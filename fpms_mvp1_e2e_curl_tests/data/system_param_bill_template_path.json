@@ -1,0 +1,6 @@
+{
+  "param_value": "${BILL_TEMPLATE_PATH}",
+  "value_type": "string",
+  "description": "Bill docx template path",
+  "is_secret": false
+}

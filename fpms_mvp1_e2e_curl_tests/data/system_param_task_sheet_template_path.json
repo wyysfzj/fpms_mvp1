@@ -1,0 +1,6 @@
+{
+  "param_value": "${TASK_SHEET_TEMPLATE_PATH}",
+  "value_type": "string",
+  "description": "Task sheet docx template path",
+  "is_secret": false
+}

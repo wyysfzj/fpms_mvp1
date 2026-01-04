@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: fpms
+      POSTGRES_USER: fpms
+      POSTGRES_PASSWORD: fpms
+    volumes:
+      - fpms_db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      FPMS_ENV: prod
+      DATABASE_URL: postgresql+psycopg://fpms:fpms@db:5432/fpms
+      CORS_ORIGINS: '["http://localhost:8080"]'
+    volumes:
+      - fpms_storage:/app/storage
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  fpms_db:
+  fpms_storage:

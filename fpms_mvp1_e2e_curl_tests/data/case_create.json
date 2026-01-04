@@ -1,0 +1,7 @@
+{
+  "case_no": "CN-2025-0001",
+  "case_type": "NORMAL",
+  "patent_category": "INV",
+  "flow_dir": "CN_DOMESTIC",
+  "client_id": "${CLIENT_ID}"
+}

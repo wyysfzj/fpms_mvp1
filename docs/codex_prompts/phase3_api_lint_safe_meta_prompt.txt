@@ -1,0 +1,17 @@
+SYSTEM / DEVELOPER INSTRUCTION FOR CODEX (paste into Codex before executing API tasks)
+
+You are implementing FastAPI endpoints under a Ruff-enforced codebase.
+
+Hard requirements:
+1) Do NOT put `Depends(require_perm("X.Y"))` in decorator `dependencies=[...]`.
+   You MUST inject it as a function parameter:
+     `_perm: None = Depends(require_perm("X.Y"))`
+2) Keep imports Ruff-safe:
+   - `from __future__ import annotations` first
+   - Only import names that are used (no unused imports)
+   - Sort imports as: future, stdlib, third-party, first-party
+3) Do not invent new response envelopes; follow existing project patterns.
+4) No schema changes; use existing ORM models only.
+5) After changes, `ruff check .` must pass.
+
+When you generate code, include only necessary imports and ensure handler signature includes `_perm`.
