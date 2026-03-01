@@ -68,3 +68,36 @@ Note (MVP1): permission codes use `Title.Action` naming and must stay consistent
 - `POST /letterheads` → `LetterHead.Create`  (task: `BE-APIX-04-01_letterheads_create`)
 - `GET /letterheads` → `LetterHead.Read`  (task: `BE-APIX-04-02_letterheads_list`)
 - `GET /tasks/{id}/print` → `Task.Read`  (task: `BL-DOC-05_add_task_print_endpoint`)
+
+## Post-enhancement Domain Matrix (Wave 02 Contract)
+
+As of 2026-02-28, these routes are planned by post-enhancement task files and may not be wired yet.
+Permission codes below are the runtime contract to keep `ROLE_PERMISSIONS` and API enforcement consistent.
+
+### Annuity
+- `GET /annuity/tasks` → `AnnuityTask.Read`  (task: `PE-BE-AN-02`)
+- `PUT /annuity/tasks/{task_id}/instruction` → `AnnuityTask.Action`  (task: `PE-BE-AN-03`)
+- `POST /annuity/tasks/generate-drafts` → `AnnuityTask.Action`  (task: `PE-BE-AN-05`)
+- `POST /pay-lists/from-fee-items` → `PayList.Create`  (task: `PE-BE-AN-06`)
+- `POST /gov-payments` → `GovPayment.Create`  (task: `PE-BE-AN-07`)
+
+### Collections (Dunning / Bad Debt)
+- `POST /dunning` → `Dunning.Create`  (task: `PE-BE-CL-02`)
+- `GET /dunning` → `Dunning.Read`  (task: `PE-BE-CL-03`)
+- `POST /bills/{bill_id}/bad-debt` → `BadDebt.Action`  (task: `PE-BE-CL-04`)
+- `POST /bills/{bill_id}/bad-debt/restore` → `BadDebt.Action`  (task: `PE-BE-CL-05`)
+
+### Commission
+- `POST /commission/rules` → `CommissionRule.Create`  (task: `PE-BE-COM-01`)
+- `GET /commission/rules` → `CommissionRule.Read`  (task: `PE-BE-COM-02`)
+- `PUT /commission/rules/{rule_id}` → `CommissionRule.Edit`  (task: `PE-BE-COM-03`)
+- `GET /commission` → `Commission.Read`  (task: `PE-BE-COM-07`)
+- `POST /commission/settlements` → `CommissionSettlement.Create`  (task: `PE-BE-COM-08`)
+- `POST /commission/settlements/{id}/generate-lines` → `CommissionSettlement.Action`  (task: `PE-BE-COM-09`)
+- `GET /commission/reports/settlement` → `CommissionReport.Read`  (task: `PE-BE-COM-10`)
+
+### Consulting / Search / Expense
+- `POST /consulting/cases` → `ConsultingCase.Create`  (task: `PE-BE-CS-01`)
+- `POST /consulting/fee-drafts` → `ConsultingFeeDraft.Create`  (task: `PE-BE-CS-05`)
+- `POST /expenses` → `Expense.Create`  (task: `PE-BE-CS-02`)
+- `GET /expenses` → `Expense.Read`  (task: `PE-BE-CS-03`)

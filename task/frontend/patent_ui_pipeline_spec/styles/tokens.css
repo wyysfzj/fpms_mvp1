@@ -1,0 +1,59 @@
+/* Patent UI — Pipeline Dashboard Tokens
+   Source: extracted from reference/newpatent_static.html and reference/newpatent_interactive.html
+   Notes:
+   - Default visual style is "Style B: Modern Tech" (Inter UI + dense cards)
+   - Immersive mode is "Style C" override, activated by body class: `mode-immersive`
+*/
+
+:root {
+  /* Brand / Semantic colors */
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-light: #EFF6FF;
+
+  --success: #10B981;   /* 回款/完成 */
+  --warning: #F59E0B;   /* 待办/草单 */
+  --danger:  #EF4444;   /* 绝限/欠款 */
+  --purple:  #8B5CF6;   /* 财务/账单 */
+
+  /* Neutrals */
+  --bg-body:  #F1F5F9;
+  --bg-card:  #FFFFFF;
+  --text-main:#0F172A;
+  --text-sub: #64748B;
+  --border:   #E2E8F0;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --header-height: 64px;
+  --content-padding: 32px;
+  --radius: 6px;
+
+  /* Typography */
+  --font-ui:   "Inter", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-read: "Inter", system-ui, sans-serif;
+
+  /* Content flow sizing (used by immersive mode) */
+  --content-width: 100%;
+  --content-margin: 0;
+}
+
+/* Immersive mode (Style C)
+   - hides chrome (sidebar/header/right panel/dashboard-only)
+   - shifts typography to Noto Serif SC for long-form reading
+*/
+body.mode-immersive {
+  --primary: #0D9488;      /* Teal */
+  --bg-body: #F5F5F4;      /* Warm Grey */
+  --bg-card: #F5F5F4;
+  --text-main: #292524;
+
+  --sidebar-width: 0px;
+  --header-height: 0px;
+
+  --font-read: "Noto Serif SC", serif;
+
+  --content-width: 760px;
+  --content-margin: 0 auto;
+}

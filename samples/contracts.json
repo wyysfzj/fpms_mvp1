@@ -1,0 +1,24 @@
+[
+  {
+    "contract_no": "CTR-2025-0001",
+    "client_code": "C001",
+    "project_no": "PRJ-CONS-2025-001",
+    "currency": "CNY",
+    "contract_amount": 20000,
+    "signed_date": "2025-01-10",
+    "effective_date": "2025-01-15",
+    "status": "ACTIVE",
+    "source": "derived_from:samples/bill_create_manual.json + samples/projects.json"
+  },
+  {
+    "contract_no": "CTR-2025-0002",
+    "client_code": "C-BYD",
+    "project_no": "PRJ-SRCH-2025-002",
+    "currency": "CNY",
+    "contract_amount": 16000,
+    "signed_date": "2025-02-01",
+    "effective_date": "2025-02-05",
+    "status": "ACTIVE",
+    "source": "derived_from:samples/fee_draft_add_item.json + samples/projects.json"
+  }
+]

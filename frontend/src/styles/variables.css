@@ -1,0 +1,55 @@
+/* ================= FPMS Design Tokens (Source of Truth) ================= */
+:root {
+  --color-primary: #2563EB;
+  --color-success: #10B981;
+  --color-danger: #EF4444;
+  --color-warning: #F59E0B;
+  --color-purple: #8B5CF6;
+  --color-primary-light: #EFF6FF;
+
+  --color-bg-body: #F1F5F9;
+  --color-bg-panel: #FFFFFF;
+  --color-bg-sidebar: #FFFFFF;
+
+  --font-main: "Inter", "PingFang SC", system-ui, sans-serif;
+  --font-read: "Inter", "PingFang SC", system-ui, sans-serif;
+
+  --sidebar-width: 240px;
+  --header-height: 60px;
+  --radius-base: 6px;
+  --shadow-card: none;
+  --border-panel: 1px solid #E2E8F0;
+
+  /* Spec token aliases (pipeline CSS uses short names) */
+  --primary: var(--color-primary);
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --danger: var(--color-danger);
+  --purple: var(--color-purple);
+  --primary-light: var(--color-primary-light);
+  --primary-hover: #1D4ED8;
+  --bg-body: var(--color-bg-body);
+  --bg-card: var(--color-bg-panel);
+  --border: #E2E8F0;
+  --radius: var(--radius-base);
+}
+
+body.mode-immersive {
+  --color-primary: #0D9488;
+
+  --color-bg-body: #F5F5F4;
+  --color-bg-panel: #F5F5F4;
+  --color-bg-sidebar: transparent;
+
+  --font-read: "Noto Serif SC", "Songti SC", serif;
+
+  --sidebar-width: 0px;
+  --header-height: 0px;
+  --shadow-card: none;
+  --border-panel: none;
+
+  /* Spec alias overrides for immersive */
+  --primary: #0D9488;
+  --bg-body: #F5F5F4;
+  --bg-card: #F5F5F4;
+}

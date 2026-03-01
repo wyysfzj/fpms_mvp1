@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Master - 专利业务全景台</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    
+    <style>
+        /* ================= 核心变量 (Style B: Modern Tech) ================= */
+        :root {
+            /* 品牌色 - 科技蓝 */
+            --primary: #2563EB;       
+            --primary-hover: #1D4ED8;
+            --primary-light: #EFF6FF; 
+
+            /* 功能色 */
+            --success: #10B981;       /* 绿色：回款/完成 */
+            --warning: #F59E0B;       /* 橙色：待办/草单 */
+            --danger: #EF4444;        /* 红色：绝限/欠款 */
+            --purple: #8B5CF6;        /* 紫色：账单/财务 */
+
+            /* 中性色 */
+            --bg-body: #F1F5F9;       /* 冷灰背景 */
+            --bg-card: #FFFFFF;       /* 纯白卡片 */
+            --text-main: #0F172A;     /* 深黑文本 */
+            --text-sub: #64748B;      /* 灰蓝辅助文本 */
+            --border: #E2E8F0;        /* 边框线 */
+
+            /* 布局参数 */
+            --sidebar-width: 240px;
+            --header-height: 64px;
+            --radius: 6px;            /* 较小的圆角，强调干练 */
+        }
+
+        /* ================= 全局重置 ================= */
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+        body { 
+            font-family: 'Inter', system-ui, sans-serif; 
+            background-color: var(--bg-body); 
+            color: var(--text-main);
+            height: 100vh; 
+            display: flex; 
+            overflow: hidden;
+        }
+        a { text-decoration: none; color: inherit; }
+
+        /* ================= 侧边栏 (Sidebar) ================= */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--bg-card);
+            border-right: 1px solid var(--border);
+            display: flex; flex-direction: column;
+            padding: 24px 16px;
+        }
+
+        .brand {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 20px; font-weight: 800; color: var(--primary);
+            margin-bottom: 40px; padding-left: 8px;
+        }
+
+        .nav-section {
+            margin-bottom: 24px;
+        }
+
+        .nav-title {
+            font-size: 11px; font-weight: 700; color: var(--text-sub);
+            text-transform: uppercase; letter-spacing: 0.8px;
+            margin-bottom: 8px; padding-left: 12px;
+        }
+
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px;
+            border-radius: var(--radius);
+            font-size: 14px; font-weight: 500; color: var(--text-sub);
+            cursor: pointer; transition: all 0.2s;
+        }
+        .nav-item:hover { background-color: var(--bg-body); color: var(--text-main); }
+        .nav-item.active { background-color: var(--primary-light); color: var(--primary); }
+        .nav-item svg { width: 18px; height: 18px; stroke-width: 2px; }
+
+        /* ================= 主内容区 (Main) ================= */
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* 顶部栏 */
+        .header {
+            height: var(--header-height);
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 32px;
+        }
+
+        .search-wrapper { position: relative; width: 400px; }
+        .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-sub); width: 16px; }
+        .search-input {
+            width: 100%; padding: 10px 10px 10px 36px;
+            background: var(--bg-body); border: 1px solid transparent;
+            border-radius: 99px; font-size: 13px; transition: 0.2s;
+        }
+        .search-input:focus { background: #fff; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+        .user-profile { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+        .avatar { width: 36px; height: 36px; background: #E0E7FF; color: var(--primary); border-radius: 50%; display: grid; place-items: center; font-weight: 700; }
+
+        /* 仪表盘滚动区 */
+        .dashboard-scroll { flex: 1; overflow-y: auto; padding: 32px; }
+
+        /* ================= 组件：业务流管道 (Pipeline) ================= */
+        /* 逻辑: 映射 Client -> Case -> Bill -> Payment 资金流 */
+        .pipeline-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .pipe-card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 20px;
+            position: relative; overflow: hidden;
+            display: flex; flex-direction: column; justify-content: space-between;
+            height: 140px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        .pipe-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+
+        /* 顶部彩色条 - 区分阶段 */
+        .pipe-bar { position: absolute; top: 0; left: 0; width: 100%; height: 4px; }
+        
+        /* 箭头连接符 */
+        .pipe-arrow {
+            position: absolute; right: -22px; top: 50%; transform: translateY(-50%);
+            z-index: 10; color: #CBD5E1; background: var(--bg-body);
+            border-radius: 50%; padding: 4px; border: 1px solid #fff;
+        }
+
+        .pipe-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: var(--text-sub); }
+        .pipe-num { font-size: 32px; font-weight: 700; color: var(--text-main); font-family: 'Inter', sans-serif; }
+        .pipe-label { font-size: 12px; color: var(--text-sub); margin-top: auto; display: flex; align-items: center; gap: 6px; }
+
+        /* ================= 组件：双栏布局 (Action vs Finance) ================= */
+        .split-grid {
+            display: grid; grid-template-columns: 2fr 1fr; gap: 24px;
+        }
+
+        .panel {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); display: flex; flex-direction: column;
+            min-height: 400px;
+        }
+
+        .panel-header {
+            padding: 16px 24px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .panel-title { font-weight: 600; font-size: 16px; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+
+        /* 列表项样式 */
+        .list-item {
+            padding: 16px 24px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: flex-start; gap: 16px;
+            transition: background 0.1s;
+        }
+        .list-item:hover { background: var(--bg-body); }
+        .list-item:last-child { border-bottom: none; }
+
+        /* 案号胶囊 */
+        .case-tag {
+            font-family: 'JetBrains Mono', monospace; font-size: 12px;
+            background: #F1F5F9; color: var(--text-sub);
+            padding: 2px 8px; border-radius: 4px; border: 1px solid #E2E8F0;
+        }
+
+        /* 关系标签 (Tiny Tags) */
+        .rel-tag {
+            font-size: 11px; padding: 2px 6px; border-radius: 4px;
+            display: inline-flex; align-items: center; gap: 4px;
+            border: 1px solid transparent;
+        }
+        .rel-tag.doc { background: #EFF6FF; color: var(--primary); border-color: #DBEAFE; } /* 关联文书 */
+        .rel-tag.fee { background: #FFF7ED; color: var(--warning); border-color: #FFEDD5; } /* 关联费用 */
+
+        /* 状态徽章 */
+        .badge {
+            font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 99px; white-space: nowrap;
+        }
+        .badge.urgent { background: #FEF2F2; color: var(--danger); border: 1px solid #FECACA; }
+        .badge.normal { background: #F0FDF4; color: var(--success); border: 1px solid #BBF7D0; }
+        .badge.warn   { background: #FFFBEB; color: #D97706; border: 1px solid #FDE68A; }
+
+        /* 财务特定样式 */
+        .money-text { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+        .finance-row { display: flex; justify-content: space-between; width: 100%; margin-bottom: 4px; }
+
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="brand">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            IP Master
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                总览 Dashboard
+            </div>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-title">业务实体 (Entity)</div>
+            <div class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                客户 Clients
+            </div>
+            <div class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                案件 Cases
+            </div>
+            <div class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                任务 & 期限
+            </div>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-title">财务 (Finance)</div>
+            <div class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                费用 & 账单
+            </div>
+            <div class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+                回款 & 核销
+            </div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="header">
+            <div class="search-wrapper">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" class="search-input" placeholder="搜索案号 (P23...)、客户名、或账单号...">
+            </div>
+            <div class="user-profile">
+                <span>Admin User</span>
+                <div class="avatar">A</div>
+            </div>
+        </header>
+
+        <div class="dashboard-scroll">
+            
+            <div class="pipeline-grid">
+                
+                <div class="pipe-card">
+                    <div class="pipe-bar" style="background: var(--primary);"></div>
+                    <div class="pipe-header">
+                        <span>NEW CASES</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                    </div>
+                    <div class="pipe-num">12</div>
+                    <div class="pipe-label">本周新委托 (Client)</div>
+                    <div class="pipe-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></div>
+                </div>
+
+                <div class="pipe-card">
+                    <div class="pipe-bar" style="background: var(--warning);"></div>
+                    <div class="pipe-header">
+                        <span>PENDING TASKS</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    </div>
+                    <div class="pipe-num">45</div>
+                    <div class="pipe-label">
+                        <span style="color:var(--danger); font-weight:600; display:flex; align-items:center; gap:4px;">
+                            • 3 绝限 (Urgent)
+                        </span>
+                    </div>
+                    <div class="pipe-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></div>
+                </div>
+
+                <div class="pipe-card">
+                    <div class="pipe-bar" style="background: var(--purple);"></div>
+                    <div class="pipe-header">
+                        <span>UNBILLED DRAFTS</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    </div>
+                    <div class="pipe-num money-text">¥ 82k</div>
+                    <div class="pipe-label">待出账单 (Drafts)</div>
+                    <div class="pipe-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></div>
+                </div>
+
+                <div class="pipe-card">
+                    <div class="pipe-bar" style="background: var(--success);"></div>
+                    <div class="pipe-header">
+                        <span>UNALLOCATED</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                    </div>
+                    <div class="pipe-num money-text" style="color:var(--success)">¥ 12k</div>
+                    <div class="pipe-label">待核销金额 (Offset)</div>
+                </div>
+            </div>
+
+            <div class="split-grid">
+                
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                            待办任务 (Docket)
+                        </div>
+                        <a href="#" style="font-size:13px; color:var(--primary); font-weight:500;">查看全部 →</a>
+                    </div>
+
+                    <div class="list-item">
+                        <div style="flex:1">
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                                <span class="case-tag">P2310-008</span>
+                                <span style="font-weight:600; font-size:14px;">答复第一次审查意见 (OA1)</span>
+                            </div>
+                            <div style="display:flex; gap:10px; color:var(--text-sub); font-size:12px; align-items:center;">
+                                <span>客户: 蔚来汽车</span>
+                                <span class="rel-tag doc">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+                                    关联文书: 发文通知书
+                                </span>
+                            </div>
+                        </div>
+                        <div class="badge urgent">绝限: 剩2天</div>
+                    </div>
+
+                    <div class="list-item">
+                        <div style="flex:1">
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                                <span class="case-tag">P2311-042</span>
+                                <span style="font-weight:600; font-size:14px;">缴纳登记费</span>
+                            </div>
+                            <div style="display:flex; gap:10px; color:var(--text-sub); font-size:12px; align-items:center;">
+                                <span>客户: 大疆创新</span>
+                                <span class="rel-tag fee">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line></svg>
+                                    关联费用
+                                </span>
+                            </div>
+                        </div>
+                        <div class="badge normal">剩 14 天</div>
+                    </div>
+
+                     <div class="list-item">
+                        <div style="flex:1">
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                                <span class="case-tag">P2312-005</span>
+                                <span style="font-weight:600; font-size:14px;">新案撰写</span>
+                            </div>
+                            <div style="display:flex; gap:10px; color:var(--text-sub); font-size:12px; align-items:center;">
+                                <span>客户: 比亚迪电子</span>
+                                <span style="font-style:italic;">Drafting</span>
+                            </div>
+                        </div>
+                        <div class="badge normal">2024-03-01</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                            财务状况
+                        </div>
+                    </div>
+
+                    <div class="list-item" style="background:#F0FDF4; flex-direction:column; gap:4px;">
+                        <div class="finance-row">
+                            <span class="money-text" style="color:var(--success); font-size:16px;">+ ¥ 50,000.00</span>
+                            <span class="badge normal" style="border-color:var(--success);">待核销 Payment</span>
+                        </div>
+                        <div class="finance-row" style="font-size:12px; color:var(--text-sub);">
+                            <span>来源: 腾讯科技(深圳)</span>
+                            <span>昨天</span>
+                        </div>
+                        <div style="width:100%; text-align:right; margin-top:4px;">
+                            <a href="#" style="font-size:11px; color:var(--primary); font-weight:600;">→ 关联账单 (Offset)</a>
+                        </div>
+                    </div>
+
+                    <div class="list-item" style="flex-direction:column; gap:4px;">
+                        <div class="finance-row">
+                            <span style="font-size:14px; font-weight:600;">Bill #2023-109</span>
+                            <span class="money-text">¥ 8,500.00</span>
+                        </div>
+                        <div class="finance-row" style="font-size:12px; color:var(--text-sub);">
+                            <span>客户: 小米移动</span>
+                            <span class="badge urgent" style="padding:2px 6px;">已逾期 3 天</span>
+                        </div>
+                    </div>
+
+                    <div class="list-item" style="flex-direction:column; gap:4px;">
+                        <div class="finance-row">
+                            <span style="font-size:14px; font-weight:600;">Bill #2023-112</span>
+                            <span class="money-text">¥ 12,300.00</span>
+                        </div>
+                        <div class="finance-row" style="font-size:12px; color:var(--text-sub);">
+                            <span>客户: 华为终端</span>
+                            <span class="badge warn" style="padding:2px 6px; background:#FFF7ED; color:#EA580C; border:none;">待付款</span>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </main>
+</body>
+</html>

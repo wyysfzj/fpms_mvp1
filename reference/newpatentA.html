@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Master - 交互式原型</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&family=Noto+Serif+SC:wght@500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* ================= 1. 基础变量 (Style B: Modern Tech) ================= */
+        :root {
+            --primary: #2563EB;       
+            --primary-light: #EFF6FF; 
+            --success: #10B981;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            --purple: #8B5CF6;
+
+            --bg-body: #F1F5F9;
+            --bg-card: #FFFFFF;
+            --text-main: #0F172A;
+            --text-sub: #64748B;
+            --border: #E2E8F0;
+
+            --sidebar-width: 240px;
+            --header-height: 64px;
+            --radius: 6px;
+            
+            /* 字体变量 - 用于沉浸模式切换 */
+            --font-ui: 'Inter', system-ui, sans-serif;
+            --font-read: 'Inter', system-ui, sans-serif; 
+            --content-width: 100%;
+            --content-margin: 0;
+        }
+
+        /* ================= 沉浸模式覆写 (Style C) ================= */
+        body.mode-immersive {
+            --primary: #0D9488; /* Teal */
+            --bg-body: #F5F5F4; /* Warm Grey */
+            --bg-card: #F5F5F4; 
+            --text-main: #292524;
+            --sidebar-width: 0px; /* 隐藏侧栏 */
+            --header-height: 0px; /* 隐藏顶栏 */
+            --font-read: 'Noto Serif SC', serif; /* 衬线体 */
+            --content-width: 760px; /* 阅读最佳宽度 */
+            --content-margin: 0 auto;
+        }
+        
+        /* 沉浸模式下的特殊隐藏 */
+        body.mode-immersive .sidebar, 
+        body.mode-immersive .header,
+        body.mode-immersive .dashboard-only,
+        body.mode-immersive .right-panel-area { display: none !important; }
+        
+        body.mode-immersive .main-content { padding: 40px; background: var(--bg-body); }
+        body.mode-immersive .case-detail-container { 
+            max-width: 760px; margin: 0 auto; border: none; box-shadow: none; 
+        }
+
+        /* ================= 全局重置 ================= */
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
+        body { font-family: var(--font-ui); background-color: var(--bg-body); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; }
+        
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+        
+        /* ================= 布局组件 ================= */
+        .sidebar {
+            width: var(--sidebar-width); background: var(--bg-card); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; padding: 24px 16px; flex-shrink: 0; z-index: 50; overflow: hidden; white-space: nowrap;
+        }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .header {
+            height: var(--header-height); background: var(--bg-card); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 32px; flex-shrink: 0;
+        }
+        .scroll-area { flex: 1; overflow-y: auto; padding: 32px; position: relative; }
+
+        /* ================= 视图切换系统 (Views) ================= */
+        .view-section { display: none; animation: fadeIn 0.3s ease; }
+        .view-section.active { display: block; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ================= 样式类: 导航 ================= */
+        .brand { font-size: 20px; font-weight: 800; color: var(--primary); margin-bottom: 40px; display: flex; align-items: center; gap: 10px; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius); font-size: 14px; font-weight: 500; color: var(--text-sub); cursor: pointer; }
+        .nav-item:hover { background-color: var(--bg-body); color: var(--text-main); }
+        .nav-item.active { background-color: var(--primary-light); color: var(--primary); }
+        
+        /* ================= 样式类: Dashboard 管道 ================= */
+        .pipeline-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 32px; }
+        .pipe-card {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+            position: relative; overflow: hidden; height: 140px; cursor: pointer;
+        }
+        .pipe-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .pipe-bar { position: absolute; top: 0; left: 0; width: 100%; height: 4px; }
+        .pipe-num { font-size: 32px; font-weight: 700; margin-top: 10px; }
+
+        /* ================= 样式类: 列表与表格 (Data Grid) ================= */
+        .data-table { width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: var(--radius); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .data-table th { text-align: left; padding: 12px 24px; background: #F8FAFC; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-sub); font-weight: 600; }
+        .data-table td { padding: 16px 24px; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .data-table tr:hover { background: #F1F5F9; cursor: pointer; }
+        .tag { padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; }
+        .tag.blue { background: #EFF6FF; color: #2563EB; }
+        .tag.green { background: #F0FDF4; color: #16A34A; }
+
+        /* ================= 样式类: 详情页 (Detail View) ================= */
+        .back-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--text-sub); margin-bottom: 20px; cursor: pointer; }
+        .back-btn:hover { color: var(--primary); }
+        
+        .case-detail-container { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); min-height: 80vh; display: flex; overflow: hidden; }
+        .doc-area { flex: 1; padding: 40px; font-family: var(--font-read); line-height: 1.8; overflow-y: auto; }
+        .right-panel-area { width: 280px; background: #F8FAFC; border-left: 1px solid var(--border); padding: 20px; }
+
+        .stepper { display: flex; margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+        .step { flex: 1; text-align: center; position: relative; font-size: 12px; color: var(--text-sub); }
+        .step.active { color: var(--primary); font-weight: 700; }
+        .step::after { content:''; display: block; width: 10px; height: 10px; background: #E2E8F0; border-radius: 50%; margin: 10px auto 0; }
+        .step.active::after { background: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+        /* ================= 样式类: 抽屉 (Drawer) ================= */
+        .drawer-backdrop {
+            position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(2px);
+            z-index: 999; display: none; opacity: 0; transition: opacity 0.3s;
+        }
+        .drawer-backdrop.open { display: block; opacity: 1; }
+        
+        .drawer-panel {
+            position: absolute; top: 0; right: 0; bottom: 0; width: 450px;
+            background: #fff; box-shadow: -10px 0 30px rgba(0,0,0,0.1);
+            transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex; flex-direction: column;
+        }
+        .drawer-backdrop.open .drawer-panel { transform: translateX(0); }
+        
+        .form-group { margin-bottom: 20px; }
+        .form-label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; color: var(--text-main); }
+        .form-input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; }
+        .btn { padding: 10px 20px; border-radius: 4px; font-weight: 600; cursor: pointer; border: none; font-size: 14px; }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); margin-right: 10px; }
+
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="brand">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            IP Master
+        </div>
+        
+        <div class="nav-item active" onclick="switchView('dashboard')">
+            <span>📊</span> 总览 Dashboard
+        </div>
+        
+        <div style="margin: 24px 0 8px 12px; font-size:11px; font-weight:700; color:var(--text-sub);">业务实体</div>
+        <div class="nav-item" onclick="switchView('list-cases')">
+            <span>📂</span> 案件 (Cases)
+        </div>
+        <div class="nav-item" onclick="switchView('list-tasks')">
+            <span>⏰</span> 任务 (Tasks)
+        </div>
+        <div class="nav-item">
+            <span>🏢</span> 客户 (Clients)
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="header">
+            <div style="font-weight:600; font-size:16px;" id="page-title">工作台</div>
+            <div style="display:flex; align-items:center; gap:15px;">
+                <button id="immersive-toggle" class="btn btn-outline" style="display:none; padding:6px 12px; font-size:12px;" onclick="toggleImmersive()">
+                    进入沉浸模式
+                </button>
+                <div style="width:32px; height:32px; background:#E0E7FF; border-radius:50%; display:grid; place-items:center; color:#2563EB; font-weight:bold;">A</div>
+            </div>
+        </header>
+
+        <div class="scroll-area">
+            
+            <div id="view-dashboard" class="view-section active">
+                <div class="pipeline-grid">
+                    <div class="pipe-card" onclick="openDrawer()">
+                        <div class="pipe-bar" style="background: var(--primary);"></div>
+                        <div style="display:flex; justify-content:space-between; color:var(--text-sub); font-size:13px; font-weight:600;">
+                            <span>NEW CASES</span>
+                            <span>+</span>
+                        </div>
+                        <div class="pipe-num">12</div>
+                        <div style="margin-top:auto; font-size:12px; color:var(--primary); font-weight:500;">点击新建案件 →</div>
+                    </div>
+                    
+                    <div class="pipe-card" onclick="switchView('list-tasks')">
+                        <div class="pipe-bar" style="background: var(--warning);"></div>
+                        <div style="font-size:13px; font-weight:600; color:var(--text-sub);">PENDING TASKS</div>
+                        <div class="pipe-num">45</div>
+                        <div style="margin-top:auto; font-size:12px; color:var(--danger);">3 个绝限任务</div>
+                    </div>
+                    
+                    <div class="pipe-card">
+                        <div class="pipe-bar" style="background: var(--purple);"></div>
+                        <div style="font-size:13px; font-weight:600; color:var(--text-sub);">DRAFTS</div>
+                        <div class="pipe-num">¥82k</div>
+                        <div style="margin-top:auto; font-size:12px; color:var(--text-sub);">待出账单</div>
+                    </div>
+
+                    <div class="pipe-card">
+                        <div class="pipe-bar" style="background: var(--success);"></div>
+                        <div style="font-size:13px; font-weight:600; color:var(--text-sub);">UNALLOCATED</div>
+                        <div class="pipe-num" style="color:var(--success)">¥12k</div>
+                        <div style="margin-top:auto; font-size:12px; color:var(--text-sub);">待核销</div>
+                    </div>
+                </div>
+
+                <h3 style="font-size:16px; margin-bottom:15px;">待办任务 (Docket)</h3>
+                <div class="data-table" style="background:white; border-radius:6px; border:1px solid #E2E8F0;">
+                    <div style="padding:15px 20px; border-bottom:1px solid #E2E8F0; display:flex; align-items:center; cursor:pointer;" onclick="switchView('detail-case')">
+                        <span style="font-family:'JetBrains Mono'; background:#F1F5F9; padding:2px 8px; font-size:12px; margin-right:15px;">P2310-008</span>
+                        <div style="flex:1;">
+                            <div style="font-weight:600; font-size:14px; margin-bottom:4px;">答复第一次审查意见 (OA1)</div>
+                            <div style="font-size:12px; color:var(--text-sub);">客户: 蔚来汽车 | 关联: 发文通知书</div>
+                        </div>
+                        <span style="background:#FEF2F2; color:#EF4444; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:600;">绝限: 2天</span>
+                    </div>
+                    
+                    <div style="padding:15px 20px; display:flex; align-items:center; cursor:pointer;" onclick="switchView('detail-case')">
+                        <span style="font-family:'JetBrains Mono'; background:#F1F5F9; padding:2px 8px; font-size:12px; margin-right:15px;">P2311-042</span>
+                        <div style="flex:1;">
+                            <div style="font-weight:600; font-size:14px; margin-bottom:4px;">缴纳办登费</div>
+                            <div style="font-size:12px; color:var(--text-sub);">客户: 大疆创新</div>
+                        </div>
+                        <span style="background:#F0FDF4; color:#16A34A; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:600;">剩 14 天</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="view-list-cases" class="view-section">
+                <div class="back-btn" onclick="switchView('dashboard')">← 返回仪表盘</div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+                    <h2 style="font-size:20px; font-weight:700;">全部案件 (All Cases)</h2>
+                    <button class="btn btn-primary" onclick="openDrawer()">+ 新建案件</button>
+                </div>
+                
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>案号</th>
+                            <th>客户</th>
+                            <th>案件名称</th>
+                            <th>阶段</th>
+                            <th>申请日</th>
+                            <th>负责人</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr onclick="switchView('detail-case')">
+                            <td style="font-family:'JetBrains Mono'">P2310-008</td>
+                            <td>蔚来汽车</td>
+                            <td>一种激光雷达避障系统...</td>
+                            <td><span class="tag blue">实审中</span></td>
+                            <td>2023-05-12</td>
+                            <td>张律师</td>
+                        </tr>
+                        <tr onclick="switchView('detail-case')">
+                            <td style="font-family:'JetBrains Mono'">P2310-009</td>
+                            <td>腾讯科技</td>
+                            <td>区块链数据处理方法...</td>
+                            <td><span class="tag green">已授权</span></td>
+                            <td>2023-04-10</td>
+                            <td>李助理</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="view-detail-case" class="view-section">
+                <div class="back-btn" onclick="switchView('dashboard')">← 返回仪表盘</div>
+                
+                <div class="case-detail-container">
+                    <div class="doc-area">
+                        <div style="margin-bottom:30px;">
+                            <h1 style="font-size:24px; font-weight:700; margin-bottom:10px;">一种激光雷达避障系统及其控制方法</h1>
+                            <div style="color:var(--text-sub); font-size:13px;">P2310-008 | 申请日: 2023-05-12</div>
+                        </div>
+
+                        <div class="stepper">
+                            <div class="step active">受理</div>
+                            <div class="step active">初审</div>
+                            <div class="step active">公布</div>
+                            <div class="step active" style="color:var(--primary)">实审中</div>
+                            <div class="step">授权</div>
+                        </div>
+
+                        <h3 style="font-weight:700; margin-bottom:15px; font-size:16px;">权利要求书 (Claims)</h3>
+                        <p style="margin-bottom:20px;">1. 一种基于激光雷达点云数据的车辆自动驾驶避障方法，其特征在于，包括以下步骤：<br>步骤S1：获取激光雷达采集的原始点云数据... </p>
+                        <p style="margin-bottom:20px;">2. 根据权利要求1所述的方法，其特征在于，所述步骤S1具体包括利用直通滤波算法去除...</p>
+                        <p style="color:#94A3B8; font-style:italic;">[... 点击此处进入编辑模式 ...]</p>
+                    </div>
+
+                    <div class="right-panel-area">
+                        <div style="margin-bottom:20px; padding:15px; background:#FEF2F2; border:1px solid #FECACA; border-radius:6px;">
+                            <div style="font-size:12px; color:#991B1B; font-weight:700; margin-bottom:5px;">绝限提醒 (Deadline)</div>
+                            <div style="font-size:18px; color:#DC2626; font-weight:800;">2023-11-15</div>
+                            <div style="font-size:12px; color:#EF4444;">剩余 2 天</div>
+                        </div>
+                        
+                        <div style="font-size:13px; font-weight:700; margin-bottom:10px;">关联任务</div>
+                        <div style="font-size:13px; margin-bottom:8px;">✅ 缴纳申请费</div>
+                        <div style="font-size:13px; color:var(--primary); font-weight:600;">⬜ 答复审查意见</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <div class="drawer-backdrop" id="drawer">
+        <div class="drawer-panel">
+            <div style="padding:24px; border-bottom:1px solid #E2E8F0; font-size:18px; font-weight:700;">
+                新建案件 (New Case)
+            </div>
+            <div style="padding:24px; flex:1; overflow-y:auto;">
+                <div class="form-group">
+                    <label class="form-label">客户 (Client)</label>
+                    <input type="text" class="form-input" placeholder="输入客户名称搜索...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">案件类型 (Type)</label>
+                    <select class="form-input">
+                        <option>发明专利 (Invention)</option>
+                        <option>实用新型 (Utility Model)</option>
+                        <option>外观设计 (Design)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">案件标题 (Title)</label>
+                    <textarea class="form-input" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">内部案号 (Ref No.)</label>
+                    <input type="text" class="form-input" value="P2310-XXX" disabled style="background:#F1F5F9; color:#64748B;">
+                </div>
+            </div>
+            <div style="padding:20px 24px; border-top:1px solid #E2E8F0; display:flex; justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closeDrawer()">取消</button>
+                <button class="btn btn-primary" onclick="closeDrawer()">创建案件</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 视图切换逻辑
+        function switchView(viewId) {
+            // 1. 隐藏所有视图
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+
+            // 2. 显示目标视图
+            document.getElementById('view-' + viewId).classList.add('active');
+
+            // 3. 更新 Header 状态
+            const titleMap = {
+                'dashboard': '工作台',
+                'list-cases': '案件管理',
+                'list-tasks': '任务管理',
+                'detail-case': '案件详情 / P2310-008'
+            };
+            document.getElementById('page-title').innerText = titleMap[viewId] || '工作台';
+
+            // 4. 控制“沉浸模式”按钮的显示 (仅详情页显示)
+            const immersiveBtn = document.getElementById('immersive-toggle');
+            if (viewId === 'detail-case') {
+                immersiveBtn.style.display = 'block';
+            } else {
+                immersiveBtn.style.display = 'none';
+                // 离开详情页自动退出沉浸模式
+                document.body.classList.remove('mode-immersive');
+                immersiveBtn.innerText = "进入沉浸模式";
+            }
+        }
+
+        // 抽屉控制
+        function openDrawer() {
+            document.getElementById('drawer').classList.add('open');
+        }
+        function closeDrawer() {
+            document.getElementById('drawer').classList.remove('open');
+        }
+
+        // 沉浸模式切换
+        function toggleImmersive() {
+            const body = document.body;
+            const btn = document.getElementById('immersive-toggle');
+            
+            body.classList.toggle('mode-immersive');
+            
+            if (body.classList.contains('mode-immersive')) {
+                btn.innerText = "退出沉浸模式";
+            } else {
+                btn.innerText = "进入沉浸模式";
+            }
+        }
+    </script>
+</body>
+</html>

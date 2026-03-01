@@ -1,201 +1,354 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
+from app.core.errors import raise_business_error
 from app.db.session import get_db
-from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+from app.modules.auth.models import T_User
+from app.modules.fees.models import FeeDraft, FeeItem
+from app.modules.fees.schemas import (
+    FeeDraftCreateIn,
+    FeeDraftListItemOut,
+    FeeDraftOut,
+    FeeItemCreateIn,
+    FeeItemOut,
+    FeeItemUpdateIn,
+    FeeRateCreateIn,
+    FeeRateOut,
+    FeeRateUpdateIn,
+    OkOut,
+)
+from app.modules.fees.service import add_fee_item, list_fee_drafts, list_fee_rates
+from app.modules.fees.service import create_fee_draft as create_fee_draft_service
+from app.modules.fees.service import create_fee_rate as create_fee_rate_service
+from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
+from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
+from app.modules.fees.service import update_fee_item as update_fee_item_service
+from app.modules.fees.service import update_fee_rate as update_fee_rate_service
 
 router = APIRouter()
 
 
-@router.get("/fees/drafts")
+@router.get("/fees/drafts", summary="List fee drafts")
 def get_fee_drafts(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1),
-    _perm: None = Depends(require_perm("Fee.Draft.Read")),
+    page_size: int = Query(default=20, ge=1, le=100),
+    case_id: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    _perm: None = Depends(require_perm("Fee.Read")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    query = db.query(FeeDraft)
-    total = query.count()
-    drafts = (
-        query.order_by(FeeDraft.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    """
+    List fee drafts with filters and pagination.
+
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Read
+    **Request example**:
+    `GET /api/v1/fees/drafts?page=1&page_size=20&status=OPEN&case_id=CASE_ID`
+    **Curl example**:
+    ```bash
+    curl -s -X GET "http://localhost:8000/api/v1/fees/drafts?page=1&page_size=20" \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: List of fee drafts
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 422: VALIDATION_ERROR
+    """
+    filters = {
+        "case_id": case_id,
+        "client_id": client_id,
+        "status": status_filter,
+    }
+    drafts, total = list_fee_drafts(db, filters=filters, page=page, page_size=page_size)
     items = [
-        {
-            "id": draft.id,
-            "case_id": draft.case_id,
-            "client_id": draft.client_id,
-            "draft_type": draft.draft_type,
-        }
+        FeeDraftListItemOut(
+            id=draft.id,
+            case_id=draft.case_id,
+            client_id=draft.client_id,
+            currency=draft.currency,
+            status=draft.status,
+            amount=draft.amount,
+        )
         for draft in drafts
     ]
     return {"items": items, "page": page, "page_size": page_size, "total": total}
 
 
-@router.post("/fees/drafts", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/fees/drafts",
+    status_code=status.HTTP_201_CREATED,
+    response_model=FeeDraftOut,
+    summary="Create a fee draft",
+)
 def create_fee_draft(
-    payload: dict[str, Any],
-    _perm: None = Depends(require_perm("Fee.Draft.Create")),
+    payload: FeeDraftCreateIn,
+    _perm: None = Depends(require_perm("Fee.Create")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    case_id = payload.get("case_id")
-    if not case_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="case_id is required")
+) -> FeeDraftOut:
+    """
+    Create a fee draft.
 
-    draft = FeeDraft(
-        id=str(uuid4()),
-        case_id=case_id,
-        client_id=payload.get("client_id"),
-        draft_type=payload.get("draft_type") or "GENERIC",
-        currency=payload.get("currency") or "CNY",
-        status=payload.get("status") or "OPEN",
-    )
-    db.add(draft)
-    db.commit()
-    db.refresh(draft)
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Create
+    **Request example**:
+    ```json
+    {"case_id": "CASE_ID", "client_id": "CLIENT_ID", "currency": "CNY"}
+    ```
+    **Curl example**:
+    ```bash
+    curl -s -X POST http://localhost:8000/api/v1/fees/drafts \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{"case_id":"CASE_ID","client_id":"CLIENT_ID","currency":"CNY"}'
+    ```
+    **Responses**:
+    - 201: Fee draft created
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Case or client not found
+    - 422: VALIDATION_ERROR
+    """
+    draft = create_fee_draft_service(db, data=payload, actor_id=current_user.id)
+    return FeeDraftOut.model_validate(draft)
 
-    return {
-        "id": draft.id,
-        "case_id": draft.case_id,
-        "client_id": draft.client_id,
-        "draft_type": draft.draft_type,
-        "currency": draft.currency,
-        "status": draft.status,
-    }
 
-
-@router.post("/fees/drafts/{draft_id}/lock")
+@router.post("/fees/drafts/{draft_id}/lock", response_model=OkOut, summary="Lock a fee draft")
 def lock_fee_draft(
     draft_id: str,
-    _perm: None = Depends(require_perm("Fee.Draft.Action")),
+    _perm: None = Depends(require_perm("Fee.Lock")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> dict[str, str]:
-    draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
-    if not draft:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
+) -> OkOut:
+    """
+    Lock a fee draft to prevent edits.
 
-    draft.status = "LOCKED"
-    db.commit()
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Lock
+    **Request example**:
+    `POST /api/v1/fees/drafts/DRAFT_ID/lock`
+    **Curl example**:
+    ```bash
+    curl -s -X POST http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/lock \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: Fee draft locked
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Fee draft not found
+    - 409: Fee draft already locked
+    - 422: VALIDATION_ERROR
+    """
+    lock_fee_draft_service(db, draft_id=draft_id, actor_id=current_user.id)
+    return OkOut()
 
-    return {"status": "ok"}
 
-
-@router.post("/fees/drafts/{draft_id}/unlock")
+@router.post(
+    "/fees/drafts/{draft_id}/unlock",
+    response_model=OkOut,
+    summary="Unlock a fee draft",
+)
 def unlock_fee_draft(
     draft_id: str,
-    _perm: None = Depends(require_perm("Fee.Draft.Action")),
+    _perm: None = Depends(require_perm("Fee.Lock")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> dict[str, str]:
-    draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
-    if not draft:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
+) -> OkOut:
+    """
+    Unlock a fee draft to allow edits.
 
-    draft.status = "OPEN"
-    db.commit()
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Lock
+    **Request example**:
+    `POST /api/v1/fees/drafts/DRAFT_ID/unlock`
+    **Curl example**:
+    ```bash
+    curl -s -X POST http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/unlock \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: Fee draft unlocked
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Fee draft not found
+    - 409: Fee draft not locked
+    - 422: VALIDATION_ERROR
+    """
+    unlock_fee_draft_service(db, draft_id=draft_id, actor_id=current_user.id)
+    return OkOut()
 
-    return {"status": "ok"}
 
-
-@router.post("/fees/drafts/{draft_id}/items", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/fees/drafts/{draft_id}/items",
+    status_code=status.HTTP_201_CREATED,
+    response_model=FeeItemOut,
+    summary="Add a fee item to a draft",
+)
 def create_fee_item(
     draft_id: str,
-    payload: dict[str, Any],
-    _perm: None = Depends(require_perm("Fee.Item.Create")),
+    payload: FeeItemCreateIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
-    if not draft:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
+) -> FeeItemOut:
+    """
+    Add a fee item to a draft.
 
-    item = FeeItem(
-        id=str(uuid4()),
-        draft_id=draft_id,
-        case_id=payload.get("case_id"),
-        rate_id=payload.get("rate_id"),
-        fee_code=payload.get("fee_code"),
-        fee_name=payload.get("fee_name"),
-    )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Edit
+    **Request example**:
+    ```json
+    {"rate_id": "RATE_ID", "quantity": 1, "unit_price": "100.00"}
+    ```
+    **Curl example**:
+    ```bash
+    curl -s -X POST http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/items \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{"rate_id":"RATE_ID","quantity":1,"unit_price":"100.00"}'
+    ```
+    **Responses**:
+    - 201: Fee item created
+    - 400: Rate disabled or currency mismatch
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Draft or rate not found
+    - 409: Draft is locked
+    - 422: VALIDATION_ERROR
+    """
+    item = add_fee_item(db, draft_id=draft_id, data=payload, actor_id=current_user.id)
+    return FeeItemOut.model_validate(item)
 
-    return {
-        "id": item.id,
-        "draft_id": item.draft_id,
-        "case_id": item.case_id,
-        "rate_id": item.rate_id,
-        "fee_code": item.fee_code,
-        "fee_name": item.fee_name,
-    }
 
-
-@router.put("/fees/items/{item_id}")
+@router.put(
+    "/fees/drafts/{draft_id}/items/{item_id}",
+    response_model=FeeItemOut,
+    summary="Update a fee item",
+)
 def update_fee_item(
+    draft_id: str,
     item_id: str,
-    payload: dict[str, Any],
-    _perm: None = Depends(require_perm("Fee.Item.Edit")),
+    payload: FeeItemUpdateIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    item = db.query(FeeItem).filter(FeeItem.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee item not found")
+) -> FeeItemOut:
+    """
+    Update a fee item in a draft.
 
-    if "draft_id" in payload:
-        item.draft_id = payload.get("draft_id")
-    if "case_id" in payload:
-        item.case_id = payload.get("case_id")
-    if "rate_id" in payload:
-        item.rate_id = payload.get("rate_id")
-    if "fee_code" in payload:
-        item.fee_code = payload.get("fee_code")
-    if "fee_name" in payload:
-        item.fee_name = payload.get("fee_name")
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Edit
+    **Request example**:
+    ```json
+    {"quantity": 2, "unit_price": "120.00"}
+    ```
+    **Curl example**:
+    ```bash
+    curl -s -X PUT http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/items/ITEM_ID \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{"quantity":2,"unit_price":"120.00"}'
+    ```
+    **Responses**:
+    - 200: Fee item updated
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Draft or item not found
+    - 409: Draft is locked
+    - 422: VALIDATION_ERROR
+    """
+    item = update_fee_item_service(
+        db,
+        draft_id=draft_id,
+        item_id=item_id,
+        data=payload,
+        actor_id=current_user.id,
+    )
+    return FeeItemOut.model_validate(item)
 
-    db.commit()
-    db.refresh(item)
 
-    return {
-        "id": item.id,
-        "draft_id": item.draft_id,
-        "case_id": item.case_id,
-        "rate_id": item.rate_id,
-        "fee_code": item.fee_code,
-        "fee_name": item.fee_name,
-    }
-
-
-@router.delete("/fees/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/fees/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a fee item",
+)
 def delete_fee_item(
     item_id: str,
     _perm: None = Depends(require_perm("Fee.Item.Delete")),
     db: Session = Depends(get_db),
 ) -> Response:
+    """
+    Delete a fee item.
+
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Item.Delete
+    **Request example**:
+    `DELETE /api/v1/fees/items/ITEM_ID`
+    **Curl example**:
+    ```bash
+    curl -s -X DELETE http://localhost:8000/api/v1/fees/items/ITEM_ID \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 204: Fee item deleted
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Fee item not found
+    - 422: VALIDATION_ERROR
+    """
     item = db.query(FeeItem).filter(FeeItem.id == item_id).first()
     if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee item not found")
+        raise_business_error(
+            "FEE_ITEM_NOT_FOUND",
+            "Fee item not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     db.delete(item)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/fees/drafts/{draft_id}")
+@router.get("/fees/drafts/{draft_id}", summary="Get a fee draft")
 def get_fee_draft(
     draft_id: str,
     _perm: None = Depends(require_perm("Fee.Draft.Read")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    """
+    Get a fee draft by ID.
+
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Draft.Read
+    **Request example**:
+    `GET /api/v1/fees/drafts/DRAFT_ID`
+    **Curl example**:
+    ```bash
+    curl -s -X GET http://localhost:8000/api/v1/fees/drafts/DRAFT_ID \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: Fee draft details
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Fee draft not found
+    - 422: VALIDATION_ERROR
+    """
     draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
     if not draft:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
+        raise_business_error(
+            "FEE_DRAFT_NOT_FOUND",
+            "Fee draft not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     return {
         "id": draft.id,
@@ -207,16 +360,43 @@ def get_fee_draft(
     }
 
 
-@router.put("/fees/drafts/{draft_id}")
+@router.put("/fees/drafts/{draft_id}", summary="Update a fee draft")
 def update_fee_draft(
     draft_id: str,
     payload: dict[str, Any],
     _perm: None = Depends(require_perm("Fee.Draft.Edit")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    """
+    Update a fee draft fields.
+
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Draft.Edit
+    **Request example**:
+    ```json
+    {"draft_type": "GENERIC", "currency": "CNY"}
+    ```
+    **Curl example**:
+    ```bash
+    curl -s -X PUT http://localhost:8000/api/v1/fees/drafts/DRAFT_ID \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{"draft_type":"GENERIC","currency":"CNY"}'
+    ```
+    **Responses**:
+    - 200: Fee draft updated
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Fee draft not found
+    - 422: VALIDATION_ERROR
+    """
     draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
     if not draft:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
+        raise_business_error(
+            "FEE_DRAFT_NOT_FOUND",
+            "Fee draft not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     if "case_id" in payload:
         draft.case_id = payload.get("case_id")
@@ -242,90 +422,131 @@ def update_fee_draft(
     }
 
 
-@router.get("/fees/rates")
+@router.get("/fees/rates", summary="List fee rates")
 def get_fee_rates(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1),
-    _perm: None = Depends(require_perm("Fee.Rate.Read")),
+    page_size: int = Query(default=20, ge=1, le=100),
+    fee_code: str | None = Query(default=None),
+    fee_type: str | None = Query(default=None),
+    currency: str | None = Query(default=None),
+    enabled: bool | None = Query(default=None),
+    rate_group: str | None = Query(default=None),
+    country_code: str | None = Query(default=None),
+    case_type: str | None = Query(default=None),
+    patent_category: str | None = Query(default=None),
+    calc_mode: str | None = Query(default=None),
+    _perm: None = Depends(require_perm("FeeRate.Read")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    query = db.query(FeeRate)
-    total = query.count()
-    rates = query.order_by(FeeRate.fee_code).offset((page - 1) * page_size).limit(page_size).all()
-    items = [
-        {
-            "id": rate.id,
-            "fee_code": rate.fee_code,
-            "fee_name": rate.fee_name,
-            "fee_type": rate.fee_type,
-        }
-        for rate in rates
-    ]
+    """
+    List fee rates with filters and pagination.
+
+    **Auth**: Bearer JWT
+    **Permission**: FeeRate.Read
+    **Request example**:
+    `GET /api/v1/fees/rates?page=1&page_size=20&currency=CNY&enabled=true`
+    **Curl example**:
+    ```bash
+    curl -s -X GET "http://localhost:8000/api/v1/fees/rates?page=1&page_size=20" \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: List of fee rates
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 422: VALIDATION_ERROR
+    """
+    filters = {
+        "fee_code": fee_code,
+        "fee_type": fee_type,
+        "currency": currency,
+        "enabled": enabled,
+        "rate_group": rate_group,
+        "country_code": country_code,
+        "case_type": case_type,
+        "patent_category": patent_category,
+        "calc_mode": calc_mode,
+    }
+    rates, total = list_fee_rates(db, filters=filters, page=page, page_size=page_size)
+    items = [FeeRateOut.model_validate(rate) for rate in rates]
     return {"items": items, "page": page, "page_size": page_size, "total": total}
 
 
-@router.post("/fees/rates", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/fees/rates",
+    status_code=status.HTTP_201_CREATED,
+    response_model=FeeRateOut,
+    summary="Create a fee rate",
+)
 def create_fee_rate(
-    payload: dict[str, Any],
-    _perm: None = Depends(require_perm("Fee.Rate.Create")),
+    payload: FeeRateCreateIn,
+    _perm: None = Depends(require_perm("FeeRate.Create")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    fee_code = payload.get("fee_code")
-    if not fee_code:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="fee_code is required")
+) -> FeeRateOut:
+    """
+    Create a fee rate.
 
-    rate = FeeRate(
-        id=str(uuid4()),
-        fee_code=fee_code,
-        fee_name=payload.get("fee_name"),
-        fee_type=payload.get("fee_type") or "SERVICE",
-        currency=payload.get("currency") or "CNY",
-        default_amount=payload.get("default_amount"),
-    )
-    db.add(rate)
-    db.commit()
-    db.refresh(rate)
-
-    return {
-        "id": rate.id,
-        "fee_code": rate.fee_code,
-        "fee_name": rate.fee_name,
-        "fee_type": rate.fee_type,
-        "currency": rate.currency,
-        "default_amount": rate.default_amount,
+    **Auth**: Bearer JWT
+    **Permission**: FeeRate.Create
+    **Request example**:
+    ```json
+    {
+      "fee_code": "FEE_CODE_001",
+      "fee_name": "Filing Fee",
+      "fee_type": "GOV",
+      "currency": "CNY",
+      "default_amount": "100.00",
+      "enabled": true
     }
+    ```
+    **Curl example**:
+    ```bash
+    curl -s -X POST http://localhost:8000/api/v1/fees/rates \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{"fee_code":"FEE_CODE_001","fee_name":"Filing Fee","fee_type":"GOV","currency":"CNY","default_amount":"100.00","enabled":true}'
+    ```
+    **Responses**:
+    - 201: Fee rate created
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 422: VALIDATION_ERROR
+    """
+    rate = create_fee_rate_service(db, data=payload, actor_id=current_user.id)
+    return FeeRateOut.model_validate(rate)
 
 
-@router.put("/fees/rates/{rate_id}")
+@router.put("/fees/rates/{rate_id}", response_model=FeeRateOut, summary="Update a fee rate")
 def update_fee_rate(
     rate_id: str,
-    payload: dict[str, Any],
-    _perm: None = Depends(require_perm("Fee.Rate.Edit")),
+    payload: FeeRateUpdateIn,
+    _perm: None = Depends(require_perm("FeeRate.Edit")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    rate = db.query(FeeRate).filter(FeeRate.id == rate_id).first()
-    if not rate:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee rate not found")
+) -> FeeRateOut:
+    """
+    Update a fee rate by ID.
 
-    if "fee_code" in payload:
-        rate.fee_code = payload.get("fee_code") or rate.fee_code
-    if "fee_name" in payload:
-        rate.fee_name = payload.get("fee_name")
-    if "fee_type" in payload:
-        rate.fee_type = payload.get("fee_type") or rate.fee_type
-    if "currency" in payload:
-        rate.currency = payload.get("currency") or rate.currency
-    if "default_amount" in payload:
-        rate.default_amount = payload.get("default_amount")
-
-    db.commit()
-    db.refresh(rate)
-
-    return {
-        "id": rate.id,
-        "fee_code": rate.fee_code,
-        "fee_name": rate.fee_name,
-        "fee_type": rate.fee_type,
-        "currency": rate.currency,
-        "default_amount": rate.default_amount,
-    }
+    **Auth**: Bearer JWT
+    **Permission**: FeeRate.Edit
+    **Request example**:
+    ```json
+    {"fee_name": "Updated Filing Fee", "enabled": false}
+    ```
+    **Curl example**:
+    ```bash
+    curl -s -X PUT http://localhost:8000/api/v1/fees/rates/RATE_ID \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{"fee_name":"Updated Filing Fee","enabled":false}'
+    ```
+    **Responses**:
+    - 200: Fee rate updated
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Fee rate not found
+    - 422: VALIDATION_ERROR
+    """
+    rate = update_fee_rate_service(db, rate_id=rate_id, data=payload, actor_id=current_user.id)
+    return FeeRateOut.model_validate(rate)

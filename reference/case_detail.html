@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>专利案件详情 - 现代/沉浸模式切换</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    
+    <style>
+        /* ================= 基础变量 (Style B - Modern Tech 默认) ================= */
+        :root {
+            /* 品牌色 */
+            --color-primary: #2563EB;     /* 科技蓝 */
+            --color-bg-body: #F1F5F9;     /* 冷灰背景 */
+            --color-bg-panel: #FFFFFF;    /* 纯白面板 */
+            --color-border: #E2E8F0;      /* 边框线 */
+            
+            /* 文字颜色 */
+            --text-main: #1E293B;
+            --text-sub: #64748B;
+            --text-accent: #2563EB;
+            
+            /* 字体 */
+            --font-ui: "Inter", system-ui, sans-serif;
+            --font-read: "Inter", system-ui, sans-serif; /* 默认也用无衬线 */
+            --font-mono: "JetBrains Mono", monospace;
+            
+            /* 布局尺寸 */
+            --sidebar-width: 240px;
+            --header-height: 60px;
+            --radius: 6px;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            
+            /* 动画 */
+            --transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        /* ================= 沉浸模式变量 (Style C - Focus Mode) ================= */
+        body.mode-immersive {
+            /* 暖色调护眼 */
+            --color-primary: #0D9488;     /* 水鸭绿 (Teal) */
+            --color-bg-body: #F5F5F4;     /* 暖灰 (Warm Grey) */
+            --color-bg-panel: #F5F5F4;    /* 面板融入背景，减少割裂感 */
+            --color-border: transparent;  /* 隐藏边框干扰 */
+            
+            --text-main: #292524;         /* 深暖灰 */
+            --text-sub: #78716C;
+            --text-accent: #0D9488;
+            
+            --font-read: "Noto Serif SC", serif; /* 切换为宋体/衬线，适合长文阅读 */
+            --sidebar-width: 0px;         /* 隐藏侧边栏 */
+            --header-height: 0px;         /* 隐藏顶部导航 */
+            --shadow: none;               /* 去除阴影 */
+        }
+
+        /* ================= 全局重置 ================= */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: var(--font-ui); 
+            background-color: var(--color-bg-body); 
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            transition: var(--transition);
+        }
+
+        /* ================= 侧边栏 (Sidebar) ================= */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: #FFFFFF;
+            border-right: 1px solid var(--color-border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            transition: var(--transition);
+            overflow: hidden; /* 收起时隐藏内容 */
+            white-space: nowrap;
+        }
+        .logo { 
+            font-size: 18px; font-weight: 800; color: var(--color-primary); 
+            display: flex; align-items: center; gap: 10px; margin-bottom: 40px; 
+        }
+        .nav-item {
+            padding: 12px; border-radius: var(--radius); color: var(--text-sub);
+            cursor: pointer; display: flex; gap: 12px; align-items: center; font-size: 14px; font-weight: 500;
+            transition: 0.2s;
+        }
+        .nav-item:hover { background: #F8FAFC; color: var(--color-primary); }
+        .nav-item.active { background: #EFF6FF; color: var(--color-primary); }
+
+        /* ================= 主体区域 (Main) ================= */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* 顶部导航 (Top Header) */
+        .top-header {
+            height: var(--header-height);
+            background: #FFFFFF;
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            transition: var(--transition);
+            overflow: hidden;
+        }
+        /* 沉浸模式下顶部导航变为极简工具栏，我们通过 transform 移动它 */
+        body.mode-immersive .top-header {
+            height: 0; border-bottom: none; opacity: 0;
+        }
+
+        /* 搜索框 */
+        .search-bar {
+            background: #F1F5F9; padding: 8px 16px; border-radius: 99px; width: 300px; color: var(--text-sub); font-size: 13px;
+        }
+
+        /* ================= 内容滚动区 (Scroll Area) ================= */
+        .content-scroll {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            transition: var(--transition);
+        }
+        /* 沉浸模式下，内容区居中且收窄，模拟纸张 */
+        body.mode-immersive .content-scroll {
+            padding: 40px 15% 0 15%; /* 左右留白增加 */
+            background: var(--color-bg-body);
+        }
+
+        /* ================= 案件头部卡片 (Case Header) ================= */
+        .case-header {
+            background: var(--color-bg-panel);
+            padding: 24px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border: 1px solid var(--color-border);
+            transition: var(--transition);
+        }
+        body.mode-immersive .case-header {
+            background: transparent; border: none; padding: 0 0 20px 0; border-bottom: 2px solid #E7E5E4; border-radius: 0;
+        }
+
+        .case-title h1 { font-size: 20px; margin-bottom: 8px; font-weight: 700; line-height: 1.4; }
+        body.mode-immersive .case-title h1 { font-family: var(--font-read); font-size: 28px; color: #1C1917; }
+        
+        .case-meta { display: flex; gap: 15px; font-size: 13px; color: var(--text-sub); }
+        .case-tag { background: #EFF6FF; color: var(--color-primary); padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+
+        /* 进度条 (Timeline) - 仅在普通模式显示 */
+        .timeline-wrapper { margin-top: 20px; display: flex; align-items: center; gap: 0; opacity: 1; transition: 0.3s; }
+        body.mode-immersive .timeline-wrapper { display: none; } /* 沉浸模式隐藏进度条 */
+        
+        .step { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+        .step::after { content:''; position: absolute; top: 8px; left: 50%; width: 100%; height: 2px; background: #E2E8F0; z-index: 0; }
+        .step:last-child::after { display: none; }
+        .step-dot { width: 16px; height: 16px; border-radius: 50%; background: #E2E8F0; z-index: 1; border: 2px solid #fff; margin-bottom: 6px; }
+        .step.active .step-dot { background: var(--color-primary); }
+        .step.done .step-dot { background: #10B981; } /* 绿色完成 */
+        .step-label { font-size: 11px; color: var(--text-sub); }
+
+        /* ================= 选项卡与内容 (Tabs & Body) ================= */
+        .tabs { display: flex; gap: 30px; border-bottom: 1px solid var(--color-border); margin-bottom: 20px; transition: var(--transition); }
+        body.mode-immersive .tabs { border-bottom: none; justify-content: flex-start; }
+        
+        .tab-item { 
+            padding-bottom: 12px; cursor: pointer; color: var(--text-sub); font-size: 14px; font-weight: 500; position: relative; 
+            transition: var(--transition);
+        }
+        .tab-item.active { color: var(--color-primary); }
+        .tab-item.active::after { 
+            content:''; position: absolute; bottom: -1px; left: 0; width: 100%; height: 2px; background: var(--color-primary); 
+        }
+        body.mode-immersive .tab-item { opacity: 0.5; font-family: var(--font-ui); } 
+        body.mode-immersive .tab-item.active { opacity: 1; font-weight: bold; border-bottom: none; }
+        body.mode-immersive .tab-item.active::after { display: none; } /* 沉浸模式下去除下划线 */
+
+        /* 内容网格 */
+        .content-grid {
+            display: grid; grid-template-columns: 2fr 1fr; gap: 20px; /* 默认左宽右窄 */
+            transition: var(--transition);
+        }
+        body.mode-immersive .content-grid { display: block; } /* 沉浸模式改为单栏阅读流 */
+
+        .panel {
+            background: var(--color-bg-panel); border: 1px solid var(--color-border);
+            border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+        body.mode-immersive .panel { 
+            background: transparent; border: none; box-shadow: none; padding: 0; margin-bottom: 50px; 
+        }
+
+        /* 撰写/阅读区域样式 */
+        .doc-content {
+            font-family: var(--font-read);
+            line-height: 1.8; /* 增大行高 */
+            font-size: 15px;
+            color: var(--text-main);
+        }
+        body.mode-immersive .doc-content {
+            font-size: 18px; /* 增大字号 */
+            line-height: 2.0; 
+            max-width: 760px; /* 限制阅读宽度，防止视线疲劳 */
+            margin: 0 auto;   /* 居中 */
+        }
+        
+        /* 模拟的文档文本段落 */
+        .doc-p { margin-bottom: 20px; text-align: justify; }
+
+        /* 右侧边栏 (Deadlines) */
+        .side-panel { display: flex; flex-direction: column; gap: 15px; }
+        body.mode-immersive .side-panel { display: none; } /* 沉浸模式隐藏右侧辅助信息 */
+
+        .deadline-card {
+            background: #FEF2F2; border: 1px solid #FECACA; padding: 15px; border-radius: var(--radius);
+        }
+        .deadline-title { color: #991B1B; font-weight: 700; font-size: 13px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;}
+        .deadline-date { font-size: 20px; color: #DC2626; font-weight: 800; font-family: var(--font-mono); }
+
+        /* ================= 浮动切换按钮 (Float Toggle) ================= */
+        .mode-toggle {
+            position: fixed;
+            top: 20px;
+            right: 30px;
+            z-index: 999;
+            background: white;
+            border: 1px solid #E2E8F0;
+            padding: 8px 16px;
+            border-radius: 99px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1E293B;
+            transition: 0.3s;
+        }
+        .mode-toggle:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+        
+        /* 沉浸模式下的按钮样式 */
+        body.mode-immersive .mode-toggle {
+            background: #E7E5E4; border-color: #D6D3D1; color: #57534E; opacity: 0.6;
+        }
+        body.mode-immersive .mode-toggle:hover { opacity: 1; }
+
+        /* 提示徽标 */
+        .icon-pen { width: 14px; height: 14px; fill: currentColor; }
+
+    </style>
+</head>
+<body class="">
+
+    <button class="mode-toggle" onclick="toggleMode()">
+        <svg class="icon-pen" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        <span id="mode-text">进入沉浸撰写模式</span>
+    </button>
+
+    <div class="sidebar">
+        <div class="logo">
+            <span style="color:#2563EB">IP</span>Master
+        </div>
+        <div class="nav-item"><span>📊</span> 工作台</div>
+        <div class="nav-item active"><span>📂</span> 案件管理</div>
+        <div class="nav-item"><span>📅</span> 期限监控</div>
+        <div class="nav-item"><span>👥</span> 客户中心</div>
+        <div class="nav-item" style="margin-top:auto"><span>⚙️</span> 设置</div>
+    </div>
+
+    <div class="main-container">
+        <div class="top-header">
+            <div style="font-size:14px; color:#64748B;">案件管理 / 案件详情 / <span style="color:#1E293B; font-weight:600">P2310-008</span></div>
+            <div style="display:flex; gap:20px; align-items:center;">
+                <input type="text" class="search-bar" placeholder="搜索全局案件...">
+                <div style="width:32px; height:32px; background:#CBD5E1; border-radius:50%;"></div>
+            </div>
+        </div>
+
+        <div class="content-scroll">
+            
+            <div class="case-header">
+                <div style="flex:1">
+                    <div class="case-meta" style="margin-bottom:10px;">
+                        <span style="font-family: var(--font-mono);">P2310-008</span>
+                        <span>|</span>
+                        <span>申请日: 2023-05-12</span>
+                        <span>|</span>
+                        <span>客户: 蔚来汽车科技</span>
+                    </div>
+                    <div class="case-title">
+                        <h1>一种基于激光雷达点云数据的车辆自动驾驶避障方法及系统</h1>
+                    </div>
+                    
+                    <div class="timeline-wrapper">
+                        <div class="step done">
+                            <div class="step-dot"></div><div class="step-label">受理</div>
+                        </div>
+                        <div class="step done">
+                            <div class="step-dot"></div><div class="step-label">初审合格</div>
+                        </div>
+                        <div class="step done">
+                            <div class="step-dot"></div><div class="step-label">公布</div>
+                        </div>
+                        <div class="step active">
+                            <div class="step-dot"></div><div class="step-label" style="color:#2563EB; font-weight:700">实审中</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-dot"></div><div class="step-label">授权/驳回</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="text-align:right;">
+                    <span class="case-tag">第一次审查意见</span>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <div class="tab-item">基本信息</div>
+                <div class="tab-item active">权利要求 (Claims)</div>
+                <div class="tab-item">官方文档</div>
+                <div class="tab-item">费减监控</div>
+            </div>
+
+            <div class="content-grid">
+                <div class="panel">
+                    <div class="doc-content">
+                        <h3 style="margin-bottom:20px; font-weight:bold;">权利要求书</h3>
+                        <p class="doc-p">1. 一种基于激光雷达点云数据的车辆自动驾驶避障方法，其特征在于，包括以下步骤：<br>
+                        步骤S1：获取激光雷达采集的原始点云数据，并对所述原始点云数据进行预处理，得到目标点云数据；<br>
+                        步骤S2：利用基于体素网格的聚类算法对所述目标点云数据进行障碍物检测，获取障碍物的三维边界框信息；</p>
+                        
+                        <p class="doc-p">2. 根据权利要求1所述的方法，其特征在于，所述步骤S1具体包括：<br>
+                        利用直通滤波算法去除所述原始点云数据中的背景噪声，并通过统计离群值移除算法去除离群点。</p>
+                        
+                        <p class="doc-p">3. 根据权利要求1所述的方法，其特征在于，所述步骤S2中，所述体素网格的大小根据车辆当前的行驶速度动态调整；<br>
+                        当行驶速度大于预设阈值时，增大体素网格尺寸以降低计算量；当行驶速度小于预设阈值时，减小体素网格尺寸以提高检测精度。</p>
+
+                        <p class="doc-p">4. 一种车辆自动驾驶避障系统，用于实现权利要求1-3任一项所述的方法，其特征在于，包括：<br>
+                        数据采集模块，用于获取激光雷达数据；<br>
+                        处理模块，用于执行点云聚类及障碍物识别算法。</p>
+                        
+                        <p class="doc-p" style="color:#94A3B8; font-style:italic;">[... 点击展开更多权利要求 ...]</p>
+                    </div>
+                </div>
+
+                <div class="side-panel">
+                    <div class="deadline-card">
+                        <div class="deadline-title">
+                            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            答复绝限 (Final Deadline)
+                        </div>
+                        <div class="deadline-date">2023-11-15</div>
+                        <div style="font-size:12px; color:#B91C1C; margin-top:5px;">剩余 12 天</div>
+                    </div>
+
+                    <div class="panel" style="padding:15px;">
+                        <div style="font-size:13px; font-weight:600; margin-bottom:10px;">案件备注</div>
+                        <textarea style="width:100%; border:1px solid #E2E8F0; border-radius:4px; padding:8px; font-size:12px; height:80px;" placeholder="在此输入内部备注..."></textarea>
+                    </div>
+
+                    <div class="panel" style="padding:15px;">
+                        <div style="font-size:13px; font-weight:600; margin-bottom:10px;">发明人</div>
+                        <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                            <span style="background:#F1F5F9; padding:4px 8px; border-radius:4px; font-size:12px;">张伟</span>
+                            <span style="background:#F1F5F9; padding:4px 8px; border-radius:4px; font-size:12px;">李晓明</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        function toggleMode() {
+            const body = document.body;
+            const btnText = document.getElementById('mode-text');
+            
+            body.classList.toggle('mode-immersive');
+            
+            if (body.classList.contains('mode-immersive')) {
+                btnText.textContent = "退出沉浸模式";
+            } else {
+                btnText.textContent = "进入沉浸撰写模式";
+            }
+        }
+    </script>
+</body>
+</html>

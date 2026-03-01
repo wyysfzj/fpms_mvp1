@@ -1,32 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime
-
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, text
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.mixins import AuditMixin, UUIDPrimaryKeyMixin
 
 
-class T_User(Base):
+class T_User(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_user"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.current_timestamp(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.current_timestamp(),
-        onupdate=func.current_timestamp(),
-    )
 
     user_roles: Mapped[list["T_UserRole"]] = relationship(
         "T_UserRole",
@@ -35,10 +22,9 @@ class T_User(Base):
     )
 
 
-class T_Role(Base):
+class T_Role(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_role"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
     code: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
 
@@ -47,6 +33,21 @@ class T_Role(Base):
         back_populates="role",
         cascade="all, delete-orphan",
     )
+
+
+class T_RolePerm(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    """Maps permissions to roles."""
+
+    __tablename__ = "t_role_perm"
+
+    role_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("t_role.id", ondelete="CASCADE"),
+        index=True,
+    )
+    perm_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+
+    __table_args__ = (UniqueConstraint("role_id", "perm_code", name="uq_role_perm"),)
 
 
 class T_UserRole(Base):

@@ -1,0 +1,15 @@
+{
+  "dunning": {
+    "to_date": "2026-01-31",
+    "round_no": 1,
+    "status": "DRAFT",
+    "currency": "CNY",
+    "source": "backend/tests/test_collections_e2e.py"
+  },
+  "bad_debt": {
+    "target_invoice": "INV-2025-0001",
+    "mark_date": "2026-02-15",
+    "restore_date": "2026-02-28",
+    "source": "backend/app/modules/collections/api.py"
+  }
+}

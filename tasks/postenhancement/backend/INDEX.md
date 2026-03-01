@@ -1,0 +1,50 @@
+# Backend Atomic Task Files
+
+- Source split from `tasks/postenhancement/POSTENH_ATOMIC_BACKEND_TASKS.md`
+
+## Tasks
+
+- [PE-BE-00-01](./PE-BE-00-01.md) — 扩展 CaseType/状态枚举，加入 `CONSULTING` / `SEARCH` 并补齐校验映射。
+- [PE-BE-00-02](./PE-BE-00-02.md) — 统一新增模块权限常量并写入 RBAC seed 字典。
+- [PE-BE-00-03](./PE-BE-00-03.md) — 定义新增 API 错误语义与响应 envelope 统一约束（面向后续任务）。
+- [PE-BE-00-04](./PE-BE-00-04.md) — 新增 `GET /auth/me` 返回当前用户角色与权限（解除 FE-00-02 阻塞）。
+- [PE-BE-DB-01](./PE-BE-DB-01.md) — 新增 `T_Expense`（通用第三方支出）。
+- [PE-BE-DB-02](./PE-BE-DB-02.md) — 新增 `T_PayList`（官费清单头）。
+- [PE-BE-DB-03](./PE-BE-DB-03.md) — 新增 `T_GovPayment`（官费缴费明细）。
+- [PE-BE-DB-04](./PE-BE-DB-04.md) — 新增 `T_AnnuityTask`（年费任务）。
+- [PE-BE-DB-05](./PE-BE-DB-05.md) — 新增 `T_Dunning` + `T_DunningLine`。
+- [PE-BE-DB-06](./PE-BE-DB-06.md) — 新增 `T_CommissionRule`。
+- [PE-BE-DB-07](./PE-BE-DB-07.md) — 新增 `T_Commission`。
+- [PE-BE-DB-08](./PE-BE-DB-08.md) — 新增 `T_CommissionSettlement` + `T_CommissionSettleLine`。
+- [PE-BE-AN-01](./PE-BE-AN-01.md) — 实现年费任务提取服务（按到期区间/状态筛选）。
+- [PE-BE-AN-02](./PE-BE-AN-02.md) — `GET /annuity/tasks`。
+- [PE-BE-AN-03](./PE-BE-AN-03.md) — `PUT /annuity/tasks/{task_id}/instruction`（客户指示录入）。
+- [PE-BE-AN-04](./PE-BE-AN-04.md) — 实现“年费任务→费用草单”生成服务。
+- [PE-BE-AN-05](./PE-BE-AN-05.md) — `POST /annuity/tasks/generate-drafts`。
+- [PE-BE-AN-06](./PE-BE-AN-06.md) — `POST /pay-lists/from-fee-items`（官费清单生成）。
+- [PE-BE-AN-07](./PE-BE-AN-07.md) — `POST /gov-payments`（官方缴费登记）。
+- [PE-BE-CL-01](./PE-BE-CL-01.md) — 实现逾期账单筛选与催款批次生成服务。
+- [PE-BE-CL-02](./PE-BE-CL-02.md) — `POST /dunning`。
+- [PE-BE-CL-03](./PE-BE-CL-03.md) — `GET /dunning`（查询与分页）。
+- [PE-BE-CL-04](./PE-BE-CL-04.md) — `POST /bills/{bill_id}/bad-debt`。
+- [PE-BE-CL-05](./PE-BE-CL-05.md) — `POST /bills/{bill_id}/bad-debt/restore`。
+- [PE-BE-COM-01](./PE-BE-COM-01.md) — `POST /commission/rules`。
+- [PE-BE-COM-02](./PE-BE-COM-02.md) — `GET /commission/rules`。
+- [PE-BE-COM-03](./PE-BE-COM-03.md) — `PUT /commission/rules/{rule_id}`。
+- [PE-BE-COM-04](./PE-BE-COM-04.md) — 实现账单生成触发提成记录服务。
+- [PE-BE-COM-05](./PE-BE-COM-05.md) — 在 billing 链路中接入提成服务 hook（不改变旧返回契约）。
+- [PE-BE-COM-06](./PE-BE-COM-06.md) — 实现 WaitPay/ForceSettle 可结算判定更新（offset/reverse 后重算）。
+- [PE-BE-COM-07](./PE-BE-COM-07.md) — `GET /commission`（提成记录查询）。
+- [PE-BE-COM-08](./PE-BE-COM-08.md) — `POST /commission/settlements`（创建结算批次）。
+- [PE-BE-COM-09](./PE-BE-COM-09.md) — `POST /commission/settlements/{id}/generate-lines`。
+- [PE-BE-COM-10](./PE-BE-COM-10.md) — `GET /commission/reports/settlement`。
+- [PE-BE-CS-01](./PE-BE-CS-01.md) — `POST /consulting/cases`（或扩展 `/cases` 的 consulting/search 验证分支）。
+- [PE-BE-CS-02](./PE-BE-CS-02.md) — `POST /expenses`（支出录入）。
+- [PE-BE-CS-03](./PE-BE-CS-03.md) — `GET /expenses`（支出查询统计）。
+- [PE-BE-CS-04](./PE-BE-CS-04.md) — 实现顾问/检索服务费草单生成策略（固定/工时/混合）。
+- [PE-BE-CS-05](./PE-BE-CS-05.md) — `POST /consulting/fee-drafts`。
+- [PE-BE-CS-06](./PE-BE-CS-06.md) — 顾问/检索账单生成时接入提成规则匹配。
+- [PE-BE-QA-01](./PE-BE-QA-01.md) — 统一关键模块错误 envelope（避免裸 `HTTPException detail` 分叉）。
+- [PE-BE-QA-02](./PE-BE-QA-02.md) — 统一分页上限策略（`page_size le=100`）。
+- [PE-BE-TEST-01](./PE-BE-TEST-01.md) — 新增 annuity/collections/commission/consulting 关键 E2E 测试。
+- [PE-BE-WIRE-01](./PE-BE-WIRE-01.md) — 将新增模块 router 接入 `backend/app/api/router.py`（一次性）。

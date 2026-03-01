@@ -7,7 +7,11 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import get_settings
-from app.core.errors import BusinessError, ErrorResponse
+from app.core.errors import BusinessError, to_error_response
+from app.core.logging import configure_logging
+from app.core.middleware import CorrelationIdMiddleware, RequestLoggingMiddleware
+
+configure_logging()
 
 
 def create_app() -> FastAPI:
@@ -21,33 +25,25 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(CorrelationIdMiddleware)
 
     @app.exception_handler(BusinessError)
     async def business_error_handler(request: Request, exc: BusinessError):
-        error_response = ErrorResponse(
-            error={
-                "code": exc.code,
-                "message": exc.message,
-                "details": exc.details,
-            }
-        )
         return JSONResponse(
             status_code=exc.status_code,
-            content=error_response.model_dump(),
+            content=to_error_response(exc.code, exc.message, exc.details),
         )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):
-        error_response = ErrorResponse(
-            error={
-                "code": "VALIDATION_ERROR",
-                "message": "Invalid request",
-                "details": exc.errors(),
-            }
-        )
         return JSONResponse(
             status_code=422,
-            content=error_response.model_dump(),
+            content=to_error_response(
+                "VALIDATION_ERROR",
+                "Invalid request",
+                {"errors": exc.errors()},
+            ),
         )
 
     @app.get("/healthz")

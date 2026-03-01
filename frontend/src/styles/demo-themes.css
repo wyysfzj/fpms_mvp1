@@ -1,0 +1,62 @@
+/* ==========================================================================
+   DEMO Theme: Style-B 现代科技 (Tech Efficiency)
+   Source: reference/patent_ui.html body.style-b
+   Activated when: VITE_DEMO_UI=1 → body.style-b
+   ========================================================================== */
+
+body.style-b {
+  /* --- Overrides vs base tokens (variables.css / base.css) --- */
+  --text-sub: #94A3B8;              /* base: #64748B → lighter in style-b */
+  --sidebar-width: 220px;           /* base: 240px → narrower */
+  --color-border: #F1F5F9;          /* base: #E2E8F0 → subtler */
+
+  /* --- Sidebar active state (new, used by SidebarNav) --- */
+  --sidebar-text: #64748B;
+  --sidebar-hover-bg: #F1F5F9;
+  --sidebar-active-bg: #EFF6FF;
+  --sidebar-active-text: #2563EB;
+
+  /* --- Layout density tokens (new, used by dashboard/detail pages) --- */
+  --content-padding: 20px;
+  --card-padding: 15px;
+  --table-row-padding: 8px 12px;
+
+  /* --- KPI / card tokens (new, used by Dashboard KPI cards) --- */
+  --radius-card: 8px;
+  --text-highlight: #2563EB;
+  --font-num: "Inter", sans-serif;
+
+  /* --- Element Plus border sync --- */
+  --el-border-color: #F1F5F9;
+}
+
+/* Style-B component overrides */
+body.style-b .el-tag {
+  border-radius: 4px;
+}
+
+body.style-b .kpi-grid {
+  gap: 10px;
+}
+
+/* Status tag colors (style-b variants) */
+body.style-b .tag-urgent {
+  background: #FEE2E2;
+  color: #EF4444;
+}
+
+body.style-b .tag-warning {
+  background: #FFFBEB;
+  color: #D97706;
+}
+
+body.style-b .tag-normal {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+/* Sidebar active item highlight */
+body.style-b .sidebar-nav .nav-item.router-link-active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
+}

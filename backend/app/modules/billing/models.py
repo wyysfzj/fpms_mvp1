@@ -12,18 +12,17 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    func,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.mixins import AuditMixin, UUIDPrimaryKeyMixin
 
 
-class Bill(Base):
+class Bill(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_bill"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
     bill_no: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     client_id: Mapped[str] = mapped_column(String(36), ForeignKey("t_client.id"), nullable=False)
     currency: Mapped[str] = mapped_column(String(8), nullable=False, server_default=text("'CNY'"))
@@ -48,21 +47,11 @@ class Bill(Base):
     balance: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False), nullable=False, server_default=func.current_timestamp()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False),
-        nullable=False,
-        server_default=func.current_timestamp(),
-        onupdate=func.current_timestamp(),
-    )
 
 
-class BillItem(Base):
+class BillItem(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_bill_item"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
     bill_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_bill.id", ondelete="CASCADE"), nullable=False
     )
@@ -82,10 +71,9 @@ class BillItem(Base):
     )
 
 
-class CaseReceipt(Base):
+class CaseReceipt(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_case_receipt"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
     case_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False
     )
@@ -98,12 +86,20 @@ class CaseReceipt(Base):
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
     last_receipt_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    fee_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    year_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_arrears: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, server_default=text("0")
+    )
+    invoice_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_commissionable: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, server_default=text("0")
+    )
 
 
-class Offset(Base):
+class Offset(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_offset"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
     payment_line_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_payment_line.id", ondelete="CASCADE"), nullable=False
     )
@@ -118,10 +114,9 @@ class Offset(Base):
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
 
 
-class Payment(Base):
+class Payment(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_payment"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
     pay_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
     client_id: Mapped[str] = mapped_column(String(36), ForeignKey("t_client.id"), nullable=False)
     pay_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -130,15 +125,11 @@ class Payment(Base):
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=False), nullable=False, server_default=func.current_timestamp()
-    )
 
 
-class PaymentLine(Base):
+class PaymentLine(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_payment_line"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
     payment_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_payment.id", ondelete="CASCADE"), nullable=False
     )

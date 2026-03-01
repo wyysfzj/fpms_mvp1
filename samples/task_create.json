@@ -1,0 +1,6 @@
+{
+  "case_id": "${CASE_ID}",
+  "title": "Manual Task - Simulated",
+  "due_date": "2026-01-15",
+  "status": "OPEN"
+}

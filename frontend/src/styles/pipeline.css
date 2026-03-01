@@ -1,0 +1,316 @@
+/* ==========================================================================
+   Pipeline Dashboard Component Styles
+   Adapted from spec components.css; uses project CSS variable names.
+   ========================================================================== */
+
+/* ---- Common ---- */
+.money-text { font-weight: 800; letter-spacing: 0.2px; font-family: var(--font-mono, monospace); }
+
+.case-tag {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--primary, var(--color-primary));
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border, var(--color-border));
+  background: #FFFFFF;
+  color: var(--text-sub, #64748B);
+  white-space: nowrap;
+}
+.badge.urgent {
+  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--danger, var(--color-danger));
+}
+.badge.warn {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #EA580C;
+}
+
+/* ---- Relation tags ---- */
+.rel-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--border, var(--color-border));
+  background: #FFFFFF;
+  color: var(--text-sub, #64748B);
+}
+.rel-tag.doc {
+  border-color: rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--primary, var(--color-primary));
+}
+.rel-tag.fee {
+  border-color: rgba(139, 92, 246, 0.25);
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--purple, var(--color-purple));
+}
+
+/* ---- Pipeline Grid (top workflow cards) ---- */
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.pipe-card {
+  background: var(--bg-card, var(--color-bg-panel));
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: var(--radius, var(--radius-base));
+  padding: 18px 18px 16px;
+  height: 140px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: box-shadow 0.2s ease;
+}
+.pipe-card:hover { box-shadow: 0 6px 14px rgba(15, 23, 42, 0.10); }
+
+.pipe-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+}
+
+.pipe-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-sub, #64748B);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.pipe-num {
+  font-weight: 900;
+  font-size: 34px;
+  margin-top: 10px;
+  color: var(--text-main, #0F172A);
+}
+
+.pipe-label {
+  margin-top: auto;
+  font-size: 12px;
+  color: var(--text-sub, #64748B);
+}
+
+.pipe-hint {
+  margin-top: auto;
+  font-size: 12px;
+  color: var(--primary, var(--color-primary));
+  font-weight: 700;
+}
+
+/* ---- Split Grid (Action Center + Financial Loop) ---- */
+.split-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+}
+
+.panel {
+  background: var(--bg-card, var(--color-bg-panel));
+  border: 1px solid var(--border, var(--color-border));
+  border-radius: var(--radius, var(--radius-base));
+  overflow: hidden;
+}
+
+.panel > .panel-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, var(--color-border));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.panel > .panel-header .panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 900;
+  font-size: 14px;
+  color: var(--text-main, #0F172A);
+}
+
+.panel-link {
+  font-size: 13px;
+  color: var(--primary, var(--color-primary));
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+.panel-link:hover { text-decoration: underline; }
+
+/* ---- Task list items (Action Center) ---- */
+.list-item {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, var(--color-border));
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.list-item:last-child { border-bottom: none; }
+.list-item:hover { background: rgba(37, 99, 235, 0.04); }
+
+.task-main { flex: 1; min-width: 0; }
+.task-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.task-title {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--text-main, #0F172A);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-sub-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--text-sub, #64748B);
+  font-size: 12px;
+  align-items: center;
+}
+
+/* ---- Finance Row ---- */
+.finance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.finance-highlight {
+  background: rgba(16, 185, 129, 0.08);
+}
+.finance-left {
+  flex: 1;
+  min-width: 0;
+}
+.finance-label {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-main, #0F172A);
+}
+.finance-date {
+  font-size: 12px;
+  color: var(--text-sub, #64748B);
+}
+.finance-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* ---- Drawer (slide-over for New Case) ---- */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(10px);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 520px;
+  background: #FFFFFF;
+  border-left: 1px solid var(--border, var(--color-border));
+  box-shadow: -10px 0 30px rgba(15, 23, 42, 0.25);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.drawer-backdrop.open .drawer-panel {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--border, var(--color-border));
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text-main, #0F172A);
+}
+.drawer-body {
+  padding: 22px 24px;
+  flex: 1;
+  overflow: auto;
+}
+.drawer-footer {
+  padding: 18px 24px;
+  border-top: 1px solid var(--border, var(--color-border));
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ---- Form groups (for drawer) ---- */
+.form-group { margin-bottom: 18px; }
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text-sub, #64748B);
+  font-weight: 700;
+}
+
+/* ---- Dashboard-only: hidden in immersive mode ---- */
+body.mode-immersive .dashboard-only { display: none !important; }
+
+/* ---- Panel empty state ---- */
+.panel-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--text-sub, #64748B);
+  font-size: 13px;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1260px) {
+  .pipeline-grid { grid-template-columns: repeat(2, 1fr); }
+  .split-grid { grid-template-columns: 1fr; }
+  .drawer-panel { width: 100%; max-width: 520px; }
+}

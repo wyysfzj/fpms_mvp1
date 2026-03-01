@@ -1,0 +1,37 @@
+{
+  "rules": [
+    {
+      "rule_name": "COM-RULE-SERVICE-001",
+      "case_type": "NORMAL",
+      "fee_type": "SERVICE",
+      "flow_dir": "CN_DOMESTIC",
+      "patent_category": "INV",
+      "s1_rate": 0.10,
+      "s2_rate": 0.05,
+      "wait_pay": true,
+      "force_settle": false,
+      "effective_from": "2025-01-01",
+      "source": "derived_from:docs/FPMS SPEC 2.0.md + backend/tests/test_commission_e2e.py"
+    },
+    {
+      "rule_name": "COM-RULE-CS-002",
+      "case_type": "CONSULTING",
+      "fee_type": "SERVICE",
+      "flow_dir": "CN_DOMESTIC",
+      "patent_category": "INV",
+      "s1_rate": 0.12,
+      "s2_rate": 0.06,
+      "wait_pay": false,
+      "force_settle": true,
+      "effective_from": "2025-01-01",
+      "source": "derived_from:docs/FPMS SPEC 2.0.md + backend/tests/test_consulting_e2e.py"
+    }
+  ],
+  "settlement": {
+    "agent_id": "agent-linfeng-001",
+    "period_from": "2025-01-01",
+    "period_to": "2025-12-31",
+    "currency": "CNY",
+    "source": "backend/app/modules/commission/api.py"
+  }
+}

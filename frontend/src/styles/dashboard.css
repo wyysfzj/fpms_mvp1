@@ -1,0 +1,141 @@
+/* ==========================================================================
+   Dashboard Styles — aligned to patent_ui.html style-b layout
+   Uses CSS variables for theme compatibility
+   ========================================================================== */
+
+.dashboard-page {
+  padding: var(--content-padding, 24px);
+}
+
+/* Header section: title + date */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border, #E2E8F0);
+}
+
+.dashboard-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-main, #1E293B);
+}
+
+.dashboard-date {
+  font-size: 14px;
+  color: var(--text-sub, #94A3B8);
+}
+
+/* KPI grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--kpi-gap, 16px);
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  background: var(--color-bg-panel, #fff);
+  padding: 20px;
+  border-radius: var(--radius-card, 8px);
+  box-shadow: var(--shadow-card, none);
+  border: var(--border-panel, 1px solid #E2E8F0);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kpi-label {
+  font-size: 13px;
+  color: var(--text-sub, #94A3B8);
+  letter-spacing: 0.5px;
+}
+
+.kpi-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-highlight, var(--color-primary, #2563EB));
+  font-family: var(--font-num, "Inter", sans-serif);
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--text-sub, #94A3B8);
+}
+
+/* Data panel (table wrapper) */
+.data-panel {
+  background: var(--color-bg-panel, #fff);
+  border-radius: var(--radius-card, 8px);
+  box-shadow: var(--shadow-card, none);
+  border: var(--border-panel, 1px solid #E2E8F0);
+  padding: var(--card-padding, 20px);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-main, #1E293B);
+}
+
+/* Status tags */
+.status-tag {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.tag-urgent {
+  background: #FEE2E2;
+  color: #EF4444;
+}
+
+.tag-warning {
+  background: #FFFBEB;
+  color: #D97706;
+}
+
+.tag-normal {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+/* Todo empty state */
+.todo-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--text-sub, #94A3B8);
+  font-size: 14px;
+}
+
+/* Links in table */
+.chain-link {
+  color: var(--color-primary, #2563EB);
+  text-decoration: none;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.chain-link:hover {
+  text-decoration: underline;
+}
+
+.text-muted {
+  color: var(--text-sub, #94A3B8);
+}
+
+.text-danger {
+  color: var(--color-danger, #EF4444);
+  font-weight: 600;
+}

@@ -1,0 +1,6 @@
+{
+  "case_id": "${CASE_ID}",
+  "client_id": "${CLIENT_ID}",
+  "currency": "CNY",
+  "title": "Fee Draft - Simulated"
+}

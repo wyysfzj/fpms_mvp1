@@ -1,0 +1,182 @@
+<template>
+  <el-dialog
+    v-model="visible"
+    title="编辑客户指示"
+    width="520px"
+    :close-on-click-modal="false"
+    @close="handleClose"
+  >
+    <div v-if="error" class="dialog-error">
+      <ApiErrorBanner :error="error" @dismiss="error = null" />
+    </div>
+
+    <el-form
+      ref="formRef"
+      :model="form"
+      :rules="rules"
+      label-position="top"
+    >
+      <el-form-item
+        label="客户指示"
+        prop="instruction"
+        :error="fieldErrors.get('instruction')?.join('，')"
+      >
+        <el-radio-group v-model="form.instruction">
+          <el-radio value="PAY">缴费（PAY）</el-radio>
+          <el-radio value="DEFER">延期（DEFER）</el-radio>
+          <el-radio value="ABANDON">放弃（ABANDON）</el-radio>
+        </el-radio-group>
+      </el-form-item>
+
+      <el-form-item
+        label="指示日期"
+        prop="instruction_date"
+        :error="fieldErrors.get('instruction_date')?.join('，')"
+      >
+        <el-date-picker
+          v-model="form.instruction_date"
+          type="date"
+          placeholder="请选择日期（可选）"
+          value-format="YYYY-MM-DD"
+          format="YYYY-MM-DD"
+          style="width: 100%"
+          clearable
+        />
+      </el-form-item>
+    </el-form>
+
+    <template #footer>
+      <el-button @click="handleClose">取消</el-button>
+      <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup lang="ts">
+import { reactive, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
+import { updateAnnuityTaskInstruction } from '../../../api/annuity'
+import { mapFieldErrors } from '../../../api/errors'
+import type { ApiError } from '../../../api/types'
+import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+
+type InstructionValue = '' | 'PAY' | 'DEFER' | 'ABANDON'
+
+const props = defineProps<{
+  modelValue: boolean
+  taskId: number | null
+  initialInstruction?: string
+  initialInstructionDate?: string
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  success: []
+}>()
+
+const visible = ref(props.modelValue)
+const formRef = ref<FormInstance>()
+const saving = ref(false)
+const error = ref<ApiError | null>(null)
+const fieldErrors = ref<Map<string, string[]>>(new Map())
+
+const form = reactive<{
+  instruction: InstructionValue
+  instruction_date: string
+}>({
+  instruction: '',
+  instruction_date: '',
+})
+
+const rules: FormRules = {
+  instruction: [
+    { required: true, message: '请选择客户指示', trigger: 'change' },
+  ],
+}
+
+function normalizeInstruction(value?: string): InstructionValue {
+  const normalized = (value || '').toUpperCase()
+  if (normalized === 'PAY' || normalized === 'DEFER' || normalized === 'ABANDON') {
+    return normalized
+  }
+  return ''
+}
+
+function resetForm() {
+  form.instruction = normalizeInstruction(props.initialInstruction)
+  form.instruction_date = props.initialInstructionDate || ''
+  error.value = null
+  fieldErrors.value = new Map()
+}
+
+watch(
+  () => props.modelValue,
+  (value) => {
+    visible.value = value
+    if (value) resetForm()
+  },
+)
+
+watch(visible, (value) => {
+  emit('update:modelValue', value)
+})
+
+function handleClose() {
+  visible.value = false
+}
+
+function mapErrorMessage(apiError: ApiError): string {
+  switch (apiError.code) {
+    case 'ANNUITY_INSTRUCTION_INVALID':
+      return '客户指示不合法，或当前状态不允许该变更。'
+    case 'ANNUITY_TASK_NOT_FOUND':
+      return '未找到对应的年费任务。'
+    case 'ANNUITY_STATE_CONFLICT':
+      return '当前任务状态不允许更新客户指示。'
+    case 'VALIDATION_ERROR':
+      return '参数校验失败，请检查后重试。'
+    default:
+      if (apiError.status === 401) return '登录已失效，请重新登录。'
+      if (apiError.status === 403) return '无权限执行该操作。'
+      if (apiError.status === 404) return '目标任务不存在。'
+      if (apiError.status === 409) return '状态冲突，暂时无法保存。'
+      if (apiError.status === 422) return '输入内容不符合要求，请检查后重试。'
+      return '保存失败，请稍后重试。'
+  }
+}
+
+async function handleSave() {
+  fieldErrors.value = new Map()
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+  if (!props.taskId) {
+    ElMessage.error('缺少任务标识，无法保存。')
+    return
+  }
+
+  saving.value = true
+  error.value = null
+
+  try {
+    await updateAnnuityTaskInstruction(props.taskId, {
+      instruction: form.instruction,
+      instruction_date: form.instruction_date || undefined,
+    })
+    ElMessage.success('客户指示已保存')
+    visible.value = false
+    emit('success')
+  } catch (err) {
+    const apiError = err as ApiError
+    error.value = {
+      ...apiError,
+      message: mapErrorMessage(apiError),
+    }
+    if (apiError.status === 422 && apiError.details) {
+      fieldErrors.value = mapFieldErrors(apiError.details)
+    }
+  } finally {
+    saving.value = false
+  }
+}
+</script>

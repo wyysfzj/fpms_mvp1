@@ -1,0 +1,51 @@
+---
+
+## Appendix: UI Design Tokens & Specs (Source of Truth)
+
+> **Agent Note:** You MUST implement `src/styles/variables.css` using EXACTLY these values to ensure the "Dual-Mode" visual identity.
+
+### 1. CSS Variables Definition
+```css
+:root {
+  /* ================= Default Mode (Style B: Modern Tech) ================= */
+  /* Brand Colors */
+  --color-primary: #2563EB;     /* Electric Blue: Actions, Links, Active States */
+  --color-success: #10B981;     /* Emerald: Completed steps */
+  --color-danger: #EF4444;      /* Red: Deadlines */
+  
+  /* Backgrounds */
+  --color-bg-body: #F1F5F9;     /* Cool Grey: App Background */
+  --color-bg-panel: #FFFFFF;    /* Pure White: Cards/Panels */
+  --color-bg-sidebar: #FFFFFF;
+  
+  /* Typography */
+  --font-main: "Inter", "PingFang SC", system-ui, sans-serif;
+  --font-read: "Inter", "PingFang SC", system-ui, sans-serif; /* Same as UI in default mode */
+  
+  /* Layout & Shape */
+  --sidebar-width: 240px;
+  --header-height: 60px;
+  --radius-base: 6px;           /* Small/Modern radius */
+  --shadow-card: none;          /* Flat design preferred in Style B */
+  --border-panel: 1px solid #E2E8F0;
+}
+
+/* ================= Immersive Mode (Style C: Focus) ================= */
+body.mode-immersive {
+  /* Brand Colors */
+  --color-primary: #0D9488;     /* Teal: Calming, Focus */
+  
+  /* Backgrounds */
+  --color-bg-body: #F5F5F4;     /* Warm Grey: Eye-protection */
+  --color-bg-panel: #F5F5F4;    /* Blends with body to reduce visual noise */
+  --color-bg-sidebar: transparent;
+  
+  /* Typography */
+  --font-read: "Noto Serif SC", "Songti SC", serif; /* Serif for long-form reading */
+  
+  /* Layout & Shape */
+  --sidebar-width: 0px;         /* Collapsed */
+  --header-height: 0px;         /* Hidden */
+  --shadow-card: none;
+  --border-panel: none;
+}

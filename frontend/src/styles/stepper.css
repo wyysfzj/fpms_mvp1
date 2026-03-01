@@ -1,0 +1,181 @@
+/* ==========================================================================
+   Case Detail Stepper — 5-step progress + KPI cards + branch alert
+   Extracted from v3_styles.css; scoped to .stepper / .step / .kpi-* classes
+   ========================================================================== */
+
+.stepper {
+  margin-top: 16px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  padding: 14px 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.step {
+  text-align: center;
+  position: relative;
+  font-size: 12px;
+  color: var(--text-sub, #64748b);
+  font-weight: 700;
+}
+
+.step::before {
+  content: '';
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  display: block;
+  margin: 0 auto 8px;
+  background: #cbd5e1;
+}
+
+.step.done {
+  color: #0f766e;
+}
+.step.done::before {
+  background: var(--success, #10b981);
+}
+
+.step.active {
+  color: var(--primary, #2563eb);
+}
+.step.active::before {
+  background: var(--primary, #2563eb);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+
+/* KPI 4 cards below stepper */
+.flow-state-card {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.flow-kpi-box {
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 6px;
+  padding: 10px;
+  background: white;
+}
+
+.flow-kpi-label {
+  font-size: 11px;
+  color: var(--text-sub, #64748b);
+  margin-bottom: 4px;
+}
+
+.flow-kpi-value {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.flow-kpi-value.small {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Branch status alert */
+.alert-note {
+  margin-top: 12px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 12px;
+  color: #92400e;
+}
+
+/* Deadline card (right panel) */
+.deadline-card {
+  margin-bottom: 14px;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  padding: 12px;
+}
+
+.deadline-card-title {
+  font-size: 12px;
+  color: #991b1b;
+  font-weight: 800;
+}
+
+.deadline-date {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+  color: #dc2626;
+  margin: 6px 0;
+}
+
+.deadline-left {
+  font-size: 12px;
+  color: #ef4444;
+}
+
+/* Related tasks list (right panel) */
+.related-tasks-title {
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.related-task-item {
+  padding: 8px 0;
+  border-bottom: 1px dashed #e2e8f0;
+  font-size: 13px;
+}
+
+.related-task-item:last-child {
+  border-bottom: none;
+}
+
+/* Case detail container grid layout */
+.case-detail-v3-grid {
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: var(--radius, 6px);
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  overflow: hidden;
+}
+
+.case-detail-v3-main {
+  padding: 28px;
+  line-height: 1.75;
+}
+
+.case-detail-v3-aside {
+  background: #f8fafc;
+  border-left: 1px solid var(--border, #e2e8f0);
+  padding: 18px;
+}
+
+.muted {
+  color: var(--text-sub, #64748b);
+  font-size: 12px;
+}
+
+/* Responsive: <= 1260px */
+@media (max-width: 1260px) {
+  .case-detail-v3-grid {
+    grid-template-columns: 1fr;
+  }
+  .case-detail-v3-aside {
+    border-left: none;
+    border-top: 1px solid var(--border, #e2e8f0);
+  }
+  .flow-state-card {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Responsive: <= 780px */
+@media (max-width: 780px) {
+  .stepper {
+    grid-template-columns: 1fr;
+  }
+}

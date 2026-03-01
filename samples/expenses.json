@@ -1,0 +1,24 @@
+[
+  {
+    "expense_no": "EXP-20260108-000001",
+    "case_no": "CS-2025-SRCH-002",
+    "category": "SEARCH_DB",
+    "expense_date": "2026-01-08",
+    "amount": 800,
+    "currency": "CNY",
+    "vendor_name": "国家知识产权检索平台",
+    "status": "DRAFT",
+    "source": "backend/app/modules/expenses/service.py"
+  },
+  {
+    "expense_no": "EXP-20260112-000002",
+    "case_no": "CS-2025-CONS-001",
+    "category": "TRANSLATION",
+    "expense_date": "2026-01-12",
+    "amount": 1200,
+    "currency": "CNY",
+    "vendor_name": "中英专利翻译中心",
+    "status": "DRAFT",
+    "source": "backend/app/modules/expenses/service.py"
+  }
+]

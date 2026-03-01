@@ -1,0 +1,14 @@
+{
+  "case_id": "${CASE_ID}",
+  "client_id": "${CLIENT_ID}",
+  "currency": "CNY",
+  "title": "Bill - Simulated",
+  "items": [
+    {
+      "description": "Service fee",
+      "qty": 1,
+      "unit_price": 2000,
+      "amount": 2000
+    }
+  ]
+}

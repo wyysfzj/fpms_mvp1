@@ -1,0 +1,72 @@
+/* ================= Global Reset & Base Styles ================= */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    font-family: var(--font-main);
+    background-color: var(--color-bg-body);
+    color: #1E293B;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+#app {
+    height: 100%;
+}
+
+/* ================= Additional Token Aliases ================= */
+:root {
+    --color-border: #E2E8F0;
+    --text-main: #1E293B;
+    --text-sub: #64748B;
+    --text-accent: var(--color-primary);
+    --font-mono: "JetBrains Mono", monospace;
+    --transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+body.mode-immersive {
+    --color-border: transparent;
+    --text-main: #292524;
+    --text-sub: #78716C;
+    --text-accent: var(--color-primary);
+}
+
+/* ================= Element Plus Variable Mapping ================= */
+:root {
+    --el-color-primary: var(--color-primary);
+    --el-border-radius-base: var(--radius-base);
+    --el-border-color: #E2E8F0;
+    --el-bg-color: var(--color-bg-panel);
+    --el-fill-color-blank: var(--color-bg-panel);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html:focus-within {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    body,
+    .content-scroll,
+    .sidebar,
+    .top-header,
+    .mode-toggle {
+        transition: none !important;
+    }
+}

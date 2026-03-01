@@ -1,0 +1,1 @@
+# Universal Atomic Execution Prompt (v2) — ENH-03-02 (FPMS MVP1)

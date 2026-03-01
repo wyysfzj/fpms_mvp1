@@ -1,66 +1,258 @@
 from __future__ import annotations
 
-from typing import Any
-from uuid import uuid4
+import logging
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_perm
+from app.core.config import get_settings
 from app.db.session import get_db
-from app.modules.documents.models import DocAttachment, Document
+from app.modules.cases.models import Case
+from app.modules.documents.enums import DocumentDirection
+from app.modules.documents.fee_linking_service import maybe_create_fee_draft
+from app.modules.documents.models import DocTemplate
+from app.modules.documents.schemas import (
+    DocAttachmentOut,
+    DocTemplateCreateIn,
+    DocTemplateListOut,
+    DocTemplateOut,
+    DocTemplateUpdateIn,
+    DocumentCreateIn,
+    DocumentListOut,
+    DocumentOut,
+    DocumentUpdateIn,
+)
+from app.modules.documents.service import add_attachment as add_attachment_service
+from app.modules.documents.service import (
+    create_doc_template,
+    get_attachment_download,
+    get_doc_template,
+    list_doc_templates,
+    list_documents,
+    update_doc_template,
+)
+from app.modules.documents.service import create_document as create_document_service
+from app.modules.documents.service import get_document as get_document_service
+from app.modules.documents.service import update_document as update_document_service
 from app.modules.tasks.task_generation_service import TaskGenerationService
 
 router = APIRouter()
 
 
-@router.get("/documents")
-def get_documents(
+# ---------------------------------------------------------------------------
+# B1: DocTemplate CRUD endpoints (registered BEFORE /documents/{id} routes)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/doc-templates", response_model=DocTemplateListOut, summary="List doc templates")
+def list_doc_templates_endpoint(
+    q: str | None = Query(default=None),
+    direction: DocumentDirection | None = Query(default=None),
+    enabled: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _perm: None = Depends(require_perm("DocTemplate.Read")),
+    db: Session = Depends(get_db),
+) -> DocTemplateListOut:
+    items, total = list_doc_templates(
+        db, direction=direction, enabled=enabled, q=q, page=page, page_size=page_size
+    )
+    return DocTemplateListOut(
+        items=[DocTemplateOut.model_validate(t) for t in items],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+@router.post(
+    "/doc-templates",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DocTemplateOut,
+    summary="Create a doc template",
+)
+def create_doc_template_endpoint(
+    payload: DocTemplateCreateIn,
+    _perm: None = Depends(require_perm("DocTemplate.Create")),
+    db: Session = Depends(get_db),
+) -> DocTemplateOut:
+    template = create_doc_template(db, payload)
+    return DocTemplateOut.model_validate(template)
+
+
+@router.get(
+    "/doc-templates/{template_id}",
+    response_model=DocTemplateOut,
+    summary="Get a doc template",
+)
+def get_doc_template_endpoint(
+    template_id: str,
+    _perm: None = Depends(require_perm("DocTemplate.Read")),
+    db: Session = Depends(get_db),
+) -> DocTemplateOut:
+    template = get_doc_template(db, template_id)
+    return DocTemplateOut.model_validate(template)
+
+
+@router.put(
+    "/doc-templates/{template_id}",
+    response_model=DocTemplateOut,
+    summary="Update a doc template",
+)
+def update_doc_template_endpoint(
+    template_id: str,
+    payload: DocTemplateUpdateIn,
+    _perm: None = Depends(require_perm("DocTemplate.Edit")),
+    db: Session = Depends(get_db),
+) -> DocTemplateOut:
+    template = update_doc_template(db, template_id, payload)
+    return DocTemplateOut.model_validate(template)
+
+
+# ---------------------------------------------------------------------------
+# Document endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/documents", response_model=DocumentListOut, summary="List documents")
+def get_documents(
+    q: str | None = Query(default=None),
+    direction: DocumentDirection | None = Query(default=None),
+    doc_template_id: str | None = Query(default=None),
+    case_id: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     _perm: None = Depends(require_perm("Doc.Read")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    query = db.query(Document)
-    total = query.count()
-    documents = (
-        query.order_by(Document.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+) -> DocumentListOut:
+    """
+    List documents with filters and pagination.
+
+    **Auth**: Bearer JWT
+    **Permission**: Doc.Read
+    **Request example**:
+    `GET /api/v1/documents?page=1&page_size=20&direction=IN&case_id=CASE_ID`
+    **Curl example**:
+    ```bash
+    curl -s -X GET "http://localhost:8000/api/v1/documents?page=1&page_size=20" \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: List of documents
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 422: VALIDATION_ERROR
+    """
+    documents, total = list_documents(
+        db,
+        q=q,
+        direction=direction,
+        doc_template_id=doc_template_id,
+        case_id=case_id,
+        client_id=client_id,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        page_size=page_size,
     )
+    # Batch-resolve case_no for all documents in this page
+    case_ids = {doc.case_id for doc in documents if doc.case_id}
+    case_no_map: dict[str, str] = {}
+    if case_ids:
+        cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
+        case_no_map = {c.id: c.case_no for c in cases}
+
     items = [
-        {
-            "id": document.id,
-            "case_id": document.case_id,
-            "doc_template_id": document.doc_template_id,
-            "direction": document.direction,
-        }
+        DocumentOut(
+            id=document.id,
+            case_id=document.case_id,
+            case_no=case_no_map.get(document.case_id) if document.case_id else None,
+            doc_template_id=document.doc_template_id,
+            direction=document.direction,
+            doc_date=document.doc_date,
+            title=document.title,
+            ref_no=document.ref_no,
+            extra_data=document.extra_data,
+            reply_to_id=document.reply_to_id,
+            need_reply=document.need_reply,
+            reply_date=document.reply_date,
+            created_at=document.created_at,
+            updated_at=document.updated_at,
+        )
         for document in documents
     ]
-    return {"items": items, "page": page, "page_size": page_size, "total": total}
+    return DocumentListOut(items=items, page=page, page_size=page_size, total=total)
 
 
-@router.post("/documents", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/documents",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DocumentOut,
+    summary="Create a document",
+)
 def create_document(
-    payload: dict[str, Any],
+    payload: DocumentCreateIn,
     response: Response,
     _perm: None = Depends(require_perm("Doc.Create")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    case_id = payload.get("case_id")
-    if not case_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="case_id is required")
+) -> DocumentOut:
+    """
+    Create a document.
 
-    document = Document(
-        id=str(uuid4()),
-        case_id=case_id,
-        doc_template_id=payload.get("doc_template_id"),
-        direction=payload.get("direction") or "IN",
-        doc_date=payload.get("doc_date"),
-        title=payload.get("title"),
-    )
-    db.add(document)
+    **Auth**: Bearer JWT
+    **Permission**: Doc.Create
+    **Request example**:
+    ```json
+    {
+      "case_id": "CASE_ID",
+      "doc_template_id": null,
+      "direction": "IN",
+      "doc_date": "2024-01-15",
+      "title": "CURL Doc Title",
+      "ref_no": "DOC-REF-001",
+      "extra_data": null
+    }
+    ```
+    **Curl example**:
+    ```bash
+    curl -s -X POST http://localhost:8000/api/v1/documents \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{"case_id":"CASE_ID","doc_template_id":null,"direction":"IN","doc_date":"2024-01-15","title":"CURL Doc Title","ref_no":"DOC-REF-001","extra_data":null}'
+    ```
+    **Responses**:
+    - 201: Document created
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Case or template not found
+    - 409: Task generation failed
+    - 422: VALIDATION_ERROR
+    """
+    document = create_document_service(db, payload)
+
+    # B3: Auto-create fee draft if template has fee_draft_type
+    auto_fee_draft_id = None
+    if document.doc_template_id:
+        template = db.execute(
+            select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
+        ).scalar_one_or_none()
+        if template:
+            try:
+                draft = maybe_create_fee_draft(db, document, template)
+                if draft:
+                    auto_fee_draft_id = draft.id
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    "B3: fee draft creation failed for doc %s", document.id, exc_info=True
+                )
+
     try:
         created_tasks = TaskGenerationService().generate_from_document(db, document)
     except RuntimeError as exc:
@@ -70,127 +262,222 @@ def create_document(
     db.commit()
     db.refresh(document)
     response.headers["X-Auto-Tasks-Created"] = str(len(created_tasks))
-    return {
-        "id": document.id,
-        "case_id": document.case_id,
-        "doc_template_id": document.doc_template_id,
-        "direction": document.direction,
-        "doc_date": str(document.doc_date) if document.doc_date else None,
-        "title": document.title,
-    }
+    if auto_fee_draft_id:
+        response.headers["X-Auto-Fee-Draft-Created"] = auto_fee_draft_id
+    return DocumentOut(
+        id=document.id,
+        case_id=document.case_id,
+        doc_template_id=document.doc_template_id,
+        direction=document.direction,
+        doc_date=document.doc_date,
+        title=document.title,
+        ref_no=document.ref_no,
+        extra_data=document.extra_data,
+        reply_to_id=document.reply_to_id,
+        need_reply=document.need_reply,
+        reply_date=document.reply_date,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+    )
 
 
-@router.get("/documents/{document_id}/attachments/{attachment_id}/download")
+@router.get(
+    "/documents/{document_id}/attachments/{attachment_id}/download",
+    summary="Download a document attachment",
+)
 def download_attachment(
     document_id: str,
     attachment_id: str,
     _perm: None = Depends(require_perm("Doc.Attach")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+) -> FileResponse:
+    """
+    Download a document attachment file.
 
-    attachment = (
-        db.query(DocAttachment)
-        .filter(DocAttachment.id == attachment_id, DocAttachment.document_id == document_id)
-        .first()
+    **Auth**: Bearer JWT
+    **Permission**: Doc.Attach
+    **Request example**:
+    `GET /api/v1/documents/DOCUMENT_ID/attachments/ATTACHMENT_ID/download`
+    **Curl example**:
+    ```bash
+    curl -s -X GET \\
+      "http://localhost:8000/api/v1/documents/DOCUMENT_ID/attachments/ATTACHMENT_ID/download" \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -o attachment.bin
+    ```
+    **Responses**:
+    - 200: File download
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Document or attachment not found
+    - 422: VALIDATION_ERROR
+    """
+    settings = get_settings()
+    abs_path, filename, mime_type = get_attachment_download(
+        db,
+        document_id=document_id,
+        attachment_id=attachment_id,
+        storage_dir=settings.storage_dir,
     )
-    if not attachment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
-
-    return {
-        "id": document.id,
-        "case_id": document.case_id,
-        "doc_template_id": document.doc_template_id,
-        "direction": document.direction,
-        "doc_date": str(document.doc_date) if document.doc_date else None,
-        "title": document.title,
-    }
+    return FileResponse(path=abs_path, filename=filename, media_type=mime_type)
 
 
-@router.get("/documents/{document_id}")
+@router.get(
+    "/documents/{document_id}",
+    response_model=DocumentOut,
+    summary="Get a document",
+)
 def get_document(
     document_id: str,
     _perm: None = Depends(require_perm("Doc.Read")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+) -> DocumentOut:
+    """
+    Get a document by ID (includes attachments).
 
-    return {
-        "id": document.id,
-        "case_id": document.case_id,
-        "doc_template_id": document.doc_template_id,
-        "direction": document.direction,
-        "doc_date": str(document.doc_date) if document.doc_date else None,
-        "title": document.title,
-    }
+    **Auth**: Bearer JWT
+    **Permission**: Doc.Read
+    **Request example**:
+    `GET /api/v1/documents/DOCUMENT_ID`
+    **Curl example**:
+    ```bash
+    curl -s -X GET http://localhost:8000/api/v1/documents/DOCUMENT_ID \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: Document details
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Document not found
+    - 422: VALIDATION_ERROR
+    """
+    document = get_document_service(db, document_id)
+    return DocumentOut(
+        id=document.id,
+        case_id=document.case_id,
+        doc_template_id=document.doc_template_id,
+        direction=document.direction,
+        doc_date=document.doc_date,
+        title=document.title,
+        ref_no=document.ref_no,
+        extra_data=document.extra_data,
+        reply_to_id=document.reply_to_id,
+        need_reply=document.need_reply,
+        reply_date=document.reply_date,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+        attachments=[
+            {
+                "id": attachment.id,
+                "document_id": attachment.document_id,
+                "file_name": attachment.file_name,
+                "mime_type": attachment.mime_type or "",
+                "file_size": attachment.file_size or 0,
+                "uploaded_at": attachment.created_at,
+            }
+            for attachment in document.attachments
+        ],
+    )
 
 
-@router.put("/documents/{document_id}")
+@router.put(
+    "/documents/{document_id}",
+    response_model=DocumentOut,
+    summary="Update a document",
+)
 def update_document(
     document_id: str,
-    payload: dict[str, Any],
+    payload: DocumentUpdateIn,
     _perm: None = Depends(require_perm("Doc.Edit")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+) -> DocumentOut:
+    """
+    Update a document by ID.
 
-    if "case_id" in payload:
-        document.case_id = payload.get("case_id")
-    if "doc_template_id" in payload:
-        document.doc_template_id = payload.get("doc_template_id")
-    if "direction" in payload:
-        document.direction = payload.get("direction") or document.direction
-    if "doc_date" in payload:
-        document.doc_date = payload.get("doc_date")
-    if "title" in payload:
-        document.title = payload.get("title")
+    **Auth**: Bearer JWT
+    **Permission**: Doc.Edit
+    **Request example**:
+    ```json
+    {"title": "Updated Document Title", "ref_no": "DOC-REF-002"}
+    ```
+    **Curl example**:
+    ```bash
+    curl -s -X PUT http://localhost:8000/api/v1/documents/DOCUMENT_ID \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{"title":"Updated Document Title","ref_no":"DOC-REF-002"}'
+    ```
+    **Responses**:
+    - 200: Document updated
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Document, case, or template not found
+    - 422: VALIDATION_ERROR
+    """
+    document = update_document_service(db, document_id, payload)
+    return DocumentOut(
+        id=document.id,
+        case_id=document.case_id,
+        doc_template_id=document.doc_template_id,
+        direction=document.direction,
+        doc_date=document.doc_date,
+        title=document.title,
+        ref_no=document.ref_no,
+        extra_data=document.extra_data,
+        reply_to_id=document.reply_to_id,
+        need_reply=document.need_reply,
+        reply_date=document.reply_date,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+    )
 
-    db.commit()
-    db.refresh(document)
 
-    return {
-        "id": document.id,
-        "case_id": document.case_id,
-        "doc_template_id": document.doc_template_id,
-        "direction": document.direction,
-        "doc_date": str(document.doc_date) if document.doc_date else None,
-        "title": document.title,
-    }
-
-
-@router.post("/documents/{document_id}/attachments", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/documents/{document_id}/attachments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DocAttachmentOut,
+    summary="Upload a document attachment",
+)
 def add_attachment(
     document_id: str,
-    payload: dict[str, Any],
+    file: UploadFile = File(...),
     _perm: None = Depends(require_perm("Doc.Attach")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+) -> DocAttachmentOut:
+    """
+    Upload a document attachment.
 
-    attachment = DocAttachment(
-        id=str(uuid4()),
-        document_id=document.id,
-        file_name=payload.get("file_name") or "",
-        file_path=payload.get("file_path") or "",
-        mime_type=payload.get("mime_type"),
-        file_size=payload.get("file_size"),
+    **Auth**: Bearer JWT
+    **Permission**: Doc.Attach
+    **Request example**:
+    `POST /api/v1/documents/DOCUMENT_ID/attachments (multipart form file)`
+    **Curl example**:
+    ```bash
+    curl -s -X POST http://localhost:8000/api/v1/documents/DOCUMENT_ID/attachments \\
+      -H "Authorization: Bearer $FPMS_TOKEN" \\
+      -F "file=@/path/to/file.pdf"
+    ```
+    **Responses**:
+    - 201: Attachment uploaded
+    - 400: Attachment validation failed
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Document not found
+    - 422: VALIDATION_ERROR
+    """
+    settings = get_settings()
+    attachment = add_attachment_service(
+        db,
+        document_id,
+        upload_file=file,
+        storage_dir=settings.storage_dir,
+        actor_id=None,
     )
-    db.add(attachment)
-    db.commit()
-
-    return {
-        "id": document.id,
-        "case_id": document.case_id,
-        "doc_template_id": document.doc_template_id,
-        "direction": document.direction,
-        "doc_date": str(document.doc_date) if document.doc_date else None,
-        "title": document.title,
-    }
+    return DocAttachmentOut(
+        id=attachment.id,
+        document_id=attachment.document_id,
+        file_name=attachment.file_name,
+        mime_type=attachment.mime_type or "",
+        file_size=attachment.file_size or 0,
+        uploaded_at=attachment.created_at,
+    )

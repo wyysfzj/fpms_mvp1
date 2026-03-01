@@ -1,0 +1,44 @@
+{
+  "task_templates": [
+    {
+      "code": "OA_REPLY",
+      "name": "OA答复期限",
+      "add_days": 120,
+      "inner_offset_days": 14,
+      "source": "backend/scripts/seed_dev.py"
+    },
+    {
+      "code": "GRANT_FEE",
+      "name": "授权登记费",
+      "add_days": 60,
+      "inner_offset_days": 7,
+      "source": "backend/scripts/seed_dev.py"
+    }
+  ],
+  "doc_templates": [
+    {
+      "code": "OA_IN",
+      "name": "审查意见通知书（收文）",
+      "direction": "IN",
+      "need_reply": true,
+      "deadline_template_code": "OA_REPLY",
+      "status_effect": "OA1",
+      "source": "backend/scripts/seed_dev.py"
+    },
+    {
+      "code": "OA_OUT",
+      "name": "审查意见答复书（发文）",
+      "direction": "OUT",
+      "reply_to_template_code": "OA_IN",
+      "source": "backend/scripts/seed_dev.py"
+    },
+    {
+      "code": "GRANT_NOTICE",
+      "name": "授权通知书",
+      "direction": "IN",
+      "status_effect": "GRANT_PENDING",
+      "fee_draft_type": "GRANT_FEE",
+      "source": "backend/scripts/seed_dev.py"
+    }
+  ]
+}

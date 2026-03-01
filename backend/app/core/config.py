@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./fpms_dev.db"
     cors_origins: List[str] = ["http://localhost:5173"]
     jwt_secret: str = "dev-secret-change-me"
+    jwt_expire_minutes: int = 60
     storage_dir: str = "./storage"
 
 

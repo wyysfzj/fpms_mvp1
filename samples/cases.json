@@ -1,0 +1,65 @@
+[
+  {
+    "case_no": "CN-2025-0001",
+    "case_type": "NORMAL",
+    "patent_category": "INV",
+    "flow_dir": "CN_DOMESTIC",
+    "source": "fpms_mvp1_e2e_curl_tests/data/case_create.json"
+  },
+  {
+    "case_no": "V3-001",
+    "title_cn": "智能充电桩控制方法及系统",
+    "app_no": "202410001001.1",
+    "status": "WAITING_RECEIPT",
+    "client_code": "C-NIO",
+    "filing_date": "2024-01-15",
+    "recv_date": "2024-01-10",
+    "applicant": "蔚来汽车科技有限公司",
+    "inventor": "张伟",
+    "source": "backend/scripts/seed_dev.py"
+  },
+  {
+    "case_no": "V3-010",
+    "title_cn": "新能源汽车能量回收控制策略",
+    "app_no": "202410001010.0",
+    "status": "GRANTED",
+    "client_code": "C-BYD",
+    "filing_date": "2024-01-08",
+    "recv_date": "2024-01-03",
+    "applicant": "比亚迪股份有限公司",
+    "inventor": "郑华",
+    "source": "backend/scripts/seed_dev.py"
+  },
+  {
+    "case_no": "V3-013",
+    "title_cn": "物联网设备安全认证协议",
+    "app_no": "202410001013.4",
+    "status": "INVALIDATED",
+    "client_code": "C-HW",
+    "filing_date": "2023-03-20",
+    "recv_date": "2023-03-15",
+    "applicant": "华为技术有限公司",
+    "inventor": "林峰",
+    "source": "backend/scripts/seed_dev.py"
+  },
+  {
+    "case_no": "CS-2025-CONS-001",
+    "case_type": "CONSULTING",
+    "title_cn": "专利布局顾问项目-华为物联网安全",
+    "client_code": "C-HW",
+    "status": "NOT_FILED",
+    "recv_date": "2025-01-15",
+    "primary_agent": "林峰",
+    "source": "samples/projects.json"
+  },
+  {
+    "case_no": "CS-2025-SRCH-002",
+    "case_type": "SEARCH",
+    "title_cn": "侵权检索项目-新能源汽车能量回收",
+    "client_code": "C-BYD",
+    "status": "NOT_FILED",
+    "recv_date": "2025-02-01",
+    "primary_agent": "郑华",
+    "source": "samples/projects.json"
+  }
+]

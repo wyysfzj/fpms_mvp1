@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_perm
 from app.db.session import get_db
 from app.modules.auth.models import T_Role, T_User, T_UserRole
+from app.modules.rbac.service import seed_default_roles_perms
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ router = APIRouter()
 @router.get("/admin/users")
 def list_admin_users(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     _perm: None = Depends(require_perm("AdminUser.Read")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
@@ -197,5 +198,8 @@ async def seed_roles_permissions(
             db.add(T_UserRole(user_id=admin_user.id, role_id=admin_role.id))
 
     db.commit()
+
+    # Ensure role-permission mappings are fully seeded (idempotent).
+    seed_default_roles_perms(db)
 
     return {"status": "ok"}

@@ -1,0 +1,53 @@
+/* ==========================================================================
+   Relation Chain Card Styles (DEMO-UI-03)
+   ========================================================================== */
+
+.relation-chain-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--color-bg-panel, #fff);
+  border: var(--border-panel, 1px solid #E2E8F0);
+  border-radius: var(--radius-card, 8px);
+  margin-bottom: 16px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+
+.chain-label {
+  color: var(--text-sub, #94A3B8);
+  font-weight: 600;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.chain-items {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.chain-arrow {
+  color: var(--text-sub, #94A3B8);
+  margin: 0 2px;
+  font-size: 12px;
+}
+
+.chain-link {
+  color: var(--color-primary, #2563EB);
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.chain-link:hover {
+  text-decoration: underline;
+}
+
+.chain-muted {
+  color: var(--text-sub, #94A3B8);
+  font-style: italic;
+  font-size: 13px;
+}

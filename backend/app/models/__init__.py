@@ -3,12 +3,10 @@ from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Paym
 from app.modules.cases.models import Case
 from app.modules.documents.models import DocAttachment, DocTemplate, Document
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
-from app.modules.masterdata.clients.models import Client
+from app.modules.masterdata.clients.models import Client, ClientAddress, ClientContact
 from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 from app.modules.templates.models import Template
 
-from .client_address import ClientAddress
-from .client_contact import ClientContact
 from .letter_head import LetterHead
 from .system_param import SystemParam
 

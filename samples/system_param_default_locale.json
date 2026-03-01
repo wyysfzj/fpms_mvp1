@@ -1,0 +1,6 @@
+{
+  "param_value": "en-US",
+  "value_type": "string",
+  "description": "Default locale",
+  "is_secret": false
+}

@@ -1,0 +1,24 @@
+[
+  {
+    "project_no": "PRJ-CONS-2025-001",
+    "project_type": "CONSULTING",
+    "project_name": "专利布局顾问项目-华为物联网安全",
+    "client_code": "C-HW",
+    "owner": "林峰",
+    "planned_hours": 120,
+    "start_date": "2025-01-15",
+    "end_date": "2025-03-31",
+    "source": "derived_from:backend/scripts/seed_dev.py + docs/FPMS SPEC 2.0.md"
+  },
+  {
+    "project_no": "PRJ-SRCH-2025-002",
+    "project_type": "SEARCH",
+    "project_name": "侵权检索项目-新能源汽车能量回收",
+    "client_code": "C-BYD",
+    "owner": "郑华",
+    "planned_hours": 80,
+    "start_date": "2025-02-01",
+    "end_date": "2025-04-15",
+    "source": "derived_from:backend/scripts/seed_dev.py + docs/FPMS SPEC 2.0.md"
+  }
+]

@@ -30,6 +30,9 @@ class BusinessError(Exception):
         self.details = details
         self.status_code = status_code
 
+    def __str__(self) -> str:
+        return f"{self.code}: {self.message}"
+
 
 def raise_business_error(
     code: str,

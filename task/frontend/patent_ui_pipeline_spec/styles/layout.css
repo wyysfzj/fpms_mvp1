@@ -1,0 +1,115 @@
+/* Patent UI — Pipeline Dashboard Layout
+   Requires tokens.css
+*/
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  color: var(--text-main);
+  background: var(--bg-body);
+}
+
+/* Root app shell */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-width);
+  background: #0B1220;
+  color: #E2E8F0;
+  padding: 18px 12px;
+  transition: width 240ms ease;
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  padding: 10px 10px 16px;
+}
+
+.nav-section { margin-top: 10px; }
+.nav-title {
+  margin: 24px 0 8px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(226,232,240,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  color: rgba(226,232,240,0.9);
+}
+
+.nav-item:hover { background: rgba(148,163,184,0.12); }
+.nav-item.active {
+  background: rgba(37, 99, 235, 0.20);
+  color: #FFFFFF;
+}
+
+/* Main */
+.main-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  height: var(--header-height);
+  background: rgba(255,255,255,0.72);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+/* Scroll area for main content */
+.scroll-area {
+  flex: 1;
+  overflow: auto;
+  padding: var(--content-padding);
+}
+
+/* View sections (interactive prototype uses view switching; Vue router maps to routes) */
+.view-section { display: none; }
+.view-section.active { display: block; }
+
+/* Dashboard-only marker (used for immersive hide rules) */
+.dashboard-only {}
+
+/* Immersive hide rules */
+body.mode-immersive .sidebar,
+body.mode-immersive .header,
+body.mode-immersive .dashboard-only,
+body.mode-immersive .right-panel-area { display: none !important; }
+
+body.mode-immersive .scroll-area {
+  padding: 40px 40px 56px;
+  background: var(--bg-body);
+}
+
+/* content container widths in immersive mode */
+.reading-container {
+  max-width: var(--content-width);
+  margin: var(--content-margin);
+}

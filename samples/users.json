@@ -1,0 +1,9 @@
+[
+  {
+    "username": "admin",
+    "display_name": "Administrator",
+    "password": "admin123",
+    "roles": ["Admin"],
+    "source": "backend/scripts/seed_dev.py"
+  }
+]

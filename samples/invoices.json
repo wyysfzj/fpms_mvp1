@@ -1,0 +1,26 @@
+[
+  {
+    "invoice_no": "INV-2025-0001",
+    "bill_title": "Bill - Simulated",
+    "client_code": "C001",
+    "case_no": "CN-2025-0001",
+    "currency": "CNY",
+    "amount": 2000,
+    "issue_date": "2025-12-30",
+    "due_date": "2026-01-15",
+    "status": "UNSETTLED",
+    "source": "samples/bill_create_manual.json"
+  },
+  {
+    "invoice_no": "INV-2025-0002",
+    "bill_title": "Fee Draft - Simulated",
+    "client_code": "C-BYD",
+    "case_no": "V3-010",
+    "currency": "CNY",
+    "amount": 1000,
+    "issue_date": "2025-12-28",
+    "due_date": "2026-01-10",
+    "status": "PARTIALLY_SETTLED",
+    "source": "samples/fee_draft_add_item.json + samples/cases.json"
+  }
+]

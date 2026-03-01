@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import timedelta
+import calendar
+from datetime import date, timedelta
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -20,7 +21,7 @@ class TaskGenerationService:
             return []
 
         doc_type = self._get_document_type(db, document)
-        if not doc_type or not self._is_office_action(doc_type, document):
+        if not doc_type:
             return []
 
         templates = db.query(TaskTemplate).filter(TaskTemplate.code == doc_type).all()
@@ -32,9 +33,11 @@ class TaskGenerationService:
             if hasattr(template, "enabled") and not template.enabled:
                 continue
 
-            offset_days = self._get_offset_days(template)
-            due_date = doc_date + timedelta(days=offset_days)
+            due_date = self._compute_due_date(doc_date, template)
             title = template.name or template.code
+
+            inner_offset = getattr(template, "inner_offset_days", None)
+            internal_due_date = due_date - timedelta(days=inner_offset) if inner_offset else None
 
             if self._task_exists(db, document, template, case_id, due_date, title):
                 continue
@@ -47,6 +50,7 @@ class TaskGenerationService:
                 title=title,
                 base_date=doc_date,
                 due_date=due_date,
+                internal_due_date=internal_due_date,
                 status="OPEN",
             )
             db.add(task)
@@ -68,19 +72,7 @@ class TaskGenerationService:
         direction = getattr(document, "direction", None)
         if direction:
             return str(direction).upper() == "IN"
-
-        flow_dir = getattr(document, "flow_dir", None)
-        if flow_dir:
-            return str(flow_dir).upper() in {"IN", "INBOUND"}
-
         return False
-
-    def _is_office_action(self, doc_type: str, document) -> bool:
-        if "OA" in doc_type.upper():
-            return True
-
-        title = getattr(document, "title", None)
-        return bool(title) and "OA" in str(title).upper()
 
     def _get_document_type(self, db: Session, document) -> str | None:
         for attr in ("doc_type", "doc_code", "template_code"):
@@ -92,19 +84,35 @@ class TaskGenerationService:
         if doc_template_id:
             doc_template = db.query(DocTemplate).filter(DocTemplate.id == doc_template_id).first()
             if doc_template:
-                return doc_template.code
+                return getattr(doc_template, "deadline_template_code", None) or doc_template.code
 
         return None
 
-    def _get_offset_days(self, template) -> int:
-        for attr in ("offset_days", "due_offset_days", "offset_day", "due_days"):
-            if hasattr(template, attr):
-                value = getattr(template, attr)
-                if value is None:
-                    raise RuntimeError("TaskTemplate missing offset_days mapping")
-                return int(value)
+    @staticmethod
+    def _add_months(base: date, months: int) -> date:
+        """Add *months* to *base*, clamping day to valid range."""
+        month = base.month - 1 + months
+        year = base.year + month // 12
+        month = month % 12 + 1
+        day = min(base.day, calendar.monthrange(year, month)[1])
+        return date(year, month, day)
 
-        raise RuntimeError("TaskTemplate missing offset_days mapping")
+    def _compute_due_date(self, base: date, template) -> date:
+        """Compute due date from add_days and/or add_months on the template."""
+        add_days = getattr(template, "add_days", None) or 0
+        add_months = getattr(template, "add_months", None) or 0
+
+        if not add_days and not add_months:
+            raise RuntimeError(
+                f"TaskTemplate '{getattr(template, 'code', '?')}' missing add_days/add_months"
+            )
+
+        result = base
+        if add_months:
+            result = self._add_months(result, add_months)
+        if add_days:
+            result = result + timedelta(days=add_days)
+        return result
 
     def _task_exists(
         self,

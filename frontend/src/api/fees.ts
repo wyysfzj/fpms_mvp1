@@ -1,0 +1,276 @@
+import { http } from './http'
+import type { Pagination } from './types'
+import type {
+    CalcMode,
+    FeeDraftCreatePayload,
+    FeeDraftDetail,
+    FeeDraftListItem,
+    FeeDraftListParams,
+    FeeDraftUpdatePayload,
+    FeeItem,
+    FeeItemCreatePayload,
+    FeeItemUpdatePayload,
+    FeeRate,
+    FeeRateCreatePayload,
+    FeeRateListParams,
+    FeeRateUpdatePayload,
+} from './fees.types'
+
+interface BackendFeeRate {
+    id: string
+    fee_code: string
+    fee_name: string
+    fee_type: string
+    currency?: string | null
+    default_amount?: string | number | null
+    enabled?: boolean
+    rate_group?: string | null
+    country_code?: string | null
+    case_type?: string | null
+    patent_category?: string | null
+    calc_mode?: string | null
+    calc_params?: string | null
+    allow_reduction?: boolean | null
+    effective_from?: string | null
+    effective_to?: string | null
+}
+
+interface BackendFeeItem {
+    id: string
+    draft_id: string
+    rate_id: string
+    fee_name?: string | null
+    quantity?: string | number | null
+    unit_price?: string | number | null
+    amount?: string | number | null
+    remark?: string | null
+}
+
+function mapFeeRate(input: BackendFeeRate): FeeRate {
+    return {
+        id: input.id,
+        name: input.fee_name || input.fee_code,
+        rate: Number(input.default_amount || 0),
+        currency: input.currency || 'CNY',
+        fee_code: input.fee_code,
+        fee_type: input.fee_type,
+        enabled: input.enabled,
+        rate_group: input.rate_group ?? null,
+        country_code: input.country_code ?? null,
+        case_type: input.case_type ?? null,
+        patent_category: input.patent_category ?? null,
+        calc_mode: (input.calc_mode as CalcMode) ?? null,
+        calc_params: input.calc_params ?? null,
+        allow_reduction: input.allow_reduction ?? null,
+        effective_from: input.effective_from ?? null,
+        effective_to: input.effective_to ?? null,
+    }
+}
+
+function mapFeeItem(input: BackendFeeItem): FeeItem {
+    return {
+        id: input.id,
+        draft_id: input.draft_id,
+        rate_id: input.rate_id,
+        description: input.remark || input.fee_name || '',
+        quantity: Number(input.quantity || 0),
+        unit_price: Number(input.unit_price || 0),
+        amount: Number(input.amount || 0),
+    }
+}
+
+function buildFeeCode(name: string): string {
+    const base = name
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 24)
+
+    const suffix = String(Date.now()).slice(-6)
+    return `${base || 'RATE'}_${suffix}`
+}
+
+function toFeeRateCreatePayload(data: FeeRateCreatePayload): Record<string, unknown> {
+    return {
+        fee_code: data.fee_code || buildFeeCode(data.name),
+        fee_name: data.name,
+        fee_type: data.fee_type || 'GOV',
+        currency: data.currency || 'CNY',
+        default_amount: data.rate,
+        enabled: true,
+        ...(data.rate_group !== undefined && { rate_group: data.rate_group }),
+        ...(data.country_code !== undefined && { country_code: data.country_code }),
+        ...(data.case_type !== undefined && { case_type: data.case_type }),
+        ...(data.patent_category !== undefined && { patent_category: data.patent_category }),
+        ...(data.calc_mode !== undefined && { calc_mode: data.calc_mode }),
+        ...(data.calc_params !== undefined && { calc_params: data.calc_params }),
+        ...(data.allow_reduction !== undefined && { allow_reduction: data.allow_reduction }),
+        ...(data.effective_from !== undefined && { effective_from: data.effective_from }),
+        ...(data.effective_to !== undefined && { effective_to: data.effective_to }),
+    }
+}
+
+function toFeeRateUpdatePayload(data: FeeRateUpdatePayload): Record<string, unknown> {
+    const payload: Record<string, unknown> = {}
+
+    if (data.name !== undefined) payload.fee_name = data.name
+    if (data.fee_type !== undefined) payload.fee_type = data.fee_type
+    if (data.currency !== undefined) payload.currency = data.currency
+    if (data.rate !== undefined) payload.default_amount = data.rate
+    if (data.enabled !== undefined) payload.enabled = data.enabled
+    if (data.rate_group !== undefined) payload.rate_group = data.rate_group
+    if (data.country_code !== undefined) payload.country_code = data.country_code
+    if (data.case_type !== undefined) payload.case_type = data.case_type
+    if (data.patent_category !== undefined) payload.patent_category = data.patent_category
+    if (data.calc_mode !== undefined) payload.calc_mode = data.calc_mode
+    if (data.calc_params !== undefined) payload.calc_params = data.calc_params
+    if (data.allow_reduction !== undefined) payload.allow_reduction = data.allow_reduction
+    if (data.effective_from !== undefined) payload.effective_from = data.effective_from
+    if (data.effective_to !== undefined) payload.effective_to = data.effective_to
+
+    return payload
+}
+
+/**
+ * Get paginated list of fee rates
+ */
+export async function getFeeRates(params: FeeRateListParams = {}): Promise<Pagination<FeeRate>> {
+    const { page = 1, page_size = 50 } = params
+    const response = await http.get<Pagination<BackendFeeRate>>('/fees/rates', {
+        params: { page, page_size }
+    })
+
+    return {
+        ...response.data,
+        items: response.data.items.map(mapFeeRate),
+    }
+}
+
+/**
+ * Create a new fee rate
+ */
+export async function createFeeRate(data: FeeRateCreatePayload): Promise<FeeRate> {
+    const response = await http.post<BackendFeeRate>('/fees/rates', toFeeRateCreatePayload(data))
+    return mapFeeRate(response.data)
+}
+
+/**
+ * Update an existing fee rate
+ */
+export async function updateFeeRate(id: string, data: FeeRateUpdatePayload): Promise<FeeRate> {
+    const response = await http.put<BackendFeeRate>(`/fees/rates/${id}`, toFeeRateUpdatePayload(data))
+    return mapFeeRate(response.data)
+}
+
+// Fee Draft Functions
+
+/**
+ * Get paginated list of fee drafts
+ */
+export async function getFeeDrafts(
+    params: FeeDraftListParams = {},
+): Promise<Pagination<FeeDraftListItem>> {
+    const { page = 1, page_size = 20, case_id, client_id, status } = params
+    const response = await http.get<Pagination<FeeDraftListItem>>('/fees/drafts', {
+        params: { page, page_size, case_id, client_id, status }
+    })
+    return response.data
+}
+
+/**
+ * Get a single fee draft by ID
+ */
+export async function getFeeDraft(id: string): Promise<FeeDraftDetail> {
+    const response = await http.get<FeeDraftDetail>(`/fees/drafts/${id}`)
+    return response.data
+}
+
+/**
+ * Create a new fee draft
+ */
+export async function createFeeDraft(data: FeeDraftCreatePayload): Promise<FeeDraftDetail> {
+    const response = await http.post<FeeDraftDetail>('/fees/drafts', data)
+    return response.data
+}
+
+/**
+ * Update an existing fee draft
+ */
+export async function updateFeeDraft(id: string, data: FeeDraftUpdatePayload): Promise<FeeDraftDetail> {
+    const response = await http.put<FeeDraftDetail>(`/fees/drafts/${id}`, data)
+    return response.data
+}
+
+// Fee Item Functions
+
+/**
+ * Get items for a fee draft
+ */
+export async function getFeeDraftItems(draftId: string): Promise<FeeItem[]> {
+    const response = await http.get<BackendFeeItem[]>(`/fees/drafts/${draftId}/items`)
+    return response.data.map(mapFeeItem)
+}
+
+/**
+ * Create a new fee item in a draft
+ */
+export async function createFeeItem(draftId: string, data: FeeItemCreatePayload): Promise<FeeItem> {
+    let rateId = data.rate_id
+    if (!rateId) {
+        const rates = await getFeeRates({ page: 1, page_size: 1 })
+        rateId = rates.items[0]?.id
+    }
+    if (!rateId) {
+        throw {
+            status: 409,
+            code: 'MISSING_CONFIGURATION',
+            message: 'No fee rate available. Create a fee rate before adding draft items.',
+        }
+    }
+
+    const response = await http.post<BackendFeeItem>(`/fees/drafts/${draftId}/items`, {
+        rate_id: rateId,
+        quantity: data.quantity,
+        unit_price: data.unit_price,
+        remark: data.description || undefined,
+    })
+    return mapFeeItem(response.data)
+}
+
+/**
+ * Update an existing fee item
+ */
+export async function updateFeeItem(draftId: string, itemId: string, data: FeeItemUpdatePayload): Promise<FeeItem> {
+    const response = await http.put<BackendFeeItem>(`/fees/drafts/${draftId}/items/${itemId}`, {
+        quantity: data.quantity,
+        unit_price: data.unit_price,
+        remark: data.description || undefined,
+    })
+    return mapFeeItem(response.data)
+}
+
+/**
+ * Delete a fee item
+ */
+export async function deleteFeeItem(itemId: string): Promise<void> {
+    await http.delete(`/fees/items/${itemId}`)
+}
+
+// Fee Draft Lock/Unlock
+
+/**
+ * Lock a fee draft (prevents editing)
+ */
+export async function lockFeeDraft(draftId: string): Promise<FeeDraftDetail> {
+    const response = await http.post<FeeDraftDetail>(`/fees/drafts/${draftId}/lock`)
+    return response.data
+}
+
+/**
+ * Unlock a fee draft (allows editing)
+ */
+export async function unlockFeeDraft(draftId: string): Promise<FeeDraftDetail> {
+    const response = await http.post<FeeDraftDetail>(`/fees/drafts/${draftId}/unlock`)
+    return response.data
+}

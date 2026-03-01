@@ -1,0 +1,28 @@
+{
+  "annuity_tasks": [
+    {
+      "case_no": "V3-010",
+      "year_no": 3,
+      "due_date": "2026-03-31",
+      "client_instruction": "PAY",
+      "notice_status": "PENDING",
+      "status": "OPEN",
+      "source": "backend/tests/test_annuity_e2e.py"
+    },
+    {
+      "case_no": "V3-001",
+      "year_no": 2,
+      "due_date": "2026-02-15",
+      "client_instruction": "DEFER",
+      "notice_status": "SENT",
+      "status": "OPEN",
+      "source": "backend/tests/test_annuity_e2e.py"
+    }
+  ],
+  "gov_payment": {
+    "paid_date": "2026-01-20",
+    "paid_amount": 1000,
+    "official_receipt_no": "CNIPA-REC-20260120-0001",
+    "source": "backend/app/modules/annuity/api.py"
+  }
+}

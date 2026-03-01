@@ -1,0 +1,22 @@
+[
+  {
+    "payment_no": "PAY-2026-0001",
+    "client_code": "C001",
+    "currency": "CNY",
+    "amount": 500,
+    "pay_date": "2026-01-08",
+    "method": "BANK_TRANSFER",
+    "allocated_to_invoice": "INV-2025-0001",
+    "source": "derived_from:task/frontend/FE-3/FE-3_RUNTIME_SMOKE_EVIDENCE.md"
+  },
+  {
+    "payment_no": "PAY-2026-0002",
+    "client_code": "C-BYD",
+    "currency": "CNY",
+    "amount": 1000,
+    "pay_date": "2026-01-12",
+    "method": "BANK_TRANSFER",
+    "allocated_to_invoice": "INV-2025-0002",
+    "source": "samples/fee_draft_add_item.json + samples/invoices.json"
+  }
+]

@@ -1,0 +1,53 @@
+{
+  "fee_draft": {
+    "currency": "CNY",
+    "title": "Fee Draft - Simulated",
+    "source": "fpms_mvp1_e2e_curl_tests/data/fee_draft_create.json"
+  },
+  "fee_item": {
+    "description": "Filing fee",
+    "qty": 1,
+    "unit_price": 1000,
+    "amount": 1000,
+    "source": "fpms_mvp1_e2e_curl_tests/data/fee_draft_add_item.json"
+  },
+  "bill_manual": {
+    "title": "Bill - Simulated",
+    "description": "Service fee",
+    "qty": 1,
+    "unit_price": 2000,
+    "amount": 2000,
+    "currency": "CNY",
+    "source": "fpms_mvp1_e2e_curl_tests/data/bill_create_manual.json"
+  },
+  "task_manual": {
+    "title": "Manual Task - Simulated",
+    "due_date": "2026-01-15",
+    "status": "OPEN",
+    "source": "fpms_mvp1_e2e_curl_tests/data/task_create.json"
+  },
+  "document_oa": {
+    "doc_type": "OA",
+    "flow_dir": "IN",
+    "doc_date": "2025-12-28",
+    "title": "Office Action - Simulated",
+    "source": "fpms_mvp1_e2e_curl_tests/data/document_create_oa.json"
+  },
+  "system_params": [
+    {
+      "param_key": "default_locale",
+      "param_value": "en-US",
+      "source": "fpms_mvp1_e2e_curl_tests/data/system_param_default_locale.json"
+    },
+    {
+      "param_key": "bill_no_prefix",
+      "param_value": "INV",
+      "source": "backend/scripts/seed_dev.py"
+    },
+    {
+      "param_key": "default_currency",
+      "param_value": "CNY",
+      "source": "backend/scripts/seed_dev.py"
+    }
+  ]
+}

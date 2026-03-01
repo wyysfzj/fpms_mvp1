@@ -190,3 +190,84 @@ Rules:
 Gates:
 - Task Gate: `./scripts/task_validate.sh <TASK-ID>`
 - Release Gate: `./scripts/release_gate.sh`
+
+---
+
+## 13) Codex Six-Agent Team Configuration (MVP1 Execution)
+
+This repository supports a **6-role execution team** in Codex by role mapping
+to available agent types and strict runbook discipline.
+
+### 13.1 Role Mapping (Supported)
+
+| Business Role | Codex Executor | Responsibility |
+|---|---|---|
+| Team Lead / Project Manager | Main thread (no sub-agent) | Plan, assign task IDs, coordinate dependencies, final acceptance |
+| Architect / Designer | `explorer` agent | Spec/contract analysis, module boundary checks, design decisions |
+| Backend Developer | `worker` agent | Implement one backend atomic task file per run |
+| Frontend Developer | `worker` agent | Implement one frontend atomic task file per run |
+| Tester | `worker` agent (use `awaiter` for long waits) | Execute task gate/release gate, regression and evidence checks |
+| Reviewer | `explorer` agent | Independent code review, acceptance validation, risk notes |
+
+Notes:
+- Codex does not require a special custom "team config" object.
+- Team behavior is enforced by this file + task files + evidence gates.
+
+### 13.2 Hard Constraints (Iron Rules + Quality Gate)
+
+- Preserve all rules in Sections 1-12; this section is additive, not a replacement.
+- One agent execution MUST target exactly one atomic task file path.
+- Lead MUST assign explicit task file path (example:
+  `tasks/postenhancement/backend/PE-BE-COM-05.md`).
+- No cross-scope edits outside task allowlist.
+- Backend/Frontend dev agents MUST NOT modify each other's ownership files unless
+  task explicitly allows.
+- Reviewer cannot mark complete unless required gates pass and evidence exists.
+
+### 13.3 Coordination Protocol (No Regression)
+
+1) Architect defines/freeze API contract and acceptance checklist for the task.
+2) Backend/Frontend implement in parallel only after contract freeze.
+3) Tester runs gates and records evidence.
+4) Reviewer validates: scope, quality gate, and no impact to existing features.
+5) Lead closes the task only with evidence + reviewer pass.
+
+Mandatory handoff artifacts per task:
+- `artifacts/<TASK-ID>/results.jsonl`
+- `artifacts/<TASK-ID>/summary.md`
+- `artifacts/<TASK-ID>/git/diff.patch`
+
+### 13.4 Required Verification by Role
+
+- Backend task:
+  - `ruff check --fix .`
+  - `ruff format .`
+  - `ruff check .`
+  - `pytest -q` (or task-defined targeted tests)
+- Frontend task:
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run build`
+- Reviewer:
+  - Verify status-code semantics, permission enforcement, envelope consistency,
+    SQLite compatibility, and task allowlist compliance.
+
+---
+
+## 14) Frontend UI Language Iron Rule (MANDATORY)
+
+- All user-facing UI text MUST be Simplified Chinese.
+- This rule applies to:
+  - page titles
+  - menu labels
+  - buttons
+  - form labels/placeholders
+  - validation/error/toast messages
+  - empty states and helper texts
+  - dialog titles/content/actions
+- English is allowed only for non-UI technical values:
+  - IDs, enum/code values, API field names, protocol terms, file paths, logs.
+- If an existing page has mixed language, FE tasks touching that page MUST
+  normalize visible text to Simplified Chinese within task scope.
+- Reviewer MUST reject FE tasks that introduce or retain user-visible non-Chinese
+  text without explicit task-level exception.
