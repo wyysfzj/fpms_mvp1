@@ -1,5 +1,7 @@
 <template>
   <div class="case-panel">
+    <h3 class="panel-heading">申请人/发明人</h3>
+
     <!-- Applicants -->
     <div class="claims-section">
       <h3 class="panel-heading">申请人</h3>

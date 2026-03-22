@@ -70,6 +70,14 @@
                     <span class="info-value case-no">{{ caseData.case_no }}</span>
                   </div>
                   <div class="info-item">
+                    <span class="info-label">案件类型</span>
+                    <span class="info-value">{{ caseTypeText }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">专利类别</span>
+                    <span class="info-value">{{ patentCategoryText }}</span>
+                  </div>
+                  <div class="info-item">
                     <span class="info-label">{{ ZH.caseDetail.title }}</span>
                     <span class="info-value">{{ caseData.title || '-' }}</span>
                   </div>
@@ -88,6 +96,140 @@
                   <div class="info-item">
                     <span class="info-label">{{ ZH.caseDetail.appDate }}</span>
                     <span class="info-value">{{ caseData.app_date || '-' }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">申请号</span>
+                    <span class="info-value">{{ caseData.app_no || '-' }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">流程方向</span>
+                    <span class="info-value">{{ flowDirText }}</span>
+                  </div>
+                </div>
+
+                <div v-if="statusAutomationHint" class="status-linkage-card">
+                  <h4 class="info-section-title">状态联动说明</h4>
+                  <p class="status-linkage-text">{{ statusAutomationHint }}</p>
+                </div>
+
+                <div v-if="caseData.priorities?.length" class="info-section">
+                  <h4 class="info-section-title">优先权信息</h4>
+                  <div class="priority-list">
+                    <div v-for="priority in caseData.priorities" :key="priority.seq" class="priority-item">
+                      <span>第 {{ priority.seq }} 条</span>
+                      <span>{{ priority.country_code || '-' }}</span>
+                      <span>{{ priority.prio_no || '-' }}</span>
+                      <span>{{ priority.prio_date || '-' }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="caseData.foreign_agent_name || caseData.foreign_ref" class="info-section">
+                  <h4 class="info-section-title">涉外代理信息</h4>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">外方代理</span>
+                      <span class="info-value">{{ caseData.foreign_agent_name || caseData.foreign_agent_id || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">外方案号</span>
+                      <span class="info-value">{{ caseData.foreign_ref || '-' }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="caseData.bio_deposits?.length" class="info-section">
+                  <h4 class="info-section-title">菌种保藏</h4>
+                  <div class="priority-list">
+                    <div v-for="bioDeposit in caseData.bio_deposits" :key="bioDeposit.seq" class="priority-item bio-item">
+                      <span>第 {{ bioDeposit.seq }} 条</span>
+                      <span>{{ bioDeposit.deposit_no || '-' }}</span>
+                      <span>{{ bioDeposit.deposit_unit_name || '-' }}</span>
+                      <span>{{ bioDeposit.deposit_date || '-' }}</span>
+                      <span>{{ bioDeposit.name || '-' }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="caseData.intl_app_no || caseData.intl_app_date || caseData.pct_national_entry_date"
+                  class="info-section"
+                >
+                  <h4 class="info-section-title">PCT 信息</h4>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">国际申请号</span>
+                      <span class="info-value">{{ caseData.intl_app_no || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">国际申请日</span>
+                      <span class="info-value">{{ caseData.intl_app_date || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">RO</span>
+                      <span class="info-value">{{ caseData.ro || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">ISA</span>
+                      <span class="info-value">{{ caseData.isa || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">IPEA</span>
+                      <span class="info-value">{{ caseData.ipea || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">国际公开号</span>
+                      <span class="info-value">{{ caseData.intl_pub_no || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">国际公开日</span>
+                      <span class="info-value">{{ caseData.intl_pub_date || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">国际公开语言</span>
+                      <span class="info-value">{{ caseData.intl_pub_lang || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">需要 IPER</span>
+                      <span class="info-value">{{ caseData.need_iper === true ? '是' : caseData.need_iper === false ? '否' : '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">IPER 日期</span>
+                      <span class="info-value">{{ caseData.iper_date || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">国家阶段进入日</span>
+                      <span class="info-value">{{ caseData.pct_national_entry_date || '-' }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="caseData.original_case_id || caseData.invalid_client_id || caseData.invalid_patentee || caseData.invalid_requester || caseData.invalid_role"
+                  class="info-section"
+                >
+                  <h4 class="info-section-title">无效案件信息</h4>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">原案 ID</span>
+                      <span class="info-value">{{ caseData.original_case_id || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">委托方</span>
+                      <span class="info-value">{{ caseData.invalid_client_name || caseData.invalid_client_id || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">专利权人</span>
+                      <span class="info-value">{{ caseData.invalid_patentee || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">请求人</span>
+                      <span class="info-value">{{ caseData.invalid_requester || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">我方角色</span>
+                      <span class="info-value">{{ invalidRoleText }}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -306,6 +448,25 @@ const FEE_REDUCTION_MAP: Record<string, string> = {
 const APPLICANT_KIND_MAP: Record<string, string> = {
   INDIVIDUAL: '个人', ENTITY: '企业', UNIV: '高校', GOV: '政府'
 }
+const CASE_TYPE_MAP: Record<string, string> = {
+  NORMAL: '普通案件',
+  PCT_INTL: 'PCT 国际阶段',
+  PCT_NATL: 'PCT 国家阶段',
+  INVALIDATION: '无效案件',
+  PRIORITY: '优先权案件',
+  CONSULTING: '顾问项目',
+  SEARCH: '检索项目',
+}
+const PATENT_CATEGORY_MAP: Record<string, string> = {
+  INV: '发明',
+  UM: '实用新型',
+  DES: '外观设计',
+}
+const FLOW_DIR_MAP: Record<string, string> = {
+  CN_DOMESTIC: '中国国内',
+  CN_OUTBOUND: '中国向外',
+  FOREIGN_INBOUND: '国外进入中国',
+}
 
 const feeReductionText = computed(() =>
   caseData.value?.fee_reduction
@@ -317,6 +478,38 @@ const applicantKindText = computed(() =>
     ? APPLICANT_KIND_MAP[caseData.value.applicant_kind] || caseData.value.applicant_kind
     : '-'
 )
+const caseTypeText = computed(() =>
+  caseData.value?.case_type
+    ? CASE_TYPE_MAP[caseData.value.case_type] || caseData.value.case_type
+    : '-'
+)
+const patentCategoryText = computed(() =>
+  caseData.value?.patent_category
+    ? PATENT_CATEGORY_MAP[caseData.value.patent_category] || caseData.value.patent_category
+    : '-'
+)
+const flowDirText = computed(() =>
+  caseData.value?.flow_dir
+    ? FLOW_DIR_MAP[caseData.value.flow_dir] || caseData.value.flow_dir
+    : '-'
+)
+const statusAutomationHint = computed(() => {
+  const status = caseData.value?.status || ''
+  if (status === 'ACCEPTED') {
+    return '当前状态通常由受理通知等流程联动生成，详情页仅展示结果，编辑页会提示谨慎手工修改。'
+  }
+  if (status === 'GRANT_PENDING') {
+    return '当前状态通常由授权缴费/登记相关流程驱动，请结合来往文书与任务面板核对。'
+  }
+  return ''
+})
+const invalidRoleText = computed(() => {
+  const role = caseData.value?.invalid_role || ''
+  if (role === 'PATENTEE') return '代表专利权人'
+  if (role === 'REQUESTER') return '代表请求人'
+  if (role === 'BOTH') return '双方均代表'
+  return role || '-'
+})
 
 async function fetchCase() {
   const id = String(route.params.id || '').trim()
@@ -370,5 +563,39 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--color-border);
+}
+
+.status-linkage-card {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 85%, white);
+  border: 1px solid var(--el-color-warning-light-5);
+}
+
+.status-linkage-text {
+  margin: 0;
+  color: var(--text-main);
+  line-height: 1.6;
+}
+
+.priority-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.priority-item {
+  display: grid;
+  grid-template-columns: 120px repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+}
+
+.bio-item {
+  grid-template-columns: 120px repeat(4, minmax(0, 1fr));
 }
 </style>

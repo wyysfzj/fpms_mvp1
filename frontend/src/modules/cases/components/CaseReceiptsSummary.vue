@@ -13,6 +13,7 @@
     <!-- Content -->
     <template v-else-if="receipts">
       <!-- Summary Cards -->
+      <h4 class="section-title">收款摘要</h4>
       <div class="summary-cards">
         <div class="summary-card">
           <div class="card-label">累计开票</div>
@@ -33,6 +34,10 @@
       <!-- Enriched Receipt Info (B5) -->
       <div v-if="hasEnrichedFields" class="enriched-info">
         <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">收款币种</span>
+            <span class="info-value">{{ receipts.currency }}</span>
+          </div>
           <div v-if="receipts.fee_code" class="info-item">
             <span class="info-label">费用代码</span>
             <span class="info-value mono-num">{{ receipts.fee_code }}</span>
@@ -44,6 +49,10 @@
           <div v-if="receipts.year_no != null" class="info-item">
             <span class="info-label">年度</span>
             <span class="info-value">{{ receipts.year_no }}</span>
+          </div>
+          <div v-if="receipts.last_receipt_date" class="info-item">
+            <span class="info-label">最后回款日</span>
+            <span class="info-value">{{ formatDate(receipts.last_receipt_date) }}</span>
           </div>
           <div v-if="receipts.invoice_no" class="info-item">
             <span class="info-label">发票号</span>
@@ -63,7 +72,7 @@
 
       <!-- Bills Table -->
       <div v-if="receipts.bills.length > 0" class="bills-section">
-        <h4 class="section-title">账单</h4>
+        <h4 class="section-title">相关账单</h4>
         <el-table
           :data="receipts.bills"
           stripe
@@ -105,13 +114,13 @@
 
       <!-- Empty State -->
       <div v-else class="no-bills">
-        <p>该案件暂无账单。</p>
+        <p>该案件暂无相关账单，收款摘要已展示在上方。</p>
       </div>
     </template>
 
     <!-- No Data -->
     <div v-else-if="!loading && !error" class="no-data">
-      <p>暂无账务信息。</p>
+      <p>暂无账单与收款信息。</p>
     </div>
   </div>
 </template>
@@ -141,6 +150,7 @@ const hasEnrichedFields = computed(() => {
     receipts.value.fee_code ||
     receipts.value.fee_type ||
     receipts.value.year_no != null ||
+    receipts.value.last_receipt_date ||
     receipts.value.invoice_no ||
     receipts.value.is_arrears != null ||
     receipts.value.is_commissionable != null
