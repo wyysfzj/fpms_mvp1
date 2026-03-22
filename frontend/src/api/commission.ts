@@ -121,6 +121,9 @@ interface BackendCommissionSettlementReportResult {
         currency?: string | null
         line_status?: string | null
         settlement_status?: string | null
+        s1_done?: boolean
+        s2_done?: boolean
+        is_settleable?: boolean
         settleable_date?: string | null
         period_from?: string | null
         period_to?: string | null
@@ -242,6 +245,9 @@ function mapCommissionSettlementReport(
             currency: item.currency ?? undefined,
             line_status: item.line_status ?? undefined,
             settlement_status: item.settlement_status ?? undefined,
+            s1_done: item.s1_done ?? false,
+            s2_done: item.s2_done ?? false,
+            is_settleable: item.is_settleable ?? false,
             settleable_date: item.settleable_date ?? undefined,
             period_from: item.period_from ?? undefined,
             period_to: item.period_to ?? undefined,

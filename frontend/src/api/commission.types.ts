@@ -173,6 +173,9 @@ export interface CommissionSettlementReportResult {
         currency?: string
         line_status?: string
         settlement_status?: string
+        s1_done: boolean
+        s2_done: boolean
+        is_settleable: boolean
         settleable_date?: string
         period_from?: string
         period_to?: string

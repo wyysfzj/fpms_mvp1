@@ -19,8 +19,8 @@
       <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-position="top">
         <el-row :gutter="12">
           <el-col :xs="24" :sm="12" :md="8" :lg="6">
-            <el-form-item label="代理人 ID" prop="agent_id">
-              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人 ID" />
+            <el-form-item label="代理人编号" prop="agent_id">
+              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人编号" />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8" :lg="6">
@@ -66,7 +66,7 @@
             aria-label="结算批次编号"
             :min="1"
             :controls="false"
-            placeholder="结算批次 ID"
+            placeholder="结算批次编号"
             class="w-full"
           />
         </el-col>
@@ -85,25 +85,43 @@
 
       <div v-if="lastGenerate" class="result-block">
         <el-descriptions :column="3" border>
-          <el-descriptions-item label="批次 ID">{{ lastGenerate.settlement_id }}</el-descriptions-item>
-          <el-descriptions-item label="状态">{{ lastGenerate.status }}</el-descriptions-item>
+          <el-descriptions-item label="批次编号">{{ lastGenerate.settlement_id }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="settlementStatusTagType(lastGenerate.status)" size="small">
+              {{ settlementStatusLabel(lastGenerate.status) }}
+            </el-tag>
+          </el-descriptions-item>
           <el-descriptions-item label="明细总数">{{ lastGenerate.line_count }}</el-descriptions-item>
           <el-descriptions-item label="新增明细">{{ lastGenerate.created_count }}</el-descriptions-item>
           <el-descriptions-item label="更新明细">{{ lastGenerate.updated_count }}</el-descriptions-item>
           <el-descriptions-item label="明细总额">{{ formatMoney(lastGenerate.total_amount) }}</el-descriptions-item>
         </el-descriptions>
+        <el-alert
+          v-if="lastGenerate.status === 'GENERATED'"
+          type="success"
+          :closable="false"
+          show-icon
+          title="本次结算明细已生成，相关提成阶段结果已写入，可在提成记录列表查看阶段完成状态。"
+          class="result-alert"
+        />
       </div>
 
       <div v-if="recentSettlements.length" class="result-block">
         <div class="sub-title">本页创建的批次</div>
         <el-table :data="recentSettlements" stripe size="small" class="compact-table">
-          <el-table-column prop="id" label="ID" width="80" />
-          <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
+          <el-table-column prop="id" label="编号" width="80" />
+          <el-table-column prop="agent_id" label="代理人编号" min-width="140">
             <template #default="{ row }">
               {{ row.agent_id || '—' }}
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="100" />
+          <el-table-column prop="status" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="settlementStatusTagType(row.status)" size="small">
+                {{ settlementStatusLabel(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="currency" label="币种" width="90" />
           <el-table-column prop="line_count" label="明细数" width="90" />
           <el-table-column label="总额" width="120" align="right">
@@ -127,10 +145,10 @@
 
       <el-row :gutter="12" class="filter-bar">
         <el-col :xs="24" :sm="12" :md="8" :lg="6">
-          <el-input v-model.trim="reportFilters.agent_id" aria-label="报表代理人筛选" placeholder="代理人 ID" clearable @keyup.enter="queryReport" />
+          <el-input v-model.trim="reportFilters.agent_id" aria-label="报表代理人筛选" placeholder="代理人编号" clearable @keyup.enter="queryReport" />
         </el-col>
         <el-col :xs="24" :sm="12" :md="8" :lg="6">
-          <el-input v-model.trim="reportFilters.case_id" aria-label="报表案件筛选" placeholder="案件 ID" clearable @keyup.enter="queryReport" />
+          <el-input v-model.trim="reportFilters.case_id" aria-label="报表案件筛选" placeholder="案件编号" clearable @keyup.enter="queryReport" />
         </el-col>
         <el-col :xs="12" :sm="8" :md="4" :lg="3">
           <el-input v-model.trim="reportFilters.currency" aria-label="报表币种筛选" placeholder="币种" clearable @keyup.enter="queryReport" />
@@ -195,10 +213,46 @@
           </el-col>
         </el-row>
 
+        <div v-if="stageSummary.hasAnyStatus" class="result-block">
+          <div class="sub-title">阶段完成概览</div>
+          <el-row :gutter="12" class="stat-grid">
+            <el-col :xs="24" :sm="12">
+              <el-card shadow="never" class="stat-card">
+                <div class="stat-label">批次状态分布</div>
+                <div class="stage-tag-list">
+                  <el-tag
+                    v-for="item in stageSummary.settlementStatuses"
+                    :key="`settlement-${item.status}`"
+                    :type="settlementStatusTagType(item.status)"
+                    size="small"
+                  >
+                    {{ settlementStatusLabel(item.status) }} ×{{ item.count }}
+                  </el-tag>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :xs="24" :sm="12">
+              <el-card shadow="never" class="stat-card">
+                <div class="stat-label">明细状态分布</div>
+                <div class="stage-tag-list">
+                  <el-tag
+                    v-for="item in stageSummary.lineStatuses"
+                    :key="`line-${item.status}`"
+                    :type="lineStatusTagType(item.status)"
+                    size="small"
+                  >
+                    {{ lineStatusLabel(item.status) }} ×{{ item.count }}
+                  </el-tag>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+        </div>
+
         <div class="table-section">
           <div class="sub-title">按代理人统计</div>
           <el-table :data="report.by_agent" stripe size="small" class="compact-table">
-            <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
+            <el-table-column prop="agent_id" label="代理人编号" min-width="160">
               <template #default="{ row }">
                 {{ row.agent_id || '—' }}
               </template>
@@ -215,7 +269,7 @@
         <div class="table-section">
           <div class="sub-title">按案件统计</div>
           <el-table :data="report.by_case" stripe size="small" class="compact-table">
-            <el-table-column prop="case_id" label="案件 ID" min-width="180">
+            <el-table-column prop="case_id" label="案件编号" min-width="180">
               <template #default="{ row }">
                 {{ row.case_id || '—' }}
               </template>
@@ -245,22 +299,57 @@
         <div class="table-section">
           <div class="sub-title">明细列表</div>
           <el-table :data="report.details" stripe size="small" class="compact-table">
-            <el-table-column prop="settlement_id" label="批次 ID" width="90" />
-            <el-table-column prop="commission_id" label="提成 ID" width="90" />
-            <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
+            <el-table-column prop="settlement_id" label="批次编号" width="90" />
+            <el-table-column prop="commission_id" label="提成编号" width="90" />
+            <el-table-column prop="agent_id" label="代理人编号" min-width="140">
               <template #default="{ row }">
                 {{ row.agent_id || '—' }}
               </template>
             </el-table-column>
-            <el-table-column prop="case_id" label="案件 ID" min-width="150" />
+            <el-table-column prop="case_id" label="案件编号" min-width="150" />
             <el-table-column prop="settlement_status" label="批次状态" width="100">
               <template #default="{ row }">
-                {{ row.settlement_status || '—' }}
+                <el-tag
+                  v-if="row.settlement_status"
+                  :type="settlementStatusTagType(row.settlement_status)"
+                  size="small"
+                >
+                  {{ settlementStatusLabel(row.settlement_status) }}
+                </el-tag>
+                <span v-else>—</span>
               </template>
             </el-table-column>
             <el-table-column prop="line_status" label="明细状态" width="100">
               <template #default="{ row }">
-                {{ row.line_status || '—' }}
+                <el-tag
+                  v-if="row.line_status"
+                  :type="lineStatusTagType(row.line_status)"
+                  size="small"
+                >
+                  {{ lineStatusLabel(row.line_status) }}
+                </el-tag>
+                <span v-else>—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="S1 阶段" width="90">
+              <template #default="{ row }">
+                <el-tag :type="completionTagType(row.s1_done)" size="small">
+                  {{ completionLabel(row.s1_done) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="S2 阶段" width="90">
+              <template #default="{ row }">
+                <el-tag :type="completionTagType(row.s2_done)" size="small">
+                  {{ completionLabel(row.s2_done) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="可结算" width="90">
+              <template #default="{ row }">
+                <el-tag :type="completionTagType(row.is_settleable)" size="small">
+                  {{ settleableLabel(row.is_settleable) }}
+                </el-tag>
               </template>
             </el-table-column>
             <el-table-column label="金额" width="120" align="right">
@@ -286,7 +375,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import {
@@ -318,7 +407,7 @@ const createForm = reactive({
 })
 
 const createRules: FormRules = {
-  agent_id: [{ required: true, message: '代理人 ID 为必填项', trigger: 'blur' }],
+  agent_id: [{ required: true, message: '代理人编号为必填项', trigger: 'blur' }],
   currency: [{ required: true, message: '币种为必填项', trigger: 'blur' }],
 }
 
@@ -340,6 +429,11 @@ const reportFilters = reactive({
   date_range: [] as string[],
   time_field: 'line_created_at' as CommissionSettlementReportParams['time_field'],
 })
+
+type StageCount = {
+  status: string
+  count: number
+}
 
 function toApiError(errorLike: unknown): ApiError | null {
   if (!errorLike || typeof errorLike !== 'object') return null
@@ -372,7 +466,7 @@ function mapGenerateLinesError(errorLike: unknown): string {
   if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
 
   if (apiError.status === 404 && apiError.code === 'COMMISSION_SETTLEMENT_NOT_FOUND') {
-    return '结算批次不存在，请确认批次 ID。'
+    return '结算批次不存在，请确认批次编号。'
   }
   if (apiError.status === 400 && apiError.code === 'COMMISSION_SETTLEMENT_INVALID') {
     return '结算批次参数或状态无效，无法生成明细。'
@@ -419,6 +513,119 @@ function formatDateTime(value: string): string {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
+function settlementStatusLabel(status: string | undefined): string {
+  const map: Record<string, string> = {
+    DRAFT: '草稿',
+    GENERATED: '已生成',
+    CREATED: '已创建',
+    PENDING: '待处理',
+    SETTLED: '已结算',
+    COMPLETE: '已完成',
+    CLOSED: '已关闭',
+    CANCELLED: '已取消',
+    VOID: '已作废',
+    OPEN: '进行中',
+  }
+  return map[status || ''] || status || '—'
+}
+
+function settlementStatusTagType(
+  status: string | undefined,
+): 'success' | 'warning' | 'info' | 'danger' {
+  switch (status) {
+    case 'GENERATED':
+    case 'SETTLED':
+    case 'COMPLETE':
+    case 'CLOSED':
+      return 'success'
+    case 'CANCELLED':
+    case 'VOID':
+      return 'danger'
+    case 'DRAFT':
+    case 'OPEN':
+    case 'CREATED':
+    case 'PENDING':
+      return 'warning'
+    default:
+      return 'info'
+  }
+}
+
+function lineStatusLabel(status: string | undefined): string {
+  const map: Record<string, string> = {
+    PENDING: '待处理',
+    GENERATED: '已生成',
+    SETTLED: '已结算',
+    COMPLETE: '已完成',
+    CLOSED: '已关闭',
+    CANCELLED: '已取消',
+    VOID: '已作废',
+    OPEN: '进行中',
+  }
+  return map[status || ''] || status || '—'
+}
+
+function lineStatusTagType(status: string | undefined): 'success' | 'warning' | 'info' | 'danger' {
+  switch (status) {
+    case 'SETTLED':
+    case 'GENERATED':
+    case 'COMPLETE':
+    case 'CLOSED':
+      return 'success'
+    case 'PENDING':
+      return 'warning'
+    case 'CANCELLED':
+    case 'VOID':
+      return 'danger'
+    default:
+      return 'info'
+  }
+}
+
+function normalizeStatus(status: string | undefined): string {
+  return (status || '').trim().toUpperCase()
+}
+
+function completionLabel(done: boolean | undefined): string {
+  return done ? '已完成' : '未完成'
+}
+
+function settleableLabel(settleable: boolean | undefined): string {
+  return settleable ? '可结算' : '不可结算'
+}
+
+function completionTagType(done: boolean | undefined): 'success' | 'info' {
+  return done ? 'success' : 'info'
+}
+
+const stageSummary = computed(() => {
+  const settlementCounts = new Map<string, number>()
+  const lineCounts = new Map<string, number>()
+
+  for (const detail of report.value?.details ?? []) {
+    const settlementStatus = normalizeStatus(detail.settlement_status)
+    const lineStatus = normalizeStatus(detail.line_status)
+
+    if (settlementStatus) {
+      settlementCounts.set(settlementStatus, (settlementCounts.get(settlementStatus) || 0) + 1)
+    }
+    if (lineStatus) {
+      lineCounts.set(lineStatus, (lineCounts.get(lineStatus) || 0) + 1)
+    }
+  }
+
+  const toList = (counts: Map<string, number>): StageCount[] =>
+    [...counts.entries()]
+      .map(([status, count]) => ({ status, count }))
+      .sort((left, right) => right.count - left.count || left.status.localeCompare(right.status))
+
+  return {
+    hasAnyStatus: settlementCounts.size > 0 || lineCounts.size > 0,
+    settlementStatuses: toList(settlementCounts),
+    lineStatuses: toList(lineCounts),
+  }
+})
+
 function buildCreatePayload(): CommissionSettlementCreatePayload {
   return {
     agent_id: createForm.agent_id.trim(),
@@ -456,7 +663,7 @@ async function handleCreateSettlement() {
     const settlement = await createCommissionSettlement(buildCreatePayload())
     recentSettlements.value = [settlement, ...recentSettlements.value.filter((s) => s.id !== settlement.id)]
     generateForm.settlement_id = settlement.id
-    ElMessage.success(`批次创建成功（ID: ${settlement.id}）`)
+    ElMessage.success(`批次创建成功（编号: ${settlement.id}）`)
   } catch (err) {
     error.value = toApiError(err)
     ElMessage.error(mapCreateSettlementError(err))
@@ -467,7 +674,7 @@ async function handleCreateSettlement() {
 
 async function handleGenerateLines() {
   if (!generateForm.settlement_id) {
-    ElMessage.warning('请先输入结算批次 ID')
+    ElMessage.warning('请先输入结算批次编号')
     return
   }
 
@@ -547,6 +754,10 @@ onMounted(() => {
   margin-top: 16px;
 }
 
+.result-alert {
+  margin-top: 12px;
+}
+
 .sub-title {
   margin-bottom: 8px;
   font-weight: 600;
@@ -578,6 +789,13 @@ onMounted(() => {
   margin-top: 8px;
   font-size: 24px;
   font-weight: 700;
+}
+
+.stage-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .table-section {
