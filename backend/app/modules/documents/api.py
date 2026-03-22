@@ -43,6 +43,26 @@ from app.modules.tasks.task_generation_service import TaskGenerationService
 router = APIRouter()
 
 
+def _build_document_out(document, *, case_no: str | None = None, attachments: list | None = None) -> DocumentOut:
+    return DocumentOut(
+        id=document.id,
+        case_id=document.case_id,
+        case_no=case_no,
+        doc_template_id=document.doc_template_id,
+        direction=document.direction,
+        doc_date=document.doc_date,
+        title=document.title,
+        ref_no=document.ref_no,
+        extra_data=document.extra_data,
+        reply_to_id=document.reply_to_id,
+        need_reply=document.need_reply,
+        reply_date=document.reply_date,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+        attachments=attachments or [],
+    )
+
+
 # ---------------------------------------------------------------------------
 # B1: DocTemplate CRUD endpoints (registered BEFORE /documents/{id} routes)
 # ---------------------------------------------------------------------------
@@ -125,6 +145,8 @@ def get_documents(
     doc_template_id: str | None = Query(default=None),
     case_id: str | None = Query(default=None),
     client_id: str | None = Query(default=None),
+    need_reply: bool | None = Query(default=None),
+    replied: bool | None = Query(default=None),
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -157,6 +179,8 @@ def get_documents(
         doc_template_id=doc_template_id,
         case_id=case_id,
         client_id=client_id,
+        need_reply=need_reply,
+        replied=replied,
         date_from=date_from,
         date_to=date_to,
         page=page,
@@ -264,21 +288,8 @@ def create_document(
     response.headers["X-Auto-Tasks-Created"] = str(len(created_tasks))
     if auto_fee_draft_id:
         response.headers["X-Auto-Fee-Draft-Created"] = auto_fee_draft_id
-    return DocumentOut(
-        id=document.id,
-        case_id=document.case_id,
-        doc_template_id=document.doc_template_id,
-        direction=document.direction,
-        doc_date=document.doc_date,
-        title=document.title,
-        ref_no=document.ref_no,
-        extra_data=document.extra_data,
-        reply_to_id=document.reply_to_id,
-        need_reply=document.need_reply,
-        reply_date=document.reply_date,
-        created_at=document.created_at,
-        updated_at=document.updated_at,
-    )
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    return _build_document_out(document, case_no=case.case_no if case else None)
 
 
 @router.get(
@@ -352,20 +363,10 @@ def get_document(
     - 422: VALIDATION_ERROR
     """
     document = get_document_service(db, document_id)
-    return DocumentOut(
-        id=document.id,
-        case_id=document.case_id,
-        doc_template_id=document.doc_template_id,
-        direction=document.direction,
-        doc_date=document.doc_date,
-        title=document.title,
-        ref_no=document.ref_no,
-        extra_data=document.extra_data,
-        reply_to_id=document.reply_to_id,
-        need_reply=document.need_reply,
-        reply_date=document.reply_date,
-        created_at=document.created_at,
-        updated_at=document.updated_at,
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    return _build_document_out(
+        document,
+        case_no=case.case_no if case else None,
         attachments=[
             {
                 "id": attachment.id,
@@ -415,21 +416,8 @@ def update_document(
     - 422: VALIDATION_ERROR
     """
     document = update_document_service(db, document_id, payload)
-    return DocumentOut(
-        id=document.id,
-        case_id=document.case_id,
-        doc_template_id=document.doc_template_id,
-        direction=document.direction,
-        doc_date=document.doc_date,
-        title=document.title,
-        ref_no=document.ref_no,
-        extra_data=document.extra_data,
-        reply_to_id=document.reply_to_id,
-        need_reply=document.need_reply,
-        reply_date=document.reply_date,
-        created_at=document.created_at,
-        updated_at=document.updated_at,
-    )
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    return _build_document_out(document, case_no=case.case_no if case else None)
 
 
 @router.post(

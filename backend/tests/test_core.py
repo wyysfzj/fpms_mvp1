@@ -5,6 +5,19 @@ from typing import Any
 import app.api.deps as deps
 
 
+def test_login_cors_preflight_allows_localhost_and_loopback(client) -> None:
+    for origin in ("http://localhost:5173", "http://127.0.0.1:5173"):
+        response = client.options(
+            "/api/v1/auth/login",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin
+
+
 def test_login_success_returns_token(client) -> None:
     response = client.post(
         "/api/v1/auth/login",

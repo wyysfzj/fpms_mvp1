@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.errors import raise_business_error
 from app.core.storage import ensure_dir, safe_join
 from app.modules.cases.models import Case
+from app.modules.cases.service import validate_case_status_transition
 from app.modules.documents.enums import DocumentDirection
 from app.modules.documents.models import DocAttachment, DocTemplate, Document
 from app.modules.documents.schemas import (
@@ -23,6 +24,70 @@ from app.modules.tasks.models import Task
 from app.modules.tasks.service import _create_task_log
 
 
+def _apply_template_defaults(
+    *,
+    case: Case,
+    document: Document,
+    template: DocTemplate | None,
+    need_reply_overridden: bool = False,
+) -> None:
+    if not template:
+        return
+
+    if not need_reply_overridden and getattr(template, "need_reply", None) is not None:
+        document.need_reply = template.need_reply
+
+    if getattr(template, "status_effect", None) and document.direction == DocumentDirection.IN:
+        validate_case_status_transition(case.status, template.status_effect)
+        case.status = template.status_effect
+
+    if (
+        getattr(template, "status_restore", None)
+        and document.direction == DocumentDirection.OUT
+        and document.reply_to_id
+    ):
+        validate_case_status_transition(case.status, template.status_restore)
+        case.status = template.status_restore
+
+
+def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None) -> None:
+    if not document.reply_to_id or document.direction != DocumentDirection.OUT:
+        return
+
+    original_doc = db.execute(
+        select(Document).where(Document.id == document.reply_to_id)
+    ).scalar_one_or_none()
+    if not original_doc:
+        raise_business_error(
+            "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
+        )
+
+    open_tasks = (
+        db.execute(
+            select(Task).where(
+                Task.document_id == document.reply_to_id,
+                Task.status == TaskStatus.OPEN.value,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    for task in open_tasks:
+        task.status = TaskStatus.DONE.value
+        task.done_at = datetime.utcnow()
+        _create_task_log(
+            db,
+            task_id=task.id,
+            action=TaskAction.AUTO_WRITEOFF,
+            from_status=TaskStatus.OPEN.value,
+            to_status=TaskStatus.DONE.value,
+            remark=f"Auto write-off: reply document {document.id}",
+        )
+
+    original_doc.reply_date = doc_date
+
+
 def list_documents(
     db: Session,
     *,
@@ -31,6 +96,8 @@ def list_documents(
     doc_template_id: str | None = None,
     case_id: str | None = None,
     client_id: str | None = None,
+    need_reply: bool | None = None,
+    replied: bool | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     page: int = 1,
@@ -56,6 +123,12 @@ def list_documents(
         stmt = stmt.where(Document.case_id == case_id)
     if client_id:
         stmt = stmt.join(Case, Document.case_id == Case.id).where(Case.client_id == client_id)
+    if need_reply is not None:
+        stmt = stmt.where(Document.need_reply.is_(need_reply))
+    if replied is True:
+        stmt = stmt.where(Document.reply_date.is_not(None))
+    elif replied is False:
+        stmt = stmt.where(Document.reply_date.is_(None))
     if date_from:
         stmt = stmt.where(Document.doc_date >= date_from)
     if date_to:
@@ -107,52 +180,8 @@ def create_document(db: Session, data: DocumentCreateIn) -> Document:
     )
     db.add(document)
 
-    # B2: DocTemplate cascade
-    if data.doc_template_id and template:
-        # Propagate need_reply from template to document
-        if getattr(template, "need_reply", None):
-            document.need_reply = True
-
-        # Apply status_effect to case
-        if getattr(template, "status_effect", None):
-            case.status = template.status_effect
-
-    # B2: Reply chain — auto write-off
-    if data.reply_to_id and data.direction == DocumentDirection.OUT:
-        original_doc = db.execute(
-            select(Document).where(Document.id == data.reply_to_id)
-        ).scalar_one_or_none()
-        if not original_doc:
-            raise_business_error(
-                "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
-            )
-
-        # Find OPEN tasks linked to the original document
-        open_tasks = (
-            db.execute(
-                select(Task).where(
-                    Task.document_id == data.reply_to_id,
-                    Task.status == TaskStatus.OPEN.value,
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-        for task in open_tasks:
-            task.status = TaskStatus.DONE.value
-            task.done_at = datetime.utcnow()
-            _create_task_log(
-                db,
-                task_id=task.id,
-                action=TaskAction.AUTO_WRITEOFF,
-                from_status=TaskStatus.OPEN.value,
-                to_status=TaskStatus.DONE.value,
-                remark=f"Auto write-off: reply document {document.id}",
-            )
-
-        # Update original document's reply_date
-        original_doc.reply_date = data.doc_date
+    _apply_template_defaults(case=case, document=document, template=template)
+    _apply_reply_chain(db, document=document, doc_date=data.doc_date)
 
     db.commit()
     db.refresh(document)
@@ -177,6 +206,11 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
         raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
 
     updates = data.model_dump(exclude_unset=True)
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    template = None
 
     if "case_id" in updates:
         case = db.execute(select(Case).where(Case.id == updates["case_id"])).scalar_one_or_none()
@@ -191,9 +225,24 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
             raise_business_error(
                 "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
             )
+    elif document.doc_template_id:
+        template = db.execute(
+            select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
+        ).scalar_one_or_none()
 
     for field, value in updates.items():
         setattr(document, field, value)
+
+    _apply_template_defaults(
+        case=case,
+        document=document,
+        template=template,
+        need_reply_overridden="need_reply" in updates,
+    )
+    if "reply_to_id" in updates or (
+        "doc_template_id" in updates and getattr(template, "status_restore", None)
+    ):
+        _apply_reply_chain(db, document=document, doc_date=document.doc_date)
 
     db.commit()
     db.refresh(document)

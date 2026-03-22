@@ -64,6 +64,18 @@ def _get_doc_template_by_code(client: TestClient, auth_headers: dict, code: str)
     return match[0]
 
 
+def _create_doc_template(client: TestClient, auth_headers: dict, **overrides) -> dict:
+    payload = {
+        "code": f"WD-{uuid.uuid4().hex[:8].upper()}",
+        "name": "B2 Custom Template",
+        "direction": "OUT",
+        **overrides,
+    }
+    resp = client.post(DOC_TMPL_BASE, json=payload, headers=auth_headers)
+    assert resp.status_code == 201, f"Doc template creation failed: {resp.text}"
+    return resp.json()
+
+
 def _create_document(
     client: TestClient,
     auth_headers: dict,
@@ -144,6 +156,7 @@ def test_create_document_with_reply_fields(client: TestClient, auth_headers: dic
     assert "need_reply" in doc, "Response must include need_reply field"
     assert "reply_date" in doc, "Response must include reply_date field"
     assert doc["reply_date"] is None
+    assert doc["case_no"].startswith("B2-")
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +374,43 @@ def test_doc_template_cascade_status_effect(client: TestClient, auth_headers: di
     )
 
 
+def test_doc_template_cascade_rejects_illegal_status_regression(
+    client: TestClient, auth_headers: dict
+) -> None:
+    """Terminal case status must not be regressed by document status_effect."""
+    case = _create_case(client, auth_headers)
+
+    promote_resp = client.put(
+        f"{CASE_BASE}/{case['id']}",
+        headers=auth_headers,
+        json={
+            "status": "GRANTED",
+            "app_no": "CN202510123456.7",
+            "filing_date": "2025-01-15",
+        },
+    )
+    assert promote_resp.status_code == 200, promote_resp.text
+
+    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
+    resp = client.post(
+        DOC_BASE,
+        headers=auth_headers,
+        json={
+            "case_id": case["id"],
+            "direction": "IN",
+            "doc_date": "2026-01-15",
+            "title": "Illegal regression OA",
+            "doc_template_id": oa_in_tmpl["id"],
+        },
+    )
+    assert resp.status_code == 409, resp.text
+    payload = resp.json()["error"]
+    assert payload["code"] == "CASE_STATUS_TRANSITION_INVALID"
+
+    case_after = _get_case(client, auth_headers, case["id"])
+    assert case_after["status"] == "GRANTED"
+
+
 # ---------------------------------------------------------------------------
 # 7. DocTemplate cascade — need_reply
 # ---------------------------------------------------------------------------
@@ -384,6 +434,25 @@ def test_doc_template_cascade_need_reply(client: TestClient, auth_headers: dict)
     )
 
     assert doc.get("need_reply") is True, "Document should inherit need_reply=True from DocTemplate"
+
+
+def test_document_update_applies_template_defaults_and_returns_case_no(
+    client: TestClient, auth_headers: dict
+) -> None:
+    """Updating template should apply template-backed defaults needed by FE and preserve case_no."""
+    case = _create_case(client, auth_headers)
+    doc = _create_document(client, auth_headers, case["id"], title="Update defaults target")
+    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
+
+    resp = client.put(
+        f"{DOC_BASE}/{doc['id']}",
+        headers=auth_headers,
+        json={"doc_template_id": oa_in_tmpl["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    updated = resp.json()
+    assert updated["case_no"] == case["case_no"]
+    assert updated["need_reply"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +506,49 @@ def test_document_update_reply_fields(client: TestClient, auth_headers: dict) ->
     assert updated["need_reply"] is True
 
 
+def test_reply_document_applies_status_restore_when_template_configured(
+    client: TestClient, auth_headers: dict
+) -> None:
+    """Reply template status_restore should bring the case back to configured status."""
+    case = _create_case(client, auth_headers)
+    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
+
+    incoming = _create_document(
+        client,
+        auth_headers,
+        case["id"],
+        direction="IN",
+        doc_template_id=oa_in_tmpl["id"],
+        title="Incoming OA",
+    )
+    case_after_in = _get_case(client, auth_headers, case["id"])
+    assert case_after_in["status"] == "OA1"
+
+    restore_tmpl = _create_doc_template(
+        client,
+        auth_headers,
+        code=f"OA-OUT-{uuid.uuid4().hex[:6].upper()}",
+        name="OA 回复恢复状态",
+        direction="OUT",
+        status_restore="ACCEPTED",
+        reply_to_template_code="OA_IN",
+    )
+
+    reply = _create_document(
+        client,
+        auth_headers,
+        case["id"],
+        direction="OUT",
+        doc_template_id=restore_tmpl["id"],
+        title="Reply with restore",
+        reply_to_id=incoming["id"],
+    )
+    assert reply["case_no"] == case["case_no"]
+
+    case_after_reply = _get_case(client, auth_headers, case["id"])
+    assert case_after_reply["status"] == "ACCEPTED"
+
+
 # ---------------------------------------------------------------------------
 # 10. Document list includes reply fields
 # ---------------------------------------------------------------------------
@@ -461,6 +573,83 @@ def test_document_list_includes_reply_fields(client: TestClient, auth_headers: d
         assert "reply_to_id" in item, "List item must include reply_to_id"
         assert "need_reply" in item, "List item must include need_reply"
         assert "reply_date" in item, "List item must include reply_date"
+
+
+def test_document_list_can_filter_by_reply_state(
+    client: TestClient, auth_headers: dict
+) -> None:
+    """GET /documents supports need_reply/replied filters for Batch 2 query scope."""
+    case = _create_case(client, auth_headers)
+    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
+    oa_out_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_OUT")
+
+    awaiting_reply = _create_document(
+        client,
+        auth_headers,
+        case["id"],
+        direction="IN",
+        doc_template_id=oa_in_tmpl["id"],
+        title="OA awaiting reply",
+    )
+    replied_doc = _create_document(
+        client,
+        auth_headers,
+        case["id"],
+        direction="IN",
+        doc_template_id=oa_in_tmpl["id"],
+        title="OA replied",
+        doc_date="2026-01-20",
+    )
+    _create_document(
+        client,
+        auth_headers,
+        case["id"],
+        direction="OUT",
+        doc_template_id=oa_out_tmpl["id"],
+        title="OA reply sent",
+        doc_date="2026-02-01",
+        reply_to_id=replied_doc["id"],
+    )
+    plain_doc = _create_document(
+        client,
+        auth_headers,
+        case["id"],
+        direction="IN",
+        title="Plain incoming doc",
+        doc_date="2026-01-25",
+    )
+
+    need_reply_resp = client.get(
+        DOC_BASE,
+        headers=auth_headers,
+        params={"case_id": case["id"], "need_reply": True, "page_size": 100},
+    )
+    assert need_reply_resp.status_code == 200, need_reply_resp.text
+    need_reply_ids = {item["id"] for item in need_reply_resp.json()["items"]}
+    assert awaiting_reply["id"] in need_reply_ids
+    assert replied_doc["id"] in need_reply_ids
+    assert plain_doc["id"] not in need_reply_ids
+
+    pending_resp = client.get(
+        DOC_BASE,
+        headers=auth_headers,
+        params={"case_id": case["id"], "need_reply": True, "replied": False, "page_size": 100},
+    )
+    assert pending_resp.status_code == 200, pending_resp.text
+    pending_ids = {item["id"] for item in pending_resp.json()["items"]}
+    assert awaiting_reply["id"] in pending_ids
+    assert replied_doc["id"] not in pending_ids
+
+    replied_resp = client.get(
+        DOC_BASE,
+        headers=auth_headers,
+        params={"case_id": case["id"], "replied": True, "page_size": 100},
+    )
+    assert replied_resp.status_code == 200, replied_resp.text
+    replied_ids = {item["id"] for item in replied_resp.json()["items"]}
+    assert replied_doc["id"] in replied_ids
+    assert awaiting_reply["id"] not in replied_ids
+    assert plain_doc["id"] not in replied_ids
 
 
 # ---------------------------------------------------------------------------

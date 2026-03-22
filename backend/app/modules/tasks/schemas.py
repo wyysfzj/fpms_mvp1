@@ -58,6 +58,8 @@ class TaskListItemOut(BaseModel):
 
     id: str
     case_id: str | None = None
+    case_no: str | None = None
+    client_name: str | None = None
     document_id: str | None = None
     task_template_id: str | None = None
     title: str
@@ -65,7 +67,10 @@ class TaskListItemOut(BaseModel):
     internal_due_date: date | None = None
     worker_id: str | None = None
     supervisor_id: str | None = None
+    remark: str | None = None
     status: TaskStatus
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class TaskActionIn(BaseModel):

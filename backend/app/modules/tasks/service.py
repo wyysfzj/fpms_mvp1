@@ -69,6 +69,8 @@ def list_tasks(
     db: Session,
     *,
     filters: dict[str, Any],
+    actor_id: str | None,
+    as_role: TaskTodayAs | None,
     page: int,
     page_size: int,
 ) -> tuple[list[Task], int]:
@@ -81,6 +83,11 @@ def list_tasks(
     due_from: date | None = filters.get("due_from")
     due_to: date | None = filters.get("due_to")
     client_id = filters.get("client_id")
+
+    if as_role == TaskTodayAs.WORKER and actor_id:
+        stmt = stmt.where(Task.worker_id == actor_id)
+    elif as_role == TaskTodayAs.SUPERVISOR and actor_id:
+        stmt = stmt.where(Task.supervisor_id == actor_id)
 
     if status:
         stmt = stmt.where(Task.status == status)
@@ -220,6 +227,17 @@ def update_task(
     db.commit()
     db.refresh(task)
     return task
+
+
+def delete_task(
+    db: Session,
+    *,
+    task_id: str,
+    actor_id: str | None,
+) -> None:
+    task = get_task(db, task_id=task_id)
+    db.delete(task)
+    db.commit()
 
 
 def close_task(

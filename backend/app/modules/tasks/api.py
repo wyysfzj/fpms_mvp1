@@ -34,6 +34,7 @@ from app.modules.tasks.service import cancel_task as cancel_task_service
 from app.modules.tasks.service import close_task as close_task_service
 from app.modules.tasks.service import create_task as create_task_service
 from app.modules.tasks.service import create_task_template as create_task_template_service
+from app.modules.tasks.service import delete_task as delete_task_service
 from app.modules.tasks.service import get_task as get_task_service
 from app.modules.tasks.service import list_task_logs as list_task_logs_service
 from app.modules.tasks.service import list_task_templates as list_task_templates_service
@@ -43,6 +44,45 @@ from app.modules.tasks.service import update_task as update_task_service
 from app.modules.tasks.service import update_task_template as update_task_template_service
 
 router = APIRouter()
+
+
+def _build_task_list_items(db: Session, tasks: list[Task]) -> list[TaskListItemOut]:
+    case_ids = {task.case_id for task in tasks if task.case_id}
+    case_no_map: dict[str, str] = {}
+    case_client_map: dict[str, str | None] = {}
+    if case_ids:
+        cases = db.query(Case.id, Case.case_no, Case.client_id).filter(Case.id.in_(case_ids)).all()
+        case_no_map = {case.id: case.case_no for case in cases}
+        case_client_map = {case.id: case.client_id for case in cases}
+
+    client_ids = {client_id for client_id in case_client_map.values() if client_id}
+    client_name_map: dict[str, str] = {}
+    if client_ids:
+        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
+        client_name_map = {client.id: client.name_cn for client in clients}
+
+    return [
+        TaskListItemOut(
+            id=task.id,
+            case_id=task.case_id,
+            case_no=case_no_map.get(task.case_id) if task.case_id else None,
+            client_name=client_name_map.get(case_client_map.get(task.case_id, ""))
+            if task.case_id
+            else None,
+            document_id=task.document_id,
+            task_template_id=task.task_template_id,
+            title=task.title or "",
+            due_date=task.due_date,
+            internal_due_date=task.internal_due_date,
+            worker_id=task.worker_id,
+            supervisor_id=task.supervisor_id,
+            remark=getattr(task, "remark", None),
+            status=task.status,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+        )
+        for task in tasks
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +138,7 @@ def update_task_template(
 @router.get("/tasks", summary="List tasks")
 def get_tasks(
     status: str | None = Query(default=None),
+    as_role: TaskTodayAs | None = Query(default=None, alias="as"),
     due_from: date | None = Query(default=None),
     due_to: date | None = Query(default=None),
     worker_id: str | None = Query(default=None),
@@ -107,6 +148,7 @@ def get_tasks(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     _perm: None = Depends(require_perm("Task.Read")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -136,46 +178,15 @@ def get_tasks(
         "due_to": due_to,
         "client_id": client_id,
     }
-    tasks, total = list_tasks(db, filters=filters, page=page, page_size=page_size)
-
-    # Batch-resolve case_no and client_name for all tasks in this page
-    case_ids = {task.case_id for task in tasks if task.case_id}
-    case_no_map: dict[str, str] = {}
-    case_client_map: dict[str, str | None] = {}
-    if case_ids:
-        cases = db.query(Case.id, Case.case_no, Case.client_id).filter(Case.id.in_(case_ids)).all()
-        case_no_map = {c.id: c.case_no for c in cases}
-        case_client_map = {c.id: c.client_id for c in cases}
-
-    # Batch-resolve client_name
-    client_ids = {cid for cid in case_client_map.values() if cid}
-    client_name_map: dict[str, str] = {}
-    if client_ids:
-        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
-        client_name_map = {c.id: c.name_cn for c in clients}
-
-    items = [
-        {
-            "id": task.id,
-            "case_id": task.case_id,
-            "case_no": case_no_map.get(task.case_id) if task.case_id else None,
-            "client_name": client_name_map.get(case_client_map.get(task.case_id, ""), "")
-            if task.case_id
-            else None,
-            "document_id": task.document_id,
-            "task_template_id": task.task_template_id,
-            "title": task.title or "",
-            "due_date": task.due_date,
-            "internal_due_date": task.internal_due_date,
-            "worker_id": task.worker_id,
-            "supervisor_id": task.supervisor_id,
-            "remark": getattr(task, "remark", None),
-            "status": task.status,
-            "created_at": task.created_at,
-            "updated_at": task.updated_at,
-        }
-        for task in tasks
-    ]
+    tasks, total = list_tasks(
+        db,
+        filters=filters,
+        actor_id=current_user.id,
+        as_role=as_role,
+        page=page,
+        page_size=page_size,
+    )
+    items = [item.model_dump(mode="json") for item in _build_task_list_items(db, tasks)]
     return {"items": items, "page": page, "page_size": page_size, "total": total}
 
 
@@ -207,21 +218,7 @@ def get_tasks_today(
     - 422: VALIDATION_ERROR
     """
     tasks, total = list_tasks_today(db, actor_id=current_user.id, as_role=as_role)
-    items = [
-        TaskListItemOut(
-            id=task.id,
-            case_id=task.case_id,
-            document_id=task.document_id,
-            task_template_id=task.task_template_id,
-            title=task.title or "",
-            due_date=task.due_date,
-            internal_due_date=task.internal_due_date,
-            worker_id=task.worker_id,
-            supervisor_id=task.supervisor_id,
-            status=task.status,
-        )
-        for task in tasks
-    ]
+    items = [item.model_dump(mode="json") for item in _build_task_list_items(db, tasks)]
     return {"items": items, "page": page, "page_size": page_size, "total": total}
 
 
@@ -469,6 +466,34 @@ def update_task(
     """
     task = update_task_service(db, task_id=task_id, data=payload, actor_id=current_user.id)
     return TaskOut.model_validate(task)
+
+
+@router.delete(
+    "/tasks/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    summary="Delete a task",
+)
+def delete_task(
+    task_id: str,
+    _perm: None = Depends(require_perm("Task.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> Response:
+    """
+    Delete a manually maintained task by ID.
+
+    **Auth**: Bearer JWT
+    **Permission**: Task.Edit
+    **Responses**:
+    - 204: Task deleted
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Task not found
+    - 422: VALIDATION_ERROR
+    """
+    delete_task_service(db, task_id=task_id, actor_id=current_user.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/tasks/{task_id}/print", summary="Print a task sheet")
