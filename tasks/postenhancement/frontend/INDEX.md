@@ -4,6 +4,16 @@
 
 ## Tasks
 
+- [PE-FE-CM-01](./PE-FE-CM-01.md) — Cases UI 补齐：动态校验、扩展信息分区、参与方快速回填。
+- [PE-FE-CM-02](./PE-FE-CM-02.md) — Batch 1A Cases follow-up：申请人主数据选择、快速新建、回填与 FE 证据收口。
+- [PE-FE-CM-03](./PE-FE-CM-03.md) — Deferred Batch 1 Cases follow-up：外方代理、菌种保藏、PCT、无效案字段。
+- [PE-FE-WD-02](./PE-FE-WD-02.md) — Batch 2 Documents 前端补齐：缺省值、回复/时限提示、费用/状态提示、查询视图。
+- [PE-FE-WD-03](./PE-FE-WD-03.md) — Batch 2 Documents 前端剩余补齐：模板缺省值、detail/edit 提示与展示。
+- [PE-FE-DL-02](./PE-FE-DL-02.md) — Batch 2 Tasks/Deadlines 前端补齐：双视图、手工维护、今日提醒、Dashboard 入口。
+- [PE-FE-DL-03](./PE-FE-DL-03.md) — Batch 2 Tasks/Deadlines 前端剩余补齐：双视图、今日提醒、Dashboard 入口。
+- [PE-FE-FE-03](./PE-FE-FE-03.md) — Batch 3 Fees 前端补齐：费率配置、草稿查询、金额展示口径。
+- [PE-FE-AN-06](./PE-FE-AN-06.md) — Batch 3 Annuity 前端补齐：年费任务、官费清单、官费缴费页面。
+- [PE-FE-FE-04](./PE-FE-FE-04.md) — Batch 3 收款/费用查询前端补齐：个案收款与费用概览展示。
 - [PE-FE-00-01](./PE-FE-00-01.md) — 统一前端权限常量与后端权限码命名（`Title.Action`）。
 - [PE-FE-00-02](./PE-FE-00-02.md) — 登录后拉取真实权限并写入 auth store（避免 permissive unknown）。
 - [PE-FE-00-03](./PE-FE-00-03.md) — 补充前端错误码与状态码处理对照文档。

@@ -1,0 +1,81 @@
+# PE-QA-B2-01 — Batch 2 Documents + Tasks close audit.
+
+- Source: `tasks/postenhancement/BATCH2_DOCS_TASKS_MANIFEST_20260315.md`
+- Type: `qa gate`
+- Execution mode: Atomic (single-task, single-owner)
+
+## Task Definition
+
+- Goal: audit closure of Batch 2 after Documents and Tasks backend/frontend completion.
+- Scope checked:
+  - `US-WD-01`
+  - `US-WD-02`
+  - `US-WD-03`
+  - `US-WD-04`
+  - `US-WD-06`
+  - `FR-WD-01`
+  - `FR-WD-03`
+  - `FR-WD-04`
+  - `FR-WD-07`
+  - `US-DL-01`
+  - `US-DL-02`
+  - `US-DL-03`
+  - `US-DL-04`
+  - `US-DL-05`
+  - `US-DL-07`
+  - `FR-DL-01`
+  - `FR-DL-02`
+  - `FR-DL-04`
+  - `FR-DL-05`
+  - `FR-DL-06`
+  - `FR-DL-08`
+- Allowlist:
+  - `backend/app/modules/documents/api.py`
+  - `backend/app/modules/documents/service.py`
+  - `backend/app/modules/documents/schemas.py`
+  - `backend/app/modules/documents/fee_linking_service.py`
+  - `backend/app/modules/tasks/api.py`
+  - `backend/app/modules/tasks/service.py`
+  - `backend/app/modules/tasks/schemas.py`
+  - `backend/app/modules/tasks/task_generation_service.py`
+  - `backend/app/modules/annuity/service.py`
+  - `backend/tests/test_b2_reply_chain.py`
+  - `backend/tests/test_b3_fee_linking.py`
+  - `backend/tests/test_task_template.py`
+  - `frontend/src/modules/documents/pages/DocumentCreate.vue`
+  - `frontend/src/modules/documents/pages/DocumentEdit.vue`
+  - `frontend/src/modules/documents/pages/DocumentDetail.vue`
+  - `frontend/src/modules/documents/pages/DocumentList.vue`
+  - `frontend/src/modules/tasks/pages/TaskList.vue`
+  - `frontend/src/modules/tasks/pages/TaskDetail.vue`
+  - `frontend/src/modules/tasks/pages/TaskCreate.vue`
+  - `frontend/src/modules/tasks/pages/TodayReminders.vue`
+  - `frontend/src/modules/dashboard/pages/Dashboard.vue`
+  - `frontend/src/modules/dashboard/components/TodoTable.vue`
+  - `frontend/src/modules/system/pages/TaskTemplateList.vue`
+  - `frontend/src/api/documents.ts`
+  - `frontend/src/api/documents.types.ts`
+  - `frontend/src/api/tasks.ts`
+  - `frontend/src/api/tasks.types.ts`
+  - `docs/FPMS_Final_Enhancement_execution_summary_20260315.md`
+- Audit focus:
+  - allowlist compliance
+  - Batch 2 scope only
+  - no false claim on Batch 3
+  - evidence completeness
+  - no accidental inclusion of document generation scope
+- Verification:
+  - `pytest -q backend/tests/test_b2_reply_chain.py backend/tests/test_b3_fee_linking.py backend/tests/test_task_template.py`
+  - `npm run lint`
+  - `npm run typecheck`
+  - `./scripts/task_validate.sh PE-BE-WD-02`
+  - `./scripts/task_validate.sh PE-FE-WD-02`
+  - `./scripts/task_validate.sh PE-BE-DL-02`
+  - `./scripts/task_validate.sh PE-FE-DL-02`
+
+## Execution Checklist
+
+- [ ] Confirm Batch 2 only
+- [ ] Run minimal BE/FE verification
+- [ ] Verify no scope contamination inside claimed tasks
+- [ ] Produce PASS / FAIL / BLOCKED with evidence path

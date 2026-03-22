@@ -4,6 +4,9 @@
 
 ## Tasks
 
+- [PE-BE-CM-01](./PE-BE-CM-01.md) — Case 域补齐：组合校验、参与方回填、状态联动、扩展字段规则。
+- [PE-BE-DB-CM-02](./PE-BE-DB-CM-02.md) — Case schema 扩展：外方代理、菌种保藏、PCT、无效案字段。
+- [PE-BE-CM-02](./PE-BE-CM-02.md) — Case 域 deferred Batch 1 后端补齐：外方代理、菌种保藏、PCT、无效案规则。
 - [PE-BE-00-01](./PE-BE-00-01.md) — 扩展 CaseType/状态枚举，加入 `CONSULTING` / `SEARCH` 并补齐校验映射。
 - [PE-BE-00-02](./PE-BE-00-02.md) — 统一新增模块权限常量并写入 RBAC seed 字典。
 - [PE-BE-00-03](./PE-BE-00-03.md) — 定义新增 API 错误语义与响应 envelope 统一约束（面向后续任务）。
@@ -46,5 +49,18 @@
 - [PE-BE-CS-06](./PE-BE-CS-06.md) — 顾问/检索账单生成时接入提成规则匹配。
 - [PE-BE-QA-01](./PE-BE-QA-01.md) — 统一关键模块错误 envelope（避免裸 `HTTPException detail` 分叉）。
 - [PE-BE-QA-02](./PE-BE-QA-02.md) — 统一分页上限策略（`page_size le=100`）。
+- [PE-QA-CM-01](./PE-QA-CM-01.md) — Batch 1 Case 域验证与范围审计。
+- [PE-QA-CM-02](./PE-QA-CM-02.md) — Batch 1A Case 域关闭审计：申请人回填与 FE evidence normalization。
+- [PE-QA-CM-03](./PE-QA-CM-03.md) — Deferred Batch 1 Case 关闭审计：外方代理与扩展字段。
+- [PE-BE-WD-02](./PE-BE-WD-02.md) — Batch 2 Documents 后端补齐：缺省值、回复链、时限联动、费用/状态联动、查询口径。
+- [PE-BE-WD-03](./PE-BE-WD-03.md) — Batch 2 Documents 后端剩余补齐：模板缺省值、reply/deadline 闭环。
+- [PE-BE-DL-02](./PE-BE-DL-02.md) — Batch 2 Tasks/Deadlines 后端补齐：模板、自动生成、双视图、手工维护、今日提醒。
+- [PE-BE-DL-03](./PE-BE-DL-03.md) — Batch 2 Tasks/Deadlines 后端剩余补齐：视图与今日提醒。
+- [PE-QA-B2-01](./PE-QA-B2-01.md) — Batch 2 Documents + Tasks 关闭审计与 evidence gate。
+- [PE-QA-B2-02](./PE-QA-B2-02.md) — Batch 2 最终关闭审计（remaining follow-up）。
+- [PE-BE-FE-03](./PE-BE-FE-03.md) — Batch 3 Fees 后端补齐：多计算模式、费减/折扣、金额口径。
+- [PE-BE-AN-08](./PE-BE-AN-08.md) — Batch 3 Annuity 后端补齐：年费任务、官费清单、官费缴费、状态链路。
+- [PE-BE-FE-04](./PE-BE-FE-04.md) — Batch 3 收款/费用查询后端补齐：个案收款与费用概览口径。
+- [PE-QA-B3-01](./PE-QA-B3-01.md) — Batch 3 最终关闭审计（fees / annuity / receipts）。
 - [PE-BE-TEST-01](./PE-BE-TEST-01.md) — 新增 annuity/collections/commission/consulting 关键 E2E 测试。
 - [PE-BE-WIRE-01](./PE-BE-WIRE-01.md) — 将新增模块 router 接入 `backend/app/api/router.py`（一次性）。
