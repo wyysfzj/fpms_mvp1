@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -8,7 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from app.modules.annuity.models import AnnuityTask
-from app.modules.fees.models import FeeItem
+from app.modules.billing.models import Bill, BillItem, CaseReceipt
+from app.modules.cases.models import Case
+from app.modules.fees.models import FeeItem, FeeRate
+from app.modules.fees.service import calculate_fee_amount
 
 
 def _uid(prefix: str) -> str:
@@ -337,3 +341,166 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
         json={"task_ids": []},
     )
     _assert_error(validation_resp, 422, "VALIDATION_ERROR")
+
+
+def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:
+    rate = FeeRate(
+        fee_code=_uid("RATE"),
+        fee_name="PER CLAIM RATE",
+        fee_type="SERVICE",
+        currency="CNY",
+        default_amount=Decimal("100.00"),
+        calc_mode="PER_CLAIM",
+        calc_params='{"per_claim_amount":"50","discount_pct":"10","reduction_pct":"20"}',
+        allow_reduction=True,
+    )
+    case = Case(
+        case_no=_uid("CASE"),
+        case_type="NORMAL",
+        patent_category="INV",
+        flow_dir="CN_DOMESTIC",
+        claim_count=3,
+    )
+
+    amount = calculate_fee_amount(rate, case)
+
+    # 50 * 3 = 150; reduction 20% => 120; discount 10% => 108
+    assert amount == Decimal("108.00")
+
+
+def test_case_receipt_endpoint_returns_batch3_receipt_fields(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+
+    with session_factory() as db:
+        receipt = CaseReceipt(
+            case_id=case_id,
+            fee_type="SERVICE",
+            currency="CNY",
+            receivable_amt=Decimal("500.00"),
+            received_amt=Decimal("300.00"),
+            last_receipt_date=date(2026, 4, 1),
+            fee_code="ANN-SERVICE",
+            year_no=2,
+            is_arrears=True,
+            invoice_no=_uid("INV"),
+            is_commissionable=True,
+        )
+        db.add(receipt)
+        db.commit()
+
+    resp = client.get(f"/api/v1/cases/{case_id}/receipts", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["case_id"] == case_id
+    assert payload["currency"] == "CNY"
+    assert payload["receivable_amt"] == "500.00"
+    assert payload["received_amt"] == "300.00"
+    assert payload["fee_code"] == "ANN-SERVICE"
+    assert payload["year_no"] == 2
+    assert payload["is_arrears"] is True
+    assert payload["invoice_no"].startswith("INV-")
+    assert payload["is_commissionable"] is True
+
+
+def test_case_receipt_endpoint_includes_bills_overview_list(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+
+    with session_factory() as db:
+        receipt = CaseReceipt(
+            case_id=case_id,
+            fee_type="SERVICE",
+            currency="CNY",
+            receivable_amt=Decimal("200.00"),
+            received_amt=Decimal("80.00"),
+            last_receipt_date=date(2026, 5, 1),
+            fee_code="ANN-SERVICE",
+            year_no=1,
+            is_arrears=True,
+            invoice_no=_uid("INV"),
+            is_commissionable=False,
+        )
+        db.add(receipt)
+
+        bill = Bill(
+            bill_no=_uid("BILL"),
+            client_id=client_id,
+            currency="CNY",
+            direction="AR",
+            status="UNSETTLED",
+            bill_date=date(2026, 5, 2),
+            total_service=Decimal("200.00"),
+            amount=Decimal("200.00"),
+            balance=Decimal("120.00"),
+        )
+        db.add(bill)
+        db.flush()
+
+        # same bill has two lines for this case; receipt overview should deduplicate bills
+        db.add_all(
+            [
+                BillItem(
+                    bill_id=bill.id,
+                    case_id=case_id,
+                    fee_code="ANN-SVC-A",
+                    fee_name="Service A",
+                    fee_type="SERVICE",
+                    amount=Decimal("120.00"),
+                ),
+                BillItem(
+                    bill_id=bill.id,
+                    case_id=case_id,
+                    fee_code="ANN-SVC-B",
+                    fee_name="Service B",
+                    fee_type="SERVICE",
+                    amount=Decimal("80.00"),
+                ),
+            ]
+        )
+        db.commit()
+
+    resp = client.get(f"/api/v1/cases/{case_id}/receipts", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    assert "bills" in payload
+    assert len(payload["bills"]) == 1
+    assert payload["bills"][0]["bill_no"].startswith("BILL-")
+    assert payload["bills"][0]["status"] == "UNSETTLED"
+    assert payload["bills"][0]["amount"] == "200.00"
+    assert payload["bills"][0]["balance"] == "120.00"
+
+
+def test_annuity_generate_drafts_normalizes_currency_case(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+    task_id = _insert_annuity_task(
+        session_factory,
+        case_id=case_id,
+        client_id=client_id,
+        year_no=1,
+        due_date=date(2026, 6, 1),
+    )
+    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+
+    resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [task_id], "pay_next_year": False, "currency": "cny"},
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["summary"]["success"] == 1
+    assert payload["summary"]["failed"] == 0
+    assert payload["success"][0]["currency"] == "CNY"
+    assert payload["success"][0]["amount"] == "120.00"

@@ -156,15 +156,19 @@ def list_annuity_tasks(
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
 
     offset = (page - 1) * page_size
-    items = db.execute(
-        stmt.order_by(
-            AnnuityTask.due_date.asc(),
-            AnnuityTask.created_at.desc(),
-            AnnuityTask.id.asc(),
+    items = (
+        db.execute(
+            stmt.order_by(
+                AnnuityTask.due_date.asc(),
+                AnnuityTask.created_at.desc(),
+                AnnuityTask.id.asc(),
+            )
+            .offset(offset)
+            .limit(page_size)
         )
-        .offset(offset)
-        .limit(page_size)
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return items, total
 
 
@@ -379,6 +383,8 @@ def generate_fee_drafts_from_annuity_tasks(
     actor_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate annuity fee drafts for selected tasks with per-task result details."""
+    normalized_currency = (currency or "").strip().upper() or "CNY"
+
     normalized_task_ids: list[int] = []
     seen_ids: set[int] = set()
     for task_id in task_ids:
@@ -453,8 +459,8 @@ def generate_fee_drafts_from_annuity_tasks(
                     status_code=409,
                 )
 
-            gov_amount = _rate_amount(db, fee_type="GOV", currency=currency)
-            service_amount = _rate_amount(db, fee_type="SERVICE", currency=currency)
+            gov_amount = _rate_amount(db, fee_type="GOV", currency=normalized_currency)
+            service_amount = _rate_amount(db, fee_type="SERVICE", currency=normalized_currency)
             total_amount = gov_amount + service_amount
             marker = _annuity_marker(task_id, year_no)
 
@@ -463,7 +469,7 @@ def generate_fee_drafts_from_annuity_tasks(
                 case_id=task.case_id,
                 client_id=task.client_id,
                 draft_type=_ANNUITY_DRAFT_TYPE,
-                currency=currency,
+                currency=normalized_currency,
                 status="OPEN",
                 total_gov=gov_amount,
                 total_service=service_amount,
@@ -516,7 +522,7 @@ def generate_fee_drafts_from_annuity_tasks(
                     "task_id": task_id,
                     "year_no": year_no,
                     "draft_id": draft.id,
-                    "currency": currency,
+                    "currency": normalized_currency,
                     "amount": str(total_amount),
                     "pay_next_year": target["pay_next_year"],
                 }
@@ -776,7 +782,9 @@ def _recompute_pay_list_status(pay_list: PayList, payments: list[GovPayment]) ->
         return
 
     pay_list.status = "PAID"
-    pay_list.paid_date = max((p.paid_date for p in paid_rows if p.paid_date is not None), default=None)
+    pay_list.paid_date = max(
+        (p.paid_date for p in paid_rows if p.paid_date is not None), default=None
+    )
 
 
 def register_gov_payment(
@@ -840,14 +848,11 @@ def register_gov_payment(
         )
 
     if target is None:
-        fee_item_row = (
-            db.execute(
-                select(FeeItem, FeeDraft)
-                .join(FeeDraft, FeeDraft.id == FeeItem.draft_id)
-                .where(FeeItem.id == normalized_fee_item_id)
-            )
-            .first()
-        )
+        fee_item_row = db.execute(
+            select(FeeItem, FeeDraft)
+            .join(FeeDraft, FeeDraft.id == FeeItem.draft_id)
+            .where(FeeItem.id == normalized_fee_item_id)
+        ).first()
         if fee_item_row is None:
             raise_business_error("FEE_ITEM_NOT_FOUND", "Fee item not found", status_code=404)
 
@@ -884,7 +889,9 @@ def register_gov_payment(
             status="PAID",
             currency=pay_list.currency,
             paid_date=paid_date or date.today(),
-            paid_amount=Decimal(paid_amount) if paid_amount is not None else Decimal(fee_item.amount or 0),
+            paid_amount=Decimal(paid_amount)
+            if paid_amount is not None
+            else Decimal(fee_item.amount or 0),
             official_receipt_no=official_receipt_no,
             remark=remark,
             created_by=actor_id,
@@ -892,7 +899,9 @@ def register_gov_payment(
         )
         db.add(target)
     else:
-        if ((target.status or "").strip().upper() in {"PAID", "RECORDED"}) or target.paid_date is not None:
+        if (
+            (target.status or "").strip().upper() in {"PAID", "RECORDED"}
+        ) or target.paid_date is not None:
             raise_business_error(
                 "GOV_PAYMENT_DUPLICATE",
                 "Official payment already registered",
@@ -911,7 +920,11 @@ def register_gov_payment(
 
     db.flush()
     payments = (
-        db.execute(select(GovPayment).where(GovPayment.pay_list_id == pay_list.id).order_by(GovPayment.id.asc()))
+        db.execute(
+            select(GovPayment)
+            .where(GovPayment.pay_list_id == pay_list.id)
+            .order_by(GovPayment.id.asc())
+        )
         .scalars()
         .all()
     )

@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
 from app.core.errors import raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
+from app.modules.cases.models import Case
 from app.modules.fees.models import FeeDraft, FeeItem
 from app.modules.fees.schemas import (
     FeeDraftCreateIn,
@@ -22,15 +24,38 @@ from app.modules.fees.schemas import (
     FeeRateUpdateIn,
     OkOut,
 )
-from app.modules.fees.service import add_fee_item, list_fee_drafts, list_fee_rates
+from app.modules.fees.service import add_fee_item, list_fee_drafts, list_fee_items, list_fee_rates
 from app.modules.fees.service import create_fee_draft as create_fee_draft_service
 from app.modules.fees.service import create_fee_rate as create_fee_rate_service
 from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
 from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
 from app.modules.fees.service import update_fee_item as update_fee_item_service
 from app.modules.fees.service import update_fee_rate as update_fee_rate_service
+from app.modules.masterdata.clients.models import Client
 
 router = APIRouter()
+
+
+def _get_client_display_name(client: Client) -> str | None:
+    return client.name_cn or client.name_en
+
+
+def _build_case_no_map(db: Session, case_ids: set[str]) -> dict[str, str]:
+    if not case_ids:
+        return {}
+    cases = db.execute(select(Case.id, Case.case_no).where(Case.id.in_(case_ids))).all()
+    return {case_id: case_no for case_id, case_no in cases if case_no}
+
+
+def _build_client_name_map(db: Session, client_ids: set[str]) -> dict[str, str]:
+    if not client_ids:
+        return {}
+    clients = db.execute(select(Client).where(Client.id.in_(client_ids))).scalars().all()
+    return {
+        client.id: _get_client_display_name(client)
+        for client in clients
+        if _get_client_display_name(client)
+    }
 
 
 @router.get("/fees/drafts", summary="List fee drafts")
@@ -67,11 +92,17 @@ def get_fee_drafts(
         "status": status_filter,
     }
     drafts, total = list_fee_drafts(db, filters=filters, page=page, page_size=page_size)
+    case_no_map = _build_case_no_map(db, {draft.case_id for draft in drafts if draft.case_id})
+    client_name_map = _build_client_name_map(
+        db, {draft.client_id for draft in drafts if draft.client_id}
+    )
     items = [
         FeeDraftListItemOut(
             id=draft.id,
             case_id=draft.case_id,
+            case_no=case_no_map.get(draft.case_id),
             client_id=draft.client_id,
+            client_name=client_name_map.get(draft.client_id) if draft.client_id else None,
             currency=draft.currency,
             status=draft.status,
             amount=draft.amount,
@@ -228,6 +259,39 @@ def create_fee_item(
     return FeeItemOut.model_validate(item)
 
 
+@router.get(
+    "/fees/drafts/{draft_id}/items",
+    response_model=list[FeeItemOut],
+    summary="List fee items for a draft",
+)
+def get_fee_items(
+    draft_id: str,
+    _perm: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> list[FeeItemOut]:
+    """
+    List fee items for a draft.
+
+    **Auth**: Bearer JWT
+    **Permission**: Fee.Read
+    **Request example**:
+    `GET /api/v1/fees/drafts/DRAFT_ID/items`
+    **Curl example**:
+    ```bash
+    curl -s -X GET http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/items \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: Fee item list
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Fee draft not found
+    - 422: VALIDATION_ERROR
+    """
+    items = list_fee_items(db, draft_id=draft_id)
+    return [FeeItemOut.model_validate(item) for item in items]
+
+
 @router.put(
     "/fees/drafts/{draft_id}/items/{item_id}",
     response_model=FeeItemOut,
@@ -317,12 +381,12 @@ def delete_fee_item(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/fees/drafts/{draft_id}", summary="Get a fee draft")
+@router.get("/fees/drafts/{draft_id}", response_model=FeeDraftOut, summary="Get a fee draft")
 def get_fee_draft(
     draft_id: str,
     _perm: None = Depends(require_perm("Fee.Draft.Read")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> FeeDraftOut:
     """
     Get a fee draft by ID.
 
@@ -350,14 +414,29 @@ def get_fee_draft(
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    return {
-        "id": draft.id,
-        "case_id": draft.case_id,
-        "client_id": draft.client_id,
-        "draft_type": draft.draft_type,
-        "currency": draft.currency,
-        "status": draft.status,
-    }
+    case_no = db.execute(select(Case.case_no).where(Case.id == draft.case_id)).scalar_one_or_none()
+    client_name = None
+    if draft.client_id:
+        client = db.execute(select(Client).where(Client.id == draft.client_id)).scalar_one_or_none()
+        if client:
+            client_name = _get_client_display_name(client)
+
+    return FeeDraftOut(
+        id=draft.id,
+        case_id=draft.case_id,
+        case_no=case_no,
+        client_id=draft.client_id,
+        client_name=client_name,
+        draft_type=draft.draft_type,
+        currency=draft.currency,
+        status=draft.status,
+        total_gov=draft.total_gov,
+        total_service=draft.total_service,
+        total_misc=draft.total_misc,
+        amount=draft.amount,
+        created_at=draft.created_at,
+        updated_at=draft.updated_at,
+    )
 
 
 @router.put("/fees/drafts/{draft_id}", summary="Update a fee draft")

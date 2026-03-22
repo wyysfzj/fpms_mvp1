@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Literal
@@ -279,6 +280,12 @@ def add_fee_item(
     db.refresh(item)
     recalc_fee_draft_totals(db, draft_id=draft_id)
     return item
+
+
+def list_fee_items(db: Session, *, draft_id: str) -> list[FeeItem]:
+    get_fee_draft(db, draft_id=draft_id)
+    stmt = select(FeeItem).where(FeeItem.draft_id == draft_id).order_by(FeeItem.created_at.asc())
+    return list(db.execute(stmt).scalars().all())
 
 
 def update_fee_item(
@@ -737,14 +744,69 @@ def generate_consulting_fee_draft_strategy(
 def calculate_fee_amount(rate: FeeRate, case: Case | None = None) -> Decimal:
     """Calculate fee amount based on rate's calc_mode.
 
-    Currently only FIXED mode is implemented.
-    Other modes (PER_CLAIM, PER_PAGE, TIER) return default_amount with a TODO log.
+    Batch 3 slice:
+    - FIXED keeps default amount behavior
+    - PER_CLAIM supports calc_params + optional reduction/discount percentages
+    - Other modes still fall back to default amount
     """
     amount = rate.default_amount if rate.default_amount is not None else Decimal("0")
-    calc_mode = getattr(rate, "calc_mode", None) or "FIXED"
+    calc_mode = (getattr(rate, "calc_mode", None) or "FIXED").upper()
 
     if calc_mode == "FIXED":
         return amount
+
+    if calc_mode == "PER_CLAIM":
+        calc_params_raw = getattr(rate, "calc_params", None)
+        calc_params: dict[str, Any] = {}
+        if calc_params_raw:
+            try:
+                parsed = json.loads(calc_params_raw)
+                if isinstance(parsed, dict):
+                    calc_params = parsed
+            except (TypeError, ValueError):
+                logger.warning(
+                    "calculate_fee_amount: invalid calc_params for rate=%s, raw=%r",
+                    rate.fee_code,
+                    calc_params_raw,
+                )
+
+        per_claim_amount_raw = calc_params.get("per_claim_amount", amount)
+        try:
+            per_claim_amount = Decimal(per_claim_amount_raw)
+        except (InvalidOperation, TypeError, ValueError):
+            per_claim_amount = amount
+
+        if case is not None and case.claim_count is not None:
+            claim_count = Decimal(case.claim_count)
+        else:
+            claim_count_raw = calc_params.get("claim_count", 1)
+            try:
+                claim_count = Decimal(claim_count_raw)
+            except (InvalidOperation, TypeError, ValueError):
+                claim_count = Decimal("1")
+
+        computed = per_claim_amount * claim_count
+
+        if getattr(rate, "allow_reduction", False):
+            reduction_raw = calc_params.get("reduction_pct", 0)
+            try:
+                reduction_pct = Decimal(reduction_raw)
+            except (InvalidOperation, TypeError, ValueError):
+                reduction_pct = Decimal("0")
+            reduction_pct = max(Decimal("0"), min(Decimal("100"), reduction_pct))
+            if reduction_pct > 0:
+                computed = computed * (Decimal("100") - reduction_pct) / Decimal("100")
+
+        discount_raw = calc_params.get("discount_pct", 0)
+        try:
+            discount_pct = Decimal(discount_raw)
+        except (InvalidOperation, TypeError, ValueError):
+            discount_pct = Decimal("0")
+        discount_pct = max(Decimal("0"), min(Decimal("100"), discount_pct))
+        if discount_pct > 0:
+            computed = computed * (Decimal("100") - discount_pct) / Decimal("100")
+
+        return _quantize_money(computed)
 
     logger.warning(
         "calculate_fee_amount: calc_mode=%s not yet implemented for rate=%s, "

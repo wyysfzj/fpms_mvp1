@@ -26,7 +26,9 @@ class FeeDraftOut(BaseModel):
 
     id: str
     case_id: str
+    case_no: str | None = None
     client_id: str | None = None
+    client_name: str | None = None
     draft_type: str
     currency: str
     status: FeeDraftStatus
@@ -43,7 +45,9 @@ class FeeDraftListItemOut(BaseModel):
 
     id: str
     case_id: str
+    case_no: str | None = None
     client_id: str | None = None
+    client_name: str | None = None
     currency: str
     status: FeeDraftStatus
     amount: Decimal
