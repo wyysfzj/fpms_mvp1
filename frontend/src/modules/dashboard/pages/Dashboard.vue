@@ -76,6 +76,10 @@
         <FinancePanel :items="financeItems" :loading="financeLoading" />
       </div>
 
+      <div style="margin-top: 16px;">
+        <TodoTable :tasks="todayTasks" :loading="todayLoading" />
+      </div>
+
       <!-- Action Center (below split grid) -->
       <div style="margin-top: 16px;">
         <ActionCenter :tasks="enrichedTasks" :loading="tasksLoading" />
@@ -101,6 +105,8 @@ import FinancePanel from '../components/FinancePanel.vue'
 import NewCaseDrawer from '../components/NewCaseDrawer.vue'
 import WorkflowOverview from '../components/WorkflowOverview.vue'
 import WorkflowCaseTable from '../components/WorkflowCaseTable.vue'
+import TodoTable from '../components/TodoTable.vue'
+import { getTodayReminders } from '../../../api/tasks'
 import {
   fetchPipelineKpi,
   fetchEnrichedTasks,
@@ -111,12 +117,14 @@ import {
 import type { PipelineKpi, WorkflowStats } from '../dashboard.api'
 import type { EnrichedTask } from '../components/ActionCenter.vue'
 import type { FinanceItem } from '../components/FinanceRow.vue'
+import type { Task } from '../../../api/tasks.types'
 
 const router = useRouter()
 
 // --- State ---
 const pipeLoading = ref(true)
 const tasksLoading = ref(true)
+const todayLoading = ref(true)
 const financeLoading = ref(true)
 const wfLoading = ref(true)
 const error = ref<string | null>(null)
@@ -138,6 +146,7 @@ const wfStats = ref<WorkflowStats>({
 })
 
 const enrichedTasks = ref<EnrichedTask[]>([])
+const todayTasks = ref<Task[]>([])
 const financeItems = ref<FinanceItem[]>([])
 
 const filteredCases = computed(() =>
@@ -183,6 +192,11 @@ onMounted(async () => {
     .catch(err => { error.value = err?.message || '加载待办任务失败' })
     .finally(() => { tasksLoading.value = false })
 
+  const todayPromise = getTodayReminders('worker')
+    .then(data => { todayTasks.value = data.items.slice(0, 10) })
+    .catch(err => { error.value = err?.message || '加载今日提醒失败' })
+    .finally(() => { todayLoading.value = false })
+
   const financePromise = fetchFinanceData()
     .then(data => { financeItems.value = data })
     .catch(err => { error.value = err?.message || '加载财务数据失败' })
@@ -193,6 +207,6 @@ onMounted(async () => {
     .catch(err => { error.value = err?.message || '加载工作流失败' })
     .finally(() => { wfLoading.value = false })
 
-  await Promise.all([pipePromise, tasksPromise, financePromise, wfPromise])
+  await Promise.all([pipePromise, tasksPromise, todayPromise, financePromise, wfPromise])
 })
 </script>

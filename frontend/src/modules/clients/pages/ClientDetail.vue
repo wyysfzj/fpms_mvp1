@@ -27,6 +27,9 @@
       <el-tabs v-model="activeTab">
         <!-- Tab 1: 基本信息 -->
         <el-tab-pane label="基本信息" name="info">
+          <div class="info-hint">
+            当前主档仅展示客户基础字段；联系人与地址请分别在“联系人”和“地址”页签中维护。
+          </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">客户名称</span>
@@ -200,3 +203,15 @@ onMounted(() => {
     fetchCases()
 })
 </script>
+
+<style scoped>
+.info-hint {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--bg-subtle, #f8fafc);
+  color: var(--text-sub);
+  font-size: 13px;
+  line-height: 1.6;
+}
+</style>

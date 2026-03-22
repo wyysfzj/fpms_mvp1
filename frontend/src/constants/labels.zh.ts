@@ -1,6 +1,9 @@
+import { TERM_UI } from './terminology'
+
 /**
  * Chinese labels for FPMS Demo UI
- * Centralized string table — no i18n framework needed
+ * Centralized string table — no i18n framework needed.
+ * 领域关键术语统一从 terminology.ts 取值，避免口径漂移。
  */
 export const ZH = {
     app: {
@@ -18,7 +21,7 @@ export const ZH = {
         dashboard: '工作台',
         caseGroup: '案件管理',
         cases: '案件列表',
-        documents: '文档管理',
+        documents: TERM_UI.documentsModule,
         fees: '费用管理',
         billing: '账单管理',
         tasks: '期限监控',
@@ -45,10 +48,10 @@ export const ZH = {
         case_new: '新建案件',
         case_detail: '案件详情',
         case_edit: '编辑案件',
-        documents: '文档列表',
-        document_new: '新建文档',
-        document_detail: '文档详情',
-        document_edit: '编辑文档',
+        documents: `${TERM_UI.correspondence}列表`,
+        document_new: `登记${TERM_UI.correspondence}`,
+        document_detail: `${TERM_UI.correspondence}详情`,
+        document_edit: `编辑${TERM_UI.correspondence}`,
         tasks: '任务列表',
         task_new: '新建任务',
         tasks_today: '今日提醒',
@@ -97,10 +100,10 @@ export const ZH = {
     caseDetail: {
         editCase: '编辑案件',
         overview: '概览',
-        claims: '权利要求',
-        officialDocs: '官方文件',
+        claims: TERM_UI.caseParticipants,
+        officialDocs: TERM_UI.correspondence,
         fees: '费用',
-        billing: '账单',
+        billing: TERM_UI.billingAndReceipts,
         tasks: '任务',
         caseInfo: '案件信息',
         caseNumber: '案号',
@@ -116,23 +119,23 @@ export const ZH = {
         notFound: '未找到案件',
         notFoundMsg: '请求的案件不存在。',
         untitled: '未命名案件',
-        claimsPlaceholder: '权利要求内容将在后续任务中实现。',
-        docsPlaceholder: '官方文件将在后续任务中实现。',
+        claimsPlaceholder: '申请人和发明人信息将在此处展示。',
+        docsPlaceholder: `${TERM_UI.correspondence}将在后续任务中实现。`,
         feesPlaceholder: '费用管理将在后续任务中实现。',
         tasksPlaceholder: '任务管理将在后续任务中实现。',
     },
     docDetail: {
-        editDoc: '编辑文档',
-        docContent: '文档内容',
-        docInfo: '文档信息',
+        editDoc: `编辑${TERM_UI.correspondence}`,
+        docContent: '文件内容',
+        docInfo: '文件信息',
         id: '编号',
         direction: '方向',
         created: '创建时间',
         updated: '更新时间',
         quickActions: '快捷操作',
-        notFound: '未找到文档',
-        notFoundMsg: '请求的文档不存在。',
-        noContent: '该文档暂无内容。',
+        notFound: `未找到${TERM_UI.correspondence}`,
+        notFoundMsg: `请求的${TERM_UI.correspondence}不存在。`,
+        noContent: '该文件暂无内容。',
     },
     feeDetail: {
         refresh: '刷新',
@@ -260,8 +263,8 @@ export const ZH = {
         emptyMsg: '创建您的第一个草稿以开始跟踪费用。',
     },
     docList: {
-        title: '文档列表',
-        newDoc: '新建文档',
+        title: `${TERM_UI.correspondence}列表`,
+        newDoc: `登记${TERM_UI.correspondence}`,
         id: '编号',
         direction: '方向',
         docTitle: '标题',
@@ -271,8 +274,8 @@ export const ZH = {
         created: '创建时间',
         actions: '操作',
         view: '查看',
-        emptyTitle: '暂无文档',
-        emptyMsg: '创建您的第一个文档。',
+        emptyTitle: `暂无${TERM_UI.correspondence}`,
+        emptyMsg: `登记第一条${TERM_UI.correspondence}。`,
     },
     pipeline: {
         newCases: '新委托',

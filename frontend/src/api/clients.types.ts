@@ -10,10 +10,7 @@ export interface Client {
     client_code?: string | null
     client_type?: string | null
     default_currency?: string | null
-    contact_person?: string
-    phone?: string
     email?: string
-    address?: string
     is_active: boolean
     created_at?: string
     updated_at?: string
@@ -30,10 +27,7 @@ export interface ClientCreatePayload {
     client_code?: string
     client_type?: string
     default_currency?: string
-    contact_person?: string
-    phone?: string
     email?: string
-    address?: string
 }
 
 export interface ClientUpdatePayload {
@@ -42,10 +36,7 @@ export interface ClientUpdatePayload {
     client_code?: string
     client_type?: string
     default_currency?: string
-    contact_person?: string
-    phone?: string
     email?: string
-    address?: string
 }
 
 // ── Address types ──────────────────────────────────

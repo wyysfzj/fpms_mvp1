@@ -34,6 +34,9 @@ from app.modules.masterdata.clients.service import (
     update_client_contact,
 )
 from app.modules.masterdata.clients.service import deactivate_client as deactivate_client_service
+from app.modules.masterdata.clients.service import (
+    get_client as get_client_service,
+)
 from app.modules.masterdata.clients.service import update_client as update_client_service
 
 router = APIRouter()
@@ -75,6 +78,35 @@ def get_clients(
     )
     items = [ClientListItemOut.model_validate(client) for client in clients]
     return {"items": items, "page": page, "page_size": page_size, "total": total}
+
+
+@router.get("/clients/{client_id}", response_model=ClientOut, summary="Get a client")
+def get_client(
+    client_id: str,
+    _perm: None = Depends(require_perm("Client.Read")),
+    db: Session = Depends(get_db),
+) -> ClientOut:
+    """
+    Get a client by ID.
+
+    **Auth**: Bearer JWT
+    **Permission**: Client.Read
+    **Request example**:
+    `GET /api/v1/clients/CLIENT_ID`
+    **Curl example**:
+    ```bash
+    curl -s -X GET http://localhost:8000/api/v1/clients/CLIENT_ID \\
+      -H "Authorization: Bearer $FPMS_TOKEN"
+    ```
+    **Responses**:
+    - 200: Client details
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Client not found
+    - 422: VALIDATION_ERROR
+    """
+    client = get_client_service(db, client_id=client_id)
+    return ClientOut.model_validate(client)
 
 
 @router.post(

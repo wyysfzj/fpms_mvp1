@@ -22,9 +22,14 @@
             :to="`/cases/${row.case_id}`"
             class="chain-link"
           >
-            {{ row.case_id.slice(0, 8) }}...
+            {{ row.case_no || row.case_id.slice(0, 8) + '...' }}
           </router-link>
           <span v-else class="text-muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="客户" width="160">
+        <template #default="{ row }">
+          {{ row.client_name || '—' }}
         </template>
       </el-table-column>
       <el-table-column label="期限" width="140">

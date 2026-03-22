@@ -33,40 +33,56 @@
       >
         <div class="form-section">
           <h3 class="form-section-title">基础信息</h3>
-          
+
           <el-form-item label="客户名称" prop="name" :error="fieldErrors.get('name')?.join(', ')">
             <el-input v-model="form.name" placeholder="请输入客户名称" />
           </el-form-item>
-          
-          <el-form-item label="联系人" prop="contact_person" :error="fieldErrors.get('contact_person')?.join(', ')">
-            <el-input v-model="form.contact_person" placeholder="请输入联系人姓名" />
-          </el-form-item>
+
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="客户代码" prop="client_code" :error="fieldErrors.get('client_code')?.join(', ')">
+                <el-input v-model="form.client_code" placeholder="请输入客户代码（可选）" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="英文名称" prop="name_en" :error="fieldErrors.get('name_en')?.join(', ')">
+                <el-input v-model="form.name_en" placeholder="请输入英文名称（可选）" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
+        <div class="form-section">
+          <h3 class="form-section-title">业务属性</h3>
+
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="客户类型" prop="client_type" :error="fieldErrors.get('client_type')?.join(', ')">
+                <el-input v-model="form.client_type" placeholder="请输入客户类型（可选）" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="默认币种" prop="default_currency" :error="fieldErrors.get('default_currency')?.join(', ')">
+                <el-select v-model="form.default_currency" placeholder="请选择默认币种" class="full-width">
+                  <el-option label="人民币（CNY）" value="CNY" />
+                  <el-option label="美元（USD）" value="USD" />
+                  <el-option label="欧元（EUR）" value="EUR" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
         </div>
 
         <div class="form-section">
           <h3 class="form-section-title">联系方式</h3>
-          
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="电话" prop="phone" :error="fieldErrors.get('phone')?.join(', ')">
-                <el-input v-model="form.phone" placeholder="请输入电话号码" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="邮箱" prop="email" :error="fieldErrors.get('email')?.join(', ')">
-                <el-input v-model="form.email" placeholder="请输入邮箱地址" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          
-          <el-form-item label="地址" prop="address" :error="fieldErrors.get('address')?.join(', ')">
-            <el-input 
-              v-model="form.address" 
-              type="textarea" 
-              :rows="3" 
-              placeholder="请输入地址" 
-            />
+
+          <el-form-item label="邮箱" prop="email" :error="fieldErrors.get('email')?.join(', ')">
+            <el-input v-model="form.email" placeholder="请输入邮箱地址" />
           </el-form-item>
+
+          <div class="field-hint">
+            联系人和地址请在客户创建完成后，到客户详情页的“联系人”和“地址”页签中维护。
+          </div>
         </div>
 
         <!-- Deactivate Section (Edit mode only) -->
@@ -122,10 +138,11 @@ const fieldErrors = ref<Map<string, string[]>>(new Map())
 
 const form = reactive<ClientCreatePayload>({
   name: '',
-  contact_person: '',
-  phone: '',
+  client_code: '',
+  name_en: '',
+  client_type: '',
+  default_currency: 'CNY',
   email: '',
-  address: '',
 })
 
 const rules: FormRules = {
@@ -146,10 +163,11 @@ async function fetchClient() {
     client.value = await getClient(clientId.value)
     // Populate form with existing data
     form.name = client.value.name
-    form.contact_person = client.value.contact_person || ''
-    form.phone = client.value.phone || ''
+    form.client_code = client.value.client_code || ''
+    form.name_en = client.value.name_en || ''
+    form.client_type = client.value.client_type || ''
+    form.default_currency = client.value.default_currency || 'CNY'
     form.email = client.value.email || ''
-    form.address = client.value.address || ''
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -228,3 +246,15 @@ onMounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.full-width {
+  width: 100%;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: 4px;
+}
+</style>

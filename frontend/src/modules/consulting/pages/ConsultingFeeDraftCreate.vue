@@ -21,22 +21,22 @@
       <el-form label-position="top">
         <el-row :gutter="12">
           <el-col :xs="24" :sm="12" :md="8">
-            <el-form-item label="案件 ID">
-              <el-input v-model.trim="form.case_id" placeholder="请输入案件 ID" />
+            <el-form-item label="案件编号">
+              <el-input v-model.trim="form.case_id" placeholder="请输入案件编号" />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="生成模式">
               <el-select v-model="form.mode" placeholder="请选择模式">
-                <el-option label="固定模式（FIXED）" value="FIXED" />
-                <el-option label="工时模式（HOURLY）" value="HOURLY" />
-                <el-option label="混合模式（HYBRID）" value="HYBRID" />
+                <el-option label="固定模式" value="FIXED" />
+                <el-option label="工时模式" value="HOURLY" />
+                <el-option label="混合模式" value="HYBRID" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="币种">
-              <el-input v-model.trim="form.currency" placeholder="默认 CNY（可选）" />
+              <el-input v-model.trim="form.currency" placeholder="默认人民币（可选）" />
             </el-form-item>
           </el-col>
 
@@ -72,12 +72,12 @@
             <el-row :gutter="8">
               <el-col :xs="24" :sm="12" :md="6">
                 <el-form-item label="费用代码">
-                  <el-input v-model.trim="line.fee_code" placeholder="例如：CONSULT_HOUR" />
+                  <el-input v-model.trim="line.fee_code" placeholder="请输入费用代码" />
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :sm="12" :md="6">
                 <el-form-item label="费用名称">
-                  <el-input v-model.trim="line.fee_name" placeholder="例如：顾问工时费" />
+                  <el-input v-model.trim="line.fee_name" placeholder="请输入费用名称" />
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :sm="12" :md="4">
@@ -92,12 +92,12 @@
               </el-col>
               <el-col :xs="24" :sm="12" :md="4">
                 <el-form-item label="追踪键">
-                  <el-input v-model.trim="line.trace_key" placeholder="可选" />
+                  <el-input v-model.trim="line.trace_key" placeholder="选填" />
                 </el-form-item>
               </el-col>
               <el-col :span="24">
                 <el-form-item label="备注">
-                  <el-input v-model.trim="line.remark" placeholder="可选" />
+                  <el-input v-model.trim="line.remark" placeholder="选填" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -122,12 +122,12 @@
             <el-row :gutter="8">
               <el-col :xs="24" :sm="12" :md="6">
                 <el-form-item label="费用代码">
-                  <el-input v-model.trim="line.fee_code" placeholder="例如：SEARCH_MISC" />
+                  <el-input v-model.trim="line.fee_code" placeholder="请输入费用代码" />
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :sm="12" :md="6">
                 <el-form-item label="费用名称">
-                  <el-input v-model.trim="line.fee_name" placeholder="例如：检索附加费" />
+                  <el-input v-model.trim="line.fee_name" placeholder="请输入费用名称" />
                 </el-form-item>
               </el-col>
               <el-col :xs="24" :sm="12" :md="4">
@@ -137,12 +137,12 @@
               </el-col>
               <el-col :xs="24" :sm="12" :md="4">
                 <el-form-item label="追踪键">
-                  <el-input v-model.trim="line.trace_key" placeholder="可选" />
+                  <el-input v-model.trim="line.trace_key" placeholder="选填" />
                 </el-form-item>
               </el-col>
               <el-col :span="24">
                 <el-form-item label="备注">
-                  <el-input v-model.trim="line.remark" placeholder="可选" />
+                  <el-input v-model.trim="line.remark" placeholder="选填" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -164,10 +164,10 @@
       </template>
 
       <el-descriptions :column="4" border>
-        <el-descriptions-item label="草单 ID">{{ result.draft_id }}</el-descriptions-item>
-        <el-descriptions-item label="草单类型">{{ result.draft_type }}</el-descriptions-item>
-        <el-descriptions-item label="模式">{{ result.mode }}</el-descriptions-item>
-        <el-descriptions-item label="币种">{{ result.currency }}</el-descriptions-item>
+        <el-descriptions-item label="草单编号">{{ result.draft_id }}</el-descriptions-item>
+        <el-descriptions-item label="草单类型">{{ draftTypeLabel(result.draft_type) }}</el-descriptions-item>
+        <el-descriptions-item label="模式">{{ modeLabel(result.mode) }}</el-descriptions-item>
+        <el-descriptions-item label="币种">{{ currencyLabel(result.currency) }}</el-descriptions-item>
         <el-descriptions-item label="行数">{{ result.created_line_count }}</el-descriptions-item>
         <el-descriptions-item label="服务费合计">
           {{ formatMoney(result.totals.total_service, result.currency) }}
@@ -183,10 +183,14 @@
       <div class="line-section">
         <h3 class="line-section-title">草单明细</h3>
         <el-table :data="result.items" size="small" border>
-          <el-table-column prop="item_id" label="费用项 ID" min-width="200" />
+          <el-table-column prop="item_id" label="费用项编号" min-width="200" />
           <el-table-column prop="fee_code" label="费用代码" min-width="140" />
           <el-table-column prop="fee_name" label="费用名称" min-width="160" />
-          <el-table-column prop="fee_type" label="费用类型" width="100" />
+          <el-table-column label="费用类型" width="100">
+            <template #default="{ row }">
+              {{ feeTypeLabel(row.fee_type) }}
+            </template>
+          </el-table-column>
           <el-table-column prop="quantity" label="数量" width="90" />
           <el-table-column prop="unit_price" label="单价" width="120" />
           <el-table-column label="金额" width="140" align="right">
@@ -397,7 +401,7 @@ function mapDraftCreateError(errorLike: unknown): string {
     return '草单参数不合法，请检查模式与金额/工时配置。'
   }
   if (apiError.status === 404 && apiError.code === 'CASE_NOT_FOUND') {
-    return '案件不存在，请确认案件 ID 后重试。'
+    return '案件不存在，请确认案件编号后重试。'
   }
   if (apiError.status === 409 && apiError.code === 'FEE_DRAFT_CONFLICT') {
     const draftId = apiError.details?.draft_id
@@ -428,7 +432,7 @@ function mapErrorToBanner(errorLike: unknown, message: string): ApiError {
 }
 
 function validateFormState(): string | null {
-  if (!form.case_id.trim()) return '请填写案件 ID。'
+  if (!form.case_id.trim()) return '请填写案件编号。'
 
   if (form.mode === 'FIXED') {
     if (!(form.fixed_fee > 0)) return '固定模式下固定费用必须大于 0。'
@@ -554,6 +558,27 @@ function formatMoney(amount: number, currency: string): string {
     style: 'currency',
     currency: currency || 'CNY',
   }).format(amount || 0)
+}
+
+function modeLabel(mode: DraftMode): string {
+  if (mode === 'FIXED') return '固定模式'
+  if (mode === 'HOURLY') return '工时模式'
+  return '混合模式'
+}
+
+function draftTypeLabel(type: 'CONSULT_FEE' | 'SEARCH_FEE'): string {
+  return type === 'CONSULT_FEE' ? '顾问费草单' : '检索费草单'
+}
+
+function feeTypeLabel(type: string): string {
+  if (type === 'SERVICE') return '服务费'
+  if (type === 'MISC') return '杂费'
+  if (type === 'GOV') return '官费'
+  return type
+}
+
+function currencyLabel(currency: string): string {
+  return currency === 'CNY' ? '人民币' : currency
 }
 
 function goBack() {

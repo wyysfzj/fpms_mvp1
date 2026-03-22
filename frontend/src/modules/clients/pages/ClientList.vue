@@ -107,7 +107,7 @@ async function fetchClients() {
 }
 
 function handleView(row: Client) {
-  router.push(`/clients/${row.id}/edit`)
+  router.push(`/clients/${row.id}`)
 }
 
 function handleEdit(row: Client) {

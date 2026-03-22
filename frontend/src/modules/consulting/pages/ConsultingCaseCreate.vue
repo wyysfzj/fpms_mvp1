@@ -44,13 +44,13 @@
           </el-col>
 
           <el-col :xs="24" :sm="12" :md="8">
-            <el-form-item label="客户 ID" prop="client_id">
-              <el-input v-model.trim="form.client_id" placeholder="请输入客户 ID" />
+            <el-form-item label="客户编号" prop="client_id">
+              <el-input v-model.trim="form.client_id" placeholder="请输入客户编号" />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8">
-            <el-form-item label="负责人 ID" prop="primary_agent_id">
-              <el-input v-model.trim="form.primary_agent_id" placeholder="请输入负责人 ID" />
+            <el-form-item label="负责人编号" prop="primary_agent_id">
+              <el-input v-model.trim="form.primary_agent_id" placeholder="请输入负责人编号" />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="24" :md="8">
@@ -87,7 +87,7 @@
           </el-col>
           <el-col v-if="form.case_type === 'SEARCH'" :xs="24" :sm="12" :md="12">
             <el-form-item label="检索数据库" prop="search_database">
-              <el-input v-model.trim="form.search_database" placeholder="例如：PatBase / Derwent / Orbit" />
+              <el-input v-model.trim="form.search_database" placeholder="请输入检索数据库名称" />
             </el-form-item>
           </el-col>
 
@@ -105,12 +105,12 @@
       </template>
 
       <el-descriptions :column="3" border>
-        <el-descriptions-item label="案件 ID">{{ createdCase.id }}</el-descriptions-item>
+        <el-descriptions-item label="案件标识">{{ createdCase.id }}</el-descriptions-item>
         <el-descriptions-item label="案件编号">{{ createdCase.case_no }}</el-descriptions-item>
         <el-descriptions-item label="项目类型">{{ caseTypeLabel(createdCase.case_type) }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ createdCase.status }}</el-descriptions-item>
-        <el-descriptions-item label="客户 ID">{{ createdCase.client_id || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="负责人 ID">{{ createdCase.primary_agent_id || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ getCaseStatusText(createdCase.status) }}</el-descriptions-item>
+        <el-descriptions-item label="客户编号">{{ createdCase.client_id || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="负责人编号">{{ createdCase.primary_agent_id || '—' }}</el-descriptions-item>
         <el-descriptions-item label="接收日期">{{ createdCase.recv_date || '—' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ formatDateTime(createdCase.created_at) }}</el-descriptions-item>
       </el-descriptions>
@@ -131,6 +131,7 @@ import type {
 } from '../../../api/consulting.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import { getCaseStatusText } from '../../../constants/displayText'
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
@@ -205,9 +206,9 @@ function validateSpecialFields() {
 const formRules: FormRules = {
   case_type: [{ required: true, message: '项目类型为必填项', trigger: 'change' }],
   case_no: [{ required: true, message: '案件编号为必填项', trigger: 'blur' }],
-  client_id: [{ required: true, message: '客户 ID 为必填项', trigger: 'blur' }],
+  client_id: [{ required: true, message: '客户编号为必填项', trigger: 'blur' }],
   title_cn: [{ required: true, message: '项目标题为必填项', trigger: 'blur' }],
-  primary_agent_id: [{ required: true, message: '负责人 ID 为必填项', trigger: 'blur' }],
+  primary_agent_id: [{ required: true, message: '负责人编号为必填项', trigger: 'blur' }],
   recv_date: [{ required: true, message: '接收日期为必填项', trigger: 'change' }],
 }
 

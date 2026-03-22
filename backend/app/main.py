@@ -14,13 +14,32 @@ from app.core.middleware import CorrelationIdMiddleware, RequestLoggingMiddlewar
 configure_logging()
 
 
+def _expand_dev_cors_origins(origins: list[str]) -> list[str]:
+    expanded: list[str] = []
+
+    for origin in origins:
+        if origin not in expanded:
+            expanded.append(origin)
+
+        if origin.startswith("http://localhost:"):
+            candidate = origin.replace("http://localhost:", "http://127.0.0.1:", 1)
+            if candidate not in expanded:
+                expanded.append(candidate)
+        elif origin.startswith("http://127.0.0.1:"):
+            candidate = origin.replace("http://127.0.0.1:", "http://localhost:", 1)
+            if candidate not in expanded:
+                expanded.append(candidate)
+
+    return expanded
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="FPMS MVP1 API", version="0.1.0")
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=_expand_dev_cors_origins(settings.cors_origins),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

@@ -20,6 +20,7 @@ const routes = [
       { path: 'clients', name: 'clients', component: () => import('../modules/clients/pages/ClientList.vue') },
       { path: 'clients/new', name: 'client_new', component: () => import('../modules/clients/pages/ClientForm.vue') },
       { path: 'clients/:id/edit', name: 'client_edit', component: () => import('../modules/clients/pages/ClientForm.vue') },
+      { path: 'clients/:id', name: 'client_detail', component: () => import('../modules/clients/pages/ClientDetail.vue') },
       // Keep legacy entry to avoid breaking existing navigation.
       { path: 'settings/clients', name: 'settings_clients', component: () => import('../modules/settings/pages/ClientList.vue') },
 
