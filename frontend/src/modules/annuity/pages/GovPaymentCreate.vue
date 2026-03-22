@@ -19,7 +19,7 @@
         <el-row :gutter="12">
           <el-col :xs="24" :sm="12">
             <el-form-item
-              label="官费清单ID"
+              label="官费清单编号"
               prop="pay_list_id"
               :error="fieldErrors.get('pay_list_id')?.join('，')"
             >
@@ -34,7 +34,7 @@
           </el-col>
           <el-col :xs="24" :sm="12">
             <el-form-item
-              label="费用项ID"
+              label="费用项编号"
               prop="fee_item_id"
               :error="fieldErrors.get('fee_item_id')?.join('，')"
             >
@@ -97,8 +97,8 @@
       <h2 class="form-card-title">登记结果</h2>
 
       <el-descriptions :column="3" border>
-        <el-descriptions-item label="缴费记录ID">{{ result.gov_payment.id }}</el-descriptions-item>
-        <el-descriptions-item label="费用项ID">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
+        <el-descriptions-item label="缴费记录编号">{{ result.gov_payment.id }}</el-descriptions-item>
+        <el-descriptions-item label="费用项编号">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
         <el-descriptions-item label="缴费状态">{{ govPaymentStatusText(result.gov_payment.status) }}</el-descriptions-item>
         <el-descriptions-item label="缴费日期">{{ result.gov_payment.paid_date || '—' }}</el-descriptions-item>
         <el-descriptions-item label="缴费金额">
@@ -120,7 +120,7 @@
               {{ payListStatusText(result.pay_list.status) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="客户ID">{{ result.pay_list.client_id }}</el-descriptions-item>
+          <el-descriptions-item label="客户编号">{{ result.pay_list.client_id }}</el-descriptions-item>
           <el-descriptions-item label="更新后总额">
             {{ formatMoney(result.pay_list.total_amount, result.pay_list.currency) }}
           </el-descriptions-item>
@@ -175,12 +175,12 @@ const form = reactive<GovPaymentForm>({
 
 const rules: FormRules<GovPaymentForm> = {
   pay_list_id: [
-    { required: true, message: '官费清单ID为必填项', trigger: 'blur' },
+    { required: true, message: '官费清单编号为必填项', trigger: 'blur' },
     {
       validator: (_rule, value: unknown, callback) => {
         const numeric = Number(value)
         if (!Number.isFinite(numeric) || numeric <= 0) {
-          callback(new Error('官费清单ID必须大于 0'))
+          callback(new Error('官费清单编号必须大于 0'))
           return
         }
         callback()
@@ -188,7 +188,7 @@ const rules: FormRules<GovPaymentForm> = {
       trigger: 'blur',
     },
   ],
-  fee_item_id: [{ required: true, message: '费用项ID为必填项', trigger: 'blur' }],
+  fee_item_id: [{ required: true, message: '费用项编号为必填项', trigger: 'blur' }],
   paid_amount: [
     {
       validator: (_rule, value: unknown, callback) => {

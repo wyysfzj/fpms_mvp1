@@ -46,6 +46,34 @@ interface BackendFeeItem {
     remark?: string | null
 }
 
+interface BackendFeeDraftListItem {
+    id: string
+    case_id: string
+    case_no?: string | null
+    client_id?: string | null
+    client_name?: string | null
+    currency: string
+    status: 'OPEN' | 'LOCKED'
+    amount: string | number
+}
+
+interface BackendFeeDraftDetail {
+    id: string
+    case_id: string
+    case_no?: string | null
+    client_id?: string | null
+    client_name?: string | null
+    draft_type: string
+    currency: string
+    status: 'OPEN' | 'LOCKED'
+    total_gov?: string | number
+    total_service?: string | number
+    total_misc?: string | number
+    amount?: string | number
+    created_at?: string
+    updated_at?: string
+}
+
 function mapFeeRate(input: BackendFeeRate): FeeRate {
     return {
         id: input.id,
@@ -76,6 +104,38 @@ function mapFeeItem(input: BackendFeeItem): FeeItem {
         quantity: Number(input.quantity || 0),
         unit_price: Number(input.unit_price || 0),
         amount: Number(input.amount || 0),
+    }
+}
+
+function mapFeeDraftListItem(input: BackendFeeDraftListItem): FeeDraftListItem {
+    return {
+        id: input.id,
+        case_id: input.case_id,
+        case_no: input.case_no ?? null,
+        client_id: input.client_id ?? null,
+        client_name: input.client_name ?? null,
+        currency: input.currency,
+        status: input.status,
+        amount: Number(input.amount || 0),
+    }
+}
+
+function mapFeeDraftDetail(input: BackendFeeDraftDetail): FeeDraftDetail {
+    return {
+        id: input.id,
+        case_id: input.case_id,
+        case_no: input.case_no ?? null,
+        client_id: input.client_id ?? null,
+        client_name: input.client_name ?? null,
+        draft_type: input.draft_type,
+        currency: input.currency,
+        status: input.status,
+        total_gov: input.total_gov != null ? Number(input.total_gov) : undefined,
+        total_service: input.total_service != null ? Number(input.total_service) : undefined,
+        total_misc: input.total_misc != null ? Number(input.total_misc) : undefined,
+        amount: input.amount != null ? Number(input.amount) : undefined,
+        created_at: input.created_at,
+        updated_at: input.updated_at,
     }
 }
 
@@ -172,34 +232,37 @@ export async function getFeeDrafts(
     params: FeeDraftListParams = {},
 ): Promise<Pagination<FeeDraftListItem>> {
     const { page = 1, page_size = 20, case_id, client_id, status } = params
-    const response = await http.get<Pagination<FeeDraftListItem>>('/fees/drafts', {
+    const response = await http.get<Pagination<BackendFeeDraftListItem>>('/fees/drafts', {
         params: { page, page_size, case_id, client_id, status }
     })
-    return response.data
+    return {
+        ...response.data,
+        items: response.data.items.map(mapFeeDraftListItem),
+    }
 }
 
 /**
  * Get a single fee draft by ID
  */
 export async function getFeeDraft(id: string): Promise<FeeDraftDetail> {
-    const response = await http.get<FeeDraftDetail>(`/fees/drafts/${id}`)
-    return response.data
+    const response = await http.get<BackendFeeDraftDetail>(`/fees/drafts/${id}`)
+    return mapFeeDraftDetail(response.data)
 }
 
 /**
  * Create a new fee draft
  */
 export async function createFeeDraft(data: FeeDraftCreatePayload): Promise<FeeDraftDetail> {
-    const response = await http.post<FeeDraftDetail>('/fees/drafts', data)
-    return response.data
+    const response = await http.post<BackendFeeDraftDetail>('/fees/drafts', data)
+    return mapFeeDraftDetail(response.data)
 }
 
 /**
  * Update an existing fee draft
  */
 export async function updateFeeDraft(id: string, data: FeeDraftUpdatePayload): Promise<FeeDraftDetail> {
-    const response = await http.put<FeeDraftDetail>(`/fees/drafts/${id}`, data)
-    return response.data
+    const response = await http.put<BackendFeeDraftDetail>(`/fees/drafts/${id}`, data)
+    return mapFeeDraftDetail(response.data)
 }
 
 // Fee Item Functions

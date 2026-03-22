@@ -45,9 +45,9 @@
     <template v-else-if="draft">
       <!-- Relation Chain -->
       <RelationChainCard
-        :client="draft.client_id ? { id: draft.client_id } : undefined"
-        :case-ref="draft.case_id ? { id: draft.case_id } : undefined"
-        :fee-draft="{ id: draft.id, label: draft.draft_type }"
+        :client="draft.client_id ? { id: draft.client_id, name: clientDisplayName } : undefined"
+        :case-ref="draft.case_id ? { id: draft.case_id, no: caseDisplayNo } : undefined"
+        :fee-draft="{ id: draft.id, label: displayDraftId }"
       />
 
       <div class="case-header">
@@ -58,7 +58,7 @@
               🔒 已锁定
             </el-tag>
             <span class="meta-divider">|</span>
-            <span class="case-no">{{ ZH.feeDetail.draftId }}: {{ draft.id }}</span>
+            <span class="case-no">{{ ZH.feeDetail.draftId }}: {{ displayDraftId }}</span>
             <span class="meta-divider">|</span>
             <span>{{ ZH.feeDetail.currency }}: {{ draft.currency }}</span>
           </div>
@@ -96,7 +96,7 @@
                 <div class="info-grid">
                   <div class="info-item">
                     <span class="info-label">{{ ZH.feeDetail.draftId }}</span>
-                    <span class="info-value case-no">{{ draft.id }}</span>
+                    <span class="info-value case-no">{{ displayDraftId }}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">{{ ZH.feeDetail.status }}</span>
@@ -105,7 +105,7 @@
                   <div class="info-item">
                     <span class="info-label">{{ ZH.feeDetail.caseId }}</span>
                     <router-link class="entity-link info-value" :to="`/cases/${draft.case_id}`">
-                      {{ draft.case_id }}
+                      {{ caseDisplayNo }}
                     </router-link>
                   </div>
                   <div class="info-item">
@@ -113,9 +113,9 @@
                     <router-link
                       v-if="draft.client_id"
                       class="entity-link info-value"
-                      :to="`/clients/${draft.client_id}/edit`"
+                      :to="`/clients/${draft.client_id}`"
                     >
-                      {{ draft.client_id }}
+                      {{ clientDisplayName }}
                     </router-link>
                     <span v-else class="info-value">—</span>
                   </div>
@@ -126,6 +126,22 @@
                   <div class="info-item">
                     <span class="info-label">{{ ZH.feeDetail.currency }}</span>
                     <span class="info-value">{{ draft.currency }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">官费合计</span>
+                    <span class="info-value mono-num">{{ formatMoney(draft.total_gov, draft.currency) }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">服务费合计</span>
+                    <span class="info-value mono-num">{{ formatMoney(draft.total_service, draft.currency) }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">杂费合计</span>
+                    <span class="info-value mono-num">{{ formatMoney(draft.total_misc, draft.currency) }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">草稿总额</span>
+                    <span class="info-value mono-num">{{ formatMoney(draft.amount, draft.currency) }}</span>
                   </div>
                 </div>
               </div>
@@ -164,6 +180,8 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getCase } from '../../../api/cases'
+import { getClient } from '../../../api/clients'
 import { getFeeDraft, lockFeeDraft, unlockFeeDraft } from '../../../api/fees'
 import type { FeeDraftDetail } from '../../../api/fees.types'
 import type { ApiError } from '../../../api/types'
@@ -182,18 +200,66 @@ const draft = ref<FeeDraftDetail | null>(null)
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const activeTab = ref('items')
+const caseDisplayNo = ref('')
+const clientDisplayName = ref('')
 
 // Lock state
 const lockLoading = ref(false)
 const lockError = ref<ApiError | null>(null)
 
 const draftId = computed(() => String(route.params.id || ''))
+const displayDraftId = computed(() => {
+  if (!draft.value?.id) return '—'
+  const shortId = draft.value.id.slice(0, 8).toUpperCase()
+  return `${draft.value.draft_type}-${shortId}`
+})
 
 const isLocked = computed(() => draft.value?.status === 'LOCKED')
 
 const statusTagType = computed<'warning' | 'info'>(() => {
   return draft.value?.status === 'LOCKED' ? 'warning' : 'info'
 })
+
+function formatMoney(value: number | string | undefined, currency: string): string {
+  const amount = value == null ? 0 : Number(value)
+  if (Number.isNaN(amount)) {
+    return `${currency} ${String(value ?? 0)}`
+  }
+  return new Intl.NumberFormat('zh-CN', { style: 'currency', currency }).format(amount)
+}
+
+async function resolveDisplayContext() {
+  caseDisplayNo.value = draft.value?.case_id || ''
+  clientDisplayName.value = draft.value?.client_id || ''
+
+  const jobs: Promise<void>[] = []
+
+  if (draft.value?.case_id) {
+    jobs.push(
+      getCase(draft.value.case_id)
+        .then(caseData => {
+          caseDisplayNo.value = caseData.case_no || draft.value?.case_id || ''
+        })
+        .catch(() => {
+          caseDisplayNo.value = draft.value?.case_id || ''
+        })
+    )
+  }
+
+  if (draft.value?.client_id) {
+    jobs.push(
+      getClient(draft.value.client_id)
+        .then(clientData => {
+          clientDisplayName.value = clientData.name || draft.value?.client_id || ''
+        })
+        .catch(() => {
+          clientDisplayName.value = draft.value?.client_id || ''
+        })
+    )
+  }
+
+  await Promise.all(jobs)
+}
 
 async function fetchDraft() {
   if (!draftId.value) return
@@ -203,6 +269,7 @@ async function fetchDraft() {
 
   try {
     draft.value = await getFeeDraft(draftId.value)
+    await resolveDisplayContext()
     pageContext.setBreadcrumb(['费用管理', '费用草稿', draftId.value.slice(0, 8)])
   } catch (err) {
     error.value = err as ApiError

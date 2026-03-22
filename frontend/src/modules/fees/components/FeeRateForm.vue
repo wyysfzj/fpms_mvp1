@@ -141,8 +141,9 @@
           v-model="form.calc_params"
           type="textarea"
           :rows="2"
-          placeholder="JSON格式（可选）"
+          :placeholder="calcParamsPlaceholder"
         />
+        <div class="field-hint">{{ calcParamsHint }}</div>
       </el-form-item>
     </el-form>
 
@@ -181,6 +182,21 @@ const error = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 
 const isEdit = computed(() => !!props.rate)
+const calcParamsPlaceholder = computed(() => {
+  if (form.calc_mode === 'PER_CLAIM') {
+    return '{"per_claim_amount":"50","discount_pct":"10","reduction_pct":"20"}'
+  }
+  return 'JSON格式（可选）'
+})
+const calcParamsHint = computed(() => {
+  if (form.calc_mode === 'PER_CLAIM') {
+    if (form.allow_reduction) {
+      return '按权利要求模式支持 per_claim_amount、discount_pct、reduction_pct。已开启允许减缴时，减缴比例会参与计算。'
+    }
+    return '按权利要求模式支持 per_claim_amount、discount_pct、reduction_pct。未开启允许减缴时，reduction_pct 会被忽略。'
+  }
+  return '如需高级计算，可填写 JSON 参数；未填写时按默认金额处理。'
+})
 
 const form = reactive<FeeRateCreatePayload>({
   name: '',

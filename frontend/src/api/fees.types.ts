@@ -75,7 +75,9 @@ export type FeeMoney = number | string
 export interface FeeDraftListItem {
     id: string
     case_id: string
+    case_no?: string | null
     client_id: string | null
+    client_name?: string | null
     currency: string
     status: FeeDraftStatus
     amount: FeeMoney
@@ -84,10 +86,18 @@ export interface FeeDraftListItem {
 export interface FeeDraftDetail {
     id: string
     case_id: string
+    case_no?: string | null
     client_id: string | null
+    client_name?: string | null
     draft_type: string
     currency: string
     status: FeeDraftStatus
+    total_gov?: FeeMoney
+    total_service?: FeeMoney
+    total_misc?: FeeMoney
+    amount?: FeeMoney
+    created_at?: string
+    updated_at?: string
 }
 
 export interface FeeDraftListParams {

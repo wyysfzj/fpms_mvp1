@@ -103,7 +103,7 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="48" />
-        <el-table-column prop="id" label="任务ID" width="90" />
+        <el-table-column prop="id" label="任务编号" width="90" />
         <el-table-column label="案件" min-width="180">
           <template #default="{ row }">
             <router-link :to="`/cases/${row.case_id}`" class="case-link">
@@ -111,7 +111,7 @@
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column prop="client_id" label="客户ID" min-width="180" />
+        <el-table-column prop="client_id" label="客户编号" min-width="180" />
         <el-table-column prop="year_no" label="年度" width="90" />
         <el-table-column label="到期日" width="130">
           <template #default="{ row }">
@@ -186,10 +186,10 @@
         <div class="receipt-block">
           <h3 class="receipt-title">成功明细</h3>
           <el-table :data="generateReceipt.success" size="small" border>
-            <el-table-column prop="source_task_id" label="来源任务ID" width="110" />
-            <el-table-column prop="task_id" label="任务ID" width="90" />
+            <el-table-column prop="source_task_id" label="来源任务编号" width="110" />
+            <el-table-column prop="task_id" label="任务编号" width="90" />
             <el-table-column prop="year_no" label="年度" width="80" />
-            <el-table-column prop="draft_id" label="草单ID" min-width="210" />
+            <el-table-column prop="draft_id" label="草单编号" min-width="210" />
             <el-table-column label="金额" width="140" align="right">
               <template #default="{ row }">
                 {{ formatMoney(row.amount, row.currency) }}
@@ -201,8 +201,8 @@
         <div class="receipt-block" style="margin-top: 16px">
           <h3 class="receipt-title">失败明细</h3>
           <el-table :data="generateReceipt.failed" size="small" border>
-            <el-table-column prop="source_task_id" label="来源任务ID" width="110" />
-            <el-table-column prop="task_id" label="任务ID" width="90">
+            <el-table-column prop="source_task_id" label="来源任务编号" width="110" />
+            <el-table-column prop="task_id" label="任务编号" width="90">
               <template #default="{ row }">
                 {{ row.task_id ?? '—' }}
               </template>
