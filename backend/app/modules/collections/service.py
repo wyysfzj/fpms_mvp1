@@ -164,6 +164,56 @@ def _serialize_batch(db: Session, batch: Dunning, *, reused: bool) -> dict[str, 
     }
 
 
+def get_dunning_detail(db: Session, *, dunning_id: int) -> dict[str, Any]:
+    batch = db.execute(select(Dunning).where(Dunning.id == dunning_id)).scalar_one_or_none()
+    if not batch:
+        raise_business_error(
+            "DUNNING_NOT_FOUND",
+            "No such dunning batch",
+            status_code=404,
+        )
+
+    lines = (
+        db.execute(
+            select(DunningLine)
+            .where(DunningLine.dunning_id == batch.id)
+            .order_by(DunningLine.line_no.asc(), DunningLine.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+    return {
+        "id": batch.id,
+        "dunning_no": batch.dunning_no,
+        "client_id": batch.client_id,
+        "round_no": batch.round_no,
+        "to_date": batch.to_date,
+        "currency": batch.currency,
+        "total_amount": str(batch.total_amount),
+        "status": batch.status,
+        "sent_date": batch.sent_date,
+        "remark": batch.remark,
+        "created_at": batch.created_at,
+        "updated_at": batch.updated_at,
+        "line_count": len(lines),
+        "lines": [
+            {
+                "id": line.id,
+                "line_no": line.line_no,
+                "bill_id": line.bill_id,
+                "bill_no_snapshot": line.bill_no_snapshot,
+                "due_date_snapshot": line.due_date_snapshot,
+                "bill_status_snapshot": line.bill_status_snapshot,
+                "outstanding_amount": str(line.outstanding_amount),
+                "currency_snapshot": line.currency_snapshot,
+                "remark": line.remark,
+            }
+            for line in lines
+        ],
+    }
+
+
 def generate_dunning_batches(
     db: Session,
     *,

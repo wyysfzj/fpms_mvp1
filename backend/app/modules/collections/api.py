@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.modules.collections.models import Dunning
 from app.modules.collections.service import (
     generate_dunning_batches,
+    get_dunning_detail,
     mark_bill_bad_debt,
     restore_bill_from_bad_debt,
 )
@@ -100,6 +101,15 @@ def post_dunning(
         exclude_statuses=payload.exclude_statuses,
         strict_conflict=payload.strict_conflict,
     )
+
+
+@router.get("/dunning/{dunning_id}", summary="Get dunning batch detail")
+def get_dunning_batch_detail(
+    dunning_id: int,
+    _perm: None = Depends(require_perm("Dunning.Read")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return get_dunning_detail(db, dunning_id=dunning_id)
 
 
 @router.post("/bills/{bill_id}/bad-debt", summary="Mark bill as bad debt")

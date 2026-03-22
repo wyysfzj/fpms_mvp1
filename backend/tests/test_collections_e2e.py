@@ -222,3 +222,38 @@ def test_collections_dunning_list_and_bad_debt_lifecycle(
         headers=auth_headers,
     )
     _assert_error(ineligible_resp, 400, "BAD_DEBT_NOT_ALLOWED")
+
+
+def test_collections_dunning_detail_includes_lines(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_id = _create_client(client, auth_headers)
+    bill_id = _insert_bill(
+        session_factory,
+        client_id=client_id,
+        amount=Decimal("120.00"),
+        balance=Decimal("120.00"),
+        due_date=date(2026, 3, 1),
+    )
+
+    create_resp = client.post(
+        "/api/v1/dunning",
+        headers=auth_headers,
+        json={"to_date": "2026-03-31", "client_id": client_id},
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    create_payload = create_resp.json()
+    assert create_payload["summary"]["created"] >= 1
+    batch = create_payload["batches"][0]
+
+    detail_resp = client.get(f"/api/v1/dunning/{batch['id']}", headers=auth_headers)
+    assert detail_resp.status_code == 200, detail_resp.text
+    detail_payload = detail_resp.json()
+    assert detail_payload["id"] == batch["id"]
+    assert detail_payload["round_no"] == batch["round_no"]
+    assert "lines" in detail_payload
+    assert isinstance(detail_payload["lines"], list)
+    assert len(detail_payload["lines"]) >= 1
+    assert any(line["bill_id"] == bill_id for line in detail_payload["lines"])

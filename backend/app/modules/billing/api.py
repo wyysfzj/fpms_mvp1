@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
@@ -15,26 +14,43 @@ from app.models.system_param import SystemParam
 from app.modules.billing.doc_render_bill_context import BillContextBuilder
 from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
 from app.modules.billing.schemas import (
+    BillDetailResponse,
     BillFromDraftsRequest,
+    BillItemDetailResponse,
+    BillManualCreateSchema,
     BillResponse,
+    CaseReceiptResponse,
     OffsetCreateSchema,
     OffsetResponse,
     PaymentResponse,
     PaymentSchema,
 )
 from app.modules.billing.service import (
-    create_offset as create_offset_service,
-)
-from app.modules.billing.service import (
+    create_manual_bill_record,
     generate_bill_from_drafts,
     process_payment,
 )
 from app.modules.billing.service import (
+    create_offset as create_offset_service,
+)
+from app.modules.billing.service import (
     reverse_offset as reverse_offset_service,
 )
+from app.modules.cases.models import Case
+from app.modules.fees.models import FeeDraft
 from app.modules.masterdata.clients.models import Client
 
 router = APIRouter()
+
+
+def _get_client_display_name(client: Client | None) -> str | None:
+    if not client:
+        return None
+    return client.name_cn or client.name_en
+
+
+def _build_draft_display_label(draft: FeeDraft) -> str:
+    return f"{draft.draft_type}-{draft.id[:8].upper()}"
 
 
 @router.get("/bills", summary="List bills")
@@ -260,6 +276,29 @@ def get_payments(
         .limit(page_size)
         .all()
     )
+    payment_ids = [payment.id for payment in payments]
+    payment_line_map: dict[str, list[PaymentLine]] = {}
+    if payment_ids:
+        payment_lines = (
+            db.query(PaymentLine)
+            .filter(PaymentLine.payment_id.in_(payment_ids))
+            .order_by(PaymentLine.created_at.asc())
+            .all()
+        )
+        for line in payment_lines:
+            payment_line_map.setdefault(line.payment_id, []).append(line)
+
+    def _resolve_prepayment_status(lines: list[PaymentLine]) -> str:
+        if not lines:
+            return "UNALLOCATED"
+        allocated_total = sum((line.allocated_amt for line in lines), start=0)
+        unapplied_total = sum((line.balance_amt for line in lines), start=0)
+        if allocated_total <= 0:
+            return "UNALLOCATED"
+        if unapplied_total <= 0:
+            return "FULLY_ALLOCATED"
+        return "PARTIALLY_ALLOCATED"
+
     items = [
         {
             "id": payment.id,
@@ -268,6 +307,16 @@ def get_payments(
             "pay_date": payment.pay_date,
             "currency": payment.currency,
             "amount": payment.amount,
+            "line_count": len(payment_line_map.get(payment.id, [])),
+            "allocated_amt": sum(
+                (line.allocated_amt for line in payment_line_map.get(payment.id, [])),
+                start=0,
+            ),
+            "unapplied_amt": sum(
+                (line.balance_amt for line in payment_line_map.get(payment.id, [])),
+                start=0,
+            ),
+            "prepayment_status": _resolve_prepayment_status(payment_line_map.get(payment.id, [])),
         }
         for payment in payments
     ]
@@ -469,7 +518,7 @@ def reverse_offset(
 
 @router.post("/bills/manual", status_code=status.HTTP_201_CREATED, summary="Create a bill manually")
 def create_manual_bill(
-    payload: dict[str, Any],
+    payload: BillManualCreateSchema,
     _perm: None = Depends(require_perm("Bill.Create")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
@@ -496,7 +545,7 @@ def create_manual_bill(
     - 403: FORBIDDEN
     - 422: VALIDATION_ERROR
     """
-    client_id = payload.get("client_id")
+    client_id = payload.client_id
     if not client_id:
         raise_business_error(
             "BILL_INVALID",
@@ -504,17 +553,8 @@ def create_manual_bill(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    bill = Bill(
-        id=str(uuid4()),
-        bill_no=payload.get("bill_no"),
-        client_id=client_id,
-        currency=payload.get("currency") or "CNY",
-        direction=payload.get("direction") or "AR",
-        status=payload.get("status") or "UNSETTLED",
-    )
-    db.add(bill)
-    db.commit()
-    db.refresh(bill)
+    bill = create_manual_bill_record(db, payload)
+    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill.id).order_by(BillItem.created_at.asc()).all()
 
     return {
         "id": bill.id,
@@ -523,15 +563,34 @@ def create_manual_bill(
         "currency": bill.currency,
         "direction": bill.direction,
         "status": bill.status,
+        "amount": bill.amount,
+        "balance": bill.balance,
+        "items": [
+            {
+                "id": item.id,
+                "bill_id": item.bill_id,
+                "case_id": item.case_id,
+                "draft_id": item.draft_id,
+                "fee_code": item.fee_code,
+                "fee_name": item.fee_name,
+                "fee_type": item.fee_type,
+                "year_no": item.year_no,
+                "description": item.fee_name or item.fee_code or "账单明细",
+                "quantity": 1,
+                "unit_price": item.amount,
+                "amount": item.amount,
+            }
+            for item in bill_items
+        ],
     }
 
 
-@router.get("/bills/{bill_id}", summary="Get a bill")
+@router.get("/bills/{bill_id}", response_model=BillDetailResponse, summary="Get a bill")
 def get_bill(
     bill_id: str,
     _perm: None = Depends(require_perm("Bill.Read")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> BillDetailResponse:
     """
     Get a bill by ID.
 
@@ -559,22 +618,87 @@ def get_bill(
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    return {
-        "id": bill.id,
-        "bill_no": bill.bill_no,
-        "client_id": bill.client_id,
-        "currency": bill.currency,
-        "direction": bill.direction,
-        "status": bill.status,
-    }
+    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill_id).order_by(BillItem.created_at.asc()).all()
+    client = db.query(Client).filter(Client.id == bill.client_id).first()
+
+    case_ids = [item.case_id for item in bill_items if item.case_id]
+    unique_case_ids = list(dict.fromkeys(case_ids))
+    case_map: dict[str, Case] = {}
+    if unique_case_ids:
+        cases = db.query(Case).filter(Case.id.in_(unique_case_ids)).all()
+        case_map = {case.id: case for case in cases}
+
+    draft_ids = [item.draft_id for item in bill_items if item.draft_id]
+    unique_draft_ids = list(dict.fromkeys(draft_ids))
+    draft_map: dict[str, FeeDraft] = {}
+    if unique_draft_ids:
+        drafts = db.query(FeeDraft).filter(FeeDraft.id.in_(unique_draft_ids)).all()
+        draft_map = {draft.id: draft for draft in drafts}
+
+    primary_case_id = unique_case_ids[0] if len(unique_case_ids) == 1 else None
+    primary_case = case_map.get(primary_case_id) if primary_case_id else None
+
+    source_draft_labels = [
+        _build_draft_display_label(draft_map[draft_id])
+        for draft_id in unique_draft_ids
+        if draft_id in draft_map
+    ]
+    primary_draft_id = unique_draft_ids[0] if unique_draft_ids else None
+    primary_draft = draft_map.get(primary_draft_id) if primary_draft_id else None
+
+    items = [
+        BillItemDetailResponse(
+            id=item.id,
+            bill_id=item.bill_id,
+            case_id=item.case_id,
+            draft_id=item.draft_id,
+            fee_code=item.fee_code,
+            fee_name=item.fee_name,
+            fee_type=item.fee_type,
+            year_no=item.year_no,
+            description=item.fee_name or item.fee_code or "账单明细",
+            quantity=1,
+            unit_price=item.amount,
+            amount=item.amount,
+        )
+        for item in bill_items
+    ]
+
+    return BillDetailResponse(
+        id=bill.id,
+        bill_no=bill.bill_no,
+        client_id=bill.client_id,
+        client_name=_get_client_display_name(client),
+        case_id=primary_case.id if primary_case else None,
+        case_no=primary_case.case_no if primary_case else None,
+        currency=bill.currency,
+        direction=bill.direction,
+        status=bill.status,
+        total_gov=bill.total_gov,
+        total_service=bill.total_service,
+        total_misc=bill.total_misc,
+        amount=bill.amount,
+        balance=bill.balance,
+        bill_date=bill.bill_date,
+        due_date=bill.due_date,
+        items=items,
+        source_draft_ids=unique_draft_ids,
+        source_draft_labels=source_draft_labels,
+        primary_draft_id=primary_draft.id if primary_draft else None,
+        primary_draft_label=_build_draft_display_label(primary_draft) if primary_draft else None,
+    )
 
 
-@router.get("/cases/{case_id}/receipts", summary="Get case receipt")
+@router.get(
+    "/cases/{case_id}/receipts",
+    response_model=CaseReceiptResponse,
+    summary="Get case receipt",
+)
 def get_case_receipt(
     case_id: str,
     _perm: None = Depends(require_perm("CaseReceipt.Read")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> CaseReceiptResponse:
     """
     Get the case receipt summary.
 
@@ -602,17 +726,49 @@ def get_case_receipt(
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    return {
-        "id": receipt.id,
-        "case_id": receipt.case_id,
-        "fee_type": receipt.fee_type,
-        "currency": receipt.currency,
-        "receivable_amt": receipt.receivable_amt,
-        "received_amt": receipt.received_amt,
-        "last_receipt_date": receipt.last_receipt_date,
-        "fee_code": receipt.fee_code,
-        "year_no": receipt.year_no,
-        "is_arrears": receipt.is_arrears,
-        "invoice_no": receipt.invoice_no,
-        "is_commissionable": receipt.is_commissionable,
-    }
+    bill_rows = (
+        db.query(
+            Bill.id,
+            Bill.bill_no,
+            Bill.status,
+            Bill.amount,
+            Bill.balance,
+            Bill.bill_date,
+        )
+        .join(BillItem, BillItem.bill_id == Bill.id)
+        .filter(BillItem.case_id == case_id)
+        .order_by(Bill.bill_date.desc(), Bill.created_at.desc(), Bill.id.desc())
+        .all()
+    )
+    seen_bill_ids: set[str] = set()
+    bill_overview_rows: list[dict[str, Any]] = []
+    for row in bill_rows:
+        if row.id in seen_bill_ids:
+            continue
+        seen_bill_ids.add(row.id)
+        bill_overview_rows.append(
+            {
+                "id": row.id,
+                "bill_no": row.bill_no,
+                "status": row.status,
+                "amount": row.amount,
+                "balance": row.balance,
+                "issue_date": row.bill_date,
+            }
+        )
+
+    return CaseReceiptResponse(
+        id=receipt.id,
+        case_id=receipt.case_id,
+        fee_type=receipt.fee_type,
+        currency=receipt.currency,
+        receivable_amt=receipt.receivable_amt,
+        received_amt=receipt.received_amt,
+        last_receipt_date=receipt.last_receipt_date,
+        fee_code=receipt.fee_code,
+        year_no=receipt.year_no,
+        is_arrears=receipt.is_arrears,
+        invoice_no=receipt.invoice_no,
+        is_commissionable=receipt.is_commissionable,
+        bills=bill_overview_rows,
+    )

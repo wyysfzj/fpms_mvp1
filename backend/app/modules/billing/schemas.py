@@ -55,6 +55,49 @@ class BillResponse(BaseModel):
     status: str
 
 
+class BillItemDetailResponse(BaseModel):
+    """Response schema for bill detail items."""
+
+    id: str
+    bill_id: str
+    case_id: str | None = None
+    draft_id: str | None = None
+    fee_code: str | None = None
+    fee_name: str | None = None
+    fee_type: str | None = None
+    year_no: int | None = None
+    description: str
+    quantity: Decimal = Field(Decimal("1"), ge=0)
+    unit_price: Decimal = Field(Decimal("0"), ge=0)
+    amount: Decimal = Field(Decimal("0"), ge=0)
+
+
+class BillDetailResponse(BaseModel):
+    """Enriched bill detail response schema."""
+
+    id: str
+    bill_no: str | None = None
+    client_id: str
+    client_name: str | None = None
+    case_id: str | None = None
+    case_no: str | None = None
+    currency: str
+    direction: str
+    status: str
+    total_gov: Decimal = Field(Decimal("0"), ge=0)
+    total_service: Decimal = Field(Decimal("0"), ge=0)
+    total_misc: Decimal = Field(Decimal("0"), ge=0)
+    amount: Decimal = Field(Decimal("0"), ge=0)
+    balance: Decimal = Field(Decimal("0"), ge=0)
+    bill_date: date | None = None
+    due_date: date | None = None
+    items: list[BillItemDetailResponse] = []
+    source_draft_ids: list[str] = []
+    source_draft_labels: list[str] = []
+    primary_draft_id: str | None = None
+    primary_draft_label: str | None = None
+
+
 class PaymentSchema(BaseModel):
     """Schema for recording payments."""
 
@@ -112,6 +155,38 @@ class CaseReceiptResponse(BaseModel):
     is_arrears: bool | None = None
     invoice_no: str | None = None
     is_commissionable: bool | None = None
+    bills: list["CaseReceiptBillResponse"] = []
+
+
+class CaseReceiptBillResponse(BaseModel):
+    """Bill overview row under case receipt summary."""
+
+    id: str
+    bill_no: str | None = None
+    status: str
+    amount: Decimal = Field(Decimal("0"), ge=0)
+    balance: Decimal = Field(Decimal("0"), ge=0)
+    issue_date: date | None = None
+
+
+class BillManualItemSchema(BaseModel):
+    description: str = Field(..., max_length=256)
+    quantity: int = Field(1, gt=0)
+    unit_price: Decimal = Field(..., ge=0)
+    fee_type: str | None = Field(None, max_length=16)
+    year_no: int | None = None
+
+
+class BillManualCreateSchema(BaseModel):
+    client_id: str = Field(..., min_length=1)
+    case_id: str | None = Field(None, min_length=1)
+    currency: str = Field("CNY", max_length=8)
+    direction: str = Field("AR", pattern="^(AR|AP)$")
+    status: str = Field("UNSETTLED", max_length=24)
+    bill_date: date | None = None
+    due_date: date | None = None
+    items: list[BillManualItemSchema] = Field(..., min_length=1)
+    notes: str | None = Field(None, max_length=512)
 
 
 class BillStatusSchema(BaseModel):

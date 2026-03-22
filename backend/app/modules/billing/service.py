@@ -12,6 +12,7 @@ from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Paym
 from app.modules.billing.schemas import (
     BillCreateSchema,
     BillFromDraftsRequest,
+    BillManualCreateSchema,
     BillStatusSchema,
     OffsetCreateSchema,
     PaymentSchema,
@@ -404,6 +405,55 @@ def generate_bill(
     )
     _apply_bill_status(bill, data.status)
     db.add(bill)
+    db.commit()
+    db.refresh(bill)
+    _run_commission_hook_non_blocking(db, bill)
+    _run_consulting_commission_recompute_non_blocking(
+        db,
+        bill_id=bill.id,
+        as_of_date=bill.bill_date,
+    )
+    return bill
+
+
+def create_manual_bill_record(db: Session, data: BillManualCreateSchema) -> Bill:
+    """Create a manual bill using the typed payload."""
+    total_amount = sum(Decimal(item.quantity) * item.unit_price for item in data.items)
+    if total_amount <= Decimal("0"):
+        raise_business_error(
+            "BILL_MANUAL_TOTAL_INVALID",
+            "Manual bill must include at least one positive item",
+            status_code=400,
+        )
+
+    bill = Bill(
+        id=str(uuid4()),
+        client_id=data.client_id,
+        currency=data.currency,
+        direction=data.direction,
+        bill_date=data.bill_date,
+        due_date=data.due_date,
+        total_gov=Decimal("0"),
+        total_service=total_amount,
+        total_misc=Decimal("0"),
+        amount=total_amount,
+        balance=total_amount,
+    )
+    _apply_bill_status(bill, data.status)
+    db.add(bill)
+    db.flush()
+
+    for item in data.items:
+        bill_item = BillItem(
+            bill_id=bill.id,
+            case_id=data.case_id,
+            fee_name=item.description,
+            fee_type=item.fee_type,
+            year_no=item.year_no,
+            amount=Decimal(item.quantity) * item.unit_price,
+        )
+        db.add(bill_item)
+
     db.commit()
     db.refresh(bill)
     _run_commission_hook_non_blocking(db, bill)

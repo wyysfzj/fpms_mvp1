@@ -16,6 +16,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.modules.billing.models import CaseReceipt, PaymentLine
@@ -171,6 +172,58 @@ def _setup_full_billing_chain(client, auth_headers, fee_amount: str = "500.00"):
         "payment": payment,
         "payment_line_id": payment_line_id,
     }
+
+
+def test_manual_bill_requires_items(client: TestClient, auth_headers: dict[str, str]) -> None:
+    cl = _create_client(client, auth_headers)
+    resp = client.post(
+        "/api/v1/bills/manual",
+        json={"client_id": cl["id"], "currency": "CNY", "items": []},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_manual_bill_creation_with_items_creates_items(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    cl = _create_client(client, auth_headers)
+    payload = {
+        "client_id": cl["id"],
+        "currency": "CNY",
+        "direction": "AP",
+        "items": [
+            {"description": "Service Fee", "quantity": 2, "unit_price": "150.00"},
+        ],
+    }
+    resp = client.post("/api/v1/bills/manual", json=payload, headers=auth_headers)
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["client_id"] == cl["id"]
+    assert data["direction"] == "AP"
+    assert data["amount"] == "300.00"
+    assert data["balance"] == "300.00"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["amount"] == "300.00"
+
+
+def test_manual_bill_creation_rejects_invalid_status(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    cl = _create_client(client, auth_headers)
+    payload = {
+        "client_id": cl["id"],
+        "currency": "CNY",
+        "status": "BAD_DEBT",
+        "items": [
+            {"description": "Service Fee", "quantity": 1, "unit_price": "100.00"},
+        ],
+    }
+    resp = client.post("/api/v1/bills/manual", json=payload, headers=auth_headers)
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "BILL_STATUS_INVALID"
 
 
 # ---------------------------------------------------------------------------
@@ -433,3 +486,42 @@ def test_receipt_received_amt_reversed(client, auth_headers, session_factory):
         )
     finally:
         db2.close()
+
+
+def test_payment_list_shows_prepayment_progress(client, auth_headers):
+    """Payment list should reflect unallocated -> allocated -> reversed prepayment state."""
+    setup = _setup_full_billing_chain(client, auth_headers, fee_amount="500.00")
+    bill_id = setup["bill"]["id"]
+    payment_id = setup["payment"]["id"]
+    payment_line_id = setup["payment_line_id"]
+
+    list_before = client.get("/api/v1/payments?page=1&page_size=20", headers=auth_headers)
+    assert list_before.status_code == 200, list_before.text
+    payment_before = next(item for item in list_before.json()["items"] if item["id"] == payment_id)
+    assert payment_before["prepayment_status"] == "UNALLOCATED"
+    assert payment_before["allocated_amt"] == "0.00"
+    assert payment_before["unapplied_amt"] == "500.00"
+    assert payment_before["line_count"] >= 1
+
+    offset = _create_offset(client, auth_headers, payment_line_id, bill_id, "500.00")
+
+    list_after_offset = client.get("/api/v1/payments?page=1&page_size=20", headers=auth_headers)
+    assert list_after_offset.status_code == 200, list_after_offset.text
+    payment_after_offset = next(
+        item for item in list_after_offset.json()["items"] if item["id"] == payment_id
+    )
+    assert payment_after_offset["prepayment_status"] == "FULLY_ALLOCATED"
+    assert payment_after_offset["allocated_amt"] == "500.00"
+    assert payment_after_offset["unapplied_amt"] == "0.00"
+
+    reverse_resp = client.post(f"{OFFSETS_URL}/{offset['id']}/reverse", headers=auth_headers)
+    assert reverse_resp.status_code == 200, reverse_resp.text
+
+    list_after_reverse = client.get("/api/v1/payments?page=1&page_size=20", headers=auth_headers)
+    assert list_after_reverse.status_code == 200, list_after_reverse.text
+    payment_after_reverse = next(
+        item for item in list_after_reverse.json()["items"] if item["id"] == payment_id
+    )
+    assert payment_after_reverse["prepayment_status"] == "UNALLOCATED"
+    assert payment_after_reverse["allocated_amt"] == "0.00"
+    assert payment_after_reverse["unapplied_amt"] == "500.00"
