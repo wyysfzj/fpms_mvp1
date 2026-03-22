@@ -82,9 +82,16 @@ export async function getTaskLogs(taskId: string): Promise<TaskLog[]> {
  * Get paginated list of tasks
  */
 export async function getTasks(params: TaskListParams = {}): Promise<Pagination<Task>> {
-    const { page = 1, page_size = 20, status, case_id, client_id } = params
+    const { page = 1, page_size = 20, status, case_id, client_id, as } = params
     const response = await http.get<Pagination<BackendTask>>('/tasks', {
-        params: { page, page_size, ...(status ? { status } : {}), ...(case_id ? { case_id } : {}), ...(client_id ? { client_id } : {}) }
+        params: {
+            page,
+            page_size,
+            ...(status ? { status } : {}),
+            ...(case_id ? { case_id } : {}),
+            ...(client_id ? { client_id } : {}),
+            ...(as ? { as } : {}),
+        }
     })
 
     return {
@@ -123,10 +130,14 @@ export async function cancelTask(id: string | number): Promise<void> {
 }
 
 /**
+ * Delete a manually maintained task
+ */
+export async function deleteTask(id: string | number): Promise<void> {
+    await http.delete(`/tasks/${id}`)
+}
+
+/**
  * Get today's reminders for worker or supervisor
- * TODO: /tasks/today endpoint still uses old TaskListItemOut schema and does not return
- * case_no, remark, created_at, updated_at like /tasks does. If TodayReminders.vue needs
- * case_no, backend must enrich this endpoint to match /tasks response shape.
  */
 export async function getTodayReminders(mode: 'worker' | 'supervisor'): Promise<Pagination<Task>> {
     const response = await http.get<Pagination<BackendTask>>('/tasks/today', {

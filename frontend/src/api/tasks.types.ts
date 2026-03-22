@@ -41,6 +41,7 @@ export interface TaskListParams {
     status?: string
     case_id?: string
     client_id?: string
+    as?: 'worker' | 'supervisor'
 }
 
 export interface TaskCreatePayload {

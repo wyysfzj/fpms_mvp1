@@ -56,6 +56,24 @@
 
           <el-row :gutter="20">
             <el-col :span="12">
+              <el-form-item label="文件模板">
+                <el-select
+                  v-model="form.doc_template_id"
+                  placeholder="选择模板（可选）"
+                  clearable
+                  filterable
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="t in filteredTemplates"
+                    :key="t.id"
+                    :label="`${t.code} — ${t.name}`"
+                    :value="t.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
               <el-form-item label="文档日期" prop="doc_date" :error="fieldErrors.get('doc_date')?.join(', ')">
                 <el-date-picker
                   v-model="form.doc_date"
@@ -67,6 +85,9 @@
                 />
               </el-form-item>
             </el-col>
+          </el-row>
+
+          <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
                 <el-input
@@ -77,6 +98,25 @@
               </el-form-item>
             </el-col>
           </el-row>
+
+          <div v-if="selectedTemplate" class="template-hints">
+            <div class="template-hints-title">模板规则提示</div>
+            <div class="template-hints-list">
+              <el-tag v-if="selectedTemplate.need_reply" type="warning" size="small">需要回复</el-tag>
+              <el-tag v-if="selectedTemplate.deadline_template_code" type="danger" size="small">
+                自动建期限：{{ selectedTemplate.deadline_template_code }}
+              </el-tag>
+              <el-tag v-if="selectedTemplate.fee_draft_type" type="success" size="small">
+                自动建费用草稿：{{ selectedTemplate.fee_draft_type }}
+              </el-tag>
+              <el-tag v-if="selectedTemplate.status_effect" type="info" size="small">
+                状态变更：{{ selectedTemplate.status_effect }}
+              </el-tag>
+              <el-tag v-if="selectedTemplate.reply_to_template_code" type="info" size="small">
+                回复模板：{{ selectedTemplate.reply_to_template_code }}
+              </el-tag>
+            </div>
+          </div>
         </div>
 
         <div class="form-section">
@@ -97,12 +137,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { getDocument, updateDocument } from '../../../api/documents'
-import type { Document, DocumentUpdatePayload } from '../../../api/documents.types'
+import { getDocument, getDocTemplates, updateDocument } from '../../../api/documents'
+import type { DocTemplate, Document, DocumentUpdatePayload } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -115,16 +155,24 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref<ApiError | null>(null)
 const docData = ref<Document | null>(null)
+const docTemplates = ref<DocTemplate[]>([])
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 
 const form = reactive<DocumentUpdatePayload>({
   title: '',
   direction: undefined,
   case_id: '',
+  doc_template_id: null,
   doc_date: '',
   doc_type: '',
   description: '',
 })
+const filteredTemplates = computed(() =>
+  docTemplates.value.filter((t) => !form.direction || t.direction === form.direction)
+)
+const selectedTemplate = computed(
+  () => docTemplates.value.find((t) => t.id === form.doc_template_id) || null
+)
 
 const rules: FormRules = {
   title: [
@@ -151,6 +199,7 @@ async function fetchDocument() {
     form.title = docData.value.title || ''
     form.direction = docData.value.direction
     form.case_id = docData.value.case_id || ''
+    form.doc_template_id = docData.value.doc_template_id || null
     form.doc_date = docData.value.doc_date || ''
     form.doc_type = docData.value.doc_type || ''
     form.description = docData.value.description || ''
@@ -199,6 +248,13 @@ function handleCancel() {
 
 onMounted(() => {
   fetchDocument()
+  getDocTemplates({ enabled: true, page_size: 100 })
+    .then((result) => {
+      docTemplates.value = result.items
+    })
+    .catch(() => {
+      // Silently ignore
+    })
 })
 </script>
 
@@ -213,5 +269,24 @@ onMounted(() => {
 
 .full-width {
   width: 100%;
+}
+
+.template-hints {
+  margin-bottom: 20px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+}
+
+.template-hints-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.template-hints-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 </style>

@@ -107,6 +107,19 @@
                   </router-link>
                 </span>
               </div>
+              <div v-if="templateHints.length" class="info-item info-item-full">
+                <span class="info-label">模板规则</span>
+                <div class="info-value template-rule-list">
+                  <el-tag
+                    v-for="hint in templateHints"
+                    :key="hint"
+                    size="small"
+                    class="template-rule-tag"
+                  >
+                    {{ hint }}
+                  </el-tag>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -140,8 +153,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getDocument } from '../../../api/documents'
-import type { Document } from '../../../api/documents.types'
+import { getDocument, getDocTemplate } from '../../../api/documents'
+import type { DocTemplate, Document } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import AttachmentList from '../components/AttachmentList.vue'
@@ -155,11 +168,30 @@ const router = useRouter()
 const pageContext = usePageContext()
 
 const doc = ref<Document | null>(null)
+const docTemplate = ref<DocTemplate | null>(null)
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 
 const directionClass = computed(() => {
   return doc.value?.direction === 'IN' ? 'direction-in' : 'direction-out'
+})
+const templateHints = computed(() => {
+  if (!docTemplate.value) return []
+  const hints: string[] = []
+  if (docTemplate.value.need_reply) hints.push('需要回复')
+  if (docTemplate.value.deadline_template_code) {
+    hints.push(`自动建期限：${docTemplate.value.deadline_template_code}`)
+  }
+  if (docTemplate.value.fee_draft_type) {
+    hints.push(`自动建费用草稿：${docTemplate.value.fee_draft_type}`)
+  }
+  if (docTemplate.value.status_effect) {
+    hints.push(`状态变更：${docTemplate.value.status_effect}`)
+  }
+  if (docTemplate.value.reply_to_template_code) {
+    hints.push(`回复模板：${docTemplate.value.reply_to_template_code}`)
+  }
+  return hints
 })
 
 async function fetchDocument() {
@@ -173,6 +205,9 @@ async function fetchDocument() {
 
   try {
     doc.value = await getDocument(id)
+    docTemplate.value = doc.value.doc_template_id
+      ? await getDocTemplate(doc.value.doc_template_id)
+      : null
     pageContext.setBreadcrumb(['案件管理', '文档详情', doc.value.doc_type || doc.value.id])
   } catch (err) {
     error.value = err as ApiError
@@ -240,5 +275,19 @@ onBeforeUnmount(() => {
 
 .reply-link:hover {
   text-decoration: underline;
+}
+
+.info-item-full {
+  grid-column: 1 / -1;
+}
+
+.template-rule-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.template-rule-tag {
+  margin-right: 0;
 }
 </style>

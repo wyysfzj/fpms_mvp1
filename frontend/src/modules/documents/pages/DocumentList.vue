@@ -15,6 +15,15 @@
     <!-- Filter Bar -->
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6">
+        <el-input
+          v-model="filterKeyword"
+          placeholder="按标题或文号搜索"
+          clearable
+          @keyup.enter="onFilterChange"
+          @clear="onFilterChange"
+        />
+      </el-col>
+      <el-col :span="6">
         <el-select v-model="filterDirection" placeholder="全部" clearable @change="onFilterChange">
           <el-option label="全部" value="" />
           <el-option label="收文" value="IN" />
@@ -36,6 +45,52 @@
             :value="c.id"
           />
         </el-select>
+      </el-col>
+      <el-col :span="6">
+        <el-select
+          v-model="filterTemplateId"
+          placeholder="全部模板"
+          clearable
+          filterable
+          @change="onFilterChange"
+        >
+          <el-option
+            v-for="t in templateOptions"
+            :key="t.id"
+            :label="`${t.code} — ${t.name}`"
+            :value="t.id"
+          />
+        </el-select>
+      </el-col>
+    </el-row>
+    <el-row :gutter="16" style="margin-bottom: 16px">
+      <el-col :span="6">
+        <el-date-picker
+          v-model="filterDateRange"
+          type="daterange"
+          start-placeholder="起始日期"
+          end-placeholder="结束日期"
+          value-format="YYYY-MM-DD"
+          class="full-width"
+          clearable
+          @change="onFilterChange"
+        />
+      </el-col>
+      <el-col :span="6">
+        <el-select
+          v-model="filterReplyState"
+          placeholder="全部回复状态"
+          clearable
+          @change="onFilterChange"
+        >
+          <el-option label="全部回复状态" value="" />
+          <el-option label="需回复" value="PENDING" />
+          <el-option label="已回复" value="DONE" />
+          <el-option label="无需回复" value="NONE" />
+        </el-select>
+      </el-col>
+      <el-col :span="6">
+        <el-button @click="resetFilters">重置筛选</el-button>
       </el-col>
     </el-row>
 
@@ -127,10 +182,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import dayjs from 'dayjs'
-import { getDocuments } from '../../../api/documents'
+import { getDocuments, getDocTemplates } from '../../../api/documents'
 import { getClients } from '../../../api/clients'
 import type { Client } from '../../../api/clients.types'
-import type { Document } from '../../../api/documents.types'
+import type { DocTemplate, Document } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
@@ -146,9 +201,14 @@ const error = ref<ApiError | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const filterKeyword = ref('')
 const filterDirection = ref<'' | 'IN' | 'OUT'>('')
 const filterClientId = ref('')
+const filterTemplateId = ref('')
+const filterDateRange = ref<string[]>([])
+const filterReplyState = ref<'' | 'PENDING' | 'DONE' | 'NONE'>('')
 const clientOptions = ref<Client[]>([])
+const templateOptions = ref<DocTemplate[]>([])
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 
 function onFilterChange() {
@@ -160,7 +220,27 @@ async function fetchDocuments() {
   loading.value = true
   error.value = null
   try {
-    const result = await getDocuments({ page: page.value, page_size: pageSize.value, direction: filterDirection.value || undefined, client_id: filterClientId.value || undefined })
+    const [date_from, date_to] = filterDateRange.value
+    const need_reply =
+      filterReplyState.value === 'NONE' ? false : filterReplyState.value ? true : undefined
+    const replied =
+      filterReplyState.value === 'PENDING'
+        ? false
+        : filterReplyState.value === 'DONE'
+          ? true
+          : undefined
+    const result = await getDocuments({
+      page: page.value,
+      page_size: pageSize.value,
+      q: filterKeyword.value.trim() || undefined,
+      direction: filterDirection.value || undefined,
+      client_id: filterClientId.value || undefined,
+      doc_template_id: filterTemplateId.value || undefined,
+      need_reply,
+      replied,
+      date_from: date_from || undefined,
+      date_to: date_to || undefined,
+    })
     documents.value = result.items
     total.value = result.total
   } catch (err) {
@@ -197,13 +277,37 @@ async function loadClients() {
   }
 }
 
+async function loadTemplates() {
+  try {
+    const result = await getDocTemplates({ enabled: true, page_size: 100 })
+    templateOptions.value = result.items
+  } catch {
+    // silently ignore
+  }
+}
+
+function resetFilters() {
+  filterKeyword.value = ''
+  filterDirection.value = ''
+  filterClientId.value = ''
+  filterTemplateId.value = ''
+  filterDateRange.value = []
+  filterReplyState.value = ''
+  onFilterChange()
+}
+
 onMounted(() => {
   fetchDocuments()
   loadClients()
+  loadTemplates()
 })
 </script>
 
 <style scoped>
+.full-width {
+  width: 100%;
+}
+
 .doc-case-link {
   color: var(--color-primary);
   text-decoration: none;

@@ -102,9 +102,33 @@ function toUpdatePayload(data: DocumentUpdatePayload): Record<string, unknown> {
  * Get paginated list of documents
  */
 export async function getDocuments(params: DocumentListParams = {}): Promise<Pagination<Document>> {
-    const { page = 1, page_size = 20, direction, case_id, client_id } = params
+    const {
+        page = 1,
+        page_size = 20,
+        q,
+        direction,
+        doc_template_id,
+        case_id,
+        client_id,
+        need_reply,
+        replied,
+        date_from,
+        date_to,
+    } = params
     const response = await http.get<Pagination<BackendDocument>>('/documents', {
-        params: { page, page_size, ...(direction ? { direction } : {}), ...(case_id ? { case_id } : {}), ...(client_id ? { client_id } : {}) }
+        params: {
+            page,
+            page_size,
+            ...(q ? { q } : {}),
+            ...(direction ? { direction } : {}),
+            ...(doc_template_id ? { doc_template_id } : {}),
+            ...(case_id ? { case_id } : {}),
+            ...(client_id ? { client_id } : {}),
+            ...(need_reply !== undefined ? { need_reply } : {}),
+            ...(replied !== undefined ? { replied } : {}),
+            ...(date_from ? { date_from } : {}),
+            ...(date_to ? { date_to } : {}),
+        }
     })
 
     return {

@@ -59,12 +59,15 @@
           <span v-if="task.case_no" class="reminder-case">
             案件：{{ task.case_no }}
           </span>
-          <span v-if="task.assigned_to" class="reminder-assignee">
-            {{ task.assigned_to }}
+          <span v-if="task.client_name" class="reminder-client">
+            客户：{{ task.client_name }}
+          </span>
+          <span v-if="displayAssignee(task)" class="reminder-assignee">
+            {{ displayAssignee(task) }}
           </span>
         </div>
-        <div v-if="task.priority" class="reminder-priority" :class="getPriorityClass(task.priority)">
-          {{ getTaskPriorityText(task.priority) }}
+        <div v-if="task.internal_due" class="reminder-secondary">
+          内部期限：{{ formatDate(task.internal_due) }}
         </div>
       </div>
     </div>
@@ -79,7 +82,7 @@ import { getTodayReminders } from '../../../api/tasks'
 import type { Task } from '../../../api/tasks.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
-import { getTaskPriorityText, getTaskStatusText } from '../../../constants/displayText'
+import { getTaskStatusText } from '../../../constants/displayText'
 
 const router = useRouter()
 
@@ -149,18 +152,14 @@ function getStatusType(status: string): '' | 'success' | 'warning' | 'danger' | 
   }
 }
 
-function getPriorityClass(priority?: string): string {
-  switch (priority?.toLowerCase()) {
-    case 'high':
-    case 'urgent':
-      return 'priority-high'
-    case 'medium':
-      return 'priority-medium'
-    case 'low':
-      return 'priority-low'
-    default:
-      return ''
+function displayAssignee(task: Task): string {
+  if (viewMode.value === 'worker' && task.supervisor_id) {
+    return `监督人：${task.supervisor_id}`
   }
+  if (viewMode.value === 'supervisor' && task.worker_id) {
+    return `负责人：${task.worker_id}`
+  }
+  return task.assigned_to ? `负责人：${task.assigned_to}` : ''
 }
 
 onMounted(() => {
@@ -229,23 +228,9 @@ onMounted(() => {
   font-family: var(--font-mono);
 }
 
-.reminder-priority {
-  position: absolute;
-  top: 16px;
-  right: 16px;
+.reminder-secondary {
+  margin-top: 8px;
   font-size: 12px;
-  font-weight: 500;
-}
-
-.priority-high {
-  color: var(--color-danger);
-}
-
-.priority-medium {
-  color: #F59E0B;
-}
-
-.priority-low {
   color: var(--text-sub);
 }
 

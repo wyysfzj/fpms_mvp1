@@ -32,13 +32,13 @@
         </template>
       </el-table-column>
       <el-table-column label="状态变更" width="120">
-        <template #default="{ row }">{{ row.status_effect || '—' }}</template>
+        <template #default="{ row }">{{ getStatusEffectLabel(row.status_effect) }}</template>
       </el-table-column>
       <el-table-column label="期限模板" width="140">
-        <template #default="{ row }">{{ row.deadline_template_code || '—' }}</template>
+        <template #default="{ row }">{{ getDeadlineTemplateLabel(row.deadline_template_code) }}</template>
       </el-table-column>
       <el-table-column label="费用类型" width="120">
-        <template #default="{ row }">{{ row.fee_draft_type || '—' }}</template>
+        <template #default="{ row }">{{ getFeeDraftTypeLabel(row.fee_draft_type) }}</template>
       </el-table-column>
       <el-table-column label="需回复" width="80">
         <template #default="{ row }">
@@ -111,8 +111,8 @@
           <el-col :span="12">
             <el-form-item label="方向">
               <el-select v-model="form.direction" style="width: 100%">
-                <el-option label="收文 (IN)" value="IN" />
-                <el-option label="发文 (OUT)" value="OUT" />
+                <el-option label="收文" value="IN" />
+                <el-option label="发文" value="OUT" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -125,12 +125,12 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="状态变更">
-              <el-input v-model.trim="form.status_effect" placeholder="例如：PUBLISHED" />
+              <el-input v-model.trim="form.status_effect" placeholder="请输入状态编码" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="状态恢复">
-              <el-input v-model.trim="form.status_restore" placeholder="例如：SUB_EXAM" />
+              <el-input v-model.trim="form.status_restore" placeholder="请输入恢复状态编码" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -149,7 +149,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="费用类型">
-              <el-input v-model.trim="form.fee_draft_type" placeholder="例如：REG_FEE" />
+              <el-input v-model.trim="form.fee_draft_type" placeholder="请输入费用草稿类型编码" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -165,20 +165,20 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="费用项目列表 (JSON)">
+        <el-form-item label="费用项目列表">
           <el-input
             v-model="form.fee_item_list"
             type="textarea"
             :rows="3"
-            placeholder='[{"fee_code":"REG_FEE","fee_name":"登记费","amount":200}]'
+            placeholder="请输入费用项目配置"
           />
         </el-form-item>
-        <el-form-item label="输入字段定义 (JSON)">
+        <el-form-item label="输入字段定义">
           <el-input
             v-model="form.input_fields"
             type="textarea"
             :rows="3"
-            placeholder='{"field_name":{"label":"字段标签","type":"text"}}'
+            placeholder="请输入输入字段配置"
           />
         </el-form-item>
       </el-form>
@@ -201,6 +201,7 @@ import { getTaskTemplates } from '../../../api/tasks'
 import type { TaskTemplate } from '../../../api/tasks.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import { getCaseStatusText } from '../../../constants/displayText'
 
 const templates = ref<DocTemplate[]>([])
 const loading = ref(false)
@@ -235,6 +236,34 @@ const form = reactive({
 const formRules: FormRules = {
   code: [{ required: true, message: '编码为必填项', trigger: 'blur' }],
   name: [{ required: true, message: '名称为必填项', trigger: 'blur' }],
+}
+
+const FEE_DRAFT_TYPE_TEXT: Record<string, string> = {
+  APPLY_FEE: '申请费草稿',
+  OA_FEE: '审查意见费草稿',
+  GRANT_FEE: '授权费草稿',
+  ANNUITY_FEE: '年费草稿',
+  INVALIDATION_FEE: '无效费草稿',
+  LITIGATION_FEE: '诉讼费草稿',
+  CONSULT_FEE: '顾问费草稿',
+  SEARCH_FEE: '检索费草稿',
+  INTERMEDIATE_FEE: '中间文件费草稿',
+}
+
+function getStatusEffectLabel(status?: string | null): string {
+  if (!status) return '—'
+  return getCaseStatusText(status)
+}
+
+function getDeadlineTemplateLabel(code?: string | null): string {
+  if (!code) return '—'
+  const matched = taskTemplateOptions.value.find((item) => item.code === code)
+  return matched?.name || code
+}
+
+function getFeeDraftTypeLabel(type?: string | null): string {
+  if (!type) return '—'
+  return FEE_DRAFT_TYPE_TEXT[type] || type
 }
 
 async function fetchTemplates() {

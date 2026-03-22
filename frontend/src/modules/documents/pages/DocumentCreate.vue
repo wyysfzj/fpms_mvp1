@@ -2,19 +2,19 @@
   <div class="page-container">
     <div class="page-header">
       <div class="page-header-left">
-        <h1 class="page-title">新建文档</h1>
+        <h1 class="page-title">登记往来文件</h1>
       </div>
       <div class="page-header-right">
         <el-button @click="handleCancel">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">
-          创建文档
+        <el-button type="primary" :loading="saving" :disabled="isCaseContextUnavailable" @click="handleSave">
+          登记往来文件
         </el-button>
       </div>
     </div>
 
     <!-- Error Banner -->
-    <div v-if="error" class="page-error">
-      <ApiErrorBanner :error="error" @dismiss="error = null" />
+    <div v-if="activeError" class="page-error">
+      <ApiErrorBanner :error="activeError" @dismiss="handleDismissError" />
     </div>
 
     <!-- Form -->
@@ -27,10 +27,10 @@
         class="document-form"
       >
         <div class="form-section">
-          <h3 class="form-section-title">文档信息</h3>
+          <h3 class="form-section-title">往来文件信息</h3>
           
           <el-form-item label="标题" prop="title" :error="fieldErrors.get('title')?.join(', ')">
-            <el-input v-model="form.title" placeholder="请输入文档标题" />
+            <el-input v-model="form.title" placeholder="请输入文件标题" />
           </el-form-item>
 
           <el-row :gutter="20">
@@ -47,7 +47,7 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="文档日期" prop="doc_date" :error="fieldErrors.get('doc_date')?.join(', ')">
+              <el-form-item label="文件日期" prop="doc_date" :error="fieldErrors.get('doc_date')?.join(', ')">
                 <el-date-picker
                   v-model="form.doc_date"
                   type="date"
@@ -62,7 +62,7 @@
 
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="文档模板">
+              <el-form-item label="文件模板">
                 <el-select
                   v-model="form.doc_template_id"
                   placeholder="选择模板（可选）"
@@ -78,16 +78,13 @@
                     :value="t.id"
                   />
                 </el-select>
-                <div v-if="selectedTemplate?.need_reply" class="field-hint">
-                  <el-tag type="warning" size="small">需要回复</el-tag>
-                </div>
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="回复来源文档">
+              <el-form-item label="回复来源文件">
                 <el-select
                   v-model="form.reply_to_id"
-                  placeholder="选择回复的文档（可选）"
+                  placeholder="选择回复来源文件（可选）"
                   clearable
                   filterable
                   style="width: 100%"
@@ -109,7 +106,23 @@
 
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
+              <el-form-item
+                v-if="hasLockedCaseContext"
+                label="所属案件"
+                prop="case_id"
+                :error="fieldErrors.get('case_id')?.join(', ')"
+              >
+                <el-input
+                  :model-value="lockedCaseNo"
+                  readonly
+                  class="full-width"
+                  placeholder="案件编号已自动带入"
+                />
+                <div class="field-hint">
+                  该案件已从案件详情页带入，当前流程不可修改
+                </div>
+              </el-form-item>
+              <el-form-item v-else label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
                 <el-input
                   v-model.trim="form.case_id"
                   placeholder="请输入案件编号"
@@ -121,18 +134,37 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="文档类型" prop="doc_type" :error="fieldErrors.get('doc_type')?.join(', ')">
+              <el-form-item label="文件类型" prop="doc_type" :error="fieldErrors.get('doc_type')?.join(', ')">
                 <el-input v-model="form.doc_type" placeholder="例如：审查意见通知书、答复文件" />
               </el-form-item>
             </el-col>
           </el-row>
+
+          <div v-if="selectedTemplate" class="template-hints">
+            <div class="template-hints-title">模板规则提示</div>
+            <div class="template-hints-list">
+              <el-tag v-if="selectedTemplate.need_reply" type="warning" size="small">需要回复</el-tag>
+              <el-tag v-if="selectedTemplate.deadline_template_code" type="danger" size="small">
+                自动建期限：{{ selectedTemplate.deadline_template_code }}
+              </el-tag>
+              <el-tag v-if="selectedTemplate.fee_draft_type" type="success" size="small">
+                自动建费用草稿：{{ selectedTemplate.fee_draft_type }}
+              </el-tag>
+              <el-tag v-if="selectedTemplate.status_effect" type="info" size="small">
+                状态变更：{{ selectedTemplate.status_effect }}
+              </el-tag>
+              <el-tag v-if="selectedTemplate.reply_to_template_code" type="info" size="small">
+                回复模板：{{ selectedTemplate.reply_to_template_code }}
+              </el-tag>
+            </div>
+          </div>
 
           <el-form-item label="描述" prop="description" :error="fieldErrors.get('description')?.join(', ')">
             <el-input 
               v-model="form.description" 
               type="textarea" 
               :rows="3" 
-              placeholder="请输入文档描述" 
+              placeholder="请输入文件说明" 
             />
           </el-form-item>
         </div>
@@ -143,9 +175,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { getCase } from '../../../api/cases'
 import { createDocument, getDocTemplates, getDocuments } from '../../../api/documents'
 import type { DocumentCreatePayload } from '../../../api/documents.types'
 import type { DocTemplate, Document as Doc } from '../../../api/documents.types'
@@ -153,12 +186,17 @@ import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 
+const route = useRoute()
 const router = useRouter()
 
 const formRef = ref<FormInstance>()
 const saving = ref(false)
 const error = ref<ApiError | null>(null)
+const caseContextError = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
+const lockedCaseNo = ref('')
+const hasLockedCaseContext = ref(false)
+const caseContextReady = ref(false)
 
 const form = reactive<DocumentCreatePayload>({
   title: '',
@@ -179,6 +217,15 @@ const selectedTemplate = ref<DocTemplate | null>(null)
 const filteredTemplates = computed(() =>
   docTemplates.value.filter(t => t.direction === form.direction)
 )
+const activeError = computed(() => caseContextError.value ?? error.value)
+const isCaseContextUnavailable = computed(() => !caseContextReady.value)
+
+function getQueryParam(value: unknown): string {
+  if (Array.isArray(value)) {
+    return typeof value[0] === 'string' ? value[0].trim() : ''
+  }
+  return typeof value === 'string' ? value.trim() : ''
+}
 
 function onTemplateChange(templateId: string | null) {
   if (!templateId) {
@@ -205,7 +252,44 @@ watch(() => form.case_id, async (newCaseId) => {
   }
 })
 
+async function initializeCaseContext() {
+  const routeCaseId = getQueryParam(route.query.case_id)
+  const routeCaseNo = getQueryParam(route.query.case_no)
+
+  if (!routeCaseId) {
+    hasLockedCaseContext.value = false
+    caseContextReady.value = false
+    caseContextError.value = {
+      status: 400,
+      code: 'CASE_CONTEXT_REQUIRED',
+      message: '未找到关联案件，请从案件详情页重新进入往来文件登记。',
+    }
+    return
+  }
+
+  form.case_id = routeCaseId
+  lockedCaseNo.value = routeCaseNo
+  hasLockedCaseContext.value = true
+
+  try {
+    const caseData = await getCase(routeCaseId)
+    lockedCaseNo.value = caseData.case_no || lockedCaseNo.value
+    caseContextReady.value = true
+    caseContextError.value = null
+  } catch {
+    form.case_id = ''
+    caseContextReady.value = false
+    caseContextError.value = {
+      status: 404,
+      code: 'CASE_CONTEXT_INVALID',
+      message: '关联案件不存在或已失效，请返回案件详情页后重新登记往来文件。',
+    }
+  }
+}
+
 onMounted(async () => {
+  await initializeCaseContext()
+
   try {
     const result = await getDocTemplates({ enabled: true, page_size: 100 })
     docTemplates.value = result.items
@@ -225,11 +309,22 @@ const rules: FormRules = {
     { required: true, message: '案件编号为必填项', trigger: 'blur' },
   ],
   doc_date: [
-    { required: true, message: '文档日期为必填项', trigger: 'change' },
+    { required: true, message: '文件日期为必填项', trigger: 'change' },
   ],
 }
 
 async function handleSave() {
+  if (isCaseContextUnavailable.value) {
+    if (!caseContextError.value) {
+      caseContextError.value = {
+        status: 400,
+        code: 'CASE_CONTEXT_REQUIRED',
+        message: '未找到有效案件，当前无法登记往来文件。',
+      }
+    }
+    return
+  }
+
   fieldErrors.value = new Map()
   
   const valid = await formRef.value?.validate().catch(() => false)
@@ -252,7 +347,7 @@ async function handleSave() {
     if (form.reply_to_id) payload.reply_to_id = form.reply_to_id
 
     await createDocument(payload)
-    ElMessage.success('文档创建成功')
+    ElMessage.success('往来文件登记成功')
     router.push('/documents')
   } catch (err) {
     const apiError = err as ApiError
@@ -264,6 +359,14 @@ async function handleSave() {
   } finally {
     saving.value = false
   }
+}
+
+function handleDismissError() {
+  if (caseContextError.value) {
+    caseContextError.value = null
+    return
+  }
+  error.value = null
 }
 
 function handleCancel() {
@@ -305,5 +408,25 @@ function handleCancel() {
 .document-form .el-form-item__label {
   font-weight: 500;
   color: var(--text-main);
+}
+
+.template-hints {
+  margin-bottom: 20px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+}
+
+.template-hints-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.template-hints-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 </style>

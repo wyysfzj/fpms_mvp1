@@ -23,9 +23,15 @@ export interface Document {
 export interface DocumentListParams {
     page?: number
     page_size?: number
+    q?: string
     direction?: 'IN' | 'OUT'
+    doc_template_id?: string
     case_id?: string
     client_id?: string
+    need_reply?: boolean
+    replied?: boolean
+    date_from?: string
+    date_to?: string
 }
 
 export interface DocumentCreatePayload {

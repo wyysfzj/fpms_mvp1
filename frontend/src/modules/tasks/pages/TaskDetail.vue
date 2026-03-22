@@ -30,6 +30,14 @@
         >
           取消
         </el-button>
+        <el-button
+          v-if="task"
+          type="danger"
+          plain
+          @click="handleDelete"
+        >
+          删除
+        </el-button>
       </div>
     </div>
 
@@ -148,7 +156,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getTask, closeTask, reopenTask, cancelTask } from '../../../api/tasks'
+import { getTask, closeTask, reopenTask, cancelTask, deleteTask } from '../../../api/tasks'
 import type { Task } from '../../../api/tasks.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -275,6 +283,22 @@ async function handleCancel() {
       { confirmButtonText: ZH.common.confirm, cancelButtonText: ZH.common.cancel, type: 'warning' }
     )
     await executeAction('cancel', cancelTask)
+  } catch {
+    // User cancelled
+  }
+}
+
+async function handleDelete() {
+  if (!task.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确认删除任务“${task.value.title}”吗？该操作不可撤销。`,
+      '删除任务',
+      { confirmButtonText: '删除', cancelButtonText: ZH.common.cancel, type: 'warning' }
+    )
+    await deleteTask(task.value.id)
+    ElMessage.success('任务删除成功')
+    goBack()
   } catch {
     // User cancelled
   }

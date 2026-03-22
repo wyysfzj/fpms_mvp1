@@ -15,6 +15,13 @@
     <!-- Filter Bar -->
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6">
+        <el-segmented
+          v-model="viewMode"
+          :options="viewOptions"
+          @change="onFilterChange"
+        />
+      </el-col>
+      <el-col :span="6">
         <el-select v-model="filterStatus" placeholder="全部" clearable @change="onFilterChange">
           <el-option label="全部" value="" />
           <el-option label="待处理" value="OPEN" />
@@ -141,6 +148,9 @@
                   >
                     <span class="action-danger">{{ ZH.taskList.cancel }}</span>
                   </el-dropdown-item>
+                  <el-dropdown-item divided @click="handleDelete(row)">
+                    <span class="action-danger">删除</span>
+                  </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -157,7 +167,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getTasks, closeTask, reopenTask, cancelTask } from '../../../api/tasks'
+import { getTasks, closeTask, reopenTask, cancelTask, deleteTask } from '../../../api/tasks'
 import { getClients } from '../../../api/clients'
 import type { Client } from '../../../api/clients.types'
 import type { Task } from '../../../api/tasks.types'
@@ -177,8 +187,14 @@ const pageSize = ref(20)
 const total = ref(0)
 const filterStatus = ref('')
 const filterClientId = ref('')
+const viewMode = ref<'all' | 'worker' | 'supervisor'>('all')
 const clientOptions = ref<Client[]>([])
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+const viewOptions = [
+  { label: '全部任务', value: 'all' },
+  { label: '我的任务', value: 'worker' },
+  { label: '团队任务', value: 'supervisor' },
+]
 
 function onFilterChange() {
   page.value = 1
@@ -192,7 +208,13 @@ async function fetchTasks() {
   loading.value = true
   error.value = null
   try {
-    const result = await getTasks({ page: page.value, page_size: pageSize.value, status: filterStatus.value || undefined, client_id: filterClientId.value || undefined })
+    const result = await getTasks({
+      page: page.value,
+      page_size: pageSize.value,
+      status: filterStatus.value || undefined,
+      client_id: filterClientId.value || undefined,
+      as: viewMode.value === 'all' ? undefined : viewMode.value,
+    })
     tasks.value = result.items
     total.value = result.total
   } catch (err) {
@@ -301,6 +323,19 @@ async function handleCancel(row: Task) {
       { confirmButtonText: ZH.common.confirm, cancelButtonText: ZH.common.cancel, type: 'warning' }
     )
     await executeAction(row.id, 'cancel', cancelTask)
+  } catch {
+    // User cancelled
+  }
+}
+
+async function handleDelete(row: Task) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除任务“${row.title}”吗？该操作不可撤销。`,
+      '删除任务',
+      { confirmButtonText: '删除', cancelButtonText: ZH.common.cancel, type: 'warning' }
+    )
+    await executeAction(row.id, 'delete', deleteTask)
   } catch {
     // User cancelled
   }
