@@ -950,6 +950,19 @@ def _line_amount_for_commission(commission: Commission) -> Decimal:
     return _quantize_money(s1_amount + s2_amount)
 
 
+def _apply_settlement_completion(commission: Commission, *, actor_id: str | None) -> None:
+    _to_decimal(commission.s1_amount, field_name="commission.s1_amount")
+    _to_decimal(commission.s2_amount, field_name="commission.s2_amount")
+
+    commission.s1_done = True
+    commission.s2_done = True
+    if commission.s1_done and commission.s2_done:
+        commission.status = "SETTLED"
+    elif not _normalize_optional_text(commission.status):
+        commission.status = "OPEN"
+    commission.updated_by = actor_id
+
+
 def _normalize_report_time_field(value: str | None) -> str:
     normalized = _normalize_optional_text(value)
     effective = normalized or "line_created_at"
@@ -1098,6 +1111,9 @@ def get_commission_settlement_report(
             "currency": settlement.currency,
             "line_status": line.status,
             "settlement_status": settlement.status,
+            "s1_done": commission.s1_done,
+            "s2_done": commission.s2_done,
+            "is_settleable": commission.is_settleable,
             "settleable_date": commission.settleable_date,
             "period_from": settlement.period_from,
             "period_to": settlement.period_to,
@@ -1287,6 +1303,7 @@ def generate_commission_settlement_lines(
                 updated_by=actor_id,
             )
             db.add(line)
+            _apply_settlement_completion(commission, actor_id=actor_id)
             created_count += 1
             continue
 
@@ -1300,6 +1317,7 @@ def generate_commission_settlement_lines(
         if changed:
             existing.updated_by = actor_id
             updated_count += 1
+        _apply_settlement_completion(commission, actor_id=actor_id)
 
     db.flush()
     aggregate = db.execute(

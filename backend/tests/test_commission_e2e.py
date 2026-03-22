@@ -242,6 +242,14 @@ def test_commission_settlement_generate_lines_idempotency_and_reports(
     assert generate_payload["created_count"] >= 1
     assert generate_payload["status"] == "GENERATED"
 
+    with session_factory() as db:
+        generated_commission = db.execute(
+            select(Commission).where(Commission.id == commission_id)
+        ).scalar_one()
+        assert generated_commission.s1_done is True
+        assert generated_commission.s2_done is True
+        assert generated_commission.status == "SETTLED"
+
     repeat_generate_resp = client.post(
         f"/api/v1/commission/settlements/{settlement_id}/generate-lines",
         headers=auth_headers,
@@ -258,7 +266,7 @@ def test_commission_settlement_generate_lines_idempotency_and_reports(
         params={
             "agent_id": agent_id,
             "case_id": case_id,
-            "status": "OPEN",
+            "status": "SETTLED",
             "settleable_date_from": "2026-03-01",
             "settleable_date_to": "2026-03-31",
             "page": 1,
@@ -293,6 +301,10 @@ def test_commission_settlement_generate_lines_idempotency_and_reports(
     assert "totals" in report_payload
     assert "details" in report_payload
     assert report_payload["totals"]["line_count"] >= 1
+    detail = report_payload["details"][0]
+    assert "s1_done" in detail
+    assert "s2_done" in detail
+    assert "is_settleable" in detail
 
     invalid_report_resp = client.get(
         "/api/v1/commission/reports/settlement",
@@ -319,3 +331,71 @@ def test_commission_settlement_generate_lines_idempotency_and_reports(
         headers=auth_headers,
     )
     _assert_error(closed_state_resp, 409, "COMMISSION_SETTLEMENT_CONFLICT")
+
+
+def test_manual_bill_creation_triggers_commission_auto_generation(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    client_id, case_id, agent_id = _create_client_case_with_agent(client, auth_headers)
+
+    rule_resp = client.post(
+        "/api/v1/commission/rules",
+        headers=auth_headers,
+        json={
+            "rule_name": _uid("RULE-MANUAL"),
+            "case_type": "NORMAL",
+            "fee_type": "SERVICE",
+            "flow_dir": "CN_DOMESTIC",
+            "patent_category": "INV",
+            "s1_rate": "0.10",
+            "s2_rate": "0.05",
+            "s1_fixed_amount": "0",
+            "s2_fixed_amount": "0",
+            "wait_pay": False,
+            "force_settle": False,
+            "enabled": True,
+            "effective_from": "2027-01-01",
+            "effective_to": "2027-12-31",
+        },
+    )
+    assert rule_resp.status_code == 201, rule_resp.text
+
+    manual_bill_resp = client.post(
+        "/api/v1/bills/manual",
+        headers=auth_headers,
+        json={
+            "client_id": client_id,
+            "case_id": case_id,
+            "currency": "CNY",
+            "direction": "AR",
+            "status": "UNSETTLED",
+            "bill_date": "2027-03-12",
+            "items": [
+                {
+                    "description": "Manual service bill",
+                    "quantity": 1,
+                    "unit_price": "1000.00",
+                    "fee_type": "SERVICE",
+                }
+            ],
+        },
+    )
+    assert manual_bill_resp.status_code == 201, manual_bill_resp.text
+
+    commission_list_resp = client.get(
+        "/api/v1/commission",
+        headers=auth_headers,
+        params={
+            "agent_id": agent_id,
+            "case_id": case_id,
+            "page": 1,
+            "page_size": 20,
+        },
+    )
+    assert commission_list_resp.status_code == 200, commission_list_resp.text
+    items = commission_list_resp.json()["items"]
+    assert len(items) == 1, items
+    assert items[0]["case_id"] == case_id
+    assert items[0]["agent_id"] == agent_id
+    assert Decimal(str(items[0]["base_fee"])) == Decimal("1000.00")
