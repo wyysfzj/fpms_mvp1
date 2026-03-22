@@ -9,6 +9,7 @@ class CaseType(str, Enum):
     NORMAL = "NORMAL"  # Normal application
     PCT_INTL = "PCT_INTL"  # PCT international phase
     PCT_NATL = "PCT_NATL"  # PCT national phase
+    INVALIDATION = "INVALIDATION"  # Invalidation proceeding
     PRIORITY = "PRIORITY"  # Priority claim only
     CONSULTING = "CONSULTING"  # Consulting project
     SEARCH = "SEARCH"  # Prior-art / patent search project
@@ -52,5 +53,7 @@ class CaseStatus(str, Enum):
     OA1 = "OA1"  # 第一次审查意见 - First office action
     OA2 = "OA2"  # 第二次审查意见 - Second office action
     REEXAM = "REEXAM"  # 复审 - Re-examination
+    ACCEPTED = "ACCEPTED"  # 受理完成 - Accepted / accepted notice recorded
+    GRANT_PENDING = "GRANT_PENDING"  # 待授权缴费/登记 - Grant pending
     TERMINATED = "TERMINATED"  # 终止 - Patent terminated
     INVALIDATED = "INVALIDATED"  # 无效 - Patent invalidated

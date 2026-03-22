@@ -34,6 +34,10 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
     client_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("t_client.id"), nullable=True
     )
+    foreign_agent_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_client.id"), nullable=True
+    )
+    foreign_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
     title_cn: Mapped[str | None] = mapped_column(Text, nullable=True)
     title_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     app_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -55,6 +59,28 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
     spec_pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     claim_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     has_exam_request: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    # -- Deferred Batch 1: PCT / invalidation --
+    ro: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    isa: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ipea: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    intl_app_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    intl_app_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    intl_pub_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    intl_pub_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    intl_pub_lang: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    need_iper: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    iper_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    pct_national_entry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    original_case_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_case.id"), nullable=True
+    )
+    invalid_client_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_client.id"), nullable=True
+    )
+    invalid_patentee: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    invalid_requester: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    invalid_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # -- A3: Agent assignment (no FK — app-level validation only) --
     primary_agent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -123,3 +149,23 @@ class T_Priority(UUIDPrimaryKeyMixin, AuditMixin, Base):
     prio_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     __table_args__ = (UniqueConstraint("case_id", "seq", name="uq_priority_seq"),)
+
+
+class T_BioDeposit(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    """Bio deposit records attached to a case."""
+
+    __tablename__ = "t_bio_deposit"
+
+    case_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("t_case.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    deposit_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    deposit_unit_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    deposit_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    __table_args__ = (UniqueConstraint("case_id", "seq", name="uq_bio_deposit_seq"),)

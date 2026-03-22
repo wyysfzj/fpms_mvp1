@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
 
@@ -29,12 +29,22 @@ class PriorityIn(BaseModel):
     prio_date: date | None = None
 
 
+class BioDepositIn(BaseModel):
+    seq: int = Field(..., ge=1)
+    deposit_no: str | None = Field(None, max_length=64)
+    deposit_unit_name: str | None = Field(None, max_length=255)
+    deposit_date: date | None = None
+    name: str | None = Field(None, max_length=255)
+
+
 class CaseCreate(BaseModel):
     case_no: str = Field(..., min_length=1, max_length=64, strip_whitespace=True)
     case_type: CaseType = CaseType.NORMAL
     patent_category: PatentCategory = PatentCategory.INV
     flow_dir: FlowDir = FlowDir.CN_DOMESTIC
     client_id: str | None = None
+    foreign_agent_id: str | None = None
+    foreign_ref: str | None = Field(None, max_length=64)
     title_cn: str | None = None
     title_en: str | None = None
     app_no: str | None = Field(None, max_length=64)
@@ -49,6 +59,23 @@ class CaseCreate(BaseModel):
     spec_pages: int | None = Field(None, ge=0)
     claim_count: int | None = Field(None, ge=0)
     has_exam_request: bool | None = None
+    # Deferred Batch 1 — PCT / invalidation
+    ro: str | None = Field(None, max_length=64)
+    isa: str | None = Field(None, max_length=64)
+    ipea: str | None = Field(None, max_length=64)
+    intl_app_no: str | None = Field(None, max_length=64)
+    intl_app_date: date | None = None
+    intl_pub_no: str | None = Field(None, max_length=64)
+    intl_pub_date: date | None = None
+    intl_pub_lang: str | None = Field(None, max_length=32)
+    need_iper: bool | None = None
+    iper_date: date | None = None
+    pct_national_entry_date: date | None = None
+    original_case_id: str | None = None
+    invalid_client_id: str | None = None
+    invalid_patentee: str | None = Field(None, max_length=255)
+    invalid_requester: str | None = Field(None, max_length=255)
+    invalid_role: str | None = Field(None, max_length=32)
     # A3 — Agent assignment
     primary_agent_id: str | None = Field(None, max_length=36)
     second_agent_id: str | None = Field(None, max_length=36)
@@ -61,6 +88,7 @@ class CaseCreate(BaseModel):
     applicants: list[CaseApplicantIn] = []
     inventors: list[CaseInventorIn] = []
     priorities: list[PriorityIn] = []
+    bio_deposits: list[BioDepositIn] = []
 
 
 class CaseCreateIn(CaseCreate):
@@ -68,10 +96,13 @@ class CaseCreateIn(CaseCreate):
 
 
 class CaseUpdateFull(BaseModel):
-    title_cn: str | None = None
+    title_cn: str | None = Field(default=None, validation_alias=AliasChoices("title_cn", "title"))
     title_en: str | None = None
     app_no: str | None = Field(None, max_length=64)
     status: CaseStatus | None = None
+    filing_date: date | None = None
+    foreign_agent_id: str | None = None
+    foreign_ref: str | None = Field(None, max_length=64)
     # A3 — Publication / Grant
     pub_date: date | None = None
     pub_no: str | None = Field(None, max_length=64)
@@ -83,6 +114,23 @@ class CaseUpdateFull(BaseModel):
     spec_pages: int | None = Field(None, ge=0)
     claim_count: int | None = Field(None, ge=0)
     has_exam_request: bool | None = None
+    # Deferred Batch 1 — PCT / invalidation
+    ro: str | None = Field(None, max_length=64)
+    isa: str | None = Field(None, max_length=64)
+    ipea: str | None = Field(None, max_length=64)
+    intl_app_no: str | None = Field(None, max_length=64)
+    intl_app_date: date | None = None
+    intl_pub_no: str | None = Field(None, max_length=64)
+    intl_pub_date: date | None = None
+    intl_pub_lang: str | None = Field(None, max_length=32)
+    need_iper: bool | None = None
+    iper_date: date | None = None
+    pct_national_entry_date: date | None = None
+    original_case_id: str | None = None
+    invalid_client_id: str | None = None
+    invalid_patentee: str | None = Field(None, max_length=255)
+    invalid_requester: str | None = Field(None, max_length=255)
+    invalid_role: str | None = Field(None, max_length=32)
     # A3 — Agent assignment
     primary_agent_id: str | None = Field(None, max_length=36)
     second_agent_id: str | None = Field(None, max_length=36)
@@ -95,6 +143,24 @@ class CaseUpdateFull(BaseModel):
     applicants: list[CaseApplicantIn] | None = None
     inventors: list[CaseInventorIn] | None = None
     priorities: list[PriorityIn] | None = None
+    bio_deposits: list[BioDepositIn] | None = None
+
+    @field_validator(
+        "filing_date",
+        "pub_date",
+        "grant_date",
+        "valid_until",
+        "intl_app_date",
+        "intl_pub_date",
+        "iper_date",
+        "pct_national_entry_date",
+        mode="before",
+    )
+    @classmethod
+    def _blank_dates_to_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class CaseUpdateLimited(BaseModel):
@@ -116,6 +182,9 @@ class CaseDetail(BaseModel):
     flow_dir: str
     client_id: str | None
     client_name: str | None = None
+    foreign_agent_id: str | None = None
+    foreign_agent_name: str | None = None
+    foreign_ref: str | None = None
     title_cn: str | None
     title_en: str | None
     app_no: str | None
@@ -133,6 +202,23 @@ class CaseDetail(BaseModel):
     spec_pages: int | None = None
     claim_count: int | None = None
     has_exam_request: bool | None = None
+    # Deferred Batch 1 — PCT / invalidation
+    ro: str | None = None
+    isa: str | None = None
+    ipea: str | None = None
+    intl_app_no: str | None = None
+    intl_app_date: str | None = None
+    intl_pub_no: str | None = None
+    intl_pub_date: str | None = None
+    intl_pub_lang: str | None = None
+    need_iper: bool | None = None
+    iper_date: str | None = None
+    pct_national_entry_date: str | None = None
+    original_case_id: str | None = None
+    invalid_client_id: str | None = None
+    invalid_patentee: str | None = None
+    invalid_requester: str | None = None
+    invalid_role: str | None = None
     # A3 — Agent assignment
     primary_agent_id: str | None = None
     second_agent_id: str | None = None
@@ -145,6 +231,7 @@ class CaseDetail(BaseModel):
     applicants: list[dict]  # CaseApplicantOut
     inventors: list[dict]  # CaseInventorOut
     priorities: list[dict]  # PriorityOut
+    bio_deposits: list[dict]
     created_at: str | None = None
     updated_at: str | None = None
 

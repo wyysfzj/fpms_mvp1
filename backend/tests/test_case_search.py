@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from app.db.session import get_db
@@ -16,6 +18,26 @@ def _unique_case_no(prefix: str = "A5") -> str:
 
 
 _MINIMAL_APPLICANT = [{"seq": 1, "is_first": True, "name_cn": "测试申请人"}]
+
+_FOREIGN_FLOW_DIRS = {"CN_OUTBOUND", "FOREIGN_INBOUND"}
+
+
+def _ensure_agent_client(client: TestClient, auth_headers: dict[str, str]) -> str:
+    """Create an AGENT-type client and return its ID."""
+    resp = client.post(
+        "/api/v1/clients",
+        json={
+            "client_code": f"AGT-{uuid4().hex[:8]}",
+            "name_cn": "外方代理所",
+            "name_en": "Foreign Agent",
+            "client_type": "AGENT",
+            "default_currency": "CNY",
+            "is_active": True,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
 
 
 def _create_case(
@@ -38,6 +60,14 @@ def _create_case(
     }
     if primary_agent_id:
         payload["primary_agent_id"] = primary_agent_id
+    # Satisfy Batch 1 cross-field validation rules
+    if case_type == "PCT_INTL" and "intl_app_no" not in extra:
+        payload["intl_app_no"] = "PCT/CN2025/000001"
+        payload["intl_app_date"] = "2025-01-01"
+    if case_type == "PCT_NATL" and "pct_national_entry_date" not in extra:
+        payload["pct_national_entry_date"] = "2025-06-01"
+    if flow_dir in _FOREIGN_FLOW_DIRS and "foreign_agent_id" not in extra:
+        payload["foreign_agent_id"] = _ensure_agent_client(client, auth_headers)
     payload.update(extra)
     resp = client.post("/api/v1/cases", json=payload, headers=auth_headers)
     assert resp.status_code == 201, f"Create failed: {resp.text}"

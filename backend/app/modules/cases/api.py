@@ -2,20 +2,181 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
 from app.core.errors import raise_business_error
 from app.db.session import get_db
-from app.modules.cases.models import Case
-from app.modules.cases.schemas import CaseCreateIn
+from app.modules.auth.models import T_User
+from app.modules.cases.models import Case, T_BioDeposit, T_CaseApplicant, T_CaseInventor, T_Priority
+from app.modules.cases.schemas import CaseCreateIn, CaseUpdateFull
+from app.modules.cases.service import (
+    create_case as create_case_service,
+)
+from app.modules.cases.service import (
+    update_case_full as update_case_full_service,
+)
 from app.modules.masterdata.clients.models import Client
 
 router = APIRouter()
+
+
+def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
+    client_names = {}
+    related_client_ids = {case.client_id, case.foreign_agent_id, case.invalid_client_id}
+    related_client_ids = {client_id for client_id in related_client_ids if client_id}
+    if related_client_ids:
+        clients = (
+            db.query(Client.id, Client.name_cn).filter(Client.id.in_(related_client_ids)).all()
+        )
+        client_names = {client.id: client.name_cn for client in clients}
+
+    applicants = (
+        db.query(
+            T_CaseApplicant.seq,
+            T_CaseApplicant.is_first,
+            T_CaseApplicant.name_cn,
+            T_CaseApplicant.name_en,
+            T_CaseApplicant.address_cn,
+            T_CaseApplicant.address_en,
+        )
+        .filter(T_CaseApplicant.case_id == case.id)
+        .order_by(T_CaseApplicant.seq)
+        .all()
+    )
+    inventors = (
+        db.query(
+            T_CaseInventor.seq,
+            T_CaseInventor.name_cn,
+            T_CaseInventor.name_en,
+        )
+        .filter(T_CaseInventor.case_id == case.id)
+        .order_by(T_CaseInventor.seq)
+        .all()
+    )
+    priorities = (
+        db.query(
+            T_Priority.seq,
+            T_Priority.country_code,
+            T_Priority.prio_no,
+            T_Priority.prio_date,
+        )
+        .filter(T_Priority.case_id == case.id)
+        .order_by(T_Priority.seq)
+        .all()
+    )
+    bio_deposits = (
+        db.query(
+            T_BioDeposit.seq,
+            T_BioDeposit.deposit_no,
+            T_BioDeposit.deposit_unit_name,
+            T_BioDeposit.deposit_date,
+            T_BioDeposit.name,
+        )
+        .filter(T_BioDeposit.case_id == case.id)
+        .order_by(T_BioDeposit.seq)
+        .all()
+    )
+
+    return {
+        "id": case.id,
+        "case_no": case.case_no,
+        "case_type": case.case_type,
+        "patent_category": case.patent_category,
+        "flow_dir": case.flow_dir,
+        "client_id": case.client_id,
+        "client_name": client_names.get(case.client_id) if case.client_id else None,
+        "foreign_agent_id": case.foreign_agent_id,
+        "foreign_agent_name": (
+            client_names.get(case.foreign_agent_id) if case.foreign_agent_id else None
+        ),
+        "foreign_ref": case.foreign_ref,
+        "title_cn": case.title_cn,
+        "title_en": case.title_en,
+        "app_no": case.app_no,
+        "status": case.status,
+        "filing_date": str(case.filing_date) if case.filing_date else None,
+        "recv_date": str(case.recv_date) if case.recv_date else None,
+        "pub_date": str(case.pub_date) if case.pub_date else None,
+        "pub_no": case.pub_no,
+        "grant_date": str(case.grant_date) if case.grant_date else None,
+        "grant_no": case.grant_no,
+        "patent_no": case.patent_no,
+        "valid_until": str(case.valid_until) if case.valid_until else None,
+        "spec_pages": case.spec_pages,
+        "claim_count": case.claim_count,
+        "has_exam_request": case.has_exam_request,
+        "ro": case.ro,
+        "isa": case.isa,
+        "ipea": case.ipea,
+        "intl_app_no": case.intl_app_no,
+        "intl_app_date": str(case.intl_app_date) if case.intl_app_date else None,
+        "intl_pub_no": case.intl_pub_no,
+        "intl_pub_date": str(case.intl_pub_date) if case.intl_pub_date else None,
+        "intl_pub_lang": case.intl_pub_lang,
+        "need_iper": case.need_iper,
+        "iper_date": str(case.iper_date) if case.iper_date else None,
+        "pct_national_entry_date": (
+            str(case.pct_national_entry_date) if case.pct_national_entry_date else None
+        ),
+        "original_case_id": case.original_case_id,
+        "invalid_client_id": case.invalid_client_id,
+        "invalid_client_name": (
+            client_names.get(case.invalid_client_id) if case.invalid_client_id else None
+        ),
+        "invalid_patentee": case.invalid_patentee,
+        "invalid_requester": case.invalid_requester,
+        "invalid_role": case.invalid_role,
+        "primary_agent_id": case.primary_agent_id,
+        "second_agent_id": case.second_agent_id,
+        "draftor_id": case.draftor_id,
+        "is_fee_monitor": case.is_fee_monitor,
+        "fee_reduction": case.fee_reduction,
+        "applicant_kind": case.applicant_kind,
+        "applicants": [
+            {
+                "seq": applicant.seq,
+                "is_first": applicant.is_first,
+                "name_cn": applicant.name_cn,
+                "name_en": applicant.name_en,
+                "address_cn": applicant.address_cn,
+                "address_en": applicant.address_en,
+            }
+            for applicant in applicants
+        ],
+        "inventors": [
+            {
+                "seq": inventor.seq,
+                "name_cn": inventor.name_cn,
+                "name_en": inventor.name_en,
+            }
+            for inventor in inventors
+        ],
+        "priorities": [
+            {
+                "seq": priority.seq,
+                "country_code": priority.country_code,
+                "prio_no": priority.prio_no,
+                "prio_date": str(priority.prio_date) if priority.prio_date else None,
+            }
+            for priority in priorities
+        ],
+        "bio_deposits": [
+            {
+                "seq": bio_deposit.seq,
+                "deposit_no": bio_deposit.deposit_no,
+                "deposit_unit_name": bio_deposit.deposit_unit_name,
+                "deposit_date": str(bio_deposit.deposit_date) if bio_deposit.deposit_date else None,
+                "name": bio_deposit.name,
+            }
+            for bio_deposit in bio_deposits
+        ],
+        "created_at": str(case.created_at) if case.created_at else None,
+        "updated_at": str(case.updated_at) if case.updated_at else None,
+    }
 
 
 @router.get("/cases", summary="List cases")
@@ -148,6 +309,7 @@ def get_cases(
 def create_case(
     payload: CaseCreateIn,
     _perm: None = Depends(require_perm("Case.Create")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -180,141 +342,8 @@ def create_case(
     - 409: case_no already exists
     - 422: VALIDATION_ERROR
     """
-    case_no = payload.case_no
-    if not case_no:
-        raise_business_error(
-            "CASE_INVALID",
-            "case_no is required",
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    exists = db.query(Case).filter(Case.case_no == case_no).first()
-    if exists:
-        raise_business_error(
-            "CASE_NO_DUPLICATE",
-            "case_no already exists",
-            status_code=status.HTTP_409_CONFLICT,
-        )
-
-    from sqlalchemy import text as sa_text
-
-    case = Case(
-        id=str(uuid4()),
-        case_no=case_no,
-        case_type=payload.case_type or "NORMAL",
-        patent_category=payload.patent_category or "INV",
-        flow_dir=payload.flow_dir or "CN_DOMESTIC",
-        client_id=payload.client_id,
-        title_cn=payload.title_cn,
-        title_en=payload.title_en,
-        app_no=payload.app_no,
-        # A3 — Publication / Grant
-        pub_date=payload.pub_date,
-        pub_no=payload.pub_no,
-        grant_date=payload.grant_date,
-        grant_no=payload.grant_no,
-        patent_no=payload.patent_no,
-        valid_until=payload.valid_until,
-        # A3 — Spec details
-        spec_pages=payload.spec_pages,
-        claim_count=payload.claim_count,
-        has_exam_request=payload.has_exam_request,
-        # A3 — Agent assignment
-        primary_agent_id=payload.primary_agent_id,
-        second_agent_id=payload.second_agent_id,
-        draftor_id=payload.draftor_id,
-        # A3 — Control flags
-        is_fee_monitor=payload.is_fee_monitor,
-        fee_reduction=payload.fee_reduction,
-        applicant_kind=payload.applicant_kind,
-    )
-    db.add(case)
-    db.flush()
-
-    # Use raw SQL for sub-tables to avoid AuditMixin column mismatch
-    for applicant in payload.applicants:
-        db.execute(
-            sa_text(
-                "INSERT INTO t_case_applicant"
-                " (id, case_id, seq, is_first, name_cn, name_en, address_cn, address_en)"
-                " VALUES (:id, :case_id, :seq, :is_first, :name_cn, :name_en,"
-                " :address_cn, :address_en)"
-            ),
-            {
-                "id": str(uuid4()),
-                "case_id": case.id,
-                "seq": applicant.seq,
-                "is_first": applicant.is_first,
-                "name_cn": applicant.name_cn,
-                "name_en": applicant.name_en,
-                "address_cn": applicant.address_cn,
-                "address_en": applicant.address_en,
-            },
-        )
-
-    for inventor in payload.inventors:
-        db.execute(
-            sa_text(
-                "INSERT INTO t_case_inventor"
-                " (id, case_id, seq, name_cn, name_en)"
-                " VALUES (:id, :case_id, :seq, :name_cn, :name_en)"
-            ),
-            {
-                "id": str(uuid4()),
-                "case_id": case.id,
-                "seq": inventor.seq,
-                "name_cn": inventor.name_cn,
-                "name_en": inventor.name_en,
-            },
-        )
-
-    for prio in payload.priorities:
-        db.execute(
-            sa_text(
-                "INSERT INTO t_priority"
-                " (id, case_id, seq, country_code, prio_no, prio_date)"
-                " VALUES (:id, :case_id, :seq, :country_code, :prio_no, :prio_date)"
-            ),
-            {
-                "id": str(uuid4()),
-                "case_id": case.id,
-                "seq": prio.seq,
-                "country_code": prio.country_code,
-                "prio_no": prio.prio_no,
-                "prio_date": prio.prio_date,
-            },
-        )
-
-    db.commit()
-    db.refresh(case)
-
-    return {
-        "id": case.id,
-        "case_no": case.case_no,
-        "case_type": case.case_type,
-        "patent_category": case.patent_category,
-        "flow_dir": case.flow_dir,
-        "client_id": case.client_id,
-        "title_cn": case.title_cn,
-        "title_en": case.title_en,
-        "app_no": case.app_no,
-        "status": case.status,
-        "pub_date": str(case.pub_date) if case.pub_date else None,
-        "pub_no": case.pub_no,
-        "grant_date": str(case.grant_date) if case.grant_date else None,
-        "grant_no": case.grant_no,
-        "patent_no": case.patent_no,
-        "valid_until": str(case.valid_until) if case.valid_until else None,
-        "spec_pages": case.spec_pages,
-        "claim_count": case.claim_count,
-        "has_exam_request": case.has_exam_request,
-        "primary_agent_id": case.primary_agent_id,
-        "second_agent_id": case.second_agent_id,
-        "draftor_id": case.draftor_id,
-        "is_fee_monitor": case.is_fee_monitor,
-        "fee_reduction": case.fee_reduction,
-        "applicant_kind": case.applicant_kind,
-    }
+    case = create_case_service(db, payload, current_user.id)
+    return _serialize_case(db, case)
 
 
 @router.post("/cases/{case_id}/limited-edit", summary="Limited edit of a case")
@@ -498,8 +527,9 @@ def export_cases(
 @router.put("/cases/{case_id}", summary="Update a case")
 def update_case(
     case_id: str,
-    payload: dict[str, Any],
+    payload: CaseUpdateFull,
     _perm: None = Depends(require_perm("Case.Edit")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -526,103 +556,8 @@ def update_case(
     - 404: Case not found
     - 422: VALIDATION_ERROR
     """
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
-        raise_business_error(
-            "CASE_NOT_FOUND",
-            "Case not found",
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-
-    new_case_no = payload.get("case_no")
-    if new_case_no and new_case_no != case.case_no:
-        exists = db.query(Case).filter(Case.case_no == new_case_no, Case.id != case_id).first()
-        if exists:
-            raise_business_error(
-                "CASE_NO_DUPLICATE",
-                "case_no already exists",
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
-        case.case_no = new_case_no
-
-    case.case_type = payload.get("case_type", case.case_type)
-    case.patent_category = payload.get("patent_category", case.patent_category)
-    case.flow_dir = payload.get("flow_dir", case.flow_dir)
-    case.client_id = payload.get("client_id", case.client_id)
-
-    # A3 — new scalar fields (only update if key present)
-    if "title_cn" in payload:
-        case.title_cn = payload["title_cn"]
-    if "title_en" in payload:
-        case.title_en = payload["title_en"]
-    if "app_no" in payload:
-        case.app_no = payload["app_no"]
-    if "status" in payload:
-        case.status = payload["status"]
-    if "pub_date" in payload:
-        v = payload["pub_date"]
-        case.pub_date = date.fromisoformat(v) if isinstance(v, str) else v
-    if "pub_no" in payload:
-        case.pub_no = payload["pub_no"]
-    if "grant_date" in payload:
-        v = payload["grant_date"]
-        case.grant_date = date.fromisoformat(v) if isinstance(v, str) else v
-    if "grant_no" in payload:
-        case.grant_no = payload["grant_no"]
-    if "patent_no" in payload:
-        case.patent_no = payload["patent_no"]
-    if "valid_until" in payload:
-        v = payload["valid_until"]
-        case.valid_until = date.fromisoformat(v) if isinstance(v, str) else v
-    if "spec_pages" in payload:
-        case.spec_pages = payload["spec_pages"]
-    if "claim_count" in payload:
-        case.claim_count = payload["claim_count"]
-    if "has_exam_request" in payload:
-        case.has_exam_request = payload["has_exam_request"]
-    if "primary_agent_id" in payload:
-        case.primary_agent_id = payload["primary_agent_id"]
-    if "second_agent_id" in payload:
-        case.second_agent_id = payload["second_agent_id"]
-    if "draftor_id" in payload:
-        case.draftor_id = payload["draftor_id"]
-    if "is_fee_monitor" in payload:
-        case.is_fee_monitor = payload["is_fee_monitor"]
-    if "fee_reduction" in payload:
-        case.fee_reduction = payload["fee_reduction"]
-    if "applicant_kind" in payload:
-        case.applicant_kind = payload["applicant_kind"]
-
-    db.commit()
-    db.refresh(case)
-
-    return {
-        "id": case.id,
-        "case_no": case.case_no,
-        "case_type": case.case_type,
-        "patent_category": case.patent_category,
-        "flow_dir": case.flow_dir,
-        "client_id": case.client_id,
-        "title_cn": case.title_cn,
-        "title_en": case.title_en,
-        "app_no": case.app_no,
-        "status": case.status,
-        "pub_date": str(case.pub_date) if case.pub_date else None,
-        "pub_no": case.pub_no,
-        "grant_date": str(case.grant_date) if case.grant_date else None,
-        "grant_no": case.grant_no,
-        "patent_no": case.patent_no,
-        "valid_until": str(case.valid_until) if case.valid_until else None,
-        "spec_pages": case.spec_pages,
-        "claim_count": case.claim_count,
-        "has_exam_request": case.has_exam_request,
-        "primary_agent_id": case.primary_agent_id,
-        "second_agent_id": case.second_agent_id,
-        "draftor_id": case.draftor_id,
-        "is_fee_monitor": case.is_fee_monitor,
-        "fee_reduction": case.fee_reduction,
-        "applicant_kind": case.applicant_kind,
-    }
+    case = update_case_full_service(db, case_id, payload, current_user.id)
+    return _serialize_case(db, case)
 
 
 @router.get("/cases/{case_id}", summary="Get case by ID")
@@ -658,108 +593,4 @@ def get_case(
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    # Resolve client name
-    client_name = None
-    if case.client_id:
-        client = db.query(Client.name_cn).filter(Client.id == case.client_id).first()
-        if client:
-            client_name = client.name_cn
-
-    # Resolve applicants, inventors, priorities
-    from app.modules.cases.models import T_CaseApplicant, T_CaseInventor, T_Priority
-
-    applicants = (
-        db.query(
-            T_CaseApplicant.seq,
-            T_CaseApplicant.is_first,
-            T_CaseApplicant.name_cn,
-            T_CaseApplicant.name_en,
-            T_CaseApplicant.address_cn,
-            T_CaseApplicant.address_en,
-        )
-        .filter(T_CaseApplicant.case_id == case_id)
-        .order_by(T_CaseApplicant.seq)
-        .all()
-    )
-    inventors = (
-        db.query(
-            T_CaseInventor.seq,
-            T_CaseInventor.name_cn,
-            T_CaseInventor.name_en,
-        )
-        .filter(T_CaseInventor.case_id == case_id)
-        .order_by(T_CaseInventor.seq)
-        .all()
-    )
-    priorities = (
-        db.query(
-            T_Priority.seq,
-            T_Priority.country_code,
-            T_Priority.prio_no,
-            T_Priority.prio_date,
-        )
-        .filter(T_Priority.case_id == case_id)
-        .order_by(T_Priority.seq)
-        .all()
-    )
-
-    return {
-        "id": case.id,
-        "case_no": case.case_no,
-        "case_type": case.case_type,
-        "patent_category": case.patent_category,
-        "flow_dir": case.flow_dir,
-        "client_id": case.client_id,
-        "client_name": client_name,
-        "title_cn": case.title_cn,
-        "title_en": case.title_en,
-        "app_no": case.app_no,
-        "status": case.status,
-        "filing_date": str(case.filing_date) if case.filing_date else None,
-        "recv_date": str(case.recv_date) if case.recv_date else None,
-        # A3 — Publication / Grant
-        "pub_date": str(case.pub_date) if case.pub_date else None,
-        "pub_no": case.pub_no,
-        "grant_date": str(case.grant_date) if case.grant_date else None,
-        "grant_no": case.grant_no,
-        "patent_no": case.patent_no,
-        "valid_until": str(case.valid_until) if case.valid_until else None,
-        # A3 — Spec details
-        "spec_pages": case.spec_pages,
-        "claim_count": case.claim_count,
-        "has_exam_request": case.has_exam_request,
-        # A3 — Agent assignment
-        "primary_agent_id": case.primary_agent_id,
-        "second_agent_id": case.second_agent_id,
-        "draftor_id": case.draftor_id,
-        # A3 — Control flags
-        "is_fee_monitor": case.is_fee_monitor,
-        "fee_reduction": case.fee_reduction,
-        "applicant_kind": case.applicant_kind,
-        # Sub-tables
-        "applicants": [
-            {
-                "seq": a.seq,
-                "is_first": a.is_first,
-                "name_cn": a.name_cn,
-                "name_en": a.name_en,
-                "address_cn": a.address_cn,
-                "address_en": a.address_en,
-            }
-            for a in applicants
-        ],
-        "inventors": [
-            {"seq": i.seq, "name_cn": i.name_cn, "name_en": i.name_en} for i in inventors
-        ],
-        "priorities": [
-            {
-                "seq": p.seq,
-                "country_code": p.country_code,
-                "prio_no": p.prio_no,
-                "prio_date": str(p.prio_date) if p.prio_date else None,
-            }
-            for p in priorities
-        ],
-        "created_at": str(case.created_at) if case.created_at else None,
-        "updated_at": str(case.updated_at) if case.updated_at else None,
-    }
+    return _serialize_case(db, case)
