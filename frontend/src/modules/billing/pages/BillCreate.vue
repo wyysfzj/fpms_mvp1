@@ -27,11 +27,11 @@
             <div class="form-section">
               <h3 class="form-section-title">选择费用草稿</h3>
               <p class="form-section-desc">
-                输入已锁定费用草稿的编号，用于生成本账单。
+                请选择已锁定且已有费用明细的草稿，系统会使用内部草稿 ID 生成账单，无需手工输入 UUID。
               </p>
 
               <el-form-item
-                label="草稿编号"
+                label="费用草稿"
                 prop="draft_ids"
                 :error="fieldErrors.get('draft_ids')?.join(', ')"
               >
@@ -39,14 +39,35 @@
                   v-model="draftsForm.draft_ids"
                   multiple
                   filterable
-                  allow-create
-                  default-first-option
-                  placeholder="输入草稿编号（可粘贴或输入）"
+                  collapse-tags
+                  collapse-tags-tooltip
+                  clearable
+                  :loading="draftOptionsLoading"
+                  :no-data-text="draftOptionsLoading ? '正在加载可开票草稿…' : '暂无可用于开票的锁定草稿'"
+                  placeholder="请选择已锁定且可开票的费用草稿"
                   class="full-width"
                 >
+                  <el-option
+                    v-for="option in availableDraftOptions"
+                    :key="option.id"
+                    :label="option.displayLabel"
+                    :value="option.id"
+                  >
+                    <div class="draft-option">
+                      <div class="draft-option-main">
+                        <span class="draft-option-id">{{ option.displayId }}</span>
+                        <span class="draft-option-case">{{ option.caseDisplay }}</span>
+                      </div>
+                      <div class="draft-option-sub">
+                        <span>{{ option.clientDisplay }}</span>
+                        <span>{{ option.amountDisplay }}</span>
+                      </div>
+                    </div>
+                  </el-option>
                 </el-select>
                 <div class="field-hint">
-                  <router-link to="/fees/drafts">查看费用草稿</router-link> 以获取草稿编号
+                  仅展示“已锁定”且金额大于 0 的草稿。
+                  <router-link to="/fees/drafts">查看费用草稿列表</router-link>
                 </div>
               </el-form-item>
 
@@ -143,6 +164,25 @@
                       <el-option label="USD" value="USD" />
                       <el-option label="EUR" value="EUR" />
                     </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item
+                    label="账单方向"
+                    prop="direction"
+                    :error="fieldErrors.get('direction')?.join(', ')"
+                  >
+                    <el-select v-model="manualForm.direction" placeholder="请选择账单方向" class="full-width">
+                      <el-option
+                        v-for="option in directionOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                    <div class="field-hint">
+                      应收账单用于向客户收款，应付账单用于记录需对外支付的款项。
+                    </div>
                   </el-form-item>
                 </el-col>
               </el-row>
@@ -243,12 +283,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { createBillFromDrafts, createManualBill } from '../../../api/billing'
-import type { BillFromDraftsPayload, BillManualPayload, BillManualItem } from '../../../api/billing.types'
+import type { BillFromDraftsPayload, BillManualPayload, BillManualItem, BillDirection } from '../../../api/billing.types'
+import { getFeeDrafts } from '../../../api/fees'
+import type { FeeDraftListItem } from '../../../api/fees.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -259,6 +301,8 @@ const activeTab = ref('drafts')
 const saving = ref(false)
 const error = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
+const draftOptionsLoading = ref(false)
+const availableDrafts = ref<FeeDraftListItem[]>([])
 
 const draftsFormRef = ref<FormInstance>()
 const manualFormRef = ref<FormInstance>()
@@ -275,9 +319,15 @@ const manualForm = reactive({
   client_id: '',
   case_id: '',
   currency: 'CNY',
-  items: [{ description: '', quantity: 1, unit_price: 0 }] as BillManualItem[],
+  direction: 'AR' as BillDirection,
+  items: [{ description: '', quantity: 1, unit_price: 0, fee_type: '', year_no: undefined }] as BillManualItem[],
   notes: '',
 })
+
+const directionOptions = [
+  { label: '应收 (AR)', value: 'AR' as BillDirection },
+  { label: '应付 (AP)', value: 'AP' as BillDirection },
+]
 
 const manualRules: FormRules = {
   client_id: [
@@ -286,11 +336,61 @@ const manualRules: FormRules = {
   currency: [
     { required: true, message: '币种为必填项', trigger: 'change' },
   ],
+  direction: [
+    { required: true, message: '请确认账单方向', trigger: 'change' },
+  ],
 }
 
 const totalAmount = computed(() => {
   return manualForm.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
 })
+
+function asNumericAmount(amount: number | string | undefined): number {
+  if (amount === undefined || amount === null || amount === '') return 0
+  const parsed = Number(amount)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function formatDraftAmount(amount: number | string | undefined, currency: string): string {
+  return new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency: currency || 'CNY',
+  }).format(asNumericAmount(amount))
+}
+
+function buildDraftDisplayId(draft: FeeDraftListItem): string {
+  return `${draft.id.slice(0, 8).toUpperCase()}`
+}
+
+const availableDraftOptions = computed(() => {
+  return availableDrafts.value.map((draft) => {
+    const draftTypePrefix = '费用草稿'
+    const readableDraftId = `${draftTypePrefix}-${buildDraftDisplayId(draft)}`
+    const caseDisplay = draft.case_no || `案件 ${draft.case_id.slice(0, 8).toUpperCase()}`
+    const clientDisplay = draft.client_name || '未关联客户'
+    const amountDisplay = formatDraftAmount(draft.amount, draft.currency)
+    return {
+      id: draft.id,
+      displayId: readableDraftId,
+      caseDisplay,
+      clientDisplay,
+      amountDisplay,
+      displayLabel: `${readableDraftId} · ${caseDisplay} · ${clientDisplay} · ${amountDisplay}`,
+    }
+  })
+})
+
+async function fetchAvailableDrafts() {
+  draftOptionsLoading.value = true
+  try {
+    const result = await getFeeDrafts({ page: 1, page_size: 100, status: 'LOCKED' })
+    availableDrafts.value = result.items.filter((draft) => asNumericAmount(draft.amount) > 0)
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    draftOptionsLoading.value = false
+  }
+}
 
 function formatAmount(amount: number): string {
   const curr = manualForm.currency || 'CNY'
@@ -370,6 +470,7 @@ async function handleCreateManual() {
       client_id: manualForm.client_id,
       case_id: manualForm.case_id || undefined,
       currency: manualForm.currency,
+      direction: manualForm.direction,
       items: validItems,
       notes: manualForm.notes || undefined,
     }
@@ -388,6 +489,10 @@ async function handleCreateManual() {
     saving.value = false
   }
 }
+
+onMounted(() => {
+  fetchAvailableDrafts()
+})
 </script>
 
 <style scoped>
@@ -422,6 +527,37 @@ async function handleCreateManual() {
 
 .field-hint a:hover {
   text-decoration: underline;
+}
+
+.draft-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.draft-option-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.draft-option-id {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.draft-option-case {
+  color: var(--text-main);
+}
+
+.draft-option-sub {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-sub);
+  font-size: 12px;
 }
 
 .items-table {

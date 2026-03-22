@@ -29,9 +29,10 @@
     <template v-else-if="bill">
       <!-- Relation Chain -->
       <RelationChainCard
-        :client="bill.client_id ? { id: bill.client_id, name: bill.client_name } : undefined"
-        :case-ref="bill.case_id ? { id: bill.case_id, no: bill.case_no } : undefined"
-        :bill="{ id: bill.id, no: bill.bill_no }"
+        :client="bill.client_id ? { id: bill.client_id, name: clientDisplay } : undefined"
+        :case-ref="bill.case_id ? { id: bill.case_id, no: caseDisplay } : undefined"
+        :fee-draft="feeDraftRelation"
+        :bill="{ id: bill.id, no: billDisplayNo }"
       />
 
       <!-- Bill Header -->
@@ -40,14 +41,14 @@
           <div class="case-meta">
             <el-tag :type="statusTagType" size="small">{{ getBillStatusDisplay(bill.status) }}</el-tag>
             <span class="meta-divider">|</span>
-            <span class="bill-no">{{ bill.bill_no }}</span>
+            <span class="bill-no">{{ billDisplayNo }}</span>
             <span class="meta-divider">|</span>
             <span>{{ bill.currency }}</span>
           </div>
           <div class="case-title">
-            <h1>{{ ZH.billDetail.billNo }} {{ bill.bill_no }}</h1>
-            <p v-if="bill.client_name" class="meta-subtitle">
-              {{ bill.client_name }}
+            <h1>{{ ZH.billDetail.billNo }} {{ billDisplayNo }}</h1>
+            <p class="meta-subtitle">
+              {{ clientDisplay }}
             </p>
           </div>
         </div>
@@ -99,7 +100,7 @@
                 <div class="info-grid">
                   <div class="info-item">
                     <span class="info-label">{{ ZH.billDetail.billNo }}</span>
-                    <span class="info-value bill-no">{{ bill.bill_no }}</span>
+                    <span class="info-value bill-no">{{ billDisplayNo }}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">{{ ZH.billDetail.status }}</span>
@@ -110,9 +111,9 @@
                     <router-link
                       v-if="bill.client_id"
                       class="entity-link info-value"
-                      :to="`/clients/${bill.client_id}/edit`"
+                      :to="`/clients/${bill.client_id}`"
                     >
-                      {{ bill.client_name || bill.client_id }}
+                      {{ clientDisplay }}
                     </router-link>
                     <span v-else class="info-value">—</span>
                   </div>
@@ -123,7 +124,18 @@
                       class="entity-link info-value"
                       :to="`/cases/${bill.case_id}`"
                     >
-                      {{ bill.case_no || bill.case_id }}
+                      {{ caseDisplay }}
+                    </router-link>
+                    <span v-else class="info-value">—</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">费用草稿</span>
+                    <router-link
+                      v-if="feeDraftRelation"
+                      class="entity-link info-value"
+                      :to="`/fees/drafts/${feeDraftRelation.id}`"
+                    >
+                      {{ feeDraftDisplay }}
                     </router-link>
                     <span v-else class="info-value">—</span>
                   </div>
@@ -171,8 +183,11 @@
                   <router-link v-if="bill.case_id" :to="`/cases/${bill.case_id}`">
                     <el-button size="small">{{ ZH.billDetail.openCase }}</el-button>
                   </router-link>
-                  <router-link v-if="bill.client_id" :to="`/clients/${bill.client_id}/edit`">
+                  <router-link v-if="bill.client_id" :to="`/clients/${bill.client_id}`">
                     <el-button size="small">{{ ZH.billDetail.viewClient }}</el-button>
+                  </router-link>
+                  <router-link v-if="feeDraftRelation" :to="`/fees/drafts/${feeDraftRelation.id}`">
+                    <el-button size="small">查看费用草稿</el-button>
                   </router-link>
                   <el-popconfirm
                     v-if="canOperateBadDebt && !isBadDebt"
@@ -311,6 +326,33 @@ const offsetsLoading = ref(false)
 const billId = computed(() => String(route.params.id || ''))
 const isBadDebt = computed(() => bill.value?.status === 'BAD_DEBT')
 const canOperateBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_ACTION_PERMISSION))
+const billDisplayNo = computed(() => {
+  if (!bill.value?.id) return '—'
+  return bill.value.bill_no || `账单-${bill.value.id.slice(0, 8).toUpperCase()}`
+})
+const clientDisplay = computed(() => {
+  if (!bill.value?.client_id) return '未关联客户'
+  return bill.value.client_name || `客户-${bill.value.client_id.slice(0, 8).toUpperCase()}`
+})
+const caseDisplay = computed(() => {
+  if (!bill.value?.case_id) return '—'
+  return bill.value.case_no || `案件-${bill.value.case_id.slice(0, 8).toUpperCase()}`
+})
+const feeDraftDisplay = computed(() => {
+  if (!bill.value) return '—'
+  if (bill.value.primary_draft_label) return bill.value.primary_draft_label
+  const labels = bill.value.source_draft_labels || []
+  if (labels.length === 1) return labels[0]
+  if (labels.length > 1) return `${labels[0]} 等 ${labels.length} 个草稿`
+  return '—'
+})
+const feeDraftRelation = computed(() => {
+  if (!bill.value?.primary_draft_id) return undefined
+  return {
+    id: bill.value.primary_draft_id,
+    label: feeDraftDisplay.value,
+  }
+})
 
 const statusTagType = computed<'info' | 'warning' | 'success' | 'danger'>(() => {
   switch (bill.value?.status) {
@@ -330,7 +372,7 @@ async function fetchBill() {
 
   try {
     bill.value = await getBill(billId.value)
-    pageContext.setBreadcrumb(['账单管理', '账单详情', bill.value.bill_no || billId.value])
+    pageContext.setBreadcrumb(['账单管理', '账单详情', billDisplayNo.value])
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -386,7 +428,7 @@ async function handlePrint() {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `bill-${bill.value.bill_no}.docx`
+    link.download = `bill-${billDisplayNo.value}.docx`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

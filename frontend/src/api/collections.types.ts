@@ -66,6 +66,40 @@ export interface DunningGenerateBatch {
     lines: DunningGenerateBatchLine[]
 }
 
+export interface DunningDetailLine {
+    id: number
+    line_no: number
+    bill_id: string
+    bill_no_snapshot: string | null
+    due_date_snapshot: string | null
+    bill_status_snapshot: string | null
+    outstanding_amount: number
+    currency_snapshot: string | null
+    remark?: string | null
+}
+
+export interface DunningDetail {
+    id: number
+    dunning_no: string | null
+    client_id: string
+    round_no: number
+    to_date: string | null
+    currency: string
+    total_amount: number
+    status: string
+    sent_date: string | null
+    remark: string | null
+    created_at: string
+    updated_at: string
+    line_count: number
+    lines: DunningDetailLine[]
+    summary: {
+        line_count: number
+        bill_count: number
+        bad_debt_line_count: number
+    }
+}
+
 export interface DunningGenerateResult {
     summary: DunningGenerateSummary
     batches: DunningGenerateBatch[]

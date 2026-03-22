@@ -22,7 +22,11 @@ interface BackendBill {
     client_name?: string | null
     case_id?: string | null
     case_no?: string | null
+    direction?: string | null
     status?: string | null
+    total_gov?: number | string | null
+    total_service?: number | string | null
+    total_misc?: number | string | null
     amount?: number | string | null
     balance?: number | string | null
     currency?: string | null
@@ -34,11 +38,22 @@ interface BackendBill {
     updated_at?: string
     items?: {
         id?: string
+        bill_id?: string
+        case_id?: string | null
+        draft_id?: string | null
+        fee_code?: string | null
+        fee_name?: string | null
+        fee_type?: string | null
+        year_no?: number | null
         description?: string | null
         quantity?: number | string | null
         unit_price?: number | string | null
         amount?: number | string | null
     }[]
+    source_draft_ids?: string[] | null
+    source_draft_labels?: string[] | null
+    primary_draft_id?: string | null
+    primary_draft_label?: string | null
 }
 
 interface BackendPayment {
@@ -48,6 +63,10 @@ interface BackendPayment {
     pay_date?: string | null
     currency?: string | null
     amount?: string | number | null
+    allocated_amt?: string | number | null
+    unapplied_amt?: string | number | null
+    line_count?: number | null
+    prepayment_status?: string | null
 }
 
 interface BackendPaymentLine {
@@ -99,13 +118,29 @@ function mapBillDetail(input: BackendBill): BillDetail {
         ...mapBillListItem(input),
         case_id: input.case_id || undefined,
         case_no: input.case_no || undefined,
+        direction: input.direction || undefined,
+        bill_date: input.bill_date || undefined,
+        total_gov: input.total_gov != null ? asNumber(input.total_gov) : undefined,
+        total_service: input.total_service != null ? asNumber(input.total_service) : undefined,
+        total_misc: input.total_misc != null ? asNumber(input.total_misc) : undefined,
         items: (input.items || []).map((item, index) => ({
             id: item.id || `${input.id}-item-${index}`,
-            description: item.description || '',
+            bill_id: item.bill_id || input.id,
+            case_id: item.case_id || undefined,
+            draft_id: item.draft_id || undefined,
+            fee_code: item.fee_code || undefined,
+            fee_name: item.fee_name || undefined,
+            fee_type: item.fee_type || undefined,
+            year_no: item.year_no ?? undefined,
+            description: item.description || item.fee_name || item.fee_code || '',
             quantity: asNumber(item.quantity),
             unit_price: asNumber(item.unit_price),
             amount: asNumber(item.amount),
         })),
+        source_draft_ids: input.source_draft_ids || undefined,
+        source_draft_labels: input.source_draft_labels || undefined,
+        primary_draft_id: input.primary_draft_id || undefined,
+        primary_draft_label: input.primary_draft_label || undefined,
         notes: input.notes || undefined,
         created_at: input.created_at,
         updated_at: input.updated_at,
@@ -123,6 +158,10 @@ function mapPayment(
         client_id: input.client_id,
         amount: asNumber(input.amount),
         currency: input.currency || extras.currency || 'CNY',
+        allocated_amt: input.allocated_amt != null ? asNumber(input.allocated_amt) : undefined,
+        unapplied_amt: input.unapplied_amt != null ? asNumber(input.unapplied_amt) : undefined,
+        line_count: input.line_count ?? undefined,
+        prepayment_status: input.prepayment_status || undefined,
         payment_method: extras.payment_method || 'OTHER',
         payment_date: input.pay_date || '',
         reference: input.pay_no || undefined,
@@ -343,6 +382,7 @@ function mapCaseReceipt(input: BackendCaseReceipt): CaseReceiptsSummary {
         fee_type: input.fee_type || undefined,
         fee_code: input.fee_code || undefined,
         year_no: input.year_no ?? undefined,
+        last_receipt_date: input.last_receipt_date || undefined,
         is_arrears: input.is_arrears ?? undefined,
         invoice_no: input.invoice_no || undefined,
         is_commissionable: input.is_commissionable ?? undefined,

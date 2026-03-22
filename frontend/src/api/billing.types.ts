@@ -3,6 +3,7 @@
  */
 
 export type BillStatus = string
+export type BillDirection = 'AR' | 'AP'
 
 export interface BillListItem {
     id: string
@@ -19,6 +20,13 @@ export interface BillListItem {
 
 export interface BillItem {
     id: string
+    bill_id?: string
+    case_id?: string
+    draft_id?: string
+    fee_code?: string
+    fee_name?: string
+    fee_type?: string
+    year_no?: number
     description: string
     quantity: number
     unit_price: number
@@ -36,9 +44,18 @@ export interface BillDetail {
     amount: number
     balance: number
     currency: string
+    direction?: string
     issue_date?: string
+    bill_date?: string
     due_date?: string
+    total_gov?: number
+    total_service?: number
+    total_misc?: number
     items: BillItem[]
+    source_draft_ids?: string[]
+    source_draft_labels?: string[]
+    primary_draft_id?: string
+    primary_draft_label?: string
     notes?: string
     created_at?: string
     updated_at?: string
@@ -63,6 +80,8 @@ export interface BillManualPayload {
     client_id: string
     case_id?: string
     currency: string
+    direction?: BillDirection
+    status?: string
     items: BillManualItem[]
     notes?: string
 }
@@ -71,6 +90,8 @@ export interface BillManualItem {
     description: string
     quantity: number
     unit_price: number
+    fee_type?: string
+    year_no?: number
 }
 
 // Payment Types
@@ -83,6 +104,10 @@ export interface PaymentListItem {
     client_id: string
     amount: number
     currency: string
+    allocated_amt?: number
+    unapplied_amt?: number
+    line_count?: number
+    prepayment_status?: string
     payment_method: PaymentMethod
     payment_date: string
     reference?: string
@@ -148,6 +173,7 @@ export interface CaseReceiptsSummary {
     fee_type?: string
     fee_code?: string
     year_no?: number
+    last_receipt_date?: string
     is_arrears?: boolean
     invoice_no?: string
     is_commissionable?: boolean

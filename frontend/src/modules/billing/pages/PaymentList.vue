@@ -56,6 +56,20 @@
             <span class="mono-num">{{ formatAmount(row.amount, row.currency) }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="预收状态" width="140" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getPrepaymentTagType(row.prepayment_status)" size="small">
+              {{ getPrepaymentStatusText(row.prepayment_status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="未分配金额" width="160" align="right">
+          <template #default="{ row }">
+            <span class="mono-num">
+              {{ formatAmount(row.unapplied_amt ?? row.amount, row.currency) }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column prop="payment_method" label="付款方式" width="140">
           <template #default="{ row }">
             <el-tag size="small" type="info">{{ formatMethod(row.payment_method) }}</el-tag>
@@ -377,6 +391,30 @@ function formatAmount(amount: number, currency?: string): string {
 
 function formatMethod(method: PaymentMethod): string {
   return getPaymentMethodText(method)
+}
+
+function getPrepaymentStatusText(status?: string): string {
+  switch (status) {
+    case 'FULLY_ALLOCATED':
+      return '已分配完'
+    case 'PARTIALLY_ALLOCATED':
+      return '部分分配'
+    case 'UNALLOCATED':
+      return '预收中'
+    default:
+      return '待确认'
+  }
+}
+
+function getPrepaymentTagType(status?: string): 'success' | 'warning' | 'info' {
+  switch (status) {
+    case 'FULLY_ALLOCATED':
+      return 'success'
+    case 'PARTIALLY_ALLOCATED':
+      return 'warning'
+    default:
+      return 'info'
+  }
 }
 
 function formatPaymentOption(payment: PaymentListItem): string {

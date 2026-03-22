@@ -110,6 +110,10 @@
               placeholder="请输入备注（可选）"
             />
           </el-form-item>
+
+          <div class="field-hint">
+            新登记的回款在未核销到账单前会保持“预收中”状态，后续核销后未分配金额会自动减少。
+          </div>
         </div>
 
         <div class="form-actions">
@@ -193,7 +197,7 @@ async function handleSubmit() {
       notes: form.notes || undefined,
     })
 
-    ElMessage.success('回款登记成功')
+    ElMessage.success('回款登记成功，可在回款列表查看预收状态与未分配金额')
     router.push('/billing/payments')
   } catch (err) {
     const apiError = err as ApiError

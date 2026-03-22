@@ -5,6 +5,8 @@ import type {
     CollectionsApiError,
     CollectionsErrorCategory,
     DunningBatchListItem,
+    DunningDetail,
+    DunningDetailLine,
     DunningGenerateBatch,
     DunningGenerateBatchLine,
     DunningGeneratePayload,
@@ -79,6 +81,40 @@ interface BackendBadDebtBillResult {
     amount: number | string | null
     balance: number | string | null
     updated_at: string
+}
+
+interface BackendDunningDetailLine {
+    id: number
+    line_no: number
+    bill_id: string
+    bill_no_snapshot: string | null
+    due_date_snapshot: string | null
+    bill_status_snapshot: string | null
+    outstanding_amount: number | string | null
+    currency_snapshot: string | null
+    remark: string | null
+}
+
+interface BackendDunningDetail {
+    id: number
+    dunning_no: string | null
+    client_id: string
+    round_no: number
+    to_date: string | null
+    currency: string
+    total_amount: number | string | null
+    status: string
+    sent_date: string | null
+    remark: string | null
+    created_at: string
+    updated_at: string
+    line_count: number
+    lines: BackendDunningDetailLine[]
+    summary: {
+        line_count: number
+        bill_count: number
+        bad_debt_line_count: number
+    }
 }
 
 function asNumber(input: number | string | null | undefined): number {
@@ -212,6 +248,40 @@ export function mapCollectionsError(error: unknown): CollectionsApiError {
     return mapped
 }
 
+function mapDunningDetailLine(input: BackendDunningDetailLine): DunningDetailLine {
+    return {
+        id: input.id,
+        line_no: input.line_no,
+        bill_id: input.bill_id,
+        bill_no_snapshot: input.bill_no_snapshot,
+        due_date_snapshot: input.due_date_snapshot,
+        bill_status_snapshot: input.bill_status_snapshot,
+        outstanding_amount: asNumber(input.outstanding_amount),
+        currency_snapshot: input.currency_snapshot,
+        remark: input.remark || undefined,
+    }
+}
+
+function mapDunningDetail(input: BackendDunningDetail): DunningDetail {
+    return {
+        id: input.id,
+        dunning_no: input.dunning_no,
+        client_id: input.client_id,
+        round_no: input.round_no,
+        to_date: input.to_date,
+        currency: input.currency,
+        total_amount: asNumber(input.total_amount),
+        status: input.status,
+        sent_date: input.sent_date,
+        remark: input.remark,
+        created_at: input.created_at,
+        updated_at: input.updated_at,
+        line_count: input.line_count,
+        summary: input.summary,
+        lines: input.lines.map(mapDunningDetailLine),
+    }
+}
+
 export async function getDunning(params: DunningListParams = {}): Promise<Pagination<DunningBatchListItem>> {
     const {
         round_no,
@@ -260,4 +330,9 @@ export async function markBillBadDebt(billId: string): Promise<BadDebtBillResult
 export async function restoreBillBadDebt(billId: string): Promise<BadDebtBillResult> {
     const response = await http.post<BackendBadDebtBillResult>(`/bills/${billId}/bad-debt/restore`)
     return mapBadDebtBillResult(response.data)
+}
+
+export async function getDunningDetail(id: number): Promise<DunningDetail> {
+    const response = await http.get<BackendDunningDetail>(`/dunning/${id}`)
+    return mapDunningDetail(response.data)
 }

@@ -54,20 +54,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getDunning, mapCollectionsError } from '../../../api/collections'
-import type { CollectionsApiError, DunningBatchListItem } from '../../../api/collections.types'
+import { getDunningDetail, mapCollectionsError } from '../../../api/collections'
+import type { CollectionsApiError, DunningDetail } from '../../../api/collections.types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 
 type TagType = '' | 'success' | 'warning' | 'info' | 'danger'
 
-const LOOKUP_PAGE_SIZE = 50
-
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
-const dunningItem = ref<DunningBatchListItem | null>(null)
+const dunningItem = ref<DunningDetail | null>(null)
 const error = ref<CollectionsApiError | null>(null)
 
 const dunningId = computed(() => {
@@ -91,30 +89,6 @@ function extractListQuery(): Record<string, string> {
   return query
 }
 
-async function findDunningById(id: number): Promise<DunningBatchListItem | null> {
-  let currentPage = 1
-  let fetchedCount = 0
-  let total = 0
-
-  while (currentPage <= 100) {
-    const result = await getDunning({
-      page: currentPage,
-      page_size: LOOKUP_PAGE_SIZE,
-    })
-
-    const found = result.items.find((item) => item.id === id)
-    if (found) return found
-
-    total = result.total
-    fetchedCount += result.items.length
-    if (fetchedCount >= total || result.items.length === 0) break
-
-    currentPage += 1
-  }
-
-  return null
-}
-
 async function fetchDunningItem() {
   if (dunningId.value === null) {
     error.value = {
@@ -131,19 +105,8 @@ async function fetchDunningItem() {
   error.value = null
 
   try {
-    const result = await findDunningById(dunningId.value)
-    if (!result) {
-      error.value = {
-        status: 404,
-        code: 'DUNNING_NOT_FOUND',
-        message: '未找到该催款批次，请返回列表确认筛选条件。',
-        category: 'not_found',
-      }
-      dunningItem.value = null
-      return
-    }
-
-    dunningItem.value = result
+    const detail = await getDunningDetail(dunningId.value)
+    dunningItem.value = detail
   } catch (err) {
     error.value = mapCollectionsError(err)
     dunningItem.value = null
