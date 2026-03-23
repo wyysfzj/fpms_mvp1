@@ -537,14 +537,25 @@ def test_historical_pay_list_create_requires_client_and_round_trips_supported_fi
     assert payload["created_by"] is not None
 
     with session_factory() as db:
-        pay_lists = db.execute(select(PayList)).scalars().all()
-        gov_payments = db.execute(select(GovPayment)).scalars().all()
+        pay_list = db.execute(
+            select(PayList).where(
+                PayList.id == payload["id"],
+                PayList.pay_list_no == payload["pay_list_no"],
+                PayList.client_id == client_id,
+            )
+        ).scalar_one()
+        gov_payments = (
+            db.execute(select(GovPayment).where(GovPayment.pay_list_id == pay_list.id))
+            .scalars()
+            .all()
+        )
 
-    assert len(pay_lists) == 1
-    assert pay_lists[0].client_id == client_id
-    assert pay_lists[0].currency == "USD"
-    assert pay_lists[0].planned_pay_date == date(2026, 8, 15)
-    assert pay_lists[0].remark == "历史清单"
+    assert pay_list.client_id == client_id
+    assert pay_list.currency == "USD"
+    assert pay_list.planned_pay_date == date(2026, 8, 15)
+    assert pay_list.remark == "历史清单"
+    assert pay_list.created_by == payload["created_by"]
+    assert pay_list.updated_by == payload["updated_by"]
     assert len(gov_payments) == 0
 
 
