@@ -502,6 +502,52 @@ def test_pay_list_from_fee_items_keeps_valid_same_scope_candidates_when_other_it
     assert gov_payments[0].fee_item_id == gov_fee_item_id
 
 
+def test_historical_pay_list_create_requires_client_and_round_trips_supported_fields(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    missing_client_resp = client.post(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        json={"currency": "USD"},
+    )
+    _assert_error(missing_client_resp, 400, "PAY_LIST_CLIENT_REQUIRED")
+
+    client_id, _case_id = _create_client_and_case(client, auth_headers)
+    create_resp = client.post(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        json={
+            "client_id": client_id,
+            "currency": "USD",
+            "planned_pay_date": "2026-08-15",
+            "remark": "历史清单",
+        },
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    payload = create_resp.json()
+    assert payload["client_id"] == client_id
+    assert payload["currency"] == "USD"
+    assert payload["planned_pay_date"] == "2026-08-15"
+    assert payload["remark"] == "历史清单"
+    assert payload["status"] == "DRAFT"
+    assert payload["total_amount"] == "0.00"
+    assert payload["pay_list_no"]
+    assert payload["created_by"] is not None
+
+    with session_factory() as db:
+        pay_lists = db.execute(select(PayList)).scalars().all()
+        gov_payments = db.execute(select(GovPayment)).scalars().all()
+
+    assert len(pay_lists) == 1
+    assert pay_lists[0].client_id == client_id
+    assert pay_lists[0].currency == "USD"
+    assert pay_lists[0].planned_pay_date == date(2026, 8, 15)
+    assert pay_lists[0].remark == "历史清单"
+    assert len(gov_payments) == 0
+
+
 def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:
     rate = FeeRate(
         fee_code=_uid("RATE"),

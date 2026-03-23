@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+from app.modules.masterdata.clients.models import Client
 
 _ALLOWED_INSTRUCTIONS = ("PAY", "ABANDON", "DEFER")
 _ANNUITY_DRAFT_TYPE = "ANNUITY_FEE"
@@ -755,6 +756,64 @@ def create_pay_list_from_fee_items(
         },
         "success": success,
         "failed": failed,
+    }
+
+
+def create_historical_pay_list(
+    db: Session,
+    *,
+    client_id: str | None,
+    currency: str = "CNY",
+    planned_pay_date: date | None = None,
+    remark: str | None = None,
+    actor_id: str | None = None,
+) -> dict[str, Any]:
+    normalized_client_id = (client_id or "").strip()
+    if not normalized_client_id:
+        raise_business_error(
+            "PAY_LIST_CLIENT_REQUIRED",
+            "client_id is required",
+            status_code=400,
+        )
+
+    client = db.execute(
+        select(Client).where(Client.id == normalized_client_id)
+    ).scalar_one_or_none()
+    if client is None:
+        raise_business_error("CLIENT_NOT_FOUND", "Client not found", status_code=404)
+
+    normalized_currency = (currency or "").strip().upper() or "CNY"
+    pay_list = PayList(
+        client_id=normalized_client_id,
+        status="DRAFT",
+        currency=normalized_currency,
+        planned_pay_date=planned_pay_date,
+        total_amount=Decimal("0"),
+        remark=remark,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(pay_list)
+    db.flush()
+    pay_list.pay_list_no = f"PL-{pay_list.id:06d}"
+
+    db.commit()
+    db.refresh(pay_list)
+
+    return {
+        "id": pay_list.id,
+        "pay_list_no": pay_list.pay_list_no,
+        "client_id": pay_list.client_id,
+        "status": pay_list.status,
+        "currency": pay_list.currency,
+        "planned_pay_date": pay_list.planned_pay_date,
+        "paid_date": pay_list.paid_date,
+        "total_amount": str(pay_list.total_amount),
+        "remark": pay_list.remark,
+        "created_at": pay_list.created_at,
+        "updated_at": pay_list.updated_at,
+        "created_by": pay_list.created_by,
+        "updated_by": pay_list.updated_by,
     }
 
 

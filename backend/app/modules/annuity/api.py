@@ -4,19 +4,21 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
 from app.db.session import get_db
 from app.modules.annuity.service import (
+    create_historical_pay_list,
     create_pay_list_from_fee_items,
     generate_fee_drafts_from_annuity_tasks,
     list_annuity_tasks,
     register_gov_payment,
     update_annuity_task_instruction,
 )
+from app.modules.auth.models import T_User
 
 router = APIRouter()
 
@@ -34,6 +36,13 @@ class AnnuityGenerateDraftsIn(BaseModel):
 
 class PayListFromFeeItemsIn(BaseModel):
     fee_item_ids: list[str] = Field(..., min_length=1)
+    planned_pay_date: date | None = None
+    remark: str | None = None
+
+
+class HistoricalPayListCreateIn(BaseModel):
+    client_id: str | None = Field(default=None, max_length=36)
+    currency: str = Field(default="CNY", min_length=1, max_length=8)
     planned_pay_date: date | None = None
     remark: str | None = None
 
@@ -149,6 +158,27 @@ def post_pay_list_from_fee_items(
         fee_item_ids=payload.fee_item_ids,
         planned_pay_date=payload.planned_pay_date,
         remark=payload.remark,
+    )
+
+
+@router.post(
+    "/pay-lists",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create historical pay list",
+)
+def post_pay_lists(
+    payload: HistoricalPayListCreateIn,
+    _perm: None = Depends(require_perm("PayList.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return create_historical_pay_list(
+        db,
+        client_id=payload.client_id,
+        currency=payload.currency,
+        planned_pay_date=payload.planned_pay_date,
+        remark=payload.remark,
+        actor_id=current_user.id,
     )
 
 
