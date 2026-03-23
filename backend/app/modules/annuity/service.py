@@ -658,26 +658,27 @@ def create_pay_list_from_fee_items(
     baseline_client: str | None = None
     baseline_currency: str | None = None
     scoped_items: list[tuple[FeeItem, FeeDraft]] = []
+    candidate_scopes = {(draft.client_id, draft.currency) for _, draft in candidates}
+    scope_conflict = len(candidate_scopes) > 1
 
-    for item, draft in candidates:
-        if baseline_client is None:
-            baseline_client = draft.client_id
-            baseline_currency = draft.currency
+    if scope_conflict:
+        failed.extend(
+            {
+                "fee_item_id": item.id,
+                "code": "PAY_LIST_SCOPE_INVALID",
+                "message": "Selected fee items must belong to the same client and currency",
+                "status_code": 400,
+            }
+            for item, _draft in candidates
+        )
+    else:
+        for item, draft in candidates:
+            if baseline_client is None:
+                baseline_client = draft.client_id
+                baseline_currency = draft.currency
+            scoped_items.append((item, draft))
 
-        if draft.client_id != baseline_client or draft.currency != baseline_currency:
-            failed.append(
-                {
-                    "fee_item_id": item.id,
-                    "code": "PAY_LIST_SCOPE_INVALID",
-                    "message": "Selected fee items must belong to the same client and currency",
-                    "status_code": 400,
-                }
-            )
-            continue
-
-        scoped_items.append((item, draft))
-
-    if not scoped_items or baseline_client is None or baseline_currency is None:
+    if scope_conflict or not scoped_items or baseline_client is None or baseline_currency is None:
         return {
             "summary": {
                 "requested": len(normalized_ids),
