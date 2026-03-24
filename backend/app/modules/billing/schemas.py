@@ -145,16 +145,20 @@ class CaseReceiptResponse(BaseModel):
 
     id: str
     case_id: str
-    fee_type: str | None
+    fee_type: str | None = None
     currency: str
     receivable_amt: Decimal
     received_amt: Decimal
-    last_receipt_date: date | None
+    last_receipt_date: date | None = None
     fee_code: str | None = None
+    fee_name: str | None = None
     year_no: int | None = None
+    due_date: date | None = None
     is_arrears: bool | None = None
-    invoice_no: str | None = None
+    is_prepayment: bool | None = None
     is_commissionable: bool | None = None
+    invoice_no: str | None = None
+    remark: str | None = None
     bills: list["CaseReceiptBillResponse"] = []
 
 
@@ -167,6 +171,68 @@ class CaseReceiptBillResponse(BaseModel):
     amount: Decimal = Field(Decimal("0"), ge=0)
     balance: Decimal = Field(Decimal("0"), ge=0)
     issue_date: date | None = None
+
+
+class CaseReceiptCreate(BaseModel):
+    """Schema for creating a case receipt manually."""
+
+    case_id: str = Field(..., min_length=1)
+    fee_type: str | None = Field(None, max_length=16)
+    fee_code: str | None = Field(None, max_length=64)
+    fee_name: str | None = Field(None, max_length=128)
+    year_no: int | None = None
+    currency: str = Field("CNY", max_length=8)
+    receivable_amt: Decimal = Field(..., ge=0)
+    received_amt: Decimal = Field(..., ge=0)
+    last_receipt_date: date | None = None
+    due_date: date | None = None
+    is_arrears: bool | None = None
+    is_prepayment: bool | None = None
+    is_commissionable: bool | None = None
+    invoice_no: str | None = Field(None, max_length=64)
+    remark: str | None = Field(None, max_length=512)
+
+
+class CaseReceiptUpdate(BaseModel):
+    """Schema for updating a case receipt (partial)."""
+
+    fee_type: str | None = Field(None, max_length=16)
+    fee_code: str | None = Field(None, max_length=64)
+    fee_name: str | None = Field(None, max_length=128)
+    year_no: int | None = None
+    currency: str | None = Field(None, max_length=8)
+    receivable_amt: Decimal | None = Field(None, ge=0)
+    received_amt: Decimal | None = Field(None, ge=0)
+    last_receipt_date: date | None = None
+    due_date: date | None = None
+    is_arrears: bool | None = None
+    is_prepayment: bool | None = None
+    is_commissionable: bool | None = None
+    invoice_no: str | None = Field(None, max_length=64)
+    remark: str | None = Field(None, max_length=512)
+
+
+class CaseReceiptListItem(BaseModel):
+    """List item for cross-case receipt query."""
+
+    id: str
+    case_id: str
+    case_no: str | None = None
+    client_name: str | None = None
+    fee_type: str | None = None
+    currency: str
+    receivable_amt: Decimal
+    received_amt: Decimal
+    last_receipt_date: date | None = None
+    fee_code: str | None = None
+    fee_name: str | None = None
+    year_no: int | None = None
+    due_date: date | None = None
+    is_arrears: bool | None = None
+    is_prepayment: bool | None = None
+    is_commissionable: bool | None = None
+    invoice_no: str | None = None
+    remark: str | None = None
 
 
 class BillManualItemSchema(BaseModel):
