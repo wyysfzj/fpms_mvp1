@@ -36,7 +36,9 @@ The annuity module already implements: task list with filters, client instructio
 
 ### New Migration: `pe_fr_fe_06_annuity_task_ext`
 
-**Revision ID**: `pe_fr_fe_06_01`. Depends on `pe_fr_fe_07_01` (latest head). Adds 6 columns to `t_annuity_task` using `batch_alter_table` (SQLite compat). Forward-only. Idempotent column existence check.
+**Revision ID**: `pe_fr_fe_06_01`. `down_revision = "pe_fr_fe_07_01"` (latest head in Alembic chain). Two tables modified:
+
+**Table 1: `t_annuity_task`** — adds 6 columns using `batch_alter_table` (SQLite compat):
 
 | Column | Type | Nullable | Default | Purpose |
 |--------|------|----------|---------|---------|
@@ -47,7 +49,18 @@ The annuity module already implements: task list with filters, client instructio
 | `draft_generated` | Boolean | Yes | `0` | Fee draft has been generated |
 | `notice_sent` | Boolean | Yes | `0` | Notice has been sent |
 
-### Model Update (`annuity/models.py`)
+**Table 2: `t_case`** — adds 1 column (prerequisite for generation logic):
+
+| Column | Type | Nullable | Default | Purpose |
+|--------|------|----------|---------|---------|
+| `first_annuity_year` | Integer | Yes | NULL | First year of annuity fee obligation |
+
+**Note**: `t_case` already has `filing_date` (Date) and `valid_until` (Date). The new `first_annuity_year` is needed because the SPEC requires it as a separate field (it's typically set when a case is GRANTED, and may differ from filing year).
+
+### Model Updates
+
+**`annuity/models.py`** — add 6 fields to AnnuityTask.
+**`cases/models.py`** — add `first_annuity_year` field to T_Case.
 
 Add 6 new `mapped_column` fields to existing `AnnuityTask` class:
 
@@ -124,7 +137,9 @@ class AnnuityTaskGenerateResult(BaseModel):
 5. For each year_no from `first_annuity_year` to `last_year`:
    - Skip if AnnuityTask already exists for this case_id + year_no
    - Calculate `due_date`: `filing_date + year_no years` (CN rule: annuity due on filing anniversary)
-   - Look up `T_FeeRate(rate_group='ANNUITY', year_no=year_no)` for gov_fee_amt and service_fee_amt — default to 0 if not found
+   - Look up GOV fee: `T_FeeRate(rate_group='ANNUITY', fee_type='GOV', year_no=year_no)` → `gov_fee_amt` (default 0 if not found)
+   - Look up SERVICE fee: `T_FeeRate(rate_group='ANNUITY', fee_type='SERVICE', year_no=year_no)` → `service_fee_amt` (default 0 if not found)
+   - Note: The existing `_rate_amount()` helper needs `year_no` parameter added to its filter
    - Create `AnnuityTask` record
 6. Return `{case_id, case_no, first_year, last_year, tasks_created, tasks_skipped}`
 
@@ -232,10 +247,11 @@ Add: `generateAnnuityTasks(payload): Promise<AnnuityTaskGenerateResult>`
 
 | File | Change |
 |------|--------|
-| `backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py` | NEW — migration |
+| `backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py` | NEW — migration (6 cols on t_annuity_task + 1 col on t_case) |
 | `backend/app/modules/annuity/models.py` | EDIT — add 6 columns |
+| `backend/app/modules/cases/models.py` | EDIT — add first_annuity_year column |
 | `backend/app/modules/annuity/api.py` | EDIT — add generate endpoint, update list response |
-| `backend/app/modules/annuity/service.py` | EDIT — add generate_annuity_tasks_for_case, update list response, update draft_generated flag |
+| `backend/app/modules/annuity/service.py` | EDIT — add generate_annuity_tasks_for_case, update list response, update draft_generated flag, update _rate_amount for year_no |
 | `backend/tests/test_annuity_generate.py` | NEW — 11 tests |
 | `frontend/src/api/annuity.types.ts` | EDIT — add types, update AnnuityTask interface |
 | `frontend/src/api/annuity.ts` | EDIT — add generateAnnuityTasks function |
@@ -244,6 +260,7 @@ Add: `generateAnnuityTasks(payload): Promise<AnnuityTaskGenerateResult>`
 
 ---
 
-**Document Version**: 1.0
+**Document Version**: 1.1 (post spec-review fixes)
 **Author**: Claude Code (brainstorming session)
 **Approved by**: User (2026-03-24)
+**Spec Review**: Iteration 1 — 3 CRITICAL fixed (first_annuity_year on t_case, FeeRate year_no lookup, migration dependency)
