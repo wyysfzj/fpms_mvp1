@@ -59,9 +59,18 @@ index b11e012..5d0e3c0 100644
              target.official_receipt_no = official_receipt_no
          if remark is not None:
 diff --git a/backend/tests/test_annuity_e2e.py b/backend/tests/test_annuity_e2e.py
-index 2cc6dbd..9eb0c0d 100644
+index 2cc6dbd..f6cdb60 100644
 --- a/backend/tests/test_annuity_e2e.py
 +++ b/backend/tests/test_annuity_e2e.py
+@@ -251,7 +251,7 @@ def test_annuity_tasks_filters_and_instruction_status_matrix(
+     _assert_error(terminal_resp, 409, "ANNUITY_STATE_CONFLICT")
+ 
+ 
+-def test_annuity_generate_drafts_pay_list_gov_payment_chain(
++def test_gov_payment_register_generated_planned_chain(
+     client: TestClient,
+     auth_headers: dict[str, str],
+     session_factory: sessionmaker,
 @@ -355,6 +355,43 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
      )
      _assert_error(invalid_amount_resp, 400, "PAY_LIST_SCOPE_INVALID")
@@ -106,3 +115,12 @@ index 2cc6dbd..9eb0c0d 100644
      missing_pay_list_resp = client.post(
          "/api/v1/gov-payments",
          headers=auth_headers,
+@@ -370,7 +407,7 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
+     _assert_error(validation_resp, 422, "VALIDATION_ERROR")
+ 
+ 
+-def test_gov_payment_registration_keeps_exported_pay_list_exported(
++def test_gov_payment_register_keeps_exported_pay_list_exported(
+     client: TestClient,
+     auth_headers: dict[str, str],
+     session_factory: sessionmaker,

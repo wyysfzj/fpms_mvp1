@@ -1,3 +1,5 @@
 ## fr-fe-04-be06
- M backend/app/modules/annuity/service.py
- M backend/tests/test_annuity_e2e.py
+ M artifacts/FRFE04-BE-06/git/diff.patch
+ M artifacts/FRFE04-BE-06/git/rev.txt
+ M artifacts/FRFE04-BE-06/git/status.txt
+ M artifacts/FRFE04-BE-06/summary.md

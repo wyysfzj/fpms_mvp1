@@ -10,7 +10,7 @@
   - `cd backend && ruff check --fix app/modules/annuity/service.py tests/test_annuity_e2e.py`
   - `cd backend && ruff format app/modules/annuity/service.py tests/test_annuity_e2e.py`
   - `cd backend && ruff check app/modules/annuity/service.py tests/test_annuity_e2e.py`
-  - `cd backend && pytest -q tests/test_annuity_e2e.py -k gov_payment`
+  - `cd backend && pytest -q tests/test_annuity_e2e.py -k gov_payment_register`
   - `./scripts/task_validate.sh FRFE04-BE-06`
 - Expected status codes:
   - `200` generated/planned gov-payment registration success
