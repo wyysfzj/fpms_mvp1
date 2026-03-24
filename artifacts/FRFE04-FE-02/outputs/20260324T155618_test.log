@@ -1,0 +1,5 @@
+
+> fpms-spa@0.1.0 typecheck
+> vue-tsc --noEmit
+
+sh: vue-tsc: command not found
