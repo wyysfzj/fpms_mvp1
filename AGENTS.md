@@ -105,7 +105,6 @@ Agent MUST follow these rules without exception.
 
 ```python
 _perm: None = Depends(require_perm("Title.Action"))
-```
 
 - Permission codes MUST follow Title.Action naming.
 
