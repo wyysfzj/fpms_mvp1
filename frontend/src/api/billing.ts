@@ -6,7 +6,10 @@ import type {
     BillListItem,
     BillListParams,
     BillManualPayload,
+    CaseReceiptCreate,
+    CaseReceiptListResponse,
     CaseReceiptsSummary,
+    CaseReceiptUpdate,
     OffsetCreatePayload,
     OffsetListItem,
     PaymentCreatePayload,
@@ -395,4 +398,19 @@ function mapCaseReceipt(input: BackendCaseReceipt): CaseReceiptsSummary {
 export async function getCaseReceipts(caseId: number | string): Promise<CaseReceiptsSummary> {
     const response = await http.get<BackendCaseReceipt>(`/cases/${caseId}/receipts`)
     return mapCaseReceipt(response.data)
+}
+
+export async function createCaseReceipt(payload: CaseReceiptCreate) {
+    const { data } = await http.post('/case-receipts', payload)
+    return data
+}
+
+export async function updateCaseReceipt(id: string, payload: CaseReceiptUpdate) {
+    const { data } = await http.put(`/case-receipts/${id}`, payload)
+    return data
+}
+
+export async function listCaseReceipts(params: Record<string, unknown> = {}): Promise<CaseReceiptListResponse> {
+    const { data } = await http.get<CaseReceiptListResponse>('/case-receipts', { params })
+    return data
 }

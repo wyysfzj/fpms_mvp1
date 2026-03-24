@@ -187,3 +187,66 @@ export interface CaseReceiptBill {
     balance: number
     issue_date?: string
 }
+
+export interface CaseReceiptCreate {
+  case_id: string
+  fee_type?: string | null
+  fee_code?: string | null
+  fee_name?: string | null
+  year_no?: number | null
+  currency?: string
+  receivable_amt: number | string
+  received_amt: number | string
+  last_receipt_date?: string | null
+  due_date?: string | null
+  is_arrears?: boolean | null
+  is_prepayment?: boolean | null
+  is_commissionable?: boolean | null
+  invoice_no?: string | null
+  remark?: string | null
+}
+
+export interface CaseReceiptUpdate {
+  fee_type?: string | null
+  fee_code?: string | null
+  fee_name?: string | null
+  year_no?: number | null
+  currency?: string | null
+  receivable_amt?: number | string | null
+  received_amt?: number | string | null
+  last_receipt_date?: string | null
+  due_date?: string | null
+  is_arrears?: boolean | null
+  is_prepayment?: boolean | null
+  is_commissionable?: boolean | null
+  invoice_no?: string | null
+  remark?: string | null
+}
+
+export interface CaseReceiptListItem {
+  id: string
+  case_id: string
+  case_no?: string | null
+  client_name?: string | null
+  fee_type?: string | null
+  currency: string
+  receivable_amt: number
+  received_amt: number
+  last_receipt_date?: string | null
+  fee_code?: string | null
+  fee_name?: string | null
+  year_no?: number | null
+  due_date?: string | null
+  is_arrears?: boolean | null
+  is_prepayment?: boolean | null
+  is_commissionable?: boolean | null
+  invoice_no?: string | null
+  remark?: string | null
+}
+
+export interface CaseReceiptListResponse {
+  items: CaseReceiptListItem[]
+  page: number
+  page_size: number
+  total: number
+}
