@@ -251,7 +251,7 @@ def test_annuity_tasks_filters_and_instruction_status_matrix(
     _assert_error(terminal_resp, 409, "ANNUITY_STATE_CONFLICT")
 
 
-def test_annuity_generate_drafts_pay_list_gov_payment_chain(
+def test_gov_payment_register_generated_planned_chain(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
@@ -355,6 +355,43 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
     )
     _assert_error(invalid_amount_resp, 400, "PAY_LIST_SCOPE_INVALID")
 
+    zero_amount_task = _insert_annuity_task(
+        session_factory,
+        case_id=case_id,
+        client_id=client_id,
+        year_no=3,
+        due_date=date(2028, 3, 1),
+    )
+    zero_amount_generate_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [zero_amount_task], "pay_next_year": False, "currency": "CNY"},
+    )
+    assert zero_amount_generate_resp.status_code == 200, zero_amount_generate_resp.text
+    zero_amount_draft_id = zero_amount_generate_resp.json()["success"][0]["draft_id"]
+    zero_amount_gov_fee_item_id = _first_fee_item_id_by_type(
+        session_factory, zero_amount_draft_id, "GOV"
+    )
+
+    with session_factory() as db:
+        zero_amount_fee_item = (
+            db.execute(select(FeeItem).where(FeeItem.id == zero_amount_gov_fee_item_id))
+            .scalars()
+            .one()
+        )
+        zero_amount_fee_item.amount = Decimal("0.00")
+        db.commit()
+
+    zero_default_amount_resp = client.post(
+        "/api/v1/gov-payments",
+        headers=auth_headers,
+        json={
+            "pay_list_id": pay_list_id,
+            "fee_item_id": zero_amount_gov_fee_item_id,
+        },
+    )
+    _assert_error(zero_default_amount_resp, 400, "GOV_PAYMENT_INVALID")
+
     missing_pay_list_resp = client.post(
         "/api/v1/gov-payments",
         headers=auth_headers,
@@ -370,7 +407,7 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
     _assert_error(validation_resp, 422, "VALIDATION_ERROR")
 
 
-def test_gov_payment_registration_keeps_exported_pay_list_exported(
+def test_gov_payment_register_keeps_exported_pay_list_exported(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,

@@ -1211,6 +1211,16 @@ def register_gov_payment(
                 status_code=400,
             )
 
+        resolved_paid_amount = (
+            Decimal(paid_amount) if paid_amount is not None else Decimal(fee_item.amount or 0)
+        )
+        if resolved_paid_amount <= Decimal("0"):
+            raise_business_error(
+                "GOV_PAYMENT_INVALID",
+                "paid_amount must be greater than 0",
+                status_code=400,
+            )
+
         target = GovPayment(
             pay_list_id=pay_list.id,
             case_id=fee_item.case_id,
@@ -1218,9 +1228,7 @@ def register_gov_payment(
             status="PAID",
             currency=pay_list.currency,
             paid_date=paid_date or date.today(),
-            paid_amount=Decimal(paid_amount)
-            if paid_amount is not None
-            else Decimal(fee_item.amount or 0),
+            paid_amount=resolved_paid_amount,
             official_receipt_no=official_receipt_no,
             remark=remark,
             created_by=actor_id,
@@ -1237,10 +1245,25 @@ def register_gov_payment(
                 status_code=409,
             )
 
+        if paid_amount is None:
+            if Decimal(target.paid_amount or 0) <= Decimal("0"):
+                raise_business_error(
+                    "GOV_PAYMENT_INVALID",
+                    "paid_amount must be greater than 0",
+                    status_code=400,
+                )
+        else:
+            resolved_paid_amount = Decimal(paid_amount)
+            if resolved_paid_amount <= Decimal("0"):
+                raise_business_error(
+                    "GOV_PAYMENT_INVALID",
+                    "paid_amount must be greater than 0",
+                    status_code=400,
+                )
+            target.paid_amount = resolved_paid_amount
+
         target.status = "PAID"
         target.paid_date = paid_date or date.today()
-        if paid_amount is not None:
-            target.paid_amount = Decimal(paid_amount)
         if official_receipt_no is not None:
             target.official_receipt_no = official_receipt_no
         if remark is not None:

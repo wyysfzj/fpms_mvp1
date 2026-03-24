@@ -1,0 +1,108 @@
+diff --git a/backend/app/modules/annuity/service.py b/backend/app/modules/annuity/service.py
+index b11e012..5d0e3c0 100644
+--- a/backend/app/modules/annuity/service.py
++++ b/backend/app/modules/annuity/service.py
+@@ -1211,6 +1211,16 @@ def register_gov_payment(
+                 status_code=400,
+             )
+ 
++        resolved_paid_amount = (
++            Decimal(paid_amount) if paid_amount is not None else Decimal(fee_item.amount or 0)
++        )
++        if resolved_paid_amount <= Decimal("0"):
++            raise_business_error(
++                "GOV_PAYMENT_INVALID",
++                "paid_amount must be greater than 0",
++                status_code=400,
++            )
++
+         target = GovPayment(
+             pay_list_id=pay_list.id,
+             case_id=fee_item.case_id,
+@@ -1218,9 +1228,7 @@ def register_gov_payment(
+             status="PAID",
+             currency=pay_list.currency,
+             paid_date=paid_date or date.today(),
+-            paid_amount=Decimal(paid_amount)
+-            if paid_amount is not None
+-            else Decimal(fee_item.amount or 0),
++            paid_amount=resolved_paid_amount,
+             official_receipt_no=official_receipt_no,
+             remark=remark,
+             created_by=actor_id,
+@@ -1237,10 +1245,25 @@ def register_gov_payment(
+                 status_code=409,
+             )
+ 
++        if paid_amount is None:
++            if Decimal(target.paid_amount or 0) <= Decimal("0"):
++                raise_business_error(
++                    "GOV_PAYMENT_INVALID",
++                    "paid_amount must be greater than 0",
++                    status_code=400,
++                )
++        else:
++            resolved_paid_amount = Decimal(paid_amount)
++            if resolved_paid_amount <= Decimal("0"):
++                raise_business_error(
++                    "GOV_PAYMENT_INVALID",
++                    "paid_amount must be greater than 0",
++                    status_code=400,
++                )
++            target.paid_amount = resolved_paid_amount
++
+         target.status = "PAID"
+         target.paid_date = paid_date or date.today()
+-        if paid_amount is not None:
+-            target.paid_amount = Decimal(paid_amount)
+         if official_receipt_no is not None:
+             target.official_receipt_no = official_receipt_no
+         if remark is not None:
+diff --git a/backend/tests/test_annuity_e2e.py b/backend/tests/test_annuity_e2e.py
+index 2cc6dbd..9eb0c0d 100644
+--- a/backend/tests/test_annuity_e2e.py
++++ b/backend/tests/test_annuity_e2e.py
+@@ -355,6 +355,43 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
+     )
+     _assert_error(invalid_amount_resp, 400, "PAY_LIST_SCOPE_INVALID")
+ 
++    zero_amount_task = _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=3,
++        due_date=date(2028, 3, 1),
++    )
++    zero_amount_generate_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [zero_amount_task], "pay_next_year": False, "currency": "CNY"},
++    )
++    assert zero_amount_generate_resp.status_code == 200, zero_amount_generate_resp.text
++    zero_amount_draft_id = zero_amount_generate_resp.json()["success"][0]["draft_id"]
++    zero_amount_gov_fee_item_id = _first_fee_item_id_by_type(
++        session_factory, zero_amount_draft_id, "GOV"
++    )
++
++    with session_factory() as db:
++        zero_amount_fee_item = (
++            db.execute(select(FeeItem).where(FeeItem.id == zero_amount_gov_fee_item_id))
++            .scalars()
++            .one()
++        )
++        zero_amount_fee_item.amount = Decimal("0.00")
++        db.commit()
++
++    zero_default_amount_resp = client.post(
++        "/api/v1/gov-payments",
++        headers=auth_headers,
++        json={
++            "pay_list_id": pay_list_id,
++            "fee_item_id": zero_amount_gov_fee_item_id,
++        },
++    )
++    _assert_error(zero_default_amount_resp, 400, "GOV_PAYMENT_INVALID")
++
+     missing_pay_list_resp = client.post(
+         "/api/v1/gov-payments",
+         headers=auth_headers,

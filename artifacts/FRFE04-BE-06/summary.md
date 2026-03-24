@@ -1,0 +1,33 @@
+# FRFE04-BE-06 Evidence Summary
+
+- Task/runbook executed: `FRFE04-BE-06`
+- Role executed: `backend worker`
+- Final per-task status: `PASS`
+- Modified files:
+  - `backend/app/modules/annuity/service.py`
+  - `backend/tests/test_annuity_e2e.py`
+- Verification commands:
+  - `cd backend && ruff check --fix app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff format app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff check app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && pytest -q tests/test_annuity_e2e.py -k gov_payment`
+  - `./scripts/task_validate.sh FRFE04-BE-06`
+- Expected status codes:
+  - `200` generated/planned gov-payment registration success
+  - `400` zero/negative final paid amount rejected
+  - `401` unauthenticated request
+  - `403` permission denied
+  - `404` missing pay list
+  - `409` duplicate gov-payment registration rejected
+- Closure slice completed: harden `POST /gov-payments` to register one generated/planned `GovPayment` row under an existing pay list with duplicate protection and positive amount rules
+- Explicit non-closure boundary respected: did not create standalone `GovPayment`, did not create manual rows with nullable `fee_item_id`, and did not implement voucher/invoice fields
+- API-level coverage exercised:
+  - generated/planned gov-payment registration succeeds on a normal GOV fee item
+  - duplicate registration is rejected with `GOV_PAYMENT_DUPLICATE`
+  - explicit invalid positive amount path remains rejected
+  - defaulted zero planned amount is rejected with `GOV_PAYMENT_INVALID`
+- Evidence path: `artifacts/FRFE04-BE-06/**`
+- Evidence files:
+  - `artifacts/FRFE04-BE-06/results.jsonl`
+  - `artifacts/FRFE04-BE-06/summary.md`
+  - `artifacts/FRFE04-BE-06/git/diff.patch`
