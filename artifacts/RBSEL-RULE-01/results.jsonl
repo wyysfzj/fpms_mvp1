@@ -1,2 +1,5 @@
-{"cmd":"rg -n \"Story Shape Classification|every multi-step task that will enter `writing-plans`|Before entering `writing-plans`|resulting task plan MUST also record the same `Story Shape Classification`|chosen_runbook\" .worktrees/rbsel-rule-01/AGENTS.md","step":"lint","rc":0}
-{"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0}
+{"cmd":"rg -n \"Story Shape Classification & Runbook Selection \\(MANDATORY\\)|shared_file_density|prereq_dependency_density|be_fe_coupling|evidence_cost|chosen_runbook|shared prerequisite|shared ownership conflict|state-machine reachability|return to planning|follow-up task\" .worktrees/rbsel-rule-01/AGENTS.md","step":"lint","rc":0}
+{"cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01 diff 0e78d0..HEAD -- AGENTS.md > artifacts/RBSEL-RULE-01/git/diff.patch","step":"evidence","rc":0}
+{"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0,"status":"PASS"}
+{"cmd":"rg -n 'valid `chosen_runbook` IDs|permission snippet code fence|process-based exclusion' artifacts/RBSEL-RULE-01/summary.md","step":"evidence","rc":0}
+{"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0,"status":"PASS"}

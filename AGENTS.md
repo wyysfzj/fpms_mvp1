@@ -44,7 +44,7 @@ Agent MUST follow these rules without exception.
 
 ## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
 
-- This rule applies to every multi-step task that will enter `writing-plans`; it does not apply to a single-file fix task or a doc-only task that is handled outside `writing-plans`.
+- This rule applies whenever the task file or batch manifest requires more than one atomic task file, more than one execution wave, or an explicit planning artifact; it does not apply to a single-file fix task or a doc-only task handled outside `writing-plans`.
 - Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:
   - `shared_file_density`
   - `prereq_dependency_density`
@@ -52,6 +52,11 @@ Agent MUST follow these rules without exception.
   - `evidence_cost`
 - The resulting task plan MUST also record the same `Story Shape Classification`.
 - The task spec and the task plan MUST both record the selected `chosen_runbook`.
+- Valid `chosen_runbook` IDs are:
+  - `P0-single-lane-story`
+  - `P0-prereq-heavy-story`
+  - `P0-multi-lane-parallel-story`
+  - `P0-frontend-heavy-story`
 - The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.
 - Execution MUST NOT start until both classification and runbook selection are complete and recorded in the spec and plan.
 - If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.
@@ -100,6 +105,7 @@ Agent MUST follow these rules without exception.
 
 ```python
 _perm: None = Depends(require_perm("Title.Action"))
+```
 
 - Permission codes MUST follow Title.Action naming.
 

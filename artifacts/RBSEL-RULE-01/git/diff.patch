@@ -1,13 +1,26 @@
 diff --git a/AGENTS.md b/AGENTS.md
-index d6dccb7..225771e 100644
+index f5f321e..21d7695 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
-@@ -44,7 +44,7 @@ Agent MUST follow these rules without exception.
+@@ -42,6 +42,21 @@ Agent MUST follow these rules without exception.
+   - one mixed backend+frontend mega task
+   - one task that combines defaults + linkage + queries + dashboard
  
- ## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
++## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
++
++- This rule applies to every multi-step task that will enter `writing-plans`; it does not apply to a single-file fix task or a doc-only task that is handled outside `writing-plans`.
++- Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:
++  - `shared_file_density`
++  - `prereq_dependency_density`
++  - `be_fe_coupling`
++  - `evidence_cost`
++- The resulting task plan MUST also record the same `Story Shape Classification`.
++- The task spec and the task plan MUST both record the selected `chosen_runbook`.
++- The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.
++- Execution MUST NOT start until both classification and runbook selection are complete and recorded in the spec and plan.
++- If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.
++- If the new prerequisite changes the closure slice, the original task MUST NOT be stretched to absorb it; the work MUST be split into a follow-up task.
++
+ ---
  
-- This rule applies only to multi-step tasks that require `writing-plans`; it does not apply to simple single-file fixes or doc-only tasks that never need planning.
-+ This rule applies to every multi-step task that will enter `writing-plans`; the only approved exclusion is a genuinely simple single-file fix or doc-only task that can be completed without `writing-plans`.
- - Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:
-   - `shared_file_density`
-   - `prereq_dependency_density`
+ ## 2) Phase Constraints
