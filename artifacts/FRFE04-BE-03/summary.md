@@ -1,0 +1,33 @@
+# FRFE04-BE-03 Evidence Summary
+
+- Task/runbook executed: `FRFE04-BE-03`
+- Role executed: `backend worker`
+- Final per-task status: `PASS`
+- Modified files:
+  - `backend/app/modules/annuity/api.py`
+  - `backend/app/modules/annuity/service.py`
+  - `backend/tests/test_annuity_e2e.py`
+- Verification commands:
+  - `cd backend && ruff check --fix app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff format app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff check app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && pytest -q tests/test_annuity_e2e.py -k pay_list_detail`
+  - `./scripts/task_validate.sh FRFE04-BE-03`
+- Expected status codes:
+  - `200` for successful detail reads
+  - `401` for unauthenticated access
+  - `403` for authenticated users without `PayList.Read`
+  - `404` for unknown pay-list ids
+- Closure slice completed: return one pay-list header plus associated `GovPayment` rows
+- Explicit non-closure boundary respected: no status mutation, export generation, manual row creation, or blocked `SPEC` field backfill
+- API-level coverage exercised:
+  - happy-path detail read
+  - payload key set and serialization shape for pay-list header and `GovPayment` row
+  - `404` unknown pay-list
+  - `401` unauthenticated access
+  - `403` permission-denied access for missing `PayList.Read`
+- Evidence path: `artifacts/FRFE04-BE-03/**`
+- Evidence files:
+  - `artifacts/FRFE04-BE-03/results.jsonl`
+  - `artifacts/FRFE04-BE-03/summary.md`
+  - `artifacts/FRFE04-BE-03/git/diff.patch`

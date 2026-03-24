@@ -1,0 +1,13 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0
+
+
+Oops! Something went wrong! :(
+
+ESLint: 9.39.2
+
+Error: ENOENT: no such file or directory, open '/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/vite.config.ts.timestamp-1772292590295-0f5b2c532e5058.mjs'
+    at async open (node:internal/fs/promises:640:25)
+    at async Object.readFile (node:internal/fs/promises:1244:14)
+    at async readAndVerifyFile (/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/node_modules/eslint/lib/eslint/eslint-helpers.js:1306:16)

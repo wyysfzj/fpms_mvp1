@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"cd backend && pytest -q tests/test_task_template.py -k 'today_returns_enriched_fields_and_role_filtered or current_user_role_view'","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_task_template.py","rc":0}

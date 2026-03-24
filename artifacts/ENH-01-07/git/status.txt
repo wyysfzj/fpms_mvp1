@@ -1,0 +1,30 @@
+## master
+ M backend/app/main.py
+ M backend/app/modules/auth/api.py
+ M backend/app/modules/auth/models.py
+ M backend/app/modules/auth/schemas.py
+ M backend/app/modules/auth/service.py
+ M backend/app/modules/rbac/models.py
+ M backend/app/modules/rbac/service.py
+ M tasks/backend/mvp1enhance/ENH-01-02.md
+?? "Atomic Task Writing Specification v1.0.md"
+?? backend/alembic/versions/ea0de36a1dde_add_t_role_perm.py
+?? backend/app/core/pagination.py
+?? backend/app/core/security.py
+?? backend/app/core/storage.py
+?? backend/app/db/mixins.py
+?? docs/decisions/
+?? tasks/backend/mvp1enhance/ENH-00-12.md
+?? tasks/backend/mvp1enhance/ENH-00-12_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-01_CODEX_PROMPT_FINAL.md
+?? tasks/backend/mvp1enhance/ENH-01-01_CODEX_PROMPT_FINAL_UUID.md
+?? tasks/backend/mvp1enhance/ENH-01-02_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-03_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-04_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-05_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-06_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-07_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-08_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-09_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-11.md
+?? tasks/backend/mvp1enhance/ENH-01-11_CODEX_PROMPT.md

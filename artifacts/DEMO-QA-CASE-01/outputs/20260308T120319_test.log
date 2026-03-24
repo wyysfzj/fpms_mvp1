@@ -1,0 +1,11 @@
+{"timestamp": "2026-03-08T04:03:20.497947+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "4ddc349d-93a9-4518-a9c5-773dcaca8e7c"}
+{"timestamp": "2026-03-08T04:03:20.498785+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/auth/login \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T04:03:20.506530+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "0d864dcd-4b7f-4f7f-a646-10243764e843"}
+{"timestamp": "2026-03-08T04:03:20.507126+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/cases?case_no=ZY-IP-2026-D-003%60&page=1&page_size=5 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T04:03:20.511410+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "ae49e586-947b-44e2-971f-6b08f8afd54e"}
+{"timestamp": "2026-03-08T04:03:20.511972+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/cases/e85b6e2e-64a2-429b-b54d-315f99695b64 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T04:03:20.518643+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "266a060b-aaca-43d5-9098-affa88416e51"}
+{"timestamp": "2026-03-08T04:03:20.519198+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: PUT http://testserver/api/v1/cases/e85b6e2e-64a2-429b-b54d-315f99695b64 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T04:03:20.521280+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "dd63ba6b-babe-466f-8a94-464d6264dbe2"}
+{"timestamp": "2026-03-08T04:03:20.521762+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: PUT http://testserver/api/v1/cases/e85b6e2e-64a2-429b-b54d-315f99695b64 \"HTTP/1.1 422 Unprocessable Entity\"", "request_id": null}
+{'case_id': 'e85b6e2e-64a2-429b-b54d-315f99695b64', 'stored_status_before_smoke': 'ACCEPTED', 'valid_code': 200, 'invalid_code': 422}

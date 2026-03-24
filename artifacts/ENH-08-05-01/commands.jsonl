@@ -1,0 +1,4 @@
+{"ts":"20260129T002351","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/system/service.py"}
+{"ts":"20260129T002358","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/system/service.py"}
+{"ts":"20260129T002406","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/system/service.py"}
+{"ts":"20260129T002413","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"from\ app.modules.system.service\ import\ list_system_params\,\ upsert_system_param\,\ mask_secret_param_value\;\ print\(\'OK\'\)\""}

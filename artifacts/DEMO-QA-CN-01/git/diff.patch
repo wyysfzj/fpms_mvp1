@@ -1,0 +1,893 @@
+diff --git a/frontend/src/constants/displayText.ts b/frontend/src/constants/displayText.ts
+index 81b05a0..806ef28 100644
+--- a/frontend/src/constants/displayText.ts
++++ b/frontend/src/constants/displayText.ts
+@@ -1,6 +1,8 @@
+ export const CASE_STATUS_TEXT: Record<string, string> = {
++  ACCEPTED: '已受理',
+   NOT_FILED: '未递交',
+   WAITING_RECEIPT: '等待受理',
++  PENDING: '审查中',
+   PRELIM_EXAM: '初审',
+   AMENDMENT: '补正中',
+   PRELIM_PASS: '初审通过',
+@@ -8,8 +10,12 @@ export const CASE_STATUS_TEXT: Record<string, string> = {
+   SUB_EXAM: '实审中',
+   OA1: '一通阶段',
+   OA2: '二通阶段',
++  GRANT_PENDING: '待授权',
+   GRANTED: '已授权',
+   REJECTED: '驳回',
++  WITHDRAWN: '已撤回',
++  ABANDONED: '视为放弃',
++  EXPIRED: '已失效',
+   TERMINATED: '中止/终止',
+   INVALIDATED: '全部无效',
+   INVALIDATED_PARTIAL: '部分无效',
+diff --git a/frontend/src/constants/workflow.ts b/frontend/src/constants/workflow.ts
+index 5d5a5ea..5b399a5 100644
+--- a/frontend/src/constants/workflow.ts
++++ b/frontend/src/constants/workflow.ts
+@@ -28,8 +28,10 @@ export interface StatusRule {
+ }
+ 
+ export const STATUS_STEP_MAP: Record<string, StatusRule> = {
++  ACCEPTED: { stepKey: 'ACCEPTED', legalStatusCode: 'ACCEPTED', legalText: getCaseStatusText('ACCEPTED'), stepText: '受理', nextAction: '已进入受理阶段，继续跟进初审进展。' },
+   NOT_FILED: { stepKey: 'ACCEPTED', legalStatusCode: 'NOT_FILED', legalText: getCaseStatusText('NOT_FILED'), stepText: '受理', nextAction: '完成递交后进入受理节点。' },
+   WAITING_RECEIPT: { stepKey: 'ACCEPTED', legalStatusCode: 'WAITING_RECEIPT', legalText: getCaseStatusText('WAITING_RECEIPT'), stepText: '受理', nextAction: '收到受理通知后进入初审节点。' },
++  PENDING: { stepKey: 'PRELIM', legalStatusCode: 'PENDING', legalText: getCaseStatusText('PENDING'), stepText: '初审', nextAction: '案件仍在审查中，请根据最新来文推进后续流程。' },
+   PRELIM_EXAM: { stepKey: 'PRELIM', legalStatusCode: 'PRELIM_EXAM', legalText: getCaseStatusText('PRELIM_EXAM'), stepText: '初审', nextAction: '初审通过后进入公布节点。' },
+   PRELIM_PASS: { stepKey: 'PRELIM', legalStatusCode: 'PRELIM_PASS', legalText: getCaseStatusText('PRELIM_PASS'), stepText: '初审', nextAction: '完成公开手续后进入公布节点。' },
+   AMENDMENT: { stepKey: 'PRELIM', legalStatusCode: 'AMENDMENT', legalText: getCaseStatusText('AMENDMENT'), stepText: '初审', nextAction: '补正完成后回到初审并推进公开。' },
+@@ -38,8 +40,12 @@ export const STATUS_STEP_MAP: Record<string, StatusRule> = {
+   OA1: { stepKey: 'SUB_EXAM', legalStatusCode: 'OA1', legalText: getCaseStatusText('OA1'), stepText: '实审', nextAction: '提交 OA 答复后回到实审。' },
+   OA2: { stepKey: 'SUB_EXAM', legalStatusCode: 'OA2', legalText: getCaseStatusText('OA2'), stepText: '实审', nextAction: '继续答复审查意见，满足条件后可授权。' },
+   REEXAM: { stepKey: 'SUB_EXAM', legalStatusCode: 'REEXAM', legalText: getCaseStatusText('REEXAM'), stepText: '实审', nextAction: '复审结果决定是否转入授权或驳回。' },
++  GRANT_PENDING: { stepKey: 'GRANTED', legalStatusCode: 'GRANT_PENDING', legalText: getCaseStatusText('GRANT_PENDING'), stepText: '授权', nextAction: '已收到授权节点信号，请完成授权登记与后续费用处理。' },
+   GRANTED: { stepKey: 'GRANTED', legalStatusCode: 'GRANTED', legalText: getCaseStatusText('GRANTED'), stepText: '授权', nextAction: '进入授权后费用和年费管理。' },
+   REJECTED: { stepKey: 'SUB_EXAM', legalStatusCode: 'REJECTED', legalText: getCaseStatusText('REJECTED'), stepText: '实审', nextAction: '可按策略进入复审或结案。', branchNote: '该案已进入分支状态：驳回。主干流程停留在第4步（实审），未进入“授权”。' },
++  WITHDRAWN: { stepKey: 'SUB_EXAM', legalStatusCode: 'WITHDRAWN', legalText: getCaseStatusText('WITHDRAWN'), stepText: '实审', nextAction: '该案已撤回，请核对撤回事由与结案动作。', branchNote: '该案已进入分支状态：已撤回。主干流程停留在审查阶段，未继续推进授权。' },
++  ABANDONED: { stepKey: 'SUB_EXAM', legalStatusCode: 'ABANDONED', legalText: getCaseStatusText('ABANDONED'), stepText: '实审', nextAction: '该案已放弃，请确认是否还有未关闭的后续事项。', branchNote: '该案已进入分支状态：视为放弃。主干流程停留在审查阶段，未继续推进授权。' },
++  EXPIRED: { stepKey: 'GRANTED', legalStatusCode: 'EXPIRED', legalText: getCaseStatusText('EXPIRED'), stepText: '授权', nextAction: '该案已失效，请核对年费与权利维持记录。', branchNote: '该案已进入分支状态：已失效。主干流程保留“授权”的历史位置。' },
+   TERMINATED: { stepKey: 'GRANTED', legalStatusCode: 'TERMINATED', legalText: getCaseStatusText('TERMINATED'), stepText: '授权', nextAction: '检查年费或恢复权利策略。', branchNote: '该案已进入分支状态：终止。主干流程保留“授权”的历史位置。' },
+   INVALIDATED: { stepKey: 'GRANTED', legalStatusCode: 'INVALIDATED', legalText: getCaseStatusText('INVALIDATED'), stepText: '授权', nextAction: '查看无效决定文书并评估后续动作。', branchNote: '该案已进入分支状态：全部无效。主干流程保留“授权”的历史位置。' },
+   INVALIDATED_PARTIAL: { stepKey: 'GRANTED', legalStatusCode: 'INVALIDATED_PARTIAL', legalText: getCaseStatusText('INVALIDATED_PARTIAL'), stepText: '授权', nextAction: '核对受影响权利要求并评估后续策略。', branchNote: '该案已进入分支状态：部分无效。主干流程保留“授权”的历史位置。' },
+@@ -79,12 +85,12 @@ export function getCaseWorkflow(status: string | undefined) {
+ }
+ 
+ export function getStatusTagClass(status: string): string {
+-  if (status === 'GRANTED') return 'green'
+-  if (status === 'WAITING_RECEIPT' || status === 'NOT_FILED') return 'blue'
+-  if (['PRELIM_EXAM', 'PRELIM_PASS', 'AMENDMENT'].includes(status)) return 'orange'
++  if (['GRANT_PENDING', 'GRANTED'].includes(status)) return 'green'
++  if (['ACCEPTED', 'WAITING_RECEIPT', 'NOT_FILED'].includes(status)) return 'blue'
++  if (['PENDING', 'PRELIM_EXAM', 'PRELIM_PASS', 'AMENDMENT'].includes(status)) return 'orange'
+   if (status === 'PUBLISHED') return 'indigo'
+   if (['SUB_EXAM', 'OA1', 'OA2', 'REEXAM'].includes(status)) return 'blue'
+   if (['REJECTED', 'INVALIDATED'].includes(status)) return 'red'
+-  if (status === 'TERMINATED') return 'gray'
++  if (['WITHDRAWN', 'ABANDONED', 'EXPIRED', 'TERMINATED'].includes(status)) return 'gray'
+   return 'gray'
+ }
+diff --git a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+index 00e1beb..cfa9db0 100644
+--- a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
++++ b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+@@ -103,7 +103,7 @@
+         @selection-change="handleSelectionChange"
+       >
+         <el-table-column type="selection" width="48" />
+-        <el-table-column prop="id" label="任务ID" width="90" />
++        <el-table-column prop="id" label="任务编号" width="90" />
+         <el-table-column label="案件" min-width="180">
+           <template #default="{ row }">
+             <router-link :to="`/cases/${row.case_id}`" class="case-link">
+@@ -111,7 +111,7 @@
+             </router-link>
+           </template>
+         </el-table-column>
+-        <el-table-column prop="client_id" label="客户ID" min-width="180" />
++        <el-table-column prop="client_id" label="客户编号" min-width="180" />
+         <el-table-column prop="year_no" label="年度" width="90" />
+         <el-table-column label="到期日" width="130">
+           <template #default="{ row }">
+@@ -186,10 +186,10 @@
+         <div class="receipt-block">
+           <h3 class="receipt-title">成功明细</h3>
+           <el-table :data="generateReceipt.success" size="small" border>
+-            <el-table-column prop="source_task_id" label="来源任务ID" width="110" />
+-            <el-table-column prop="task_id" label="任务ID" width="90" />
++            <el-table-column prop="source_task_id" label="来源任务编号" width="110" />
++            <el-table-column prop="task_id" label="任务编号" width="90" />
+             <el-table-column prop="year_no" label="年度" width="80" />
+-            <el-table-column prop="draft_id" label="草单ID" min-width="210" />
++            <el-table-column prop="draft_id" label="草单编号" min-width="210" />
+             <el-table-column label="金额" width="140" align="right">
+               <template #default="{ row }">
+                 {{ formatMoney(row.amount, row.currency) }}
+@@ -201,8 +201,8 @@
+         <div class="receipt-block" style="margin-top: 16px">
+           <h3 class="receipt-title">失败明细</h3>
+           <el-table :data="generateReceipt.failed" size="small" border>
+-            <el-table-column prop="source_task_id" label="来源任务ID" width="110" />
+-            <el-table-column prop="task_id" label="任务ID" width="90">
++            <el-table-column prop="source_task_id" label="来源任务编号" width="110" />
++            <el-table-column prop="task_id" label="任务编号" width="90">
+               <template #default="{ row }">
+                 {{ row.task_id ?? '—' }}
+               </template>
+diff --git a/frontend/src/modules/annuity/pages/GovPaymentCreate.vue b/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+index 220d069..aa20fd9 100644
+--- a/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
++++ b/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+@@ -19,7 +19,7 @@
+         <el-row :gutter="12">
+           <el-col :xs="24" :sm="12">
+             <el-form-item
+-              label="官费清单ID"
++              label="官费清单编号"
+               prop="pay_list_id"
+               :error="fieldErrors.get('pay_list_id')?.join('，')"
+             >
+@@ -34,7 +34,7 @@
+           </el-col>
+           <el-col :xs="24" :sm="12">
+             <el-form-item
+-              label="费用项ID"
++              label="费用项编号"
+               prop="fee_item_id"
+               :error="fieldErrors.get('fee_item_id')?.join('，')"
+             >
+@@ -97,8 +97,8 @@
+       <h2 class="form-card-title">登记结果</h2>
+ 
+       <el-descriptions :column="3" border>
+-        <el-descriptions-item label="缴费记录ID">{{ result.gov_payment.id }}</el-descriptions-item>
+-        <el-descriptions-item label="费用项ID">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
++        <el-descriptions-item label="缴费记录编号">{{ result.gov_payment.id }}</el-descriptions-item>
++        <el-descriptions-item label="费用项编号">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
+         <el-descriptions-item label="缴费状态">{{ govPaymentStatusText(result.gov_payment.status) }}</el-descriptions-item>
+         <el-descriptions-item label="缴费日期">{{ result.gov_payment.paid_date || '—' }}</el-descriptions-item>
+         <el-descriptions-item label="缴费金额">
+@@ -120,7 +120,7 @@
+               {{ payListStatusText(result.pay_list.status) }}
+             </el-tag>
+           </el-descriptions-item>
+-          <el-descriptions-item label="客户ID">{{ result.pay_list.client_id }}</el-descriptions-item>
++          <el-descriptions-item label="客户编号">{{ result.pay_list.client_id }}</el-descriptions-item>
+           <el-descriptions-item label="更新后总额">
+             {{ formatMoney(result.pay_list.total_amount, result.pay_list.currency) }}
+           </el-descriptions-item>
+@@ -175,12 +175,12 @@ const form = reactive<GovPaymentForm>({
+ 
+ const rules: FormRules<GovPaymentForm> = {
+   pay_list_id: [
+-    { required: true, message: '官费清单ID为必填项', trigger: 'blur' },
++    { required: true, message: '官费清单编号为必填项', trigger: 'blur' },
+     {
+       validator: (_rule, value: unknown, callback) => {
+         const numeric = Number(value)
+         if (!Number.isFinite(numeric) || numeric <= 0) {
+-          callback(new Error('官费清单ID必须大于 0'))
++          callback(new Error('官费清单编号必须大于 0'))
+           return
+         }
+         callback()
+@@ -188,7 +188,7 @@ const rules: FormRules<GovPaymentForm> = {
+       trigger: 'blur',
+     },
+   ],
+-  fee_item_id: [{ required: true, message: '费用项ID为必填项', trigger: 'blur' }],
++  fee_item_id: [{ required: true, message: '费用项编号为必填项', trigger: 'blur' }],
+   paid_amount: [
+     {
+       validator: (_rule, value: unknown, callback) => {
+diff --git a/frontend/src/modules/cases/pages/CaseEdit.vue b/frontend/src/modules/cases/pages/CaseEdit.vue
+index 78b3bbe..26512fe 100644
+--- a/frontend/src/modules/cases/pages/CaseEdit.vue
++++ b/frontend/src/modules/cases/pages/CaseEdit.vue
+@@ -44,22 +44,17 @@
+ 
+           <el-form-item label="法律状态" prop="status" :error="fieldErrors.get('status')?.join(', ')">
+             <el-select v-model="form.status" placeholder="请选择法律状态" clearable>
+-              <el-option label="未递交" value="NOT_FILED" />
+-              <el-option label="等待受理" value="WAITING_RECEIPT" />
+-              <el-option label="初审" value="PRELIM_EXAM" />
+-              <el-option label="补正中" value="AMENDMENT" />
+-              <el-option label="初审通过" value="PRELIM_PASS" />
+-              <el-option label="已公开" value="PUBLISHED" />
+-              <el-option label="实审中" value="SUB_EXAM" />
+-              <el-option label="一通阶段" value="OA1" />
+-              <el-option label="二通阶段" value="OA2" />
+-              <el-option label="复审中" value="REEXAM" />
+-              <el-option label="已授权" value="GRANTED" />
+-              <el-option label="驳回" value="REJECTED" />
+-              <el-option label="中止/终止" value="TERMINATED" />
+-              <el-option label="全部无效" value="INVALIDATED" />
+-              <el-option label="部分无效" value="INVALIDATED_PARTIAL" />
++              <el-option
++                v-for="option in statusOptions"
++                :key="option.value"
++                :label="option.label"
++                :value="option.value"
++                :disabled="option.disabled"
++              />
+             </el-select>
++            <div v-if="showReadonlyStatusHint" class="field-hint">
++              当前状态由流程或文书联动生成，此处仅展示，不建议手工修改。
++            </div>
+           </el-form-item>
+         </div>
+ 
+@@ -79,34 +74,9 @@
+                 />
+               </el-form-item>
+             </el-col>
+-            <el-col :span="12">
+-              <el-form-item label="优先权日" prop="app_date" :error="fieldErrors.get('app_date')?.join(', ')">
+-                <el-date-picker
+-                  v-model="form.app_date"
+-                  type="date"
+-                  placeholder="请选择优先权日"
+-                  format="YYYY-MM-DD"
+-                  value-format="YYYY-MM-DD"
+-                  style="width: 100%"
+-                />
+-              </el-form-item>
+-            </el-col>
+           </el-row>
+         </div>
+ 
+-        <div class="form-section">
+-          <h3 class="form-section-title">备注</h3>
+-
+-          <el-form-item prop="notes" :error="fieldErrors.get('notes')?.join(', ')">
+-            <el-input
+-              v-model="form.notes"
+-              type="textarea"
+-              :rows="4"
+-              placeholder="请输入案件备注"
+-            />
+-          </el-form-item>
+-        </div>
+-
+         <el-collapse v-model="expandedSections" class="case-extra-sections">
+           <el-collapse-item title="公告与授权" name="pub_grant">
+             <el-row :gutter="20">
+@@ -227,7 +197,7 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import { ref, reactive, onMounted } from 'vue'
++import { computed, ref, reactive, onMounted } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+ import { ElMessage } from 'element-plus'
+ import type { FormInstance, FormRules } from 'element-plus'
+@@ -235,6 +205,7 @@ import { getCase, updateCase } from '../../../api/cases'
+ import type { Case, CaseUpdatePayload } from '../../../api/cases.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import { CASE_STATUS_TEXT } from '../../../constants/displayText'
+ import { mapValidationDetailsToFieldErrors } from '../../../utils/validation'
+ 
+ const route = useRoute()
+@@ -248,12 +219,33 @@ const caseData = ref<Case | null>(null)
+ const fieldErrors = ref<Map<string, string[]>>(new Map())
+ const expandedSections = ref<string[]>([])
+ 
++const EDITABLE_STATUS_VALUES = [
++  'NOT_FILED',
++  'PENDING',
++  'WAITING_RECEIPT',
++  'PRELIM_EXAM',
++  'AMENDMENT',
++  'PRELIM_PASS',
++  'PUBLISHED',
++  'SUB_EXAM',
++  'OA1',
++  'OA2',
++  'REEXAM',
++  'GRANTED',
++  'REJECTED',
++  'WITHDRAWN',
++  'ABANDONED',
++  'EXPIRED',
++  'TERMINATED',
++  'INVALIDATED',
++] as const
++
++const READONLY_STATUS_VALUES = ['ACCEPTED', 'GRANT_PENDING'] as const
++
+ const form = reactive<CaseUpdatePayload>({
+   title: '',
+   status: '',
+   filing_date: '',
+-  app_date: '',
+-  notes: '',
+ })
+ 
+ const rules: FormRules = {
+@@ -262,6 +254,32 @@ const rules: FormRules = {
+   ],
+ }
+ 
++const statusOptions = computed(() => {
++  const editableOptions = EDITABLE_STATUS_VALUES.map((value) => ({
++    value,
++    label: CASE_STATUS_TEXT[value] || value,
++    disabled: false,
++  }))
++
++  const currentStatus = form.status?.trim()
++  if (currentStatus && READONLY_STATUS_VALUES.includes(currentStatus as typeof READONLY_STATUS_VALUES[number])) {
++    return [
++      {
++        value: currentStatus,
++        label: `${CASE_STATUS_TEXT[currentStatus] || currentStatus}（流程状态，只读）`,
++        disabled: true,
++      },
++      ...editableOptions,
++    ]
++  }
++
++  return editableOptions
++})
++
++const showReadonlyStatusHint = computed(() =>
++  READONLY_STATUS_VALUES.includes((form.status || '').trim() as typeof READONLY_STATUS_VALUES[number])
++)
++
+ async function fetchCase() {
+   const id = String(route.params.id || '').trim()
+   if (!id) {
+@@ -277,8 +295,6 @@ async function fetchCase() {
+     form.title = caseData.value.title || ''
+     form.status = caseData.value.status || ''
+     form.filing_date = caseData.value.filing_date || ''
+-    form.app_date = caseData.value.app_date || ''
+-    form.notes = caseData.value.notes || ''
+     // A3 fields
+     form.pub_date = caseData.value.pub_date || ''
+     form.pub_no = caseData.value.pub_no || ''
+@@ -317,7 +333,12 @@ async function handleSave() {
+   error.value = null
+ 
+   try {
+-    await updateCase(id, form)
++    const payload: CaseUpdatePayload = { ...form }
++    if (READONLY_STATUS_VALUES.includes((payload.status || '').trim() as typeof READONLY_STATUS_VALUES[number])) {
++      delete payload.status
++    }
++
++    await updateCase(id, payload)
+     ElMessage.success('案件更新成功')
+     router.push(`/cases/${id}`)
+   } catch (err) {
+diff --git a/frontend/src/modules/commission/pages/CommissionList.vue b/frontend/src/modules/commission/pages/CommissionList.vue
+index 41662c2..01842e8 100644
+--- a/frontend/src/modules/commission/pages/CommissionList.vue
++++ b/frontend/src/modules/commission/pages/CommissionList.vue
+@@ -12,7 +12,7 @@
+         <el-input
+           v-model.trim="filters.agent_id"
+           aria-label="代理人筛选"
+-          placeholder="代理人 ID"
++          placeholder="代理人编号"
+           clearable
+           @keyup.enter="onFilterChange"
+         />
+@@ -21,7 +21,7 @@
+         <el-input
+           v-model.trim="filters.case_id"
+           aria-label="案件筛选"
+-          placeholder="案件 ID"
++          placeholder="案件编号"
+           clearable
+           @keyup.enter="onFilterChange"
+         />
+@@ -84,9 +84,9 @@
+ 
+     <div v-else class="page-table">
+       <el-table :data="records" aria-label="提成记录列表" stripe size="small" class="compact-table">
+-        <el-table-column prop="id" label="ID" width="80" />
+-        <el-table-column prop="case_id" label="案件 ID" min-width="160" />
+-        <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++        <el-table-column prop="id" label="编号" width="80" />
++        <el-table-column prop="case_id" label="案件编号" min-width="160" />
++        <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+           <template #default="{ row }">
+             {{ row.agent_id || '—' }}
+           </template>
+diff --git a/frontend/src/modules/commission/pages/CommissionSettlement.vue b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+index c34a356..35a65c3 100644
+--- a/frontend/src/modules/commission/pages/CommissionSettlement.vue
++++ b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+@@ -19,8 +19,8 @@
+       <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-position="top">
+         <el-row :gutter="12">
+           <el-col :xs="24" :sm="12" :md="8" :lg="6">
+-            <el-form-item label="代理人 ID" prop="agent_id">
+-              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人 ID" />
++            <el-form-item label="代理人编号" prop="agent_id">
++              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人编号" />
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12" :md="8" :lg="6">
+@@ -66,7 +66,7 @@
+             aria-label="结算批次编号"
+             :min="1"
+             :controls="false"
+-            placeholder="结算批次 ID"
++            placeholder="结算批次编号"
+             class="w-full"
+           />
+         </el-col>
+@@ -85,7 +85,7 @@
+ 
+       <div v-if="lastGenerate" class="result-block">
+         <el-descriptions :column="3" border>
+-          <el-descriptions-item label="批次 ID">{{ lastGenerate.settlement_id }}</el-descriptions-item>
++          <el-descriptions-item label="批次编号">{{ lastGenerate.settlement_id }}</el-descriptions-item>
+           <el-descriptions-item label="状态">{{ lastGenerate.status }}</el-descriptions-item>
+           <el-descriptions-item label="明细总数">{{ lastGenerate.line_count }}</el-descriptions-item>
+           <el-descriptions-item label="新增明细">{{ lastGenerate.created_count }}</el-descriptions-item>
+@@ -97,8 +97,8 @@
+       <div v-if="recentSettlements.length" class="result-block">
+         <div class="sub-title">本页创建的批次</div>
+         <el-table :data="recentSettlements" stripe size="small" class="compact-table">
+-          <el-table-column prop="id" label="ID" width="80" />
+-          <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
++          <el-table-column prop="id" label="编号" width="80" />
++          <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+             <template #default="{ row }">
+               {{ row.agent_id || '—' }}
+             </template>
+@@ -127,10 +127,10 @@
+ 
+       <el-row :gutter="12" class="filter-bar">
+         <el-col :xs="24" :sm="12" :md="8" :lg="6">
+-          <el-input v-model.trim="reportFilters.agent_id" aria-label="报表代理人筛选" placeholder="代理人 ID" clearable @keyup.enter="queryReport" />
++          <el-input v-model.trim="reportFilters.agent_id" aria-label="报表代理人筛选" placeholder="代理人编号" clearable @keyup.enter="queryReport" />
+         </el-col>
+         <el-col :xs="24" :sm="12" :md="8" :lg="6">
+-          <el-input v-model.trim="reportFilters.case_id" aria-label="报表案件筛选" placeholder="案件 ID" clearable @keyup.enter="queryReport" />
++          <el-input v-model.trim="reportFilters.case_id" aria-label="报表案件筛选" placeholder="案件编号" clearable @keyup.enter="queryReport" />
+         </el-col>
+         <el-col :xs="12" :sm="8" :md="4" :lg="3">
+           <el-input v-model.trim="reportFilters.currency" aria-label="报表币种筛选" placeholder="币种" clearable @keyup.enter="queryReport" />
+@@ -198,7 +198,7 @@
+         <div class="table-section">
+           <div class="sub-title">按代理人统计</div>
+           <el-table :data="report.by_agent" stripe size="small" class="compact-table">
+-            <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++            <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+               <template #default="{ row }">
+                 {{ row.agent_id || '—' }}
+               </template>
+@@ -215,7 +215,7 @@
+         <div class="table-section">
+           <div class="sub-title">按案件统计</div>
+           <el-table :data="report.by_case" stripe size="small" class="compact-table">
+-            <el-table-column prop="case_id" label="案件 ID" min-width="180">
++            <el-table-column prop="case_id" label="案件编号" min-width="180">
+               <template #default="{ row }">
+                 {{ row.case_id || '—' }}
+               </template>
+@@ -245,14 +245,14 @@
+         <div class="table-section">
+           <div class="sub-title">明细列表</div>
+           <el-table :data="report.details" stripe size="small" class="compact-table">
+-            <el-table-column prop="settlement_id" label="批次 ID" width="90" />
+-            <el-table-column prop="commission_id" label="提成 ID" width="90" />
+-            <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
++            <el-table-column prop="settlement_id" label="批次编号" width="90" />
++            <el-table-column prop="commission_id" label="提成编号" width="90" />
++            <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+               <template #default="{ row }">
+                 {{ row.agent_id || '—' }}
+               </template>
+             </el-table-column>
+-            <el-table-column prop="case_id" label="案件 ID" min-width="150" />
++            <el-table-column prop="case_id" label="案件编号" min-width="150" />
+             <el-table-column prop="settlement_status" label="批次状态" width="100">
+               <template #default="{ row }">
+                 {{ row.settlement_status || '—' }}
+@@ -318,7 +318,7 @@ const createForm = reactive({
+ })
+ 
+ const createRules: FormRules = {
+-  agent_id: [{ required: true, message: '代理人 ID 为必填项', trigger: 'blur' }],
++  agent_id: [{ required: true, message: '代理人编号为必填项', trigger: 'blur' }],
+   currency: [{ required: true, message: '币种为必填项', trigger: 'blur' }],
+ }
+ 
+@@ -372,7 +372,7 @@ function mapGenerateLinesError(errorLike: unknown): string {
+   if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
+ 
+   if (apiError.status === 404 && apiError.code === 'COMMISSION_SETTLEMENT_NOT_FOUND') {
+-    return '结算批次不存在，请确认批次 ID。'
++    return '结算批次不存在，请确认批次编号。'
+   }
+   if (apiError.status === 400 && apiError.code === 'COMMISSION_SETTLEMENT_INVALID') {
+     return '结算批次参数或状态无效，无法生成明细。'
+@@ -456,7 +456,7 @@ async function handleCreateSettlement() {
+     const settlement = await createCommissionSettlement(buildCreatePayload())
+     recentSettlements.value = [settlement, ...recentSettlements.value.filter((s) => s.id !== settlement.id)]
+     generateForm.settlement_id = settlement.id
+-    ElMessage.success(`批次创建成功（ID: ${settlement.id}）`)
++    ElMessage.success(`批次创建成功（编号: ${settlement.id}）`)
+   } catch (err) {
+     error.value = toApiError(err)
+     ElMessage.error(mapCreateSettlementError(err))
+@@ -467,7 +467,7 @@ async function handleCreateSettlement() {
+ 
+ async function handleGenerateLines() {
+   if (!generateForm.settlement_id) {
+-    ElMessage.warning('请先输入结算批次 ID')
++    ElMessage.warning('请先输入结算批次编号')
+     return
+   }
+ 
+diff --git a/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue b/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
+index 00c3c62..99cfabe 100644
+--- a/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
++++ b/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
+@@ -44,13 +44,13 @@
+           </el-col>
+ 
+           <el-col :xs="24" :sm="12" :md="8">
+-            <el-form-item label="客户 ID" prop="client_id">
+-              <el-input v-model.trim="form.client_id" placeholder="请输入客户 ID" />
++            <el-form-item label="客户编号" prop="client_id">
++              <el-input v-model.trim="form.client_id" placeholder="请输入客户编号" />
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12" :md="8">
+-            <el-form-item label="负责人 ID" prop="primary_agent_id">
+-              <el-input v-model.trim="form.primary_agent_id" placeholder="请输入负责人 ID" />
++            <el-form-item label="负责人编号" prop="primary_agent_id">
++              <el-input v-model.trim="form.primary_agent_id" placeholder="请输入负责人编号" />
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="24" :md="8">
+@@ -87,7 +87,7 @@
+           </el-col>
+           <el-col v-if="form.case_type === 'SEARCH'" :xs="24" :sm="12" :md="12">
+             <el-form-item label="检索数据库" prop="search_database">
+-              <el-input v-model.trim="form.search_database" placeholder="例如：PatBase / Derwent / Orbit" />
++              <el-input v-model.trim="form.search_database" placeholder="请输入检索数据库名称" />
+             </el-form-item>
+           </el-col>
+ 
+@@ -105,12 +105,12 @@
+       </template>
+ 
+       <el-descriptions :column="3" border>
+-        <el-descriptions-item label="案件 ID">{{ createdCase.id }}</el-descriptions-item>
++        <el-descriptions-item label="案件标识">{{ createdCase.id }}</el-descriptions-item>
+         <el-descriptions-item label="案件编号">{{ createdCase.case_no }}</el-descriptions-item>
+         <el-descriptions-item label="项目类型">{{ caseTypeLabel(createdCase.case_type) }}</el-descriptions-item>
+-        <el-descriptions-item label="状态">{{ createdCase.status }}</el-descriptions-item>
+-        <el-descriptions-item label="客户 ID">{{ createdCase.client_id || '—' }}</el-descriptions-item>
+-        <el-descriptions-item label="负责人 ID">{{ createdCase.primary_agent_id || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="状态">{{ getCaseStatusText(createdCase.status) }}</el-descriptions-item>
++        <el-descriptions-item label="客户编号">{{ createdCase.client_id || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="负责人编号">{{ createdCase.primary_agent_id || '—' }}</el-descriptions-item>
+         <el-descriptions-item label="接收日期">{{ createdCase.recv_date || '—' }}</el-descriptions-item>
+         <el-descriptions-item label="创建时间">{{ formatDateTime(createdCase.created_at) }}</el-descriptions-item>
+       </el-descriptions>
+@@ -131,6 +131,7 @@ import type {
+ } from '../../../api/consulting.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import { getCaseStatusText } from '../../../constants/displayText'
+ 
+ const router = useRouter()
+ const formRef = ref<FormInstance>()
+@@ -205,9 +206,9 @@ function validateSpecialFields() {
+ const formRules: FormRules = {
+   case_type: [{ required: true, message: '项目类型为必填项', trigger: 'change' }],
+   case_no: [{ required: true, message: '案件编号为必填项', trigger: 'blur' }],
+-  client_id: [{ required: true, message: '客户 ID 为必填项', trigger: 'blur' }],
++  client_id: [{ required: true, message: '客户编号为必填项', trigger: 'blur' }],
+   title_cn: [{ required: true, message: '项目标题为必填项', trigger: 'blur' }],
+-  primary_agent_id: [{ required: true, message: '负责人 ID 为必填项', trigger: 'blur' }],
++  primary_agent_id: [{ required: true, message: '负责人编号为必填项', trigger: 'blur' }],
+   recv_date: [{ required: true, message: '接收日期为必填项', trigger: 'change' }],
+ }
+ 
+diff --git a/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue b/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
+index 5dd5018..fd91707 100644
+--- a/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
++++ b/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
+@@ -21,22 +21,22 @@
+       <el-form label-position="top">
+         <el-row :gutter="12">
+           <el-col :xs="24" :sm="12" :md="8">
+-            <el-form-item label="案件 ID">
+-              <el-input v-model.trim="form.case_id" placeholder="请输入案件 ID" />
++            <el-form-item label="案件编号">
++              <el-input v-model.trim="form.case_id" placeholder="请输入案件编号" />
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12" :md="8">
+             <el-form-item label="生成模式">
+               <el-select v-model="form.mode" placeholder="请选择模式">
+-                <el-option label="固定模式（FIXED）" value="FIXED" />
+-                <el-option label="工时模式（HOURLY）" value="HOURLY" />
+-                <el-option label="混合模式（HYBRID）" value="HYBRID" />
++                <el-option label="固定模式" value="FIXED" />
++                <el-option label="工时模式" value="HOURLY" />
++                <el-option label="混合模式" value="HYBRID" />
+               </el-select>
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12" :md="8">
+             <el-form-item label="币种">
+-              <el-input v-model.trim="form.currency" placeholder="默认 CNY（可选）" />
++              <el-input v-model.trim="form.currency" placeholder="默认人民币（可选）" />
+             </el-form-item>
+           </el-col>
+ 
+@@ -72,12 +72,12 @@
+             <el-row :gutter="8">
+               <el-col :xs="24" :sm="12" :md="6">
+                 <el-form-item label="费用代码">
+-                  <el-input v-model.trim="line.fee_code" placeholder="例如：CONSULT_HOUR" />
++                  <el-input v-model.trim="line.fee_code" placeholder="请输入费用代码" />
+                 </el-form-item>
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="6">
+                 <el-form-item label="费用名称">
+-                  <el-input v-model.trim="line.fee_name" placeholder="例如：顾问工时费" />
++                  <el-input v-model.trim="line.fee_name" placeholder="请输入费用名称" />
+                 </el-form-item>
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="4">
+@@ -92,12 +92,12 @@
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="4">
+                 <el-form-item label="追踪键">
+-                  <el-input v-model.trim="line.trace_key" placeholder="可选" />
++                  <el-input v-model.trim="line.trace_key" placeholder="选填" />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="24">
+                 <el-form-item label="备注">
+-                  <el-input v-model.trim="line.remark" placeholder="可选" />
++                  <el-input v-model.trim="line.remark" placeholder="选填" />
+                 </el-form-item>
+               </el-col>
+             </el-row>
+@@ -122,12 +122,12 @@
+             <el-row :gutter="8">
+               <el-col :xs="24" :sm="12" :md="6">
+                 <el-form-item label="费用代码">
+-                  <el-input v-model.trim="line.fee_code" placeholder="例如：SEARCH_MISC" />
++                  <el-input v-model.trim="line.fee_code" placeholder="请输入费用代码" />
+                 </el-form-item>
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="6">
+                 <el-form-item label="费用名称">
+-                  <el-input v-model.trim="line.fee_name" placeholder="例如：检索附加费" />
++                  <el-input v-model.trim="line.fee_name" placeholder="请输入费用名称" />
+                 </el-form-item>
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="4">
+@@ -137,12 +137,12 @@
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="4">
+                 <el-form-item label="追踪键">
+-                  <el-input v-model.trim="line.trace_key" placeholder="可选" />
++                  <el-input v-model.trim="line.trace_key" placeholder="选填" />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="24">
+                 <el-form-item label="备注">
+-                  <el-input v-model.trim="line.remark" placeholder="可选" />
++                  <el-input v-model.trim="line.remark" placeholder="选填" />
+                 </el-form-item>
+               </el-col>
+             </el-row>
+@@ -164,10 +164,10 @@
+       </template>
+ 
+       <el-descriptions :column="4" border>
+-        <el-descriptions-item label="草单 ID">{{ result.draft_id }}</el-descriptions-item>
+-        <el-descriptions-item label="草单类型">{{ result.draft_type }}</el-descriptions-item>
+-        <el-descriptions-item label="模式">{{ result.mode }}</el-descriptions-item>
+-        <el-descriptions-item label="币种">{{ result.currency }}</el-descriptions-item>
++        <el-descriptions-item label="草单编号">{{ result.draft_id }}</el-descriptions-item>
++        <el-descriptions-item label="草单类型">{{ draftTypeLabel(result.draft_type) }}</el-descriptions-item>
++        <el-descriptions-item label="模式">{{ modeLabel(result.mode) }}</el-descriptions-item>
++        <el-descriptions-item label="币种">{{ currencyLabel(result.currency) }}</el-descriptions-item>
+         <el-descriptions-item label="行数">{{ result.created_line_count }}</el-descriptions-item>
+         <el-descriptions-item label="服务费合计">
+           {{ formatMoney(result.totals.total_service, result.currency) }}
+@@ -183,10 +183,14 @@
+       <div class="line-section">
+         <h3 class="line-section-title">草单明细</h3>
+         <el-table :data="result.items" size="small" border>
+-          <el-table-column prop="item_id" label="费用项 ID" min-width="200" />
++          <el-table-column prop="item_id" label="费用项编号" min-width="200" />
+           <el-table-column prop="fee_code" label="费用代码" min-width="140" />
+           <el-table-column prop="fee_name" label="费用名称" min-width="160" />
+-          <el-table-column prop="fee_type" label="费用类型" width="100" />
++          <el-table-column label="费用类型" width="100">
++            <template #default="{ row }">
++              {{ feeTypeLabel(row.fee_type) }}
++            </template>
++          </el-table-column>
+           <el-table-column prop="quantity" label="数量" width="90" />
+           <el-table-column prop="unit_price" label="单价" width="120" />
+           <el-table-column label="金额" width="140" align="right">
+@@ -397,7 +401,7 @@ function mapDraftCreateError(errorLike: unknown): string {
+     return '草单参数不合法，请检查模式与金额/工时配置。'
+   }
+   if (apiError.status === 404 && apiError.code === 'CASE_NOT_FOUND') {
+-    return '案件不存在，请确认案件 ID 后重试。'
++    return '案件不存在，请确认案件编号后重试。'
+   }
+   if (apiError.status === 409 && apiError.code === 'FEE_DRAFT_CONFLICT') {
+     const draftId = apiError.details?.draft_id
+@@ -428,7 +432,7 @@ function mapErrorToBanner(errorLike: unknown, message: string): ApiError {
+ }
+ 
+ function validateFormState(): string | null {
+-  if (!form.case_id.trim()) return '请填写案件 ID。'
++  if (!form.case_id.trim()) return '请填写案件编号。'
+ 
+   if (form.mode === 'FIXED') {
+     if (!(form.fixed_fee > 0)) return '固定模式下固定费用必须大于 0。'
+@@ -556,6 +560,27 @@ function formatMoney(amount: number, currency: string): string {
+   }).format(amount || 0)
+ }
+ 
++function modeLabel(mode: DraftMode): string {
++  if (mode === 'FIXED') return '固定模式'
++  if (mode === 'HOURLY') return '工时模式'
++  return '混合模式'
++}
++
++function draftTypeLabel(type: 'CONSULT_FEE' | 'SEARCH_FEE'): string {
++  return type === 'CONSULT_FEE' ? '顾问费草单' : '检索费草单'
++}
++
++function feeTypeLabel(type: string): string {
++  if (type === 'SERVICE') return '服务费'
++  if (type === 'MISC') return '杂费'
++  if (type === 'GOV') return '官费'
++  return type
++}
++
++function currencyLabel(currency: string): string {
++  return currency === 'CNY' ? '人民币' : currency
++}
++
+ function goBack() {
+   router.back()
+ }
+diff --git a/frontend/src/modules/system/pages/DocTemplateList.vue b/frontend/src/modules/system/pages/DocTemplateList.vue
+index b3142e7..ade017f 100644
+--- a/frontend/src/modules/system/pages/DocTemplateList.vue
++++ b/frontend/src/modules/system/pages/DocTemplateList.vue
+@@ -32,13 +32,13 @@
+         </template>
+       </el-table-column>
+       <el-table-column label="状态变更" width="120">
+-        <template #default="{ row }">{{ row.status_effect || '—' }}</template>
++        <template #default="{ row }">{{ getStatusEffectLabel(row.status_effect) }}</template>
+       </el-table-column>
+       <el-table-column label="期限模板" width="140">
+-        <template #default="{ row }">{{ row.deadline_template_code || '—' }}</template>
++        <template #default="{ row }">{{ getDeadlineTemplateLabel(row.deadline_template_code) }}</template>
+       </el-table-column>
+       <el-table-column label="费用类型" width="120">
+-        <template #default="{ row }">{{ row.fee_draft_type || '—' }}</template>
++        <template #default="{ row }">{{ getFeeDraftTypeLabel(row.fee_draft_type) }}</template>
+       </el-table-column>
+       <el-table-column label="需回复" width="80">
+         <template #default="{ row }">
+@@ -111,8 +111,8 @@
+           <el-col :span="12">
+             <el-form-item label="方向">
+               <el-select v-model="form.direction" style="width: 100%">
+-                <el-option label="收文 (IN)" value="IN" />
+-                <el-option label="发文 (OUT)" value="OUT" />
++                <el-option label="收文" value="IN" />
++                <el-option label="发文" value="OUT" />
+               </el-select>
+             </el-form-item>
+           </el-col>
+@@ -125,12 +125,12 @@
+         <el-row :gutter="16">
+           <el-col :span="12">
+             <el-form-item label="状态变更">
+-              <el-input v-model.trim="form.status_effect" placeholder="例如：PUBLISHED" />
++              <el-input v-model.trim="form.status_effect" placeholder="请输入状态编码" />
+             </el-form-item>
+           </el-col>
+           <el-col :span="12">
+             <el-form-item label="状态恢复">
+-              <el-input v-model.trim="form.status_restore" placeholder="例如：SUB_EXAM" />
++              <el-input v-model.trim="form.status_restore" placeholder="请输入恢复状态编码" />
+             </el-form-item>
+           </el-col>
+         </el-row>
+@@ -149,7 +149,7 @@
+           </el-col>
+           <el-col :span="12">
+             <el-form-item label="费用类型">
+-              <el-input v-model.trim="form.fee_draft_type" placeholder="例如：REG_FEE" />
++              <el-input v-model.trim="form.fee_draft_type" placeholder="请输入费用草稿类型编码" />
+             </el-form-item>
+           </el-col>
+         </el-row>
+@@ -165,20 +165,20 @@
+             </el-form-item>
+           </el-col>
+         </el-row>
+-        <el-form-item label="费用项目列表 (JSON)">
++        <el-form-item label="费用项目列表">
+           <el-input
+             v-model="form.fee_item_list"
+             type="textarea"
+             :rows="3"
+-            placeholder='[{"fee_code":"REG_FEE","fee_name":"登记费","amount":200}]'
++            placeholder="请输入费用项目配置"
+           />
+         </el-form-item>
+-        <el-form-item label="输入字段定义 (JSON)">
++        <el-form-item label="输入字段定义">
+           <el-input
+             v-model="form.input_fields"
+             type="textarea"
+             :rows="3"
+-            placeholder='{"field_name":{"label":"字段标签","type":"text"}}'
++            placeholder="请输入输入字段配置"
+           />
+         </el-form-item>
+       </el-form>
+@@ -201,6 +201,7 @@ import { getTaskTemplates } from '../../../api/tasks'
+ import type { TaskTemplate } from '../../../api/tasks.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import { getCaseStatusText } from '../../../constants/displayText'
+ 
+ const templates = ref<DocTemplate[]>([])
+ const loading = ref(false)
+@@ -237,6 +238,34 @@ const formRules: FormRules = {
+   name: [{ required: true, message: '名称为必填项', trigger: 'blur' }],
+ }
+ 
++const FEE_DRAFT_TYPE_TEXT: Record<string, string> = {
++  APPLY_FEE: '申请费草稿',
++  OA_FEE: '审查意见费草稿',
++  GRANT_FEE: '授权费草稿',
++  ANNUITY_FEE: '年费草稿',
++  INVALIDATION_FEE: '无效费草稿',
++  LITIGATION_FEE: '诉讼费草稿',
++  CONSULT_FEE: '顾问费草稿',
++  SEARCH_FEE: '检索费草稿',
++  INTERMEDIATE_FEE: '中间文件费草稿',
++}
++
++function getStatusEffectLabel(status?: string | null): string {
++  if (!status) return '—'
++  return getCaseStatusText(status)
++}
++
++function getDeadlineTemplateLabel(code?: string | null): string {
++  if (!code) return '—'
++  const matched = taskTemplateOptions.value.find((item) => item.code === code)
++  return matched?.name || code
++}
++
++function getFeeDraftTypeLabel(type?: string | null): string {
++  if (!type) return '—'
++  return FEE_DRAFT_TYPE_TEXT[type] || type
++}
++
+ async function fetchTemplates() {
+   loading.value = true
+   error.value = null

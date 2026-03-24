@@ -1,0 +1,3 @@
+{"step":"lint","cmd":"npm run lint -- src/modules/annuity/components/ManualGovPaymentDialog.vue src/modules/annuity/pages/PayListDetail.vue src/api/govPayments.ts src/api/govPayments.types.ts","rc":0}
+{"step":"test","cmd":"npm run typecheck","rc":0}
+{"step":"gate","cmd":"./scripts/task_validate.sh FRFE04-FE-05","rc":0}

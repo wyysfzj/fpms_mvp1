@@ -1,0 +1,9 @@
+{"step":"test","cmd":"./scripts/task_validate.sh PE-BE-FE-03","rc":0}
+{"step":"test","cmd":"./scripts/task_validate.sh PE-FE-FE-03","rc":0}
+{"step":"test","cmd":"./scripts/task_validate.sh PE-BE-AN-08","rc":0}
+{"step":"test","cmd":"./scripts/task_validate.sh PE-FE-AN-06","rc":0}
+{"step":"test","cmd":"./scripts/task_validate.sh PE-BE-FE-04","rc":0}
+{"step":"test","cmd":"./scripts/task_validate.sh PE-FE-FE-04","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_annuity_e2e.py","rc":0}
+{"step":"lint","cmd":"cd frontend && npm run lint","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}

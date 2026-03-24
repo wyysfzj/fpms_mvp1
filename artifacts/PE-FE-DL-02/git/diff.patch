@@ -1,0 +1,112 @@
+diff --git a/frontend/src/api/tasks.ts b/frontend/src/api/tasks.ts
+index dbfe186..dd44d06 100644
+--- a/frontend/src/api/tasks.ts
++++ b/frontend/src/api/tasks.ts
+@@ -122,6 +122,13 @@ export async function cancelTask(id: string | number): Promise<void> {
+     await http.post(`/tasks/${id}/cancel`, {})
+ }
+ 
++/**
++ * Delete a manually maintained task
++ */
++export async function deleteTask(id: string | number): Promise<void> {
++    await http.delete(`/tasks/${id}`)
++}
++
+ /**
+  * Get today's reminders for worker or supervisor
+  * TODO: /tasks/today endpoint still uses old TaskListItemOut schema and does not return
+diff --git a/frontend/src/modules/tasks/pages/TaskDetail.vue b/frontend/src/modules/tasks/pages/TaskDetail.vue
+index 56944e6..6b5d27e 100644
+--- a/frontend/src/modules/tasks/pages/TaskDetail.vue
++++ b/frontend/src/modules/tasks/pages/TaskDetail.vue
+@@ -30,6 +30,14 @@
+         >
+           取消
+         </el-button>
++        <el-button
++          v-if="task"
++          type="danger"
++          plain
++          @click="handleDelete"
++        >
++          删除
++        </el-button>
+       </div>
+     </div>
+ 
+@@ -148,7 +156,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+ import dayjs from 'dayjs'
+ import { ElMessage, ElMessageBox } from 'element-plus'
+-import { getTask, closeTask, reopenTask, cancelTask } from '../../../api/tasks'
++import { getTask, closeTask, reopenTask, cancelTask, deleteTask } from '../../../api/tasks'
+ import type { Task } from '../../../api/tasks.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+@@ -280,6 +288,22 @@ async function handleCancel() {
+   }
+ }
+ 
++async function handleDelete() {
++  if (!task.value) return
++  try {
++    await ElMessageBox.confirm(
++      `确认删除任务“${task.value.title}”吗？该操作不可撤销。`,
++      '删除任务',
++      { confirmButtonText: '删除', cancelButtonText: ZH.common.cancel, type: 'warning' }
++    )
++    await deleteTask(task.value.id)
++    ElMessage.success('任务删除成功')
++    goBack()
++  } catch {
++    // User cancelled
++  }
++}
++
+ async function executeAction(
+   actionName: string,
+   actionFn: (id: string | number) => Promise<void>,
+diff --git a/frontend/src/modules/tasks/pages/TaskList.vue b/frontend/src/modules/tasks/pages/TaskList.vue
+index 6f7eefc..babbdbe 100644
+--- a/frontend/src/modules/tasks/pages/TaskList.vue
++++ b/frontend/src/modules/tasks/pages/TaskList.vue
+@@ -141,6 +141,9 @@
+                   >
+                     <span class="action-danger">{{ ZH.taskList.cancel }}</span>
+                   </el-dropdown-item>
++                  <el-dropdown-item divided @click="handleDelete(row)">
++                    <span class="action-danger">删除</span>
++                  </el-dropdown-item>
+                 </el-dropdown-menu>
+               </template>
+             </el-dropdown>
+@@ -157,7 +160,7 @@
+ import { computed, onMounted, ref, watch } from 'vue'
+ import dayjs from 'dayjs'
+ import { ElMessage, ElMessageBox } from 'element-plus'
+-import { getTasks, closeTask, reopenTask, cancelTask } from '../../../api/tasks'
++import { getTasks, closeTask, reopenTask, cancelTask, deleteTask } from '../../../api/tasks'
+ import { getClients } from '../../../api/clients'
+ import type { Client } from '../../../api/clients.types'
+ import type { Task } from '../../../api/tasks.types'
+@@ -306,6 +309,19 @@ async function handleCancel(row: Task) {
+   }
+ }
+ 
++async function handleDelete(row: Task) {
++  try {
++    await ElMessageBox.confirm(
++      `确认删除任务“${row.title}”吗？该操作不可撤销。`,
++      '删除任务',
++      { confirmButtonText: '删除', cancelButtonText: ZH.common.cancel, type: 'warning' }
++    )
++    await executeAction(row.id, 'delete', deleteTask)
++  } catch {
++    // User cancelled
++  }
++}
++
+ async function executeAction(
+   id: string | number,
+   actionName: string,

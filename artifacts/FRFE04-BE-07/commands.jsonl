@@ -1,0 +1,11 @@
+{"ts":"20260324T150758","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_annuity_e2e.py\ -k\ pay_list_manual_item"}
+{"ts":"20260324T150758","step":"gate","cmd":"bash -lc ./scripts/task_validate.sh\ FRFE04-BE-07"}
+{"ts":"20260324T150758","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ --fix\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py\ \&\&\ ruff\ format\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py\ \&\&\ ruff\ check\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py"}
+{"ts":"20260324T150914","step":"gate","cmd":"./scripts/task_validate.sh FRFE04-BE-07"}
+{"ts":"20260324T150932","step":"gate","cmd":"./scripts/task_validate.sh FRFE04-BE-07"}
+{"ts":"20260324T151128","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_annuity_e2e.py\ -k\ pay_list_manual_item"}
+{"ts":"20260324T151128","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ --fix\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py\ \&\&\ ruff\ format\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py\ \&\&\ ruff\ check\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py"}
+{"ts":"20260324T151128","step":"gate","cmd":"bash -lc ./scripts/task_validate.sh\ FRFE04-BE-07"}
+{"ts":"20260324T151644","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ --fix\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py\ \&\&\ ruff\ format\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py\ \&\&\ ruff\ check\ app/modules/annuity/api.py\ app/modules/annuity/service.py\ tests/test_annuity_e2e.py"}
+{"ts":"20260324T151644","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_annuity_e2e.py\ -k\ pay_list_manual_item"}
+{"ts":"20260324T151644","step":"gate","cmd":"bash -lc ./scripts/task_validate.sh\ FRFE04-BE-07"}

@@ -1,0 +1,2 @@
+{"ts":"20260228T190952","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/collections/api.py\ app/modules/collections/service.py\ \&\&\ ruff\ format\ --check\ app/modules/collections/api.py\ app/modules/collections/service.py"}
+{"ts":"20260228T190952","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q"}

@@ -1,0 +1,13 @@
+{"timestamp": "2026-03-08T04:02:36.366648+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "1b789675-c363-4c2a-8478-e3bb00bd24dd"}
+{"timestamp": "2026-03-08T04:02:36.367427+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/auth/login \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T04:02:36.375784+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "81de3908-9bd1-4c31-9a19-efe747ae5156"}
+{"timestamp": "2026-03-08T04:02:36.376366+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/cases?case_no=ZY-IP-2026-D-003%60&page=1&page_size=5 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T04:02:36.380913+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "744026ba-211a-4cf5-9518-b4353370972a"}
+{"timestamp": "2026-03-08T04:02:36.381409+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/cases/e85b6e2e-64a2-429b-b54d-315f99695b64 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T04:02:36.385969+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "6caf6892-c6d0-42ae-8ca8-948ab97cc872"}
+{"timestamp": "2026-03-08T04:02:36.386519+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: PUT http://testserver/api/v1/cases/e85b6e2e-64a2-429b-b54d-315f99695b64 \"HTTP/1.1 422 Unprocessable Entity\"", "request_id": null}
+Traceback (most recent call last):
+  File "/tmp/demo_qa_case_testclient.py", line 46, in <module>
+    assert valid_resp.status_code == 200, valid_resp.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {"error":{"code":"VALIDATION_ERROR","message":"Invalid request","details":{"errors":[{"type":"enum","loc":["body","status"],"msg":"Input should be 'NOT_FILED', 'PENDING', 'GRANTED', 'REJECTED', 'WITHDRAWN', 'ABANDONED', 'EXPIRED', 'WAITING_RECEIPT', 'PRELIM_EXAM', 'PRELIM_PASS', 'AMENDMENT', 'PUBLISHED', 'SUB_EXAM', 'OA1', 'OA2', 'REEXAM', 'TERMINATED' or 'INVALIDATED'","input":"ACCEPTED","ctx":{"expected":"'NOT_FILED', 'PENDING', 'GRANTED', 'REJECTED', 'WITHDRAWN', 'ABANDONED', 'EXPIRED', 'WAITING_RECEIPT', 'PRELIM_EXAM', 'PRELIM_PASS', 'AMENDMENT', 'PUBLISHED', 'SUB_EXAM', 'OA1', 'OA2', 'REEXAM', 'TERMINATED' or 'INVALIDATED'"}}]}}}

@@ -1,0 +1,6 @@
+{"ts":"20260118T220423","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/cases/schemas.py"}
+{"ts":"20260118T220430","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/cases/schemas.py"}
+{"ts":"20260118T220434","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python\ -m\ py_compile\ app/modules/cases/schemas.py"}
+{"ts":"20260118T220446","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/cases/schemas.py"}
+{"ts":"20260118T220452","step":"quick","cmd":"bash -lc $'cd backend && python - <<\'PY\'\nfrom app.modules.cases.schemas import CaseCreate, CaseUpdateFull\ncc = CaseCreate(case_no="TEST001")\nassert cc.case_no == "TEST001"\nprint("Schemas OK")\nPY'"}
+{"ts":"20260118T220504","step":"quick","cmd":"bash -lc $'cd backend && python3 - <<\'PY\'\nfrom app.modules.cases.schemas import CaseCreate, CaseUpdateFull\ncc = CaseCreate(case_no="TEST001")\nassert cc.case_no == "TEST001"\nprint("Schemas OK")\nPY'"}

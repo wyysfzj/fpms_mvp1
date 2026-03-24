@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"ruff check backend/app/modules/cases/api.py backend/app/modules/cases/schemas.py backend/app/modules/cases/service.py backend/app/modules/cases/enums.py backend/tests/test_case_fields.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_case_fields.py","rc":0}

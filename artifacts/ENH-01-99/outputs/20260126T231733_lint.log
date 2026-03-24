@@ -1,0 +1,15 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+E402 Module level import not at top of file
+  --> scripts/scan_perms.py:10:1
+   |
+ 8 | sys.path.append(str(ROOT_DIR))
+ 9 |
+10 | from app.modules.rbac.service import ROLE_PERMISSIONS
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+Found 1 error.

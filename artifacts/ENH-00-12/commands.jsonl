@@ -1,0 +1,4 @@
+{"ts":"20260104T102823","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/main.py"}
+{"ts":"20260104T102827","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/main.py"}
+{"ts":"20260104T102831","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/main.py"}
+{"ts":"20260104T102842","step":"e2e-422","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/cases -H Content-Type:\ application/json -H Authorization:\ Bearer\  -d \{\"invalid\":\"data\"\}"}

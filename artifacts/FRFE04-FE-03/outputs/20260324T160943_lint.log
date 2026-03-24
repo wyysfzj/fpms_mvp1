@@ -1,0 +1,10 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/modules/annuity/pages/PayListDetail.vue src/router/index.ts src/api/govPayments.ts src/api/govPayments.types.ts
+
+
+/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/fr-fe-04-fe03/frontend/src/modules/annuity/pages/PayListDetail.vue
+  231:3  error  'GovPaymentInfo' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 1 problem (1 error, 0 warnings)
+

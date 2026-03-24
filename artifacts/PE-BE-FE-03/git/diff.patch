@@ -1,0 +1,346 @@
+diff --git a/backend/app/modules/fees/api.py b/backend/app/modules/fees/api.py
+index 70a1ce4..146071a 100644
+--- a/backend/app/modules/fees/api.py
++++ b/backend/app/modules/fees/api.py
+@@ -3,12 +3,14 @@ from __future__ import annotations
+ from typing import Any
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
++from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import current_user_dep, require_perm
+ from app.core.errors import raise_business_error
+ from app.db.session import get_db
+ from app.modules.auth.models import T_User
++from app.modules.cases.models import Case
+ from app.modules.fees.models import FeeDraft, FeeItem
+ from app.modules.fees.schemas import (
+     FeeDraftCreateIn,
+@@ -22,17 +24,40 @@ from app.modules.fees.schemas import (
+     FeeRateUpdateIn,
+     OkOut,
+ )
+-from app.modules.fees.service import add_fee_item, list_fee_drafts, list_fee_rates
++from app.modules.fees.service import add_fee_item, list_fee_drafts, list_fee_items, list_fee_rates
+ from app.modules.fees.service import create_fee_draft as create_fee_draft_service
+ from app.modules.fees.service import create_fee_rate as create_fee_rate_service
+ from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
+ from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
+ from app.modules.fees.service import update_fee_item as update_fee_item_service
+ from app.modules.fees.service import update_fee_rate as update_fee_rate_service
++from app.modules.masterdata.clients.models import Client
+ 
+ router = APIRouter()
+ 
+ 
++def _get_client_display_name(client: Client) -> str | None:
++    return client.name_cn or client.name_en
++
++
++def _build_case_no_map(db: Session, case_ids: set[str]) -> dict[str, str]:
++    if not case_ids:
++        return {}
++    cases = db.execute(select(Case.id, Case.case_no).where(Case.id.in_(case_ids))).all()
++    return {case_id: case_no for case_id, case_no in cases if case_no}
++
++
++def _build_client_name_map(db: Session, client_ids: set[str]) -> dict[str, str]:
++    if not client_ids:
++        return {}
++    clients = db.execute(select(Client).where(Client.id.in_(client_ids))).scalars().all()
++    return {
++        client.id: _get_client_display_name(client)
++        for client in clients
++        if _get_client_display_name(client)
++    }
++
++
+ @router.get("/fees/drafts", summary="List fee drafts")
+ def get_fee_drafts(
+     page: int = Query(default=1, ge=1),
+@@ -67,11 +92,17 @@ def get_fee_drafts(
+         "status": status_filter,
+     }
+     drafts, total = list_fee_drafts(db, filters=filters, page=page, page_size=page_size)
++    case_no_map = _build_case_no_map(db, {draft.case_id for draft in drafts if draft.case_id})
++    client_name_map = _build_client_name_map(
++        db, {draft.client_id for draft in drafts if draft.client_id}
++    )
+     items = [
+         FeeDraftListItemOut(
+             id=draft.id,
+             case_id=draft.case_id,
++            case_no=case_no_map.get(draft.case_id),
+             client_id=draft.client_id,
++            client_name=client_name_map.get(draft.client_id) if draft.client_id else None,
+             currency=draft.currency,
+             status=draft.status,
+             amount=draft.amount,
+@@ -228,6 +259,39 @@ def create_fee_item(
+     return FeeItemOut.model_validate(item)
+ 
+ 
++@router.get(
++    "/fees/drafts/{draft_id}/items",
++    response_model=list[FeeItemOut],
++    summary="List fee items for a draft",
++)
++def get_fee_items(
++    draft_id: str,
++    _perm: None = Depends(require_perm("Fee.Read")),
++    db: Session = Depends(get_db),
++) -> list[FeeItemOut]:
++    """
++    List fee items for a draft.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Read
++    **Request example**:
++    `GET /api/v1/fees/drafts/DRAFT_ID/items`
++    **Curl example**:
++    ```bash
++    curl -s -X GET http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/items \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Fee item list
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Fee draft not found
++    - 422: VALIDATION_ERROR
++    """
++    items = list_fee_items(db, draft_id=draft_id)
++    return [FeeItemOut.model_validate(item) for item in items]
++
++
+ @router.put(
+     "/fees/drafts/{draft_id}/items/{item_id}",
+     response_model=FeeItemOut,
+@@ -317,12 +381,12 @@ def delete_fee_item(
+     return Response(status_code=status.HTTP_204_NO_CONTENT)
+ 
+ 
+-@router.get("/fees/drafts/{draft_id}", summary="Get a fee draft")
++@router.get("/fees/drafts/{draft_id}", response_model=FeeDraftOut, summary="Get a fee draft")
+ def get_fee_draft(
+     draft_id: str,
+     _perm: None = Depends(require_perm("Fee.Draft.Read")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
++) -> FeeDraftOut:
+     """
+     Get a fee draft by ID.
+ 
+@@ -350,14 +414,29 @@ def get_fee_draft(
+             status_code=status.HTTP_404_NOT_FOUND,
+         )
+ 
+-    return {
+-        "id": draft.id,
+-        "case_id": draft.case_id,
+-        "client_id": draft.client_id,
+-        "draft_type": draft.draft_type,
+-        "currency": draft.currency,
+-        "status": draft.status,
+-    }
++    case_no = db.execute(select(Case.case_no).where(Case.id == draft.case_id)).scalar_one_or_none()
++    client_name = None
++    if draft.client_id:
++        client = db.execute(select(Client).where(Client.id == draft.client_id)).scalar_one_or_none()
++        if client:
++            client_name = _get_client_display_name(client)
++
++    return FeeDraftOut(
++        id=draft.id,
++        case_id=draft.case_id,
++        case_no=case_no,
++        client_id=draft.client_id,
++        client_name=client_name,
++        draft_type=draft.draft_type,
++        currency=draft.currency,
++        status=draft.status,
++        total_gov=draft.total_gov,
++        total_service=draft.total_service,
++        total_misc=draft.total_misc,
++        amount=draft.amount,
++        created_at=draft.created_at,
++        updated_at=draft.updated_at,
++    )
+ 
+ 
+ @router.put("/fees/drafts/{draft_id}", summary="Update a fee draft")
+diff --git a/backend/app/modules/fees/schemas.py b/backend/app/modules/fees/schemas.py
+index 7824828..b5b1a8c 100644
+--- a/backend/app/modules/fees/schemas.py
++++ b/backend/app/modules/fees/schemas.py
+@@ -26,7 +26,9 @@ class FeeDraftOut(BaseModel):
+ 
+     id: str
+     case_id: str
++    case_no: str | None = None
+     client_id: str | None = None
++    client_name: str | None = None
+     draft_type: str
+     currency: str
+     status: FeeDraftStatus
+@@ -43,7 +45,9 @@ class FeeDraftListItemOut(BaseModel):
+ 
+     id: str
+     case_id: str
++    case_no: str | None = None
+     client_id: str | None = None
++    client_name: str | None = None
+     currency: str
+     status: FeeDraftStatus
+     amount: Decimal
+diff --git a/backend/app/modules/fees/service.py b/backend/app/modules/fees/service.py
+index 11552f0..4fce441 100644
+--- a/backend/app/modules/fees/service.py
++++ b/backend/app/modules/fees/service.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++import json
+ import logging
+ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+ from typing import Any, Literal
+@@ -281,6 +282,12 @@ def add_fee_item(
+     return item
+ 
+ 
++def list_fee_items(db: Session, *, draft_id: str) -> list[FeeItem]:
++    get_fee_draft(db, draft_id=draft_id)
++    stmt = select(FeeItem).where(FeeItem.draft_id == draft_id).order_by(FeeItem.created_at.asc())
++    return list(db.execute(stmt).scalars().all())
++
++
+ def update_fee_item(
+     db: Session,
+     *,
+@@ -737,15 +744,70 @@ def generate_consulting_fee_draft_strategy(
+ def calculate_fee_amount(rate: FeeRate, case: Case | None = None) -> Decimal:
+     """Calculate fee amount based on rate's calc_mode.
+ 
+-    Currently only FIXED mode is implemented.
+-    Other modes (PER_CLAIM, PER_PAGE, TIER) return default_amount with a TODO log.
++    Batch 3 slice:
++    - FIXED keeps default amount behavior
++    - PER_CLAIM supports calc_params + optional reduction/discount percentages
++    - Other modes still fall back to default amount
+     """
+     amount = rate.default_amount if rate.default_amount is not None else Decimal("0")
+-    calc_mode = getattr(rate, "calc_mode", None) or "FIXED"
++    calc_mode = (getattr(rate, "calc_mode", None) or "FIXED").upper()
+ 
+     if calc_mode == "FIXED":
+         return amount
+ 
++    if calc_mode == "PER_CLAIM":
++        calc_params_raw = getattr(rate, "calc_params", None)
++        calc_params: dict[str, Any] = {}
++        if calc_params_raw:
++            try:
++                parsed = json.loads(calc_params_raw)
++                if isinstance(parsed, dict):
++                    calc_params = parsed
++            except (TypeError, ValueError):
++                logger.warning(
++                    "calculate_fee_amount: invalid calc_params for rate=%s, raw=%r",
++                    rate.fee_code,
++                    calc_params_raw,
++                )
++
++        per_claim_amount_raw = calc_params.get("per_claim_amount", amount)
++        try:
++            per_claim_amount = Decimal(per_claim_amount_raw)
++        except (InvalidOperation, TypeError, ValueError):
++            per_claim_amount = amount
++
++        if case is not None and case.claim_count is not None:
++            claim_count = Decimal(case.claim_count)
++        else:
++            claim_count_raw = calc_params.get("claim_count", 1)
++            try:
++                claim_count = Decimal(claim_count_raw)
++            except (InvalidOperation, TypeError, ValueError):
++                claim_count = Decimal("1")
++
++        computed = per_claim_amount * claim_count
++
++        if getattr(rate, "allow_reduction", False):
++            reduction_raw = calc_params.get("reduction_pct", 0)
++            try:
++                reduction_pct = Decimal(reduction_raw)
++            except (InvalidOperation, TypeError, ValueError):
++                reduction_pct = Decimal("0")
++            reduction_pct = max(Decimal("0"), min(Decimal("100"), reduction_pct))
++            if reduction_pct > 0:
++                computed = computed * (Decimal("100") - reduction_pct) / Decimal("100")
++
++        discount_raw = calc_params.get("discount_pct", 0)
++        try:
++            discount_pct = Decimal(discount_raw)
++        except (InvalidOperation, TypeError, ValueError):
++            discount_pct = Decimal("0")
++        discount_pct = max(Decimal("0"), min(Decimal("100"), discount_pct))
++        if discount_pct > 0:
++            computed = computed * (Decimal("100") - discount_pct) / Decimal("100")
++
++        return _quantize_money(computed)
++
+     logger.warning(
+         "calculate_fee_amount: calc_mode=%s not yet implemented for rate=%s, "
+         "returning default_amount=%s",
+diff --git a/backend/tests/test_annuity_e2e.py b/backend/tests/test_annuity_e2e.py
+index 50b8597..d00abbf 100644
+--- a/backend/tests/test_annuity_e2e.py
++++ b/backend/tests/test_annuity_e2e.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from datetime import date
++from decimal import Decimal
+ from uuid import uuid4
+ 
+ from fastapi.testclient import TestClient
+@@ -8,7 +9,9 @@ from sqlalchemy import select
+ from sqlalchemy.orm import sessionmaker
+ 
+ from app.modules.annuity.models import AnnuityTask
+-from app.modules.fees.models import FeeItem
++from app.modules.cases.models import Case
++from app.modules.fees.models import FeeItem, FeeRate
++from app.modules.fees.service import calculate_fee_amount
+ 
+ 
+ def _uid(prefix: str) -> str:
+@@ -337,3 +340,28 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
+         json={"task_ids": []},
+     )
+     _assert_error(validation_resp, 422, "VALIDATION_ERROR")
++
++
++def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:
++    rate = FeeRate(
++        fee_code=_uid("RATE"),
++        fee_name="PER CLAIM RATE",
++        fee_type="SERVICE",
++        currency="CNY",
++        default_amount=Decimal("100.00"),
++        calc_mode="PER_CLAIM",
++        calc_params='{"per_claim_amount":"50","discount_pct":"10","reduction_pct":"20"}',
++        allow_reduction=True,
++    )
++    case = Case(
++        case_no=_uid("CASE"),
++        case_type="NORMAL",
++        patent_category="INV",
++        flow_dir="CN_DOMESTIC",
++        claim_count=3,
++    )
++
++    amount = calculate_fee_amount(rate, case)
++
++    # 50 * 3 = 150; reduction 20% => 120; discount 10% => 108
++    assert amount == Decimal("108.00")

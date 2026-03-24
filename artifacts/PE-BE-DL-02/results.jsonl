@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"ruff check backend/app/modules/tasks/api.py backend/app/modules/tasks/service.py backend/app/modules/tasks/schemas.py backend/app/modules/tasks/task_generation_service.py backend/app/modules/documents/service.py backend/app/modules/annuity/service.py backend/tests/test_task_template.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_task_template.py","rc":0}

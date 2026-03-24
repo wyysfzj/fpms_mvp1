@@ -1,0 +1,2 @@
+docs/api_usage_guide.md:19:## Token Validation (no /auth/me in MVP1)
+docs/api_usage_guide.md:20:There is currently **no** `/auth/me` endpoint in MVP1. To validate a token:

@@ -1,0 +1,46 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+E402 Module level import not at top of file
+  --> scripts/seed_dev.py:14:1
+   |
+12 |     sys.path.insert(0, str(BASE_DIR))
+13 |
+14 | from app.core.security import get_password_hash
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+15 | from app.db.session import get_engine
+16 | from app.modules.auth.models import T_Role, T_User, T_UserRole
+   |
+
+E402 Module level import not at top of file
+  --> scripts/seed_dev.py:15:1
+   |
+14 | from app.core.security import get_password_hash
+15 | from app.db.session import get_engine
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+16 | from app.modules.auth.models import T_Role, T_User, T_UserRole
+17 | from app.modules.rbac.service import seed_default_roles_perms
+   |
+
+E402 Module level import not at top of file
+  --> scripts/seed_dev.py:16:1
+   |
+14 | from app.core.security import get_password_hash
+15 | from app.db.session import get_engine
+16 | from app.modules.auth.models import T_Role, T_User, T_UserRole
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+17 | from app.modules.rbac.service import seed_default_roles_perms
+   |
+
+E402 Module level import not at top of file
+  --> scripts/seed_dev.py:17:1
+   |
+15 | from app.db.session import get_engine
+16 | from app.modules.auth.models import T_Role, T_User, T_UserRole
+17 | from app.modules.rbac.service import seed_default_roles_perms
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+Found 5 errors (1 fixed, 4 remaining).

@@ -1,0 +1,35 @@
+diff --git a/frontend/src/modules/commission/pages/CommissionList.vue b/frontend/src/modules/commission/pages/CommissionList.vue
+index 41662c2..01842e8 100644
+--- a/frontend/src/modules/commission/pages/CommissionList.vue
++++ b/frontend/src/modules/commission/pages/CommissionList.vue
+@@ -12,7 +12,7 @@
+         <el-input
+           v-model.trim="filters.agent_id"
+           aria-label="代理人筛选"
+-          placeholder="代理人 ID"
++          placeholder="代理人编号"
+           clearable
+           @keyup.enter="onFilterChange"
+         />
+@@ -21,7 +21,7 @@
+         <el-input
+           v-model.trim="filters.case_id"
+           aria-label="案件筛选"
+-          placeholder="案件 ID"
++          placeholder="案件编号"
+           clearable
+           @keyup.enter="onFilterChange"
+         />
+@@ -84,9 +84,9 @@
+ 
+     <div v-else class="page-table">
+       <el-table :data="records" aria-label="提成记录列表" stripe size="small" class="compact-table">
+-        <el-table-column prop="id" label="ID" width="80" />
+-        <el-table-column prop="case_id" label="案件 ID" min-width="160" />
+-        <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++        <el-table-column prop="id" label="编号" width="80" />
++        <el-table-column prop="case_id" label="案件编号" min-width="160" />
++        <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+           <template #default="{ row }">
+             {{ row.agent_id || '—' }}
+           </template>

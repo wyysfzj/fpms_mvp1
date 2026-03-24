@@ -1,0 +1,957 @@
+diff --git a/backend/app/api/deps.py b/backend/app/api/deps.py
+index c865bf2..4449f9c 100644
+--- a/backend/app/api/deps.py
++++ b/backend/app/api/deps.py
+@@ -1,29 +1,66 @@
+-"""Common dependencies (auth, permissions, pagination).
+-
+-This file is a placeholder for BE-00-02 task.
+-"""
+-
+ from __future__ import annotations
+ 
+ from typing import Callable
+ 
+-from fastapi import Header, HTTPException, status
++from fastapi import Depends
++from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
++from sqlalchemy.orm import Session
+ 
++from app.core.config import get_settings
++from app.core.errors import raise_business_error
++from app.core.security import decode_access_token
++from app.db.session import get_db
++from app.modules.auth.models import T_User
++from app.modules.rbac.service import get_user_permissions
+ 
+-def require_perm(code: str) -> Callable:
+-    """Return a FastAPI dependency that enforces a permission code.
++security = HTTPBearer(auto_error=False)
++credentials_dep = Depends(security)
++db_dep = Depends(get_db)
++
++
++def get_current_user(
++    credentials: HTTPAuthorizationCredentials | None = credentials_dep,
++    db: Session = db_dep,
++) -> T_User:
++    """Get current authenticated user from JWT token."""
++    if credentials is None:
++        raise_business_error("AUTH_REQUIRED", "Authentication required", status_code=401)
++
++    token = credentials.credentials
++    settings = get_settings()
++
++    try:
++        payload = decode_access_token(token, settings.jwt_secret)
++        user_id = payload.get("sub")
++        if not user_id:
++            raise_business_error("AUTH_REQUIRED", "Invalid token", status_code=401)
++    except Exception:
++        raise_business_error("AUTH_REQUIRED", "Authentication required", status_code=401)
+ 
+-    TODO (BE-00-02): implement with JWT auth + RBAC lookup.
+-    """
++    user = db.query(T_User).filter(T_User.id == user_id).first()
++    if not user or not user.is_active:
++        raise_business_error("AUTH_REQUIRED", "User not found or inactive", status_code=401)
++
++    return user
++
++
++current_user_dep = Depends(get_current_user)
++
++
++def require_perm(code: str) -> Callable:
++    """Return dependency that enforces a permission code."""
+ 
+-    async def _dep(authorization: str | None = Header(default=None)) -> None:
+-        if not authorization:
+-            raise HTTPException(
+-                status_code=status.HTTP_401_UNAUTHORIZED,
+-                detail="Not authenticated",
++    def _perm_checker(
++        current_user: T_User = current_user_dep,
++        db: Session = db_dep,
++    ) -> None:
++        perms = get_user_permissions(db, current_user.id)
++        if code not in perms:
++            raise_business_error(
++                "FORBIDDEN",
++                "Permission denied",
++                details={"required_perm": code},
++                status_code=403,
+             )
+-        # Placeholder: actual permission check to be implemented in BE-00-02.
+-        # The dependency stays in place to ensure the route remains protected.
+-        return None
+ 
+-    return _dep
++    return _perm_checker
+diff --git a/backend/app/api/router.py b/backend/app/api/router.py
+index 1a0fe0b..4b83cc9 100644
+--- a/backend/app/api/router.py
++++ b/backend/app/api/router.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ from fastapi import APIRouter
+ 
+ from app.modules.admin.api import router as admin_router
++from app.modules.auth.api import router as auth_router
+ from app.modules.billing.api import router as billing_router
+ from app.modules.cases.api import router as case_router
+ from app.modules.documents.api import router as documents_router
+@@ -14,6 +15,7 @@ from app.modules.templates.api import router as templates_router
+ 
+ api_router = APIRouter()
+ api_router.include_router(admin_router, tags=["Admin"])
++api_router.include_router(auth_router, prefix="/auth", tags=["Auth"])
+ api_router.include_router(system_router, tags=["System"])
+ api_router.include_router(templates_router, tags=["Templates"])
+ api_router.include_router(clients_router, tags=["Clients"])
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+index 321c29b..0cc36e3 100644
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -13,6 +13,7 @@ class Settings(BaseSettings):
+     database_url: str = "sqlite:///./fpms_dev.db"
+     cors_origins: List[str] = ["http://localhost:5173"]
+     jwt_secret: str = "dev-secret-change-me"
++    jwt_expire_minutes: int = 60
+     storage_dir: str = "./storage"
+ 
+ 
+diff --git a/backend/app/main.py b/backend/app/main.py
+index bbf8a38..77ba389 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
+             error={
+                 "code": "VALIDATION_ERROR",
+                 "message": "Invalid request",
+-                "details": exc.errors(),
++                "details": {"errors": exc.errors()},
+             }
+         )
+         return JSONResponse(
+diff --git a/backend/app/modules/auth/api.py b/backend/app/modules/auth/api.py
+index 986a5ca..e65c265 100644
+--- a/backend/app/modules/auth/api.py
++++ b/backend/app/modules/auth/api.py
+@@ -1 +1,35 @@
+-# TODO: Implement FastAPI router for this module
++from __future__ import annotations
++
++from fastapi import APIRouter, Depends, status
++from sqlalchemy.orm import Session
++
++from app.core.config import get_settings
++from app.core.errors import raise_business_error
++from app.core.security import create_access_token
++from app.db.session import get_db
++from app.modules.auth.schemas import LoginRequest, TokenResponse
++from app.modules.auth.service import authenticate_user
++
++router = APIRouter()
++
++
++@router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
++def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
++    """Authenticate user and return JWT token."""
++    user = authenticate_user(db, credentials.username, credentials.password)
++
++    if not user:
++        raise_business_error(
++            code="AUTH_INVALID",
++            message="Invalid username or password",
++            status_code=401,
++        )
++
++    settings = get_settings()
++    access_token = create_access_token(
++        subject=user.id,
++        secret=settings.jwt_secret,
++        expires_minutes=settings.jwt_expire_minutes or 60,
++    )
++
++    return TokenResponse(access_token=access_token)
+diff --git a/backend/app/modules/auth/models.py b/backend/app/modules/auth/models.py
+index adfb8dc..7222df0 100644
+--- a/backend/app/modules/auth/models.py
++++ b/backend/app/modules/auth/models.py
+@@ -1,8 +1,9 @@
+ from __future__ import annotations
+ 
+ from datetime import datetime
++from uuid import uuid4
+ 
+-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, text
++from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func, text
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ 
+ from app.db.base import Base
+@@ -49,6 +50,31 @@ class T_Role(Base):
+     )
+ 
+ 
++class T_RolePerm(Base):
++    """Maps permissions to roles."""
++
++    __tablename__ = "t_role_perm"
++
++    id: Mapped[str] = mapped_column(
++        String(36),
++        primary_key=True,
++        default=lambda: str(uuid4()),
++    )
++    role_id: Mapped[str] = mapped_column(
++        String(36),
++        ForeignKey("t_role.id", ondelete="CASCADE"),
++        index=True,
++    )
++    perm_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=False),
++        nullable=False,
++        server_default=text("CURRENT_TIMESTAMP"),
++    )
++
++    __table_args__ = (UniqueConstraint("role_id", "perm_code", name="uq_role_perm"),)
++
++
+ class T_UserRole(Base):
+     __tablename__ = "t_user_role"
+ 
+diff --git a/backend/app/modules/auth/schemas.py b/backend/app/modules/auth/schemas.py
+index b9b3215..c609319 100644
+--- a/backend/app/modules/auth/schemas.py
++++ b/backend/app/modules/auth/schemas.py
+@@ -1 +1,30 @@
+-# TODO: Implement schemas for this module
++from pydantic import BaseModel, Field, field_validator
++
++
++class LoginRequest(BaseModel):
++    """Login credentials."""
++
++    username: str = Field(..., min_length=1, strip_whitespace=True)
++    password: str = Field(..., min_length=1)
++
++    @field_validator("username", mode="before")
++    @classmethod
++    def strip_username(cls, value: str) -> str:
++        if isinstance(value, str):
++            return value.strip()
++        return value
++
++
++class TokenResponse(BaseModel):
++    """JWT access token response."""
++
++    access_token: str
++    token_type: str = "bearer"
++
++
++class MeResponse(BaseModel):
++    """Current user profile with permissions."""
++
++    user: dict
++    roles: list[str]
++    permissions: list[str]
+diff --git a/backend/app/modules/auth/service.py b/backend/app/modules/auth/service.py
+index cee10e4..8432281 100644
+--- a/backend/app/modules/auth/service.py
++++ b/backend/app/modules/auth/service.py
+@@ -1 +1,27 @@
+-# TODO: Implement service layer for this module
++from __future__ import annotations
++
++from sqlalchemy.orm import Session
++
++from app.core.security import verify_password
++from app.modules.auth.models import T_User
++
++
++def authenticate_user(db: Session, username: str, password: str) -> T_User | None:
++    """
++    Authenticate user with username and password.
++
++    Returns:
++        T_User if authenticated, None otherwise
++    """
++    user = db.query(T_User).filter(T_User.username == username).first()
++
++    if not user:
++        return None
++
++    if not user.is_active:
++        return None
++
++    if not verify_password(password, user.password_hash):
++        return None
++
++    return user
+diff --git a/backend/app/modules/cases/models.py b/backend/app/modules/cases/models.py
+index e3cedf9..9fa9173 100644
+--- a/backend/app/modules/cases/models.py
++++ b/backend/app/modules/cases/models.py
+@@ -2,10 +2,22 @@ from __future__ import annotations
+ 
+ from datetime import date, datetime
+ 
+-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func, text
++from sqlalchemy import (
++    Boolean,
++    Date,
++    DateTime,
++    ForeignKey,
++    Integer,
++    String,
++    Text,
++    UniqueConstraint,
++    func,
++    text,
++)
+ from sqlalchemy.orm import Mapped, mapped_column
+ 
+ from app.db.base import Base
++from app.db.mixins import UUIDPrimaryKeyMixin
+ 
+ 
+ class Case(Base):
+@@ -42,3 +54,61 @@ class Case(Base):
+         server_default=func.current_timestamp(),
+         onupdate=func.current_timestamp(),
+     )
++
++
++class T_CaseApplicant(Base, UUIDPrimaryKeyMixin):
++    """Case applicant (one or more per case)."""
++
++    __tablename__ = "t_case_applicant"
++
++    case_id: Mapped[str] = mapped_column(
++        String(36),
++        ForeignKey("t_case.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    seq: Mapped[int] = mapped_column(Integer, nullable=False)  # Display order
++    is_first: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    name_cn: Mapped[str | None] = mapped_column(String(200), nullable=True)
++    name_en: Mapped[str | None] = mapped_column(String(200), nullable=True)
++    address_cn: Mapped[str | None] = mapped_column(Text, nullable=True)
++    address_en: Mapped[str | None] = mapped_column(Text, nullable=True)
++
++    __table_args__ = (UniqueConstraint("case_id", "seq", name="uq_case_applicant_seq"),)
++
++
++class T_CaseInventor(Base, UUIDPrimaryKeyMixin):
++    """Case inventor (one or more per case)."""
++
++    __tablename__ = "t_case_inventor"
++
++    case_id: Mapped[str] = mapped_column(
++        String(36),
++        ForeignKey("t_case.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    seq: Mapped[int] = mapped_column(Integer, nullable=False)
++    name_cn: Mapped[str | None] = mapped_column(String(200), nullable=True)
++    name_en: Mapped[str | None] = mapped_column(String(200), nullable=True)
++
++    __table_args__ = (UniqueConstraint("case_id", "seq", name="uq_case_inventor_seq"),)
++
++
++class T_Priority(Base, UUIDPrimaryKeyMixin):
++    """Priority claim information."""
++
++    __tablename__ = "t_priority"
++
++    case_id: Mapped[str] = mapped_column(
++        String(36),
++        ForeignKey("t_case.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    seq: Mapped[int] = mapped_column(Integer, nullable=False)
++    country_code: Mapped[str | None] = mapped_column(String(10), nullable=True)  # e.g., "CN", "US"
++    prio_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
++    prio_date: Mapped[date | None] = mapped_column(Date, nullable=True)
++
++    __table_args__ = (UniqueConstraint("case_id", "seq", name="uq_priority_seq"),)
+diff --git a/backend/app/modules/cases/schemas.py b/backend/app/modules/cases/schemas.py
+index f93ff93..19c8220 100644
+--- a/backend/app/modules/cases/schemas.py
++++ b/backend/app/modules/cases/schemas.py
+@@ -1,11 +1,94 @@
+ from __future__ import annotations
+ 
+-from pydantic import BaseModel
++from datetime import date
+ 
++from pydantic import BaseModel, Field
+ 
+-class CaseCreateIn(BaseModel):
+-    case_no: str
+-    case_type: str | None = None
+-    patent_category: str | None = None
+-    flow_dir: str | None = None
++from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
++
++
++class CaseApplicantIn(BaseModel):
++    seq: int = Field(..., ge=1)
++    is_first: bool = False
++    name_cn: str | None = None
++    name_en: str | None = None
++    address_cn: str | None = None
++    address_en: str | None = None
++
++
++class CaseInventorIn(BaseModel):
++    seq: int = Field(..., ge=1)
++    name_cn: str | None = None
++    name_en: str | None = None
++
++
++class PriorityIn(BaseModel):
++    seq: int = Field(..., ge=1)
++    country_code: str | None = Field(None, max_length=10)
++    prio_no: str | None = Field(None, max_length=64)
++    prio_date: date | None = None
++
++
++class CaseCreate(BaseModel):
++    case_no: str = Field(..., min_length=1, max_length=64, strip_whitespace=True)
++    case_type: CaseType = CaseType.NORMAL
++    patent_category: PatentCategory = PatentCategory.INV
++    flow_dir: FlowDir = FlowDir.CN_DOMESTIC
+     client_id: str | None = None
++    title_cn: str | None = None
++    title_en: str | None = None
++    app_no: str | None = Field(None, max_length=64)
++    applicants: list[CaseApplicantIn] = []
++    inventors: list[CaseInventorIn] = []
++    priorities: list[PriorityIn] = []
++
++
++class CaseCreateIn(CaseCreate):
++    """Backward-compatible case creation input schema."""
++
++
++class CaseUpdateFull(BaseModel):
++    title_cn: str | None = None
++    title_en: str | None = None
++    app_no: str | None = Field(None, max_length=64)
++    status: CaseStatus | None = None
++    applicants: list[CaseApplicantIn] | None = None
++    inventors: list[CaseInventorIn] | None = None
++    priorities: list[PriorityIn] | None = None
++
++
++class CaseUpdateLimited(BaseModel):
++    """Limited fields editable by Agent role."""
++
++    title_cn: str | None = None
++    title_en: str | None = None
++    inventors: list[CaseInventorIn] | None = None
++
++
++class CaseDetail(BaseModel):
++    id: str
++    case_no: str
++    case_type: str
++    patent_category: str
++    flow_dir: str
++    client_id: str | None
++    title_cn: str | None
++    title_en: str | None
++    app_no: str | None
++    status: str
++    applicants: list[dict]  # CaseApplicantOut
++    inventors: list[dict]  # CaseInventorOut
++    priorities: list[dict]  # PriorityOut
++    created_at: str
++    updated_at: str
++
++
++class CaseListItem(BaseModel):
++    id: str
++    case_no: str
++    case_type: str
++    patent_category: str
++    client_id: str | None
++    title_cn: str | None
++    title_en: str | None
++    status: str
+diff --git a/backend/app/modules/cases/service.py b/backend/app/modules/cases/service.py
+index cee10e4..beb1327 100644
+--- a/backend/app/modules/cases/service.py
++++ b/backend/app/modules/cases/service.py
+@@ -1 +1,99 @@
+-# TODO: Implement service layer for this module
++from __future__ import annotations
++
++from sqlalchemy import or_
++from sqlalchemy.orm import Session
++
++from app.core.errors import raise_business_error
++from app.core.pagination import PageResult, offset_limit
++from app.modules.cases.models import Case
++from app.modules.cases.schemas import CaseListItem
++
++
++def validate_applicants(applicants: list[dict]) -> None:
++    """
++    Validate applicants list per business rules.
++
++    Rules:
++    - Must have at least 1 applicant
++    - Exactly 1 applicant must have is_first=True
++    - seq values must be unique
++
++    Raises:
++        BusinessError with appropriate code
++    """
++    if not applicants:
++        raise_business_error(
++            "CASE_APPLICANT_REQUIRED",
++            "At least one applicant is required",
++            status_code=400,
++        )
++
++    first_count = sum(1 for applicant in applicants if applicant.get("is_first"))
++    if first_count == 0:
++        raise_business_error(
++            "CASE_FIRST_APPLICANT_REQUIRED",
++            "Exactly one applicant must be marked as first",
++            status_code=400,
++        )
++    if first_count > 1:
++        raise_business_error(
++            "CASE_DUPLICATE_FIRST_APPLICANT",
++            "Only one applicant can be marked as first",
++            status_code=400,
++        )
++
++    seqs = [applicant.get("seq") for applicant in applicants]
++    if len(seqs) != len(set(seqs)):
++        raise_business_error(
++            "CASE_DUPLICATE_APPLICANT_SEQ",
++            "Applicant seq values must be unique",
++            status_code=400,
++        )
++
++
++def list_cases(
++    db: Session,
++    q: str | None = None,
++    client_id: str | None = None,
++    status: str | None = None,
++    page: int = 1,
++    page_size: int = 20,
++) -> PageResult[CaseListItem]:
++    """List cases with pagination and filters."""
++    query = db.query(Case)
++
++    if q:
++        query = query.filter(
++            or_(
++                Case.case_no.contains(q),
++                Case.title_cn.contains(q),
++                Case.title_en.contains(q),
++                Case.app_no.contains(q),
++            )
++        )
++
++    if client_id:
++        query = query.filter(Case.client_id == client_id)
++    if status:
++        query = query.filter(Case.status == status)
++
++    total = query.count()
++
++    off, lim = offset_limit(page, page_size)
++    items = query.order_by(Case.created_at.desc()).offset(off).limit(lim).all()
++
++    list_items = [
++        CaseListItem(
++            id=case.id,
++            case_no=case.case_no,
++            case_type=case.case_type,
++            patent_category=case.patent_category,
++            client_id=case.client_id,
++            title_cn=case.title_cn,
++            title_en=case.title_en,
++            status=case.status,
++        )
++        for case in items
++    ]
++
++    return PageResult(items=list_items, page=page, page_size=page_size, total=total)
+diff --git a/backend/app/modules/rbac/models.py b/backend/app/modules/rbac/models.py
+index 2c3608a..dba7d26 100644
+--- a/backend/app/modules/rbac/models.py
++++ b/backend/app/modules/rbac/models.py
+@@ -1 +1,5 @@
+-# TODO: Implement models for this module
++from __future__ import annotations
++
++from app.modules.auth.models import T_RolePerm
++
++__all__ = ["T_RolePerm"]
+diff --git a/backend/app/modules/rbac/service.py b/backend/app/modules/rbac/service.py
+index cee10e4..a48c2d0 100644
+--- a/backend/app/modules/rbac/service.py
++++ b/backend/app/modules/rbac/service.py
+@@ -1 +1,147 @@
+-# TODO: Implement service layer for this module
++from __future__ import annotations
++
++from uuid import uuid4
++
++from sqlalchemy.orm import Session
++
++from app.modules.auth.models import T_Role, T_UserRole
++from app.modules.rbac.models import T_RolePerm
++
++# Permission definitions from docs/02_permissions_rbac.md
++ROLE_PERMISSIONS = {
++    "Admin": [
++        "Auth.Login",
++        "User.Manage",
++        "Role.Manage",
++        "Case.Read",
++        "Case.Create",
++        "Case.Edit",
++        "Case.EditLimited",
++        "Case.Export",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Edit",
++        "Doc.Attach",
++        "Doc.TemplateRender",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Fee.Draft.Create",
++        "Fee.Draft.Edit",
++        "Fee.Rate.Manage",
++        "Bill.Read",
++        "Bill.CreateFromDraft",
++        "Bill.CreateManual",
++        "Bill.Print",
++        "Payment.Create",
++        "Payment.Offset",
++        "Client.Manage",
++        "Template.Manage",
++        "SystemParam.Manage",
++    ],
++    "Formalities": [
++        "Auth.Login",
++        "Case.Read",
++        "Case.Create",
++        "Case.Edit",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Edit",
++        "Doc.Attach",
++        "Doc.TemplateRender",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Fee.Draft.Create",
++        "Fee.Draft.Edit",
++        "Fee.Rate.Manage",
++        "Bill.Read",
++        "Client.Manage",
++    ],
++    "Agent": [
++        "Auth.Login",
++        "Case.Read",
++        "Case.EditLimited",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Attach",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Bill.Read",
++        "Client.Manage",
++    ],
++    "Finance": [
++        "Auth.Login",
++        "Case.Read",
++        "Doc.Read",
++        "Task.Read",
++        "Fee.Read",
++        "Bill.Read",
++        "Bill.CreateFromDraft",
++        "Bill.CreateManual",
++        "Bill.Print",
++        "Payment.Create",
++        "Payment.Offset",
++        "Client.Manage",
++    ],
++}
++
++
++def get_user_permissions(db: Session, user_id: str) -> set[str]:
++    """
++    Get all permission codes for a user.
++
++    Returns:
++        Set of permission code strings (e.g., {"Case.Read", "Bill.Create"})
++    """
++    user_roles = db.query(T_UserRole).filter(T_UserRole.user_id == user_id).all()
++
++    if not user_roles:
++        return set()
++
++    role_ids = [ur.role_id for ur in user_roles]
++
++    role_perms = db.query(T_RolePerm).filter(T_RolePerm.role_id.in_(role_ids)).all()
++
++    return {rp.perm_code for rp in role_perms}
++
++
++def seed_default_roles_perms(db: Session) -> None:
++    """Seed default roles and their permissions. Idempotent."""
++    for role_code, perm_codes in ROLE_PERMISSIONS.items():
++        role = db.query(T_Role).filter(T_Role.code == role_code).first()
++        if not role:
++            role = T_Role(
++                id=str(uuid4()),
++                code=role_code,
++                name=role_code,
++            )
++            db.add(role)
++            db.flush()
++
++        existing = db.query(T_RolePerm).filter(T_RolePerm.role_id == role.id).all()
++        existing_codes = {ep.perm_code for ep in existing}
++
++        for perm_code in perm_codes:
++            if perm_code not in existing_codes:
++                rp = T_RolePerm(
++                    id=str(uuid4()),
++                    role_id=role.id,
++                    perm_code=perm_code,
++                )
++                db.add(rp)
++
++    db.commit()
+diff --git a/backend/scripts/seed_dev.py b/backend/scripts/seed_dev.py
+old mode 100644
+new mode 100755
+index 355d567..d415d36
+--- a/backend/scripts/seed_dev.py
++++ b/backend/scripts/seed_dev.py
+@@ -1,16 +1,62 @@
+-"""Seed development data.
++#!/usr/bin/env python
++"""Seed development database with default roles, permissions, and admin user."""
+ 
+-MVP1 suggestion:
+-- Create default roles and permissions.
+-- Create an Admin user.
+-- Create a demo client + demo case to validate the pipeline.
++from uuid import uuid4
+ 
+-This script is intentionally a placeholder: implement after auth/rbac models exist.
+-"""
++from sqlalchemy.orm import Session
++
++from app.core.security import get_password_hash
++from app.db.session import get_engine
++from app.modules.auth.models import T_Role, T_User, T_UserRole
++from app.modules.rbac.service import seed_default_roles_perms
++
++
++def seed_admin_user(db: Session) -> None:
++    """Create default admin user. Idempotent."""
++    username = "admin"
++
++    existing = db.query(T_User).filter(T_User.username == username).first()
++    if existing:
++        print(f"Admin user '{username}' already exists")
++        return
++
++    admin_user = T_User(
++        id=str(uuid4()),
++        username=username,
++        display_name="Administrator",
++        password_hash=get_password_hash("admin123"),
++        is_active=True,
++    )
++    db.add(admin_user)
++    db.flush()
++
++    admin_role = db.query(T_Role).filter(T_Role.code == "Admin").first()
++    if admin_role:
++        user_role = T_UserRole(
++            user_id=admin_user.id,
++            role_id=admin_role.id,
++        )
++        db.add(user_role)
++
++    db.commit()
++    print(f"Created admin user '{username}' with password 'admin123'")
+ 
+ 
+ def main() -> None:
+-    raise SystemExit("TODO: implement after auth/rbac module is completed")
++    """Run all dev seeds."""
++    engine = get_engine()
++
++    with Session(engine) as db:
++        print("Seeding default roles and permissions...")
++        seed_default_roles_perms(db)
++        print("✓ Roles and permissions seeded")
++
++        print("Seeding admin user...")
++        seed_admin_user(db)
++        print("✓ Admin user seeded")
++
++    print("\n✅ Development database seeded successfully!")
++    print("   Login: username='admin', password='admin123'")
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/tasks.zip b/tasks.zip
+index d8210b2..3af0544 100644
+Binary files a/tasks.zip and b/tasks.zip differ
+diff --git a/tasks/backend/mvp1enhance/ENH-01-02.md b/tasks/backend/mvp1enhance/ENH-01-02.md
+index 632527f..287bca0 100644
+--- a/tasks/backend/mvp1enhance/ENH-01-02.md
++++ b/tasks/backend/mvp1enhance/ENH-01-02.md
+@@ -1,92 +1,46 @@
+-# ENH-01-02 — Create Alembic migration for T_RolePerm
++# ENH-01-02 — Add `created_at` column to `t_role_perm`
+ 
+ ## Design references
+-- `docs/02_permissions_rbac.md`
+-- `docs/03_database_mvp1_subset.md`
++- `docs/04_backend_architecture.md`
++- `tasks/backend_tasks_atomic.md` (BE-00-05)
++- `mvp1_backend_review_report.md` (Section 1.1)
+ 
+ ## Target
+-- **File:** `backend/alembic/versions/XXXXXX_add_t_role_perm.py` (NEW)
+-- **Atomic rule:** create ONLY this migration file; add ONLY T_RolePerm table.
+-
+-## Prerequisites
+-- ENH-01-01 complete (T_RolePerm model exists)
++- **File:** `backend/alembic/versions/ea0de36a1dde_add_t_role_perm.py`
++- **Atomic rule:** Modify ONLY this migration file to add the `created_at` column to `t_role_perm`.
+ 
+ ## Scope decision (MVP1 – FIXED)
+-- Create Alembic migration for T_RolePerm table ONLY.
+-- This task does NOT modify existing tables.
+-- No data seeding in migration.
++- Add `created_at` column to `t_role_perm` table in migration.
++- Ensure the `created_at` column uses the `CURRENT_TIMESTAMP` default for SQLite compatibility.
++- The migration must be applied without modifying any other tables or models.
+ 
+ ## Components to implement (EXACT)
+-Create migration with `alembic revision -m "add_t_role_perm"`:
+-
+-```python
+-def upgrade() -> None:
+-    op.create_table(
+-        't_role_perm',
+-        sa.Column('id', sa.String(36), primary_key=True),
+-        sa.Column('role_id', sa.String(36), nullable=False, index=True),
+-        sa.Column('perm_code', sa.String(128), nullable=False, index=True),
+-        sa.ForeignKeyConstraint(['role_id'], ['t_role.id'], ondelete='CASCADE'),
+-        sa.UniqueConstraint('role_id', 'perm_code', name='uq_role_perm')
+-    )
+-
+-def downgrade() -> None:
+-    op.drop_table('t_role_perm')
+-```
++1. Modify migration file `ea0de36a1dde_add_t_role_perm.py` to include:
++   - `created_at` column (SQLite-safe with default `CURRENT_TIMESTAMP`).
++   - `nullable=False`, `server_default=sa.text("CURRENT_TIMESTAMP")`.
+ 
+ ## Non-scope (explicitly excluded)
+-- Seeding permissions (separate task)
+-- Modifying other tables
+-- Adding indexes to other tables
+-
+-## Prompt
+-Create Alembic migration for T_RolePerm table with:
+-- UUID primary key  
+-- Foreign key to t_role with CASCADE delete
+-- Unique constraint on (role_id, perm_code)
+-- Indexes on role_id and perm_code
+-
+-SQLite compatible:
+-- Use String(36) for UUIDs
+-- Use server_default=text("CURRENT_TIMESTAMP") if needed
+-
+-Do NOT:
+-- Add data seeding
+-- Modify existing tables
+-- Ask clarification questions
+-## Non-Goals
+-- Do NOT introduce new frameworks/libraries unless explicitly required by this task.
+-- Do NOT refactor unrelated modules or perform repository-wide formatting.
+-- Do NOT change data models / database schema / migrations unless this task explicitly says so.
+-- Do NOT modify authentication/authorization model beyond the scope explicitly described in this task (if applicable).
+-
++- Do NOT modify `models.py` or add any migrations to other tables.
++- No refactor in any other modules.
+ 
+ ## Acceptance checklist
+-- [ ] Migration file created in alembic/versions/
+-- [ ] Creates t_role_perm table correctly
+-- [ ] Has upgrade() and downgrade()
+-- [ ] SQLite compatible
+-- [ ] Migration runs without errors
++- [ ] `created_at` column added to `t_role_perm`
++- [ ] Migration applied successfully (run `alembic upgrade head`)
++- [ ] Schema verified via `sqlite3 fpms_dev.db ".schema t_role_perm"`
++- [ ] No other migrations or models were modified
+ 
+ ## Evidence
+-Provide objective proof of completion (attach/quote in PR or task result):
+-
+-- Commands executed (lint/test/e2e if applicable) and their outputs (or links to logs).
+-- Example requests demonstrating the behavior (e.g., curl) and expected responses.
+-- Test coverage: new/updated test file paths and passing results.
+-- Code change evidence: `git diff` for files within this task’s scope.
+-
++Provide:
++- Migration outputs showing the column was added.
++- `git diff` showing only the migration file changes.
++- Verification of the new column in the schema using SQLite.
+ 
+ ## Validation commands
+ ```bash
+ cd backend
++# Run migration
+ alembic upgrade head
+-# Should succeed
+ 
+-# Check table created
++# Verify schema
+ sqlite3 fpms_dev.db ".schema t_role_perm"
+-
+-# Test rollback
+-alembic downgrade -1
+-alembic upgrade head
+ ```

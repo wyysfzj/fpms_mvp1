@@ -1,0 +1,8 @@
+{"task_id":"PE-FE-00-03","command":"sed -n '1,220p' tasks/postenhancement/frontend/PE-FE-00-03.md","rc":0}
+{"task_id":"PE-FE-00-03","command":"sed -n '1,320p' docs/FPMS_Frontend_Manual_Test_User_Guide.md","rc":0}
+{"task_id":"PE-FE-00-03","command":"rg -n \"^## 4\\. 前端可复用错误码与状态码处理规范|^### 4\\.[1-4]|\\| 400 \\||\\| 401 \\||\\| 403 \\||\\| 404 \\||\\| 409 \\||\\| 422 \\||requestId\" docs/FPMS_Frontend_Manual_Test_User_Guide.md -S","rc":0}
+{"task_id":"PE-FE-00-03","command":"nl -ba docs/FPMS_Frontend_Manual_Test_User_Guide.md | sed -n '114,230p'","rc":0}
+{"task_id":"PE-FE-00-03","command":"git diff --no-index -- /dev/null docs/FPMS_Frontend_Manual_Test_User_Guide.md > artifacts/PE-FE-00-03/git/diff.patch","rc":0,"note":"Used no-index because guide file is untracked in current workspace HEAD."}
+{"task_id":"PE-FE-00-03","command":"rg -n \"^## 4\\.|^### 4\\.\" docs/FPMS_Frontend_Manual_Test_User_Guide.md -S","rc":0}
+{"ts":"20260228T155454","step":"lint","rc":0,"log":"artifacts/PE-FE-00-03/outputs/20260228T155454_lint.log"}
+{"ts":"20260228T155456","step":"test","rc":0,"log":"artifacts/PE-FE-00-03/outputs/20260228T155456_test.log"}

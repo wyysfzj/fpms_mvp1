@@ -1,0 +1,4 @@
+{"ts":"20260124T115950","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/billing/doc_render_bill_context.py"}
+{"ts":"20260124T115958","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/billing/doc_render_bill_context.py"}
+{"ts":"20260124T120004","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/billing/doc_render_bill_context.py"}
+{"ts":"20260124T120010","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"from\ app.modules.billing.doc_render_bill_context\ import\ BillContextBuilder\;\ print\(\'OK\'\)\""}

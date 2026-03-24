@@ -1,0 +1,12 @@
+{"ts":"20260105T002525","step":"migrate","rc":255,"log":"artifacts/ENH-01-02/outputs/20260105T002525_migrate.log"}
+{"ts":"20260105T002546","step":"migrate","rc":0,"log":"artifacts/ENH-01-02/outputs/20260105T002546_migrate.log"}
+{"ts":"20260105T002639","step":"lint","rc":0,"log":"artifacts/ENH-01-02/outputs/20260105T002639_lint.log"}
+{"ts":"20260105T002645","step":"format","rc":0,"log":"artifacts/ENH-01-02/outputs/20260105T002645_format.log"}
+{"ts":"20260105T002651","step":"test","rc":0,"log":"artifacts/ENH-01-02/outputs/20260105T002651_test.log"}
+{"ts":"20260105T002657","step":"migrate","rc":0,"log":"artifacts/ENH-01-02/outputs/20260105T002657_migrate.log"}
+{"ts":"20260105T002703","step":"schema","rc":0,"log":"artifacts/ENH-01-02/outputs/20260105T002703_schema.log"}
+{"ts":"20260111T163848","step":"lint","rc":0,"log":"artifacts/ENH-01-02/outputs/20260111T163848_lint.log"}
+{"ts":"20260111T163856","step":"format","rc":0,"log":"artifacts/ENH-01-02/outputs/20260111T163856_format.log"}
+{"ts":"20260111T163903","step":"test","rc":0,"log":"artifacts/ENH-01-02/outputs/20260111T163903_test.log"}
+{"ts":"20260111T163909","step":"migrate","rc":0,"log":"artifacts/ENH-01-02/outputs/20260111T163909_migrate.log"}
+{"ts":"20260111T163916","step":"schema","rc":0,"log":"artifacts/ENH-01-02/outputs/20260111T163916_schema.log"}

@@ -1,0 +1,597 @@
+diff --git a/frontend/src/modules/commission/pages/CommissionSettlement.vue b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+new file mode 100644
+index 0000000..1d3f2b1
+--- /dev/null
++++ b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+@@ -0,0 +1,591 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">提成结算批次</h1>
++        <span class="page-count">统计行数：{{ report?.totals.line_count ?? 0 }}</span>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <el-card class="section-card" shadow="never">
++      <template #header>
++        <div class="section-title">创建结算批次</div>
++      </template>
++
++      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-position="top">
++        <el-row :gutter="12">
++          <el-col :xs="24" :sm="12" :md="8" :lg="6">
++            <el-form-item label="代理人 ID" prop="agent_id">
++              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人 ID" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8" :lg="6">
++            <el-form-item label="结算币种" prop="currency">
++              <el-input v-model.trim="createForm.currency" placeholder="例如：CNY" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="24" :md="8" :lg="8">
++            <el-form-item label="结算期间">
++              <el-date-picker
++                v-model="createForm.period_range"
++                type="daterange"
++                range-separator="至"
++                start-placeholder="开始日期"
++                end-placeholder="结束日期"
++                format="YYYY-MM-DD"
++                value-format="YYYY-MM-DD"
++                class="w-full"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="24" :md="24" :lg="24">
++            <el-form-item label="备注">
++              <el-input v-model="createForm.remark" type="textarea" :rows="2" placeholder="可选备注" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="24" class="action-row">
++            <el-button type="primary" :loading="creating" @click="handleCreateSettlement">创建批次</el-button>
++          </el-col>
++        </el-row>
++      </el-form>
++    </el-card>
++
++    <el-card class="section-card" shadow="never">
++      <template #header>
++        <div class="section-title">生成结算明细</div>
++      </template>
++
++      <el-row :gutter="12" class="generate-row">
++        <el-col :xs="24" :sm="12" :md="8" :lg="6">
++          <el-input-number
++            v-model="generateForm.settlement_id"
++            :min="1"
++            :controls="false"
++            placeholder="结算批次 ID"
++            class="w-full"
++          />
++        </el-col>
++        <el-col :xs="24" :sm="12" :md="8" :lg="6">
++          <el-button
++            type="success"
++            :loading="generating"
++            :disabled="!generateForm.settlement_id"
++            @click="handleGenerateLines"
++          >
++            生成明细
++          </el-button>
++        </el-col>
++      </el-row>
++
++      <div v-if="lastGenerate" class="result-block">
++        <el-descriptions :column="3" border>
++          <el-descriptions-item label="批次 ID">{{ lastGenerate.settlement_id }}</el-descriptions-item>
++          <el-descriptions-item label="状态">{{ lastGenerate.status }}</el-descriptions-item>
++          <el-descriptions-item label="明细总数">{{ lastGenerate.line_count }}</el-descriptions-item>
++          <el-descriptions-item label="新增明细">{{ lastGenerate.created_count }}</el-descriptions-item>
++          <el-descriptions-item label="更新明细">{{ lastGenerate.updated_count }}</el-descriptions-item>
++          <el-descriptions-item label="明细总额">{{ formatMoney(lastGenerate.total_amount) }}</el-descriptions-item>
++        </el-descriptions>
++      </div>
++
++      <div v-if="recentSettlements.length" class="result-block">
++        <div class="sub-title">本页创建的批次</div>
++        <el-table :data="recentSettlements" stripe size="small" class="compact-table">
++          <el-table-column prop="id" label="ID" width="80" />
++          <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
++            <template #default="{ row }">
++              {{ row.agent_id || '—' }}
++            </template>
++          </el-table-column>
++          <el-table-column prop="status" label="状态" width="100" />
++          <el-table-column prop="currency" label="币种" width="90" />
++          <el-table-column prop="line_count" label="明细数" width="90" />
++          <el-table-column label="总额" width="120" align="right">
++            <template #default="{ row }">
++              <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++            </template>
++          </el-table-column>
++          <el-table-column label="操作" width="120" fixed="right">
++            <template #default="{ row }">
++              <el-button text size="small" @click="useSettlement(row.id)">用于生成</el-button>
++            </template>
++          </el-table-column>
++        </el-table>
++      </div>
++    </el-card>
++
++    <el-card class="section-card" shadow="never">
++      <template #header>
++        <div class="section-title">结算报表与统计</div>
++      </template>
++
++      <el-row :gutter="12" class="filter-bar">
++        <el-col :xs="24" :sm="12" :md="8" :lg="6">
++          <el-input v-model.trim="reportFilters.agent_id" placeholder="代理人 ID" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="24" :sm="12" :md="8" :lg="6">
++          <el-input v-model.trim="reportFilters.case_id" placeholder="案件 ID" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="12" :sm="8" :md="4" :lg="3">
++          <el-input v-model.trim="reportFilters.currency" placeholder="币种" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="12" :sm="8" :md="4" :lg="3">
++          <el-select v-model="reportFilters.time_field" placeholder="时间维度">
++            <el-option label="按明细创建时间" value="line_created_at" />
++            <el-option label="按可结算日期" value="settleable_date" />
++            <el-option label="按结算期间" value="settlement_period" />
++          </el-select>
++        </el-col>
++        <el-col :xs="12" :sm="8" :md="4" :lg="3">
++          <el-input v-model.trim="reportFilters.settlement_status" placeholder="批次状态" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="12" :sm="8" :md="4" :lg="3">
++          <el-input v-model.trim="reportFilters.line_status" placeholder="明细状态" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="24" :sm="16" :md="8" :lg="7">
++          <el-date-picker
++            v-model="reportFilters.date_range"
++            type="daterange"
++            range-separator="至"
++            start-placeholder="报表开始日期"
++            end-placeholder="报表结束日期"
++            format="YYYY-MM-DD"
++            value-format="YYYY-MM-DD"
++            class="w-full"
++          />
++        </el-col>
++        <el-col :xs="24" :sm="8" :md="4" :lg="3" class="filter-actions">
++          <el-button type="primary" :loading="reportLoading" @click="queryReport">查询报表</el-button>
++          <el-button @click="resetReportFilters">重置</el-button>
++        </el-col>
++      </el-row>
++
++      <LoadingBlock v-if="reportLoading" :rows="6" />
++
++      <div v-else-if="!report" class="page-empty">
++        <EmptyState title="暂无报表数据" message="请先设置条件并查询报表。" icon="📊" />
++      </div>
++
++      <div v-else>
++        <el-row :gutter="12" class="stat-grid">
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-card shadow="never" class="stat-card">
++              <div class="stat-label">明细总数</div>
++              <div class="stat-value">{{ report.totals.line_count }}</div>
++            </el-card>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-card shadow="never" class="stat-card">
++              <div class="stat-label">提成总额</div>
++              <div class="stat-value mono-num">{{ formatMoney(report.totals.total_amount) }}</div>
++            </el-card>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-card shadow="never" class="stat-card">
++              <div class="stat-label">分组维度</div>
++              <div class="stat-value">{{ report.filters.time_field }}</div>
++            </el-card>
++          </el-col>
++        </el-row>
++
++        <div class="table-section">
++          <div class="sub-title">按代理人统计</div>
++          <el-table :data="report.by_agent" stripe size="small" class="compact-table">
++            <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++              <template #default="{ row }">
++                {{ row.agent_id || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="line_count" label="明细数" width="100" />
++            <el-table-column label="总额" width="140" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++
++        <div class="table-section">
++          <div class="sub-title">按案件统计</div>
++          <el-table :data="report.by_case" stripe size="small" class="compact-table">
++            <el-table-column prop="case_id" label="案件 ID" min-width="180">
++              <template #default="{ row }">
++                {{ row.case_id || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="line_count" label="明细数" width="100" />
++            <el-table-column label="总额" width="140" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++
++        <div class="table-section">
++          <div class="sub-title">按时间统计</div>
++          <el-table :data="report.by_time" stripe size="small" class="compact-table">
++            <el-table-column prop="time_bucket" label="时间桶" min-width="160" />
++            <el-table-column prop="line_count" label="明细数" width="100" />
++            <el-table-column label="总额" width="140" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++
++        <div class="table-section">
++          <div class="sub-title">明细列表</div>
++          <el-table :data="report.details" stripe size="small" class="compact-table">
++            <el-table-column prop="settlement_id" label="批次 ID" width="90" />
++            <el-table-column prop="commission_id" label="提成 ID" width="90" />
++            <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
++              <template #default="{ row }">
++                {{ row.agent_id || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="case_id" label="案件 ID" min-width="150" />
++            <el-table-column prop="settlement_status" label="批次状态" width="100">
++              <template #default="{ row }">
++                {{ row.settlement_status || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="line_status" label="明细状态" width="100">
++              <template #default="{ row }">
++                {{ row.line_status || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column label="金额" width="120" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatMoney(row.amount) }}</span>
++              </template>
++            </el-table-column>
++            <el-table-column prop="settleable_date" label="可结算日期" width="120">
++              <template #default="{ row }">
++                {{ row.settleable_date || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="created_at" label="创建时间" min-width="170">
++              <template #default="{ row }">
++                {{ formatDateTime(row.created_at) }}
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++      </div>
++    </el-card>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { onMounted, reactive, ref } from 'vue'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import {
++  createCommissionSettlement,
++  generateCommissionSettlementLines,
++  getCommissionSettlementReport,
++} from '../../../api/commission'
++import type {
++  CommissionSettlement,
++  CommissionSettlementCreatePayload,
++  CommissionSettlementGenerateLinesResult,
++  CommissionSettlementReportParams,
++  CommissionSettlementReportResult,
++} from '../../../api/commission.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++
++const error = ref<ApiError | null>(null)
++
++const createFormRef = ref<FormInstance>()
++const creating = ref(false)
++const createForm = reactive({
++  agent_id: '',
++  currency: 'CNY',
++  period_range: [] as string[],
++  remark: '',
++})
++
++const createRules: FormRules = {
++  agent_id: [{ required: true, message: '代理人 ID 为必填项', trigger: 'blur' }],
++  currency: [{ required: true, message: '币种为必填项', trigger: 'blur' }],
++}
++
++const generateForm = reactive({
++  settlement_id: undefined as number | undefined,
++})
++const generating = ref(false)
++const lastGenerate = ref<CommissionSettlementGenerateLinesResult | null>(null)
++const recentSettlements = ref<CommissionSettlement[]>([])
++
++const reportLoading = ref(false)
++const report = ref<CommissionSettlementReportResult | null>(null)
++const reportFilters = reactive({
++  agent_id: '',
++  case_id: '',
++  currency: '',
++  settlement_status: '',
++  line_status: '',
++  date_range: [] as string[],
++  time_field: 'line_created_at' as CommissionSettlementReportParams['time_field'],
++})
++
++function toApiError(errorLike: unknown): ApiError | null {
++  if (!errorLike || typeof errorLike !== 'object') return null
++  const candidate = errorLike as Partial<ApiError>
++  if (typeof candidate.status !== 'number') return null
++  if (typeof candidate.code !== 'string') return null
++  if (typeof candidate.message !== 'string') return null
++  return candidate as ApiError
++}
++
++function mapCreateSettlementError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
++
++  if (apiError.status === 400 && apiError.code === 'COMMISSION_SETTLEMENT_INVALID') {
++    return '结算批次参数无效，请检查代理人、期间和币种。'
++  }
++  if (apiError.status === 409 && apiError.code === 'COMMISSION_SETTLEMENT_CONFLICT') {
++    return '结算批次冲突：当前条件下已存在进行中的批次。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限创建结算批次。'
++  if (apiError.status === 422) return '提交数据校验失败，请检查输入后重试。'
++
++  return '创建结算批次失败，请稍后重试。'
++}
++
++function mapGenerateLinesError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
++
++  if (apiError.status === 404 && apiError.code === 'COMMISSION_SETTLEMENT_NOT_FOUND') {
++    return '结算批次不存在，请确认批次 ID。'
++  }
++  if (apiError.status === 400 && apiError.code === 'COMMISSION_SETTLEMENT_INVALID') {
++    return '结算批次参数或状态无效，无法生成明细。'
++  }
++  if (apiError.status === 409 && apiError.code === 'COMMISSION_SETTLEMENT_CONFLICT') {
++    return '结算批次冲突：当前状态不允许生成或存在重复明细。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限生成结算明细。'
++  if (apiError.status === 422) return '请求参数校验失败，请检查后重试。'
++
++  return '生成结算明细失败，请稍后重试。'
++}
++
++function mapReportError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
++
++  if (apiError.status === 400 && apiError.code === 'COMMISSION_REPORT_INVALID') {
++    return '报表查询条件无效，请检查时间范围和筛选项。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限查看结算报表。'
++  if (apiError.status === 422) return '报表查询参数校验失败，请检查后重试。'
++
++  return '查询结算报表失败，请稍后重试。'
++}
++
++function normalizeOptional(value: string): string | undefined {
++  const trimmed = value.trim()
++  return trimmed || undefined
++}
++
++function formatMoney(value: number): string {
++  return value.toLocaleString('zh-CN', {
++    minimumFractionDigits: 2,
++    maximumFractionDigits: 2,
++  })
++}
++
++function formatDateTime(value: string): string {
++  const date = new Date(value)
++  if (Number.isNaN(date.getTime())) return value
++  return date.toLocaleString('zh-CN', { hour12: false })
++}
++
++function buildCreatePayload(): CommissionSettlementCreatePayload {
++  return {
++    agent_id: createForm.agent_id.trim(),
++    currency: createForm.currency.trim(),
++    period_from: createForm.period_range[0] || undefined,
++    period_to: createForm.period_range[1] || undefined,
++    remark: normalizeOptional(createForm.remark),
++  }
++}
++
++function buildReportParams(): CommissionSettlementReportParams {
++  return {
++    agent_id: normalizeOptional(reportFilters.agent_id),
++    case_id: normalizeOptional(reportFilters.case_id),
++    currency: normalizeOptional(reportFilters.currency),
++    settlement_status: normalizeOptional(reportFilters.settlement_status),
++    line_status: normalizeOptional(reportFilters.line_status),
++    date_from: reportFilters.date_range[0] || undefined,
++    date_to: reportFilters.date_range[1] || undefined,
++    time_field: reportFilters.time_field,
++  }
++}
++
++function useSettlement(id: number) {
++  generateForm.settlement_id = id
++}
++
++async function handleCreateSettlement() {
++  const valid = await createFormRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  creating.value = true
++  error.value = null
++  try {
++    const settlement = await createCommissionSettlement(buildCreatePayload())
++    recentSettlements.value = [settlement, ...recentSettlements.value.filter((s) => s.id !== settlement.id)]
++    generateForm.settlement_id = settlement.id
++    ElMessage.success(`批次创建成功（ID: ${settlement.id}）`)
++  } catch (err) {
++    error.value = toApiError(err)
++    ElMessage.error(mapCreateSettlementError(err))
++  } finally {
++    creating.value = false
++  }
++}
++
++async function handleGenerateLines() {
++  if (!generateForm.settlement_id) {
++    ElMessage.warning('请先输入结算批次 ID')
++    return
++  }
++
++  generating.value = true
++  error.value = null
++  try {
++    const result = await generateCommissionSettlementLines(generateForm.settlement_id)
++    lastGenerate.value = result
++
++    const index = recentSettlements.value.findIndex((s) => s.id === result.settlement_id)
++    if (index >= 0) {
++      recentSettlements.value[index] = {
++        ...recentSettlements.value[index],
++        line_count: result.line_count,
++        total_amount: result.total_amount,
++        status: result.status,
++      }
++    }
++
++    ElMessage.success('明细生成成功')
++  } catch (err) {
++    error.value = toApiError(err)
++    ElMessage.error(mapGenerateLinesError(err))
++  } finally {
++    generating.value = false
++  }
++}
++
++async function queryReport() {
++  reportLoading.value = true
++  error.value = null
++  try {
++    report.value = await getCommissionSettlementReport(buildReportParams())
++  } catch (err) {
++    error.value = toApiError(err)
++    ElMessage.error(mapReportError(err))
++  } finally {
++    reportLoading.value = false
++  }
++}
++
++function resetReportFilters() {
++  reportFilters.agent_id = ''
++  reportFilters.case_id = ''
++  reportFilters.currency = ''
++  reportFilters.settlement_status = ''
++  reportFilters.line_status = ''
++  reportFilters.date_range = []
++  reportFilters.time_field = 'line_created_at'
++  queryReport()
++}
++
++onMounted(() => {
++  queryReport()
++})
++</script>
++
++<style scoped>
++.section-card {
++  margin-top: 16px;
++}
++
++.section-title {
++  font-weight: 600;
++}
++
++.action-row {
++  display: flex;
++  justify-content: flex-end;
++}
++
++.generate-row {
++  align-items: center;
++}
++
++.result-block {
++  margin-top: 16px;
++}
++
++.sub-title {
++  margin-bottom: 8px;
++  font-weight: 600;
++}
++
++.filter-bar {
++  margin-bottom: 16px;
++}
++
++.filter-actions {
++  display: flex;
++  gap: 8px;
++}
++
++.stat-grid {
++  margin-bottom: 16px;
++}
++
++.stat-card {
++  min-height: 96px;
++}
++
++.stat-label {
++  font-size: 13px;
++  color: var(--text-sub);
++}
++
++.stat-value {
++  margin-top: 8px;
++  font-size: 24px;
++  font-weight: 700;
++}
++
++.table-section {
++  margin-top: 16px;
++}
++
++.mono-num {
++  font-family: var(--font-mono);
++}
++
++.w-full {
++  width: 100%;
++}
++</style>

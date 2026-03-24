@@ -1,0 +1,6 @@
+{"ts":"20260104T200531","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/core/security.py"}
+{"ts":"20260104T200535","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/core/security.py"}
+{"ts":"20260104T200539","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/core/security.py"}
+{"ts":"20260104T200642","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/core/security.py"}
+{"ts":"20260104T200647","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/core/security.py"}
+{"ts":"20260104T200652","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/core/security.py"}

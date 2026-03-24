@@ -1,0 +1,291 @@
+--- /dev/null	2026-02-28 22:18:25
++++ /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/annuity/pages/AnnuityTaskList.vue	2026-02-28 22:09:58
+@@ -0,0 +1,276 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">年费任务列表</h1>
++        <span class="page-count">{{ total }} 条</span>
++      </div>
++    </div>
++
++    <el-row :gutter="12" style="margin-bottom: 16px">
++      <el-col :xs="24" :sm="12" :md="6">
++        <el-select
++          v-model="filterStatus"
++          placeholder="任务状态"
++          clearable
++          @change="onFilterChange"
++        >
++          <el-option label="全部状态" value="" />
++          <el-option label="待处理" value="OPEN" />
++          <el-option label="已完成" value="DONE" />
++          <el-option label="已取消" value="CANCELLED" />
++        </el-select>
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6">
++        <el-select
++          v-model="filterPendingMode"
++          placeholder="处理范围"
++          clearable
++          @change="onFilterChange"
++        >
++          <el-option label="全部范围" value="" />
++          <el-option label="仅待处理" value="pending" />
++          <el-option label="仅已处理" value="processed" />
++        </el-select>
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6">
++        <el-select
++          v-model="filterNoticeStatus"
++          placeholder="通知状态"
++          clearable
++          @change="onFilterChange"
++        >
++          <el-option label="全部通知状态" value="" />
++          <el-option label="待通知" value="PENDING" />
++          <el-option label="已通知" value="SENT" />
++          <el-option label="无需通知" value="SKIPPED" />
++        </el-select>
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6">
++        <el-date-picker
++          v-model="filterDueRange"
++          type="daterange"
++          range-separator="至"
++          start-placeholder="到期开始日期"
++          end-placeholder="到期结束日期"
++          value-format="YYYY-MM-DD"
++          format="YYYY-MM-DD"
++          clearable
++          @change="onFilterChange"
++        />
++      </el-col>
++    </el-row>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="10" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无年费任务"
++        message="请调整筛选条件后重试。"
++        icon="📄"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table :data="tasks" stripe size="small" class="compact-table">
++        <el-table-column prop="id" label="任务ID" width="90" />
++        <el-table-column label="案件" min-width="180">
++          <template #default="{ row }">
++            <router-link :to="`/cases/${row.case_id}`" class="case-link">
++              {{ row.case_id }}
++            </router-link>
++          </template>
++        </el-table-column>
++        <el-table-column prop="client_id" label="客户ID" min-width="180" />
++        <el-table-column prop="year_no" label="年度" width="90" />
++        <el-table-column label="到期日" width="130">
++          <template #default="{ row }">
++            {{ formatDate(row.due_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="任务状态" width="120">
++          <template #default="{ row }">
++            <el-tag :type="statusTagType(row.status)" size="small">
++              {{ taskStatusText(row.status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="通知状态" width="120">
++          <template #default="{ row }">
++            <el-tag :type="noticeTagType(row.notice_status)" size="small">
++              {{ noticeStatusText(row.notice_status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="客户指示" width="120">
++          <template #default="{ row }">
++            {{ instructionText(row.client_instruction) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="指示日期" width="130">
++          <template #default="{ row }">
++            {{ formatDate(row.instruction_date) }}
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar
++        v-model:page="page"
++        v-model:page-size="pageSize"
++        :total="total"
++        :page-sizes="[10, 20, 50]"
++      />
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref, watch } from 'vue'
++import dayjs from 'dayjs'
++import { getAnnuityTasks } from '../../../api/annuity'
++import type { AnnuityPendingMode, AnnuityTask } from '../../../api/annuity.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++
++const tasks = ref<AnnuityTask[]>([])
++const loading = ref(false)
++const error = ref<ApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++
++const filterStatus = ref('')
++const filterPendingMode = ref<AnnuityPendingMode | ''>('')
++const filterNoticeStatus = ref('')
++const filterDueRange = ref<string[]>([])
++
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++function onFilterChange() {
++  page.value = 1
++  fetchTasks()
++}
++
++async function fetchTasks() {
++  loading.value = true
++  error.value = null
++  try {
++    const dueFrom = filterDueRange.value.length === 2 ? filterDueRange.value[0] : undefined
++    const dueTo = filterDueRange.value.length === 2 ? filterDueRange.value[1] : undefined
++
++    const result = await getAnnuityTasks({
++      page: page.value,
++      page_size: pageSize.value,
++      status: filterStatus.value || undefined,
++      pending_mode: filterPendingMode.value || undefined,
++      notice_status: filterNoticeStatus.value || undefined,
++      due_from: dueFrom,
++      due_to: dueTo,
++    })
++    tasks.value = result.items
++    total.value = result.total
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    loading.value = false
++  }
++}
++
++function formatDate(dateValue?: string): string {
++  if (!dateValue) return '—'
++  const parsed = dayjs(dateValue)
++  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : dateValue
++}
++
++function statusTagType(status: string): 'warning' | 'success' | 'info' | 'danger' {
++  switch (status?.toUpperCase()) {
++    case 'OPEN':
++      return 'warning'
++    case 'DONE':
++      return 'success'
++    case 'CANCELLED':
++    case 'CANCELED':
++      return 'info'
++    default:
++      return 'danger'
++  }
++}
++
++function taskStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'OPEN':
++      return '待处理'
++    case 'DONE':
++      return '已完成'
++    case 'CANCELLED':
++    case 'CANCELED':
++      return '已取消'
++    default:
++      return status || '未知'
++  }
++}
++
++function noticeTagType(status: string): 'warning' | 'success' | 'info' {
++  switch (status?.toUpperCase()) {
++    case 'PENDING':
++      return 'warning'
++    case 'SENT':
++      return 'success'
++    default:
++      return 'info'
++  }
++}
++
++function noticeStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'PENDING':
++      return '待通知'
++    case 'SENT':
++      return '已通知'
++    case 'SKIPPED':
++      return '无需通知'
++    default:
++      return status || '未知'
++  }
++}
++
++function instructionText(instruction?: string): string {
++  switch (instruction?.toUpperCase()) {
++    case 'PAY':
++      return '缴费'
++    case 'DEFER':
++      return '延期'
++    case 'ABANDON':
++      return '放弃'
++    default:
++      return '未指示'
++  }
++}
++
++watch([page, pageSize], () => {
++  fetchTasks()
++})
++
++onMounted(() => {
++  fetchTasks()
++})
++</script>
++
++<style scoped>
++.case-link {
++  color: var(--color-primary);
++  text-decoration: none;
++  font-weight: 500;
++}
++
++.case-link:hover {
++  text-decoration: underline;
++}
++</style>
+diff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts
+index 0904960..b64ce15 100644
+--- a/frontend/src/router/index.ts
++++ b/frontend/src/router/index.ts
+@@ -13,6 +13,7 @@ const routes = [
+       { path: 'cases/:id', name: 'case_detail', component: () => import('../modules/cases/pages/CaseDetail.vue') },
+       { path: 'documents', name: 'documents', component: () => import('../modules/documents/pages/DocumentList.vue') },
+       { path: 'tasks', name: 'tasks', component: () => import('../modules/tasks/pages/TaskList.vue') },
++      { path: 'annuity/tasks', name: 'annuity_tasks', component: () => import('../modules/annuity/pages/AnnuityTaskList.vue') },
+       { path: 'fees/drafts', name: 'fee_drafts', component: () => import('../modules/fees/pages/FeeDraftList.vue') },
+       { path: 'billing/bills', name: 'bills', component: () => import('../modules/billing/pages/BillList.vue') },
+       { path: 'settings/clients', name: 'clients', component: () => import('../modules/settings/pages/ClientList.vue') },

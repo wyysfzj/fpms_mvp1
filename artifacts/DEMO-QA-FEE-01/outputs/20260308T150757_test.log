@@ -1,0 +1,11 @@
+{"timestamp": "2026-03-08T07:07:58.349493+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "644ac9f0-b423-4180-9599-287ebc226b3c"}
+{"timestamp": "2026-03-08T07:07:58.350301+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/auth/login \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T07:07:58.358151+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "fea9c0b0-ff39-4c1a-87b5-79bc7a051516"}
+{"timestamp": "2026-03-08T07:07:58.358683+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/clients \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:07:58.365986+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "88b1f5e7-13e4-44b1-a77d-8a707f4267f2"}
+{"timestamp": "2026-03-08T07:07:58.366476+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/cases \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:07:58.371709+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "a6d21dbf-b407-420f-ba4f-8a276e9b84a9"}
+{"timestamp": "2026-03-08T07:07:58.372225+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/fees/drafts \"HTTP/1.1 201 Created\"", "request_id": null}
+Traceback (most recent call last):
+  File "<stdin>", line 53, in <module>
+AssertionError: {'id': 'aef22eb5-8987-44e0-84b9-fa93864e51cf', 'case_id': '370ebc42-31bb-40fe-8ecf-b5f6768c9dd4', 'case_no': None, 'client_id': '340808a7-8baa-4f62-838d-fd8a7c7d3f23', 'client_name': None, 'draft_type': 'GRANT_FEE', 'currency': 'CNY', 'status': 'OPEN', 'total_gov': '0.00', 'total_service': '0.00', 'total_misc': '0.00', 'amount': '0.00', 'created_at': '2026-03-08T07:07:58.369952', 'updated_at': '2026-03-08T07:07:58.369953'}

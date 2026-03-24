@@ -1,0 +1,17 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+F821 Undefined name `Case`
+  --> app/modules/documents/models.py:67:19
+   |
+65 |     )
+66 |
+67 |     case: Mapped["Case"] = relationship("Case")
+   |                   ^^^^
+68 |     attachments: Mapped[list["DocAttachment"]] = relationship(
+69 |         "DocAttachment", back_populates="document"
+   |
+
+Found 1 error.

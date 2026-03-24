@@ -1,0 +1,639 @@
+diff --git a/backend/app/modules/cases/api.py b/backend/app/modules/cases/api.py
+index c83d26b..e61d932 100644
+--- a/backend/app/modules/cases/api.py
++++ b/backend/app/modules/cases/api.py
+@@ -8,11 +8,20 @@ from fastapi import APIRouter, Depends, Query, status
+ from sqlalchemy import or_
+ from sqlalchemy.orm import Session
+ 
+-from app.api.deps import require_perm
++from app.api.deps import current_user_dep, require_perm
+ from app.core.errors import raise_business_error
+ from app.db.session import get_db
++from app.modules.auth.models import T_User
+ from app.modules.cases.models import Case
+-from app.modules.cases.schemas import CaseCreateIn
++from app.modules.cases.schemas import CaseCreateIn, CaseUpdateFull
++from app.modules.cases.service import (
++    update_case_full as update_case_full_service,
++)
++from app.modules.cases.service import (
++    validate_applicants,
++    validate_client_exists,
++    validate_priorities,
++)
+ from app.modules.masterdata.clients.models import Client
+ 
+ router = APIRouter()
+@@ -196,6 +205,13 @@ def create_case(
+             status_code=status.HTTP_409_CONFLICT,
+         )
+ 
++    applicants_dict = [applicant.model_dump() for applicant in payload.applicants]
++    priorities_dict = [priority.model_dump() for priority in payload.priorities]
++    if applicants_dict:
++        validate_applicants(applicants_dict)
++    validate_client_exists(db, payload.client_id)
++    validate_priorities(priorities_dict)
++
+     from sqlalchemy import text as sa_text
+ 
+     case = Case(
+@@ -498,8 +514,9 @@ def export_cases(
+ @router.put("/cases/{case_id}", summary="Update a case")
+ def update_case(
+     case_id: str,
+-    payload: dict[str, Any],
++    payload: CaseUpdateFull,
+     _perm: None = Depends(require_perm("Case.Edit")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+     """
+@@ -526,75 +543,7 @@ def update_case(
+     - 404: Case not found
+     - 422: VALIDATION_ERROR
+     """
+-    case = db.query(Case).filter(Case.id == case_id).first()
+-    if not case:
+-        raise_business_error(
+-            "CASE_NOT_FOUND",
+-            "Case not found",
+-            status_code=status.HTTP_404_NOT_FOUND,
+-        )
+-
+-    new_case_no = payload.get("case_no")
+-    if new_case_no and new_case_no != case.case_no:
+-        exists = db.query(Case).filter(Case.case_no == new_case_no, Case.id != case_id).first()
+-        if exists:
+-            raise_business_error(
+-                "CASE_NO_DUPLICATE",
+-                "case_no already exists",
+-                status_code=status.HTTP_400_BAD_REQUEST,
+-            )
+-        case.case_no = new_case_no
+-
+-    case.case_type = payload.get("case_type", case.case_type)
+-    case.patent_category = payload.get("patent_category", case.patent_category)
+-    case.flow_dir = payload.get("flow_dir", case.flow_dir)
+-    case.client_id = payload.get("client_id", case.client_id)
+-
+-    # A3 — new scalar fields (only update if key present)
+-    if "title_cn" in payload:
+-        case.title_cn = payload["title_cn"]
+-    if "title_en" in payload:
+-        case.title_en = payload["title_en"]
+-    if "app_no" in payload:
+-        case.app_no = payload["app_no"]
+-    if "status" in payload:
+-        case.status = payload["status"]
+-    if "pub_date" in payload:
+-        v = payload["pub_date"]
+-        case.pub_date = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "pub_no" in payload:
+-        case.pub_no = payload["pub_no"]
+-    if "grant_date" in payload:
+-        v = payload["grant_date"]
+-        case.grant_date = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "grant_no" in payload:
+-        case.grant_no = payload["grant_no"]
+-    if "patent_no" in payload:
+-        case.patent_no = payload["patent_no"]
+-    if "valid_until" in payload:
+-        v = payload["valid_until"]
+-        case.valid_until = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "spec_pages" in payload:
+-        case.spec_pages = payload["spec_pages"]
+-    if "claim_count" in payload:
+-        case.claim_count = payload["claim_count"]
+-    if "has_exam_request" in payload:
+-        case.has_exam_request = payload["has_exam_request"]
+-    if "primary_agent_id" in payload:
+-        case.primary_agent_id = payload["primary_agent_id"]
+-    if "second_agent_id" in payload:
+-        case.second_agent_id = payload["second_agent_id"]
+-    if "draftor_id" in payload:
+-        case.draftor_id = payload["draftor_id"]
+-    if "is_fee_monitor" in payload:
+-        case.is_fee_monitor = payload["is_fee_monitor"]
+-    if "fee_reduction" in payload:
+-        case.fee_reduction = payload["fee_reduction"]
+-    if "applicant_kind" in payload:
+-        case.applicant_kind = payload["applicant_kind"]
+-
+-    db.commit()
+-    db.refresh(case)
++    case = update_case_full_service(db, case_id, payload, current_user.id)
+ 
+     return {
+         "id": case.id,
+@@ -607,6 +556,7 @@ def update_case(
+         "title_en": case.title_en,
+         "app_no": case.app_no,
+         "status": case.status,
++        "filing_date": str(case.filing_date) if case.filing_date else None,
+         "pub_date": str(case.pub_date) if case.pub_date else None,
+         "pub_no": case.pub_no,
+         "grant_date": str(case.grant_date) if case.grant_date else None,
+diff --git a/backend/app/modules/cases/enums.py b/backend/app/modules/cases/enums.py
+index 916c440..02a7d6d 100644
+--- a/backend/app/modules/cases/enums.py
++++ b/backend/app/modules/cases/enums.py
+@@ -52,5 +52,7 @@ class CaseStatus(str, Enum):
+     OA1 = "OA1"  # 第一次审查意见 - First office action
+     OA2 = "OA2"  # 第二次审查意见 - Second office action
+     REEXAM = "REEXAM"  # 复审 - Re-examination
++    ACCEPTED = "ACCEPTED"  # 受理完成 - Accepted / accepted notice recorded
++    GRANT_PENDING = "GRANT_PENDING"  # 待授权缴费/登记 - Grant pending
+     TERMINATED = "TERMINATED"  # 终止 - Patent terminated
+     INVALIDATED = "INVALIDATED"  # 无效 - Patent invalidated
+diff --git a/backend/app/modules/cases/schemas.py b/backend/app/modules/cases/schemas.py
+index 2a02f55..098e8e8 100644
+--- a/backend/app/modules/cases/schemas.py
++++ b/backend/app/modules/cases/schemas.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ from datetime import date
+ 
+-from pydantic import BaseModel, Field
++from pydantic import AliasChoices, BaseModel, Field, field_validator
+ 
+ from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
+ 
+@@ -68,10 +68,11 @@ class CaseCreateIn(CaseCreate):
+ 
+ 
+ class CaseUpdateFull(BaseModel):
+-    title_cn: str | None = None
++    title_cn: str | None = Field(default=None, validation_alias=AliasChoices("title_cn", "title"))
+     title_en: str | None = None
+     app_no: str | None = Field(None, max_length=64)
+     status: CaseStatus | None = None
++    filing_date: date | None = None
+     # A3 — Publication / Grant
+     pub_date: date | None = None
+     pub_no: str | None = Field(None, max_length=64)
+@@ -96,6 +97,13 @@ class CaseUpdateFull(BaseModel):
+     inventors: list[CaseInventorIn] | None = None
+     priorities: list[PriorityIn] | None = None
+ 
++    @field_validator("filing_date", "pub_date", "grant_date", "valid_until", mode="before")
++    @classmethod
++    def _blank_dates_to_none(cls, value):
++        if isinstance(value, str) and not value.strip():
++            return None
++        return value
++
+ 
+ class CaseUpdateLimited(BaseModel):
+     """Limited fields editable by Agent role."""
+diff --git a/backend/app/modules/cases/service.py b/backend/app/modules/cases/service.py
+index 1844931..9b4b7a4 100644
+--- a/backend/app/modules/cases/service.py
++++ b/backend/app/modules/cases/service.py
+@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+ from app.core.pagination import PageResult, offset_limit
+-from app.modules.cases.enums import CaseType
++from app.modules.cases.enums import CaseStatus, CaseType
+ from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor, T_Priority
+ from app.modules.cases.schemas import (
+     CaseCreate,
+@@ -16,8 +16,26 @@ from app.modules.cases.schemas import (
+     CaseUpdateFull,
+     CaseUpdateLimited,
+ )
++from app.modules.masterdata.clients.models import Client
+ 
+ _CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
++_TERMINAL_STATUS_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
++    CaseStatus.GRANTED.value: {
++        CaseStatus.GRANTED.value,
++        CaseStatus.TERMINATED.value,
++        CaseStatus.INVALIDATED.value,
++        CaseStatus.EXPIRED.value,
++    },
++    CaseStatus.REJECTED.value: {CaseStatus.REJECTED.value},
++    CaseStatus.WITHDRAWN.value: {CaseStatus.WITHDRAWN.value},
++    CaseStatus.ABANDONED.value: {CaseStatus.ABANDONED.value},
++    CaseStatus.TERMINATED.value: {CaseStatus.TERMINATED.value},
++    CaseStatus.INVALIDATED.value: {CaseStatus.INVALIDATED.value},
++    CaseStatus.EXPIRED.value: {CaseStatus.EXPIRED.value},
++}
++_STATUSES_REQUIRING_APPLICATION_FIELDS = {
++    status.value for status in CaseStatus if status != CaseStatus.NOT_FILED
++}
+ 
+ 
+ def _normalize_required_text(value: str | None, field_name: str) -> str:
+@@ -73,6 +91,78 @@ def validate_applicants(applicants: list[dict]) -> None:
+         )
+ 
+ 
++def validate_client_exists(db: Session, client_id: str | None) -> None:
++    if not client_id:
++        return
++    exists = db.query(Client.id).filter(Client.id == client_id).first()
++    if not exists:
++        raise_business_error("CLIENT_NOT_FOUND", "Client not found", status_code=404)
++
++
++def validate_priorities(priorities: list[dict]) -> None:
++    seqs = [priority.get("seq") for priority in priorities]
++    if len(seqs) != len(set(seqs)):
++        raise_business_error(
++            "CASE_DUPLICATE_PRIORITY_SEQ",
++            "Priority seq values must be unique",
++            status_code=400,
++        )
++
++    for priority in priorities:
++        normalized_country_code = (priority.get("country_code") or "").strip() or None
++        normalized_prio_no = (priority.get("prio_no") or "").strip() or None
++        normalized_prio_date = priority.get("prio_date")
++        has_any_value = any(
++            value is not None
++            for value in (normalized_country_code, normalized_prio_no, normalized_prio_date)
++        )
++        has_all_values = all(
++            value is not None
++            for value in (normalized_country_code, normalized_prio_no, normalized_prio_date)
++        )
++        if has_any_value and not has_all_values:
++            raise_business_error(
++                "CASE_PRIORITY_INCOMPLETE",
++                "Priority country_code, prio_no and prio_date must all be provided",
++                status_code=400,
++            )
++
++
++def validate_status_required_fields(
++    *, status: str | None, app_no: str | None, filing_date: date | None
++) -> None:
++    if not status or status not in _STATUSES_REQUIRING_APPLICATION_FIELDS:
++        return
++    if not (app_no and filing_date):
++        raise_business_error(
++            "CASE_STATUS_REQUIRES_APPLICATION_FIELDS",
++            "app_no and filing_date are required for the target status",
++            status_code=400,
++        )
++
++
++def validate_case_status_transition(current_status: str | None, target_status: str | None) -> None:
++    if not target_status or not current_status or target_status == current_status:
++        return
++
++    try:
++        CaseStatus(target_status)
++    except ValueError:
++        raise_business_error(
++            "CASE_STATUS_INVALID",
++            f"Unsupported case status '{target_status}'",
++            status_code=409,
++        )
++
++    allowed = _TERMINAL_STATUS_ALLOWED_TRANSITIONS.get(current_status)
++    if allowed and target_status not in allowed:
++        raise_business_error(
++            "CASE_STATUS_TRANSITION_INVALID",
++            f"Cannot change case status from {current_status} to {target_status}",
++            status_code=409,
++        )
++
++
+ def list_cases(
+     db: Session,
+     q: str | None = None,
+@@ -153,7 +243,11 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
+         )
+ 
+     applicants_dict = [applicant.model_dump() for applicant in data.applicants]
+-    validate_applicants(applicants_dict)
++    priorities_dict = [priority.model_dump() for priority in data.priorities]
++    if applicants_dict:
++        validate_applicants(applicants_dict)
++    validate_client_exists(db, data.client_id)
++    validate_priorities(priorities_dict)
+ 
+     case = Case(
+         id=str(uuid4()),
+@@ -296,54 +390,69 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
+     if not case:
+         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+ 
+-    if data.title_cn is not None:
++    provided_fields = data.model_fields_set
++    target_status = data.status.value if data.status is not None else case.status
++    target_app_no = data.app_no if "app_no" in provided_fields else case.app_no
++    target_filing_date = data.filing_date if "filing_date" in provided_fields else case.filing_date
++
++    validate_case_status_transition(case.status, target_status)
++    validate_status_required_fields(
++        status=target_status,
++        app_no=target_app_no,
++        filing_date=target_filing_date,
++    )
++
++    if "title_cn" in provided_fields:
+         case.title_cn = data.title_cn
+-    if data.title_en is not None:
++    if "title_en" in provided_fields:
+         case.title_en = data.title_en
+-    if data.app_no is not None:
++    if "app_no" in provided_fields:
+         case.app_no = data.app_no
++    if "filing_date" in provided_fields:
++        case.filing_date = data.filing_date
+     if data.status is not None:
+         case.status = data.status
+     # A3 — Publication / Grant
+-    if data.pub_date is not None:
++    if "pub_date" in provided_fields:
+         case.pub_date = data.pub_date
+-    if data.pub_no is not None:
++    if "pub_no" in provided_fields:
+         case.pub_no = data.pub_no
+-    if data.grant_date is not None:
++    if "grant_date" in provided_fields:
+         case.grant_date = data.grant_date
+-    if data.grant_no is not None:
++    if "grant_no" in provided_fields:
+         case.grant_no = data.grant_no
+-    if data.patent_no is not None:
++    if "patent_no" in provided_fields:
+         case.patent_no = data.patent_no
+-    if data.valid_until is not None:
++    if "valid_until" in provided_fields:
+         case.valid_until = data.valid_until
+     # A3 — Spec details
+-    if data.spec_pages is not None:
++    if "spec_pages" in provided_fields:
+         case.spec_pages = data.spec_pages
+-    if data.claim_count is not None:
++    if "claim_count" in provided_fields:
+         case.claim_count = data.claim_count
+-    if data.has_exam_request is not None:
++    if "has_exam_request" in provided_fields:
+         case.has_exam_request = data.has_exam_request
+     # A3 — Agent assignment
+-    if data.primary_agent_id is not None:
++    if "primary_agent_id" in provided_fields:
+         case.primary_agent_id = data.primary_agent_id
+-    if data.second_agent_id is not None:
++    if "second_agent_id" in provided_fields:
+         case.second_agent_id = data.second_agent_id
+-    if data.draftor_id is not None:
++    if "draftor_id" in provided_fields:
+         case.draftor_id = data.draftor_id
+     # A3 — Control flags
+-    if data.is_fee_monitor is not None:
++    if "is_fee_monitor" in provided_fields:
+         case.is_fee_monitor = data.is_fee_monitor
+-    if data.fee_reduction is not None:
++    if "fee_reduction" in provided_fields:
+         case.fee_reduction = data.fee_reduction
+-    if data.applicant_kind is not None:
++    if "applicant_kind" in provided_fields:
+         case.applicant_kind = data.applicant_kind
+ 
+     case.updated_by = user_id
+ 
+     if data.applicants is not None:
+         applicants_dict = [applicant.model_dump() for applicant in data.applicants]
+-        validate_applicants(applicants_dict)
++        if applicants_dict:
++            validate_applicants(applicants_dict)
+ 
+         db.query(T_CaseApplicant).filter(T_CaseApplicant.case_id == case_id).delete()
+ 
+@@ -375,6 +484,8 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
+             )
+ 
+     if data.priorities is not None:
++        priorities_dict = [priority.model_dump() for priority in data.priorities]
++        validate_priorities(priorities_dict)
+         db.query(T_Priority).filter(T_Priority.case_id == case_id).delete()
+         for prio in data.priorities:
+             db.add(
+diff --git a/backend/app/modules/documents/service.py b/backend/app/modules/documents/service.py
+index 20e6fb6..f0f281a 100644
+--- a/backend/app/modules/documents/service.py
++++ b/backend/app/modules/documents/service.py
+@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
+ from app.core.errors import raise_business_error
+ from app.core.storage import ensure_dir, safe_join
+ from app.modules.cases.models import Case
++from app.modules.cases.service import validate_case_status_transition
+ from app.modules.documents.enums import DocumentDirection
+ from app.modules.documents.models import DocAttachment, DocTemplate, Document
+ from app.modules.documents.schemas import (
+@@ -115,6 +116,7 @@ def create_document(db: Session, data: DocumentCreateIn) -> Document:
+ 
+         # Apply status_effect to case
+         if getattr(template, "status_effect", None):
++            validate_case_status_transition(case.status, template.status_effect)
+             case.status = template.status_effect
+ 
+     # B2: Reply chain — auto write-off
+diff --git a/backend/tests/test_b2_reply_chain.py b/backend/tests/test_b2_reply_chain.py
+index 1ac36b5..9afac8f 100644
+--- a/backend/tests/test_b2_reply_chain.py
++++ b/backend/tests/test_b2_reply_chain.py
+@@ -361,6 +361,43 @@ def test_doc_template_cascade_status_effect(client: TestClient, auth_headers: di
+     )
+ 
+ 
++def test_doc_template_cascade_rejects_illegal_status_regression(
++    client: TestClient, auth_headers: dict
++) -> None:
++    """Terminal case status must not be regressed by document status_effect."""
++    case = _create_case(client, auth_headers)
++
++    promote_resp = client.put(
++        f"{CASE_BASE}/{case['id']}",
++        headers=auth_headers,
++        json={
++            "status": "GRANTED",
++            "app_no": "CN202510123456.7",
++            "filing_date": "2025-01-15",
++        },
++    )
++    assert promote_resp.status_code == 200, promote_resp.text
++
++    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
++    resp = client.post(
++        DOC_BASE,
++        headers=auth_headers,
++        json={
++            "case_id": case["id"],
++            "direction": "IN",
++            "doc_date": "2026-01-15",
++            "title": "Illegal regression OA",
++            "doc_template_id": oa_in_tmpl["id"],
++        },
++    )
++    assert resp.status_code == 409, resp.text
++    payload = resp.json()["error"]
++    assert payload["code"] == "CASE_STATUS_TRANSITION_INVALID"
++
++    case_after = _get_case(client, auth_headers, case["id"])
++    assert case_after["status"] == "GRANTED"
++
++
+ # ---------------------------------------------------------------------------
+ # 7. DocTemplate cascade — need_reply
+ # ---------------------------------------------------------------------------
+diff --git a/backend/tests/test_case_fields.py b/backend/tests/test_case_fields.py
+index 122ec21..f04ea17 100644
+--- a/backend/tests/test_case_fields.py
++++ b/backend/tests/test_case_fields.py
+@@ -2,6 +2,8 @@
+ 
+ from __future__ import annotations
+ 
++from uuid import uuid4
++
+ from fastapi.testclient import TestClient
+ 
+ # ---------------------------------------------------------------------------
+@@ -16,6 +18,23 @@ def _unique_case_no(prefix: str = "A3") -> str:
+     return f"{prefix}_TEST_{_COUNTER:04d}"
+ 
+ 
++def _create_client(client: TestClient, auth_headers: dict, name_cn: str = "案件测试客户") -> str:
++    resp = client.post(
++        "/api/v1/clients",
++        json={
++            "client_code": f"CASE-C-{uuid4().hex[:8]}",
++            "name_cn": name_cn,
++            "name_en": "Case Test Client",
++            "client_type": "CLIENT",
++            "default_currency": "CNY",
++            "is_active": True,
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201, resp.text
++    return resp.json()["id"]
++
++
+ _GROUP1_FIELDS = {
+     "pub_date": "2025-06-01",
+     "pub_no": "CN202510001A",
+@@ -309,3 +328,114 @@ class TestBooleanDefaults:
+         detail = r2.json()
+         assert detail["has_exam_request"] is None
+         assert detail["is_fee_monitor"] is None
++
++
++# ---------------------------------------------------------------------------
++# Business rules — validation and consistency
++# ---------------------------------------------------------------------------
++class TestBusinessRules:
++    def test_create_rejects_unknown_client_id(self, client: TestClient, auth_headers: dict):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("CLIENT"),
++                "client_id": str(uuid4()),
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 404, resp.text
++        payload = resp.json()["error"]
++        assert payload["code"] == "CLIENT_NOT_FOUND"
++
++    def test_create_rejects_incomplete_priority_record(
++        self, client: TestClient, auth_headers: dict
++    ):
++        client_id = _create_client(client, auth_headers)
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("PRIO"),
++                "client_id": client_id,
++                "applicants": _MINIMAL_APPLICANT,
++                "priorities": [
++                    {
++                        "seq": 1,
++                        "country_code": "CN",
++                        "prio_no": "202510001",
++                    }
++                ],
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        payload = resp.json()["error"]
++        assert payload["code"] == "CASE_PRIORITY_INCOMPLETE"
++
++    def test_create_rejects_priority_record_with_blank_text_fields(
++        self, client: TestClient, auth_headers: dict
++    ):
++        client_id = _create_client(client, auth_headers)
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("PRIOBLANK"),
++                "client_id": client_id,
++                "applicants": _MINIMAL_APPLICANT,
++                "priorities": [
++                    {
++                        "seq": 1,
++                        "country_code": "",
++                        "prio_no": "   ",
++                        "prio_date": "2025-01-15",
++                    }
++                ],
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        payload = resp.json()["error"]
++        assert payload["code"] == "CASE_PRIORITY_INCOMPLETE"
++
++    def test_update_rejects_active_status_without_application_fields(
++        self, client: TestClient, auth_headers: dict
++    ):
++        create_resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("STATUS"),
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert create_resp.status_code == 201, create_resp.text
++        case_id = create_resp.json()["id"]
++
++        update_resp = client.put(
++            f"/api/v1/cases/{case_id}",
++            json={"status": "OA1"},
++            headers=auth_headers,
++        )
++        assert update_resp.status_code == 400, update_resp.text
++        payload = update_resp.json()["error"]
++        assert payload["code"] == "CASE_STATUS_REQUIRES_APPLICATION_FIELDS"
++
++    def test_update_accepts_legacy_title_alias(self, client: TestClient, auth_headers: dict):
++        create_resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("TITLE"),
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert create_resp.status_code == 201, create_resp.text
++        case_id = create_resp.json()["id"]
++
++        update_resp = client.put(
++            f"/api/v1/cases/{case_id}",
++            json={"title": "兼容标题"},
++            headers=auth_headers,
++        )
++        assert update_resp.status_code == 200, update_resp.text
++        assert update_resp.json()["title_cn"] == "兼容标题"

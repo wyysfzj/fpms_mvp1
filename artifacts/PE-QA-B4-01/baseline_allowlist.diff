@@ -1,0 +1,1484 @@
+diff --git a/backend/app/modules/billing/api.py b/backend/app/modules/billing/api.py
+index 8fc9d63..2ce4ef5 100644
+--- a/backend/app/modules/billing/api.py
++++ b/backend/app/modules/billing/api.py
+@@ -1,7 +1,6 @@
+ from __future__ import annotations
+ 
+ from typing import Any
+-from uuid import uuid4
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
+ from sqlalchemy.orm import Session
+@@ -15,28 +14,45 @@ from app.models.system_param import SystemParam
+ from app.modules.billing.doc_render_bill_context import BillContextBuilder
+ from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
+ from app.modules.billing.schemas import (
++    BillDetailResponse,
+     BillFromDraftsRequest,
++    BillItemDetailResponse,
++    BillManualCreateSchema,
+     BillResponse,
++    CaseReceiptResponse,
+     OffsetCreateSchema,
+     OffsetResponse,
+     PaymentResponse,
+     PaymentSchema,
+ )
+ from app.modules.billing.service import (
+-    create_offset as create_offset_service,
+-)
+-from app.modules.billing.service import (
++    create_manual_bill_record,
+     generate_bill_from_drafts,
+     process_payment,
+ )
++from app.modules.billing.service import (
++    create_offset as create_offset_service,
++)
+ from app.modules.billing.service import (
+     reverse_offset as reverse_offset_service,
+ )
++from app.modules.cases.models import Case
++from app.modules.fees.models import FeeDraft
+ from app.modules.masterdata.clients.models import Client
+ 
+ router = APIRouter()
+ 
+ 
++def _get_client_display_name(client: Client | None) -> str | None:
++    if not client:
++        return None
++    return client.name_cn or client.name_en
++
++
++def _build_draft_display_label(draft: FeeDraft) -> str:
++    return f"{draft.draft_type}-{draft.id[:8].upper()}"
++
++
+ @router.get("/bills", summary="List bills")
+ def get_bills(
+     page: int = Query(default=1, ge=1),
+@@ -260,6 +276,29 @@ def get_payments(
+         .limit(page_size)
+         .all()
+     )
++    payment_ids = [payment.id for payment in payments]
++    payment_line_map: dict[str, list[PaymentLine]] = {}
++    if payment_ids:
++        payment_lines = (
++            db.query(PaymentLine)
++            .filter(PaymentLine.payment_id.in_(payment_ids))
++            .order_by(PaymentLine.created_at.asc())
++            .all()
++        )
++        for line in payment_lines:
++            payment_line_map.setdefault(line.payment_id, []).append(line)
++
++    def _resolve_prepayment_status(lines: list[PaymentLine]) -> str:
++        if not lines:
++            return "UNALLOCATED"
++        allocated_total = sum((line.allocated_amt for line in lines), start=0)
++        unapplied_total = sum((line.balance_amt for line in lines), start=0)
++        if allocated_total <= 0:
++            return "UNALLOCATED"
++        if unapplied_total <= 0:
++            return "FULLY_ALLOCATED"
++        return "PARTIALLY_ALLOCATED"
++
+     items = [
+         {
+             "id": payment.id,
+@@ -268,6 +307,16 @@ def get_payments(
+             "pay_date": payment.pay_date,
+             "currency": payment.currency,
+             "amount": payment.amount,
++            "line_count": len(payment_line_map.get(payment.id, [])),
++            "allocated_amt": sum(
++                (line.allocated_amt for line in payment_line_map.get(payment.id, [])),
++                start=0,
++            ),
++            "unapplied_amt": sum(
++                (line.balance_amt for line in payment_line_map.get(payment.id, [])),
++                start=0,
++            ),
++            "prepayment_status": _resolve_prepayment_status(payment_line_map.get(payment.id, [])),
+         }
+         for payment in payments
+     ]
+@@ -469,7 +518,7 @@ def reverse_offset(
+ 
+ @router.post("/bills/manual", status_code=status.HTTP_201_CREATED, summary="Create a bill manually")
+ def create_manual_bill(
+-    payload: dict[str, Any],
++    payload: BillManualCreateSchema,
+     _perm: None = Depends(require_perm("Bill.Create")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+@@ -496,7 +545,7 @@ def create_manual_bill(
+     - 403: FORBIDDEN
+     - 422: VALIDATION_ERROR
+     """
+-    client_id = payload.get("client_id")
++    client_id = payload.client_id
+     if not client_id:
+         raise_business_error(
+             "BILL_INVALID",
+@@ -504,17 +553,8 @@ def create_manual_bill(
+             status_code=status.HTTP_400_BAD_REQUEST,
+         )
+ 
+-    bill = Bill(
+-        id=str(uuid4()),
+-        bill_no=payload.get("bill_no"),
+-        client_id=client_id,
+-        currency=payload.get("currency") or "CNY",
+-        direction=payload.get("direction") or "AR",
+-        status=payload.get("status") or "UNSETTLED",
+-    )
+-    db.add(bill)
+-    db.commit()
+-    db.refresh(bill)
++    bill = create_manual_bill_record(db, payload)
++    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill.id).order_by(BillItem.created_at.asc()).all()
+ 
+     return {
+         "id": bill.id,
+@@ -523,15 +563,34 @@ def create_manual_bill(
+         "currency": bill.currency,
+         "direction": bill.direction,
+         "status": bill.status,
++        "amount": bill.amount,
++        "balance": bill.balance,
++        "items": [
++            {
++                "id": item.id,
++                "bill_id": item.bill_id,
++                "case_id": item.case_id,
++                "draft_id": item.draft_id,
++                "fee_code": item.fee_code,
++                "fee_name": item.fee_name,
++                "fee_type": item.fee_type,
++                "year_no": item.year_no,
++                "description": item.fee_name or item.fee_code or "账单明细",
++                "quantity": 1,
++                "unit_price": item.amount,
++                "amount": item.amount,
++            }
++            for item in bill_items
++        ],
+     }
+ 
+ 
+-@router.get("/bills/{bill_id}", summary="Get a bill")
++@router.get("/bills/{bill_id}", response_model=BillDetailResponse, summary="Get a bill")
+ def get_bill(
+     bill_id: str,
+     _perm: None = Depends(require_perm("Bill.Read")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
++) -> BillDetailResponse:
+     """
+     Get a bill by ID.
+ 
+@@ -559,22 +618,87 @@ def get_bill(
+             status_code=status.HTTP_404_NOT_FOUND,
+         )
+ 
+-    return {
+-        "id": bill.id,
+-        "bill_no": bill.bill_no,
+-        "client_id": bill.client_id,
+-        "currency": bill.currency,
+-        "direction": bill.direction,
+-        "status": bill.status,
+-    }
++    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill_id).order_by(BillItem.created_at.asc()).all()
++    client = db.query(Client).filter(Client.id == bill.client_id).first()
+ 
++    case_ids = [item.case_id for item in bill_items if item.case_id]
++    unique_case_ids = list(dict.fromkeys(case_ids))
++    case_map: dict[str, Case] = {}
++    if unique_case_ids:
++        cases = db.query(Case).filter(Case.id.in_(unique_case_ids)).all()
++        case_map = {case.id: case for case in cases}
++
++    draft_ids = [item.draft_id for item in bill_items if item.draft_id]
++    unique_draft_ids = list(dict.fromkeys(draft_ids))
++    draft_map: dict[str, FeeDraft] = {}
++    if unique_draft_ids:
++        drafts = db.query(FeeDraft).filter(FeeDraft.id.in_(unique_draft_ids)).all()
++        draft_map = {draft.id: draft for draft in drafts}
++
++    primary_case_id = unique_case_ids[0] if len(unique_case_ids) == 1 else None
++    primary_case = case_map.get(primary_case_id) if primary_case_id else None
++
++    source_draft_labels = [
++        _build_draft_display_label(draft_map[draft_id])
++        for draft_id in unique_draft_ids
++        if draft_id in draft_map
++    ]
++    primary_draft_id = unique_draft_ids[0] if unique_draft_ids else None
++    primary_draft = draft_map.get(primary_draft_id) if primary_draft_id else None
++
++    items = [
++        BillItemDetailResponse(
++            id=item.id,
++            bill_id=item.bill_id,
++            case_id=item.case_id,
++            draft_id=item.draft_id,
++            fee_code=item.fee_code,
++            fee_name=item.fee_name,
++            fee_type=item.fee_type,
++            year_no=item.year_no,
++            description=item.fee_name or item.fee_code or "账单明细",
++            quantity=1,
++            unit_price=item.amount,
++            amount=item.amount,
++        )
++        for item in bill_items
++    ]
++
++    return BillDetailResponse(
++        id=bill.id,
++        bill_no=bill.bill_no,
++        client_id=bill.client_id,
++        client_name=_get_client_display_name(client),
++        case_id=primary_case.id if primary_case else None,
++        case_no=primary_case.case_no if primary_case else None,
++        currency=bill.currency,
++        direction=bill.direction,
++        status=bill.status,
++        total_gov=bill.total_gov,
++        total_service=bill.total_service,
++        total_misc=bill.total_misc,
++        amount=bill.amount,
++        balance=bill.balance,
++        bill_date=bill.bill_date,
++        due_date=bill.due_date,
++        items=items,
++        source_draft_ids=unique_draft_ids,
++        source_draft_labels=source_draft_labels,
++        primary_draft_id=primary_draft.id if primary_draft else None,
++        primary_draft_label=_build_draft_display_label(primary_draft) if primary_draft else None,
++    )
+ 
+-@router.get("/cases/{case_id}/receipts", summary="Get case receipt")
++
++@router.get(
++    "/cases/{case_id}/receipts",
++    response_model=CaseReceiptResponse,
++    summary="Get case receipt",
++)
+ def get_case_receipt(
+     case_id: str,
+     _perm: None = Depends(require_perm("CaseReceipt.Read")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
++) -> CaseReceiptResponse:
+     """
+     Get the case receipt summary.
+ 
+@@ -602,17 +726,49 @@ def get_case_receipt(
+             status_code=status.HTTP_404_NOT_FOUND,
+         )
+ 
+-    return {
+-        "id": receipt.id,
+-        "case_id": receipt.case_id,
+-        "fee_type": receipt.fee_type,
+-        "currency": receipt.currency,
+-        "receivable_amt": receipt.receivable_amt,
+-        "received_amt": receipt.received_amt,
+-        "last_receipt_date": receipt.last_receipt_date,
+-        "fee_code": receipt.fee_code,
+-        "year_no": receipt.year_no,
+-        "is_arrears": receipt.is_arrears,
+-        "invoice_no": receipt.invoice_no,
+-        "is_commissionable": receipt.is_commissionable,
+-    }
++    bill_rows = (
++        db.query(
++            Bill.id,
++            Bill.bill_no,
++            Bill.status,
++            Bill.amount,
++            Bill.balance,
++            Bill.bill_date,
++        )
++        .join(BillItem, BillItem.bill_id == Bill.id)
++        .filter(BillItem.case_id == case_id)
++        .order_by(Bill.bill_date.desc(), Bill.created_at.desc(), Bill.id.desc())
++        .all()
++    )
++    seen_bill_ids: set[str] = set()
++    bill_overview_rows: list[dict[str, Any]] = []
++    for row in bill_rows:
++        if row.id in seen_bill_ids:
++            continue
++        seen_bill_ids.add(row.id)
++        bill_overview_rows.append(
++            {
++                "id": row.id,
++                "bill_no": row.bill_no,
++                "status": row.status,
++                "amount": row.amount,
++                "balance": row.balance,
++                "issue_date": row.bill_date,
++            }
++        )
++
++    return CaseReceiptResponse(
++        id=receipt.id,
++        case_id=receipt.case_id,
++        fee_type=receipt.fee_type,
++        currency=receipt.currency,
++        receivable_amt=receipt.receivable_amt,
++        received_amt=receipt.received_amt,
++        last_receipt_date=receipt.last_receipt_date,
++        fee_code=receipt.fee_code,
++        year_no=receipt.year_no,
++        is_arrears=receipt.is_arrears,
++        invoice_no=receipt.invoice_no,
++        is_commissionable=receipt.is_commissionable,
++        bills=bill_overview_rows,
++    )
+diff --git a/backend/app/modules/billing/schemas.py b/backend/app/modules/billing/schemas.py
+index 8e48341..c9c6f65 100644
+--- a/backend/app/modules/billing/schemas.py
++++ b/backend/app/modules/billing/schemas.py
+@@ -55,6 +55,49 @@ class BillResponse(BaseModel):
+     status: str
+ 
+ 
++class BillItemDetailResponse(BaseModel):
++    """Response schema for bill detail items."""
++
++    id: str
++    bill_id: str
++    case_id: str | None = None
++    draft_id: str | None = None
++    fee_code: str | None = None
++    fee_name: str | None = None
++    fee_type: str | None = None
++    year_no: int | None = None
++    description: str
++    quantity: Decimal = Field(Decimal("1"), ge=0)
++    unit_price: Decimal = Field(Decimal("0"), ge=0)
++    amount: Decimal = Field(Decimal("0"), ge=0)
++
++
++class BillDetailResponse(BaseModel):
++    """Enriched bill detail response schema."""
++
++    id: str
++    bill_no: str | None = None
++    client_id: str
++    client_name: str | None = None
++    case_id: str | None = None
++    case_no: str | None = None
++    currency: str
++    direction: str
++    status: str
++    total_gov: Decimal = Field(Decimal("0"), ge=0)
++    total_service: Decimal = Field(Decimal("0"), ge=0)
++    total_misc: Decimal = Field(Decimal("0"), ge=0)
++    amount: Decimal = Field(Decimal("0"), ge=0)
++    balance: Decimal = Field(Decimal("0"), ge=0)
++    bill_date: date | None = None
++    due_date: date | None = None
++    items: list[BillItemDetailResponse] = []
++    source_draft_ids: list[str] = []
++    source_draft_labels: list[str] = []
++    primary_draft_id: str | None = None
++    primary_draft_label: str | None = None
++
++
+ class PaymentSchema(BaseModel):
+     """Schema for recording payments."""
+ 
+@@ -112,6 +155,36 @@ class CaseReceiptResponse(BaseModel):
+     is_arrears: bool | None = None
+     invoice_no: str | None = None
+     is_commissionable: bool | None = None
++    bills: list["CaseReceiptBillResponse"] = []
++
++
++class CaseReceiptBillResponse(BaseModel):
++    """Bill overview row under case receipt summary."""
++
++    id: str
++    bill_no: str | None = None
++    status: str
++    amount: Decimal = Field(Decimal("0"), ge=0)
++
++
++class BillManualItemSchema(BaseModel):
++    description: str = Field(..., max_length=256)
++    quantity: int = Field(1, gt=0)
++    unit_price: Decimal = Field(..., ge=0)
++    fee_type: str | None = Field(None, max_length=16)
++    year_no: int | None = None
++
++
++class BillManualCreateSchema(BaseModel):
++    client_id: str = Field(..., min_length=1)
++    case_id: str | None = Field(None, min_length=1)
++    currency: str = Field("CNY", max_length=8)
++    direction: str = Field("AR", pattern="^(AR|AP)$")
++    status: str = Field("UNSETTLED", max_length=24)
++    bill_date: date | None = None
++    due_date: date | None = None
++    items: list[BillManualItemSchema] = Field(..., min_length=1)
++    notes: str | None = Field(None, max_length=512)
+ 
+ 
+ class BillStatusSchema(BaseModel):
+diff --git a/backend/app/modules/billing/service.py b/backend/app/modules/billing/service.py
+index 6bd47df..55abee7 100644
+--- a/backend/app/modules/billing/service.py
++++ b/backend/app/modules/billing/service.py
+@@ -12,6 +12,7 @@ from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Paym
+ from app.modules.billing.schemas import (
+     BillCreateSchema,
+     BillFromDraftsRequest,
++    BillManualCreateSchema,
+     BillStatusSchema,
+     OffsetCreateSchema,
+     PaymentSchema,
+@@ -415,6 +416,49 @@ def generate_bill(
+     return bill
+ 
+ 
++def create_manual_bill_record(db: Session, data: BillManualCreateSchema) -> Bill:
++    """Create a manual bill using the typed payload."""
++    total_amount = sum(Decimal(item.quantity) * item.unit_price for item in data.items)
++    if total_amount <= Decimal("0"):
++        raise_business_error(
++            "BILL_MANUAL_TOTAL_INVALID",
++            "Manual bill must include at least one positive item",
++            status_code=400,
++        )
++
++    bill = Bill(
++        id=str(uuid4()),
++        client_id=data.client_id,
++        currency=data.currency,
++        direction=data.direction,
++        bill_date=data.bill_date,
++        due_date=data.due_date,
++        total_gov=Decimal("0"),
++        total_service=total_amount,
++        total_misc=Decimal("0"),
++        amount=total_amount,
++        balance=total_amount,
++    )
++    _apply_bill_status(bill, data.status)
++    db.add(bill)
++    db.flush()
++
++    for item in data.items:
++        bill_item = BillItem(
++            bill_id=bill.id,
++            case_id=data.case_id,
++            fee_name=item.description,
++            fee_type=item.fee_type,
++            year_no=item.year_no,
++            amount=Decimal(item.quantity) * item.unit_price,
++        )
++        db.add(bill_item)
++
++    db.commit()
++    db.refresh(bill)
++    return bill
++
++
+ def process_payment(db: Session, data: PaymentSchema) -> Payment:
+     """Process a payment and persist it."""
+     if data.amount < Decimal("0"):
+diff --git a/backend/app/modules/collections/api.py b/backend/app/modules/collections/api.py
+index 69652c1..9a371d8 100644
+--- a/backend/app/modules/collections/api.py
++++ b/backend/app/modules/collections/api.py
+@@ -13,6 +13,7 @@ from app.db.session import get_db
+ from app.modules.collections.models import Dunning
+ from app.modules.collections.service import (
+     generate_dunning_batches,
++    get_dunning_detail,
+     mark_bill_bad_debt,
+     restore_bill_from_bad_debt,
+ )
+@@ -102,6 +103,15 @@ def post_dunning(
+     )
+ 
+ 
++@router.get("/dunning/{dunning_id}", summary="Get dunning batch detail")
++def get_dunning_batch_detail(
++    dunning_id: int,
++    _perm: None = Depends(require_perm("Dunning.Read")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    return get_dunning_detail(db, dunning_id=dunning_id)
++
++
+ @router.post("/bills/{bill_id}/bad-debt", summary="Mark bill as bad debt")
+ def post_bill_bad_debt(
+     bill_id: str,
+diff --git a/backend/app/modules/collections/service.py b/backend/app/modules/collections/service.py
+index 5db9cfe..403c42a 100644
+--- a/backend/app/modules/collections/service.py
++++ b/backend/app/modules/collections/service.py
+@@ -164,6 +164,56 @@ def _serialize_batch(db: Session, batch: Dunning, *, reused: bool) -> dict[str,
+     }
+ 
+ 
++def get_dunning_detail(db: Session, *, dunning_id: int) -> dict[str, Any]:
++    batch = db.execute(select(Dunning).where(Dunning.id == dunning_id)).scalar_one_or_none()
++    if not batch:
++        raise_business_error(
++            "DUNNING_NOT_FOUND",
++            "No such dunning batch",
++            status_code=404,
++        )
++
++    lines = (
++        db.execute(
++            select(DunningLine)
++            .where(DunningLine.dunning_id == batch.id)
++            .order_by(DunningLine.line_no.asc(), DunningLine.id.asc())
++        )
++        .scalars()
++        .all()
++    )
++
++    return {
++        "id": batch.id,
++        "dunning_no": batch.dunning_no,
++        "client_id": batch.client_id,
++        "round_no": batch.round_no,
++        "to_date": batch.to_date,
++        "currency": batch.currency,
++        "total_amount": str(batch.total_amount),
++        "status": batch.status,
++        "sent_date": batch.sent_date,
++        "remark": batch.remark,
++        "created_at": batch.created_at,
++        "updated_at": batch.updated_at,
++        "line_count": len(lines),
++        "lines": [
++            {
++                "id": line.id,
++                "line_no": line.line_no,
++                "bill_id": line.bill_id,
++                "bill_no_snapshot": line.bill_no_snapshot,
++                "due_date_snapshot": line.due_date_snapshot,
++                "bill_status_snapshot": line.bill_status_snapshot,
++                "outstanding_amount": str(line.outstanding_amount),
++                "currency_snapshot": line.currency_snapshot,
++                "remark": line.remark,
++            }
++            for line in lines
++        ],
++    }
++
++
+ def generate_dunning_batches(
+     db: Session,
+     *,
+diff --git a/backend/tests/test_b5_billing_polish.py b/backend/tests/test_b5_billing_polish.py
+index 0b397b1..2029868 100644
+--- a/backend/tests/test_b5_billing_polish.py
++++ b/backend/tests/test_b5_billing_polish.py
+@@ -16,6 +16,7 @@ from __future__ import annotations
+ import uuid
+ from decimal import Decimal
+ 
++from fastapi.testclient import TestClient
+ from sqlalchemy.orm import Session
+ 
+ from app.modules.billing.models import CaseReceipt, PaymentLine
+@@ -173,6 +174,58 @@ def _setup_full_billing_chain(client, auth_headers, fee_amount: str = "500.00"):
+     }
+ 
+ 
++def test_manual_bill_requires_items(client: TestClient, auth_headers: dict[str, str]) -> None:
++    cl = _create_client(client, auth_headers)
++    resp = client.post(
++        "/api/v1/bills/manual",
++        json={"client_id": cl["id"], "currency": "CNY", "items": []},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 422
++
++
++def test_manual_bill_creation_with_items_creates_items(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> None:
++    cl = _create_client(client, auth_headers)
++    payload = {
++        "client_id": cl["id"],
++        "currency": "CNY",
++        "direction": "AP",
++        "items": [
++            {"description": "Service Fee", "quantity": 2, "unit_price": "150.00"},
++        ],
++    }
++    resp = client.post("/api/v1/bills/manual", json=payload, headers=auth_headers)
++    assert resp.status_code == 201, resp.text
++    data = resp.json()
++    assert data["client_id"] == cl["id"]
++    assert data["direction"] == "AP"
++    assert data["amount"] == "300.00"
++    assert data["balance"] == "300.00"
++    assert len(data["items"]) == 1
++    assert data["items"][0]["amount"] == "300.00"
++
++
++def test_manual_bill_creation_rejects_invalid_status(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> None:
++    cl = _create_client(client, auth_headers)
++    payload = {
++        "client_id": cl["id"],
++        "currency": "CNY",
++        "status": "BAD_DEBT",
++        "items": [
++            {"description": "Service Fee", "quantity": 1, "unit_price": "100.00"},
++        ],
++    }
++    resp = client.post("/api/v1/bills/manual", json=payload, headers=auth_headers)
++    assert resp.status_code == 400, resp.text
++    assert resp.json()["error"]["code"] == "BILL_STATUS_INVALID"
++
++
+ # ---------------------------------------------------------------------------
+ # T2a — CaseReceipt new fields
+ # ---------------------------------------------------------------------------
+@@ -433,3 +486,42 @@ def test_receipt_received_amt_reversed(client, auth_headers, session_factory):
+         )
+     finally:
+         db2.close()
++
++
++def test_payment_list_shows_prepayment_progress(client, auth_headers):
++    """Payment list should reflect unallocated -> allocated -> reversed prepayment state."""
++    setup = _setup_full_billing_chain(client, auth_headers, fee_amount="500.00")
++    bill_id = setup["bill"]["id"]
++    payment_id = setup["payment"]["id"]
++    payment_line_id = setup["payment_line_id"]
++
++    list_before = client.get("/api/v1/payments?page=1&page_size=20", headers=auth_headers)
++    assert list_before.status_code == 200, list_before.text
++    payment_before = next(item for item in list_before.json()["items"] if item["id"] == payment_id)
++    assert payment_before["prepayment_status"] == "UNALLOCATED"
++    assert payment_before["allocated_amt"] == "0.00"
++    assert payment_before["unapplied_amt"] == "500.00"
++    assert payment_before["line_count"] >= 1
++
++    offset = _create_offset(client, auth_headers, payment_line_id, bill_id, "500.00")
++
++    list_after_offset = client.get("/api/v1/payments?page=1&page_size=20", headers=auth_headers)
++    assert list_after_offset.status_code == 200, list_after_offset.text
++    payment_after_offset = next(
++        item for item in list_after_offset.json()["items"] if item["id"] == payment_id
++    )
++    assert payment_after_offset["prepayment_status"] == "FULLY_ALLOCATED"
++    assert payment_after_offset["allocated_amt"] == "500.00"
++    assert payment_after_offset["unapplied_amt"] == "0.00"
++
++    reverse_resp = client.post(f"{OFFSETS_URL}/{offset['id']}/reverse", headers=auth_headers)
++    assert reverse_resp.status_code == 200, reverse_resp.text
++
++    list_after_reverse = client.get("/api/v1/payments?page=1&page_size=20", headers=auth_headers)
++    assert list_after_reverse.status_code == 200, list_after_reverse.text
++    payment_after_reverse = next(
++        item for item in list_after_reverse.json()["items"] if item["id"] == payment_id
++    )
++    assert payment_after_reverse["prepayment_status"] == "UNALLOCATED"
++    assert payment_after_reverse["allocated_amt"] == "0.00"
++    assert payment_after_reverse["unapplied_amt"] == "500.00"
+diff --git a/backend/tests/test_collections_e2e.py b/backend/tests/test_collections_e2e.py
+index c83fd87..704ffb0 100644
+--- a/backend/tests/test_collections_e2e.py
++++ b/backend/tests/test_collections_e2e.py
+@@ -222,3 +222,38 @@ def test_collections_dunning_list_and_bad_debt_lifecycle(
+         headers=auth_headers,
+     )
+     _assert_error(ineligible_resp, 400, "BAD_DEBT_NOT_ALLOWED")
++
++
++def test_collections_dunning_detail_includes_lines(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id = _create_client(client, auth_headers)
++    bill_id = _insert_bill(
++        session_factory,
++        client_id=client_id,
++        amount=Decimal("120.00"),
++        balance=Decimal("120.00"),
++        due_date=date(2026, 3, 1),
++    )
++
++    create_resp = client.post(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        json={"to_date": "2026-03-31", "client_id": client_id},
++    )
++    assert create_resp.status_code == 200, create_resp.text
++    create_payload = create_resp.json()
++    assert create_payload["summary"]["created"] >= 1
++    batch = create_payload["batches"][0]
++
++    detail_resp = client.get(f"/api/v1/dunning/{batch['id']}", headers=auth_headers)
++    assert detail_resp.status_code == 200, detail_resp.text
++    detail_payload = detail_resp.json()
++    assert detail_payload["id"] == batch["id"]
++    assert detail_payload["round_no"] == batch["round_no"]
++    assert "lines" in detail_payload
++    assert isinstance(detail_payload["lines"], list)
++    assert len(detail_payload["lines"]) >= 1
++    assert any(line["bill_id"] == bill_id for line in detail_payload["lines"])
+diff --git a/frontend/src/api/billing.ts b/frontend/src/api/billing.ts
+index ad6b71d..d98d1e8 100644
+--- a/frontend/src/api/billing.ts
++++ b/frontend/src/api/billing.ts
+@@ -22,7 +22,11 @@ interface BackendBill {
+     client_name?: string | null
+     case_id?: string | null
+     case_no?: string | null
++    direction?: string | null
+     status?: string | null
++    total_gov?: number | string | null
++    total_service?: number | string | null
++    total_misc?: number | string | null
+     amount?: number | string | null
+     balance?: number | string | null
+     currency?: string | null
+@@ -34,11 +38,22 @@ interface BackendBill {
+     updated_at?: string
+     items?: {
+         id?: string
++        bill_id?: string
++        case_id?: string | null
++        draft_id?: string | null
++        fee_code?: string | null
++        fee_name?: string | null
++        fee_type?: string | null
++        year_no?: number | null
+         description?: string | null
+         quantity?: number | string | null
+         unit_price?: number | string | null
+         amount?: number | string | null
+     }[]
++    source_draft_ids?: string[] | null
++    source_draft_labels?: string[] | null
++    primary_draft_id?: string | null
++    primary_draft_label?: string | null
+ }
+ 
+ interface BackendPayment {
+@@ -48,6 +63,10 @@ interface BackendPayment {
+     pay_date?: string | null
+     currency?: string | null
+     amount?: string | number | null
++    allocated_amt?: string | number | null
++    unapplied_amt?: string | number | null
++    line_count?: number | null
++    prepayment_status?: string | null
+ }
+ 
+ interface BackendPaymentLine {
+@@ -99,13 +118,29 @@ function mapBillDetail(input: BackendBill): BillDetail {
+         ...mapBillListItem(input),
+         case_id: input.case_id || undefined,
+         case_no: input.case_no || undefined,
++        direction: input.direction || undefined,
++        bill_date: input.bill_date || undefined,
++        total_gov: input.total_gov != null ? asNumber(input.total_gov) : undefined,
++        total_service: input.total_service != null ? asNumber(input.total_service) : undefined,
++        total_misc: input.total_misc != null ? asNumber(input.total_misc) : undefined,
+         items: (input.items || []).map((item, index) => ({
+             id: item.id || `${input.id}-item-${index}`,
+-            description: item.description || '',
++            bill_id: item.bill_id || input.id,
++            case_id: item.case_id || undefined,
++            draft_id: item.draft_id || undefined,
++            fee_code: item.fee_code || undefined,
++            fee_name: item.fee_name || undefined,
++            fee_type: item.fee_type || undefined,
++            year_no: item.year_no ?? undefined,
++            description: item.description || item.fee_name || item.fee_code || '',
+             quantity: asNumber(item.quantity),
+             unit_price: asNumber(item.unit_price),
+             amount: asNumber(item.amount),
+         })),
++        source_draft_ids: input.source_draft_ids || undefined,
++        source_draft_labels: input.source_draft_labels || undefined,
++        primary_draft_id: input.primary_draft_id || undefined,
++        primary_draft_label: input.primary_draft_label || undefined,
+         notes: input.notes || undefined,
+         created_at: input.created_at,
+         updated_at: input.updated_at,
+@@ -123,6 +158,10 @@ function mapPayment(
+         client_id: input.client_id,
+         amount: asNumber(input.amount),
+         currency: input.currency || extras.currency || 'CNY',
++        allocated_amt: input.allocated_amt != null ? asNumber(input.allocated_amt) : undefined,
++        unapplied_amt: input.unapplied_amt != null ? asNumber(input.unapplied_amt) : undefined,
++        line_count: input.line_count ?? undefined,
++        prepayment_status: input.prepayment_status || undefined,
+         payment_method: extras.payment_method || 'OTHER',
+         payment_date: input.pay_date || '',
+         reference: input.pay_no || undefined,
+@@ -343,6 +382,7 @@ function mapCaseReceipt(input: BackendCaseReceipt): CaseReceiptsSummary {
+         fee_type: input.fee_type || undefined,
+         fee_code: input.fee_code || undefined,
+         year_no: input.year_no ?? undefined,
++        last_receipt_date: input.last_receipt_date || undefined,
+         is_arrears: input.is_arrears ?? undefined,
+         invoice_no: input.invoice_no || undefined,
+         is_commissionable: input.is_commissionable ?? undefined,
+diff --git a/frontend/src/api/billing.types.ts b/frontend/src/api/billing.types.ts
+index 2127a54..0dca2a9 100644
+--- a/frontend/src/api/billing.types.ts
++++ b/frontend/src/api/billing.types.ts
+@@ -3,6 +3,7 @@
+  */
+ 
+ export type BillStatus = string
++export type BillDirection = 'AR' | 'AP'
+ 
+ export interface BillListItem {
+     id: string
+@@ -19,6 +20,13 @@ export interface BillListItem {
+ 
+ export interface BillItem {
+     id: string
++    bill_id?: string
++    case_id?: string
++    draft_id?: string
++    fee_code?: string
++    fee_name?: string
++    fee_type?: string
++    year_no?: number
+     description: string
+     quantity: number
+     unit_price: number
+@@ -36,9 +44,18 @@ export interface BillDetail {
+     amount: number
+     balance: number
+     currency: string
++    direction?: string
+     issue_date?: string
++    bill_date?: string
+     due_date?: string
++    total_gov?: number
++    total_service?: number
++    total_misc?: number
+     items: BillItem[]
++    source_draft_ids?: string[]
++    source_draft_labels?: string[]
++    primary_draft_id?: string
++    primary_draft_label?: string
+     notes?: string
+     created_at?: string
+     updated_at?: string
+@@ -63,6 +80,8 @@ export interface BillManualPayload {
+     client_id: string
+     case_id?: string
+     currency: string
++    direction?: BillDirection
++    status?: string
+     items: BillManualItem[]
+     notes?: string
+ }
+@@ -71,6 +90,8 @@ export interface BillManualItem {
+     description: string
+     quantity: number
+     unit_price: number
++    fee_type?: string
++    year_no?: number
+ }
+ 
+ // Payment Types
+@@ -83,6 +104,10 @@ export interface PaymentListItem {
+     client_id: string
+     amount: number
+     currency: string
++    allocated_amt?: number
++    unapplied_amt?: number
++    line_count?: number
++    prepayment_status?: string
+     payment_method: PaymentMethod
+     payment_date: string
+     reference?: string
+@@ -148,6 +173,7 @@ export interface CaseReceiptsSummary {
+     fee_type?: string
+     fee_code?: string
+     year_no?: number
++    last_receipt_date?: string
+     is_arrears?: boolean
+     invoice_no?: string
+     is_commissionable?: boolean
+diff --git a/frontend/src/api/collections.ts b/frontend/src/api/collections.ts
+index d54a47a..2dcb512 100644
+--- a/frontend/src/api/collections.ts
++++ b/frontend/src/api/collections.ts
+@@ -5,6 +5,8 @@ import type {
+     CollectionsApiError,
+     CollectionsErrorCategory,
+     DunningBatchListItem,
++    DunningDetail,
++    DunningDetailLine,
+     DunningGenerateBatch,
+     DunningGenerateBatchLine,
+     DunningGeneratePayload,
+@@ -81,6 +83,40 @@ interface BackendBadDebtBillResult {
+     updated_at: string
+ }
+ 
++interface BackendDunningDetailLine {
++    id: number
++    line_no: number
++    bill_id: string
++    bill_no_snapshot: string | null
++    due_date_snapshot: string | null
++    bill_status_snapshot: string | null
++    outstanding_amount: number | string | null
++    currency_snapshot: string | null
++    remark: string | null
++}
++
++interface BackendDunningDetail {
++    id: number
++    dunning_no: string | null
++    client_id: string
++    round_no: number
++    to_date: string | null
++    currency: string
++    total_amount: number | string | null
++    status: string
++    sent_date: string | null
++    remark: string | null
++    created_at: string
++    updated_at: string
++    line_count: number
++    lines: BackendDunningDetailLine[]
++    summary: {
++        line_count: number
++        bill_count: number
++        bad_debt_line_count: number
++    }
++}
++
+ function asNumber(input: number | string | null | undefined): number {
+     if (input === null || input === undefined || input === '') return 0
+     const parsed = Number(input)
+@@ -212,6 +248,40 @@ export function mapCollectionsError(error: unknown): CollectionsApiError {
+     return mapped
+ }
+ 
++function mapDunningDetailLine(input: BackendDunningDetailLine): DunningDetailLine {
++    return {
++        id: input.id,
++        line_no: input.line_no,
++        bill_id: input.bill_id,
++        bill_no_snapshot: input.bill_no_snapshot,
++        due_date_snapshot: input.due_date_snapshot,
++        bill_status_snapshot: input.bill_status_snapshot,
++        outstanding_amount: asNumber(input.outstanding_amount),
++        currency_snapshot: input.currency_snapshot,
++        remark: input.remark || undefined,
++    }
++}
++
++function mapDunningDetail(input: BackendDunningDetail): DunningDetail {
++    return {
++        id: input.id,
++        dunning_no: input.dunning_no,
++        client_id: input.client_id,
++        round_no: input.round_no,
++        to_date: input.to_date,
++        currency: input.currency,
++        total_amount: asNumber(input.total_amount),
++        status: input.status,
++        sent_date: input.sent_date,
++        remark: input.remark,
++        created_at: input.created_at,
++        updated_at: input.updated_at,
++        line_count: input.line_count,
++        summary: input.summary,
++        lines: input.lines.map(mapDunningDetailLine),
++    }
++}
++
+ export async function getDunning(params: DunningListParams = {}): Promise<Pagination<DunningBatchListItem>> {
+     const {
+         round_no,
+@@ -261,3 +331,8 @@ export async function restoreBillBadDebt(billId: string): Promise<BadDebtBillRes
+     const response = await http.post<BackendBadDebtBillResult>(`/bills/${billId}/bad-debt/restore`)
+     return mapBadDebtBillResult(response.data)
+ }
++
++export async function getDunningDetail(id: number): Promise<DunningDetail> {
++    const response = await http.get<BackendDunningDetail>(`/dunning/${id}`)
++    return mapDunningDetail(response.data)
++}
+diff --git a/frontend/src/api/collections.types.ts b/frontend/src/api/collections.types.ts
+index 5f8209b..dbe569e 100644
+--- a/frontend/src/api/collections.types.ts
++++ b/frontend/src/api/collections.types.ts
+@@ -66,6 +66,40 @@ export interface DunningGenerateBatch {
+     lines: DunningGenerateBatchLine[]
+ }
+ 
++export interface DunningDetailLine {
++    id: number
++    line_no: number
++    bill_id: string
++    bill_no_snapshot: string | null
++    due_date_snapshot: string | null
++    bill_status_snapshot: string | null
++    outstanding_amount: number
++    currency_snapshot: string | null
++    remark?: string | null
++}
++
++export interface DunningDetail {
++    id: number
++    dunning_no: string | null
++    client_id: string
++    round_no: number
++    to_date: string | null
++    currency: string
++    total_amount: number
++    status: string
++    sent_date: string | null
++    remark: string | null
++    created_at: string
++    updated_at: string
++    line_count: number
++    lines: DunningDetailLine[]
++    summary: {
++        line_count: number
++        bill_count: number
++        bad_debt_line_count: number
++    }
++}
++
+ export interface DunningGenerateResult {
+     summary: DunningGenerateSummary
+     batches: DunningGenerateBatch[]
+diff --git a/frontend/src/modules/billing/pages/BillCreate.vue b/frontend/src/modules/billing/pages/BillCreate.vue
+index a80e32e..75bb96d 100644
+--- a/frontend/src/modules/billing/pages/BillCreate.vue
++++ b/frontend/src/modules/billing/pages/BillCreate.vue
+@@ -27,11 +27,11 @@
+             <div class="form-section">
+               <h3 class="form-section-title">选择费用草稿</h3>
+               <p class="form-section-desc">
+-                输入已锁定费用草稿的编号，用于生成本账单。
++                请选择已锁定且已有费用明细的草稿，系统会使用内部草稿 ID 生成账单，无需手工输入 UUID。
+               </p>
+ 
+               <el-form-item
+-                label="草稿编号"
++                label="费用草稿"
+                 prop="draft_ids"
+                 :error="fieldErrors.get('draft_ids')?.join(', ')"
+               >
+@@ -39,14 +39,35 @@
+                   v-model="draftsForm.draft_ids"
+                   multiple
+                   filterable
+-                  allow-create
+-                  default-first-option
+-                  placeholder="输入草稿编号（可粘贴或输入）"
++                  collapse-tags
++                  collapse-tags-tooltip
++                  clearable
++                  :loading="draftOptionsLoading"
++                  :no-data-text="draftOptionsLoading ? '正在加载可开票草稿…' : '暂无可用于开票的锁定草稿'"
++                  placeholder="请选择已锁定且可开票的费用草稿"
+                   class="full-width"
+                 >
++                  <el-option
++                    v-for="option in availableDraftOptions"
++                    :key="option.id"
++                    :label="option.displayLabel"
++                    :value="option.id"
++                  >
++                    <div class="draft-option">
++                      <div class="draft-option-main">
++                        <span class="draft-option-id">{{ option.displayId }}</span>
++                        <span class="draft-option-case">{{ option.caseDisplay }}</span>
++                      </div>
++                      <div class="draft-option-sub">
++                        <span>{{ option.clientDisplay }}</span>
++                        <span>{{ option.amountDisplay }}</span>
++                      </div>
++                    </div>
++                  </el-option>
+                 </el-select>
+                 <div class="field-hint">
+-                  <router-link to="/fees/drafts">查看费用草稿</router-link> 以获取草稿编号
++                  仅展示“已锁定”且金额大于 0 的草稿。
++                  <router-link to="/fees/drafts">查看费用草稿列表</router-link>
+                 </div>
+               </el-form-item>
+ 
+@@ -145,6 +166,25 @@
+                     </el-select>
+                   </el-form-item>
+                 </el-col>
++                <el-col :span="12">
++                  <el-form-item
++                    label="账单方向"
++                    prop="direction"
++                    :error="fieldErrors.get('direction')?.join(', ')"
++                  >
++                    <el-select v-model="manualForm.direction" placeholder="请选择账单方向" class="full-width">
++                      <el-option
++                        v-for="option in directionOptions"
++                        :key="option.value"
++                        :label="option.label"
++                        :value="option.value"
++                      />
++                    </el-select>
++                    <div class="field-hint">
++                      应收账单用于向客户收款，应付账单用于记录需对外支付的款项。
++                    </div>
++                  </el-form-item>
++                </el-col>
+               </el-row>
+             </div>
+ 
+@@ -243,12 +283,14 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import { ref, reactive, computed } from 'vue'
++import { ref, reactive, computed, onMounted } from 'vue'
+ import { useRouter } from 'vue-router'
+ import type { FormInstance, FormRules } from 'element-plus'
+ import { ElMessage } from 'element-plus'
+ import { createBillFromDrafts, createManualBill } from '../../../api/billing'
+-import type { BillFromDraftsPayload, BillManualPayload, BillManualItem } from '../../../api/billing.types'
++import type { BillFromDraftsPayload, BillManualPayload, BillManualItem, BillDirection } from '../../../api/billing.types'
++import { getFeeDrafts } from '../../../api/fees'
++import type { FeeDraftListItem } from '../../../api/fees.types'
+ import type { ApiError } from '../../../api/types'
+ import { mapFieldErrors } from '../../../api/errors'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+@@ -259,6 +301,8 @@ const activeTab = ref('drafts')
+ const saving = ref(false)
+ const error = ref<ApiError | null>(null)
+ const fieldErrors = ref<Map<string, string[]>>(new Map())
++const draftOptionsLoading = ref(false)
++const availableDrafts = ref<FeeDraftListItem[]>([])
+ 
+ const draftsFormRef = ref<FormInstance>()
+ const manualFormRef = ref<FormInstance>()
+@@ -275,10 +319,16 @@ const manualForm = reactive({
+   client_id: '',
+   case_id: '',
+   currency: 'CNY',
+-  items: [{ description: '', quantity: 1, unit_price: 0 }] as BillManualItem[],
++  direction: 'AR' as BillDirection,
++  items: [{ description: '', quantity: 1, unit_price: 0, fee_type: '', year_no: undefined }] as BillManualItem[],
+   notes: '',
+ })
+ 
++const directionOptions = [
++  { label: '应收 (AR)', value: 'AR' as BillDirection },
++  { label: '应付 (AP)', value: 'AP' as BillDirection },
++]
++
+ const manualRules: FormRules = {
+   client_id: [
+     { required: true, message: '客户编号为必填项', trigger: 'blur' },
+@@ -286,12 +336,62 @@ const manualRules: FormRules = {
+   currency: [
+     { required: true, message: '币种为必填项', trigger: 'change' },
+   ],
++  direction: [
++    { required: true, message: '请确认账单方向', trigger: 'change' },
++  ],
+ }
+ 
+ const totalAmount = computed(() => {
+   return manualForm.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
+ })
+ 
++function asNumericAmount(amount: number | string | undefined): number {
++  if (amount === undefined || amount === null || amount === '') return 0
++  const parsed = Number(amount)
++  return Number.isFinite(parsed) ? parsed : 0
++}
++
++function formatDraftAmount(amount: number | string | undefined, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(asNumericAmount(amount))
++}
++
++function buildDraftDisplayId(draft: FeeDraftListItem): string {
++  return `${draft.id.slice(0, 8).toUpperCase()}`
++}
++
++const availableDraftOptions = computed(() => {
++  return availableDrafts.value.map((draft) => {
++    const draftTypePrefix = '费用草稿'
++    const readableDraftId = `${draftTypePrefix}-${buildDraftDisplayId(draft)}`
++    const caseDisplay = draft.case_no || `案件 ${draft.case_id.slice(0, 8).toUpperCase()}`
++    const clientDisplay = draft.client_name || '未关联客户'
++    const amountDisplay = formatDraftAmount(draft.amount, draft.currency)
++    return {
++      id: draft.id,
++      displayId: readableDraftId,
++      caseDisplay,
++      clientDisplay,
++      amountDisplay,
++      displayLabel: `${readableDraftId} · ${caseDisplay} · ${clientDisplay} · ${amountDisplay}`,
++    }
++  })
++})
++
++async function fetchAvailableDrafts() {
++  draftOptionsLoading.value = true
++  try {
++    const result = await getFeeDrafts({ page: 1, page_size: 100, status: 'LOCKED' })
++    availableDrafts.value = result.items.filter((draft) => asNumericAmount(draft.amount) > 0)
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    draftOptionsLoading.value = false
++  }
++}
++
+ function formatAmount(amount: number): string {
+   const curr = manualForm.currency || 'CNY'
+   return new Intl.NumberFormat('zh-CN', {
+@@ -370,6 +470,7 @@ async function handleCreateManual() {
+       client_id: manualForm.client_id,
+       case_id: manualForm.case_id || undefined,
+       currency: manualForm.currency,
++      direction: manualForm.direction,
+       items: validItems,
+       notes: manualForm.notes || undefined,
+     }
+@@ -388,6 +489,10 @@ async function handleCreateManual() {
+     saving.value = false
+   }
+ }
++
++onMounted(() => {
++  fetchAvailableDrafts()
++})
+ </script>
+ 
+ <style scoped>
+@@ -424,6 +529,37 @@ async function handleCreateManual() {
+   text-decoration: underline;
+ }
+ 
++.draft-option {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  padding: 2px 0;
++}
++
++.draft-option-main {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.draft-option-id {
++  font-family: var(--font-mono);
++  font-weight: 600;
++  color: var(--text-main);
++}
++
++.draft-option-case {
++  color: var(--text-main);
++}
++
++.draft-option-sub {
++  display: flex;
++  justify-content: space-between;
++  gap: 12px;
++  color: var(--text-sub);
++  font-size: 12px;
++}
++
+ .items-table {
+   width: 100%;
+   margin-bottom: 12px;
+diff --git a/frontend/src/modules/billing/pages/PaymentCreate.vue b/frontend/src/modules/billing/pages/PaymentCreate.vue
+index 0d5a27c..59a2890 100644
+--- a/frontend/src/modules/billing/pages/PaymentCreate.vue
++++ b/frontend/src/modules/billing/pages/PaymentCreate.vue
+@@ -110,6 +110,10 @@
+               placeholder="请输入备注（可选）"
+             />
+           </el-form-item>
++
++          <div class="field-hint">
++            新登记的回款在未核销到账单前会保持“预收中”状态，后续核销后未分配金额会自动减少。
++          </div>
+         </div>
+ 
+         <div class="form-actions">
+@@ -193,7 +197,7 @@ async function handleSubmit() {
+       notes: form.notes || undefined,
+     })
+ 
+-    ElMessage.success('回款登记成功')
++    ElMessage.success('回款登记成功，可在回款列表查看预收状态与未分配金额')
+     router.push('/billing/payments')
+   } catch (err) {
+     const apiError = err as ApiError
+diff --git a/frontend/src/modules/billing/pages/PaymentList.vue b/frontend/src/modules/billing/pages/PaymentList.vue
+index 161d21c..c6a3af6 100644
+--- a/frontend/src/modules/billing/pages/PaymentList.vue
++++ b/frontend/src/modules/billing/pages/PaymentList.vue
+@@ -56,6 +56,20 @@
+             <span class="mono-num">{{ formatAmount(row.amount, row.currency) }}</span>
+           </template>
+         </el-table-column>
++        <el-table-column label="预收状态" width="140" align="center">
++          <template #default="{ row }">
++            <el-tag :type="getPrepaymentTagType(row.prepayment_status)" size="small">
++              {{ getPrepaymentStatusText(row.prepayment_status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="未分配金额" width="160" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">
++              {{ formatAmount(row.unapplied_amt ?? row.amount, row.currency) }}
++            </span>
++          </template>
++        </el-table-column>
+         <el-table-column prop="payment_method" label="付款方式" width="140">
+           <template #default="{ row }">
+             <el-tag size="small" type="info">{{ formatMethod(row.payment_method) }}</el-tag>
+@@ -379,6 +393,30 @@ function formatMethod(method: PaymentMethod): string {
+   return getPaymentMethodText(method)
+ }
+ 
++function getPrepaymentStatusText(status?: string): string {
++  switch (status) {
++    case 'FULLY_ALLOCATED':
++      return '已分配完'
++    case 'PARTIALLY_ALLOCATED':
++      return '部分分配'
++    case 'UNALLOCATED':
++      return '预收中'
++    default:
++      return '待确认'
++  }
++}
++
++function getPrepaymentTagType(status?: string): 'success' | 'warning' | 'info' {
++  switch (status) {
++    case 'FULLY_ALLOCATED':
++      return 'success'
++    case 'PARTIALLY_ALLOCATED':
++      return 'warning'
++    default:
++      return 'info'
++  }
++}
++
+ function formatPaymentOption(payment: PaymentListItem): string {
+   const refText = payment.reference || payment.id
+   return `${refText} | ${formatAmount(payment.amount, payment.currency)} | ${payment.client_id}`
+diff --git a/frontend/src/modules/collections/pages/DunningDetail.vue b/frontend/src/modules/collections/pages/DunningDetail.vue
+index ce88c1d..e2deece 100644
+--- a/frontend/src/modules/collections/pages/DunningDetail.vue
++++ b/frontend/src/modules/collections/pages/DunningDetail.vue
+@@ -54,20 +54,18 @@
+ <script setup lang="ts">
+ import { computed, onMounted, ref } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+-import { getDunning, mapCollectionsError } from '../../../api/collections'
+-import type { CollectionsApiError, DunningBatchListItem } from '../../../api/collections.types'
++import { getDunningDetail, mapCollectionsError } from '../../../api/collections'
++import type { CollectionsApiError, DunningDetail } from '../../../api/collections.types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+ import LoadingBlock from '../../../components/state/LoadingBlock.vue'
+ 
+ type TagType = '' | 'success' | 'warning' | 'info' | 'danger'
+ 
+-const LOOKUP_PAGE_SIZE = 50
+-
+ const route = useRoute()
+ const router = useRouter()
+ 
+ const loading = ref(false)
+-const dunningItem = ref<DunningBatchListItem | null>(null)
++const dunningItem = ref<DunningDetail | null>(null)
+ const error = ref<CollectionsApiError | null>(null)
+ 
+ const dunningId = computed(() => {
+@@ -91,30 +89,6 @@ function extractListQuery(): Record<string, string> {
+   return query
+ }
+ 
+-async function findDunningById(id: number): Promise<DunningBatchListItem | null> {
+-  let currentPage = 1
+-  let fetchedCount = 0
+-  let total = 0
+-
+-  while (currentPage <= 100) {
+-    const result = await getDunning({
+-      page: currentPage,
+-      page_size: LOOKUP_PAGE_SIZE,
+-    })
+-
+-    const found = result.items.find((item) => item.id === id)
+-    if (found) return found
+-
+-    total = result.total
+-    fetchedCount += result.items.length
+-    if (fetchedCount >= total || result.items.length === 0) break
+-
+-    currentPage += 1
+-  }
+-
+-  return null
+-}
+-
+ async function fetchDunningItem() {
+   if (dunningId.value === null) {
+     error.value = {
+@@ -131,19 +105,8 @@ async function fetchDunningItem() {
+   error.value = null
+ 
+   try {
+-    const result = await findDunningById(dunningId.value)
+-    if (!result) {
+-      error.value = {
+-        status: 404,
+-        code: 'DUNNING_NOT_FOUND',
+-        message: '未找到该催款批次，请返回列表确认筛选条件。',
+-        category: 'not_found',
+-      }
+-      dunningItem.value = null
+-      return
+-    }
+-
+-    dunningItem.value = result
++    const detail = await getDunningDetail(dunningId.value)
++    dunningItem.value = detail
+   } catch (err) {
+     error.value = mapCollectionsError(err)
+     dunningItem.value = null

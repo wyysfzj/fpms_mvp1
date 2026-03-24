@@ -1,0 +1,109 @@
+## master
+ M backend/app/api/deps.py
+ M backend/app/api/router.py
+ M backend/app/core/config.py
+ M backend/app/main.py
+ M backend/app/modules/auth/api.py
+ M backend/app/modules/auth/models.py
+ M backend/app/modules/auth/schemas.py
+ M backend/app/modules/auth/service.py
+ M backend/app/modules/billing/api.py
+ M backend/app/modules/billing/doc_render_bill_context.py
+ M backend/app/modules/billing/schemas.py
+ M backend/app/modules/billing/service.py
+ M backend/app/modules/cases/models.py
+ M backend/app/modules/cases/schemas.py
+ M backend/app/modules/cases/service.py
+ M backend/app/modules/documents/api.py
+ M backend/app/modules/documents/models.py
+ M backend/app/modules/documents/schemas.py
+ M backend/app/modules/documents/service.py
+ M backend/app/modules/rbac/models.py
+ M backend/app/modules/rbac/service.py
+ M backend/app/modules/tasks/api.py
+ M backend/app/modules/tasks/schemas.py
+ M backend/app/modules/tasks/service.py
+ M backend/scripts/seed_dev.py
+ M tasks.zip
+ M tasks/backend/mvp1enhance/ENH-01-02.md
+ M tasks/backend/mvp1enhance/ENH-03-01.md
+ M tasks/backend/mvp1enhance/ENH-03-02.md
+ M tasks/backend/mvp1enhance/ENH-03-03.md
+ M tasks/backend/mvp1enhance/ENH-03-04.md
+ M tasks/backend/mvp1enhance/ENH-03-05.md
+ M tasks/backend/mvp1enhance/ENH-03-06.md
+ M tasks/backend/mvp1enhance/ENH-03-07.md
+ M tasks/backend/mvp1enhance/ENH-03-08.md
+ M tasks/backend/mvp1enhance/ENH-03-09.md
+ M tasks/backend/mvp1enhance/ENH-03-10.md
+ M tasks/backend/mvp1enhance/ENH-04-01.md
+ M tasks/backend/mvp1enhance/ENH-04-02.md
+ M tasks/backend/mvp1enhance/ENH-04-03.md
+ M tasks/backend/mvp1enhance/ENH-04-04.md
+ M tasks/backend/mvp1enhance/ENH-04-05.md
+ M tasks/backend/mvp1enhance/ENH-04-06.md
+ M tasks/backend/mvp1enhance/ENH-04-07.md
+ M tasks/backend/mvp1enhance/ENH-05-01.md
+ M tasks/backend/mvp1enhance/ENH-05-02.md
+ M tasks/backend/mvp1enhance/ENH-05-03.md
+ M tasks/backend/mvp1enhance/ENH-05-04.md
+ M tasks/backend/mvp1enhance/ENH-05-05.md
+ M tasks/backend/mvp1enhance/ENH-05-06.md
+?? "Atomic Task Writing Specification v1.0.md"
+?? backend/alembic/versions/ea0de36a1dde_add_t_role_perm.py
+?? backend/app/core/dependencies.py
+?? backend/app/core/pagination.py
+?? backend/app/core/security.py
+?? backend/app/core/storage.py
+?? backend/app/db/mixins.py
+?? backend/app/modules/cases/enums.py
+?? backend/app/modules/documents/enums.py
+?? backend/app/modules/tasks/enums.py
+?? backend/scripts/scan_perms.py
+?? docs/decisions/
+?? tasks/backend/mvp1enhance/ENH-00-07_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-00-07_fix_seed_dev_import_path.md
+?? tasks/backend/mvp1enhance/ENH-00-12.md
+?? tasks/backend/mvp1enhance/ENH-00-12_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-01_CODEX_PROMPT_FINAL.md
+?? tasks/backend/mvp1enhance/ENH-01-01_CODEX_PROMPT_FINAL_UUID.md
+?? tasks/backend/mvp1enhance/ENH-01-02_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-03_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-04_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-05_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-06_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-07_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-08_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-09_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-10_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-11.md
+?? tasks/backend/mvp1enhance/ENH-01-11_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-16-01_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-16-01_fix_admin_user_role_binding.md
+?? tasks/backend/mvp1enhance/ENH-01-20.md
+?? tasks/backend/mvp1enhance/ENH-01-20_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-21.md
+?? tasks/backend/mvp1enhance/ENH-01-21_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-22.md
+?? tasks/backend/mvp1enhance/ENH-01-22_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-01-99.md
+?? tasks/backend/mvp1enhance/ENH-01-99_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-02-05-01.md
+?? tasks/backend/mvp1enhance/ENH-02-05-01_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-01_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-02_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-03_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-04_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-05_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-06_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-07_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-08_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-09_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-03-10_CODEX_PROMPT.md
+?? tasks/backend/mvp1enhance/ENH-04-08.md
+?? tasks/backend/mvp1enhance/ENH-04-09.md
+?? tasks/backend/mvp1enhance/ENH-04-10.md
+?? tasks/backend/mvp1enhance/ENH-04-11.md
+?? tasks/backend/mvp1enhance/ENH-04-12.md
+?? tasks/backend/mvp1enhance/ENH-04-13.md
+?? tasks/backend/mvp1enhance/ENH-04-14.md

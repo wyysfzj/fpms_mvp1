@@ -1,0 +1,4 @@
+{"ts":"20260124T133543","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/documents/models.py"}
+{"ts":"20260124T133601","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/documents/models.py"}
+{"ts":"20260124T133606","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/documents/models.py"}
+{"ts":"20260124T133611","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/documents/models.py"}

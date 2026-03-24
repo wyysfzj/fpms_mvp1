@@ -1,0 +1,26 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+F811 Redefinition of unused `create_fee_draft` from line 14
+  --> app/modules/fees/api.py:50:5
+   |
+49 | @router.post("/fees/drafts", status_code=status.HTTP_201_CREATED, response_model=FeeDraftOut)
+50 | def create_fee_draft(
+   |     ^^^^^^^^^^^^^^^^ `create_fee_draft` redefined here
+51 |     payload: FeeDraftCreateIn,
+52 |     _perm: None = Depends(require_perm("Fee.Create")),
+   |
+  ::: app/modules/fees/api.py:14:38
+   |
+12 | from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+13 | from app.modules.fees.schemas import FeeDraftCreateIn, FeeDraftListItemOut, FeeDraftOut
+14 | from app.modules.fees.service import create_fee_draft, list_fee_drafts
+   |                                      ---------------- previous definition of `create_fee_draft` here
+15 |
+16 | router = APIRouter()
+   |
+help: Remove definition: `create_fee_draft`
+
+Found 2 errors (1 fixed, 1 remaining).

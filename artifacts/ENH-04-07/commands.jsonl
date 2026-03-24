@@ -1,0 +1,4 @@
+{"ts":"20260124T232744","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/documents/service.py"}
+{"ts":"20260124T232749","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/documents/service.py"}
+{"ts":"20260124T232756","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/documents/service.py"}
+{"ts":"20260124T232803","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"from\ app.modules.documents.service\ import\ add_attachment\,\ get_attachment_download\;\ print\(add_attachment.__name__\,\ get_attachment_download.__name__\)\""}

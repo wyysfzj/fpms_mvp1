@@ -1,0 +1,10 @@
+CREATE TABLE t_role_perm (
+	id VARCHAR(36) NOT NULL, 
+	role_id VARCHAR(36) NOT NULL, 
+	perm_code VARCHAR(128) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(role_id) REFERENCES t_role (id) ON DELETE CASCADE, 
+	CONSTRAINT uq_role_perm UNIQUE (role_id, perm_code)
+);
+CREATE INDEX ix_t_role_perm_role_id ON t_role_perm (role_id);
+CREATE INDEX ix_t_role_perm_perm_code ON t_role_perm (perm_code);

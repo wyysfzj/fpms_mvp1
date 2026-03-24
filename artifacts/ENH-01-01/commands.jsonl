@@ -1,0 +1,3 @@
+{"ts":"20260104T235315","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/models.py"}
+{"ts":"20260104T235320","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/models.py"}
+{"ts":"20260104T235326","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/models.py"}

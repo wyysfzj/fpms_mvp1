@@ -1,0 +1,5 @@
+{"ts":"20260124T234240","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/seed_dev.py"}
+{"ts":"20260124T234328","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/seed_dev.py"}
+{"ts":"20260124T234336","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/seed_dev.py"}
+{"ts":"20260124T234342","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/seed_dev.py"}
+{"ts":"20260124T234348","step":"run","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/seed_dev.py"}

@@ -1,0 +1,278 @@
+diff --git a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+index 00e1beb..cfa9db0 100644
+--- a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
++++ b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+@@ -103,7 +103,7 @@
+         @selection-change="handleSelectionChange"
+       >
+         <el-table-column type="selection" width="48" />
+-        <el-table-column prop="id" label="任务ID" width="90" />
++        <el-table-column prop="id" label="任务编号" width="90" />
+         <el-table-column label="案件" min-width="180">
+           <template #default="{ row }">
+             <router-link :to="`/cases/${row.case_id}`" class="case-link">
+@@ -111,7 +111,7 @@
+             </router-link>
+           </template>
+         </el-table-column>
+-        <el-table-column prop="client_id" label="客户ID" min-width="180" />
++        <el-table-column prop="client_id" label="客户编号" min-width="180" />
+         <el-table-column prop="year_no" label="年度" width="90" />
+         <el-table-column label="到期日" width="130">
+           <template #default="{ row }">
+@@ -186,10 +186,10 @@
+         <div class="receipt-block">
+           <h3 class="receipt-title">成功明细</h3>
+           <el-table :data="generateReceipt.success" size="small" border>
+-            <el-table-column prop="source_task_id" label="来源任务ID" width="110" />
+-            <el-table-column prop="task_id" label="任务ID" width="90" />
++            <el-table-column prop="source_task_id" label="来源任务编号" width="110" />
++            <el-table-column prop="task_id" label="任务编号" width="90" />
+             <el-table-column prop="year_no" label="年度" width="80" />
+-            <el-table-column prop="draft_id" label="草单ID" min-width="210" />
++            <el-table-column prop="draft_id" label="草单编号" min-width="210" />
+             <el-table-column label="金额" width="140" align="right">
+               <template #default="{ row }">
+                 {{ formatMoney(row.amount, row.currency) }}
+@@ -201,8 +201,8 @@
+         <div class="receipt-block" style="margin-top: 16px">
+           <h3 class="receipt-title">失败明细</h3>
+           <el-table :data="generateReceipt.failed" size="small" border>
+-            <el-table-column prop="source_task_id" label="来源任务ID" width="110" />
+-            <el-table-column prop="task_id" label="任务ID" width="90">
++            <el-table-column prop="source_task_id" label="来源任务编号" width="110" />
++            <el-table-column prop="task_id" label="任务编号" width="90">
+               <template #default="{ row }">
+                 {{ row.task_id ?? '—' }}
+               </template>
+diff --git a/frontend/src/modules/annuity/pages/GovPaymentCreate.vue b/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+index 220d069..aa20fd9 100644
+--- a/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
++++ b/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+@@ -19,7 +19,7 @@
+         <el-row :gutter="12">
+           <el-col :xs="24" :sm="12">
+             <el-form-item
+-              label="官费清单ID"
++              label="官费清单编号"
+               prop="pay_list_id"
+               :error="fieldErrors.get('pay_list_id')?.join('，')"
+             >
+@@ -34,7 +34,7 @@
+           </el-col>
+           <el-col :xs="24" :sm="12">
+             <el-form-item
+-              label="费用项ID"
++              label="费用项编号"
+               prop="fee_item_id"
+               :error="fieldErrors.get('fee_item_id')?.join('，')"
+             >
+@@ -97,8 +97,8 @@
+       <h2 class="form-card-title">登记结果</h2>
+ 
+       <el-descriptions :column="3" border>
+-        <el-descriptions-item label="缴费记录ID">{{ result.gov_payment.id }}</el-descriptions-item>
+-        <el-descriptions-item label="费用项ID">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
++        <el-descriptions-item label="缴费记录编号">{{ result.gov_payment.id }}</el-descriptions-item>
++        <el-descriptions-item label="费用项编号">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
+         <el-descriptions-item label="缴费状态">{{ govPaymentStatusText(result.gov_payment.status) }}</el-descriptions-item>
+         <el-descriptions-item label="缴费日期">{{ result.gov_payment.paid_date || '—' }}</el-descriptions-item>
+         <el-descriptions-item label="缴费金额">
+@@ -120,7 +120,7 @@
+               {{ payListStatusText(result.pay_list.status) }}
+             </el-tag>
+           </el-descriptions-item>
+-          <el-descriptions-item label="客户ID">{{ result.pay_list.client_id }}</el-descriptions-item>
++          <el-descriptions-item label="客户编号">{{ result.pay_list.client_id }}</el-descriptions-item>
+           <el-descriptions-item label="更新后总额">
+             {{ formatMoney(result.pay_list.total_amount, result.pay_list.currency) }}
+           </el-descriptions-item>
+@@ -175,12 +175,12 @@ const form = reactive<GovPaymentForm>({
+ 
+ const rules: FormRules<GovPaymentForm> = {
+   pay_list_id: [
+-    { required: true, message: '官费清单ID为必填项', trigger: 'blur' },
++    { required: true, message: '官费清单编号为必填项', trigger: 'blur' },
+     {
+       validator: (_rule, value: unknown, callback) => {
+         const numeric = Number(value)
+         if (!Number.isFinite(numeric) || numeric <= 0) {
+-          callback(new Error('官费清单ID必须大于 0'))
++          callback(new Error('官费清单编号必须大于 0'))
+           return
+         }
+         callback()
+@@ -188,7 +188,7 @@ const rules: FormRules<GovPaymentForm> = {
+       trigger: 'blur',
+     },
+   ],
+-  fee_item_id: [{ required: true, message: '费用项ID为必填项', trigger: 'blur' }],
++  fee_item_id: [{ required: true, message: '费用项编号为必填项', trigger: 'blur' }],
+   paid_amount: [
+     {
+       validator: (_rule, value: unknown, callback) => {
+diff --git a/frontend/src/modules/commission/pages/CommissionList.vue b/frontend/src/modules/commission/pages/CommissionList.vue
+index 41662c2..01842e8 100644
+--- a/frontend/src/modules/commission/pages/CommissionList.vue
++++ b/frontend/src/modules/commission/pages/CommissionList.vue
+@@ -12,7 +12,7 @@
+         <el-input
+           v-model.trim="filters.agent_id"
+           aria-label="代理人筛选"
+-          placeholder="代理人 ID"
++          placeholder="代理人编号"
+           clearable
+           @keyup.enter="onFilterChange"
+         />
+@@ -21,7 +21,7 @@
+         <el-input
+           v-model.trim="filters.case_id"
+           aria-label="案件筛选"
+-          placeholder="案件 ID"
++          placeholder="案件编号"
+           clearable
+           @keyup.enter="onFilterChange"
+         />
+@@ -84,9 +84,9 @@
+ 
+     <div v-else class="page-table">
+       <el-table :data="records" aria-label="提成记录列表" stripe size="small" class="compact-table">
+-        <el-table-column prop="id" label="ID" width="80" />
+-        <el-table-column prop="case_id" label="案件 ID" min-width="160" />
+-        <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++        <el-table-column prop="id" label="编号" width="80" />
++        <el-table-column prop="case_id" label="案件编号" min-width="160" />
++        <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+           <template #default="{ row }">
+             {{ row.agent_id || '—' }}
+           </template>
+diff --git a/frontend/src/modules/commission/pages/CommissionSettlement.vue b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+index c34a356..35a65c3 100644
+--- a/frontend/src/modules/commission/pages/CommissionSettlement.vue
++++ b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+@@ -19,8 +19,8 @@
+       <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-position="top">
+         <el-row :gutter="12">
+           <el-col :xs="24" :sm="12" :md="8" :lg="6">
+-            <el-form-item label="代理人 ID" prop="agent_id">
+-              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人 ID" />
++            <el-form-item label="代理人编号" prop="agent_id">
++              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人编号" />
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12" :md="8" :lg="6">
+@@ -66,7 +66,7 @@
+             aria-label="结算批次编号"
+             :min="1"
+             :controls="false"
+-            placeholder="结算批次 ID"
++            placeholder="结算批次编号"
+             class="w-full"
+           />
+         </el-col>
+@@ -85,7 +85,7 @@
+ 
+       <div v-if="lastGenerate" class="result-block">
+         <el-descriptions :column="3" border>
+-          <el-descriptions-item label="批次 ID">{{ lastGenerate.settlement_id }}</el-descriptions-item>
++          <el-descriptions-item label="批次编号">{{ lastGenerate.settlement_id }}</el-descriptions-item>
+           <el-descriptions-item label="状态">{{ lastGenerate.status }}</el-descriptions-item>
+           <el-descriptions-item label="明细总数">{{ lastGenerate.line_count }}</el-descriptions-item>
+           <el-descriptions-item label="新增明细">{{ lastGenerate.created_count }}</el-descriptions-item>
+@@ -97,8 +97,8 @@
+       <div v-if="recentSettlements.length" class="result-block">
+         <div class="sub-title">本页创建的批次</div>
+         <el-table :data="recentSettlements" stripe size="small" class="compact-table">
+-          <el-table-column prop="id" label="ID" width="80" />
+-          <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
++          <el-table-column prop="id" label="编号" width="80" />
++          <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+             <template #default="{ row }">
+               {{ row.agent_id || '—' }}
+             </template>
+@@ -127,10 +127,10 @@
+ 
+       <el-row :gutter="12" class="filter-bar">
+         <el-col :xs="24" :sm="12" :md="8" :lg="6">
+-          <el-input v-model.trim="reportFilters.agent_id" aria-label="报表代理人筛选" placeholder="代理人 ID" clearable @keyup.enter="queryReport" />
++          <el-input v-model.trim="reportFilters.agent_id" aria-label="报表代理人筛选" placeholder="代理人编号" clearable @keyup.enter="queryReport" />
+         </el-col>
+         <el-col :xs="24" :sm="12" :md="8" :lg="6">
+-          <el-input v-model.trim="reportFilters.case_id" aria-label="报表案件筛选" placeholder="案件 ID" clearable @keyup.enter="queryReport" />
++          <el-input v-model.trim="reportFilters.case_id" aria-label="报表案件筛选" placeholder="案件编号" clearable @keyup.enter="queryReport" />
+         </el-col>
+         <el-col :xs="12" :sm="8" :md="4" :lg="3">
+           <el-input v-model.trim="reportFilters.currency" aria-label="报表币种筛选" placeholder="币种" clearable @keyup.enter="queryReport" />
+@@ -198,7 +198,7 @@
+         <div class="table-section">
+           <div class="sub-title">按代理人统计</div>
+           <el-table :data="report.by_agent" stripe size="small" class="compact-table">
+-            <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++            <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+               <template #default="{ row }">
+                 {{ row.agent_id || '—' }}
+               </template>
+@@ -215,7 +215,7 @@
+         <div class="table-section">
+           <div class="sub-title">按案件统计</div>
+           <el-table :data="report.by_case" stripe size="small" class="compact-table">
+-            <el-table-column prop="case_id" label="案件 ID" min-width="180">
++            <el-table-column prop="case_id" label="案件编号" min-width="180">
+               <template #default="{ row }">
+                 {{ row.case_id || '—' }}
+               </template>
+@@ -245,14 +245,14 @@
+         <div class="table-section">
+           <div class="sub-title">明细列表</div>
+           <el-table :data="report.details" stripe size="small" class="compact-table">
+-            <el-table-column prop="settlement_id" label="批次 ID" width="90" />
+-            <el-table-column prop="commission_id" label="提成 ID" width="90" />
+-            <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
++            <el-table-column prop="settlement_id" label="批次编号" width="90" />
++            <el-table-column prop="commission_id" label="提成编号" width="90" />
++            <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+               <template #default="{ row }">
+                 {{ row.agent_id || '—' }}
+               </template>
+             </el-table-column>
+-            <el-table-column prop="case_id" label="案件 ID" min-width="150" />
++            <el-table-column prop="case_id" label="案件编号" min-width="150" />
+             <el-table-column prop="settlement_status" label="批次状态" width="100">
+               <template #default="{ row }">
+                 {{ row.settlement_status || '—' }}
+@@ -318,7 +318,7 @@ const createForm = reactive({
+ })
+ 
+ const createRules: FormRules = {
+-  agent_id: [{ required: true, message: '代理人 ID 为必填项', trigger: 'blur' }],
++  agent_id: [{ required: true, message: '代理人编号为必填项', trigger: 'blur' }],
+   currency: [{ required: true, message: '币种为必填项', trigger: 'blur' }],
+ }
+ 
+@@ -372,7 +372,7 @@ function mapGenerateLinesError(errorLike: unknown): string {
+   if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
+ 
+   if (apiError.status === 404 && apiError.code === 'COMMISSION_SETTLEMENT_NOT_FOUND') {
+-    return '结算批次不存在，请确认批次 ID。'
++    return '结算批次不存在，请确认批次编号。'
+   }
+   if (apiError.status === 400 && apiError.code === 'COMMISSION_SETTLEMENT_INVALID') {
+     return '结算批次参数或状态无效，无法生成明细。'
+@@ -456,7 +456,7 @@ async function handleCreateSettlement() {
+     const settlement = await createCommissionSettlement(buildCreatePayload())
+     recentSettlements.value = [settlement, ...recentSettlements.value.filter((s) => s.id !== settlement.id)]
+     generateForm.settlement_id = settlement.id
+-    ElMessage.success(`批次创建成功（ID: ${settlement.id}）`)
++    ElMessage.success(`批次创建成功（编号: ${settlement.id}）`)
+   } catch (err) {
+     error.value = toApiError(err)
+     ElMessage.error(mapCreateSettlementError(err))
+@@ -467,7 +467,7 @@ async function handleCreateSettlement() {
+ 
+ async function handleGenerateLines() {
+   if (!generateForm.settlement_id) {
+-    ElMessage.warning('请先输入结算批次 ID')
++    ElMessage.warning('请先输入结算批次编号')
+     return
+   }
+ 

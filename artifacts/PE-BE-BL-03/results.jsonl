@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"ruff check backend/app/modules/billing/api.py backend/app/modules/billing/service.py backend/app/modules/collections/service.py backend/tests/test_b5_billing_polish.py backend/tests/test_collections_e2e.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_b5_billing_polish.py tests/test_collections_e2e.py -k 'offset or payment or receipt'","rc":0}

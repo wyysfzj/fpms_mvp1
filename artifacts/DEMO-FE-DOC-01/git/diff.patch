@@ -1,0 +1,57 @@
+diff --git a/frontend/src/modules/cases/components/CaseDocumentsTab.vue b/frontend/src/modules/cases/components/CaseDocumentsTab.vue
+index a30d263..2f29c6f 100644
+--- a/frontend/src/modules/cases/components/CaseDocumentsTab.vue
++++ b/frontend/src/modules/cases/components/CaseDocumentsTab.vue
+@@ -27,6 +27,7 @@
+ import { ref, onMounted } from 'vue'
+ import { useRouter } from 'vue-router'
+ import { getDocuments } from '../../../api/documents'
++import { getCase } from '../../../api/cases'
+ import type { Document } from '../../../api/documents.types'
+ 
+ const props = defineProps<{
+@@ -36,8 +37,24 @@ const props = defineProps<{
+ const router = useRouter()
+ const items = ref<Document[]>([])
+ const loading = ref(true)
++const caseNo = ref('')
++
++async function resolveCaseNo() {
++  if (caseNo.value) return caseNo.value
++
++  try {
++    const caseData = await getCase(props.caseId)
++    caseNo.value = caseData.case_no
++  } catch {
++    // Keep existing flow if case metadata fetch fails.
++  }
++
++  return caseNo.value
++}
+ 
+ onMounted(async () => {
++  void resolveCaseNo()
++
+   try {
+     const res = await getDocuments({ case_id: props.caseId, page: 1, page_size: 50 })
+     items.value = res.items
+@@ -48,7 +65,17 @@ onMounted(async () => {
+   }
+ })
+ 
+-function handleCreate() {
+-  router.push(`/documents/new?case_id=${props.caseId}`)
++async function handleCreate() {
++  const resolvedCaseNo = await resolveCaseNo()
++  const query: Record<string, string> = { case_id: props.caseId }
++
++  if (resolvedCaseNo) {
++    query.case_no = resolvedCaseNo
++  }
++
++  router.push({
++    path: '/documents/new',
++    query,
++  })
+ }
+ </script>

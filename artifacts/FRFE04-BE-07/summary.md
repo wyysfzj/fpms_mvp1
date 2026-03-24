@@ -1,0 +1,33 @@
+# FRFE04-BE-07 Evidence Summary
+
+- Task/runbook executed: `FRFE04-BE-07`
+- Role executed: `backend worker`
+- Final per-task status: `PASS`
+- Modified files:
+  - `backend/app/modules/annuity/api.py`
+  - `backend/app/modules/annuity/service.py`
+  - `backend/tests/test_annuity_e2e.py`
+- Verification commands:
+  - `cd backend && ruff check --fix app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff format app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff check app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && pytest -q tests/test_annuity_e2e.py -k pay_list_manual_item`
+  - `./scripts/task_validate.sh FRFE04-BE-07`
+- Expected status codes:
+  - `200` manual item creation success
+  - `401` unauthenticated request
+  - `404` missing pay list
+  - `409` non-`DRAFT` pay list rejected
+- Closure slice completed: add one manual/historical `GovPayment` row under an existing pay list and allow nullable `fee_item_id`
+- Explicit non-closure boundary respected: did not create a historical pay-list header, did not redesign generated-row registration, and did not implement blocked voucher/invoice/fee-code/year fields
+- API-level coverage exercised:
+  - manual item creation succeeds with nullable `fee_item_id`
+  - pay-list total amount updates after manual row creation
+  - `401` unauthenticated request
+  - `404` missing pay list
+  - `409` non-`DRAFT` pay list rejected
+- Evidence path: `artifacts/FRFE04-BE-07/**`
+- Evidence files:
+  - `artifacts/FRFE04-BE-07/results.jsonl`
+  - `artifacts/FRFE04-BE-07/summary.md`
+  - `artifacts/FRFE04-BE-07/git/diff.patch`

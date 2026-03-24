@@ -1,0 +1,983 @@
+--- /dev/null	2026-02-28 23:00:59
++++ frontend/src/api/expenses.types.ts	2026-02-28 22:58:26
+@@ -0,0 +1,70 @@
++import type { ApiError, Pagination } from './types'
++
++export type ExpenseCategory = 'SEARCH_DB' | 'TRANSLATION' | 'TRANSPORT' | 'OTHER'
++
++export interface ExpenseItem {
++    id: number
++    expense_no: string | null
++    case_id: string | null
++    category: ExpenseCategory | string
++    expense_date: string | null
++    amount: number
++    currency: string
++    status: string
++    remark: string | null
++    created_at: string
++    updated_at: string
++}
++
++export interface ExpenseStats {
++    count_by_category: Record<string, number>
++    sum_by_category: Record<string, number>
++    count_total: number
++    sum_total: number
++}
++
++export interface ExpenseListResponse extends Pagination<ExpenseItem> {
++    stats?: ExpenseStats
++}
++
++export interface ExpenseListParams {
++    case_id?: string
++    category?: ExpenseCategory | string
++    date_from?: string
++    date_to?: string
++    currency?: string
++    status?: string
++    q?: string
++    include_stats?: boolean
++    page?: number
++    page_size?: number
++}
++
++export interface ExpenseCreatePayload {
++    case_id: string
++    category: ExpenseCategory
++    expense_date: string
++    amount: number
++    client_id?: string
++    expense_no?: string
++    vendor_name?: string
++    currency?: string
++    tax_amount?: number
++    remark?: string
++}
++
++export type ExpenseErrorCategory =
++    | 'unauthenticated'
++    | 'permission_denied'
++    | 'validation'
++    | 'business'
++    | 'not_found'
++    | 'conflict'
++    | 'unknown'
++
++export type ExpenseApiAction = 'list' | 'create'
++
++export interface ExpenseApiError extends ApiError {
++    category: ExpenseErrorCategory
++    field_errors?: Map<string, string[]>
++}
+--- /dev/null	2026-02-28 23:00:59
++++ frontend/src/api/expenses.ts	2026-02-28 22:59:00
+@@ -0,0 +1,243 @@
++import { mapFieldErrors } from './errors'
++import { http } from './http'
++import type {
++    ExpenseApiAction,
++    ExpenseApiError,
++    ExpenseErrorCategory,
++    ExpenseCreatePayload,
++    ExpenseItem,
++    ExpenseListParams,
++    ExpenseListResponse,
++    ExpenseStats,
++} from './expenses.types'
++import type { ApiError } from './types'
++
++interface BackendExpenseItem {
++    id: number
++    expense_no: string | null
++    case_id: string | null
++    category: string
++    expense_date: string | null
++    amount: number | string
++    currency: string
++    status: string
++    remark: string | null
++    created_at: string
++    updated_at: string
++}
++
++interface BackendExpenseStats {
++    count_by_category: Record<string, number | string>
++    sum_by_category: Record<string, number | string>
++    count_total: number | string
++    sum_total: number | string
++}
++
++interface BackendExpenseListResponse {
++    items: BackendExpenseItem[]
++    page: number
++    page_size: number
++    total: number
++    stats?: BackendExpenseStats
++}
++
++function asNumber(input: number | string | null | undefined): number {
++    if (input === null || input === undefined || input === '') return 0
++    const parsed = Number(input)
++    return Number.isFinite(parsed) ? parsed : 0
++}
++
++function isApiError(error: unknown): error is ApiError {
++    if (!error || typeof error !== 'object') return false
++    const candidate = error as Partial<ApiError>
++    return (
++        typeof candidate.status === 'number'
++        && typeof candidate.code === 'string'
++        && typeof candidate.message === 'string'
++    )
++}
++
++function mapExpenseItem(input: BackendExpenseItem): ExpenseItem {
++    return {
++        id: input.id,
++        expense_no: input.expense_no,
++        case_id: input.case_id,
++        category: input.category,
++        expense_date: input.expense_date,
++        amount: asNumber(input.amount),
++        currency: input.currency,
++        status: input.status,
++        remark: input.remark,
++        created_at: input.created_at,
++        updated_at: input.updated_at,
++    }
++}
++
++function mapExpenseStats(input: BackendExpenseStats): ExpenseStats {
++    const count_by_category = Object.fromEntries(
++        Object.entries(input.count_by_category || {}).map(([key, value]) => [key, asNumber(value)]),
++    )
++
++    const sum_by_category = Object.fromEntries(
++        Object.entries(input.sum_by_category || {}).map(([key, value]) => [key, asNumber(value)]),
++    )
++
++    return {
++        count_by_category,
++        sum_by_category,
++        count_total: asNumber(input.count_total),
++        sum_total: asNumber(input.sum_total),
++    }
++}
++
++function resolveExpenseErrorCategory(status: number): ExpenseErrorCategory {
++    if (status === 401) return 'unauthenticated'
++    if (status === 403) return 'permission_denied'
++    if (status === 422) return 'validation'
++    if (status === 404) return 'not_found'
++    if (status === 409) return 'conflict'
++    if (status === 400) return 'business'
++    return 'unknown'
++}
++
++function resolveExpenseErrorMessage(error: ApiError, action: ExpenseApiAction): string {
++    const code = error.code.toUpperCase()
++
++    if (code === 'CASE_NOT_FOUND') {
++        return '关联案件或项目不存在，请确认后重试。'
++    }
++
++    if (code === 'EXPENSE_INVALID') {
++        return action === 'create'
++            ? '支出数据不合法，请检查类别、日期与金额后重试。'
++            : '筛选条件不合法，请调整后重试。'
++    }
++
++    if (code === 'PERMISSION_DENIED') {
++        return '当前账号没有支出模块权限，请联系管理员。'
++    }
++
++    if (code === 'UNAUTHENTICATED') {
++        return '登录状态已失效，请重新登录。'
++    }
++
++    if (error.status === 401) return '登录状态已失效，请重新登录。'
++    if (error.status === 403) return '当前账号没有支出模块权限，请联系管理员。'
++    if (error.status === 404) return '未找到相关支出数据或关联案件。'
++    if (error.status === 409) return '当前操作存在冲突，请刷新后重试。'
++    if (error.status === 422) return '提交数据校验失败，请检查输入内容。'
++    if (error.status === 400) {
++        return action === 'create'
++            ? '支出录入参数有误，请检查后重试。'
++            : '筛选参数有误，请检查后重试。'
++    }
++
++    return action === 'create'
++        ? '支出录入失败，请稍后重试。'
++        : '支出列表加载失败，请稍后重试。'
++}
++
++function buildExpenseListQuery(params: ExpenseListParams): Record<string, unknown> {
++    const query: Record<string, unknown> = {
++        page: params.page ?? 1,
++        page_size: params.page_size ?? 20,
++        include_stats: params.include_stats ?? true,
++    }
++
++    const caseId = params.case_id?.trim()
++    if (caseId) query.case_id = caseId
++
++    const category = params.category?.trim()
++    if (category) query.category = category
++
++    const dateFrom = params.date_from?.trim()
++    if (dateFrom) query.date_from = dateFrom
++
++    const dateTo = params.date_to?.trim()
++    if (dateTo) query.date_to = dateTo
++
++    const currency = params.currency?.trim()
++    if (currency) query.currency = currency
++
++    const status = params.status?.trim()
++    if (status) query.status = status
++
++    const q = params.q?.trim()
++    if (q) query.q = q
++
++    return query
++}
++
++function toCreatePayload(payload: ExpenseCreatePayload): Record<string, unknown> {
++    return {
++        case_id: payload.case_id.trim(),
++        category: payload.category,
++        expense_date: payload.expense_date,
++        amount: payload.amount,
++        ...(payload.client_id?.trim() ? { client_id: payload.client_id.trim() } : {}),
++        ...(payload.expense_no?.trim() ? { expense_no: payload.expense_no.trim() } : {}),
++        ...(payload.vendor_name?.trim() ? { vendor_name: payload.vendor_name.trim() } : {}),
++        ...(payload.currency?.trim() ? { currency: payload.currency.trim().toUpperCase() } : {}),
++        ...(payload.tax_amount !== undefined ? { tax_amount: payload.tax_amount } : {}),
++        ...(payload.remark?.trim() ? { remark: payload.remark.trim() } : {}),
++    }
++}
++
++export function mapExpenseError(error: unknown, action: ExpenseApiAction): ExpenseApiError {
++    if (!isApiError(error)) {
++        return {
++            status: 0,
++            code: 'UNKNOWN_ERROR',
++            message: action === 'create'
++                ? '网络异常，支出录入失败，请稍后重试。'
++                : '网络异常，支出列表加载失败，请稍后重试。',
++            category: 'unknown',
++        }
++    }
++
++    const category = resolveExpenseErrorCategory(error.status)
++    const mapped: ExpenseApiError = {
++        status: error.status,
++        code: error.code,
++        message: resolveExpenseErrorMessage(error, action),
++        details: error.details,
++        requestId: error.requestId,
++        category,
++    }
++
++    if ((category === 'validation' || category === 'business') && error.details) {
++        const fieldErrors = mapFieldErrors(error.details)
++        if (fieldErrors.size > 0) {
++            mapped.field_errors = fieldErrors
++        }
++    }
++
++    return mapped
++}
++
++export async function getExpenses(params: ExpenseListParams = {}): Promise<ExpenseListResponse> {
++    try {
++        const response = await http.get<BackendExpenseListResponse>('/expenses', {
++            params: buildExpenseListQuery(params),
++        })
++
++        return {
++            items: response.data.items.map(mapExpenseItem),
++            page: response.data.page,
++            page_size: response.data.page_size,
++            total: response.data.total,
++            ...(response.data.stats ? { stats: mapExpenseStats(response.data.stats) } : {}),
++        }
++    } catch (error) {
++        throw mapExpenseError(error, 'list')
++    }
++}
++
++export async function createExpense(payload: ExpenseCreatePayload): Promise<ExpenseItem> {
++    try {
++        const response = await http.post<BackendExpenseItem>('/expenses', toCreatePayload(payload))
++        return mapExpenseItem(response.data)
++    } catch (error) {
++        throw mapExpenseError(error, 'create')
++    }
++}
+--- /dev/null	2026-02-28 23:00:59
++++ frontend/src/modules/expenses/pages/ExpenseList.vue	2026-02-28 22:59:57
+@@ -0,0 +1,353 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">支出列表</h1>
++        <span class="page-count">{{ total }} 条</span>
++      </div>
++      <div class="page-header-right">
++        <el-button type="primary" @click="goToCreate">
++          录入支出
++        </el-button>
++      </div>
++    </div>
++
++    <el-row :gutter="12" class="filter-row">
++      <el-col :xs="24" :sm="12" :md="7" :lg="6">
++        <el-input
++          v-model.trim="filterCaseId"
++          placeholder="案件/项目编号"
++          clearable
++          @keyup.enter="handleSearch"
++        />
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6" :lg="5">
++        <el-select
++          v-model="filterCategory"
++          class="full-width"
++          placeholder="支出类别"
++          clearable
++        >
++          <el-option
++            v-for="option in categoryOptions"
++            :key="option.value"
++            :label="option.label"
++            :value="option.value"
++          />
++        </el-select>
++      </el-col>
++      <el-col :xs="24" :sm="24" :md="8" :lg="7">
++        <el-date-picker
++          v-model="filterDateRange"
++          type="daterange"
++          class="full-width"
++          range-separator="至"
++          start-placeholder="开始日期"
++          end-placeholder="结束日期"
++          value-format="YYYY-MM-DD"
++          format="YYYY-MM-DD"
++          clearable
++        />
++      </el-col>
++      <el-col :xs="24" :sm="24" :md="3" :lg="6" class="filter-actions">
++        <el-button type="primary" @click="handleSearch">查询</el-button>
++        <el-button @click="handleReset">重置</el-button>
++      </el-col>
++    </el-row>
++
++    <div v-if="stats" class="stats-grid">
++      <div class="stat-card">
++        <div class="stat-label">总笔数</div>
++        <div class="stat-value">{{ stats.count_total }}</div>
++      </div>
++      <div class="stat-card">
++        <div class="stat-label">总金额</div>
++        <div class="stat-value mono-num">{{ formatAmount(stats.sum_total, 'CNY') }}</div>
++      </div>
++      <div
++        v-for="stat in categoryStats"
++        :key="stat.category"
++        class="stat-card"
++      >
++        <div class="stat-label">{{ stat.label }}</div>
++        <div class="stat-value">{{ stat.count }} 笔</div>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="8" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无支出记录"
++        message="请调整筛选条件，或先录入一条支出。"
++        icon="🧾"
++        cta-label="录入支出"
++        @cta="goToCreate"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table :data="expenses" stripe size="small" class="compact-table">
++        <el-table-column prop="expense_no" label="支出编号" min-width="180">
++          <template #default="{ row }">
++            <span class="mono-num">{{ row.expense_no || '—' }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="case_id" label="案件/项目" min-width="200">
++          <template #default="{ row }">
++            <span class="mono-num">{{ row.case_id || '—' }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="category" label="类别" width="140">
++          <template #default="{ row }">
++            <el-tag size="small" type="info">{{ getCategoryText(row.category) }}</el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="expense_date" label="支出日期" width="120">
++          <template #default="{ row }">
++            {{ formatDate(row.expense_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="金额" width="160" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ formatAmount(row.amount, row.currency) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="status" label="状态" width="120">
++          <template #default="{ row }">
++            <el-tag size="small" :type="getStatusTagType(row.status)">{{ getStatusText(row.status) }}</el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="remark" label="备注" min-width="180">
++          <template #default="{ row }">
++            {{ row.remark || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column label="创建时间" width="120">
++          <template #default="{ row }">
++            {{ formatDate(row.created_at) }}
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar
++        v-model:page="page"
++        v-model:page-size="pageSize"
++        :total="total"
++        :page-sizes="[10, 20, 50, 100]"
++      />
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref, watch } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import { getExpenses, mapExpenseError } from '../../../api/expenses'
++import type {
++  ExpenseApiError,
++  ExpenseCategory,
++  ExpenseItem,
++  ExpenseStats,
++} from '../../../api/expenses.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++
++interface CategoryOption {
++  label: string
++  value: ExpenseCategory
++}
++
++interface CategoryStatView {
++  category: string
++  label: string
++  count: number
++}
++
++const CATEGORY_TEXT: Record<string, string> = {
++  SEARCH_DB: '检索费',
++  TRANSLATION: '翻译费',
++  TRANSPORT: '交通费',
++  OTHER: '其他',
++}
++
++const STATUS_TEXT: Record<string, string> = {
++  DRAFT: '草稿',
++}
++
++const categoryOptions: CategoryOption[] = [
++  { label: '检索费', value: 'SEARCH_DB' },
++  { label: '翻译费', value: 'TRANSLATION' },
++  { label: '交通费', value: 'TRANSPORT' },
++  { label: '其他', value: 'OTHER' },
++]
++
++const router = useRouter()
++const route = useRoute()
++
++const expenses = ref<ExpenseItem[]>([])
++const loading = ref(false)
++const error = ref<ExpenseApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++const stats = ref<ExpenseStats | null>(null)
++
++const filterCaseId = ref(typeof route.query.case_id === 'string' ? route.query.case_id : '')
++const filterCategory = ref<ExpenseCategory | ''>('')
++const filterDateRange = ref<string[]>([])
++
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++const categoryStats = computed<CategoryStatView[]>(() => {
++  if (!stats.value) return []
++
++  return Object.entries(stats.value.count_by_category)
++    .map(([category, count]) => ({
++      category,
++      label: getCategoryText(category),
++      count,
++    }))
++    .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
++})
++
++function getCategoryText(category: string): string {
++  return CATEGORY_TEXT[category] || category
++}
++
++function getStatusText(status: string): string {
++  return STATUS_TEXT[status] || status
++}
++
++function getStatusTagType(status: string): 'info' | 'success' {
++  if (status === 'DRAFT') return 'info'
++  return 'success'
++}
++
++function formatDate(value?: string | null): string {
++  if (!value) return '—'
++  return value.slice(0, 10)
++}
++
++function formatAmount(amount: number, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(amount)
++}
++
++function handleSearch() {
++  if (page.value !== 1) {
++    page.value = 1
++    return
++  }
++  void fetchExpenses()
++}
++
++function handleReset() {
++  filterCaseId.value = ''
++  filterCategory.value = ''
++  filterDateRange.value = []
++  handleSearch()
++}
++
++function goToCreate() {
++  const query: Record<string, string> = {}
++  if (filterCaseId.value) {
++    query.case_id = filterCaseId.value
++  }
++  query.return_to = '/expenses'
++
++  void router.push({ path: '/expenses/new', query })
++}
++
++async function fetchExpenses() {
++  loading.value = true
++  error.value = null
++
++  try {
++    const [dateFrom, dateTo] = filterDateRange.value
++    const result = await getExpenses({
++      case_id: filterCaseId.value || undefined,
++      category: filterCategory.value || undefined,
++      date_from: dateFrom || undefined,
++      date_to: dateTo || undefined,
++      include_stats: true,
++      page: page.value,
++      page_size: pageSize.value,
++    })
++
++    expenses.value = result.items
++    total.value = result.total
++    stats.value = result.stats || null
++  } catch (err) {
++    error.value = mapExpenseError(err, 'list')
++  } finally {
++    loading.value = false
++  }
++}
++
++watch([page, pageSize], () => {
++  void fetchExpenses()
++})
++
++onMounted(() => {
++  void fetchExpenses()
++})
++</script>
++
++<style scoped>
++.filter-row {
++  margin-bottom: 16px;
++}
++
++.filter-actions {
++  display: flex;
++  gap: 8px;
++}
++
++.full-width {
++  width: 100%;
++}
++
++.stats-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
++  gap: 12px;
++  margin-bottom: 16px;
++}
++
++.stat-card {
++  border: 1px solid var(--border-default);
++  border-radius: 8px;
++  background: var(--surface-1);
++  padding: 12px;
++}
++
++.stat-label {
++  color: var(--text-sub);
++  font-size: 12px;
++}
++
++.stat-value {
++  margin-top: 6px;
++  font-size: 18px;
++  font-weight: 600;
++}
++
++.mono-num {
++  font-family: var(--font-mono);
++}
++
++@media (max-width: 768px) {
++  .filter-actions {
++    margin-top: 4px;
++  }
++}
++</style>
+--- /dev/null	2026-02-28 23:00:59
++++ frontend/src/modules/expenses/pages/ExpenseCreate.vue	2026-02-28 23:00:30
+@@ -0,0 +1,305 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <el-button text @click="goBack">
++          <span class="back-icon">←</span> 返回
++        </el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <div class="form-card">
++      <h2 class="form-card-title">录入支出</h2>
++
++      <el-form
++        ref="formRef"
++        :model="form"
++        :rules="rules"
++        label-position="top"
++        class="expense-form"
++      >
++        <el-row :gutter="16">
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="案件/项目编号"
++              prop="case_id"
++              :error="fieldErrors.get('case_id')?.join(', ')"
++            >
++              <el-input
++                v-model.trim="form.case_id"
++                placeholder="请输入案件或顾问项目编号"
++              />
++              <div class="field-hint">普通案件与顾问项目共用该编号字段。</div>
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="支出类别"
++              prop="category"
++              :error="fieldErrors.get('category')?.join(', ')"
++            >
++              <el-select v-model="form.category" class="full-width" placeholder="请选择支出类别">
++                <el-option
++                  v-for="option in categoryOptions"
++                  :key="option.value"
++                  :label="option.label"
++                  :value="option.value"
++                />
++              </el-select>
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-row :gutter="16">
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="支出日期"
++              prop="expense_date"
++              :error="fieldErrors.get('expense_date')?.join(', ')"
++            >
++              <el-date-picker
++                v-model="form.expense_date"
++                type="date"
++                class="full-width"
++                placeholder="请选择支出日期"
++                value-format="YYYY-MM-DD"
++                format="YYYY-MM-DD"
++              />
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="支出金额"
++              prop="amount"
++              :error="fieldErrors.get('amount')?.join(', ')"
++            >
++              <el-input-number
++                v-model="form.amount"
++                class="full-width"
++                :min="0.01"
++                :precision="2"
++                :step="100"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-row :gutter="16">
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="币种"
++              prop="currency"
++              :error="fieldErrors.get('currency')?.join(', ')"
++            >
++              <el-select v-model="form.currency" class="full-width" placeholder="请选择币种">
++                <el-option label="人民币（CNY）" value="CNY" />
++                <el-option label="美元（USD）" value="USD" />
++                <el-option label="欧元（EUR）" value="EUR" />
++              </el-select>
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="税额（可选）"
++              prop="tax_amount"
++              :error="fieldErrors.get('tax_amount')?.join(', ')"
++            >
++              <el-input-number
++                v-model="form.tax_amount"
++                class="full-width"
++                :min="0"
++                :precision="2"
++                :step="100"
++                placeholder="请输入税额"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-row :gutter="16">
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="支出编号（可选）"
++              prop="expense_no"
++              :error="fieldErrors.get('expense_no')?.join(', ')"
++            >
++              <el-input
++                v-model.trim="form.expense_no"
++                placeholder="留空则由系统自动生成"
++              />
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="供应商（可选）"
++              prop="vendor_name"
++              :error="fieldErrors.get('vendor_name')?.join(', ')"
++            >
++              <el-input
++                v-model.trim="form.vendor_name"
++                placeholder="请输入供应商名称"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-form-item
++          label="备注（可选）"
++          prop="remark"
++          :error="fieldErrors.get('remark')?.join(', ')"
++        >
++          <el-input
++            v-model="form.remark"
++            type="textarea"
++            :rows="3"
++            maxlength="500"
++            show-word-limit
++            placeholder="请输入备注"
++          />
++        </el-form-item>
++
++        <div class="form-actions">
++          <el-button @click="goBack">取消</el-button>
++          <el-button type="primary" :loading="saving" @click="handleSubmit">
++            保存支出
++          </el-button>
++        </div>
++      </el-form>
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { reactive, ref } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import { createExpense, mapExpenseError } from '../../../api/expenses'
++import type {
++  ExpenseApiError,
++  ExpenseCategory,
++} from '../../../api/expenses.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++interface CategoryOption {
++  label: string
++  value: ExpenseCategory
++}
++
++const categoryOptions: CategoryOption[] = [
++  { label: '检索费', value: 'SEARCH_DB' },
++  { label: '翻译费', value: 'TRANSLATION' },
++  { label: '交通费', value: 'TRANSPORT' },
++  { label: '其他', value: 'OTHER' },
++]
++
++const router = useRouter()
++const route = useRoute()
++
++const formRef = ref<FormInstance>()
++const saving = ref(false)
++const error = ref<ExpenseApiError | null>(null)
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++
++const form = reactive({
++  case_id: typeof route.query.case_id === 'string' ? route.query.case_id : '',
++  category: 'OTHER' as ExpenseCategory,
++  expense_date: new Date().toISOString().slice(0, 10),
++  amount: 0,
++  currency: 'CNY',
++  tax_amount: undefined as number | undefined,
++  expense_no: '',
++  vendor_name: '',
++  remark: '',
++})
++
++const rules: FormRules = {
++  case_id: [{ required: true, message: '案件/项目编号为必填项', trigger: 'blur' }],
++  category: [{ required: true, message: '支出类别为必填项', trigger: 'change' }],
++  expense_date: [{ required: true, message: '支出日期为必填项', trigger: 'change' }],
++  amount: [
++    { required: true, message: '支出金额为必填项', trigger: 'blur' },
++    { type: 'number', min: 0.01, message: '支出金额必须大于 0', trigger: 'blur' },
++  ],
++  currency: [{ required: true, message: '币种为必填项', trigger: 'change' }],
++}
++
++function goBack() {
++  const returnTo = typeof route.query.return_to === 'string' ? route.query.return_to : ''
++
++  if (returnTo) {
++    void router.push(returnTo)
++    return
++  }
++
++  if (window.history.length > 1) {
++    router.back()
++    return
++  }
++
++  void router.push('/dashboard')
++}
++
++async function handleSubmit() {
++  fieldErrors.value = new Map()
++  error.value = null
++
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++
++  try {
++    const created = await createExpense({
++      case_id: form.case_id,
++      category: form.category,
++      expense_date: form.expense_date,
++      amount: form.amount,
++      currency: form.currency,
++      ...(form.tax_amount !== undefined ? { tax_amount: form.tax_amount } : {}),
++      ...(form.expense_no ? { expense_no: form.expense_no } : {}),
++      ...(form.vendor_name ? { vendor_name: form.vendor_name } : {}),
++      ...(form.remark ? { remark: form.remark } : {}),
++    })
++
++    ElMessage.success(`支出录入成功${created.expense_no ? `（${created.expense_no}）` : ''}`)
++    goBack()
++  } catch (err) {
++    const apiError = mapExpenseError(err, 'create')
++    error.value = apiError
++    fieldErrors.value = apiError.field_errors || new Map()
++  } finally {
++    saving.value = false
++  }
++}
++</script>
++
++<style scoped>
++.form-card-title {
++  margin: 0 0 24px 0;
++  font-size: 20px;
++  font-weight: 600;
++}
++
++.expense-form {
++  max-width: 760px;
++}
++
++.full-width {
++  width: 100%;
++}
++
++.field-hint {
++  margin-top: 6px;
++  color: var(--text-sub);
++  font-size: 12px;
++}
++</style>

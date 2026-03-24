@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+  File "/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/cases/service.py", line 27, in validate_applicants
+    raise_business_error(
+  File "/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/core/errors.py", line 40, in raise_business_error
+    raise BusinessError(
+app.core.errors.BusinessError: Exactly one applicant must be marked as first
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<stdin>", line 9, in <module>
+AssertionError

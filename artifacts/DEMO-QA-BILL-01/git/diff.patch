@@ -1,0 +1,126 @@
+diff --git a/artifacts/DEMO-QA-BILL-01/summary.md b/artifacts/DEMO-QA-BILL-01/summary.md
+new file mode 100644
+index 0000000..ecc775e
+--- /dev/null
++++ b/artifacts/DEMO-QA-BILL-01/summary.md
+@@ -0,0 +1,102 @@
++# DEMO-QA-BILL-01 证据摘要
++
++## 任务范围
++
++本任务仅做 QA 验证与证据归档，不修改产品代码。验证对象是 bill-from-draft demo 链路中的三类问题：
++
++- 账单创建页不应再要求演示员手工输入 UUID
++- 费用草稿列表不应再以 UUID 作为主展示
++- 账单详情关系链应显示可读的费用草稿关联
++
++## 已执行检查
++
++### 1. 门禁检查
++
++通过 `lint` 证据步骤执行：
++
++```bash
++cd backend && ruff check app/modules/billing/api.py app/modules/billing/schemas.py
++cd frontend && npm run lint && npm run typecheck && npm run build
++```
++
++结果：
++
++- backend `ruff check` 通过
++- `npm run lint` 通过
++- `npm run typecheck` 通过
++- `npm run build` 通过
++
++说明：
++
++- billing detail enriched contract 的前后端对接没有引入静态检查回归
++- bill create / fee draft list / bill detail 三个页面在当前集成状态下可正常构建
++
++### 2. bill-from-draft smoke
++
++通过 `test` 证据步骤使用 `TestClient` 验证：
++
++- 登录 `admin / admin123`
++- 新建客户：`苏州星桥知识产权代理有限公司`
++- 新建案件：`ZY-BILL-D4E1324F`
++- 新建费率：`授权登记费`
++- 新建费用草稿并添加一条费用明细
++- 锁定费用草稿
++- 从该草稿生成账单
++- 拉取账单详情并校验 enriched 字段
++- 对不存在账单执行 `GET /api/v1/bills/{id}`
++- 对前端源码做页面级断言
++
++结果：
++
++- `POST /api/v1/auth/login` -> `200`
++- `POST /api/v1/clients` -> `201`
++- `POST /api/v1/cases` -> `201`
++- `POST /api/v1/fees/rates` -> `201`
++- `POST /api/v1/fees/drafts` -> `201`
++- `POST /api/v1/fees/drafts/{draft_id}/items` -> `201`
++- `POST /api/v1/fees/drafts/{draft_id}/lock` -> `200`
++- `POST /api/v1/bills/from-drafts` -> `201`
++- `GET /api/v1/bills/{bill_id}` -> `200`
++- `GET /api/v1/bills/{missing_id}` -> `404`
++
++关键返回值验证：
++
++- `client_name = 苏州星桥知识产权代理有限公司`
++- `case_no = ZY-BILL-D4E1324F`
++- `primary_draft_id = <draft_id>`
++- `primary_draft_label = GRANT_FEE-9874B2B6`
++- `source_draft_ids = [<draft_id>]`
++- `items[0].draft_id = <draft_id>`
++- `items[0].description = 授权登记费`
++
++### 3. 页面源码断言
++
++已验证以下页面包含本轮 demo 关键改动：
++
++- [BillCreate.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/billing/pages/BillCreate.vue)
++  - 包含“请选择已锁定且可开票的费用草稿”
++  - 使用 `availableDraftOptions`
++- [FeeDraftList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/fees/pages/FeeDraftList.vue)
++  - 使用 `getDraftDisplayId`
++- [BillDetail.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/billing/pages/BillDetail.vue)
++  - 向 `RelationChainCard` 传递 `fee-draft`
++  - 消费 `primary_draft_label`
++
++## 关键结论
++
++- 有效的“锁定草稿 + 明细存在”链路下，`POST /api/v1/bills/from-drafts` 可正常返回 `201`
++- 账单详情接口已经具备可读的客户、案件、费用草稿展示字段
++- 费用草稿列表和账单详情页都已从“UUID 主展示”收口为“业务标识主展示”
++- 这条 demo 路径已不再要求演示员手工输入 UUID 才能继续
++
++## 残余观察
++
++- 本次 smoke 使用的是“已有费用明细”的锁定草稿成功路径
++- “无明细草稿”的业务错误语义仍在后端保留；当前 demo 路径已通过前端筛选减少触发概率
++
++## 证据文件
++
++- `artifacts/DEMO-QA-BILL-01/results.jsonl`
++- `artifacts/DEMO-QA-BILL-01/commands.jsonl`
++- `artifacts/DEMO-QA-BILL-01/git/diff.patch`
++- `artifacts/DEMO-QA-BILL-01/outputs/*`
+diff --git a/artifacts/DEMO-QA-BILL-01/commands.jsonl b/artifacts/DEMO-QA-BILL-01/commands.jsonl
+new file mode 100644
+index 0000000..bb1e4cc
+--- /dev/null
++++ b/artifacts/DEMO-QA-BILL-01/commands.jsonl
+@@ -0,0 +1,3 @@
++{"ts":"20260308T154002","step":"lint","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/billing/api.py\ app/modules/billing/schemas.py\ \&\&\ cd\ ../frontend\ \&\&\ npm\ run\ lint\ \&\&\ npm\ run\ typecheck\ \&\&\ npm\ run\ build"}
++{"ts":"20260308T154030","step":"test","cmd":"/bin/zsh -lc $'cd backend && PYTHONPATH=. python3 - <<"PY"\nfrom uuid import uuid4\nfrom fastapi.testclient import TestClient\nfrom app.main import app\n\nclient = TestClient(app)\nlogin = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin123"})\nassert login.status_code == 200, login.text\ntoken = login.json()["access_token"]\nheaders = {"Authorization": f"Bearer {token}"}\n\nclient_resp = client.post(\n    "/api/v1/clients",\n    json={\n        "client_code": f"QA-BILL-{uuid4().hex[:8].upper()}",\n        "name_cn": "�\213\217�\236�\230\237桥�\237��\206产�\235\203代�\220\206�\234\211�\231\220�\205��\217�",\n        "default_currency": "CNY"\n    },\n    headers=headers,\n)\nassert client_resp.status_code == 201, client_resp.text\nclient_id = client_resp.json()["id"]\n\ncase_no = f"ZY-BILL-{uuid4().hex[:8].upper()}"\ncase_resp = client.post(\n    "/api/v1/cases",\n    json={\n        "case_no": case_no,\n        "case_type": "NORMAL",\n        "patent_category": "INV",\n        "flow_dir": "CN_DOMESTIC",\n        "client_id": client_id,\n        "title_cn": "�\212\230�\217��\217移�\212��\224��\220�\223�\236\204"\n    },\n    headers=headers,\n)\nassert case_resp.status_code == 201, case_resp.text\ncase_id = case_resp.json()["id"]\n\nrate_resp = client.post(\n    "/api/v1/fee-rates",\n    json={\n        "fee_code": f"QA_RATE_{uuid4().hex[:6].upper()}",\n        "fee_name": "�\216\210�\235\203�\231�记费",\n        "fee_type": "GOV",\n        "currency": "CNY",\n        "default_amount": "500.00"\n    },\n    headers=headers,\n)\nassert rate_resp.status_code == 201, rate_resp.text\nrate_id = rate_resp.json()["id"]\n\ndraft_resp = client.post(\n    "/api/v1/fees/drafts",\n    json={\n        "case_id": case_id,\n        "client_id": client_id,\n        "draft_type": "GRANT_FEE",\n        "currency": "CNY"\n    },\n    headers=headers,\n)\nassert draft_resp.status_code == 201, draft_resp.text\ndraft_id = draft_resp.json()["id"]\n\nitem_resp = client.post(\n    f"/api/v1/fees/drafts/{draft_id}/items",\n    json={"rate_id": rate_id, "quantity": 1, "unit_price": "500.00"},\n    headers=headers,\n)\nassert item_resp.status_code == 201, item_resp.text\n\nlock_resp = client.post(f"/api/v1/fees/drafts/{draft_id}/lock", headers=headers)\nassert lock_resp.status_code == 200, lock_resp.text\n\nbill_no = f"BILL-{uuid4().hex[:8].upper()}"\nbill_create = client.post(\n    "/api/v1/bills/from-drafts",\n    json={"draft_ids": [draft_id], "bill_no": bill_no},\n    headers=headers,\n)\nassert bill_create.status_code == 201, bill_create.text\nbill_id = bill_create.json()["id"]\n\nbill_detail = client.get(f"/api/v1/bills/{bill_id}", headers=headers)\nassert bill_detail.status_code == 200, bill_detail.text\nbody = bill_detail.json()\nassert body["client_name"] == "�\213\217�\236�\230\237桥�\237��\206产�\235\203代�\220\206�\234\211�\231\220�\205��\217�", body\nassert body["case_no"] == case_no, body\nassert body["primary_draft_id"] == draft_id, body\nassert body["primary_draft_label"].startswith("GRANT_FEE-"), body\nassert body["source_draft_ids"] == [draft_id], body\nassert len(body["items"]) == 1, body\nassert body["items"][0]["draft_id"] == draft_id, body\nassert body["items"][0]["description"] == "�\216\210�\235\203�\231�记费", body\n\nmissing = client.get(f"/api/v1/bills/{uuid4()}", headers=headers)\nassert missing.status_code == 404, missing.text\n\nwith open("../frontend/src/modules/billing/pages/BillCreate.vue", "r", encoding="utf-8") as fh:\n    bill_create_vue = fh.read()\nwith open("../frontend/src/modules/fees/pages/FeeDraftList.vue", "r", encoding="utf-8") as fh:\n    fee_list_vue = fh.read()\nwith open("../frontend/src/modules/billing/pages/BillDetail.vue", "r", encoding="utf-8") as fh:\n    bill_detail_vue = fh.read()\n\nassert "请�\200\211�\213�已�\224\201�\232�\224�\217��\200票�\232\204费�\224��\215\211稿" in bill_create_vue\nassert "availableDraftOptions" in bill_create_vue\nassert "getDraftDisplayId" in fee_list_vue\nassert "fee-draft" in bill_detail_vue\nassert "primary_draft_label" in bill_detail_vue\n\nprint({\n    "login": login.status_code,\n    "create_bill": bill_create.status_code,\n    "bill_detail": bill_detail.status_code,\n    "missing_bill": missing.status_code,\n    "bill_id": bill_id,\n    "draft_label": body["primary_draft_label"],\n    "case_no": body["case_no"],\n    "client_name": body["client_name"],\n})\nPY'"}
++{"ts":"20260308T154115","step":"test","cmd":"/bin/zsh -lc $'cd backend && PYTHONPATH=. python3 - <<"PY"\nfrom uuid import uuid4\nfrom fastapi.testclient import TestClient\nfrom app.main import app\n\nclient = TestClient(app)\nlogin = client.post("/api/v1/auth/login", json={"username": "admin", "password": "admin123"})\nassert login.status_code == 200, login.text\ntoken = login.json()["access_token"]\nheaders = {"Authorization": f"Bearer {token}"}\n\nclient_resp = client.post(\n    "/api/v1/clients",\n    json={\n        "client_code": f"QA-BILL-{uuid4().hex[:8].upper()}",\n        "name_cn": "�\213\217�\236�\230\237桥�\237��\206产�\235\203代�\220\206�\234\211�\231\220�\205��\217�",\n        "default_currency": "CNY"\n    },\n    headers=headers,\n)\nassert client_resp.status_code == 201, client_resp.text\nclient_id = client_resp.json()["id"]\n\ncase_no = f"ZY-BILL-{uuid4().hex[:8].upper()}"\ncase_resp = client.post(\n    "/api/v1/cases",\n    json={\n        "case_no": case_no,\n        "case_type": "NORMAL",\n        "patent_category": "INV",\n        "flow_dir": "CN_DOMESTIC",\n        "client_id": client_id,\n        "title_cn": "�\212\230�\217��\217移�\212��\224��\220�\223�\236\204"\n    },\n    headers=headers,\n)\nassert case_resp.status_code == 201, case_resp.text\ncase_id = case_resp.json()["id"]\n\nrate_resp = client.post(\n    "/api/v1/fees/rates",\n    json={\n        "fee_code": f"QA_RATE_{uuid4().hex[:6].upper()}",\n        "fee_name": "�\216\210�\235\203�\231�记费",\n        "fee_type": "GOV",\n        "currency": "CNY",\n        "default_amount": "500.00"\n    },\n    headers=headers,\n)\nassert rate_resp.status_code == 201, rate_resp.text\nrate_id = rate_resp.json()["id"]\n\ndraft_resp = client.post(\n    "/api/v1/fees/drafts",\n    json={\n        "case_id": case_id,\n        "client_id": client_id,\n        "draft_type": "GRANT_FEE",\n        "currency": "CNY"\n    },\n    headers=headers,\n)\nassert draft_resp.status_code == 201, draft_resp.text\ndraft_id = draft_resp.json()["id"]\n\nitem_resp = client.post(\n    f"/api/v1/fees/drafts/{draft_id}/items",\n    json={"rate_id": rate_id, "quantity": 1, "unit_price": "500.00"},\n    headers=headers,\n)\nassert item_resp.status_code == 201, item_resp.text\n\nlock_resp = client.post(f"/api/v1/fees/drafts/{draft_id}/lock", headers=headers)\nassert lock_resp.status_code == 200, lock_resp.text\n\nbill_no = f"BILL-{uuid4().hex[:8].upper()}"\nbill_create = client.post(\n    "/api/v1/bills/from-drafts",\n    json={"draft_ids": [draft_id], "bill_no": bill_no},\n    headers=headers,\n)\nassert bill_create.status_code == 201, bill_create.text\nbill_id = bill_create.json()["id"]\n\nbill_detail = client.get(f"/api/v1/bills/{bill_id}", headers=headers)\nassert bill_detail.status_code == 200, bill_detail.text\nbody = bill_detail.json()\nassert body["client_name"] == "�\213\217�\236�\230\237桥�\237��\206产�\235\203代�\220\206�\234\211�\231\220�\205��\217�", body\nassert body["case_no"] == case_no, body\nassert body["primary_draft_id"] == draft_id, body\nassert body["primary_draft_label"].startswith("GRANT_FEE-"), body\nassert body["source_draft_ids"] == [draft_id], body\nassert len(body["items"]) == 1, body\nassert body["items"][0]["draft_id"] == draft_id, body\nassert body["items"][0]["description"] == "�\216\210�\235\203�\231�记费", body\n\nmissing = client.get(f"/api/v1/bills/{uuid4()}", headers=headers)\nassert missing.status_code == 404, missing.text\n\nwith open("../frontend/src/modules/billing/pages/BillCreate.vue", "r", encoding="utf-8") as fh:\n    bill_create_vue = fh.read()\nwith open("../frontend/src/modules/fees/pages/FeeDraftList.vue", "r", encoding="utf-8") as fh:\n    fee_list_vue = fh.read()\nwith open("../frontend/src/modules/billing/pages/BillDetail.vue", "r", encoding="utf-8") as fh:\n    bill_detail_vue = fh.read()\n\nassert "请�\200\211�\213�已�\224\201�\232�\224�\217��\200票�\232\204费�\224��\215\211稿" in bill_create_vue\nassert "availableDraftOptions" in bill_create_vue\nassert "getDraftDisplayId" in fee_list_vue\nassert ":fee-draft=" in bill_detail_vue\nassert "primary_draft_label" in bill_detail_vue\n\nprint({\n    "login": login.status_code,\n    "create_bill": bill_create.status_code,\n    "bill_detail": bill_detail.status_code,\n    "missing_bill": missing.status_code,\n    "bill_id": bill_id,\n    "draft_label": body["primary_draft_label"],\n    "case_no": body["case_no"],\n    "client_name": body["client_name"],\n})\nPY'"}
+diff --git a/artifacts/DEMO-QA-BILL-01/results.jsonl b/artifacts/DEMO-QA-BILL-01/results.jsonl
+new file mode 100644
+index 0000000..8f46c28
+--- /dev/null
++++ b/artifacts/DEMO-QA-BILL-01/results.jsonl
+@@ -0,0 +1,3 @@
++{"ts":"20260308T154002","step":"lint","rc":0,"log":"artifacts/DEMO-QA-BILL-01/outputs/20260308T154002_lint.log"}
++{"ts":"20260308T154030","step":"test","rc":1,"log":"artifacts/DEMO-QA-BILL-01/outputs/20260308T154030_test.log"}
++{"ts":"20260308T154115","step":"test","rc":0,"log":"artifacts/DEMO-QA-BILL-01/outputs/20260308T154115_test.log"}

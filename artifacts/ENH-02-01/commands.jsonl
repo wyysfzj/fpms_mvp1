@@ -1,0 +1,6 @@
+{"ts":"20260118T214350","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/cases/enums.py"}
+{"ts":"20260118T214355","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/cases/enums.py"}
+{"ts":"20260118T214400","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python\ -m\ py_compile\ app/modules/cases/enums.py"}
+{"ts":"20260118T214410","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/cases/enums.py"}
+{"ts":"20260118T214417","step":"quick","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -c\ \"from\ app.modules.cases.enums\ import\ CaseType\,\ FlowDir\,\ PatentCategory\,\ CaseStatus\\nassert\ CaseType.NORMAL\ ==\ \'NORMAL\'\\nassert\ PatentCategory.INV\ ==\ \'INV\'\\nprint\(\'Enums\ OK\'\)\""}
+{"ts":"20260118T214431","step":"quick","cmd":"bash -lc $'cd backend && python3 - <<\'PY\'\nfrom app.modules.cases.enums import CaseType, FlowDir, PatentCategory, CaseStatus\nassert CaseType.NORMAL == "NORMAL"\nassert PatentCategory.INV == "INV"\nprint("Enums OK")\nPY'"}

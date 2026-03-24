@@ -1,0 +1,481 @@
+diff --git a/backend/app/modules/billing/api.py b/backend/app/modules/billing/api.py
+index 8fc9d63..e21d7fe 100644
+--- a/backend/app/modules/billing/api.py
++++ b/backend/app/modules/billing/api.py
+@@ -15,8 +15,11 @@ from app.models.system_param import SystemParam
+ from app.modules.billing.doc_render_bill_context import BillContextBuilder
+ from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
+ from app.modules.billing.schemas import (
++    BillDetailResponse,
+     BillFromDraftsRequest,
++    BillItemDetailResponse,
+     BillResponse,
++    CaseReceiptResponse,
+     OffsetCreateSchema,
+     OffsetResponse,
+     PaymentResponse,
+@@ -32,11 +35,23 @@ from app.modules.billing.service import (
+ from app.modules.billing.service import (
+     reverse_offset as reverse_offset_service,
+ )
++from app.modules.cases.models import Case
++from app.modules.fees.models import FeeDraft
+ from app.modules.masterdata.clients.models import Client
+ 
+ router = APIRouter()
+ 
+ 
++def _get_client_display_name(client: Client | None) -> str | None:
++    if not client:
++        return None
++    return client.name_cn or client.name_en
++
++
++def _build_draft_display_label(draft: FeeDraft) -> str:
++    return f"{draft.draft_type}-{draft.id[:8].upper()}"
++
++
+ @router.get("/bills", summary="List bills")
+ def get_bills(
+     page: int = Query(default=1, ge=1),
+@@ -526,12 +541,12 @@ def create_manual_bill(
+     }
+ 
+ 
+-@router.get("/bills/{bill_id}", summary="Get a bill")
++@router.get("/bills/{bill_id}", response_model=BillDetailResponse, summary="Get a bill")
+ def get_bill(
+     bill_id: str,
+     _perm: None = Depends(require_perm("Bill.Read")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
++) -> BillDetailResponse:
+     """
+     Get a bill by ID.
+ 
+@@ -559,22 +574,87 @@ def get_bill(
+             status_code=status.HTTP_404_NOT_FOUND,
+         )
+ 
+-    return {
+-        "id": bill.id,
+-        "bill_no": bill.bill_no,
+-        "client_id": bill.client_id,
+-        "currency": bill.currency,
+-        "direction": bill.direction,
+-        "status": bill.status,
+-    }
++    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill_id).order_by(BillItem.created_at.asc()).all()
++    client = db.query(Client).filter(Client.id == bill.client_id).first()
++
++    case_ids = [item.case_id for item in bill_items if item.case_id]
++    unique_case_ids = list(dict.fromkeys(case_ids))
++    case_map: dict[str, Case] = {}
++    if unique_case_ids:
++        cases = db.query(Case).filter(Case.id.in_(unique_case_ids)).all()
++        case_map = {case.id: case for case in cases}
++
++    draft_ids = [item.draft_id for item in bill_items if item.draft_id]
++    unique_draft_ids = list(dict.fromkeys(draft_ids))
++    draft_map: dict[str, FeeDraft] = {}
++    if unique_draft_ids:
++        drafts = db.query(FeeDraft).filter(FeeDraft.id.in_(unique_draft_ids)).all()
++        draft_map = {draft.id: draft for draft in drafts}
++
++    primary_case_id = unique_case_ids[0] if len(unique_case_ids) == 1 else None
++    primary_case = case_map.get(primary_case_id) if primary_case_id else None
++
++    source_draft_labels = [
++        _build_draft_display_label(draft_map[draft_id])
++        for draft_id in unique_draft_ids
++        if draft_id in draft_map
++    ]
++    primary_draft_id = unique_draft_ids[0] if unique_draft_ids else None
++    primary_draft = draft_map.get(primary_draft_id) if primary_draft_id else None
+ 
++    items = [
++        BillItemDetailResponse(
++            id=item.id,
++            bill_id=item.bill_id,
++            case_id=item.case_id,
++            draft_id=item.draft_id,
++            fee_code=item.fee_code,
++            fee_name=item.fee_name,
++            fee_type=item.fee_type,
++            year_no=item.year_no,
++            description=item.fee_name or item.fee_code or "账单明细",
++            quantity=1,
++            unit_price=item.amount,
++            amount=item.amount,
++        )
++        for item in bill_items
++    ]
+ 
+-@router.get("/cases/{case_id}/receipts", summary="Get case receipt")
++    return BillDetailResponse(
++        id=bill.id,
++        bill_no=bill.bill_no,
++        client_id=bill.client_id,
++        client_name=_get_client_display_name(client),
++        case_id=primary_case.id if primary_case else None,
++        case_no=primary_case.case_no if primary_case else None,
++        currency=bill.currency,
++        direction=bill.direction,
++        status=bill.status,
++        total_gov=bill.total_gov,
++        total_service=bill.total_service,
++        total_misc=bill.total_misc,
++        amount=bill.amount,
++        balance=bill.balance,
++        bill_date=bill.bill_date,
++        due_date=bill.due_date,
++        items=items,
++        source_draft_ids=unique_draft_ids,
++        source_draft_labels=source_draft_labels,
++        primary_draft_id=primary_draft.id if primary_draft else None,
++        primary_draft_label=_build_draft_display_label(primary_draft) if primary_draft else None,
++    )
++
++
++@router.get(
++    "/cases/{case_id}/receipts",
++    response_model=CaseReceiptResponse,
++    summary="Get case receipt",
++)
+ def get_case_receipt(
+     case_id: str,
+     _perm: None = Depends(require_perm("CaseReceipt.Read")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
++) -> CaseReceiptResponse:
+     """
+     Get the case receipt summary.
+ 
+@@ -602,17 +682,49 @@ def get_case_receipt(
+             status_code=status.HTTP_404_NOT_FOUND,
+         )
+ 
+-    return {
+-        "id": receipt.id,
+-        "case_id": receipt.case_id,
+-        "fee_type": receipt.fee_type,
+-        "currency": receipt.currency,
+-        "receivable_amt": receipt.receivable_amt,
+-        "received_amt": receipt.received_amt,
+-        "last_receipt_date": receipt.last_receipt_date,
+-        "fee_code": receipt.fee_code,
+-        "year_no": receipt.year_no,
+-        "is_arrears": receipt.is_arrears,
+-        "invoice_no": receipt.invoice_no,
+-        "is_commissionable": receipt.is_commissionable,
+-    }
++    bill_rows = (
++        db.query(
++            Bill.id,
++            Bill.bill_no,
++            Bill.status,
++            Bill.amount,
++            Bill.balance,
++            Bill.bill_date,
++        )
++        .join(BillItem, BillItem.bill_id == Bill.id)
++        .filter(BillItem.case_id == case_id)
++        .order_by(Bill.bill_date.desc(), Bill.created_at.desc(), Bill.id.desc())
++        .all()
++    )
++    seen_bill_ids: set[str] = set()
++    bill_overview_rows: list[dict[str, Any]] = []
++    for row in bill_rows:
++        if row.id in seen_bill_ids:
++            continue
++        seen_bill_ids.add(row.id)
++        bill_overview_rows.append(
++            {
++                "id": row.id,
++                "bill_no": row.bill_no,
++                "status": row.status,
++                "amount": row.amount,
++                "balance": row.balance,
++                "issue_date": row.bill_date,
++            }
++        )
++
++    return CaseReceiptResponse(
++        id=receipt.id,
++        case_id=receipt.case_id,
++        fee_type=receipt.fee_type,
++        currency=receipt.currency,
++        receivable_amt=receipt.receivable_amt,
++        received_amt=receipt.received_amt,
++        last_receipt_date=receipt.last_receipt_date,
++        fee_code=receipt.fee_code,
++        year_no=receipt.year_no,
++        is_arrears=receipt.is_arrears,
++        invoice_no=receipt.invoice_no,
++        is_commissionable=receipt.is_commissionable,
++        bills=bill_overview_rows,
++    )
+diff --git a/backend/app/modules/billing/schemas.py b/backend/app/modules/billing/schemas.py
+index 8e48341..8451d55 100644
+--- a/backend/app/modules/billing/schemas.py
++++ b/backend/app/modules/billing/schemas.py
+@@ -55,6 +55,49 @@ class BillResponse(BaseModel):
+     status: str
+ 
+ 
++class BillItemDetailResponse(BaseModel):
++    """Response schema for bill detail items."""
++
++    id: str
++    bill_id: str
++    case_id: str | None = None
++    draft_id: str | None = None
++    fee_code: str | None = None
++    fee_name: str | None = None
++    fee_type: str | None = None
++    year_no: int | None = None
++    description: str
++    quantity: Decimal = Field(Decimal("1"), ge=0)
++    unit_price: Decimal = Field(Decimal("0"), ge=0)
++    amount: Decimal = Field(Decimal("0"), ge=0)
++
++
++class BillDetailResponse(BaseModel):
++    """Enriched bill detail response schema."""
++
++    id: str
++    bill_no: str | None = None
++    client_id: str
++    client_name: str | None = None
++    case_id: str | None = None
++    case_no: str | None = None
++    currency: str
++    direction: str
++    status: str
++    total_gov: Decimal = Field(Decimal("0"), ge=0)
++    total_service: Decimal = Field(Decimal("0"), ge=0)
++    total_misc: Decimal = Field(Decimal("0"), ge=0)
++    amount: Decimal = Field(Decimal("0"), ge=0)
++    balance: Decimal = Field(Decimal("0"), ge=0)
++    bill_date: date | None = None
++    due_date: date | None = None
++    items: list[BillItemDetailResponse] = []
++    source_draft_ids: list[str] = []
++    source_draft_labels: list[str] = []
++    primary_draft_id: str | None = None
++    primary_draft_label: str | None = None
++
++
+ class PaymentSchema(BaseModel):
+     """Schema for recording payments."""
+ 
+@@ -112,6 +155,18 @@ class CaseReceiptResponse(BaseModel):
+     is_arrears: bool | None = None
+     invoice_no: str | None = None
+     is_commissionable: bool | None = None
++    bills: list["CaseReceiptBillResponse"] = []
++
++
++class CaseReceiptBillResponse(BaseModel):
++    """Bill overview row under case receipt summary."""
++
++    id: str
++    bill_no: str | None = None
++    status: str
++    amount: Decimal = Field(Decimal("0"), ge=0)
++    balance: Decimal = Field(Decimal("0"), ge=0)
++    issue_date: date | None = None
+ 
+ 
+ class BillStatusSchema(BaseModel):
+diff --git a/backend/tests/test_annuity_e2e.py b/backend/tests/test_annuity_e2e.py
+index 50b8597..ceea73b 100644
+--- a/backend/tests/test_annuity_e2e.py
++++ b/backend/tests/test_annuity_e2e.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from datetime import date
++from decimal import Decimal
+ from uuid import uuid4
+ 
+ from fastapi.testclient import TestClient
+@@ -8,7 +9,10 @@ from sqlalchemy import select
+ from sqlalchemy.orm import sessionmaker
+ 
+ from app.modules.annuity.models import AnnuityTask
+-from app.modules.fees.models import FeeItem
++from app.modules.billing.models import Bill, BillItem, CaseReceipt
++from app.modules.cases.models import Case
++from app.modules.fees.models import FeeItem, FeeRate
++from app.modules.fees.service import calculate_fee_amount
+ 
+ 
+ def _uid(prefix: str) -> str:
+@@ -337,3 +341,166 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
+         json={"task_ids": []},
+     )
+     _assert_error(validation_resp, 422, "VALIDATION_ERROR")
++
++
++def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:
++    rate = FeeRate(
++        fee_code=_uid("RATE"),
++        fee_name="PER CLAIM RATE",
++        fee_type="SERVICE",
++        currency="CNY",
++        default_amount=Decimal("100.00"),
++        calc_mode="PER_CLAIM",
++        calc_params='{"per_claim_amount":"50","discount_pct":"10","reduction_pct":"20"}',
++        allow_reduction=True,
++    )
++    case = Case(
++        case_no=_uid("CASE"),
++        case_type="NORMAL",
++        patent_category="INV",
++        flow_dir="CN_DOMESTIC",
++        claim_count=3,
++    )
++
++    amount = calculate_fee_amount(rate, case)
++
++    # 50 * 3 = 150; reduction 20% => 120; discount 10% => 108
++    assert amount == Decimal("108.00")
++
++
++def test_case_receipt_endpoint_returns_batch3_receipt_fields(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++
++    with session_factory() as db:
++        receipt = CaseReceipt(
++            case_id=case_id,
++            fee_type="SERVICE",
++            currency="CNY",
++            receivable_amt=Decimal("500.00"),
++            received_amt=Decimal("300.00"),
++            last_receipt_date=date(2026, 4, 1),
++            fee_code="ANN-SERVICE",
++            year_no=2,
++            is_arrears=True,
++            invoice_no=_uid("INV"),
++            is_commissionable=True,
++        )
++        db.add(receipt)
++        db.commit()
++
++    resp = client.get(f"/api/v1/cases/{case_id}/receipts", headers=auth_headers)
++    assert resp.status_code == 200, resp.text
++    payload = resp.json()
++    assert payload["case_id"] == case_id
++    assert payload["currency"] == "CNY"
++    assert payload["receivable_amt"] == "500.00"
++    assert payload["received_amt"] == "300.00"
++    assert payload["fee_code"] == "ANN-SERVICE"
++    assert payload["year_no"] == 2
++    assert payload["is_arrears"] is True
++    assert payload["invoice_no"].startswith("INV-")
++    assert payload["is_commissionable"] is True
++
++
++def test_case_receipt_endpoint_includes_bills_overview_list(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++
++    with session_factory() as db:
++        receipt = CaseReceipt(
++            case_id=case_id,
++            fee_type="SERVICE",
++            currency="CNY",
++            receivable_amt=Decimal("200.00"),
++            received_amt=Decimal("80.00"),
++            last_receipt_date=date(2026, 5, 1),
++            fee_code="ANN-SERVICE",
++            year_no=1,
++            is_arrears=True,
++            invoice_no=_uid("INV"),
++            is_commissionable=False,
++        )
++        db.add(receipt)
++
++        bill = Bill(
++            bill_no=_uid("BILL"),
++            client_id=client_id,
++            currency="CNY",
++            direction="AR",
++            status="UNSETTLED",
++            bill_date=date(2026, 5, 2),
++            total_service=Decimal("200.00"),
++            amount=Decimal("200.00"),
++            balance=Decimal("120.00"),
++        )
++        db.add(bill)
++        db.flush()
++
++        # same bill has two lines for this case; receipt overview should deduplicate bills
++        db.add_all(
++            [
++                BillItem(
++                    bill_id=bill.id,
++                    case_id=case_id,
++                    fee_code="ANN-SVC-A",
++                    fee_name="Service A",
++                    fee_type="SERVICE",
++                    amount=Decimal("120.00"),
++                ),
++                BillItem(
++                    bill_id=bill.id,
++                    case_id=case_id,
++                    fee_code="ANN-SVC-B",
++                    fee_name="Service B",
++                    fee_type="SERVICE",
++                    amount=Decimal("80.00"),
++                ),
++            ]
++        )
++        db.commit()
++
++    resp = client.get(f"/api/v1/cases/{case_id}/receipts", headers=auth_headers)
++    assert resp.status_code == 200, resp.text
++    payload = resp.json()
++
++    assert "bills" in payload
++    assert len(payload["bills"]) == 1
++    assert payload["bills"][0]["bill_no"].startswith("BILL-")
++    assert payload["bills"][0]["status"] == "UNSETTLED"
++    assert payload["bills"][0]["amount"] == "200.00"
++    assert payload["bills"][0]["balance"] == "120.00"
++
++
++def test_annuity_generate_drafts_normalizes_currency_case(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++    task_id = _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=1,
++        due_date=date(2026, 6, 1),
++    )
++    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
++
++    resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [task_id], "pay_next_year": False, "currency": "cny"},
++    )
++    assert resp.status_code == 200, resp.text
++    payload = resp.json()
++    assert payload["summary"]["success"] == 1
++    assert payload["summary"]["failed"] == 0
++    assert payload["success"][0]["currency"] == "CNY"
++    assert payload["success"][0]["amount"] == "120.00"

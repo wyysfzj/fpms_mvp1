@@ -1,0 +1,36 @@
+# FRFE04-BE-02 Evidence Summary
+
+- Task/runbook executed: `FRFE04-BE-02`
+- Role executed: `backend worker`
+- Final per-task status: `PASS`
+- Modified files:
+  - `backend/app/modules/annuity/api.py`
+  - `backend/app/modules/annuity/service.py`
+  - `backend/tests/test_annuity_e2e.py`
+- Verification commands:
+  - `cd backend && ruff check --fix app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff format app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff check app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && pytest -q tests/test_annuity_e2e.py -k pay_list_query`
+  - `./scripts/task_validate.sh FRFE04-BE-02`
+- Expected status codes:
+  - `200` for successful list queries
+  - `400` for reversed `planned_pay_date_from` / `planned_pay_date_to`
+  - `401` for unauthenticated access
+  - `403` for authenticated users without `PayList.Read`
+  - `422` for invalid pagination query params
+- Closure slice completed: paginated pay-list headers filtered by supported Phase 3 fields only, with `PayList.Read` gating and same-row `case_no` + `app_no` semantics
+- Explicit non-closure boundary respected: no detail rows, export, mark-paid, history-marker filter, type filter, fee-code filter, invoice/voucher filter, or schema changes
+- API-level coverage exercised:
+  - header-only success query
+  - explicit planned-pay-date range filtering
+  - mixed-case `case_no` + `app_no` non-match
+  - reversed date range `400`
+  - invalid pagination `422`
+  - unauthenticated `401`
+  - permission-denied `403` for missing `PayList.Read`
+- Evidence path: `artifacts/FRFE04-BE-02/**`
+- Evidence files:
+  - `artifacts/FRFE04-BE-02/results.jsonl`
+  - `artifacts/FRFE04-BE-02/summary.md`
+  - `artifacts/FRFE04-BE-02/git/diff.patch`

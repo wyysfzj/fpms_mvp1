@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/modules/annuity/pages/PayList.vue src/api/govPayments.ts src/api/govPayments.types.ts
+

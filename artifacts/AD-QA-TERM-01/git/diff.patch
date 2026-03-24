@@ -1,0 +1,5 @@
+QA-only artifact task.
+No product source files were modified in AD-QA-TERM-01.
+Evidence is recorded in:
+- artifacts/AD-QA-TERM-01/results.jsonl
+- artifacts/AD-QA-TERM-01/summary.md

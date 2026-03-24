@@ -1,0 +1,3 @@
+{"ts":"20260131T181518","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ tests/test_core.py"}
+{"ts":"20260131T181524","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ tests/test_core.py"}
+{"ts":"20260131T181531","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_core.py"}

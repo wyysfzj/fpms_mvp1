@@ -1,0 +1,9 @@
+{"step":"gate","rc":0,"cmd":"./scripts/task_validate.sh PE-BE-COM-01"}
+{"step":"gate","rc":0,"cmd":"./scripts/task_validate.sh PE-FE-COM-01"}
+{"step":"gate","rc":0,"cmd":"./scripts/task_validate.sh PE-BE-COM-02"}
+{"step":"gate","rc":0,"cmd":"./scripts/task_validate.sh PE-FE-COM-02"}
+{"step":"gate","rc":0,"cmd":"./scripts/task_validate.sh PE-BE-COM-03"}
+{"step":"gate","rc":0,"cmd":"./scripts/task_validate.sh PE-FE-COM-03"}
+{"step":"test","rc":0,"cmd":"cd backend && pytest -q tests/test_commission_e2e.py tests/test_consulting_e2e.py"}
+{"step":"lint","rc":0,"cmd":"cd frontend && npm run lint"}
+{"step":"test","rc":0,"cmd":"cd frontend && npm run typecheck"}

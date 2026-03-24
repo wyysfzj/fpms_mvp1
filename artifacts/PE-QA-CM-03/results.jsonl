@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"cd frontend && npm run lint","rc":0}
+{"step":"test","cmd":"./scripts/task_validate.sh PE-BE-DB-CM-02 && ./scripts/task_validate.sh PE-BE-CM-02 && ./scripts/task_validate.sh PE-FE-CM-03","rc":0}

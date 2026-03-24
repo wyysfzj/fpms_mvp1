@@ -1,0 +1,207 @@
+diff --git a/tmp/pe-be-cs-01/consulting.api.py.before b/backend/app/modules/consulting/api.py
+index e69de29..b239684 100644
+--- a/tmp/pe-be-cs-01/consulting.api.py.before
++++ b/backend/app/modules/consulting/api.py
+@@ -0,0 +1,68 @@
++from __future__ import annotations
++
++from datetime import date, datetime
++from typing import Any
++
++from fastapi import APIRouter, Depends, status
++from pydantic import BaseModel
++from sqlalchemy.orm import Session
++
++from app.api.deps import require_perm
++from app.db.session import get_db
++from app.modules.consulting.service import create_consulting_case
++
++router = APIRouter()
++
++
++class ConsultingCaseCreateIn(BaseModel):
++    case_no: str | None = None
++    case_type: str | None = None
++    client_id: str | None = None
++    title_cn: str | None = None
++    primary_agent_id: str | None = None
++    recv_date: date | None = None
++
++
++class ConsultingCaseOut(BaseModel):
++    id: str
++    case_no: str
++    case_type: str
++    status: str
++    client_id: str | None
++    title_cn: str | None
++    primary_agent_id: str | None
++    recv_date: date | None
++    created_at: datetime
++
++
++@router.post(
++    "/consulting/cases",
++    status_code=status.HTTP_201_CREATED,
++    response_model=ConsultingCaseOut,
++    summary="Create consulting/search case",
++)
++def post_consulting_case(
++    payload: ConsultingCaseCreateIn,
++    _perm: None = Depends(require_perm("ConsultingCase.Create")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    case = create_consulting_case(
++        db,
++        case_no=payload.case_no,
++        case_type=payload.case_type,
++        client_id=payload.client_id,
++        title_cn=payload.title_cn,
++        primary_agent_id=payload.primary_agent_id,
++        recv_date=payload.recv_date,
++    )
++    return {
++        "id": case.id,
++        "case_no": case.case_no,
++        "case_type": case.case_type,
++        "status": case.status,
++        "client_id": case.client_id,
++        "title_cn": case.title_cn,
++        "primary_agent_id": case.primary_agent_id,
++        "recv_date": case.recv_date,
++        "created_at": case.created_at,
++    }
+
+diff --git a/tmp/pe-be-cs-01/consulting.service.py.before b/backend/app/modules/consulting/service.py
+index e69de29..1a82eba 100644
+--- a/tmp/pe-be-cs-01/consulting.service.py.before
++++ b/backend/app/modules/consulting/service.py
+@@ -0,0 +1,31 @@
++from __future__ import annotations
++
++from datetime import date
++
++from sqlalchemy.orm import Session
++
++from app.modules.cases.models import Case
++from app.modules.cases.service import create_consulting_or_search_case
++
++
++def create_consulting_case(
++    db: Session,
++    *,
++    case_no: str | None,
++    case_type: str | None,
++    client_id: str | None,
++    title_cn: str | None,
++    primary_agent_id: str | None,
++    recv_date: date | None,
++    actor_id: str | None = None,
++) -> Case:
++    return create_consulting_or_search_case(
++        db,
++        case_no=case_no,
++        case_type=case_type,
++        client_id=client_id,
++        title_cn=title_cn,
++        primary_agent_id=primary_agent_id,
++        recv_date=recv_date,
++        actor_id=actor_id,
++    )
+
+diff --git a/tmp/pe-be-cs-01/cases.service.py.before b/backend/app/modules/cases/service.py
+index 28336c5..1844931 100644
+--- a/tmp/pe-be-cs-01/cases.service.py.before
++++ b/backend/app/modules/cases/service.py
+@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+ from app.core.pagination import PageResult, offset_limit
++from app.modules.cases.enums import CaseType
+ from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor, T_Priority
+ from app.modules.cases.schemas import (
+     CaseCreate,
+@@ -16,6 +17,19 @@ from app.modules.cases.schemas import (
+     CaseUpdateLimited,
+ )
+ 
++_CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
++
++
++def _normalize_required_text(value: str | None, field_name: str) -> str:
++    normalized = (value or "").strip()
++    if not normalized:
++        raise_business_error(
++            "CONSULTING_CASE_INVALID",
++            f"{field_name} is required",
++            status_code=400,
++        )
++    return normalized
++
+ 
+ def validate_applicants(applicants: list[dict]) -> None:
+     """
+@@ -219,6 +233,63 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
+     return case
+ 
+ 
++def create_consulting_or_search_case(
++    db: Session,
++    *,
++    case_no: str | None,
++    case_type: str | None,
++    client_id: str | None,
++    title_cn: str | None,
++    primary_agent_id: str | None,
++    recv_date: date | None,
++    actor_id: str | None = None,
++) -> Case:
++    normalized_case_no = _normalize_required_text(case_no, "case_no")
++    normalized_case_type = _normalize_required_text(case_type, "case_type").upper()
++    normalized_client_id = _normalize_required_text(client_id, "client_id")
++    normalized_title_cn = _normalize_required_text(title_cn, "title_cn")
++    normalized_primary_agent_id = _normalize_required_text(primary_agent_id, "primary_agent_id")
++
++    if recv_date is None:
++        raise_business_error(
++            "CONSULTING_CASE_INVALID",
++            "recv_date is required",
++            status_code=400,
++        )
++
++    if normalized_case_type not in _CONSULTING_CASE_TYPES:
++        raise_business_error(
++            "CONSULTING_CASE_INVALID",
++            "case_type must be CONSULTING or SEARCH",
++            status_code=400,
++        )
++
++    existing = db.query(Case).filter(Case.case_no == normalized_case_no).first()
++    if existing:
++        raise_business_error(
++            "CASE_NO_DUPLICATE",
++            f"Case number '{normalized_case_no}' already exists",
++            status_code=409,
++        )
++
++    case = Case(
++        id=str(uuid4()),
++        case_no=normalized_case_no,
++        case_type=normalized_case_type,
++        client_id=normalized_client_id,
++        title_cn=normalized_title_cn,
++        primary_agent_id=normalized_primary_agent_id,
++        recv_date=recv_date,
++        status="NOT_FILED",
++        created_by=actor_id,
++        updated_by=actor_id,
++    )
++    db.add(case)
++    db.commit()
++    db.refresh(case)
++    return case
++
++
+ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: str) -> Case:
+     """Full update for Admin/Formalities roles."""
+     case = db.query(Case).filter(Case.id == case_id).first()

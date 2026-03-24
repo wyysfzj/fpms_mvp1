@@ -1,0 +1,7 @@
+{"command":"pytest -q tests/test_annuity_e2e.py -k pay_list_from_fee_items","rc":1,"phase":"red","note":"unrelated per-item failures incorrectly aborted valid same-scope GOV candidates"}
+{"command":"ruff check --fix app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py","rc":0}
+{"command":"ruff format app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py","rc":0}
+{"command":"ruff check app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py","rc":0}
+{"command":"pytest -q tests/test_annuity_e2e.py -k pay_list_from_fee_items","rc":0}
+{"ts":"20260324T170700","step":"lint","rc":0,"log":"artifacts/FRFE04-BE-00/outputs/20260324T170700_legacy_lint.log"}
+{"ts":"20260324T170700","step":"test","rc":0,"log":"artifacts/FRFE04-BE-00/outputs/20260324T170700_legacy_test.log"}

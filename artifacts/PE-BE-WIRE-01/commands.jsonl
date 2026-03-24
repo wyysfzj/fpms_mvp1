@@ -1,0 +1,4 @@
+{"ts":"20260228T212810","step":"compile","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/api/router.py"}
+{"ts":"20260228T212815","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q"}
+{"ts":"20260228T213018","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/api/router.py"}
+{"ts":"20260228T213018","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q"}

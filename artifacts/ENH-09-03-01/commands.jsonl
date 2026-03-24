@@ -1,0 +1,4 @@
+{"ts":"20260131T125816","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/core/pagination.py"}
+{"ts":"20260131T125820","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/core/pagination.py"}
+{"ts":"20260131T125825","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/core/pagination.py"}
+{"ts":"20260131T125830","step":"quick","cmd":"bash -lc $'PYTHONPATH=backend python3 - <<\'PY\'\nfrom pydantic import BaseModel\nfrom app.core.pagination import PageResult\n\nclass X(BaseModel):\n    a: int\n\nclass XList(PageResult[X]):\n    pass\n\nprint(\'OK\', XList(items=[X(a=1)], page=1, page_size=10, total=1).model_dump())\nPY'"}

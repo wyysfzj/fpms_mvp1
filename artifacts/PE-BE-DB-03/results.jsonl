@@ -1,0 +1,4 @@
+{"cmd":"cd backend && alembic upgrade head","rc":0,"notes":"upgraded pe_be_db_02_pay_list_01 -> pe_be_db_03_gov_payment_01"}
+{"cmd":"write artifacts/PE-BE-DB-03/git/diff.patch (task-scoped delta for gov_payment migration/model)","rc":0}
+{"ts":"20260228T165449","step":"lint","rc":0,"log":"artifacts/PE-BE-DB-03/outputs/20260228T165449_lint.log"}
+{"ts":"20260228T165449","step":"test","rc":0,"log":"artifacts/PE-BE-DB-03/outputs/20260228T165449_test.log"}

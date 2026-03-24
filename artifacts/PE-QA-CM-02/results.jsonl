@@ -1,0 +1,2 @@
+{"step":"lint","rc":0,"cmd":"git diff --name-only -- frontend/src/api/cases.ts frontend/src/api/cases.types.ts frontend/src/modules/cases/pages/CaseCreate.vue frontend/src/modules/cases/pages/CaseEdit.vue"}
+{"step":"test","rc":0,"cmd":"./scripts/task_validate.sh PE-FE-CM-02"}

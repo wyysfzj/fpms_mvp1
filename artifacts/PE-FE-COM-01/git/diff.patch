@@ -1,0 +1,93 @@
+diff --git a/frontend/src/modules/commission/pages/CommissionList.vue b/frontend/src/modules/commission/pages/CommissionList.vue
+index 41662c2..028c570 100644
+--- a/frontend/src/modules/commission/pages/CommissionList.vue
++++ b/frontend/src/modules/commission/pages/CommissionList.vue
+@@ -12,7 +12,7 @@
+         <el-input
+           v-model.trim="filters.agent_id"
+           aria-label="代理人筛选"
+-          placeholder="代理人 ID"
++          placeholder="代理人编号"
+           clearable
+           @keyup.enter="onFilterChange"
+         />
+@@ -21,7 +21,7 @@
+         <el-input
+           v-model.trim="filters.case_id"
+           aria-label="案件筛选"
+-          placeholder="案件 ID"
++          placeholder="案件编号"
+           clearable
+           @keyup.enter="onFilterChange"
+         />
+@@ -84,9 +84,9 @@
+ 
+     <div v-else class="page-table">
+       <el-table :data="records" aria-label="提成记录列表" stripe size="small" class="compact-table">
+-        <el-table-column prop="id" label="ID" width="80" />
+-        <el-table-column prop="case_id" label="案件 ID" min-width="160" />
+-        <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++        <el-table-column prop="id" label="编号" width="80" />
++        <el-table-column prop="case_id" label="案件编号" min-width="160" />
++        <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+           <template #default="{ row }">
+             {{ row.agent_id || '—' }}
+           </template>
+@@ -101,6 +101,18 @@
+             <span class="mono-num">{{ formatAmount(row.base_fee) }}</span>
+           </template>
+         </el-table-column>
++        <el-table-column label="阶段完成" min-width="150">
++          <template #default="{ row }">
++            <div class="stage-tags">
++              <el-tag :type="row.s1_done ? 'success' : 'info'" size="small">
++                S1 {{ row.s1_done ? '已完成' : '未完成' }}
++              </el-tag>
++              <el-tag :type="row.s2_done ? 'success' : 'info'" size="small">
++                S2 {{ row.s2_done ? '已完成' : '未完成' }}
++              </el-tag>
++            </div>
++          </template>
++        </el-table-column>
+         <el-table-column prop="s1_amount" label="S1 金额" width="120" align="right">
+           <template #default="{ row }">
+             <span class="mono-num">{{ formatAmount(row.s1_amount) }}</span>
+@@ -120,8 +132,8 @@
+         </el-table-column>
+         <el-table-column prop="is_settleable" label="可结算" width="90">
+           <template #default="{ row }">
+-            <el-tag :type="row.is_settleable ? 'success' : 'info'" size="small">
+-              {{ row.is_settleable ? '是' : '否' }}
++            <el-tag :type="settleableTagType(row.is_settleable)" size="small">
++              {{ settleableLabel(row.is_settleable) }}
+             </el-tag>
+           </template>
+         </el-table-column>
+@@ -263,6 +275,14 @@ function statusTagType(status: string): 'success' | 'warning' | 'danger' | 'info
+   }
+ }
+ 
++function settleableTagType(isSettleable: boolean): 'success' | 'info' {
++  return isSettleable ? 'success' : 'info'
++}
++
++function settleableLabel(isSettleable: boolean): string {
++  return isSettleable ? '可结算' : '不可结算'
++}
++
+ watch([page, pageSize], () => {
+   fetchRecords()
+ })
+@@ -286,6 +306,12 @@ onMounted(() => {
+   font-family: var(--font-mono);
+ }
+ 
++.stage-tags {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++}
++
+ .w-full {
+   width: 100%;
+ }

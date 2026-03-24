@@ -1,0 +1,4 @@
+{"ts":"20260131T124948","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/core/pagination.py"}
+{"ts":"20260131T124953","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/core/pagination.py"}
+{"ts":"20260131T124957","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/core/pagination.py"}
+{"ts":"20260131T125002","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"from\ app.core.pagination\ import\ PageParams\,\ PageResult\,\ offset_limit\;\ print\(offset_limit\(2\,20\)\)\""}

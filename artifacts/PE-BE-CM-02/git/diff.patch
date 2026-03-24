@@ -1,0 +1,1690 @@
+diff --git a/backend/app/modules/cases/api.py b/backend/app/modules/cases/api.py
+index c83d26b..4d0e35e 100644
+--- a/backend/app/modules/cases/api.py
++++ b/backend/app/modules/cases/api.py
+@@ -2,22 +2,183 @@ from __future__ import annotations
+ 
+ from datetime import date
+ from typing import Any
+-from uuid import uuid4
+ 
+ from fastapi import APIRouter, Depends, Query, status
+ from sqlalchemy import or_
+ from sqlalchemy.orm import Session
+ 
+-from app.api.deps import require_perm
++from app.api.deps import current_user_dep, require_perm
+ from app.core.errors import raise_business_error
+ from app.db.session import get_db
+-from app.modules.cases.models import Case
+-from app.modules.cases.schemas import CaseCreateIn
++from app.modules.auth.models import T_User
++from app.modules.cases.models import Case, T_BioDeposit, T_CaseApplicant, T_CaseInventor, T_Priority
++from app.modules.cases.schemas import CaseCreateIn, CaseUpdateFull
++from app.modules.cases.service import (
++    create_case as create_case_service,
++)
++from app.modules.cases.service import (
++    update_case_full as update_case_full_service,
++)
+ from app.modules.masterdata.clients.models import Client
+ 
+ router = APIRouter()
+ 
+ 
++def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
++    client_names = {}
++    related_client_ids = {case.client_id, case.foreign_agent_id, case.invalid_client_id}
++    related_client_ids = {client_id for client_id in related_client_ids if client_id}
++    if related_client_ids:
++        clients = (
++            db.query(Client.id, Client.name_cn).filter(Client.id.in_(related_client_ids)).all()
++        )
++        client_names = {client.id: client.name_cn for client in clients}
++
++    applicants = (
++        db.query(
++            T_CaseApplicant.seq,
++            T_CaseApplicant.is_first,
++            T_CaseApplicant.name_cn,
++            T_CaseApplicant.name_en,
++            T_CaseApplicant.address_cn,
++            T_CaseApplicant.address_en,
++        )
++        .filter(T_CaseApplicant.case_id == case.id)
++        .order_by(T_CaseApplicant.seq)
++        .all()
++    )
++    inventors = (
++        db.query(
++            T_CaseInventor.seq,
++            T_CaseInventor.name_cn,
++            T_CaseInventor.name_en,
++        )
++        .filter(T_CaseInventor.case_id == case.id)
++        .order_by(T_CaseInventor.seq)
++        .all()
++    )
++    priorities = (
++        db.query(
++            T_Priority.seq,
++            T_Priority.country_code,
++            T_Priority.prio_no,
++            T_Priority.prio_date,
++        )
++        .filter(T_Priority.case_id == case.id)
++        .order_by(T_Priority.seq)
++        .all()
++    )
++    bio_deposits = (
++        db.query(
++            T_BioDeposit.seq,
++            T_BioDeposit.deposit_no,
++            T_BioDeposit.deposit_unit_name,
++            T_BioDeposit.deposit_date,
++            T_BioDeposit.name,
++        )
++        .filter(T_BioDeposit.case_id == case.id)
++        .order_by(T_BioDeposit.seq)
++        .all()
++    )
++
++    return {
++        "id": case.id,
++        "case_no": case.case_no,
++        "case_type": case.case_type,
++        "patent_category": case.patent_category,
++        "flow_dir": case.flow_dir,
++        "client_id": case.client_id,
++        "client_name": client_names.get(case.client_id) if case.client_id else None,
++        "foreign_agent_id": case.foreign_agent_id,
++        "foreign_agent_name": (
++            client_names.get(case.foreign_agent_id) if case.foreign_agent_id else None
++        ),
++        "foreign_ref": case.foreign_ref,
++        "title_cn": case.title_cn,
++        "title_en": case.title_en,
++        "app_no": case.app_no,
++        "status": case.status,
++        "filing_date": str(case.filing_date) if case.filing_date else None,
++        "recv_date": str(case.recv_date) if case.recv_date else None,
++        "pub_date": str(case.pub_date) if case.pub_date else None,
++        "pub_no": case.pub_no,
++        "grant_date": str(case.grant_date) if case.grant_date else None,
++        "grant_no": case.grant_no,
++        "patent_no": case.patent_no,
++        "valid_until": str(case.valid_until) if case.valid_until else None,
++        "spec_pages": case.spec_pages,
++        "claim_count": case.claim_count,
++        "has_exam_request": case.has_exam_request,
++        "ro": case.ro,
++        "isa": case.isa,
++        "ipea": case.ipea,
++        "intl_app_no": case.intl_app_no,
++        "intl_app_date": str(case.intl_app_date) if case.intl_app_date else None,
++        "intl_pub_no": case.intl_pub_no,
++        "intl_pub_date": str(case.intl_pub_date) if case.intl_pub_date else None,
++        "intl_pub_lang": case.intl_pub_lang,
++        "need_iper": case.need_iper,
++        "iper_date": str(case.iper_date) if case.iper_date else None,
++        "pct_national_entry_date": (
++            str(case.pct_national_entry_date) if case.pct_national_entry_date else None
++        ),
++        "original_case_id": case.original_case_id,
++        "invalid_client_id": case.invalid_client_id,
++        "invalid_client_name": (
++            client_names.get(case.invalid_client_id) if case.invalid_client_id else None
++        ),
++        "invalid_patentee": case.invalid_patentee,
++        "invalid_requester": case.invalid_requester,
++        "invalid_role": case.invalid_role,
++        "primary_agent_id": case.primary_agent_id,
++        "second_agent_id": case.second_agent_id,
++        "draftor_id": case.draftor_id,
++        "is_fee_monitor": case.is_fee_monitor,
++        "fee_reduction": case.fee_reduction,
++        "applicant_kind": case.applicant_kind,
++        "applicants": [
++            {
++                "seq": applicant.seq,
++                "is_first": applicant.is_first,
++                "name_cn": applicant.name_cn,
++                "name_en": applicant.name_en,
++                "address_cn": applicant.address_cn,
++                "address_en": applicant.address_en,
++            }
++            for applicant in applicants
++        ],
++        "inventors": [
++            {
++                "seq": inventor.seq,
++                "name_cn": inventor.name_cn,
++                "name_en": inventor.name_en,
++            }
++            for inventor in inventors
++        ],
++        "priorities": [
++            {
++                "seq": priority.seq,
++                "country_code": priority.country_code,
++                "prio_no": priority.prio_no,
++                "prio_date": str(priority.prio_date) if priority.prio_date else None,
++            }
++            for priority in priorities
++        ],
++        "bio_deposits": [
++            {
++                "seq": bio_deposit.seq,
++                "deposit_no": bio_deposit.deposit_no,
++                "deposit_unit_name": bio_deposit.deposit_unit_name,
++                "deposit_date": str(bio_deposit.deposit_date) if bio_deposit.deposit_date else None,
++                "name": bio_deposit.name,
++            }
++            for bio_deposit in bio_deposits
++        ],
++        "created_at": str(case.created_at) if case.created_at else None,
++        "updated_at": str(case.updated_at) if case.updated_at else None,
++    }
++
++
+ @router.get("/cases", summary="List cases")
+ def get_cases(
+     q: str | None = Query(default=None),
+@@ -148,6 +309,7 @@ def get_cases(
+ def create_case(
+     payload: CaseCreateIn,
+     _perm: None = Depends(require_perm("Case.Create")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+     """
+@@ -180,141 +342,8 @@ def create_case(
+     - 409: case_no already exists
+     - 422: VALIDATION_ERROR
+     """
+-    case_no = payload.case_no
+-    if not case_no:
+-        raise_business_error(
+-            "CASE_INVALID",
+-            "case_no is required",
+-            status_code=status.HTTP_400_BAD_REQUEST,
+-        )
+-
+-    exists = db.query(Case).filter(Case.case_no == case_no).first()
+-    if exists:
+-        raise_business_error(
+-            "CASE_NO_DUPLICATE",
+-            "case_no already exists",
+-            status_code=status.HTTP_409_CONFLICT,
+-        )
+-
+-    from sqlalchemy import text as sa_text
+-
+-    case = Case(
+-        id=str(uuid4()),
+-        case_no=case_no,
+-        case_type=payload.case_type or "NORMAL",
+-        patent_category=payload.patent_category or "INV",
+-        flow_dir=payload.flow_dir or "CN_DOMESTIC",
+-        client_id=payload.client_id,
+-        title_cn=payload.title_cn,
+-        title_en=payload.title_en,
+-        app_no=payload.app_no,
+-        # A3 — Publication / Grant
+-        pub_date=payload.pub_date,
+-        pub_no=payload.pub_no,
+-        grant_date=payload.grant_date,
+-        grant_no=payload.grant_no,
+-        patent_no=payload.patent_no,
+-        valid_until=payload.valid_until,
+-        # A3 — Spec details
+-        spec_pages=payload.spec_pages,
+-        claim_count=payload.claim_count,
+-        has_exam_request=payload.has_exam_request,
+-        # A3 — Agent assignment
+-        primary_agent_id=payload.primary_agent_id,
+-        second_agent_id=payload.second_agent_id,
+-        draftor_id=payload.draftor_id,
+-        # A3 — Control flags
+-        is_fee_monitor=payload.is_fee_monitor,
+-        fee_reduction=payload.fee_reduction,
+-        applicant_kind=payload.applicant_kind,
+-    )
+-    db.add(case)
+-    db.flush()
+-
+-    # Use raw SQL for sub-tables to avoid AuditMixin column mismatch
+-    for applicant in payload.applicants:
+-        db.execute(
+-            sa_text(
+-                "INSERT INTO t_case_applicant"
+-                " (id, case_id, seq, is_first, name_cn, name_en, address_cn, address_en)"
+-                " VALUES (:id, :case_id, :seq, :is_first, :name_cn, :name_en,"
+-                " :address_cn, :address_en)"
+-            ),
+-            {
+-                "id": str(uuid4()),
+-                "case_id": case.id,
+-                "seq": applicant.seq,
+-                "is_first": applicant.is_first,
+-                "name_cn": applicant.name_cn,
+-                "name_en": applicant.name_en,
+-                "address_cn": applicant.address_cn,
+-                "address_en": applicant.address_en,
+-            },
+-        )
+-
+-    for inventor in payload.inventors:
+-        db.execute(
+-            sa_text(
+-                "INSERT INTO t_case_inventor"
+-                " (id, case_id, seq, name_cn, name_en)"
+-                " VALUES (:id, :case_id, :seq, :name_cn, :name_en)"
+-            ),
+-            {
+-                "id": str(uuid4()),
+-                "case_id": case.id,
+-                "seq": inventor.seq,
+-                "name_cn": inventor.name_cn,
+-                "name_en": inventor.name_en,
+-            },
+-        )
+-
+-    for prio in payload.priorities:
+-        db.execute(
+-            sa_text(
+-                "INSERT INTO t_priority"
+-                " (id, case_id, seq, country_code, prio_no, prio_date)"
+-                " VALUES (:id, :case_id, :seq, :country_code, :prio_no, :prio_date)"
+-            ),
+-            {
+-                "id": str(uuid4()),
+-                "case_id": case.id,
+-                "seq": prio.seq,
+-                "country_code": prio.country_code,
+-                "prio_no": prio.prio_no,
+-                "prio_date": prio.prio_date,
+-            },
+-        )
+-
+-    db.commit()
+-    db.refresh(case)
+-
+-    return {
+-        "id": case.id,
+-        "case_no": case.case_no,
+-        "case_type": case.case_type,
+-        "patent_category": case.patent_category,
+-        "flow_dir": case.flow_dir,
+-        "client_id": case.client_id,
+-        "title_cn": case.title_cn,
+-        "title_en": case.title_en,
+-        "app_no": case.app_no,
+-        "status": case.status,
+-        "pub_date": str(case.pub_date) if case.pub_date else None,
+-        "pub_no": case.pub_no,
+-        "grant_date": str(case.grant_date) if case.grant_date else None,
+-        "grant_no": case.grant_no,
+-        "patent_no": case.patent_no,
+-        "valid_until": str(case.valid_until) if case.valid_until else None,
+-        "spec_pages": case.spec_pages,
+-        "claim_count": case.claim_count,
+-        "has_exam_request": case.has_exam_request,
+-        "primary_agent_id": case.primary_agent_id,
+-        "second_agent_id": case.second_agent_id,
+-        "draftor_id": case.draftor_id,
+-        "is_fee_monitor": case.is_fee_monitor,
+-        "fee_reduction": case.fee_reduction,
+-        "applicant_kind": case.applicant_kind,
+-    }
++    case = create_case_service(db, payload, current_user.id)
++    return _serialize_case(db, case)
+ 
+ 
+ @router.post("/cases/{case_id}/limited-edit", summary="Limited edit of a case")
+@@ -498,8 +527,9 @@ def export_cases(
+ @router.put("/cases/{case_id}", summary="Update a case")
+ def update_case(
+     case_id: str,
+-    payload: dict[str, Any],
++    payload: CaseUpdateFull,
+     _perm: None = Depends(require_perm("Case.Edit")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+     """
+@@ -526,103 +556,8 @@ def update_case(
+     - 404: Case not found
+     - 422: VALIDATION_ERROR
+     """
+-    case = db.query(Case).filter(Case.id == case_id).first()
+-    if not case:
+-        raise_business_error(
+-            "CASE_NOT_FOUND",
+-            "Case not found",
+-            status_code=status.HTTP_404_NOT_FOUND,
+-        )
+-
+-    new_case_no = payload.get("case_no")
+-    if new_case_no and new_case_no != case.case_no:
+-        exists = db.query(Case).filter(Case.case_no == new_case_no, Case.id != case_id).first()
+-        if exists:
+-            raise_business_error(
+-                "CASE_NO_DUPLICATE",
+-                "case_no already exists",
+-                status_code=status.HTTP_400_BAD_REQUEST,
+-            )
+-        case.case_no = new_case_no
+-
+-    case.case_type = payload.get("case_type", case.case_type)
+-    case.patent_category = payload.get("patent_category", case.patent_category)
+-    case.flow_dir = payload.get("flow_dir", case.flow_dir)
+-    case.client_id = payload.get("client_id", case.client_id)
+-
+-    # A3 — new scalar fields (only update if key present)
+-    if "title_cn" in payload:
+-        case.title_cn = payload["title_cn"]
+-    if "title_en" in payload:
+-        case.title_en = payload["title_en"]
+-    if "app_no" in payload:
+-        case.app_no = payload["app_no"]
+-    if "status" in payload:
+-        case.status = payload["status"]
+-    if "pub_date" in payload:
+-        v = payload["pub_date"]
+-        case.pub_date = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "pub_no" in payload:
+-        case.pub_no = payload["pub_no"]
+-    if "grant_date" in payload:
+-        v = payload["grant_date"]
+-        case.grant_date = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "grant_no" in payload:
+-        case.grant_no = payload["grant_no"]
+-    if "patent_no" in payload:
+-        case.patent_no = payload["patent_no"]
+-    if "valid_until" in payload:
+-        v = payload["valid_until"]
+-        case.valid_until = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "spec_pages" in payload:
+-        case.spec_pages = payload["spec_pages"]
+-    if "claim_count" in payload:
+-        case.claim_count = payload["claim_count"]
+-    if "has_exam_request" in payload:
+-        case.has_exam_request = payload["has_exam_request"]
+-    if "primary_agent_id" in payload:
+-        case.primary_agent_id = payload["primary_agent_id"]
+-    if "second_agent_id" in payload:
+-        case.second_agent_id = payload["second_agent_id"]
+-    if "draftor_id" in payload:
+-        case.draftor_id = payload["draftor_id"]
+-    if "is_fee_monitor" in payload:
+-        case.is_fee_monitor = payload["is_fee_monitor"]
+-    if "fee_reduction" in payload:
+-        case.fee_reduction = payload["fee_reduction"]
+-    if "applicant_kind" in payload:
+-        case.applicant_kind = payload["applicant_kind"]
+-
+-    db.commit()
+-    db.refresh(case)
+-
+-    return {
+-        "id": case.id,
+-        "case_no": case.case_no,
+-        "case_type": case.case_type,
+-        "patent_category": case.patent_category,
+-        "flow_dir": case.flow_dir,
+-        "client_id": case.client_id,
+-        "title_cn": case.title_cn,
+-        "title_en": case.title_en,
+-        "app_no": case.app_no,
+-        "status": case.status,
+-        "pub_date": str(case.pub_date) if case.pub_date else None,
+-        "pub_no": case.pub_no,
+-        "grant_date": str(case.grant_date) if case.grant_date else None,
+-        "grant_no": case.grant_no,
+-        "patent_no": case.patent_no,
+-        "valid_until": str(case.valid_until) if case.valid_until else None,
+-        "spec_pages": case.spec_pages,
+-        "claim_count": case.claim_count,
+-        "has_exam_request": case.has_exam_request,
+-        "primary_agent_id": case.primary_agent_id,
+-        "second_agent_id": case.second_agent_id,
+-        "draftor_id": case.draftor_id,
+-        "is_fee_monitor": case.is_fee_monitor,
+-        "fee_reduction": case.fee_reduction,
+-        "applicant_kind": case.applicant_kind,
+-    }
++    case = update_case_full_service(db, case_id, payload, current_user.id)
++    return _serialize_case(db, case)
+ 
+ 
+ @router.get("/cases/{case_id}", summary="Get case by ID")
+@@ -658,108 +593,4 @@ def get_case(
+             status_code=status.HTTP_404_NOT_FOUND,
+         )
+ 
+-    # Resolve client name
+-    client_name = None
+-    if case.client_id:
+-        client = db.query(Client.name_cn).filter(Client.id == case.client_id).first()
+-        if client:
+-            client_name = client.name_cn
+-
+-    # Resolve applicants, inventors, priorities
+-    from app.modules.cases.models import T_CaseApplicant, T_CaseInventor, T_Priority
+-
+-    applicants = (
+-        db.query(
+-            T_CaseApplicant.seq,
+-            T_CaseApplicant.is_first,
+-            T_CaseApplicant.name_cn,
+-            T_CaseApplicant.name_en,
+-            T_CaseApplicant.address_cn,
+-            T_CaseApplicant.address_en,
+-        )
+-        .filter(T_CaseApplicant.case_id == case_id)
+-        .order_by(T_CaseApplicant.seq)
+-        .all()
+-    )
+-    inventors = (
+-        db.query(
+-            T_CaseInventor.seq,
+-            T_CaseInventor.name_cn,
+-            T_CaseInventor.name_en,
+-        )
+-        .filter(T_CaseInventor.case_id == case_id)
+-        .order_by(T_CaseInventor.seq)
+-        .all()
+-    )
+-    priorities = (
+-        db.query(
+-            T_Priority.seq,
+-            T_Priority.country_code,
+-            T_Priority.prio_no,
+-            T_Priority.prio_date,
+-        )
+-        .filter(T_Priority.case_id == case_id)
+-        .order_by(T_Priority.seq)
+-        .all()
+-    )
+-
+-    return {
+-        "id": case.id,
+-        "case_no": case.case_no,
+-        "case_type": case.case_type,
+-        "patent_category": case.patent_category,
+-        "flow_dir": case.flow_dir,
+-        "client_id": case.client_id,
+-        "client_name": client_name,
+-        "title_cn": case.title_cn,
+-        "title_en": case.title_en,
+-        "app_no": case.app_no,
+-        "status": case.status,
+-        "filing_date": str(case.filing_date) if case.filing_date else None,
+-        "recv_date": str(case.recv_date) if case.recv_date else None,
+-        # A3 — Publication / Grant
+-        "pub_date": str(case.pub_date) if case.pub_date else None,
+-        "pub_no": case.pub_no,
+-        "grant_date": str(case.grant_date) if case.grant_date else None,
+-        "grant_no": case.grant_no,
+-        "patent_no": case.patent_no,
+-        "valid_until": str(case.valid_until) if case.valid_until else None,
+-        # A3 — Spec details
+-        "spec_pages": case.spec_pages,
+-        "claim_count": case.claim_count,
+-        "has_exam_request": case.has_exam_request,
+-        # A3 — Agent assignment
+-        "primary_agent_id": case.primary_agent_id,
+-        "second_agent_id": case.second_agent_id,
+-        "draftor_id": case.draftor_id,
+-        # A3 — Control flags
+-        "is_fee_monitor": case.is_fee_monitor,
+-        "fee_reduction": case.fee_reduction,
+-        "applicant_kind": case.applicant_kind,
+-        # Sub-tables
+-        "applicants": [
+-            {
+-                "seq": a.seq,
+-                "is_first": a.is_first,
+-                "name_cn": a.name_cn,
+-                "name_en": a.name_en,
+-                "address_cn": a.address_cn,
+-                "address_en": a.address_en,
+-            }
+-            for a in applicants
+-        ],
+-        "inventors": [
+-            {"seq": i.seq, "name_cn": i.name_cn, "name_en": i.name_en} for i in inventors
+-        ],
+-        "priorities": [
+-            {
+-                "seq": p.seq,
+-                "country_code": p.country_code,
+-                "prio_no": p.prio_no,
+-                "prio_date": str(p.prio_date) if p.prio_date else None,
+-            }
+-            for p in priorities
+-        ],
+-        "created_at": str(case.created_at) if case.created_at else None,
+-        "updated_at": str(case.updated_at) if case.updated_at else None,
+-    }
++    return _serialize_case(db, case)
+diff --git a/backend/app/modules/cases/schemas.py b/backend/app/modules/cases/schemas.py
+index 2a02f55..feff42f 100644
+--- a/backend/app/modules/cases/schemas.py
++++ b/backend/app/modules/cases/schemas.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ from datetime import date
+ 
+-from pydantic import BaseModel, Field
++from pydantic import AliasChoices, BaseModel, Field, field_validator
+ 
+ from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
+ 
+@@ -29,12 +29,22 @@ class PriorityIn(BaseModel):
+     prio_date: date | None = None
+ 
+ 
++class BioDepositIn(BaseModel):
++    seq: int = Field(..., ge=1)
++    deposit_no: str | None = Field(None, max_length=64)
++    deposit_unit_name: str | None = Field(None, max_length=255)
++    deposit_date: date | None = None
++    name: str | None = Field(None, max_length=255)
++
++
+ class CaseCreate(BaseModel):
+     case_no: str = Field(..., min_length=1, max_length=64, strip_whitespace=True)
+     case_type: CaseType = CaseType.NORMAL
+     patent_category: PatentCategory = PatentCategory.INV
+     flow_dir: FlowDir = FlowDir.CN_DOMESTIC
+     client_id: str | None = None
++    foreign_agent_id: str | None = None
++    foreign_ref: str | None = Field(None, max_length=64)
+     title_cn: str | None = None
+     title_en: str | None = None
+     app_no: str | None = Field(None, max_length=64)
+@@ -49,6 +59,23 @@ class CaseCreate(BaseModel):
+     spec_pages: int | None = Field(None, ge=0)
+     claim_count: int | None = Field(None, ge=0)
+     has_exam_request: bool | None = None
++    # Deferred Batch 1 — PCT / invalidation
++    ro: str | None = Field(None, max_length=64)
++    isa: str | None = Field(None, max_length=64)
++    ipea: str | None = Field(None, max_length=64)
++    intl_app_no: str | None = Field(None, max_length=64)
++    intl_app_date: date | None = None
++    intl_pub_no: str | None = Field(None, max_length=64)
++    intl_pub_date: date | None = None
++    intl_pub_lang: str | None = Field(None, max_length=32)
++    need_iper: bool | None = None
++    iper_date: date | None = None
++    pct_national_entry_date: date | None = None
++    original_case_id: str | None = None
++    invalid_client_id: str | None = None
++    invalid_patentee: str | None = Field(None, max_length=255)
++    invalid_requester: str | None = Field(None, max_length=255)
++    invalid_role: str | None = Field(None, max_length=32)
+     # A3 — Agent assignment
+     primary_agent_id: str | None = Field(None, max_length=36)
+     second_agent_id: str | None = Field(None, max_length=36)
+@@ -61,6 +88,7 @@ class CaseCreate(BaseModel):
+     applicants: list[CaseApplicantIn] = []
+     inventors: list[CaseInventorIn] = []
+     priorities: list[PriorityIn] = []
++    bio_deposits: list[BioDepositIn] = []
+ 
+ 
+ class CaseCreateIn(CaseCreate):
+@@ -68,10 +96,13 @@ class CaseCreateIn(CaseCreate):
+ 
+ 
+ class CaseUpdateFull(BaseModel):
+-    title_cn: str | None = None
++    title_cn: str | None = Field(default=None, validation_alias=AliasChoices("title_cn", "title"))
+     title_en: str | None = None
+     app_no: str | None = Field(None, max_length=64)
+     status: CaseStatus | None = None
++    filing_date: date | None = None
++    foreign_agent_id: str | None = None
++    foreign_ref: str | None = Field(None, max_length=64)
+     # A3 — Publication / Grant
+     pub_date: date | None = None
+     pub_no: str | None = Field(None, max_length=64)
+@@ -83,6 +114,23 @@ class CaseUpdateFull(BaseModel):
+     spec_pages: int | None = Field(None, ge=0)
+     claim_count: int | None = Field(None, ge=0)
+     has_exam_request: bool | None = None
++    # Deferred Batch 1 — PCT / invalidation
++    ro: str | None = Field(None, max_length=64)
++    isa: str | None = Field(None, max_length=64)
++    ipea: str | None = Field(None, max_length=64)
++    intl_app_no: str | None = Field(None, max_length=64)
++    intl_app_date: date | None = None
++    intl_pub_no: str | None = Field(None, max_length=64)
++    intl_pub_date: date | None = None
++    intl_pub_lang: str | None = Field(None, max_length=32)
++    need_iper: bool | None = None
++    iper_date: date | None = None
++    pct_national_entry_date: date | None = None
++    original_case_id: str | None = None
++    invalid_client_id: str | None = None
++    invalid_patentee: str | None = Field(None, max_length=255)
++    invalid_requester: str | None = Field(None, max_length=255)
++    invalid_role: str | None = Field(None, max_length=32)
+     # A3 — Agent assignment
+     primary_agent_id: str | None = Field(None, max_length=36)
+     second_agent_id: str | None = Field(None, max_length=36)
+@@ -95,6 +143,24 @@ class CaseUpdateFull(BaseModel):
+     applicants: list[CaseApplicantIn] | None = None
+     inventors: list[CaseInventorIn] | None = None
+     priorities: list[PriorityIn] | None = None
++    bio_deposits: list[BioDepositIn] | None = None
++
++    @field_validator(
++        "filing_date",
++        "pub_date",
++        "grant_date",
++        "valid_until",
++        "intl_app_date",
++        "intl_pub_date",
++        "iper_date",
++        "pct_national_entry_date",
++        mode="before",
++    )
++    @classmethod
++    def _blank_dates_to_none(cls, value):
++        if isinstance(value, str) and not value.strip():
++            return None
++        return value
+ 
+ 
+ class CaseUpdateLimited(BaseModel):
+@@ -116,6 +182,9 @@ class CaseDetail(BaseModel):
+     flow_dir: str
+     client_id: str | None
+     client_name: str | None = None
++    foreign_agent_id: str | None = None
++    foreign_agent_name: str | None = None
++    foreign_ref: str | None = None
+     title_cn: str | None
+     title_en: str | None
+     app_no: str | None
+@@ -133,6 +202,23 @@ class CaseDetail(BaseModel):
+     spec_pages: int | None = None
+     claim_count: int | None = None
+     has_exam_request: bool | None = None
++    # Deferred Batch 1 — PCT / invalidation
++    ro: str | None = None
++    isa: str | None = None
++    ipea: str | None = None
++    intl_app_no: str | None = None
++    intl_app_date: str | None = None
++    intl_pub_no: str | None = None
++    intl_pub_date: str | None = None
++    intl_pub_lang: str | None = None
++    need_iper: bool | None = None
++    iper_date: str | None = None
++    pct_national_entry_date: str | None = None
++    original_case_id: str | None = None
++    invalid_client_id: str | None = None
++    invalid_patentee: str | None = None
++    invalid_requester: str | None = None
++    invalid_role: str | None = None
+     # A3 — Agent assignment
+     primary_agent_id: str | None = None
+     second_agent_id: str | None = None
+@@ -145,6 +231,7 @@ class CaseDetail(BaseModel):
+     applicants: list[dict]  # CaseApplicantOut
+     inventors: list[dict]  # CaseInventorOut
+     priorities: list[dict]  # PriorityOut
++    bio_deposits: list[dict]
+     created_at: str | None = None
+     updated_at: str | None = None
+ 
+diff --git a/backend/app/modules/cases/service.py b/backend/app/modules/cases/service.py
+index 1844931..a8a9d9b 100644
+--- a/backend/app/modules/cases/service.py
++++ b/backend/app/modules/cases/service.py
+@@ -8,16 +8,37 @@ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+ from app.core.pagination import PageResult, offset_limit
+-from app.modules.cases.enums import CaseType
+-from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor, T_Priority
++from app.modules.cases.enums import CaseStatus, CaseType, FlowDir
++from app.modules.cases.models import Case, T_BioDeposit, T_CaseApplicant, T_CaseInventor, T_Priority
+ from app.modules.cases.schemas import (
+     CaseCreate,
+     CaseListItem,
+     CaseUpdateFull,
+     CaseUpdateLimited,
+ )
++from app.modules.masterdata.clients.models import Client
+ 
+ _CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
++_FOREIGN_FLOW_DIRS = {FlowDir.CN_OUTBOUND.value, FlowDir.FOREIGN_INBOUND.value}
++_FOREIGN_AGENT_TYPES = {"AGENT", "代理所"}
++_INVALIDATION_ROLES = {"PATENTEE", "REQUESTER", "BOTH"}
++_TERMINAL_STATUS_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
++    CaseStatus.GRANTED.value: {
++        CaseStatus.GRANTED.value,
++        CaseStatus.TERMINATED.value,
++        CaseStatus.INVALIDATED.value,
++        CaseStatus.EXPIRED.value,
++    },
++    CaseStatus.REJECTED.value: {CaseStatus.REJECTED.value},
++    CaseStatus.WITHDRAWN.value: {CaseStatus.WITHDRAWN.value},
++    CaseStatus.ABANDONED.value: {CaseStatus.ABANDONED.value},
++    CaseStatus.TERMINATED.value: {CaseStatus.TERMINATED.value},
++    CaseStatus.INVALIDATED.value: {CaseStatus.INVALIDATED.value},
++    CaseStatus.EXPIRED.value: {CaseStatus.EXPIRED.value},
++}
++_STATUSES_REQUIRING_APPLICATION_FIELDS = {
++    status.value for status in CaseStatus if status != CaseStatus.NOT_FILED
++}
+ 
+ 
+ def _normalize_required_text(value: str | None, field_name: str) -> str:
+@@ -73,6 +94,201 @@ def validate_applicants(applicants: list[dict]) -> None:
+         )
+ 
+ 
++def validate_client_exists(db: Session, client_id: str | None) -> None:
++    if not client_id:
++        return
++    exists = db.query(Client.id).filter(Client.id == client_id).first()
++    if not exists:
++        raise_business_error("CLIENT_NOT_FOUND", "Client not found", status_code=404)
++
++
++def validate_foreign_agent(
++    db: Session,
++    *,
++    flow_dir: str | None,
++    foreign_agent_id: str | None,
++) -> None:
++    normalized_flow_dir = (flow_dir or "").strip()
++    if normalized_flow_dir in _FOREIGN_FLOW_DIRS and not foreign_agent_id:
++        raise_business_error(
++            "CASE_FOREIGN_AGENT_REQUIRED",
++            "foreign_agent_id is required for foreign-facing cases",
++            status_code=400,
++        )
++    if not foreign_agent_id:
++        return
++    foreign_agent = (
++        db.query(Client.id, Client.client_type).filter(Client.id == foreign_agent_id).first()
++    )
++    if not foreign_agent:
++        raise_business_error("CLIENT_NOT_FOUND", "Client not found", status_code=404)
++    normalized_client_type = (foreign_agent.client_type or "").strip().upper()
++    if normalized_client_type not in _FOREIGN_AGENT_TYPES:
++        raise_business_error(
++            "CASE_FOREIGN_AGENT_INVALID_TYPE",
++            "foreign_agent_id must reference an agent client",
++            status_code=400,
++        )
++
++
++def validate_priorities(priorities: list[dict]) -> None:
++    seqs = [priority.get("seq") for priority in priorities]
++    if len(seqs) != len(set(seqs)):
++        raise_business_error(
++            "CASE_DUPLICATE_PRIORITY_SEQ",
++            "Priority seq values must be unique",
++            status_code=400,
++        )
++
++    for priority in priorities:
++        normalized_country_code = (priority.get("country_code") or "").strip() or None
++        normalized_prio_no = (priority.get("prio_no") or "").strip() or None
++        normalized_prio_date = priority.get("prio_date")
++        has_any_value = any(
++            value is not None
++            for value in (normalized_country_code, normalized_prio_no, normalized_prio_date)
++        )
++        has_all_values = all(
++            value is not None
++            for value in (normalized_country_code, normalized_prio_no, normalized_prio_date)
++        )
++        if has_any_value and not has_all_values:
++            raise_business_error(
++                "CASE_PRIORITY_INCOMPLETE",
++                "Priority country_code, prio_no and prio_date must all be provided",
++                status_code=400,
++            )
++
++
++def validate_bio_deposits(bio_deposits: list[dict]) -> None:
++    seqs = [bio_deposit.get("seq") for bio_deposit in bio_deposits]
++    if len(seqs) != len(set(seqs)):
++        raise_business_error(
++            "CASE_DUPLICATE_BIO_DEPOSIT_SEQ",
++            "Bio deposit seq values must be unique",
++            status_code=400,
++        )
++
++    for bio_deposit in bio_deposits:
++        normalized_deposit_no = (bio_deposit.get("deposit_no") or "").strip() or None
++        normalized_unit_name = (bio_deposit.get("deposit_unit_name") or "").strip() or None
++        normalized_deposit_date = bio_deposit.get("deposit_date")
++        normalized_name = (bio_deposit.get("name") or "").strip() or None
++        has_any_value = any(
++            value is not None
++            for value in (
++                normalized_deposit_no,
++                normalized_unit_name,
++                normalized_deposit_date,
++                normalized_name,
++            )
++        )
++        has_all_values = all(
++            value is not None
++            for value in (
++                normalized_deposit_no,
++                normalized_unit_name,
++                normalized_deposit_date,
++                normalized_name,
++            )
++        )
++        if has_any_value and not has_all_values:
++            raise_business_error(
++                "CASE_BIO_DEPOSIT_INCOMPLETE",
++                "Bio deposit rows must include deposit_no, deposit_unit_name, deposit_date and name",
++                status_code=400,
++            )
++
++
++def validate_case_type_specific_fields(
++    db: Session,
++    *,
++    case_type: str | None,
++    intl_app_no: str | None,
++    intl_app_date: date | None,
++    pct_national_entry_date: date | None,
++    original_case_id: str | None,
++    invalid_client_id: str | None,
++    invalid_patentee: str | None,
++    invalid_requester: str | None,
++    invalid_role: str | None,
++) -> None:
++    normalized_case_type = (case_type or "").strip()
++    if normalized_case_type == CaseType.PCT_INTL.value:
++        if not ((intl_app_no or "").strip() and intl_app_date):
++            raise_business_error(
++                "CASE_PCT_INTL_REQUIRED",
++                "intl_app_no and intl_app_date are required for PCT_INTL cases",
++                status_code=400,
++            )
++    if normalized_case_type == CaseType.PCT_NATL.value and not pct_national_entry_date:
++        raise_business_error(
++            "CASE_PCT_NATL_REQUIRED",
++            "pct_national_entry_date is required for PCT_NATL cases",
++            status_code=400,
++        )
++    if normalized_case_type == CaseType.INVALIDATION.value:
++        if not invalid_client_id or not (invalid_role or "").strip():
++            raise_business_error(
++                "CASE_INVALIDATION_REQUIRED",
++                "invalid_client_id and invalid_role are required for INVALIDATION cases",
++                status_code=400,
++            )
++        normalized_invalid_role = (invalid_role or "").strip().upper()
++        if normalized_invalid_role not in _INVALIDATION_ROLES:
++            raise_business_error(
++                "CASE_INVALID_ROLE_INVALID",
++                "invalid_role must be PATENTEE, REQUESTER or BOTH",
++                status_code=400,
++            )
++        if not ((invalid_patentee or "").strip() or (invalid_requester or "").strip()):
++            raise_business_error(
++                "CASE_INVALIDATION_REQUIRED",
++                "invalid_patentee or invalid_requester is required for INVALIDATION cases",
++                status_code=400,
++            )
++    validate_client_exists(db, invalid_client_id)
++    if original_case_id:
++        exists = db.query(Case.id).filter(Case.id == original_case_id).first()
++        if not exists:
++            raise_business_error("CASE_NOT_FOUND", "Original case not found", status_code=404)
++
++
++def validate_status_required_fields(
++    *, status: str | None, app_no: str | None, filing_date: date | None
++) -> None:
++    if not status or status not in _STATUSES_REQUIRING_APPLICATION_FIELDS:
++        return
++    if not (app_no and filing_date):
++        raise_business_error(
++            "CASE_STATUS_REQUIRES_APPLICATION_FIELDS",
++            "app_no and filing_date are required for the target status",
++            status_code=400,
++        )
++
++
++def validate_case_status_transition(current_status: str | None, target_status: str | None) -> None:
++    if not target_status or not current_status or target_status == current_status:
++        return
++
++    try:
++        CaseStatus(target_status)
++    except ValueError:
++        raise_business_error(
++            "CASE_STATUS_INVALID",
++            f"Unsupported case status '{target_status}'",
++            status_code=409,
++        )
++
++    allowed = _TERMINAL_STATUS_ALLOWED_TRANSITIONS.get(current_status)
++    if allowed and target_status not in allowed:
++        raise_business_error(
++            "CASE_STATUS_TRANSITION_INVALID",
++            f"Cannot change case status from {current_status} to {target_status}",
++            status_code=409,
++        )
++
++
+ def list_cases(
+     db: Session,
+     q: str | None = None,
+@@ -153,7 +369,26 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
+         )
+ 
+     applicants_dict = [applicant.model_dump() for applicant in data.applicants]
+-    validate_applicants(applicants_dict)
++    priorities_dict = [priority.model_dump() for priority in data.priorities]
++    bio_deposits_dict = [bio_deposit.model_dump() for bio_deposit in data.bio_deposits]
++    if applicants_dict:
++        validate_applicants(applicants_dict)
++    validate_client_exists(db, data.client_id)
++    validate_foreign_agent(db, flow_dir=data.flow_dir.value, foreign_agent_id=data.foreign_agent_id)
++    validate_priorities(priorities_dict)
++    validate_bio_deposits(bio_deposits_dict)
++    validate_case_type_specific_fields(
++        db,
++        case_type=data.case_type.value,
++        intl_app_no=data.intl_app_no,
++        intl_app_date=data.intl_app_date,
++        pct_national_entry_date=data.pct_national_entry_date,
++        original_case_id=data.original_case_id,
++        invalid_client_id=data.invalid_client_id,
++        invalid_patentee=data.invalid_patentee,
++        invalid_requester=data.invalid_requester,
++        invalid_role=data.invalid_role,
++    )
+ 
+     case = Case(
+         id=str(uuid4()),
+@@ -162,6 +397,8 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
+         patent_category=data.patent_category,
+         flow_dir=data.flow_dir,
+         client_id=data.client_id,
++        foreign_agent_id=data.foreign_agent_id,
++        foreign_ref=data.foreign_ref,
+         title_cn=data.title_cn,
+         title_en=data.title_en,
+         app_no=data.app_no,
+@@ -177,6 +414,22 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
+         spec_pages=data.spec_pages,
+         claim_count=data.claim_count,
+         has_exam_request=data.has_exam_request,
++        ro=data.ro,
++        isa=data.isa,
++        ipea=data.ipea,
++        intl_app_no=data.intl_app_no,
++        intl_app_date=data.intl_app_date,
++        intl_pub_no=data.intl_pub_no,
++        intl_pub_date=data.intl_pub_date,
++        intl_pub_lang=data.intl_pub_lang,
++        need_iper=data.need_iper,
++        iper_date=data.iper_date,
++        pct_national_entry_date=data.pct_national_entry_date,
++        original_case_id=data.original_case_id,
++        invalid_client_id=data.invalid_client_id,
++        invalid_patentee=data.invalid_patentee,
++        invalid_requester=data.invalid_requester,
++        invalid_role=(data.invalid_role or "").strip().upper() or None,
+         # A3 — Agent assignment
+         primary_agent_id=data.primary_agent_id,
+         second_agent_id=data.second_agent_id,
+@@ -228,6 +481,19 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
+             )
+         )
+ 
++    for bio_deposit in data.bio_deposits:
++        db.add(
++            T_BioDeposit(
++                id=str(uuid4()),
++                case_id=case.id,
++                seq=bio_deposit.seq,
++                deposit_no=bio_deposit.deposit_no,
++                deposit_unit_name=bio_deposit.deposit_unit_name,
++                deposit_date=bio_deposit.deposit_date,
++                name=bio_deposit.name,
++            )
++        )
++
+     db.commit()
+     db.refresh(case)
+     return case
+@@ -296,54 +562,159 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
+     if not case:
+         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+ 
+-    if data.title_cn is not None:
++    provided_fields = data.model_fields_set
++    target_status = data.status.value if data.status is not None else case.status
++    target_app_no = data.app_no if "app_no" in provided_fields else case.app_no
++    target_filing_date = data.filing_date if "filing_date" in provided_fields else case.filing_date
++    target_case_type = (
++        data.case_type.value
++        if "case_type" in provided_fields and data.case_type
++        else case.case_type
++    )
++    target_flow_dir = (
++        data.flow_dir.value if "flow_dir" in provided_fields and data.flow_dir else case.flow_dir
++    )
++    target_foreign_agent_id = (
++        data.foreign_agent_id if "foreign_agent_id" in provided_fields else case.foreign_agent_id
++    )
++
++    validate_case_status_transition(case.status, target_status)
++    validate_status_required_fields(
++        status=target_status,
++        app_no=target_app_no,
++        filing_date=target_filing_date,
++    )
++    validate_foreign_agent(
++        db,
++        flow_dir=target_flow_dir,
++        foreign_agent_id=target_foreign_agent_id,
++    )
++    validate_case_type_specific_fields(
++        db,
++        case_type=target_case_type,
++        intl_app_no=data.intl_app_no if "intl_app_no" in provided_fields else case.intl_app_no,
++        intl_app_date=(
++            data.intl_app_date if "intl_app_date" in provided_fields else case.intl_app_date
++        ),
++        pct_national_entry_date=(
++            data.pct_national_entry_date
++            if "pct_national_entry_date" in provided_fields
++            else case.pct_national_entry_date
++        ),
++        original_case_id=(
++            data.original_case_id
++            if "original_case_id" in provided_fields
++            else case.original_case_id
++        ),
++        invalid_client_id=(
++            data.invalid_client_id
++            if "invalid_client_id" in provided_fields
++            else case.invalid_client_id
++        ),
++        invalid_patentee=(
++            data.invalid_patentee
++            if "invalid_patentee" in provided_fields
++            else case.invalid_patentee
++        ),
++        invalid_requester=(
++            data.invalid_requester
++            if "invalid_requester" in provided_fields
++            else case.invalid_requester
++        ),
++        invalid_role=data.invalid_role if "invalid_role" in provided_fields else case.invalid_role,
++    )
++
++    if "case_type" in provided_fields and data.case_type is not None:
++        case.case_type = data.case_type
++    if "flow_dir" in provided_fields and data.flow_dir is not None:
++        case.flow_dir = data.flow_dir
++    if "title_cn" in provided_fields:
+         case.title_cn = data.title_cn
+-    if data.title_en is not None:
++    if "title_en" in provided_fields:
+         case.title_en = data.title_en
+-    if data.app_no is not None:
++    if "app_no" in provided_fields:
+         case.app_no = data.app_no
++    if "filing_date" in provided_fields:
++        case.filing_date = data.filing_date
++    if "foreign_agent_id" in provided_fields:
++        case.foreign_agent_id = data.foreign_agent_id
++    if "foreign_ref" in provided_fields:
++        case.foreign_ref = data.foreign_ref
+     if data.status is not None:
+         case.status = data.status
+     # A3 — Publication / Grant
+-    if data.pub_date is not None:
++    if "pub_date" in provided_fields:
+         case.pub_date = data.pub_date
+-    if data.pub_no is not None:
++    if "pub_no" in provided_fields:
+         case.pub_no = data.pub_no
+-    if data.grant_date is not None:
++    if "grant_date" in provided_fields:
+         case.grant_date = data.grant_date
+-    if data.grant_no is not None:
++    if "grant_no" in provided_fields:
+         case.grant_no = data.grant_no
+-    if data.patent_no is not None:
++    if "patent_no" in provided_fields:
+         case.patent_no = data.patent_no
+-    if data.valid_until is not None:
++    if "valid_until" in provided_fields:
+         case.valid_until = data.valid_until
+     # A3 — Spec details
+-    if data.spec_pages is not None:
++    if "spec_pages" in provided_fields:
+         case.spec_pages = data.spec_pages
+-    if data.claim_count is not None:
++    if "claim_count" in provided_fields:
+         case.claim_count = data.claim_count
+-    if data.has_exam_request is not None:
++    if "has_exam_request" in provided_fields:
+         case.has_exam_request = data.has_exam_request
++    if "ro" in provided_fields:
++        case.ro = data.ro
++    if "isa" in provided_fields:
++        case.isa = data.isa
++    if "ipea" in provided_fields:
++        case.ipea = data.ipea
++    if "intl_app_no" in provided_fields:
++        case.intl_app_no = data.intl_app_no
++    if "intl_app_date" in provided_fields:
++        case.intl_app_date = data.intl_app_date
++    if "intl_pub_no" in provided_fields:
++        case.intl_pub_no = data.intl_pub_no
++    if "intl_pub_date" in provided_fields:
++        case.intl_pub_date = data.intl_pub_date
++    if "intl_pub_lang" in provided_fields:
++        case.intl_pub_lang = data.intl_pub_lang
++    if "need_iper" in provided_fields:
++        case.need_iper = data.need_iper
++    if "iper_date" in provided_fields:
++        case.iper_date = data.iper_date
++    if "pct_national_entry_date" in provided_fields:
++        case.pct_national_entry_date = data.pct_national_entry_date
++    if "original_case_id" in provided_fields:
++        case.original_case_id = data.original_case_id
++    if "invalid_client_id" in provided_fields:
++        case.invalid_client_id = data.invalid_client_id
++    if "invalid_patentee" in provided_fields:
++        case.invalid_patentee = data.invalid_patentee
++    if "invalid_requester" in provided_fields:
++        case.invalid_requester = data.invalid_requester
++    if "invalid_role" in provided_fields:
++        case.invalid_role = (data.invalid_role or "").strip().upper() or None
+     # A3 — Agent assignment
+-    if data.primary_agent_id is not None:
++    if "primary_agent_id" in provided_fields:
+         case.primary_agent_id = data.primary_agent_id
+-    if data.second_agent_id is not None:
++    if "second_agent_id" in provided_fields:
+         case.second_agent_id = data.second_agent_id
+-    if data.draftor_id is not None:
++    if "draftor_id" in provided_fields:
+         case.draftor_id = data.draftor_id
+     # A3 — Control flags
+-    if data.is_fee_monitor is not None:
++    if "is_fee_monitor" in provided_fields:
+         case.is_fee_monitor = data.is_fee_monitor
+-    if data.fee_reduction is not None:
++    if "fee_reduction" in provided_fields:
+         case.fee_reduction = data.fee_reduction
+-    if data.applicant_kind is not None:
++    if "applicant_kind" in provided_fields:
+         case.applicant_kind = data.applicant_kind
+ 
+     case.updated_by = user_id
+ 
+     if data.applicants is not None:
+         applicants_dict = [applicant.model_dump() for applicant in data.applicants]
+-        validate_applicants(applicants_dict)
++        if applicants_dict:
++            validate_applicants(applicants_dict)
+ 
+         db.query(T_CaseApplicant).filter(T_CaseApplicant.case_id == case_id).delete()
+ 
+@@ -375,6 +746,8 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
+             )
+ 
+     if data.priorities is not None:
++        priorities_dict = [priority.model_dump() for priority in data.priorities]
++        validate_priorities(priorities_dict)
+         db.query(T_Priority).filter(T_Priority.case_id == case_id).delete()
+         for prio in data.priorities:
+             db.add(
+@@ -388,6 +761,23 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
+                 )
+             )
+ 
++    if data.bio_deposits is not None:
++        bio_deposits_dict = [bio_deposit.model_dump() for bio_deposit in data.bio_deposits]
++        validate_bio_deposits(bio_deposits_dict)
++        db.query(T_BioDeposit).filter(T_BioDeposit.case_id == case_id).delete()
++        for bio_deposit in data.bio_deposits:
++            db.add(
++                T_BioDeposit(
++                    id=str(uuid4()),
++                    case_id=case.id,
++                    seq=bio_deposit.seq,
++                    deposit_no=bio_deposit.deposit_no,
++                    deposit_unit_name=bio_deposit.deposit_unit_name,
++                    deposit_date=bio_deposit.deposit_date,
++                    name=bio_deposit.name,
++                )
++            )
++
+     db.commit()
+     db.refresh(case)
+     return case
+diff --git a/backend/tests/test_case_fields.py b/backend/tests/test_case_fields.py
+index 122ec21..9cce3db 100644
+--- a/backend/tests/test_case_fields.py
++++ b/backend/tests/test_case_fields.py
+@@ -2,6 +2,8 @@
+ 
+ from __future__ import annotations
+ 
++from uuid import uuid4
++
+ from fastapi.testclient import TestClient
+ 
+ # ---------------------------------------------------------------------------
+@@ -16,6 +18,29 @@ def _unique_case_no(prefix: str = "A3") -> str:
+     return f"{prefix}_TEST_{_COUNTER:04d}"
+ 
+ 
++def _create_client(
++    client: TestClient,
++    auth_headers: dict,
++    name_cn: str = "案件测试客户",
++    *,
++    client_type: str = "CLIENT",
++) -> str:
++    resp = client.post(
++        "/api/v1/clients",
++        json={
++            "client_code": f"CASE-C-{uuid4().hex[:8]}",
++            "name_cn": name_cn,
++            "name_en": "Case Test Client",
++            "client_type": client_type,
++            "default_currency": "CNY",
++            "is_active": True,
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201, resp.text
++    return resp.json()["id"]
++
++
+ _GROUP1_FIELDS = {
+     "pub_date": "2025-06-01",
+     "pub_no": "CN202510001A",
+@@ -309,3 +334,363 @@ class TestBooleanDefaults:
+         detail = r2.json()
+         assert detail["has_exam_request"] is None
+         assert detail["is_fee_monitor"] is None
++
++
++# ---------------------------------------------------------------------------
++# Business rules — validation and consistency
++# ---------------------------------------------------------------------------
++class TestBusinessRules:
++    def test_create_rejects_unknown_client_id(self, client: TestClient, auth_headers: dict):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("CLIENT"),
++                "client_id": str(uuid4()),
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 404, resp.text
++        payload = resp.json()["error"]
++        assert payload["code"] == "CLIENT_NOT_FOUND"
++
++    def test_create_rejects_incomplete_priority_record(
++        self, client: TestClient, auth_headers: dict
++    ):
++        client_id = _create_client(client, auth_headers)
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("PRIO"),
++                "client_id": client_id,
++                "applicants": _MINIMAL_APPLICANT,
++                "priorities": [
++                    {
++                        "seq": 1,
++                        "country_code": "CN",
++                        "prio_no": "202510001",
++                    }
++                ],
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        payload = resp.json()["error"]
++        assert payload["code"] == "CASE_PRIORITY_INCOMPLETE"
++
++    def test_create_rejects_priority_record_with_blank_text_fields(
++        self, client: TestClient, auth_headers: dict
++    ):
++        client_id = _create_client(client, auth_headers)
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("PRIOBLANK"),
++                "client_id": client_id,
++                "applicants": _MINIMAL_APPLICANT,
++                "priorities": [
++                    {
++                        "seq": 1,
++                        "country_code": "",
++                        "prio_no": "   ",
++                        "prio_date": "2025-01-15",
++                    }
++                ],
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        payload = resp.json()["error"]
++        assert payload["code"] == "CASE_PRIORITY_INCOMPLETE"
++
++    def test_update_rejects_active_status_without_application_fields(
++        self, client: TestClient, auth_headers: dict
++    ):
++        create_resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("STATUS"),
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert create_resp.status_code == 201, create_resp.text
++        case_id = create_resp.json()["id"]
++
++        update_resp = client.put(
++            f"/api/v1/cases/{case_id}",
++            json={"status": "OA1"},
++            headers=auth_headers,
++        )
++        assert update_resp.status_code == 400, update_resp.text
++        payload = update_resp.json()["error"]
++        assert payload["code"] == "CASE_STATUS_REQUIRES_APPLICATION_FIELDS"
++
++    def test_update_accepts_legacy_title_alias(self, client: TestClient, auth_headers: dict):
++        create_resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("TITLE"),
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert create_resp.status_code == 201, create_resp.text
++        case_id = create_resp.json()["id"]
++
++        update_resp = client.put(
++            f"/api/v1/cases/{case_id}",
++            json={"title": "兼容标题"},
++            headers=auth_headers,
++        )
++        assert update_resp.status_code == 200, update_resp.text
++        assert update_resp.json()["title_cn"] == "兼容标题"
++
++
++class TestDeferredBatch1Fields:
++    def test_create_rejects_foreign_flow_without_foreign_agent(
++        self, client: TestClient, auth_headers: dict
++    ):
++        client_id = _create_client(client, auth_headers, "涉外客户")
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("FOREIGN"),
++                "client_id": client_id,
++                "flow_dir": "FOREIGN_INBOUND",
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        assert resp.json()["error"]["code"] == "CASE_FOREIGN_AGENT_REQUIRED"
++
++    def test_create_rejects_foreign_agent_with_wrong_client_type(
++        self, client: TestClient, auth_headers: dict
++    ):
++        client_id = _create_client(client, auth_headers, "涉外客户")
++        wrong_agent_id = _create_client(client, auth_headers, "非代理所客户", client_type="CLIENT")
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("FOREIGNAGENT"),
++                "client_id": client_id,
++                "flow_dir": "FOREIGN_INBOUND",
++                "foreign_agent_id": wrong_agent_id,
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        assert resp.json()["error"]["code"] == "CASE_FOREIGN_AGENT_INVALID_TYPE"
++
++    def test_create_detail_roundtrip_foreign_agent_and_bio_deposits(
++        self, client: TestClient, auth_headers: dict
++    ):
++        client_id = _create_client(client, auth_headers, "涉外客户")
++        foreign_agent_id = _create_client(client, auth_headers, "外方代理所", client_type="AGENT")
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("BIO"),
++                "client_id": client_id,
++                "flow_dir": "FOREIGN_INBOUND",
++                "foreign_agent_id": foreign_agent_id,
++                "foreign_ref": "FA-2026-001",
++                "applicants": _MINIMAL_APPLICANT,
++                "bio_deposits": [
++                    {
++                        "seq": 1,
++                        "deposit_no": "CGMCC-10001",
++                        "deposit_unit_name": "CGMCC",
++                        "deposit_date": "2026-03-01",
++                        "name": "菌株A",
++                    },
++                    {
++                        "seq": 2,
++                        "deposit_no": "CCTCC-20002",
++                        "deposit_unit_name": "CCTCC",
++                        "deposit_date": "2026-03-02",
++                        "name": "菌株B",
++                    },
++                ],
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 201, resp.text
++        data = resp.json()
++        assert data["foreign_agent_id"] == foreign_agent_id
++        assert data["foreign_ref"] == "FA-2026-001"
++        assert len(data["bio_deposits"]) == 2
++
++        detail = client.get(f"/api/v1/cases/{data['id']}", headers=auth_headers)
++        assert detail.status_code == 200, detail.text
++        payload = detail.json()
++        assert payload["foreign_agent_id"] == foreign_agent_id
++        assert payload["foreign_ref"] == "FA-2026-001"
++        assert payload["foreign_agent_name"] == "外方代理所"
++        assert payload["bio_deposits"][0]["deposit_no"] == "CGMCC-10001"
++        assert payload["bio_deposits"][1]["deposit_unit_name"] == "CCTCC"
++
++    def test_create_rejects_partial_bio_deposit_row(self, client: TestClient, auth_headers: dict):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("BIOERR"),
++                "applicants": _MINIMAL_APPLICANT,
++                "bio_deposits": [
++                    {
++                        "seq": 1,
++                        "deposit_no": "CGMCC-10003",
++                    }
++                ],
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        assert resp.json()["error"]["code"] == "CASE_BIO_DEPOSIT_INCOMPLETE"
++
++    def test_create_rejects_duplicate_bio_deposit_seq(self, client: TestClient, auth_headers: dict):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("BIOSEQ"),
++                "applicants": _MINIMAL_APPLICANT,
++                "bio_deposits": [
++                    {
++                        "seq": 1,
++                        "deposit_no": "CGMCC-10003",
++                        "deposit_unit_name": "CGMCC",
++                        "deposit_date": "2026-03-03",
++                        "name": "菌株A",
++                    },
++                    {
++                        "seq": 1,
++                        "deposit_no": "CGMCC-10004",
++                        "deposit_unit_name": "CGMCC",
++                        "deposit_date": "2026-03-04",
++                        "name": "菌株B",
++                    },
++                ],
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        assert resp.json()["error"]["code"] == "CASE_DUPLICATE_BIO_DEPOSIT_SEQ"
++
++    def test_create_rejects_pct_intl_without_required_fields(
++        self, client: TestClient, auth_headers: dict
++    ):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("PCTI"),
++                "case_type": "PCT_INTL",
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        assert resp.json()["error"]["code"] == "CASE_PCT_INTL_REQUIRED"
++
++    def test_create_roundtrip_pct_intl_fields(self, client: TestClient, auth_headers: dict):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("PCTI"),
++                "case_type": "PCT_INTL",
++                "applicants": _MINIMAL_APPLICANT,
++                "intl_app_no": "PCT/CN2026/000001",
++                "intl_app_date": "2026-01-05",
++                "ro": "CNIPA",
++                "isa": "CNISA",
++                "ipea": "IPEA-CN",
++                "intl_pub_no": "WO2026/123456",
++                "intl_pub_date": "2026-07-10",
++                "intl_pub_lang": "EN",
++                "need_iper": True,
++                "iper_date": "2026-11-10",
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 201, resp.text
++        data = resp.json()
++        assert data["intl_app_no"] == "PCT/CN2026/000001"
++        assert data["need_iper"] is True
++
++    def test_create_rejects_pct_natl_without_entry_date(
++        self, client: TestClient, auth_headers: dict
++    ):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("PCTN"),
++                "case_type": "PCT_NATL",
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        assert resp.json()["error"]["code"] == "CASE_PCT_NATL_REQUIRED"
++
++    def test_create_roundtrip_pct_natl_fields(self, client: TestClient, auth_headers: dict):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("PCTN"),
++                "case_type": "PCT_NATL",
++                "applicants": _MINIMAL_APPLICANT,
++                "pct_national_entry_date": "2026-09-15",
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 201, resp.text
++        assert resp.json()["pct_national_entry_date"] == "2026-09-15"
++
++    def test_create_rejects_invalidation_without_required_fields(
++        self, client: TestClient, auth_headers: dict
++    ):
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("INV"),
++                "case_type": "INVALIDATION",
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 400, resp.text
++        assert resp.json()["error"]["code"] == "CASE_INVALIDATION_REQUIRED"
++
++    def test_create_roundtrip_invalidation_fields(self, client: TestClient, auth_headers: dict):
++        invalid_client_id = _create_client(client, auth_headers, "无效案委托方")
++        original_case = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("ORIG"),
++                "applicants": _MINIMAL_APPLICANT,
++            },
++            headers=auth_headers,
++        )
++        assert original_case.status_code == 201, original_case.text
++        original_case_id = original_case.json()["id"]
++
++        resp = client.post(
++            "/api/v1/cases",
++            json={
++                "case_no": _unique_case_no("INV"),
++                "case_type": "INVALIDATION",
++                "applicants": _MINIMAL_APPLICANT,
++                "original_case_id": original_case_id,
++                "invalid_client_id": invalid_client_id,
++                "invalid_patentee": "某专利权人",
++                "invalid_role": "REQUESTER",
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 201, resp.text
++        data = resp.json()
++        assert data["invalid_client_id"] == invalid_client_id
++        assert data["invalid_patentee"] == "某专利权人"
++        assert data["invalid_role"] == "REQUESTER"
++        assert data["original_case_id"] == original_case_id

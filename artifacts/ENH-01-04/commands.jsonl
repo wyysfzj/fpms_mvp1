@@ -1,0 +1,4 @@
+{"ts":"20260111T155936","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260111T155942","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260111T155948","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260111T155956","step":"test-idempotency","cmd":"bash -lc $'cd backend && python3 - <<\'PY\'\nfrom app.db.session import get_engine\nfrom sqlalchemy.orm import Session\nfrom app.modules.rbac.service import seed_default_roles_perms\n\nengine = get_engine()\nwith Session(engine) as db:\n    seed_default_roles_perms(db)\n    seed_default_roles_perms(db)\nprint(\'Seed completed\')\nPY'"}

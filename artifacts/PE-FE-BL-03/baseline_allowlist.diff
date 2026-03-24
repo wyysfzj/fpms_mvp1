@@ -1,0 +1,149 @@
+diff --git a/frontend/src/api/billing.ts b/frontend/src/api/billing.ts
+index ad6b71d..b69fbd4 100644
+--- a/frontend/src/api/billing.ts
++++ b/frontend/src/api/billing.ts
+@@ -22,7 +22,11 @@ interface BackendBill {
+     client_name?: string | null
+     case_id?: string | null
+     case_no?: string | null
++    direction?: string | null
+     status?: string | null
++    total_gov?: number | string | null
++    total_service?: number | string | null
++    total_misc?: number | string | null
+     amount?: number | string | null
+     balance?: number | string | null
+     currency?: string | null
+@@ -34,11 +38,22 @@ interface BackendBill {
+     updated_at?: string
+     items?: {
+         id?: string
++        bill_id?: string
++        case_id?: string | null
++        draft_id?: string | null
++        fee_code?: string | null
++        fee_name?: string | null
++        fee_type?: string | null
++        year_no?: number | null
+         description?: string | null
+         quantity?: number | string | null
+         unit_price?: number | string | null
+         amount?: number | string | null
+     }[]
++    source_draft_ids?: string[] | null
++    source_draft_labels?: string[] | null
++    primary_draft_id?: string | null
++    primary_draft_label?: string | null
+ }
+ 
+ interface BackendPayment {
+@@ -99,13 +114,29 @@ function mapBillDetail(input: BackendBill): BillDetail {
+         ...mapBillListItem(input),
+         case_id: input.case_id || undefined,
+         case_no: input.case_no || undefined,
++        direction: input.direction || undefined,
++        bill_date: input.bill_date || undefined,
++        total_gov: input.total_gov != null ? asNumber(input.total_gov) : undefined,
++        total_service: input.total_service != null ? asNumber(input.total_service) : undefined,
++        total_misc: input.total_misc != null ? asNumber(input.total_misc) : undefined,
+         items: (input.items || []).map((item, index) => ({
+             id: item.id || `${input.id}-item-${index}`,
+-            description: item.description || '',
++            bill_id: item.bill_id || input.id,
++            case_id: item.case_id || undefined,
++            draft_id: item.draft_id || undefined,
++            fee_code: item.fee_code || undefined,
++            fee_name: item.fee_name || undefined,
++            fee_type: item.fee_type || undefined,
++            year_no: item.year_no ?? undefined,
++            description: item.description || item.fee_name || item.fee_code || '',
+             quantity: asNumber(item.quantity),
+             unit_price: asNumber(item.unit_price),
+             amount: asNumber(item.amount),
+         })),
++        source_draft_ids: input.source_draft_ids || undefined,
++        source_draft_labels: input.source_draft_labels || undefined,
++        primary_draft_id: input.primary_draft_id || undefined,
++        primary_draft_label: input.primary_draft_label || undefined,
+         notes: input.notes || undefined,
+         created_at: input.created_at,
+         updated_at: input.updated_at,
+@@ -343,6 +374,7 @@ function mapCaseReceipt(input: BackendCaseReceipt): CaseReceiptsSummary {
+         fee_type: input.fee_type || undefined,
+         fee_code: input.fee_code || undefined,
+         year_no: input.year_no ?? undefined,
++        last_receipt_date: input.last_receipt_date || undefined,
+         is_arrears: input.is_arrears ?? undefined,
+         invoice_no: input.invoice_no || undefined,
+         is_commissionable: input.is_commissionable ?? undefined,
+diff --git a/frontend/src/api/billing.types.ts b/frontend/src/api/billing.types.ts
+index 2127a54..615b8a1 100644
+--- a/frontend/src/api/billing.types.ts
++++ b/frontend/src/api/billing.types.ts
+@@ -3,6 +3,7 @@
+  */
+ 
+ export type BillStatus = string
++export type BillDirection = 'AR' | 'AP'
+ 
+ export interface BillListItem {
+     id: string
+@@ -19,6 +20,13 @@ export interface BillListItem {
+ 
+ export interface BillItem {
+     id: string
++    bill_id?: string
++    case_id?: string
++    draft_id?: string
++    fee_code?: string
++    fee_name?: string
++    fee_type?: string
++    year_no?: number
+     description: string
+     quantity: number
+     unit_price: number
+@@ -36,9 +44,18 @@ export interface BillDetail {
+     amount: number
+     balance: number
+     currency: string
++    direction?: string
+     issue_date?: string
++    bill_date?: string
+     due_date?: string
++    total_gov?: number
++    total_service?: number
++    total_misc?: number
+     items: BillItem[]
++    source_draft_ids?: string[]
++    source_draft_labels?: string[]
++    primary_draft_id?: string
++    primary_draft_label?: string
+     notes?: string
+     created_at?: string
+     updated_at?: string
+@@ -63,6 +80,8 @@ export interface BillManualPayload {
+     client_id: string
+     case_id?: string
+     currency: string
++    direction?: BillDirection
++    status?: string
+     items: BillManualItem[]
+     notes?: string
+ }
+@@ -71,6 +90,8 @@ export interface BillManualItem {
+     description: string
+     quantity: number
+     unit_price: number
++    fee_type?: string
++    year_no?: number
+ }
+ 
+ // Payment Types
+@@ -148,6 +169,7 @@ export interface CaseReceiptsSummary {
+     fee_type?: string
+     fee_code?: string
+     year_no?: number
++    last_receipt_date?: string
+     is_arrears?: boolean
+     invoice_no?: string
+     is_commissionable?: boolean

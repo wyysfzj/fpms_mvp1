@@ -1,0 +1,181 @@
+diff --git a/frontend/src/modules/cases/pages/CaseEdit.vue b/frontend/src/modules/cases/pages/CaseEdit.vue
+index 78b3bbe..26512fe 100644
+--- a/frontend/src/modules/cases/pages/CaseEdit.vue
++++ b/frontend/src/modules/cases/pages/CaseEdit.vue
+@@ -44,22 +44,17 @@
+ 
+           <el-form-item label="法律状态" prop="status" :error="fieldErrors.get('status')?.join(', ')">
+             <el-select v-model="form.status" placeholder="请选择法律状态" clearable>
+-              <el-option label="未递交" value="NOT_FILED" />
+-              <el-option label="等待受理" value="WAITING_RECEIPT" />
+-              <el-option label="初审" value="PRELIM_EXAM" />
+-              <el-option label="补正中" value="AMENDMENT" />
+-              <el-option label="初审通过" value="PRELIM_PASS" />
+-              <el-option label="已公开" value="PUBLISHED" />
+-              <el-option label="实审中" value="SUB_EXAM" />
+-              <el-option label="一通阶段" value="OA1" />
+-              <el-option label="二通阶段" value="OA2" />
+-              <el-option label="复审中" value="REEXAM" />
+-              <el-option label="已授权" value="GRANTED" />
+-              <el-option label="驳回" value="REJECTED" />
+-              <el-option label="中止/终止" value="TERMINATED" />
+-              <el-option label="全部无效" value="INVALIDATED" />
+-              <el-option label="部分无效" value="INVALIDATED_PARTIAL" />
++              <el-option
++                v-for="option in statusOptions"
++                :key="option.value"
++                :label="option.label"
++                :value="option.value"
++                :disabled="option.disabled"
++              />
+             </el-select>
++            <div v-if="showReadonlyStatusHint" class="field-hint">
++              当前状态由流程或文书联动生成，此处仅展示，不建议手工修改。
++            </div>
+           </el-form-item>
+         </div>
+ 
+@@ -79,34 +74,9 @@
+                 />
+               </el-form-item>
+             </el-col>
+-            <el-col :span="12">
+-              <el-form-item label="优先权日" prop="app_date" :error="fieldErrors.get('app_date')?.join(', ')">
+-                <el-date-picker
+-                  v-model="form.app_date"
+-                  type="date"
+-                  placeholder="请选择优先权日"
+-                  format="YYYY-MM-DD"
+-                  value-format="YYYY-MM-DD"
+-                  style="width: 100%"
+-                />
+-              </el-form-item>
+-            </el-col>
+           </el-row>
+         </div>
+ 
+-        <div class="form-section">
+-          <h3 class="form-section-title">备注</h3>
+-
+-          <el-form-item prop="notes" :error="fieldErrors.get('notes')?.join(', ')">
+-            <el-input
+-              v-model="form.notes"
+-              type="textarea"
+-              :rows="4"
+-              placeholder="请输入案件备注"
+-            />
+-          </el-form-item>
+-        </div>
+-
+         <el-collapse v-model="expandedSections" class="case-extra-sections">
+           <el-collapse-item title="公告与授权" name="pub_grant">
+             <el-row :gutter="20">
+@@ -227,7 +197,7 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import { ref, reactive, onMounted } from 'vue'
++import { computed, ref, reactive, onMounted } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+ import { ElMessage } from 'element-plus'
+ import type { FormInstance, FormRules } from 'element-plus'
+@@ -235,6 +205,7 @@ import { getCase, updateCase } from '../../../api/cases'
+ import type { Case, CaseUpdatePayload } from '../../../api/cases.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import { CASE_STATUS_TEXT } from '../../../constants/displayText'
+ import { mapValidationDetailsToFieldErrors } from '../../../utils/validation'
+ 
+ const route = useRoute()
+@@ -248,12 +219,33 @@ const caseData = ref<Case | null>(null)
+ const fieldErrors = ref<Map<string, string[]>>(new Map())
+ const expandedSections = ref<string[]>([])
+ 
++const EDITABLE_STATUS_VALUES = [
++  'NOT_FILED',
++  'PENDING',
++  'WAITING_RECEIPT',
++  'PRELIM_EXAM',
++  'AMENDMENT',
++  'PRELIM_PASS',
++  'PUBLISHED',
++  'SUB_EXAM',
++  'OA1',
++  'OA2',
++  'REEXAM',
++  'GRANTED',
++  'REJECTED',
++  'WITHDRAWN',
++  'ABANDONED',
++  'EXPIRED',
++  'TERMINATED',
++  'INVALIDATED',
++] as const
++
++const READONLY_STATUS_VALUES = ['ACCEPTED', 'GRANT_PENDING'] as const
++
+ const form = reactive<CaseUpdatePayload>({
+   title: '',
+   status: '',
+   filing_date: '',
+-  app_date: '',
+-  notes: '',
+ })
+ 
+ const rules: FormRules = {
+@@ -262,6 +254,32 @@ const rules: FormRules = {
+   ],
+ }
+ 
++const statusOptions = computed(() => {
++  const editableOptions = EDITABLE_STATUS_VALUES.map((value) => ({
++    value,
++    label: CASE_STATUS_TEXT[value] || value,
++    disabled: false,
++  }))
++
++  const currentStatus = form.status?.trim()
++  if (currentStatus && READONLY_STATUS_VALUES.includes(currentStatus as typeof READONLY_STATUS_VALUES[number])) {
++    return [
++      {
++        value: currentStatus,
++        label: `${CASE_STATUS_TEXT[currentStatus] || currentStatus}（流程状态，只读）`,
++        disabled: true,
++      },
++      ...editableOptions,
++    ]
++  }
++
++  return editableOptions
++})
++
++const showReadonlyStatusHint = computed(() =>
++  READONLY_STATUS_VALUES.includes((form.status || '').trim() as typeof READONLY_STATUS_VALUES[number])
++)
++
+ async function fetchCase() {
+   const id = String(route.params.id || '').trim()
+   if (!id) {
+@@ -277,8 +295,6 @@ async function fetchCase() {
+     form.title = caseData.value.title || ''
+     form.status = caseData.value.status || ''
+     form.filing_date = caseData.value.filing_date || ''
+-    form.app_date = caseData.value.app_date || ''
+-    form.notes = caseData.value.notes || ''
+     // A3 fields
+     form.pub_date = caseData.value.pub_date || ''
+     form.pub_no = caseData.value.pub_no || ''
+@@ -317,7 +333,12 @@ async function handleSave() {
+   error.value = null
+ 
+   try {
+-    await updateCase(id, form)
++    const payload: CaseUpdatePayload = { ...form }
++    if (READONLY_STATUS_VALUES.includes((payload.status || '').trim() as typeof READONLY_STATUS_VALUES[number])) {
++      delete payload.status
++    }
++
++    await updateCase(id, payload)
+     ElMessage.success('案件更新成功')
+     router.push(`/cases/${id}`)
+   } catch (err) {

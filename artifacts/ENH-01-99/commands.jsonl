@@ -1,0 +1,66 @@
+{"ts":"20260124T122734","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260124T122741","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260124T122749","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260124T122756","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260124T122802","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260124T122809","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260124T122816","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260124T233217","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260124T233224","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260124T233229","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260124T233235","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260124T233241","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260124T233246","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260124T233252","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260126T223202","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260126T223211","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260126T223219","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260126T223228","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260126T223236","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260126T223244","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260126T223257","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260126T223435","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260126T223442","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260126T223450","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260126T223458","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260126T223506","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260126T223514","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260126T223524","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260126T225306","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260126T225315","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260126T225325","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260126T225334","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260126T225344","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260126T225352","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260126T225400","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260126T225451","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260126T225458","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260126T225506","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260126T225515","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260126T225523","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260126T225532","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260126T225540","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260126T231727","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260126T231733","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260126T231804","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260126T231809","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260126T231815","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260126T231821","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260126T231828","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260126T231834","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260126T231840","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260127T001241","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260127T001248","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260127T001259","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260127T001306","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260127T001314","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260127T001320","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260127T001325","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}
+{"ts":"20260131T132103","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260131T132138","step":"scan","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/scan_perms.py"}
+{"ts":"20260131T132143","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/scan_perms.py"}
+{"ts":"20260131T132148","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/scan_perms.py"}
+{"ts":"20260131T132152","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/scan_perms.py"}
+{"ts":"20260131T132158","step":"lint2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260131T132202","step":"fmt2","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260131T132207","step":"test2","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}

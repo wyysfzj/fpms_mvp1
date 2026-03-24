@@ -1,0 +1,1779 @@
+diff --git a/frontend/src/api/cases.ts b/frontend/src/api/cases.ts
+index 6752b65..b5dc51e 100644
+--- a/frontend/src/api/cases.ts
++++ b/frontend/src/api/cases.ts
+@@ -19,6 +19,7 @@ interface BackendCase {
+     case_no: string
+     case_type?: string
+     patent_category?: string
++    flow_dir?: string
+     client_id?: string | null
+     client_name?: string | null
+     title_cn?: string | null
+@@ -30,6 +31,7 @@ interface BackendCase {
+     app_date?: string | null
+     applicants?: Array<{ seq: number; is_first?: boolean; name_cn?: string; name_en?: string; address_cn?: string; address_en?: string }>
+     inventors?: Array<{ seq: number; name_cn?: string; name_en?: string }>
++    priorities?: Array<{ seq: number; country_code?: string | null; prio_no?: string | null; prio_date?: string | null }>
+     // A3: Publication & Grant
+     pub_date?: string | null
+     pub_no?: string | null
+@@ -57,6 +59,9 @@ function mapCase(input: BackendCase): Case {
+     return {
+         id: input.id,
+         case_no: input.case_no,
++        case_type: input.case_type || undefined,
++        patent_category: input.patent_category || undefined,
++        flow_dir: input.flow_dir || undefined,
+         title: input.title_cn || input.title_en || undefined,
+         client_id: input.client_id || '',
+         client_name: input.client_name || undefined,
+@@ -67,6 +72,12 @@ function mapCase(input: BackendCase): Case {
+         app_date: input.app_date || undefined,
+         applicants: input.applicants || [],
+         inventors: input.inventors || [],
++        priorities: (input.priorities || []).map((priority) => ({
++            seq: priority.seq,
++            country_code: priority.country_code || undefined,
++            prio_no: priority.prio_no || undefined,
++            prio_date: priority.prio_date || undefined,
++        })),
+         // Publication & Grant
+         pub_date: input.pub_date || undefined,
+         pub_no: input.pub_no || undefined,
+@@ -91,6 +102,56 @@ function mapCase(input: BackendCase): Case {
+     }
+ }
+ 
++function trimToUndefined(value: string | null | undefined): string | undefined {
++    if (typeof value !== 'string') return value ?? undefined
++    const normalized = value.trim()
++    return normalized ? normalized : undefined
++}
++
++function trimToNull(value: string | null | undefined): string | null | undefined {
++    if (value === undefined) return undefined
++    if (value === null) return null
++    const normalized = value.trim()
++    return normalized ? normalized : null
++}
++
++function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
++    const payload: Record<string, unknown> = {}
++
++    if (data.title !== undefined) payload.title = trimToNull(data.title)
++    if (data.status !== undefined) payload.status = trimToNull(data.status)
++    if (data.filing_date !== undefined) payload.filing_date = trimToNull(data.filing_date)
++    if (data.app_no !== undefined) payload.app_no = trimToNull(data.app_no)
++    if (data.priorities !== undefined) payload.priorities = data.priorities
++        ?.map((priority) => ({
++            seq: priority.seq,
++            country_code: trimToNull(priority.country_code),
++            prio_no: trimToNull(priority.prio_no),
++            prio_date: trimToNull(priority.prio_date),
++        }))
++    if (data.pub_date !== undefined) payload.pub_date = trimToNull(data.pub_date)
++    if (data.pub_no !== undefined) payload.pub_no = trimToNull(data.pub_no)
++    if (data.grant_date !== undefined) payload.grant_date = trimToNull(data.grant_date)
++    if (data.grant_no !== undefined) payload.grant_no = trimToNull(data.grant_no)
++    if (data.patent_no !== undefined) payload.patent_no = trimToNull(data.patent_no)
++    if (data.valid_until !== undefined) payload.valid_until = trimToNull(data.valid_until)
++    if (data.spec_pages !== undefined) payload.spec_pages = data.spec_pages
++    if (data.claim_count !== undefined) payload.claim_count = data.claim_count
++    if (data.has_exam_request !== undefined) payload.has_exam_request = data.has_exam_request
++    if (data.primary_agent_id !== undefined) {
++        payload.primary_agent_id = trimToNull(data.primary_agent_id)
++    }
++    if (data.second_agent_id !== undefined) {
++        payload.second_agent_id = trimToNull(data.second_agent_id)
++    }
++    if (data.draftor_id !== undefined) payload.draftor_id = trimToNull(data.draftor_id)
++    if (data.is_fee_monitor !== undefined) payload.is_fee_monitor = data.is_fee_monitor
++    if (data.fee_reduction !== undefined) payload.fee_reduction = trimToNull(data.fee_reduction)
++    if (data.applicant_kind !== undefined) payload.applicant_kind = trimToNull(data.applicant_kind)
++
++    return payload
++}
++
+ /**
+  * Get paginated list of cases
+  */
+@@ -128,25 +189,34 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
+     // Backend expects title_cn (not title) and patent_category
+     const payload: Record<string, unknown> = {
+         case_no: data.case_no,
++        case_type: trimToUndefined(data.case_type) || 'NORMAL',
+         client_id: data.client_id,
+-        title_cn: data.title || undefined,
+-        patent_category: data.patent_category || undefined,
++        title_cn: trimToUndefined(data.title),
++        patent_category: trimToUndefined(data.patent_category),
++        flow_dir: trimToUndefined(data.flow_dir) || 'CN_DOMESTIC',
++        app_no: trimToUndefined(data.app_no),
++        priorities: data.priorities?.map((priority) => ({
++            seq: priority.seq,
++            country_code: trimToUndefined(priority.country_code),
++            prio_no: trimToUndefined(priority.prio_no),
++            prio_date: trimToUndefined(priority.prio_date),
++        })),
+         // A3 fields
+-        pub_date: data.pub_date || undefined,
+-        pub_no: data.pub_no || undefined,
+-        grant_date: data.grant_date || undefined,
+-        grant_no: data.grant_no || undefined,
+-        patent_no: data.patent_no || undefined,
+-        valid_until: data.valid_until || undefined,
++        pub_date: trimToUndefined(data.pub_date),
++        pub_no: trimToUndefined(data.pub_no),
++        grant_date: trimToUndefined(data.grant_date),
++        grant_no: trimToUndefined(data.grant_no),
++        patent_no: trimToUndefined(data.patent_no),
++        valid_until: trimToUndefined(data.valid_until),
+         spec_pages: data.spec_pages ?? undefined,
+         claim_count: data.claim_count ?? undefined,
+         has_exam_request: data.has_exam_request ?? undefined,
+-        primary_agent_id: data.primary_agent_id || undefined,
+-        second_agent_id: data.second_agent_id || undefined,
+-        draftor_id: data.draftor_id || undefined,
++        primary_agent_id: trimToUndefined(data.primary_agent_id),
++        second_agent_id: trimToUndefined(data.second_agent_id),
++        draftor_id: trimToUndefined(data.draftor_id),
+         is_fee_monitor: data.is_fee_monitor ?? undefined,
+-        fee_reduction: data.fee_reduction || undefined,
+-        applicant_kind: data.applicant_kind || undefined,
++        fee_reduction: trimToUndefined(data.fee_reduction),
++        applicant_kind: trimToUndefined(data.applicant_kind),
+     }
+     const response = await http.post<BackendCase>('/cases', payload)
+     return mapCase(response.data)
+@@ -156,7 +226,7 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
+  * Update an existing case
+  */
+ export async function updateCase(id: string | number, data: CaseUpdatePayload): Promise<Case> {
+-    const response = await http.put<BackendCase>(`/cases/${id}`, data)
++    const response = await http.put<BackendCase>(`/cases/${id}`, toUpdatePayload(data))
+     return mapCase(response.data)
+ }
+ 
+diff --git a/frontend/src/api/cases.types.ts b/frontend/src/api/cases.types.ts
+index 78bd13b..b618bb5 100644
+--- a/frontend/src/api/cases.types.ts
++++ b/frontend/src/api/cases.types.ts
+@@ -17,9 +17,19 @@ export interface CaseInventor {
+     name_en?: string
+ }
+ 
++export interface CasePriority {
++    seq: number
++    country_code?: string
++    prio_no?: string
++    prio_date?: string
++}
++
+ export interface Case {
+     id: string
+     case_no: string
++    case_type?: string
++    patent_category?: string
++    flow_dir?: string
+     title?: string
+     client_id: string | number
+     client_name?: string
+@@ -30,6 +40,7 @@ export interface Case {
+     app_no?: string
+     applicants?: CaseApplicant[]
+     inventors?: CaseInventor[]
++    priorities?: CasePriority[]
+     notes?: string
+     // A3: Publication & Grant
+     pub_date?: string
+@@ -61,9 +72,14 @@ export interface CaseListParams {
+ 
+ export interface CaseCreatePayload {
+     case_no: string
++    case_type?: string
+     title?: string
+     client_id: string | number
+     patent_category?: string
++    flow_dir?: string
++    app_no?: string
++    filing_date?: string
++    status?: string
+     // A3 fields (all optional on create)
+     pub_date?: string
+     pub_no?: string
+@@ -80,14 +96,18 @@ export interface CaseCreatePayload {
+     is_fee_monitor?: boolean
+     fee_reduction?: string
+     applicant_kind?: string
++    priorities?: CasePriority[]
+ }
+ 
+ export interface CaseUpdatePayload {
+     title?: string
+     status?: string
+     filing_date?: string
+-    app_date?: string
+-    notes?: string
++    app_no?: string | null
++    case_type?: string | null
++    patent_category?: string | null
++    flow_dir?: string | null
++    priorities?: CasePriority[] | null
+     // A3 fields (all optional on update, | null for explicit clearing)
+     pub_date?: string | null
+     pub_no?: string | null
+diff --git a/frontend/src/modules/cases/pages/CaseCreate.vue b/frontend/src/modules/cases/pages/CaseCreate.vue
+index 4950e71..1623185 100644
+--- a/frontend/src/modules/cases/pages/CaseCreate.vue
++++ b/frontend/src/modules/cases/pages/CaseCreate.vue
+@@ -12,18 +12,30 @@
+       </div>
+     </div>
+ 
+-    <!-- Error Banner -->
+     <div v-if="error" class="page-error">
+       <ApiErrorBanner :error="error" @dismiss="error = null" />
+     </div>
+ 
+-    <!-- Loading Clients -->
+     <div v-if="loadingClients" class="page-loading">
+       <el-skeleton :rows="6" animated />
+     </div>
+ 
+-    <!-- Form -->
+     <div v-else class="form-card">
++      <el-alert
++        v-if="validationSummary.length"
++        title="请先修正以下问题后再保存"
++        type="error"
++        show-icon
++        :closable="false"
++        class="validation-summary"
++      >
++        <ul class="validation-summary-list">
++          <li v-for="item in validationSummary" :key="item.key">
++            {{ item.message }}
++          </li>
++        </ul>
++      </el-alert>
++
+       <el-form
+         ref="formRef"
+         :model="form"
+@@ -33,30 +45,82 @@
+       >
+         <div class="form-section">
+           <h3 class="form-section-title">基础信息</h3>
+-          
+-          <el-form-item label="案号" prop="case_no" :error="fieldErrors.get('case_no')?.join(', ')">
+-            <el-input v-model="form.case_no" placeholder="请输入案号（例如：P2024-001）" />
+-          </el-form-item>
+-          
+-          <el-form-item label="标题" prop="title" :error="fieldErrors.get('title')?.join(', ')">
+-            <el-input v-model="form.title" placeholder="请输入案件标题" />
+-          </el-form-item>
+ 
+-          <el-form-item label="客户" prop="client_id" :error="fieldErrors.get('client_id')?.join(', ')">
+-            <el-select
+-              v-model="form.client_id"
+-              placeholder="请选择客户"
+-              :loading="loadingClients"
+-              filterable
+-              class="full-width"
+-            >
+-              <el-option
+-                v-for="client in clients"
+-                :key="client.id"
+-                :label="client.name"
+-                :value="client.id"
+-              />
+-            </el-select>
++          <el-row :gutter="20">
++            <el-col :span="8">
++              <el-form-item label="案号" prop="case_no" :error="fieldErrors.get('case_no')?.join('，')">
++                <el-input v-model="form.case_no" placeholder="请输入案号（例如：P2024-001）" />
++              </el-form-item>
++            </el-col>
++            <el-col :span="8">
++              <el-form-item label="案件类型" prop="case_type" :error="fieldErrors.get('case_type')?.join('，')">
++                <el-select v-model="form.case_type" class="full-width" placeholder="请选择案件类型">
++                  <el-option
++                    v-for="option in CASE_TYPE_OPTIONS"
++                    :key="option.value"
++                    :label="option.label"
++                    :value="option.value"
++                  />
++                </el-select>
++              </el-form-item>
++            </el-col>
++            <el-col :span="8">
++              <el-form-item label="专利类别" prop="patent_category" :error="fieldErrors.get('patent_category')?.join('，')">
++                <el-select
++                  v-model="form.patent_category"
++                  class="full-width"
++                  placeholder="请选择专利类别"
++                  :disabled="isConsultingCase"
++                >
++                  <el-option
++                    v-for="option in PATENT_CATEGORY_OPTIONS"
++                    :key="option.value"
++                    :label="option.label"
++                    :value="option.value"
++                  />
++                </el-select>
++              </el-form-item>
++            </el-col>
++          </el-row>
++
++          <el-row :gutter="20">
++            <el-col :span="12">
++              <el-form-item label="标题" prop="title" :error="fieldErrors.get('title')?.join('，')">
++                <el-input v-model="form.title" placeholder="请输入案件标题" />
++              </el-form-item>
++            </el-col>
++            <el-col :span="12">
++              <el-form-item label="流程方向" prop="flow_dir" :error="fieldErrors.get('flow_dir')?.join('，')">
++                <el-select v-model="form.flow_dir" class="full-width" placeholder="请选择流程方向">
++                  <el-option
++                    v-for="option in FLOW_DIR_OPTIONS"
++                    :key="option.value"
++                    :label="option.label"
++                    :value="option.value"
++                  />
++                </el-select>
++              </el-form-item>
++            </el-col>
++          </el-row>
++
++          <el-form-item label="客户" prop="client_id" :error="fieldErrors.get('client_id')?.join('，')">
++            <div class="client-field">
++              <el-select
++                v-model="form.client_id"
++                placeholder="请选择客户"
++                :loading="loadingClients"
++                filterable
++                class="full-width"
++              >
++                <el-option
++                  v-for="client in clients"
++                  :key="client.id"
++                  :label="client.name"
++                  :value="client.id"
++                />
++              </el-select>
++              <el-button plain @click="showQuickClientDialog = true">快速新建客户</el-button>
++            </div>
+             <div v-if="clientsTotal > clients.length" class="field-hint">
+               当前显示 {{ clients.length }} / {{ clientsTotal }} 位客户
+             </div>
+@@ -64,12 +128,64 @@
+         </div>
+ 
+         <el-collapse v-model="expandedSections" class="case-extra-sections">
+-          <el-collapse-item title="公告与授权" name="pub_grant">
++          <el-collapse-item v-if="showPrioritySection" title="优先权信息" name="priority">
++            <div class="section-toolbar">
++              <div class="field-hint">当存在优先权时，每条记录都必须完整填写国家/地区、号码和日期。</div>
++              <el-button text type="primary" @click="addPriority">新增优先权</el-button>
++            </div>
++            <div v-if="fieldErrors.get('priorities')?.length" class="section-error">
++              {{ fieldErrors.get('priorities')?.join('，') }}
++            </div>
++            <div v-if="!form.priorities?.length" class="field-hint">当前案件类型建议补充优先权记录；如不适用，可留空。</div>
++            <div
++              v-for="(priority, index) in form.priorities"
++              :key="priority.seq"
++              class="priority-card"
++            >
++              <div class="priority-card-header">
++                <span>优先权 {{ index + 1 }}</span>
++                <el-button text type="danger" @click="removePriority(index)">删除</el-button>
++              </div>
++              <el-row :gutter="16">
++                <el-col :span="8">
++                  <el-input v-model="priority.country_code" placeholder="国家/地区代码，例如 CN" />
++                </el-col>
++                <el-col :span="8">
++                  <el-input v-model="priority.prio_no" placeholder="优先权号" />
++                </el-col>
++                <el-col :span="8">
++                  <el-date-picker
++                    v-model="priority.prio_date"
++                    type="date"
++                    placeholder="优先权日"
++                    format="YYYY-MM-DD"
++                    value-format="YYYY-MM-DD"
++                    class="full-width"
++                  />
++                </el-col>
++              </el-row>
++            </div>
++          </el-collapse-item>
++
++          <el-collapse-item v-if="showPublicationSection" title="公告与授权" name="pub_grant">
++            <el-row :gutter="20">
++              <el-col :span="12">
++                <el-form-item label="申请号" :error="fieldErrors.get('app_no')?.join('，')">
++                  <el-input v-model="form.app_no" placeholder="用于后续状态联动校验" />
++                </el-form-item>
++              </el-col>
++            </el-row>
+             <el-row :gutter="20">
+               <el-col :span="12">
+                 <el-form-item label="公告日">
+-                  <el-date-picker v-model="form.pub_date" type="date" placeholder="请选择公告日"
+-                    format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%" />
++                  <el-date-picker
++                    v-model="form.pub_date"
++                    type="date"
++                    placeholder="请选择公告日"
++                    format="YYYY-MM-DD"
++                    value-format="YYYY-MM-DD"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="12">
+@@ -81,8 +197,14 @@
+             <el-row :gutter="20">
+               <el-col :span="12">
+                 <el-form-item label="授权日">
+-                  <el-date-picker v-model="form.grant_date" type="date" placeholder="请选择授权日"
+-                    format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%" />
++                  <el-date-picker
++                    v-model="form.grant_date"
++                    type="date"
++                    placeholder="请选择授权日"
++                    format="YYYY-MM-DD"
++                    value-format="YYYY-MM-DD"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="12">
+@@ -99,25 +221,41 @@
+               </el-col>
+               <el-col :span="12">
+                 <el-form-item label="有效期至">
+-                  <el-date-picker v-model="form.valid_until" type="date" placeholder="请选择有效期至"
+-                    format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%" />
++                  <el-date-picker
++                    v-model="form.valid_until"
++                    type="date"
++                    placeholder="请选择有效期至"
++                    format="YYYY-MM-DD"
++                    value-format="YYYY-MM-DD"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+             </el-row>
+           </el-collapse-item>
+ 
+-          <el-collapse-item title="说明书信息" name="spec">
++          <el-collapse-item v-if="showSpecificationSection" title="说明书信息" name="spec">
+             <el-row :gutter="20">
+               <el-col :span="8">
+                 <el-form-item label="说明书页数">
+-                  <el-input-number v-model="form.spec_pages" :min="0" controls-position="right"
+-                    placeholder="页数" style="width: 100%" />
++                  <el-input-number
++                    v-model="form.spec_pages"
++                    :min="0"
++                    controls-position="right"
++                    placeholder="页数"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="权利要求项数">
+-                  <el-input-number v-model="form.claim_count" :min="0" controls-position="right"
+-                    placeholder="项数" style="width: 100%" />
++                  <el-input-number
++                    v-model="form.claim_count"
++                    :min="0"
++                    controls-position="right"
++                    placeholder="项数"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="8">
+@@ -132,23 +270,23 @@
+             <el-row :gutter="20">
+               <el-col :span="8">
+                 <el-form-item label="主办代理人">
+-                  <el-input v-model="form.primary_agent_id" placeholder="请输入代理人ID" />
++                  <el-input v-model="form.primary_agent_id" placeholder="请输入代理人 ID" />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="辅办代理人">
+-                  <el-input v-model="form.second_agent_id" placeholder="请输入代理人ID" />
++                  <el-input v-model="form.second_agent_id" placeholder="请输入代理人 ID" />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="撰写人">
+-                  <el-input v-model="form.draftor_id" placeholder="请输入撰写人ID" />
++                  <el-input v-model="form.draftor_id" placeholder="请输入撰写人 ID" />
+                 </el-form-item>
+               </el-col>
+             </el-row>
+           </el-collapse-item>
+ 
+-          <el-collapse-item title="控制标记" name="flags">
++          <el-collapse-item v-if="showSpecificationSection" title="控制标记" name="flags">
+             <el-row :gutter="20">
+               <el-col :span="8">
+                 <el-form-item label="费用监控">
+@@ -157,7 +295,7 @@
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="减免类型">
+-                  <el-select v-model="form.fee_reduction" placeholder="请选择" clearable style="width: 100%">
++                  <el-select v-model="form.fee_reduction" placeholder="请选择" clearable class="full-width">
+                     <el-option label="不减免" value="NONE" />
+                     <el-option label="部分减免" value="PARTIAL" />
+                     <el-option label="全额减免" value="FULL" />
+@@ -166,7 +304,7 @@
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="申请人类型">
+-                  <el-select v-model="form.applicant_kind" placeholder="请选择" clearable style="width: 100%">
++                  <el-select v-model="form.applicant_kind" placeholder="请选择" clearable class="full-width">
+                     <el-option label="个人" value="INDIVIDUAL" />
+                     <el-option label="企业" value="ENTITY" />
+                     <el-option label="高校" value="UNIV" />
+@@ -179,49 +317,181 @@
+         </el-collapse>
+       </el-form>
+     </div>
++
++    <el-dialog v-model="showQuickClientDialog" title="快速新建客户" width="520px" destroy-on-close>
++      <el-form label-position="top" class="quick-client-form">
++        <el-form-item label="客户名称" required>
++          <el-input v-model="quickClientForm.name" placeholder="请输入客户名称" />
++        </el-form-item>
++        <el-row :gutter="16">
++          <el-col :span="12">
++            <el-form-item label="客户代码">
++              <el-input v-model="quickClientForm.client_code" placeholder="可选" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="12">
++            <el-form-item label="英文名称">
++              <el-input v-model="quickClientForm.name_en" placeholder="可选" />
++            </el-form-item>
++          </el-col>
++        </el-row>
++        <el-row :gutter="16">
++          <el-col :span="12">
++            <el-form-item label="客户类型">
++              <el-input v-model="quickClientForm.client_type" placeholder="可选" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="12">
++            <el-form-item label="邮箱">
++              <el-input v-model="quickClientForm.email" placeholder="可选" />
++            </el-form-item>
++          </el-col>
++        </el-row>
++      </el-form>
++      <template #footer>
++        <el-button @click="resetQuickClientDialog">取消</el-button>
++        <el-button type="primary" :loading="creatingClient" @click="handleQuickClientSave">
++          创建并回填
++        </el-button>
++      </template>
++    </el-dialog>
+   </div>
+ </template>
+ 
+ <script setup lang="ts">
+-import { ref, reactive, onMounted } from 'vue'
++import { computed, onMounted, reactive, ref, watch } from 'vue'
+ import { useRouter } from 'vue-router'
+ import { ElMessage } from 'element-plus'
+ import type { FormInstance, FormRules } from 'element-plus'
+ import { createCase } from '../../../api/cases'
+-import { getClients } from '../../../api/clients'
+-import type { CaseCreatePayload } from '../../../api/cases.types'
+-import type { Client } from '../../../api/clients.types'
++import { createClient, getClients } from '../../../api/clients'
++import type { CaseCreatePayload, CasePriority } from '../../../api/cases.types'
++import type { Client, ClientCreatePayload } from '../../../api/clients.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+ import { mapValidationDetailsToFieldErrors } from '../../../utils/validation'
+ 
++interface ValidationItem {
++  key: string
++  message: string
++  section?: string
++}
++
++const CASE_TYPE_OPTIONS = [
++  { label: '普通案件', value: 'NORMAL' },
++  { label: 'PCT 国际阶段', value: 'PCT_INTL' },
++  { label: 'PCT 国家阶段', value: 'PCT_NATL' },
++  { label: '优先权案件', value: 'PRIORITY' },
++  { label: '顾问项目', value: 'CONSULTING' },
++  { label: '检索项目', value: 'SEARCH' },
++]
++
++const PATENT_CATEGORY_OPTIONS = [
++  { label: '发明', value: 'INV' },
++  { label: '实用新型', value: 'UM' },
++  { label: '外观设计', value: 'DES' },
++]
++
++const FLOW_DIR_OPTIONS = [
++  { label: '中国国内', value: 'CN_DOMESTIC' },
++  { label: '中国向外', value: 'CN_OUTBOUND' },
++  { label: '国外进入中国', value: 'FOREIGN_INBOUND' },
++]
++
++const PRIORITY_CASE_TYPES = ['PRIORITY', 'PCT_INTL', 'PCT_NATL']
++const CONSULTING_CASE_TYPES = ['CONSULTING', 'SEARCH']
++
+ const router = useRouter()
+ 
+ const formRef = ref<FormInstance>()
+ const saving = ref(false)
+ const loadingClients = ref(false)
++const creatingClient = ref(false)
+ const error = ref<ApiError | null>(null)
+ const fieldErrors = ref<Map<string, string[]>>(new Map())
++const validationSummary = ref<ValidationItem[]>([])
+ 
+ const clients = ref<Client[]>([])
+ const clientsTotal = ref(0)
+ const expandedSections = ref<string[]>([])
++const showQuickClientDialog = ref(false)
+ 
+ const form = reactive<CaseCreatePayload>({
+   case_no: '',
++  case_type: 'NORMAL',
+   title: '',
+   client_id: '',
++  patent_category: 'INV',
++  flow_dir: 'CN_DOMESTIC',
++  app_no: '',
++  priorities: [],
+ })
+ 
++const quickClientForm = reactive<ClientCreatePayload>({
++  name: '',
++  client_code: '',
++  name_en: '',
++  client_type: '',
++  default_currency: 'CNY',
++  email: '',
++})
++
++const isConsultingCase = computed(() => CONSULTING_CASE_TYPES.includes(form.case_type || 'NORMAL'))
++const showPrioritySection = computed(() => PRIORITY_CASE_TYPES.includes(form.case_type || 'NORMAL'))
++const showPublicationSection = computed(() => !isConsultingCase.value)
++const showSpecificationSection = computed(() => !isConsultingCase.value)
++
+ const rules: FormRules = {
+-  case_no: [
+-    { required: true, message: '案号为必填项', trigger: 'blur' },
+-  ],
+-  client_id: [
+-    { required: true, message: '请选择客户', trigger: 'change' },
++  case_no: [{ required: true, message: '案号为必填项', trigger: 'blur' }],
++  case_type: [{ required: true, message: '请选择案件类型', trigger: 'change' }],
++  patent_category: [
++    {
++      trigger: 'change',
++      validator: (_rule, value, callback) => {
++        if (isConsultingCase.value || String(value || '').trim()) {
++          callback()
++          return
++        }
++        callback(new Error('请选择专利类别'))
++      },
++    },
+   ],
++  client_id: [{ required: true, message: '请选择客户', trigger: 'change' }],
+ }
+ 
++watch(
++  () => form.case_type,
++  (value) => {
++    if (CONSULTING_CASE_TYPES.includes(value || '')) {
++      form.patent_category = undefined
++      form.app_no = ''
++      form.pub_date = ''
++      form.pub_no = ''
++      form.grant_date = ''
++      form.grant_no = ''
++      form.patent_no = ''
++      form.valid_until = ''
++      form.spec_pages = undefined
++      form.claim_count = undefined
++      form.has_exam_request = undefined
++      form.is_fee_monitor = undefined
++      form.fee_reduction = ''
++      form.applicant_kind = ''
++    } else if (!form.patent_category) {
++      form.patent_category = 'INV'
++    }
++
++    if (!PRIORITY_CASE_TYPES.includes(value || '')) {
++      form.priorities = []
++      fieldErrors.value.delete('priorities')
++    } else if (!form.priorities?.length) {
++      form.priorities = [createEmptyPriority(1)]
++      expandedSections.value = Array.from(new Set([...expandedSections.value, 'priority']))
++    }
++  },
++  { immediate: true }
++)
++
+ async function fetchClients() {
+   loadingClients.value = true
+   try {
+@@ -235,34 +505,153 @@ async function fetchClients() {
+   }
+ }
+ 
++function createEmptyPriority(seq: number): CasePriority {
++  return {
++    seq,
++    country_code: '',
++    prio_no: '',
++    prio_date: '',
++  }
++}
++
++function addPriority() {
++  const nextSeq = (form.priorities?.length || 0) + 1
++  form.priorities = [...(form.priorities || []), createEmptyPriority(nextSeq)]
++}
++
++function removePriority(index: number) {
++  const nextPriorities = [...(form.priorities || [])]
++  nextPriorities.splice(index, 1)
++  form.priorities = nextPriorities.map((priority, seq) => ({ ...priority, seq: seq + 1 }))
++}
++
++function normalizeFieldErrorsFromSummary(items: ValidationItem[]) {
++  const next = new Map<string, string[]>(fieldErrors.value)
++  for (const item of items) {
++    const current = next.get(item.key) || []
++    current.push(item.message)
++    next.set(item.key, current)
++  }
++  fieldErrors.value = next
++}
++
++function runCustomValidation(): ValidationItem[] {
++  const items: ValidationItem[] = []
++  const seen = new Set<string>()
++
++  const add = (key: string, message: string, section?: string) => {
++    const token = `${key}:${message}`
++    if (seen.has(token)) return
++    seen.add(token)
++    items.push({ key, message, section })
++  }
++
++  if (!form.client_id) {
++    add('client_id', '请选择客户，或使用“快速新建客户”后自动回填。')
++  }
++
++  if (showPrioritySection.value) {
++    ;(form.priorities || []).forEach((priority, index) => {
++      const hasAnyValue = [priority.country_code, priority.prio_no, priority.prio_date].some((value) => String(value || '').trim())
++      const hasAllValues = [priority.country_code, priority.prio_no, priority.prio_date].every((value) => String(value || '').trim())
++      if (hasAnyValue && !hasAllValues) {
++        add(
++          'priorities',
++          `优先权 ${index + 1} 需要同时填写国家/地区、号码和日期。`,
++          'priority'
++        )
++      }
++    })
++  }
++
++  return items
++}
++
+ async function handleSave() {
+-  // Clear previous field errors
+   fieldErrors.value = new Map()
+-  
+-  // Validate form
++  validationSummary.value = []
++
+   const valid = await formRef.value?.validate().catch(() => false)
+-  if (!valid) return
+-  
++  if (!valid) {
++    validationSummary.value = [{ key: 'form', message: '请先完成基础必填项。' }]
++    return
++  }
++
++  const customErrors = runCustomValidation()
++  if (customErrors.length) {
++    validationSummary.value = customErrors
++    normalizeFieldErrorsFromSummary(customErrors)
++    expandedSections.value = Array.from(
++      new Set([...expandedSections.value, ...customErrors.map((item) => item.section).filter(Boolean) as string[]])
++    )
++    return
++  }
++
+   saving.value = true
+   error.value = null
+-  
++
+   try {
+-    await createCase(form)
++    await createCase({
++      ...form,
++      patent_category: isConsultingCase.value ? undefined : form.patent_category,
++      priorities: form.priorities?.filter((priority) =>
++        [priority.country_code, priority.prio_no, priority.prio_date].some((value) => String(value || '').trim())
++      ),
++    })
+     ElMessage.success('案件创建成功')
+     router.push('/cases')
+   } catch (err) {
+     const apiError = err as ApiError
+     error.value = apiError
+-    
+-    // Map 422 field errors
++
+     if (apiError.status === 422 && apiError.details) {
+       fieldErrors.value = mapValidationDetailsToFieldErrors(apiError.details)
++      validationSummary.value = [{ key: 'api', message: '后端校验未通过，请检查表单字段。' }]
+     }
+   } finally {
+     saving.value = false
+   }
+ }
+ 
++function resetQuickClientDialog() {
++  showQuickClientDialog.value = false
++  quickClientForm.name = ''
++  quickClientForm.client_code = ''
++  quickClientForm.name_en = ''
++  quickClientForm.client_type = ''
++  quickClientForm.default_currency = 'CNY'
++  quickClientForm.email = ''
++}
++
++async function handleQuickClientSave() {
++  if (!quickClientForm.name.trim()) {
++    ElMessage.warning('请先填写客户名称')
++    return
++  }
++
++  creatingClient.value = true
++  try {
++    const created = await createClient({
++      ...quickClientForm,
++      name: quickClientForm.name.trim(),
++      client_code: quickClientForm.client_code?.trim(),
++      name_en: quickClientForm.name_en?.trim(),
++      client_type: quickClientForm.client_type?.trim(),
++      email: quickClientForm.email?.trim(),
++    })
++    await fetchClients()
++    form.client_id = created.id
++    fieldErrors.value.delete('client_id')
++    validationSummary.value = validationSummary.value.filter((item) => item.key !== 'client_id')
++    ElMessage.success('客户已创建并回填')
++    resetQuickClientDialog()
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    creatingClient.value = false
++  }
++}
++
+ function handleCancel() {
+   router.push('/cases')
+ }
+@@ -277,12 +666,58 @@ onMounted(() => {
+   width: 100%;
+ }
+ 
++.validation-summary {
++  margin-bottom: 20px;
++}
++
++.validation-summary-list {
++  margin: 8px 0 0;
++  padding-left: 18px;
++}
++
++.client-field {
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) auto;
++  gap: 12px;
++  align-items: start;
++}
++
+ .field-hint {
+   font-size: 12px;
+   color: var(--text-sub);
+   margin-top: 4px;
+ }
+ 
++.section-toolbar {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: 12px;
++  margin-bottom: 12px;
++}
++
++.section-error {
++  margin-bottom: 12px;
++  color: var(--el-color-danger);
++  font-size: 13px;
++}
++
++.priority-card {
++  border: 1px solid var(--color-border);
++  border-radius: 12px;
++  padding: 16px;
++  margin-bottom: 12px;
++  background: var(--color-bg-card);
++}
++
++.priority-card-header {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  margin-bottom: 12px;
++  font-weight: 600;
++}
++
+ .case-form .el-form-item {
+   margin-bottom: 20px;
+ }
+diff --git a/frontend/src/modules/cases/pages/CaseDetail.vue b/frontend/src/modules/cases/pages/CaseDetail.vue
+index 4ea517f..f480dc3 100644
+--- a/frontend/src/modules/cases/pages/CaseDetail.vue
++++ b/frontend/src/modules/cases/pages/CaseDetail.vue
+@@ -69,6 +69,14 @@
+                     <span class="info-label">{{ ZH.caseDetail.caseNumber }}</span>
+                     <span class="info-value case-no">{{ caseData.case_no }}</span>
+                   </div>
++                  <div class="info-item">
++                    <span class="info-label">案件类型</span>
++                    <span class="info-value">{{ caseTypeText }}</span>
++                  </div>
++                  <div class="info-item">
++                    <span class="info-label">专利类别</span>
++                    <span class="info-value">{{ patentCategoryText }}</span>
++                  </div>
+                   <div class="info-item">
+                     <span class="info-label">{{ ZH.caseDetail.title }}</span>
+                     <span class="info-value">{{ caseData.title || '-' }}</span>
+@@ -89,6 +97,31 @@
+                     <span class="info-label">{{ ZH.caseDetail.appDate }}</span>
+                     <span class="info-value">{{ caseData.app_date || '-' }}</span>
+                   </div>
++                  <div class="info-item">
++                    <span class="info-label">申请号</span>
++                    <span class="info-value">{{ caseData.app_no || '-' }}</span>
++                  </div>
++                  <div class="info-item">
++                    <span class="info-label">流程方向</span>
++                    <span class="info-value">{{ flowDirText }}</span>
++                  </div>
++                </div>
++
++                <div v-if="statusAutomationHint" class="status-linkage-card">
++                  <h4 class="info-section-title">状态联动说明</h4>
++                  <p class="status-linkage-text">{{ statusAutomationHint }}</p>
++                </div>
++
++                <div v-if="caseData.priorities?.length" class="info-section">
++                  <h4 class="info-section-title">优先权信息</h4>
++                  <div class="priority-list">
++                    <div v-for="priority in caseData.priorities" :key="priority.seq" class="priority-item">
++                      <span>第 {{ priority.seq }} 条</span>
++                      <span>{{ priority.country_code || '-' }}</span>
++                      <span>{{ priority.prio_no || '-' }}</span>
++                      <span>{{ priority.prio_date || '-' }}</span>
++                    </div>
++                  </div>
+                 </div>
+ 
+                 <!-- A3: Publication & Grant -->
+@@ -306,6 +339,24 @@ const FEE_REDUCTION_MAP: Record<string, string> = {
+ const APPLICANT_KIND_MAP: Record<string, string> = {
+   INDIVIDUAL: '个人', ENTITY: '企业', UNIV: '高校', GOV: '政府'
+ }
++const CASE_TYPE_MAP: Record<string, string> = {
++  NORMAL: '普通案件',
++  PCT_INTL: 'PCT 国际阶段',
++  PCT_NATL: 'PCT 国家阶段',
++  PRIORITY: '优先权案件',
++  CONSULTING: '顾问项目',
++  SEARCH: '检索项目',
++}
++const PATENT_CATEGORY_MAP: Record<string, string> = {
++  INV: '发明',
++  UM: '实用新型',
++  DES: '外观设计',
++}
++const FLOW_DIR_MAP: Record<string, string> = {
++  CN_DOMESTIC: '中国国内',
++  CN_OUTBOUND: '中国向外',
++  FOREIGN_INBOUND: '国外进入中国',
++}
+ 
+ const feeReductionText = computed(() =>
+   caseData.value?.fee_reduction
+@@ -317,6 +368,31 @@ const applicantKindText = computed(() =>
+     ? APPLICANT_KIND_MAP[caseData.value.applicant_kind] || caseData.value.applicant_kind
+     : '-'
+ )
++const caseTypeText = computed(() =>
++  caseData.value?.case_type
++    ? CASE_TYPE_MAP[caseData.value.case_type] || caseData.value.case_type
++    : '-'
++)
++const patentCategoryText = computed(() =>
++  caseData.value?.patent_category
++    ? PATENT_CATEGORY_MAP[caseData.value.patent_category] || caseData.value.patent_category
++    : '-'
++)
++const flowDirText = computed(() =>
++  caseData.value?.flow_dir
++    ? FLOW_DIR_MAP[caseData.value.flow_dir] || caseData.value.flow_dir
++    : '-'
++)
++const statusAutomationHint = computed(() => {
++  const status = caseData.value?.status || ''
++  if (status === 'ACCEPTED') {
++    return '当前状态通常由受理通知等流程联动生成，详情页仅展示结果，编辑页会提示谨慎手工修改。'
++  }
++  if (status === 'GRANT_PENDING') {
++    return '当前状态通常由授权缴费/登记相关流程驱动，请结合来往文书与任务面板核对。'
++  }
++  return ''
++})
+ 
+ async function fetchCase() {
+   const id = String(route.params.id || '').trim()
+@@ -371,4 +447,34 @@ onBeforeUnmount(() => {
+   padding-bottom: 8px;
+   border-bottom: 1px solid var(--color-border);
+ }
++
++.status-linkage-card {
++  margin-top: 20px;
++  padding: 16px;
++  border-radius: 12px;
++  background: color-mix(in srgb, var(--el-color-warning-light-9) 85%, white);
++  border: 1px solid var(--el-color-warning-light-5);
++}
++
++.status-linkage-text {
++  margin: 0;
++  color: var(--text-main);
++  line-height: 1.6;
++}
++
++.priority-list {
++  display: flex;
++  flex-direction: column;
++  gap: 10px;
++}
++
++.priority-item {
++  display: grid;
++  grid-template-columns: 120px repeat(3, minmax(0, 1fr));
++  gap: 12px;
++  padding: 12px 14px;
++  border-radius: 10px;
++  background: var(--color-bg-card);
++  border: 1px solid var(--color-border);
++}
+ </style>
+diff --git a/frontend/src/modules/cases/pages/CaseEdit.vue b/frontend/src/modules/cases/pages/CaseEdit.vue
+index 78b3bbe..92df72e 100644
+--- a/frontend/src/modules/cases/pages/CaseEdit.vue
++++ b/frontend/src/modules/cases/pages/CaseEdit.vue
+@@ -12,18 +12,28 @@
+       </div>
+     </div>
+ 
+-    <!-- Error Banner -->
+     <div v-if="error" class="page-error">
+       <ApiErrorBanner :error="error" @dismiss="error = null" />
+     </div>
+ 
+-    <!-- Loading -->
+     <div v-if="loading" class="page-loading">
+       <el-skeleton :rows="8" animated />
+     </div>
+ 
+-    <!-- Form -->
+     <div v-else class="form-card">
++      <el-alert
++        v-if="validationSummary.length"
++        title="请先修正以下问题后再保存"
++        type="error"
++        show-icon
++        :closable="false"
++        class="validation-summary"
++      >
++        <ul class="validation-summary-list">
++          <li v-for="item in validationSummary" :key="item.key">{{ item.message }}</li>
++        </ul>
++      </el-alert>
++
+       <el-form
+         ref="formRef"
+         :model="form"
+@@ -34,33 +44,60 @@
+         <div class="form-section">
+           <h3 class="form-section-title">案件信息</h3>
+ 
+-          <el-form-item label="案号">
+-            <el-input :model-value="caseData?.case_no" disabled />
+-          </el-form-item>
+-
+-          <el-form-item label="标题" prop="title" :error="fieldErrors.get('title')?.join(', ')">
+-            <el-input v-model="form.title" placeholder="请输入案件标题" />
+-          </el-form-item>
+-
+-          <el-form-item label="法律状态" prop="status" :error="fieldErrors.get('status')?.join(', ')">
+-            <el-select v-model="form.status" placeholder="请选择法律状态" clearable>
+-              <el-option label="未递交" value="NOT_FILED" />
+-              <el-option label="等待受理" value="WAITING_RECEIPT" />
+-              <el-option label="初审" value="PRELIM_EXAM" />
+-              <el-option label="补正中" value="AMENDMENT" />
+-              <el-option label="初审通过" value="PRELIM_PASS" />
+-              <el-option label="已公开" value="PUBLISHED" />
+-              <el-option label="实审中" value="SUB_EXAM" />
+-              <el-option label="一通阶段" value="OA1" />
+-              <el-option label="二通阶段" value="OA2" />
+-              <el-option label="复审中" value="REEXAM" />
+-              <el-option label="已授权" value="GRANTED" />
+-              <el-option label="驳回" value="REJECTED" />
+-              <el-option label="中止/终止" value="TERMINATED" />
+-              <el-option label="全部无效" value="INVALIDATED" />
+-              <el-option label="部分无效" value="INVALIDATED_PARTIAL" />
+-            </el-select>
+-          </el-form-item>
++          <el-row :gutter="20">
++            <el-col :span="8">
++              <el-form-item label="案号">
++                <el-input :model-value="caseData?.case_no" disabled />
++              </el-form-item>
++            </el-col>
++            <el-col :span="8">
++              <el-form-item label="案件类型">
++                <el-input :model-value="caseTypeText" disabled />
++              </el-form-item>
++            </el-col>
++            <el-col :span="8">
++              <el-form-item label="专利类别">
++                <el-input :model-value="patentCategoryText" disabled />
++              </el-form-item>
++            </el-col>
++          </el-row>
++
++          <el-row :gutter="20">
++            <el-col :span="12">
++              <el-form-item label="标题" prop="title" :error="fieldErrors.get('title')?.join('，')">
++                <el-input v-model="form.title" placeholder="请输入案件标题" />
++              </el-form-item>
++            </el-col>
++            <el-col :span="12">
++              <el-form-item label="客户">
++                <el-input :model-value="caseData?.client_name || caseData?.client_id || '未关联客户'" disabled />
++              </el-form-item>
++            </el-col>
++          </el-row>
++
++          <el-row :gutter="20">
++            <el-col :span="12">
++              <el-form-item label="法律状态" prop="status" :error="fieldErrors.get('status')?.join('，')">
++                <el-select v-model="form.status" placeholder="请选择法律状态" clearable class="full-width">
++                  <el-option
++                    v-for="option in statusOptions"
++                    :key="option.value"
++                    :label="option.label"
++                    :value="option.value"
++                    :disabled="option.disabled"
++                  />
++                </el-select>
++                <div v-if="showReadonlyStatusHint" class="field-hint">
++                  当前状态由流程或文书联动生成，此处仅展示，不建议手工修改。
++                </div>
++              </el-form-item>
++            </el-col>
++            <el-col :span="12">
++              <el-form-item label="申请号" :error="fieldErrors.get('app_no')?.join('，')">
++                <el-input v-model="form.app_no" placeholder="当状态进入受理/审查阶段时为必填" />
++              </el-form-item>
++            </el-col>
++          </el-row>
+         </div>
+ 
+         <div class="form-section">
+@@ -68,52 +105,72 @@
+ 
+           <el-row :gutter="20">
+             <el-col :span="12">
+-              <el-form-item label="申请日" prop="filing_date" :error="fieldErrors.get('filing_date')?.join(', ')">
++              <el-form-item label="申请日" prop="filing_date" :error="fieldErrors.get('filing_date')?.join('，')">
+                 <el-date-picker
+                   v-model="form.filing_date"
+                   type="date"
+                   placeholder="请选择申请日"
+                   format="YYYY-MM-DD"
+                   value-format="YYYY-MM-DD"
+-                  style="width: 100%"
+-                />
+-              </el-form-item>
+-            </el-col>
+-            <el-col :span="12">
+-              <el-form-item label="优先权日" prop="app_date" :error="fieldErrors.get('app_date')?.join(', ')">
+-                <el-date-picker
+-                  v-model="form.app_date"
+-                  type="date"
+-                  placeholder="请选择优先权日"
+-                  format="YYYY-MM-DD"
+-                  value-format="YYYY-MM-DD"
+-                  style="width: 100%"
++                  class="full-width"
+                 />
+               </el-form-item>
+             </el-col>
+           </el-row>
+         </div>
+ 
+-        <div class="form-section">
+-          <h3 class="form-section-title">备注</h3>
+-
+-          <el-form-item prop="notes" :error="fieldErrors.get('notes')?.join(', ')">
+-            <el-input
+-              v-model="form.notes"
+-              type="textarea"
+-              :rows="4"
+-              placeholder="请输入案件备注"
+-            />
+-          </el-form-item>
+-        </div>
+-
+         <el-collapse v-model="expandedSections" class="case-extra-sections">
+-          <el-collapse-item title="公告与授权" name="pub_grant">
++          <el-collapse-item v-if="showPrioritySection" title="优先权信息" name="priority">
++            <div class="section-toolbar">
++              <div class="field-hint">每条优先权必须完整填写国家/地区、号码和日期。</div>
++              <el-button text type="primary" @click="addPriority">新增优先权</el-button>
++            </div>
++            <div v-if="fieldErrors.get('priorities')?.length" class="section-error">
++              {{ fieldErrors.get('priorities')?.join('，') }}
++            </div>
++            <div v-if="!form.priorities?.length" class="field-hint">当前没有优先权记录。</div>
++            <div
++              v-for="(priority, index) in form.priorities"
++              :key="priority.seq"
++              class="priority-card"
++            >
++              <div class="priority-card-header">
++                <span>优先权 {{ index + 1 }}</span>
++                <el-button text type="danger" @click="removePriority(index)">删除</el-button>
++              </div>
++              <el-row :gutter="16">
++                <el-col :span="8">
++                  <el-input v-model="priority.country_code" placeholder="国家/地区代码，例如 CN" />
++                </el-col>
++                <el-col :span="8">
++                  <el-input v-model="priority.prio_no" placeholder="优先权号" />
++                </el-col>
++                <el-col :span="8">
++                  <el-date-picker
++                    v-model="priority.prio_date"
++                    type="date"
++                    placeholder="优先权日"
++                    format="YYYY-MM-DD"
++                    value-format="YYYY-MM-DD"
++                    class="full-width"
++                  />
++                </el-col>
++              </el-row>
++            </div>
++          </el-collapse-item>
++
++          <el-collapse-item v-if="showPublicationSection" title="公告与授权" name="pub_grant">
+             <el-row :gutter="20">
+               <el-col :span="12">
+                 <el-form-item label="公告日">
+-                  <el-date-picker v-model="form.pub_date" type="date" placeholder="请选择公告日"
+-                    format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%" />
++                  <el-date-picker
++                    v-model="form.pub_date"
++                    type="date"
++                    placeholder="请选择公告日"
++                    format="YYYY-MM-DD"
++                    value-format="YYYY-MM-DD"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="12">
+@@ -125,8 +182,14 @@
+             <el-row :gutter="20">
+               <el-col :span="12">
+                 <el-form-item label="授权日">
+-                  <el-date-picker v-model="form.grant_date" type="date" placeholder="请选择授权日"
+-                    format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%" />
++                  <el-date-picker
++                    v-model="form.grant_date"
++                    type="date"
++                    placeholder="请选择授权日"
++                    format="YYYY-MM-DD"
++                    value-format="YYYY-MM-DD"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="12">
+@@ -143,25 +206,41 @@
+               </el-col>
+               <el-col :span="12">
+                 <el-form-item label="有效期至">
+-                  <el-date-picker v-model="form.valid_until" type="date" placeholder="请选择有效期至"
+-                    format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 100%" />
++                  <el-date-picker
++                    v-model="form.valid_until"
++                    type="date"
++                    placeholder="请选择有效期至"
++                    format="YYYY-MM-DD"
++                    value-format="YYYY-MM-DD"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+             </el-row>
+           </el-collapse-item>
+ 
+-          <el-collapse-item title="说明书信息" name="spec">
++          <el-collapse-item v-if="showSpecificationSection" title="说明书信息" name="spec">
+             <el-row :gutter="20">
+               <el-col :span="8">
+                 <el-form-item label="说明书页数">
+-                  <el-input-number v-model="form.spec_pages" :min="0" controls-position="right"
+-                    placeholder="页数" style="width: 100%" />
++                  <el-input-number
++                    v-model="form.spec_pages"
++                    :min="0"
++                    controls-position="right"
++                    placeholder="页数"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="权利要求项数">
+-                  <el-input-number v-model="form.claim_count" :min="0" controls-position="right"
+-                    placeholder="项数" style="width: 100%" />
++                  <el-input-number
++                    v-model="form.claim_count"
++                    :min="0"
++                    controls-position="right"
++                    placeholder="项数"
++                    class="full-width"
++                  />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="8">
+@@ -176,23 +255,23 @@
+             <el-row :gutter="20">
+               <el-col :span="8">
+                 <el-form-item label="主办代理人">
+-                  <el-input v-model="form.primary_agent_id" placeholder="请输入代理人ID" />
++                  <el-input v-model="form.primary_agent_id" placeholder="请输入代理人 ID" />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="辅办代理人">
+-                  <el-input v-model="form.second_agent_id" placeholder="请输入代理人ID" />
++                  <el-input v-model="form.second_agent_id" placeholder="请输入代理人 ID" />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="撰写人">
+-                  <el-input v-model="form.draftor_id" placeholder="请输入撰写人ID" />
++                  <el-input v-model="form.draftor_id" placeholder="请输入撰写人 ID" />
+                 </el-form-item>
+               </el-col>
+             </el-row>
+           </el-collapse-item>
+ 
+-          <el-collapse-item title="控制标记" name="flags">
++          <el-collapse-item v-if="showSpecificationSection" title="控制标记" name="flags">
+             <el-row :gutter="20">
+               <el-col :span="8">
+                 <el-form-item label="费用监控">
+@@ -201,7 +280,7 @@
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="减免类型">
+-                  <el-select v-model="form.fee_reduction" placeholder="请选择" clearable style="width: 100%">
++                  <el-select v-model="form.fee_reduction" placeholder="请选择" clearable class="full-width">
+                     <el-option label="不减免" value="NONE" />
+                     <el-option label="部分减免" value="PARTIAL" />
+                     <el-option label="全额减免" value="FULL" />
+@@ -210,7 +289,7 @@
+               </el-col>
+               <el-col :span="8">
+                 <el-form-item label="申请人类型">
+-                  <el-select v-model="form.applicant_kind" placeholder="请选择" clearable style="width: 100%">
++                  <el-select v-model="form.applicant_kind" placeholder="请选择" clearable class="full-width">
+                     <el-option label="个人" value="INDIVIDUAL" />
+                     <el-option label="企业" value="ENTITY" />
+                     <el-option label="高校" value="UNIV" />
+@@ -227,16 +306,64 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import { ref, reactive, onMounted } from 'vue'
++import { computed, onMounted, reactive, ref } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+ import { ElMessage } from 'element-plus'
+ import type { FormInstance, FormRules } from 'element-plus'
+ import { getCase, updateCase } from '../../../api/cases'
+-import type { Case, CaseUpdatePayload } from '../../../api/cases.types'
++import type { Case, CasePriority, CaseUpdatePayload } from '../../../api/cases.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import { CASE_STATUS_TEXT } from '../../../constants/displayText'
+ import { mapValidationDetailsToFieldErrors } from '../../../utils/validation'
+ 
++interface ValidationItem {
++  key: string
++  message: string
++  section?: string
++}
++
++const CASE_TYPE_TEXT: Record<string, string> = {
++  NORMAL: '普通案件',
++  PCT_INTL: 'PCT 国际阶段',
++  PCT_NATL: 'PCT 国家阶段',
++  PRIORITY: '优先权案件',
++  CONSULTING: '顾问项目',
++  SEARCH: '检索项目',
++}
++
++const PATENT_CATEGORY_TEXT: Record<string, string> = {
++  INV: '发明',
++  UM: '实用新型',
++  DES: '外观设计',
++}
++
++const PRIORITY_CASE_TYPES = ['PRIORITY', 'PCT_INTL', 'PCT_NATL']
++const CONSULTING_CASE_TYPES = ['CONSULTING', 'SEARCH']
++const EDITABLE_STATUS_VALUES = [
++  'NOT_FILED',
++  'PENDING',
++  'WAITING_RECEIPT',
++  'PRELIM_EXAM',
++  'AMENDMENT',
++  'PRELIM_PASS',
++  'PUBLISHED',
++  'SUB_EXAM',
++  'OA1',
++  'OA2',
++  'REEXAM',
++  'GRANTED',
++  'REJECTED',
++  'WITHDRAWN',
++  'ABANDONED',
++  'EXPIRED',
++  'TERMINATED',
++  'INVALIDATED',
++  'INVALIDATED_PARTIAL',
++]
++const READONLY_STATUS_VALUES = ['ACCEPTED', 'GRANT_PENDING'] as const
++const STATUSES_REQUIRING_APP_FIELDS = EDITABLE_STATUS_VALUES.filter((status) => status !== 'NOT_FILED')
++
+ const route = useRoute()
+ const router = useRouter()
+ 
+@@ -247,39 +374,88 @@ const error = ref<ApiError | null>(null)
+ const caseData = ref<Case | null>(null)
+ const fieldErrors = ref<Map<string, string[]>>(new Map())
+ const expandedSections = ref<string[]>([])
++const validationSummary = ref<ValidationItem[]>([])
+ 
+ const form = reactive<CaseUpdatePayload>({
+   title: '',
+   status: '',
++  app_no: '',
+   filing_date: '',
+-  app_date: '',
+-  notes: '',
++  priorities: [],
+ })
+ 
+ const rules: FormRules = {
+-  title: [
+-    { max: 500, message: '标题不能超过 500 个字符', trigger: 'blur' },
+-  ],
++  title: [{ max: 500, message: '标题不能超过 500 个字符', trigger: 'blur' }],
++}
++
++const caseTypeText = computed(() => {
++  const value = caseData.value?.case_type || ''
++  return CASE_TYPE_TEXT[value] || value || '未设置'
++})
++
++const patentCategoryText = computed(() => {
++  const value = caseData.value?.patent_category || ''
++  return PATENT_CATEGORY_TEXT[value] || value || '未设置'
++})
++
++const showPrioritySection = computed(() => PRIORITY_CASE_TYPES.includes(caseData.value?.case_type || ''))
++const showPublicationSection = computed(() => !CONSULTING_CASE_TYPES.includes(caseData.value?.case_type || ''))
++const showSpecificationSection = computed(() => !CONSULTING_CASE_TYPES.includes(caseData.value?.case_type || ''))
++
++const statusOptions = computed(() => {
++  const editableOptions = EDITABLE_STATUS_VALUES.map((value) => ({
++    value,
++    label: CASE_STATUS_TEXT[value] || value,
++    disabled: false,
++  }))
++
++  const currentStatus = form.status?.trim()
++  if (currentStatus && READONLY_STATUS_VALUES.includes(currentStatus as typeof READONLY_STATUS_VALUES[number])) {
++    return [
++      {
++        value: currentStatus,
++        label: `${CASE_STATUS_TEXT[currentStatus] || currentStatus}（流程状态，只读）`,
++        disabled: true,
++      },
++      ...editableOptions,
++    ]
++  }
++
++  return editableOptions
++})
++
++const showReadonlyStatusHint = computed(() =>
++  READONLY_STATUS_VALUES.includes((form.status || '').trim() as typeof READONLY_STATUS_VALUES[number])
++)
++
++function createEmptyPriority(seq: number): CasePriority {
++  return {
++    seq,
++    country_code: '',
++    prio_no: '',
++    prio_date: '',
++  }
+ }
+ 
+ async function fetchCase() {
+   const id = String(route.params.id || '').trim()
+-  if (!id) {
+-    return
+-  }
++  if (!id) return
+ 
+   loading.value = true
+   error.value = null
+ 
+   try {
+     caseData.value = await getCase(id)
+-    // Populate form with existing data
+     form.title = caseData.value.title || ''
+     form.status = caseData.value.status || ''
++    form.app_no = caseData.value.app_no || ''
+     form.filing_date = caseData.value.filing_date || ''
+-    form.app_date = caseData.value.app_date || ''
+-    form.notes = caseData.value.notes || ''
+-    // A3 fields
++    form.priorities = (caseData.value.priorities || []).map((priority, index) => ({
++      seq: index + 1,
++      country_code: priority.country_code || '',
++      prio_no: priority.prio_no || '',
++      prio_date: priority.prio_date || '',
++    }))
+     form.pub_date = caseData.value.pub_date || ''
+     form.pub_no = caseData.value.pub_no || ''
+     form.grant_date = caseData.value.grant_date || ''
+@@ -302,31 +478,106 @@ async function fetchCase() {
+   }
+ }
+ 
++function addPriority() {
++  const nextSeq = (form.priorities?.length || 0) + 1
++  form.priorities = [...(form.priorities || []), createEmptyPriority(nextSeq)]
++}
++
++function removePriority(index: number) {
++  const nextPriorities = [...(form.priorities || [])]
++  nextPriorities.splice(index, 1)
++  form.priorities = nextPriorities.map((priority, seq) => ({ ...priority, seq: seq + 1 }))
++}
++
++function runCustomValidation(): ValidationItem[] {
++  const items: ValidationItem[] = []
++  const seen = new Set<string>()
++  const add = (key: string, message: string, section?: string) => {
++    const token = `${key}:${message}`
++    if (seen.has(token)) return
++    seen.add(token)
++    items.push({ key, message, section })
++  }
++
++  const status = (form.status || '').trim()
++  if (status && STATUSES_REQUIRING_APP_FIELDS.includes(status)) {
++    if (!String(form.app_no || '').trim()) {
++      add('app_no', '当前法律状态要求填写申请号。', 'pub_grant')
++    }
++    if (!String(form.filing_date || '').trim()) {
++      add('filing_date', '当前法律状态要求填写申请日。', 'pub_grant')
++    }
++  }
++
++  ;(form.priorities || []).forEach((priority, index) => {
++    const hasAnyValue = [priority.country_code, priority.prio_no, priority.prio_date].some((value) => String(value || '').trim())
++    const hasAllValues = [priority.country_code, priority.prio_no, priority.prio_date].every((value) => String(value || '').trim())
++    if (hasAnyValue && !hasAllValues) {
++      add('priorities', `优先权 ${index + 1} 需要同时填写国家/地区、号码和日期。`, 'priority')
++    }
++  })
++
++  return items
++}
++
++function mergeFieldErrors(items: ValidationItem[]) {
++  const next = new Map<string, string[]>(fieldErrors.value)
++  for (const item of items) {
++    const current = next.get(item.key) || []
++    current.push(item.message)
++    next.set(item.key, current)
++  }
++  fieldErrors.value = next
++}
++
+ async function handleSave() {
+   const id = String(route.params.id || '').trim()
+   if (!id) return
+ 
+-  // Clear previous field errors
+   fieldErrors.value = new Map()
++  validationSummary.value = []
+ 
+-  // Validate form
+   const valid = await formRef.value?.validate().catch(() => false)
+-  if (!valid) return
++  if (!valid) {
++    validationSummary.value = [{ key: 'form', message: '请先修正表单基础字段。' }]
++    return
++  }
++
++  const customErrors = runCustomValidation()
++  if (customErrors.length) {
++    validationSummary.value = customErrors
++    mergeFieldErrors(customErrors)
++    expandedSections.value = Array.from(
++      new Set([...expandedSections.value, ...customErrors.map((item) => item.section).filter(Boolean) as string[]])
++    )
++    return
++  }
+ 
+   saving.value = true
+   error.value = null
+ 
+   try {
+-    await updateCase(id, form)
++    const payload: CaseUpdatePayload = {
++      ...form,
++      priorities: form.priorities?.filter((priority) =>
++        [priority.country_code, priority.prio_no, priority.prio_date].some((value) => String(value || '').trim())
++      ),
++    }
++
++    if (READONLY_STATUS_VALUES.includes((payload.status || '').trim() as typeof READONLY_STATUS_VALUES[number])) {
++      delete payload.status
++    }
++
++    await updateCase(id, payload)
+     ElMessage.success('案件更新成功')
+     router.push(`/cases/${id}`)
+   } catch (err) {
+     const apiError = err as ApiError
+     error.value = apiError
+ 
+-    // Map 422 field errors
+     if (apiError.status === 422 && apiError.details) {
+       fieldErrors.value = mapValidationDetailsToFieldErrors(apiError.details)
++      validationSummary.value = [{ key: 'api', message: '后端校验未通过，请检查表单字段。' }]
+     }
+   } finally {
+     saving.value = false
+@@ -342,3 +593,54 @@ onMounted(() => {
+   fetchCase()
+ })
+ </script>
++
++<style scoped>
++.full-width {
++  width: 100%;
++}
++
++.validation-summary {
++  margin-bottom: 20px;
++}
++
++.validation-summary-list {
++  margin: 8px 0 0;
++  padding-left: 18px;
++}
++
++.field-hint {
++  font-size: 12px;
++  color: var(--text-sub);
++  margin-top: 4px;
++}
++
++.section-toolbar {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: 12px;
++  margin-bottom: 12px;
++}
++
++.section-error {
++  margin-bottom: 12px;
++  color: var(--el-color-danger);
++  font-size: 13px;
++}
++
++.priority-card {
++  border: 1px solid var(--color-border);
++  border-radius: 12px;
++  padding: 16px;
++  margin-bottom: 12px;
++  background: var(--color-bg-card);
++}
++
++.priority-card-header {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  margin-bottom: 12px;
++  font-weight: 600;
++}
++</style>

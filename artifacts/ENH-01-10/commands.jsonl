@@ -1,0 +1,8 @@
+{"ts":"20260118T201548","step":"chmod","cmd":"bash -lc cd\ backend\ \&\&\ chmod\ +x\ scripts/seed_dev.py"}
+{"ts":"20260118T201558","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/seed_dev.py"}
+{"ts":"20260118T201606","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/seed_dev.py"}
+{"ts":"20260118T201614","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/seed_dev.py"}
+{"ts":"20260118T201622","step":"seed1","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/seed_dev.py"}
+{"ts":"20260118T201651","step":"seed1-fixed","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ python3\ scripts/seed_dev.py"}
+{"ts":"20260118T201701","step":"seed2","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ python3\ scripts/seed_dev.py"}
+{"ts":"20260118T201715","step":"e2e","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/auth/login -H Content-Type:\ application/json -d \{\"username\":\"admin\"\,\"password\":\"admin123\"\}"}

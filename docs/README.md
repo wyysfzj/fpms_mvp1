@@ -4,13 +4,15 @@ Start here:
 
 1. `00_mvp1_scope.md` — what MVP1 includes/excludes
 2. `01_information_architecture.md` — pages/menu (B/S IA)
-3. `02_permissions_rbac.md` — role-permission matrix + API enforcement
+3. `02_permissions_rbac.md` — MVP1 RBAC model, core permission vocabulary, and menu-to-role expectations
 4. `03_database_mvp1_subset.md` — MVP1 DB subset (from SPEC) + indexes
 5. `04_backend_architecture.md` — backend layering & conventions
 6. `05_frontend_architecture.md` — frontend layering & conventions
 7. `06_deployment.md` — Docker + config strategy
 8. `07_db_ddl_and_sqlite.md` — database definition
 9. `TODO.md` — decisions pending / open questions
+
+RBAC contract split: `02_permissions_rbac.md` owns the high-level RBAC model and role/menu expectations, `permissions_matrix.md` owns endpoint-to-permission mapping for API tasks, including export routes, and `backend/app/modules/rbac/service.py` is the executable runtime seed.
 
 ## Execution Order (Authoritative)
 

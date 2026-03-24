@@ -1,0 +1,5 @@
+{"cmd":"cd backend && alembic upgrade head","rc":0,"notes":"upgraded pe_be_db_07_commission_01 -> pe_be_db_08_comm_settle_01"}
+{"cmd":"write artifacts/PE-BE-DB-08/git/diff.patch (task-scoped delta for commission settlement migration/models)","rc":0}
+{"cmd":"cd backend && alembic upgrade head","rc":0,"notes":"re-run on existing head; no new migrations applied"}
+{"ts":"20260228T172759","step":"lint","rc":0,"log":"artifacts/PE-BE-DB-08/outputs/20260228T172759_lint.log"}
+{"ts":"20260228T172759","step":"test","rc":0,"log":"artifacts/PE-BE-DB-08/outputs/20260228T172759_test.log"}

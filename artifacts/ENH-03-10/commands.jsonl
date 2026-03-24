@@ -1,0 +1,4 @@
+{"ts":"20260124T120409","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/billing/api.py"}
+{"ts":"20260124T120416","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/billing/api.py"}
+{"ts":"20260124T120423","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/billing/api.py"}
+{"ts":"20260124T120431","step":"curl","cmd":"bash -lc export\ FPMS_TOKEN=REPLACE_ME\ \&\&\ curl\ -i\ -H\ \'Authorization:\ Bearer\ \'\ \'http://localhost:8000/api/v1/bills/REPLACE_BILL_ID/print\'"}

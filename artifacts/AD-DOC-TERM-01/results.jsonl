@@ -1,0 +1,7 @@
+{"ts":"20260309T003845","step":"test","rc":0,"log":"artifacts/AD-DOC-TERM-01/outputs/20260309T003845_test.log"}
+{"ts":"20260309T003845","step":"lint","rc":1,"log":"artifacts/AD-DOC-TERM-01/outputs/20260309T003845_lint.log"}
+{"ts":"20260309T003902","step":"lint","rc":0,"log":"artifacts/AD-DOC-TERM-01/outputs/20260309T003902_lint.log"}
+{"ts":"20260309T004051","step":"test","rc":0,"log":"artifacts/AD-DOC-TERM-01/outputs/20260309T004051_test.log"}
+{"ts":"20260309T004051","step":"lint","rc":0,"log":"artifacts/AD-DOC-TERM-01/outputs/20260309T004051_lint.log"}
+{"ts":"20260309T004156","step":"test","rc":0,"log":"artifacts/AD-DOC-TERM-01/outputs/20260309T004156_test.log"}
+{"ts":"20260309T004156","step":"lint","rc":0,"log":"artifacts/AD-DOC-TERM-01/outputs/20260309T004156_lint.log"}

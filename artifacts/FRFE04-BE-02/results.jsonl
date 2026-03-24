@@ -1,0 +1,7 @@
+{"cmd":"ruff check --fix app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py","rc":0}
+{"cmd":"ruff format app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py","rc":0}
+{"cmd":"ruff check app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py","rc":0}
+{"cmd":"pytest -q tests/test_annuity_e2e.py -k pay_list_query","rc":0}
+{"ts":"20260324T101851","step":"lint","rc":0,"log":"artifacts/FRFE04-BE-02/outputs/20260324T101851_lint.log"}
+{"ts":"20260324T101855","step":"test","rc":0,"log":"artifacts/FRFE04-BE-02/outputs/20260324T101855_test.log"}
+{"step":"gate","command":"./scripts/task_validate.sh FRFE04-BE-02","rc":0}

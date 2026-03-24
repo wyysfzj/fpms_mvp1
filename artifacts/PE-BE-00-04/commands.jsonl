@@ -1,0 +1,2 @@
+{"ts":"20260228T163654","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ ."}
+{"ts":"20260228T163654","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q"}

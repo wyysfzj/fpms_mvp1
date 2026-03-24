@@ -1,0 +1,14 @@
+{"task_id":"PE-FE-00-01","command":"sed -n '1,220p' tasks/postenhancement/frontend/PE-FE-00-01.md","rc":0}
+{"task_id":"PE-FE-00-01","command":"sed -n '1,260p' frontend/src/constants/perms.ts" ,"rc":0}
+{"task_id":"PE-FE-00-01","command":"sed -n '1,260p' frontend/src/constants/menu.ts" ,"rc":0}
+{"task_id":"PE-FE-00-01","command":"cd frontend && npm run lint && npm run typecheck","rc":0}
+{"task_id":"PE-FE-00-01","command":"rg -n \"cases:read|:read|:write\" frontend/src/constants/perms.ts frontend/src/constants/menu.ts -S","rc":1,"note":"No legacy permission string matches found (expected for this check)."}
+{"task_id":"PE-FE-00-01","command":"git diff --no-index -- /dev/null frontend/src/constants/perms.ts > artifacts/PE-FE-00-01/git/diff.patch","rc":0,"note":"Used no-index because frontend constants are untracked in current workspace state."}
+{"ts":"20260228T155450","step":"lint","rc":0,"log":"artifacts/PE-FE-00-01/outputs/20260228T155450_lint.log"}
+{"ts":"20260228T155452","step":"test","rc":0,"log":"artifacts/PE-FE-00-01/outputs/20260228T155452_test.log"}
+{"task_id":"PE-FE-00-01","remediation":"wave01_followup","command":"rg -n \"DASHBOARD_READ\" frontend/src || true","rc":0,"note":"No matches after removing unused constant."}
+{"task_id":"PE-FE-00-01","remediation":"wave01_followup","command":"cd frontend && npm run lint && npm run typecheck","rc":0}
+{"task_id":"PE-FE-00-01","remediation":"wave01_followup","command":"git diff --no-index -- /tmp/pe-fe-00-01-perms.before.ts frontend/src/constants/perms.ts > artifacts/PE-FE-00-01/git/diff.patch","rc":0,"note":"Refreshed diff patch for follow-up remediation (remove DASHBOARD_READ)."}
+{"task_id":"PE-FE-00-01","remediation":"wave01_followup_rerun_20260228","command":"cd frontend && npm run lint && npm run typecheck","rc":0}
+{"task_id":"PE-FE-00-01","remediation":"wave01_followup_rerun_20260228","command":"rg -n \"DASHBOARD_READ\" frontend/src || true","rc":0,"note":"No matches; constant is not present in frontend sources."}
+{"task_id":"PE-FE-00-01","remediation":"wave01_followup_rerun_20260228","command":"git diff --no-index -- /tmp/pe-fe-00-01-perms.before.ts frontend/src/constants/perms.ts > artifacts/PE-FE-00-01/git/diff.patch || true","rc":0,"note":"Refreshed scoped remediation patch for DASHBOARD_READ removal."}

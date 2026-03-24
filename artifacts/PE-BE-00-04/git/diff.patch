@@ -1,0 +1,69 @@
+diff --git a/backend/app/modules/auth/api.py b/backend/app/modules/auth/api.py
+--- a/backend/app/modules/auth/api.py
++++ b/backend/app/modules/auth/api.py
+@@
+-from app.core.config import get_settings
++from app.api.deps import current_user_dep
++from app.core.config import get_settings
+@@
+-from app.modules.auth.schemas import LoginRequest, TokenResponse
++from app.modules.auth.models import T_Role, T_User, T_UserRole
++from app.modules.auth.schemas import LoginRequest, MeResponse, MeUser, TokenResponse
++from app.modules.rbac.service import get_user_permissions
+@@
+ def login(credentials: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+@@
+     return TokenResponse(access_token=access_token)
++
++
++@router.get(
++    "/me",
++    response_model=MeResponse,
++    status_code=status.HTTP_200_OK,
++    summary="Get current authenticated user profile",
++)
++def get_me(
++    current_user: T_User = current_user_dep,
++    db: Session = Depends(get_db),
++) -> MeResponse:
++    role_rows = (
++        db.query(T_Role.code)
++        .join(T_UserRole, T_UserRole.role_id == T_Role.id)
++        .filter(T_UserRole.user_id == current_user.id)
++        .all()
++    )
++    roles = sorted(row[0] for row in role_rows)
++    permissions = sorted(get_user_permissions(db, current_user.id))
++
++    return MeResponse(
++        user=MeUser(
++            id=current_user.id,
++            username=current_user.username,
++            is_active=current_user.is_active,
++        ),
++        roles=roles,
++        permissions=permissions,
++    )
++
++diff --git a/backend/app/modules/auth/schemas.py b/backend/app/modules/auth/schemas.py
++--- a/backend/app/modules/auth/schemas.py
+++++ b/backend/app/modules/auth/schemas.py
++@@
++ class TokenResponse(BaseModel):
++@@
++     access_token: str
++     token_type: str = "bearer"
++
++
++class MeUser(BaseModel):
++    id: str
++    username: str
++    is_active: bool
++
++
++class MeResponse(BaseModel):
++@@
++-    user: dict
+++    user: MeUser
++     roles: list[str]
++     permissions: list[str]

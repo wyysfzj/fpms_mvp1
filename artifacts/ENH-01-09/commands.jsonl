@@ -1,0 +1,11 @@
+{"ts":"20260118T191351","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/api/deps.py"}
+{"ts":"20260118T191400","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/api/deps.py"}
+{"ts":"20260118T191408","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/api/deps.py"}
+{"ts":"20260118T191448","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/api/deps.py"}
+{"ts":"20260118T191503","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/api/deps.py"}
+{"ts":"20260118T191511","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/api/deps.py"}
+{"ts":"20260118T191658","step":"e2e-401","cmd":"curl -i -sS http://localhost:8000/api/v1/cases"}
+{"ts":"20260118T191830","step":"e2e-403","cmd":"bash -lc TOKEN=\;\ curl\ -i\ -sS\ -H\ \"Authorization:\ Bearer\ \"\ http://localhost:8000/api/v1/cases"}
+{"ts":"20260118T191902","step":"e2e-login","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/auth/login -H Content-Type:\ application/json -d \{\"username\":\"admin\"\,\"password\":\"admin123\"\}"}
+{"ts":"20260118T191939","step":"e2e-403","cmd":"bash -lc set\ -euo\ pipefail\;\ TOKEN=\;\ if\ \[\ -z\ \"\"\ \]\;\ then\ echo\ \'missing\ access_token\'\;\ exit\ 1\;\ fi\;\ curl\ -i\ -sS\ -H\ \"Authorization:\ Bearer\ \"\ http://localhost:8000/api/v1/cases"}
+{"ts":"20260118T192326","step":"e2e-403","cmd":"curl -i -sS -H Authorization:\ Bearer\ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4NjgzMGI1Mi04NGI3LTQ3MjUtYmQwZS03NTk2MjQ3NzE1ZmMiLCJleHAiOjE3Njg3Mzg3NDJ9.cyMb4cladm_OGOqMnYKe6uigdoaFGIyZ5JlDTMESHbc http://localhost:8000/api/v1/cases"}

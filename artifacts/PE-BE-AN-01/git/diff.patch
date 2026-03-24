@@ -1,0 +1,180 @@
+diff --git a/backend/app/modules/annuity/service.py b/backend/app/modules/annuity/service.py
+new file mode 100644
+index 0000000..99a5c9d
+--- /dev/null
++++ b/backend/app/modules/annuity/service.py
+@@ -0,0 +1,174 @@
++from __future__ import annotations
++
++from datetime import date
++from typing import Any
++
++from sqlalchemy import func, select
++from sqlalchemy.orm import Session
++
++from app.core.errors import raise_business_error
++from app.modules.annuity.models import AnnuityTask
++
++_TERMINAL_STATUSES = (
++    "DONE",
++    "CLOSED",
++    "CANCELLED",
++    "ABANDONED",
++    "PAID",
++    "SETTLED",
++    "COMPLETED",
++)
++
++
++def _coerce_date(value: Any, field_name: str) -> date | None:
++    if value is None or value == "":
++        return None
++    if isinstance(value, date):
++        return value
++    if isinstance(value, str):
++        try:
++            return date.fromisoformat(value)
++        except ValueError:
++            raise_business_error(
++                "ANNUITY_DATE_RANGE_INVALID",
++                f"Invalid {field_name}; expected YYYY-MM-DD",
++                status_code=400,
++            )
++    raise_business_error(
++        "ANNUITY_DATE_RANGE_INVALID",
++        f"Invalid {field_name}; expected YYYY-MM-DD",
++        status_code=400,
++    )
++
++
++def _normalize_statuses(value: Any) -> list[str]:
++    if value is None:
++        return []
++    if isinstance(value, (list, tuple, set)):
++        values = [str(item).strip().upper() for item in value if str(item).strip()]
++        return values
++    text = str(value).strip()
++    return [text.upper()] if text else []
++
++
++def _normalize_pending_mode(value: Any) -> str:
++    if value is None:
++        return "all"
++    if isinstance(value, bool):
++        return "pending" if value else "all"
++
++    mode = str(value).strip().lower()
++    aliases = {
++        "": "all",
++        "all": "all",
++        "pending": "pending",
++        "open": "pending",
++        "todo": "pending",
++        "processed": "processed",
++        "done": "processed",
++        "completed": "processed",
++        "closed": "processed",
++    }
++    if mode in aliases:
++        return aliases[mode]
++
++    raise_business_error(
++        "ANNUITY_PENDING_MODE_INVALID",
++        "Invalid pending filter mode",
++        details={"pending_mode": value},
++        status_code=400,
++    )
++
++
++def list_annuity_tasks(
++    db: Session,
++    *,
++    filters: dict[str, Any] | None = None,
++    page: int = 1,
++    page_size: int = 20,
++) -> tuple[list[AnnuityTask], int]:
++    """List annuity tasks with range/status/pending filters and pagination."""
++    filters = filters or {}
++
++    due_from = _coerce_date(
++        filters.get("due_from")
++        or filters.get("due_date_from")
++        or filters.get("date_from")
++        or filters.get("from"),
++        "due_from",
++    )
++    due_to = _coerce_date(
++        filters.get("due_to")
++        or filters.get("due_date_to")
++        or filters.get("date_to")
++        or filters.get("to"),
++        "due_to",
++    )
++    if due_from and due_to and due_from > due_to:
++        raise_business_error(
++            "ANNUITY_DATE_RANGE_INVALID",
++            "due_from must be <= due_to",
++            status_code=400,
++        )
++
++    status_values = _normalize_statuses(filters.get("status"))
++    pending_mode = _normalize_pending_mode(
++        filters.get("pending_mode", filters.get("pending_filter", filters.get("pending")))
++    )
++
++    stmt = select(AnnuityTask)
++
++    case_id = filters.get("case_id")
++    client_id = filters.get("client_id")
++    notice_status_values = _normalize_statuses(filters.get("notice_status"))
++
++    if case_id:
++        stmt = stmt.where(AnnuityTask.case_id == case_id)
++    if client_id:
++        stmt = stmt.where(AnnuityTask.client_id == client_id)
++    if due_from:
++        stmt = stmt.where(AnnuityTask.due_date >= due_from)
++    if due_to:
++        stmt = stmt.where(AnnuityTask.due_date <= due_to)
++    if status_values:
++        if len(status_values) == 1:
++            stmt = stmt.where(func.upper(AnnuityTask.status) == status_values[0])
++        else:
++            stmt = stmt.where(func.upper(AnnuityTask.status).in_(status_values))
++    if notice_status_values:
++        if len(notice_status_values) == 1:
++            stmt = stmt.where(func.upper(AnnuityTask.notice_status) == notice_status_values[0])
++        else:
++            stmt = stmt.where(func.upper(AnnuityTask.notice_status).in_(notice_status_values))
++
++    if pending_mode == "pending":
++        stmt = stmt.where(
++            AnnuityTask.status.is_(None) | (~func.upper(AnnuityTask.status).in_(_TERMINAL_STATUSES))
++        )
++    elif pending_mode == "processed":
++        stmt = stmt.where(func.upper(AnnuityTask.status).in_(_TERMINAL_STATUSES))
++
++    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
++
++    offset = (page - 1) * page_size
++    items = db.execute(
++        stmt.order_by(
++            AnnuityTask.due_date.asc(),
++            AnnuityTask.created_at.desc(),
++            AnnuityTask.id.asc(),
++        )
++        .offset(offset)
++        .limit(page_size)
++    ).scalars().all()
++    return items, total
++
++
++def extract_annuity_tasks(
++    db: Session,
++    *,
++    filters: dict[str, Any] | None = None,
++    page: int = 1,
++    page_size: int = 20,
++) -> tuple[list[AnnuityTask], int]:
++    """Compatibility alias for task-extraction wording in enhancement runbooks."""
++    return list_annuity_tasks(db, filters=filters, page=page, page_size=page_size)

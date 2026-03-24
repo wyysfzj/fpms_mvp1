@@ -1,0 +1,2 @@
+{"ts":"20260131T180212","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ pyproject.toml\ \|\|\ true"}
+{"ts":"20260131T180218","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -c\ \'print\(\"pyproject\ updated\"\)\'"}

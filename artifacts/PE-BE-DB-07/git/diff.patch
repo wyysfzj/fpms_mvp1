@@ -1,0 +1,75 @@
+diff --git a/backend/alembic/versions/pe_be_db_07_create_t_commission.py b/backend/alembic/versions/pe_be_db_07_create_t_commission.py
+new file mode 100644
+--- /dev/null
++++ b/backend/alembic/versions/pe_be_db_07_create_t_commission.py
+@@
++revision = "pe_be_db_07_commission_01"
++down_revision = "pe_be_db_06_comm_rule_01"
++
++def upgrade() -> None:
++    op.create_table(
++        "t_commission",
++        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
++        sa.Column("case_id", sa.String(36), sa.ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False),
++        sa.Column("agent_id", sa.String(36), nullable=True),
++        sa.Column("rule_id", sa.Integer(), sa.ForeignKey("t_commission_rule.id", ondelete="SET NULL"), nullable=True),
++        sa.Column("fee_type", sa.String(32), nullable=True),
++        sa.Column("base_fee", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
++        sa.Column("s1_rate", sa.Numeric(8, 4), nullable=False, server_default=sa.text("0")),
++        sa.Column("s1_amount", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
++        sa.Column("s1_done", sa.Boolean(), nullable=False, server_default=sa.text("0")),
++        sa.Column("s2_rate", sa.Numeric(8, 4), nullable=False, server_default=sa.text("0")),
++        sa.Column("s2_amount", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
++        sa.Column("s2_done", sa.Boolean(), nullable=False, server_default=sa.text("0")),
++        sa.Column("wait_pay", sa.Boolean(), nullable=False, server_default=sa.text("0")),
++        sa.Column("force_settle", sa.Boolean(), nullable=False, server_default=sa.text("0")),
++        sa.Column("status", sa.String(24), nullable=False, server_default=sa.text("'OPEN'")),
++        sa.Column("is_settleable", sa.Boolean(), nullable=False, server_default=sa.text("0")),
++        sa.Column("settleable_date", sa.Date(), nullable=True),
++        sa.Column("remark", sa.Text(), nullable=True),
++        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
++        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
++        sa.Column("created_by", sa.String(36), nullable=True),
++        sa.Column("updated_by", sa.String(36), nullable=True),
++    )
++    op.create_index("ix_t_commission_case_id", "t_commission", ["case_id"])
++    op.create_index("ix_t_commission_agent_id", "t_commission", ["agent_id"])
++    op.create_index("ix_t_commission_status", "t_commission", ["status"])
++    op.create_index("ix_t_commission_is_settleable", "t_commission", ["is_settleable"])
++
++def downgrade() -> None:
++    op.drop_index("ix_t_commission_is_settleable", table_name="t_commission")
++    op.drop_index("ix_t_commission_status", table_name="t_commission")
++    op.drop_index("ix_t_commission_agent_id", table_name="t_commission")
++    op.drop_index("ix_t_commission_case_id", table_name="t_commission")
++    op.drop_table("t_commission")
++
++diff --git a/backend/app/modules/commission/models.py b/backend/app/modules/commission/models.py
++--- a/backend/app/modules/commission/models.py
+++++ b/backend/app/modules/commission/models.py
++@@
++class Commission(Base):
++    __tablename__ = "t_commission"
++
++    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
++    case_id: Mapped[str] = mapped_column(String(36), ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False)
++    agent_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
++    rule_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("t_commission_rule.id", ondelete="SET NULL"), nullable=True)
++    fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
++    base_fee: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
++    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s1_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
++    s1_done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s2_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
++    s2_done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    wait_pay: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    force_settle: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'OPEN'"))
++    is_settleable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    settleable_date: Mapped[date | None] = mapped_column(Date, nullable=True)
++    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
++    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
++    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP"))
++    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
++    updated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)

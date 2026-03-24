@@ -1,0 +1,298 @@
+diff --git a/tmp/pe-be-com-10/api.py.before b/backend/app/modules/commission/api.py
+index 3d72c5c..9a1dc52 100644
+--- a/tmp/pe-be-com-10/api.py.before
++++ b/backend/app/modules/commission/api.py
+@@ -17,6 +17,7 @@ from app.modules.commission.service import (
+     create_commission_rule,
+     create_commission_settlement,
+     generate_commission_settlement_lines,
++    get_commission_settlement_report,
+     update_commission_rule,
+ )
+ 
+@@ -253,6 +254,35 @@ def post_commission_settlement(
+     return _to_settlement_out(settlement)
+ 
+ 
++@router.get(
++    "/commission/reports/settlement",
++    summary="Get commission settlement report",
++)
++def get_commission_reports_settlement(
++    agent_id: str | None = Query(default=None),
++    case_id: str | None = Query(default=None),
++    currency: str | None = Query(default=None),
++    settlement_status: str | None = Query(default=None),
++    line_status: str | None = Query(default=None),
++    date_from: date | None = Query(default=None),
++    date_to: date | None = Query(default=None),
++    time_field: str = Query(default="line_created_at"),
++    _perm: None = Depends(require_perm("CommissionReport.Read")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    return get_commission_settlement_report(
++        db,
++        agent_id=agent_id,
++        case_id=case_id,
++        currency=currency,
++        settlement_status=settlement_status,
++        line_status=line_status,
++        date_from=date_from,
++        date_to=date_to,
++        time_field=time_field,
++    )
++
++
+ @router.post(
+     "/commission/settlements/{id}/generate-lines",
+     summary="Generate settlement lines for a commission settlement batch",
+
+diff --git a/tmp/pe-be-com-10/service.py.before b/backend/app/modules/commission/service.py
+index c294378..a3f00f0 100644
+--- a/tmp/pe-be-com-10/service.py.before
++++ b/backend/app/modules/commission/service.py
+@@ -1,6 +1,6 @@
+ from __future__ import annotations
+ 
+-from datetime import date
++from datetime import date, datetime, time
+ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+ from typing import Any
+ 
+@@ -22,6 +22,8 @@ _SERVICE_FEE_TYPE = "SERVICE"
+ _TERMINAL_COMMISSION_STATUSES = {"SETTLED", "CANCELLED", "VOID", "CLOSED"}
+ _ACTIVE_SETTLEMENT_STATUSES = {"DRAFT", "CREATED"}
+ _SETTLEMENT_GENERATE_ALLOWED_STATUSES = {"DRAFT", "GENERATED"}
++_SETTLEMENT_REPORT_TIME_FIELDS = {"line_created_at", "settleable_date", "settlement_period"}
++_UNKNOWN_TIME_BUCKET = "UNKNOWN"
+ 
+ 
+ def _normalize_optional_text(value: str | None) -> str | None:
+@@ -948,6 +950,227 @@ def _line_amount_for_commission(commission: Commission) -> Decimal:
+     return _quantize_money(s1_amount + s2_amount)
+ 
+ 
++def _normalize_report_time_field(value: str | None) -> str:
++    normalized = _normalize_optional_text(value)
++    effective = normalized or "line_created_at"
++    if effective not in _SETTLEMENT_REPORT_TIME_FIELDS:
++        raise_business_error(
++            "COMMISSION_REPORT_INVALID",
++            "time_field must be one of line_created_at, settleable_date, settlement_period",
++            status_code=400,
++        )
++    return effective
++
++
++def _to_date_only(value: date | datetime | None) -> date | None:
++    if value is None:
++        return None
++    if isinstance(value, datetime):
++        return value.date()
++    return value
++
++
++def _to_month_bucket(value: date | datetime | None) -> str:
++    normalized = _to_date_only(value)
++    if normalized is None:
++        return _UNKNOWN_TIME_BUCKET
++    return normalized.strftime("%Y-%m")
++
++
++def get_commission_settlement_report(
++    db: Session,
++    *,
++    agent_id: str | None = None,
++    case_id: str | None = None,
++    currency: str | None = None,
++    settlement_status: str | None = None,
++    line_status: str | None = None,
++    date_from: date | None = None,
++    date_to: date | None = None,
++    time_field: str = "line_created_at",
++) -> dict[str, Any]:
++    if date_from and date_to and date_from > date_to:
++        raise_business_error(
++            "COMMISSION_REPORT_INVALID",
++            "date_from must be less than or equal to date_to",
++            status_code=400,
++        )
++
++    effective_time_field = _normalize_report_time_field(time_field)
++    normalized_agent_id = _normalize_optional_text(agent_id)
++    normalized_case_id = _normalize_optional_text(case_id)
++    normalized_currency = _normalize_optional_text(currency)
++    normalized_settlement_status = _normalize_optional_text(settlement_status)
++    normalized_line_status = _normalize_optional_text(line_status)
++
++    stmt = (
++        select(CommissionSettleLine, CommissionSettlement, Commission)
++        .join(
++            CommissionSettlement,
++            CommissionSettlement.id == CommissionSettleLine.settlement_id,
++        )
++        .join(
++            Commission,
++            Commission.id == CommissionSettleLine.commission_id,
++        )
++    )
++
++    if normalized_agent_id:
++        stmt = stmt.where(
++            func.coalesce(Commission.agent_id, CommissionSettlement.agent_id) == normalized_agent_id
++        )
++    if normalized_case_id:
++        stmt = stmt.where(Commission.case_id == normalized_case_id)
++    if normalized_currency:
++        stmt = stmt.where(
++            func.upper(func.coalesce(CommissionSettlement.currency, ""))
++            == normalized_currency.upper()
++        )
++    if normalized_settlement_status:
++        stmt = stmt.where(
++            func.upper(func.coalesce(CommissionSettlement.status, ""))
++            == normalized_settlement_status.upper()
++        )
++    if normalized_line_status:
++        stmt = stmt.where(
++            func.upper(func.coalesce(CommissionSettleLine.status, ""))
++            == normalized_line_status.upper()
++        )
++
++    if effective_time_field == "line_created_at":
++        if date_from is not None:
++            stmt = stmt.where(
++                CommissionSettleLine.created_at >= datetime.combine(date_from, time.min)
++            )
++        if date_to is not None:
++            stmt = stmt.where(
++                CommissionSettleLine.created_at <= datetime.combine(date_to, time.max)
++            )
++    elif effective_time_field == "settleable_date":
++        if date_from is not None:
++            stmt = stmt.where(
++                Commission.settleable_date.is_not(None),
++                Commission.settleable_date >= date_from,
++            )
++        if date_to is not None:
++            stmt = stmt.where(
++                Commission.settleable_date.is_not(None),
++                Commission.settleable_date <= date_to,
++            )
++    else:
++        period_ref = func.coalesce(CommissionSettlement.period_to, CommissionSettlement.period_from)
++        if date_from is not None:
++            stmt = stmt.where(period_ref.is_not(None), period_ref >= date_from)
++        if date_to is not None:
++            stmt = stmt.where(period_ref.is_not(None), period_ref <= date_to)
++
++    rows = db.execute(
++        stmt.order_by(CommissionSettleLine.created_at.asc(), CommissionSettleLine.id.asc())
++    ).all()
++
++    details: list[dict[str, Any]] = []
++    by_agent_map: dict[str | None, dict[str, Any]] = {}
++    by_case_map: dict[str | None, dict[str, Any]] = {}
++    by_time_map: dict[str, dict[str, Any]] = {}
++    total_amount = Decimal("0")
++
++    for line, settlement, commission in rows:
++        line_amount = _quantize_money(_to_decimal(line.amount, field_name="settlement_line.amount"))
++        agent_value = _normalize_optional_text(commission.agent_id) or _normalize_optional_text(
++            settlement.agent_id
++        )
++
++        if effective_time_field == "line_created_at":
++            bucket_source = line.created_at
++        elif effective_time_field == "settleable_date":
++            bucket_source = commission.settleable_date
++        else:
++            bucket_source = settlement.period_to or settlement.period_from
++        time_bucket = _to_month_bucket(bucket_source)
++
++        detail = {
++            "settlement_id": settlement.id,
++            "settlement_no": settlement.settlement_no,
++            "commission_id": commission.id,
++            "agent_id": agent_value,
++            "case_id": commission.case_id,
++            "amount": line_amount,
++            "currency": settlement.currency,
++            "line_status": line.status,
++            "settlement_status": settlement.status,
++            "settleable_date": commission.settleable_date,
++            "period_from": settlement.period_from,
++            "period_to": settlement.period_to,
++            "created_at": line.created_at,
++        }
++        details.append(detail)
++        total_amount += line_amount
++
++        if agent_value not in by_agent_map:
++            by_agent_map[agent_value] = {
++                "agent_id": agent_value,
++                "line_count": 0,
++                "total_amount": Decimal("0"),
++            }
++        by_agent_map[agent_value]["line_count"] += 1
++        by_agent_map[agent_value]["total_amount"] += line_amount
++
++        case_value = commission.case_id
++        if case_value not in by_case_map:
++            by_case_map[case_value] = {
++                "case_id": case_value,
++                "line_count": 0,
++                "total_amount": Decimal("0"),
++            }
++        by_case_map[case_value]["line_count"] += 1
++        by_case_map[case_value]["total_amount"] += line_amount
++
++        if time_bucket not in by_time_map:
++            by_time_map[time_bucket] = {
++                "time_bucket": time_bucket,
++                "line_count": 0,
++                "total_amount": Decimal("0"),
++            }
++        by_time_map[time_bucket]["line_count"] += 1
++        by_time_map[time_bucket]["total_amount"] += line_amount
++
++    by_agent = sorted(by_agent_map.values(), key=lambda item: item["agent_id"] or "")
++    by_case = sorted(by_case_map.values(), key=lambda item: item["case_id"] or "")
++    by_time = sorted(
++        by_time_map.values(),
++        key=lambda item: (item["time_bucket"] == _UNKNOWN_TIME_BUCKET, item["time_bucket"]),
++    )
++    for entry in by_agent:
++        entry["total_amount"] = _quantize_money(entry["total_amount"])
++    for entry in by_case:
++        entry["total_amount"] = _quantize_money(entry["total_amount"])
++    for entry in by_time:
++        entry["total_amount"] = _quantize_money(entry["total_amount"])
++
++    return {
++        "filters": {
++            "agent_id": normalized_agent_id,
++            "case_id": normalized_case_id,
++            "currency": normalized_currency.upper() if normalized_currency else None,
++            "settlement_status": (
++                normalized_settlement_status.upper() if normalized_settlement_status else None
++            ),
++            "line_status": normalized_line_status.upper() if normalized_line_status else None,
++            "date_from": date_from,
++            "date_to": date_to,
++            "time_field": effective_time_field,
++        },
++        "totals": {
++            "line_count": len(details),
++            "total_amount": _quantize_money(total_amount),
++        },
++        "by_agent": by_agent,
++        "by_case": by_case,
++        "by_time": by_time,
++        "details": details,
++    }
++
++
+ def generate_commission_settlement_lines(
+     db: Session,
+     *,

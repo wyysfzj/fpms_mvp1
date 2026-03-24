@@ -1,0 +1,7 @@
+HTTP/1.1 409 Conflict
+date: Sat, 03 Jan 2026 16:11:36 GMT
+server: uvicorn
+content-length: 35
+content-type: application/json
+
+{"detail":"case_no already exists"}

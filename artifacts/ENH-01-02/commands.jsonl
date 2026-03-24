@@ -1,0 +1,12 @@
+{"ts":"20260105T002525","step":"migrate","cmd":"alembic revision -m add_t_role_perm"}
+{"ts":"20260105T002546","step":"migrate","cmd":"bash -lc cd\ backend\ \&\&\ alembic\ revision\ -m\ \'add_t_role_perm\'"}
+{"ts":"20260105T002639","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ alembic/versions/ea0de36a1dde_add_t_role_perm.py"}
+{"ts":"20260105T002645","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ alembic/versions/ea0de36a1dde_add_t_role_perm.py"}
+{"ts":"20260105T002651","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ alembic/versions/ea0de36a1dde_add_t_role_perm.py"}
+{"ts":"20260105T002657","step":"migrate","cmd":"bash -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}
+{"ts":"20260105T002703","step":"schema","cmd":"bash -lc cd\ backend\ \&\&\ sqlite3\ fpms_dev.db\ \'.schema\ t_role_perm\'"}
+{"ts":"20260111T163848","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ alembic/versions/ea0de36a1dde_add_t_role_perm.py"}
+{"ts":"20260111T163856","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ alembic/versions/ea0de36a1dde_add_t_role_perm.py"}
+{"ts":"20260111T163903","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ alembic/versions/ea0de36a1dde_add_t_role_perm.py"}
+{"ts":"20260111T163909","step":"migrate","cmd":"bash -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}
+{"ts":"20260111T163916","step":"schema","cmd":"bash -lc cd\ backend\ \&\&\ sqlite3\ fpms_dev.db\ \'.schema\ t_role_perm\'"}

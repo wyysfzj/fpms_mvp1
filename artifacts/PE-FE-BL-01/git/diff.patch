@@ -1,0 +1,397 @@
+diff --git a/frontend/src/api/billing.ts b/frontend/src/api/billing.ts
+index ad6b71d..b69fbd4 100644
+--- a/frontend/src/api/billing.ts
++++ b/frontend/src/api/billing.ts
+@@ -22,7 +22,11 @@ interface BackendBill {
+     client_name?: string | null
+     case_id?: string | null
+     case_no?: string | null
++    direction?: string | null
+     status?: string | null
++    total_gov?: number | string | null
++    total_service?: number | string | null
++    total_misc?: number | string | null
+     amount?: number | string | null
+     balance?: number | string | null
+     currency?: string | null
+@@ -34,11 +38,22 @@ interface BackendBill {
+     updated_at?: string
+     items?: {
+         id?: string
++        bill_id?: string
++        case_id?: string | null
++        draft_id?: string | null
++        fee_code?: string | null
++        fee_name?: string | null
++        fee_type?: string | null
++        year_no?: number | null
+         description?: string | null
+         quantity?: number | string | null
+         unit_price?: number | string | null
+         amount?: number | string | null
+     }[]
++    source_draft_ids?: string[] | null
++    source_draft_labels?: string[] | null
++    primary_draft_id?: string | null
++    primary_draft_label?: string | null
+ }
+ 
+ interface BackendPayment {
+@@ -99,13 +114,29 @@ function mapBillDetail(input: BackendBill): BillDetail {
+         ...mapBillListItem(input),
+         case_id: input.case_id || undefined,
+         case_no: input.case_no || undefined,
++        direction: input.direction || undefined,
++        bill_date: input.bill_date || undefined,
++        total_gov: input.total_gov != null ? asNumber(input.total_gov) : undefined,
++        total_service: input.total_service != null ? asNumber(input.total_service) : undefined,
++        total_misc: input.total_misc != null ? asNumber(input.total_misc) : undefined,
+         items: (input.items || []).map((item, index) => ({
+             id: item.id || `${input.id}-item-${index}`,
+-            description: item.description || '',
++            bill_id: item.bill_id || input.id,
++            case_id: item.case_id || undefined,
++            draft_id: item.draft_id || undefined,
++            fee_code: item.fee_code || undefined,
++            fee_name: item.fee_name || undefined,
++            fee_type: item.fee_type || undefined,
++            year_no: item.year_no ?? undefined,
++            description: item.description || item.fee_name || item.fee_code || '',
+             quantity: asNumber(item.quantity),
+             unit_price: asNumber(item.unit_price),
+             amount: asNumber(item.amount),
+         })),
++        source_draft_ids: input.source_draft_ids || undefined,
++        source_draft_labels: input.source_draft_labels || undefined,
++        primary_draft_id: input.primary_draft_id || undefined,
++        primary_draft_label: input.primary_draft_label || undefined,
+         notes: input.notes || undefined,
+         created_at: input.created_at,
+         updated_at: input.updated_at,
+@@ -343,6 +374,7 @@ function mapCaseReceipt(input: BackendCaseReceipt): CaseReceiptsSummary {
+         fee_type: input.fee_type || undefined,
+         fee_code: input.fee_code || undefined,
+         year_no: input.year_no ?? undefined,
++        last_receipt_date: input.last_receipt_date || undefined,
+         is_arrears: input.is_arrears ?? undefined,
+         invoice_no: input.invoice_no || undefined,
+         is_commissionable: input.is_commissionable ?? undefined,
+diff --git a/frontend/src/api/billing.types.ts b/frontend/src/api/billing.types.ts
+index 2127a54..615b8a1 100644
+--- a/frontend/src/api/billing.types.ts
++++ b/frontend/src/api/billing.types.ts
+@@ -3,6 +3,7 @@
+  */
+ 
+ export type BillStatus = string
++export type BillDirection = 'AR' | 'AP'
+ 
+ export interface BillListItem {
+     id: string
+@@ -19,6 +20,13 @@ export interface BillListItem {
+ 
+ export interface BillItem {
+     id: string
++    bill_id?: string
++    case_id?: string
++    draft_id?: string
++    fee_code?: string
++    fee_name?: string
++    fee_type?: string
++    year_no?: number
+     description: string
+     quantity: number
+     unit_price: number
+@@ -36,9 +44,18 @@ export interface BillDetail {
+     amount: number
+     balance: number
+     currency: string
++    direction?: string
+     issue_date?: string
++    bill_date?: string
+     due_date?: string
++    total_gov?: number
++    total_service?: number
++    total_misc?: number
+     items: BillItem[]
++    source_draft_ids?: string[]
++    source_draft_labels?: string[]
++    primary_draft_id?: string
++    primary_draft_label?: string
+     notes?: string
+     created_at?: string
+     updated_at?: string
+@@ -63,6 +80,8 @@ export interface BillManualPayload {
+     client_id: string
+     case_id?: string
+     currency: string
++    direction?: BillDirection
++    status?: string
+     items: BillManualItem[]
+     notes?: string
+ }
+@@ -71,6 +90,8 @@ export interface BillManualItem {
+     description: string
+     quantity: number
+     unit_price: number
++    fee_type?: string
++    year_no?: number
+ }
+ 
+ // Payment Types
+@@ -148,6 +169,7 @@ export interface CaseReceiptsSummary {
+     fee_type?: string
+     fee_code?: string
+     year_no?: number
++    last_receipt_date?: string
+     is_arrears?: boolean
+     invoice_no?: string
+     is_commissionable?: boolean
+diff --git a/frontend/src/modules/billing/pages/BillCreate.vue b/frontend/src/modules/billing/pages/BillCreate.vue
+index a80e32e..75bb96d 100644
+--- a/frontend/src/modules/billing/pages/BillCreate.vue
++++ b/frontend/src/modules/billing/pages/BillCreate.vue
+@@ -27,11 +27,11 @@
+             <div class="form-section">
+               <h3 class="form-section-title">选择费用草稿</h3>
+               <p class="form-section-desc">
+-                输入已锁定费用草稿的编号，用于生成本账单。
++                请选择已锁定且已有费用明细的草稿，系统会使用内部草稿 ID 生成账单，无需手工输入 UUID。
+               </p>
+ 
+               <el-form-item
+-                label="草稿编号"
++                label="费用草稿"
+                 prop="draft_ids"
+                 :error="fieldErrors.get('draft_ids')?.join(', ')"
+               >
+@@ -39,14 +39,35 @@
+                   v-model="draftsForm.draft_ids"
+                   multiple
+                   filterable
+-                  allow-create
+-                  default-first-option
+-                  placeholder="输入草稿编号（可粘贴或输入）"
++                  collapse-tags
++                  collapse-tags-tooltip
++                  clearable
++                  :loading="draftOptionsLoading"
++                  :no-data-text="draftOptionsLoading ? '正在加载可开票草稿…' : '暂无可用于开票的锁定草稿'"
++                  placeholder="请选择已锁定且可开票的费用草稿"
+                   class="full-width"
+                 >
++                  <el-option
++                    v-for="option in availableDraftOptions"
++                    :key="option.id"
++                    :label="option.displayLabel"
++                    :value="option.id"
++                  >
++                    <div class="draft-option">
++                      <div class="draft-option-main">
++                        <span class="draft-option-id">{{ option.displayId }}</span>
++                        <span class="draft-option-case">{{ option.caseDisplay }}</span>
++                      </div>
++                      <div class="draft-option-sub">
++                        <span>{{ option.clientDisplay }}</span>
++                        <span>{{ option.amountDisplay }}</span>
++                      </div>
++                    </div>
++                  </el-option>
+                 </el-select>
+                 <div class="field-hint">
+-                  <router-link to="/fees/drafts">查看费用草稿</router-link> 以获取草稿编号
++                  仅展示“已锁定”且金额大于 0 的草稿。
++                  <router-link to="/fees/drafts">查看费用草稿列表</router-link>
+                 </div>
+               </el-form-item>
+ 
+@@ -145,6 +166,25 @@
+                     </el-select>
+                   </el-form-item>
+                 </el-col>
++                <el-col :span="12">
++                  <el-form-item
++                    label="账单方向"
++                    prop="direction"
++                    :error="fieldErrors.get('direction')?.join(', ')"
++                  >
++                    <el-select v-model="manualForm.direction" placeholder="请选择账单方向" class="full-width">
++                      <el-option
++                        v-for="option in directionOptions"
++                        :key="option.value"
++                        :label="option.label"
++                        :value="option.value"
++                      />
++                    </el-select>
++                    <div class="field-hint">
++                      应收账单用于向客户收款，应付账单用于记录需对外支付的款项。
++                    </div>
++                  </el-form-item>
++                </el-col>
+               </el-row>
+             </div>
+ 
+@@ -243,12 +283,14 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import { ref, reactive, computed } from 'vue'
++import { ref, reactive, computed, onMounted } from 'vue'
+ import { useRouter } from 'vue-router'
+ import type { FormInstance, FormRules } from 'element-plus'
+ import { ElMessage } from 'element-plus'
+ import { createBillFromDrafts, createManualBill } from '../../../api/billing'
+-import type { BillFromDraftsPayload, BillManualPayload, BillManualItem } from '../../../api/billing.types'
++import type { BillFromDraftsPayload, BillManualPayload, BillManualItem, BillDirection } from '../../../api/billing.types'
++import { getFeeDrafts } from '../../../api/fees'
++import type { FeeDraftListItem } from '../../../api/fees.types'
+ import type { ApiError } from '../../../api/types'
+ import { mapFieldErrors } from '../../../api/errors'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+@@ -259,6 +301,8 @@ const activeTab = ref('drafts')
+ const saving = ref(false)
+ const error = ref<ApiError | null>(null)
+ const fieldErrors = ref<Map<string, string[]>>(new Map())
++const draftOptionsLoading = ref(false)
++const availableDrafts = ref<FeeDraftListItem[]>([])
+ 
+ const draftsFormRef = ref<FormInstance>()
+ const manualFormRef = ref<FormInstance>()
+@@ -275,10 +319,16 @@ const manualForm = reactive({
+   client_id: '',
+   case_id: '',
+   currency: 'CNY',
+-  items: [{ description: '', quantity: 1, unit_price: 0 }] as BillManualItem[],
++  direction: 'AR' as BillDirection,
++  items: [{ description: '', quantity: 1, unit_price: 0, fee_type: '', year_no: undefined }] as BillManualItem[],
+   notes: '',
+ })
+ 
++const directionOptions = [
++  { label: '应收 (AR)', value: 'AR' as BillDirection },
++  { label: '应付 (AP)', value: 'AP' as BillDirection },
++]
++
+ const manualRules: FormRules = {
+   client_id: [
+     { required: true, message: '客户编号为必填项', trigger: 'blur' },
+@@ -286,12 +336,62 @@ const manualRules: FormRules = {
+   currency: [
+     { required: true, message: '币种为必填项', trigger: 'change' },
+   ],
++  direction: [
++    { required: true, message: '请确认账单方向', trigger: 'change' },
++  ],
+ }
+ 
+ const totalAmount = computed(() => {
+   return manualForm.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
+ })
+ 
++function asNumericAmount(amount: number | string | undefined): number {
++  if (amount === undefined || amount === null || amount === '') return 0
++  const parsed = Number(amount)
++  return Number.isFinite(parsed) ? parsed : 0
++}
++
++function formatDraftAmount(amount: number | string | undefined, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(asNumericAmount(amount))
++}
++
++function buildDraftDisplayId(draft: FeeDraftListItem): string {
++  return `${draft.id.slice(0, 8).toUpperCase()}`
++}
++
++const availableDraftOptions = computed(() => {
++  return availableDrafts.value.map((draft) => {
++    const draftTypePrefix = '费用草稿'
++    const readableDraftId = `${draftTypePrefix}-${buildDraftDisplayId(draft)}`
++    const caseDisplay = draft.case_no || `案件 ${draft.case_id.slice(0, 8).toUpperCase()}`
++    const clientDisplay = draft.client_name || '未关联客户'
++    const amountDisplay = formatDraftAmount(draft.amount, draft.currency)
++    return {
++      id: draft.id,
++      displayId: readableDraftId,
++      caseDisplay,
++      clientDisplay,
++      amountDisplay,
++      displayLabel: `${readableDraftId} · ${caseDisplay} · ${clientDisplay} · ${amountDisplay}`,
++    }
++  })
++})
++
++async function fetchAvailableDrafts() {
++  draftOptionsLoading.value = true
++  try {
++    const result = await getFeeDrafts({ page: 1, page_size: 100, status: 'LOCKED' })
++    availableDrafts.value = result.items.filter((draft) => asNumericAmount(draft.amount) > 0)
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    draftOptionsLoading.value = false
++  }
++}
++
+ function formatAmount(amount: number): string {
+   const curr = manualForm.currency || 'CNY'
+   return new Intl.NumberFormat('zh-CN', {
+@@ -370,6 +470,7 @@ async function handleCreateManual() {
+       client_id: manualForm.client_id,
+       case_id: manualForm.case_id || undefined,
+       currency: manualForm.currency,
++      direction: manualForm.direction,
+       items: validItems,
+       notes: manualForm.notes || undefined,
+     }
+@@ -388,6 +489,10 @@ async function handleCreateManual() {
+     saving.value = false
+   }
+ }
++
++onMounted(() => {
++  fetchAvailableDrafts()
++})
+ </script>
+ 
+ <style scoped>
+@@ -424,6 +529,37 @@ async function handleCreateManual() {
+   text-decoration: underline;
+ }
+ 
++.draft-option {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  padding: 2px 0;
++}
++
++.draft-option-main {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++}
++
++.draft-option-id {
++  font-family: var(--font-mono);
++  font-weight: 600;
++  color: var(--text-main);
++}
++
++.draft-option-case {
++  color: var(--text-main);
++}
++
++.draft-option-sub {
++  display: flex;
++  justify-content: space-between;
++  gap: 12px;
++  color: var(--text-sub);
++  font-size: 12px;
++}
++
+ .items-table {
+   width: 100%;
+   margin-bottom: 12px;

@@ -1,0 +1,4 @@
+{"ts":"20260118T222612","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/cases/service.py"}
+{"ts":"20260118T222618","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/cases/service.py"}
+{"ts":"20260118T222623","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python\ -m\ py_compile\ app/modules/cases/service.py"}
+{"ts":"20260118T222634","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/cases/service.py"}

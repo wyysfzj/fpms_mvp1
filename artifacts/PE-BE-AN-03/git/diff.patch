@@ -1,0 +1,346 @@
+diff --git a/backend/app/modules/annuity/api.py b/backend/app/modules/annuity/api.py
+new file mode 100644
+index 0000000..104db35
+--- /dev/null
++++ b/backend/app/modules/annuity/api.py
+@@ -0,0 +1,96 @@
++from __future__ import annotations
++
++from datetime import date
++from typing import Any
++
++from fastapi import APIRouter, Depends, Query
++from pydantic import BaseModel, Field
++from sqlalchemy.orm import Session
++
++from app.api.deps import require_perm
++from app.db.session import get_db
++from app.modules.annuity.service import list_annuity_tasks, update_annuity_task_instruction
++
++router = APIRouter()
++
++
++class AnnuityInstructionUpdateIn(BaseModel):
++    instruction: str = Field(..., min_length=1, max_length=24)
++    instruction_date: date | None = None
++
++
++@router.get("/annuity/tasks", summary="List annuity tasks")
++def get_annuity_tasks(
++    due_from: date | None = Query(default=None),
++    due_to: date | None = Query(default=None),
++    status: str | None = Query(default=None),
++    pending_mode: str | None = Query(default=None),
++    case_id: str | None = Query(default=None),
++    client_id: str | None = Query(default=None),
++    notice_status: str | None = Query(default=None),
++    page: int = Query(default=1, ge=1),
++    page_size: int = Query(default=20, ge=1),
++    _perm: None = Depends(require_perm("AnnuityTask.Read")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    """List annuity tasks with filters and pagination."""
++    filters = {
++        "due_from": due_from,
++        "due_to": due_to,
++        "status": status,
++        "pending_mode": pending_mode,
++        "case_id": case_id,
++        "client_id": client_id,
++        "notice_status": notice_status,
++    }
++    tasks, total = list_annuity_tasks(db, filters=filters, page=page, page_size=page_size)
++
++    items = [
++        {
++            "id": task.id,
++            "case_id": task.case_id,
++            "client_id": task.client_id,
++            "year_no": task.year_no,
++            "due_date": task.due_date,
++            "client_instruction": task.client_instruction,
++            "instruction_date": task.instruction_date,
++            "notice_status": task.notice_status,
++            "notice_sent_date": task.notice_sent_date,
++            "status": task.status,
++            "remark": task.remark,
++            "created_at": task.created_at,
++            "updated_at": task.updated_at,
++        }
++        for task in tasks
++    ]
++    return {"items": items, "page": page, "page_size": page_size, "total": total}
++
++
++@router.put("/annuity/tasks/{task_id}/instruction", summary="Update annuity task instruction")
++def put_annuity_task_instruction(
++    task_id: int,
++    payload: AnnuityInstructionUpdateIn,
++    _perm: None = Depends(require_perm("AnnuityTask.Action")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    task = update_annuity_task_instruction(
++        db,
++        task_id=task_id,
++        instruction=payload.instruction,
++        instruction_date=payload.instruction_date,
++    )
++    return {
++        "id": task.id,
++        "case_id": task.case_id,
++        "client_id": task.client_id,
++        "year_no": task.year_no,
++        "due_date": task.due_date,
++        "client_instruction": task.client_instruction,
++        "instruction_date": task.instruction_date,
++        "notice_status": task.notice_status,
++        "notice_sent_date": task.notice_sent_date,
++        "status": task.status,
++        "remark": task.remark,
++        "created_at": task.created_at,
++        "updated_at": task.updated_at,
++    }
+diff --git a/backend/app/modules/annuity/service.py b/backend/app/modules/annuity/service.py
+new file mode 100644
+index 0000000..4426502
+--- /dev/null
++++ b/backend/app/modules/annuity/service.py
+@@ -0,0 +1,238 @@
++from __future__ import annotations
++
++from datetime import date
++from typing import Any
++
++from sqlalchemy import func, select
++from sqlalchemy.orm import Session
++
++from app.core.errors import raise_business_error
++from app.modules.annuity.models import AnnuityTask
++
++_ALLOWED_INSTRUCTIONS = ("PAY", "ABANDON", "DEFER")
++_TERMINAL_STATUSES = (
++    "DONE",
++    "CLOSED",
++    "CANCELLED",
++    "ABANDONED",
++    "PAID",
++    "SETTLED",
++    "COMPLETED",
++)
++
++
++def _coerce_date(value: Any, field_name: str) -> date | None:
++    if value is None or value == "":
++        return None
++    if isinstance(value, date):
++        return value
++    if isinstance(value, str):
++        try:
++            return date.fromisoformat(value)
++        except ValueError:
++            raise_business_error(
++                "ANNUITY_DATE_RANGE_INVALID",
++                f"Invalid {field_name}; expected YYYY-MM-DD",
++                status_code=400,
++            )
++    raise_business_error(
++        "ANNUITY_DATE_RANGE_INVALID",
++        f"Invalid {field_name}; expected YYYY-MM-DD",
++        status_code=400,
++    )
++
++
++def _normalize_statuses(value: Any) -> list[str]:
++    if value is None:
++        return []
++    if isinstance(value, (list, tuple, set)):
++        values = [str(item).strip().upper() for item in value if str(item).strip()]
++        return values
++    text = str(value).strip()
++    return [text.upper()] if text else []
++
++
++def _normalize_pending_mode(value: Any) -> str:
++    if value is None:
++        return "all"
++    if isinstance(value, bool):
++        return "pending" if value else "all"
++
++    mode = str(value).strip().lower()
++    aliases = {
++        "": "all",
++        "all": "all",
++        "pending": "pending",
++        "open": "pending",
++        "todo": "pending",
++        "processed": "processed",
++        "done": "processed",
++        "completed": "processed",
++        "closed": "processed",
++    }
++    if mode in aliases:
++        return aliases[mode]
++
++    raise_business_error(
++        "ANNUITY_PENDING_MODE_INVALID",
++        "Invalid pending filter mode",
++        details={"pending_mode": value},
++        status_code=400,
++    )
++
++
++def list_annuity_tasks(
++    db: Session,
++    *,
++    filters: dict[str, Any] | None = None,
++    page: int = 1,
++    page_size: int = 20,
++) -> tuple[list[AnnuityTask], int]:
++    """List annuity tasks with range/status/pending filters and pagination."""
++    filters = filters or {}
++
++    due_from = _coerce_date(
++        filters.get("due_from")
++        or filters.get("due_date_from")
++        or filters.get("date_from")
++        or filters.get("from"),
++        "due_from",
++    )
++    due_to = _coerce_date(
++        filters.get("due_to")
++        or filters.get("due_date_to")
++        or filters.get("date_to")
++        or filters.get("to"),
++        "due_to",
++    )
++    if due_from and due_to and due_from > due_to:
++        raise_business_error(
++            "ANNUITY_DATE_RANGE_INVALID",
++            "due_from must be <= due_to",
++            status_code=400,
++        )
++
++    status_values = _normalize_statuses(filters.get("status"))
++    pending_mode = _normalize_pending_mode(
++        filters.get("pending_mode", filters.get("pending_filter", filters.get("pending")))
++    )
++
++    stmt = select(AnnuityTask)
++
++    case_id = filters.get("case_id")
++    client_id = filters.get("client_id")
++    notice_status_values = _normalize_statuses(filters.get("notice_status"))
++
++    if case_id:
++        stmt = stmt.where(AnnuityTask.case_id == case_id)
++    if client_id:
++        stmt = stmt.where(AnnuityTask.client_id == client_id)
++    if due_from:
++        stmt = stmt.where(AnnuityTask.due_date >= due_from)
++    if due_to:
++        stmt = stmt.where(AnnuityTask.due_date <= due_to)
++    if status_values:
++        if len(status_values) == 1:
++            stmt = stmt.where(func.upper(AnnuityTask.status) == status_values[0])
++        else:
++            stmt = stmt.where(func.upper(AnnuityTask.status).in_(status_values))
++    if notice_status_values:
++        if len(notice_status_values) == 1:
++            stmt = stmt.where(func.upper(AnnuityTask.notice_status) == notice_status_values[0])
++        else:
++            stmt = stmt.where(func.upper(AnnuityTask.notice_status).in_(notice_status_values))
++
++    if pending_mode == "pending":
++        stmt = stmt.where(
++            AnnuityTask.status.is_(None) | (~func.upper(AnnuityTask.status).in_(_TERMINAL_STATUSES))
++        )
++    elif pending_mode == "processed":
++        stmt = stmt.where(func.upper(AnnuityTask.status).in_(_TERMINAL_STATUSES))
++
++    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
++
++    offset = (page - 1) * page_size
++    items = db.execute(
++        stmt.order_by(
++            AnnuityTask.due_date.asc(),
++            AnnuityTask.created_at.desc(),
++            AnnuityTask.id.asc(),
++        )
++        .offset(offset)
++        .limit(page_size)
++    ).scalars().all()
++    return items, total
++
++
++def extract_annuity_tasks(
++    db: Session,
++    *,
++    filters: dict[str, Any] | None = None,
++    page: int = 1,
++    page_size: int = 20,
++) -> tuple[list[AnnuityTask], int]:
++    """Compatibility alias for task-extraction wording in enhancement runbooks."""
++    return list_annuity_tasks(db, filters=filters, page=page, page_size=page_size)
++
++
++def update_annuity_task_instruction(
++    db: Session,
++    *,
++    task_id: int,
++    instruction: str,
++    instruction_date: date | None = None,
++) -> AnnuityTask:
++    """Update client instruction with legal transition checks."""
++    task = db.execute(select(AnnuityTask).where(AnnuityTask.id == task_id)).scalar_one_or_none()
++    if not task:
++        raise_business_error("ANNUITY_TASK_NOT_FOUND", "Annuity task not found", status_code=404)
++
++    new_instruction = (instruction or "").strip().upper()
++    if new_instruction not in _ALLOWED_INSTRUCTIONS:
++        raise_business_error(
++            "ANNUITY_INSTRUCTION_INVALID",
++            "Invalid instruction; allowed values are PAY/ABANDON/DEFER",
++            status_code=400,
++        )
++
++    current_status = ((task.status or "") if task.status is not None else "").strip().upper()
++    if current_status in _TERMINAL_STATUSES:
++        raise_business_error(
++            "ANNUITY_STATE_CONFLICT",
++            "Instruction update is not allowed for current task state",
++            details={"status": task.status},
++            status_code=409,
++        )
++
++    current_instruction = (
++        ((task.client_instruction or "") if task.client_instruction is not None else "")
++        .strip()
++        .upper()
++    )
++    if not current_instruction:
++        current_instruction = "NONE"
++
++    allowed_transitions = {
++        "NONE": {"PAY", "ABANDON", "DEFER"},
++        "DEFER": {"PAY", "ABANDON", "DEFER"},
++        "PAY": {"PAY"},
++        "ABANDON": {"ABANDON"},
++    }
++    if new_instruction not in allowed_transitions.get(current_instruction, set()):
++        raise_business_error(
++            "ANNUITY_INSTRUCTION_INVALID",
++            "Invalid instruction transition",
++            details={"from": current_instruction, "to": new_instruction},
++            status_code=400,
++        )
++
++    instruction_changed = task.client_instruction != new_instruction
++    task.client_instruction = new_instruction
++    if instruction_date is not None:
++        task.instruction_date = instruction_date
++    elif instruction_changed and task.instruction_date is None:
++        task.instruction_date = date.today()
++
++    db.commit()
++    db.refresh(task)
++    return task

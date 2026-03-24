@@ -1,0 +1,5 @@
+{"timestamp": "2026-03-08T07:04:55.408076+00:00", "level": "ERROR", "logger": "app.request", "message": "unhandled exception", "request_id": "297d3e19-36ae-4a23-963e-c479fd715022"}
+{"timestamp": "2026-03-08T07:04:55.408786+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/auth/login \"HTTP/1.1 500 Internal Server Error\"", "request_id": null}
+Traceback (most recent call last):
+  File "<stdin>", line 7, in <module>
+AssertionError: {"error":{"code":"INTERNAL_SERVER_ERROR","message":"Internal server error","details":null}}

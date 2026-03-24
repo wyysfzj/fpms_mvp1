@@ -1,0 +1,5 @@
+{"cmd":"awk fence-parity check on docs/error_codes.md and docs/api_usage_guide.md","rc":0,"notes":"docs/error_codes.md fence_count=4 parity=OK; docs/api_usage_guide.md fence_count=50 parity=OK"}
+{"cmd":"rg consistency check against backend/app/api/router.py and backend error handlers","rc":0,"notes":"router includes only current modules (admin/auth/system/templates/clients/cases/documents/tasks/fees/billing); BusinessError + RequestValidationError handlers confirmed; legacy HTTPException usage confirmed in cases/api.py"}
+{"cmd":"rg section-presence check for newly added documentation sections","rc":0,"notes":"Found new sections in both docs: Envelope constraints, Post-enhancement domains, Error Response Contract, Post-enhancement Domain Status Semantics"}
+{"ts":"20260228T155418","step":"lint","rc":0,"log":"artifacts/PE-BE-00-03/outputs/20260228T155418_lint.log"}
+{"ts":"20260228T155418","step":"test","rc":0,"log":"artifacts/PE-BE-00-03/outputs/20260228T155418_test.log"}

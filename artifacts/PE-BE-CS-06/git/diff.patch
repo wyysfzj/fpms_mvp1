@@ -1,0 +1,137 @@
+diff --git a/tmp/pe-be-cs-06/consulting.service.py.before b/backend/app/modules/consulting/service.py
+index 80afbc5..350732f 100644
+--- a/tmp/pe-be-cs-06/consulting.service.py.before
++++ b/backend/app/modules/consulting/service.py
+@@ -4,12 +4,15 @@ from datetime import date
+ from decimal import Decimal
+ from typing import Any, Literal
+ 
++from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+ from app.modules.cases.models import Case
+ from app.modules.cases.service import create_consulting_or_search_case
+ from app.modules.fees.service import generate_consulting_fee_draft_strategy
+ 
++_CONSULTING_CASE_TYPES = {"CONSULTING", "SEARCH"}
++
+ 
+ def create_consulting_case(
+     db: Session,
+@@ -55,3 +58,19 @@ def generate_consulting_fee_draft(
+         misc_lines=misc_lines,
+         actor_id=actor_id,
+     )
++
++
++def filter_consulting_search_case_ids(db: Session, case_ids: list[str]) -> list[str]:
++    normalized_case_ids = sorted(
++        {str(case_id).strip() for case_id in case_ids if str(case_id).strip()}
++    )
++    if not normalized_case_ids:
++        return []
++
++    rows = db.execute(select(Case.id, Case.case_type).where(Case.id.in_(normalized_case_ids))).all()
++    matched = [
++        case_id
++        for case_id, case_type in rows
++        if (case_type or "").strip().upper() in _CONSULTING_CASE_TYPES
++    ]
++    return sorted(matched)
+
+diff --git a/tmp/pe-be-cs-06/billing.service.py.before b/backend/app/modules/billing/service.py
+index 7d3ae51..6bd47df 100644
+--- a/tmp/pe-be-cs-06/billing.service.py.before
++++ b/backend/app/modules/billing/service.py
+@@ -20,6 +20,7 @@ from app.modules.commission.service import (
+     apply_commission_for_bill,
+     recompute_commission_settleable,
+ )
++from app.modules.consulting.service import filter_consulting_search_case_ids
+ from app.modules.fees.models import FeeDraft, FeeItem
+ 
+ logger = logging.getLogger(__name__)
+@@ -138,6 +139,59 @@ def _run_commission_settleable_recompute_non_blocking(
+     )
+ 
+ 
++def _run_consulting_commission_recompute_non_blocking(
++    db: Session, *, bill_id: str, as_of_date: date | None
++) -> None:
++    service_case_ids = _collect_service_case_ids_for_bill(db, bill_id)
++    consulting_case_ids = filter_consulting_search_case_ids(db, service_case_ids)
++    if not consulting_case_ids:
++        return
++
++    try:
++        summary = recompute_commission_settleable(
++            db,
++            case_ids=consulting_case_ids,
++            as_of_date=as_of_date,
++            strict=False,
++        )
++    except Exception:
++        logger.exception(
++            "Billing consulting commission settleable recompute crashed unexpectedly",
++            extra={"bill_id": bill_id, "case_count": len(consulting_case_ids)},
++        )
++        return
++
++    status = summary.get("status", "FAILED_NON_BLOCKING")
++    if status == "FAILED_NON_BLOCKING":
++        err = summary.get("error") or {}
++        logger.error(
++            "Billing consulting commission settleable recompute failed non-blocking",
++            extra={
++                "bill_id": bill_id,
++                "status": status,
++                "case_count": len(consulting_case_ids),
++                "processed_count": summary.get("processed_count", 0),
++                "updated_count": summary.get("updated_count", 0),
++                "unchanged_count": summary.get("unchanged_count", 0),
++                "error_code": err.get("code"),
++                "error_message": err.get("message"),
++            },
++        )
++        return
++
++    logger.info(
++        "Billing consulting commission settleable recompute completed",
++        extra={
++            "bill_id": bill_id,
++            "status": status,
++            "case_count": len(consulting_case_ids),
++            "processed_count": summary.get("processed_count", 0),
++            "updated_count": summary.get("updated_count", 0),
++            "unchanged_count": summary.get("unchanged_count", 0),
++        },
++    )
++
++
+ def _validate_single_client(client_ids: list[str | None]) -> str:
+     unique_ids = {client_id for client_id in client_ids if client_id}
+     if len(unique_ids) != 1:
+@@ -353,6 +407,11 @@ def generate_bill(
+     db.commit()
+     db.refresh(bill)
+     _run_commission_hook_non_blocking(db, bill)
++    _run_consulting_commission_recompute_non_blocking(
++        db,
++        bill_id=bill.id,
++        as_of_date=bill.bill_date,
++    )
+     return bill
+ 
+ 
+@@ -449,6 +508,11 @@ def generate_bill_from_drafts(db: Session, data: BillFromDraftsRequest) -> Bill:
+     db.commit()
+     db.refresh(bill)
+     _run_commission_hook_non_blocking(db, bill)
++    _run_consulting_commission_recompute_non_blocking(
++        db,
++        bill_id=bill.id,
++        as_of_date=bill.bill_date,
++    )
+     return bill
+ 
+ 

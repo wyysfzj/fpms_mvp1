@@ -1,0 +1,53 @@
+diff --git a/docs/error_codes.md b/docs/error_codes.md
+--- a/docs/error_codes.md
++++ b/docs/error_codes.md
+@@
+-## Error envelope
+-All BusinessError responses follow:
++## Error envelope
++FPMS currently uses two error response shapes:
++1) `BusinessError` / validation envelope
++2) legacy FastAPI `HTTPException` envelope: `{"detail":"..."}`
+@@
++## Envelope constraints for post-enhancement domains (mandatory)
++For new domains (`annuity`, `collections`, `commission`, `consulting`):
++- Business/domain failures MUST use `BusinessError` envelope.
++- Request schema failures MUST return `422` with `VALIDATION_ERROR`.
++- Do not introduce custom envelope shapes.
+@@
++### Post-enhancement domains (reserved conventions)
++Added reserved code/status mappings for:
++- Annuity
++- Collections (Dunning / Bad Debt)
++- Commission
++- Consulting / Search
++
++Added representative mappings including:
++- `ANNUITY_TASK_NOT_FOUND` (404)
++- `ANNUITY_DRAFT_ALREADY_GENERATED` (409)
++- `DUNNING_BATCH_NOT_FOUND` (404)
++- `BAD_DEBT_ALREADY_MARKED` (409)
++- `COMMISSION_RULE_NOT_FOUND` (404)
++- `COMMISSION_RULE_CONFLICT` (409)
++- `CONSULTING_EXPENSE_NOT_FOUND` (404)
++- `CONSULTING_CONFLICT` (409)
++
+diff --git a/docs/api_usage_guide.md b/docs/api_usage_guide.md
+--- a/docs/api_usage_guide.md
++++ b/docs/api_usage_guide.md
+@@
++## Error Response Contract
++Documented current dual-envelope behavior:
++- Preferred `{"error":{...}}` for BusinessError and validation.
++- Legacy `{"detail":"..."}` for some existing endpoints.
++
++Added post-enhancement rule that new domains MUST use BusinessError envelope and status semantics `400/401/403/404/409/422`.
++
++## Post-enhancement Domain Status Semantics
++Added explicit semantics for annuity/collections/commission/consulting domains and noted they are not yet routed as of 2026-02-28.
++Documented temporary route-level 404 behavior (`{"detail":"Not Found"}`) until routers are implemented.
+@@
+ ## Common Errors & Fixes
++Expanded with:
++- `400 BUSINESS_ERROR`
++- `404 NOT_FOUND` (including not-yet-routed domain route-level 404 note)

@@ -1,0 +1,4 @@
+{"ts":"20260131T124653","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/main.py"}
+{"ts":"20260131T124657","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/main.py"}
+{"ts":"20260131T124701","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/main.py"}
+{"ts":"20260131T124705","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"import\ app.main\;\ print\(\'OK\'\)\""}

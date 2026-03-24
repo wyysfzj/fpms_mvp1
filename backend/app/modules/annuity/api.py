@@ -4,19 +4,27 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
 from app.db.session import get_db
 from app.modules.annuity.service import (
+    add_manual_gov_payment,
+    create_historical_pay_list,
     create_pay_list_from_fee_items,
+    export_pay_list,
     generate_fee_drafts_from_annuity_tasks,
+    get_pay_list_detail,
     list_annuity_tasks,
+    list_pay_lists,
+    mark_pay_list_paid,
     register_gov_payment,
     update_annuity_task_instruction,
 )
+from app.modules.auth.models import T_User
 
 router = APIRouter()
 
@@ -38,6 +46,13 @@ class PayListFromFeeItemsIn(BaseModel):
     remark: str | None = None
 
 
+class HistoricalPayListCreateIn(BaseModel):
+    client_id: str | None = Field(default=None, max_length=36)
+    currency: str = Field(default="CNY", min_length=1, max_length=8)
+    planned_pay_date: date | None = None
+    remark: str | None = None
+
+
 class GovPaymentCreateIn(BaseModel):
     pay_list_id: int
     fee_item_id: str = Field(..., min_length=1, max_length=36)
@@ -45,6 +60,19 @@ class GovPaymentCreateIn(BaseModel):
     paid_amount: Decimal | None = Field(default=None, gt=0)
     official_receipt_no: str | None = Field(default=None, max_length=64)
     remark: str | None = None
+
+
+class ManualGovPaymentCreateIn(BaseModel):
+    case_id: str = Field(..., min_length=1, max_length=36)
+    fee_item_id: str | None = Field(default=None, max_length=36)
+    paid_date: date
+    paid_amount: Decimal = Field(..., gt=0)
+    official_receipt_no: str | None = Field(default=None, max_length=64)
+    remark: str | None = None
+
+
+class PayListMarkPaidIn(BaseModel):
+    paid_date: date
 
 
 @router.get("/annuity/tasks", summary="List annuity tasks")
@@ -152,6 +180,137 @@ def post_pay_list_from_fee_items(
     )
 
 
+@router.get("/pay-lists", summary="List pay lists")
+def get_pay_lists(
+    pay_list_no: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    planned_pay_date_from: date | None = Query(default=None),
+    planned_pay_date_to: date | None = Query(default=None),
+    currency: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
+    app_no: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _perm: None = Depends(require_perm("PayList.Read")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """List pay-list headers with supported read-only filters and pagination."""
+    filters = {
+        "pay_list_no": pay_list_no,
+        "client_id": client_id,
+        "status": status,
+        "planned_pay_date_from": planned_pay_date_from,
+        "planned_pay_date_to": planned_pay_date_to,
+        "currency": currency,
+        "case_no": case_no,
+        "app_no": app_no,
+    }
+    pay_lists, total = list_pay_lists(db, filters=filters, page=page, page_size=page_size)
+
+    client_ids = {pay_list.client_id for pay_list in pay_lists if pay_list.client_id}
+    client_name_map: dict[str, str] = {}
+    if client_ids:
+        from app.modules.masterdata.clients.models import Client
+
+        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
+        client_name_map = {client.id: client.name_cn for client in clients}
+
+    items = [
+        {
+            "id": pay_list.id,
+            "pay_list_no": pay_list.pay_list_no,
+            "client_id": pay_list.client_id,
+            "client_name": client_name_map.get(pay_list.client_id),
+            "status": pay_list.status,
+            "currency": pay_list.currency,
+            "planned_pay_date": pay_list.planned_pay_date,
+            "paid_date": pay_list.paid_date,
+            "total_amount": str(pay_list.total_amount),
+            "remark": pay_list.remark,
+            "created_at": pay_list.created_at,
+            "updated_at": pay_list.updated_at,
+            "created_by": pay_list.created_by,
+            "updated_by": pay_list.updated_by,
+        }
+        for pay_list in pay_lists
+    ]
+    return {"items": items, "page": page, "page_size": page_size, "total": total}
+
+
+@router.get("/pay-lists/{pay_list_id}", summary="Get pay list detail")
+def get_pay_list(
+    pay_list_id: int,
+    _perm: None = Depends(require_perm("PayList.Read")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return get_pay_list_detail(db, pay_list_id=pay_list_id)
+
+
+@router.post(
+    "/pay-lists/{pay_list_id}/export",
+    summary="Export pay list to Excel",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}},
+            "description": "Excel export generated",
+        }
+    },
+)
+def post_pay_list_export(
+    pay_list_id: int,
+    _perm: None = Depends(require_perm("PayList.Export")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> Response:
+    export_payload = export_pay_list(db, pay_list_id=pay_list_id, actor_id=current_user.id)
+    return Response(
+        content=export_payload["content"],
+        media_type=export_payload["content_type"],
+        headers={
+            "Content-Disposition": f'attachment; filename="{export_payload["filename"]}"',
+        },
+    )
+
+
+@router.post("/pay-lists/{pay_list_id}/mark-paid", summary="Mark pay list paid")
+def post_pay_list_mark_paid(
+    pay_list_id: int,
+    payload: PayListMarkPaidIn,
+    _perm: None = Depends(require_perm("Billing.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return mark_pay_list_paid(
+        db,
+        pay_list_id=pay_list_id,
+        paid_date=payload.paid_date,
+        actor_id=current_user.id,
+    )
+
+
+@router.post(
+    "/pay-lists",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create historical pay list",
+)
+def post_pay_lists(
+    payload: HistoricalPayListCreateIn,
+    _perm: None = Depends(require_perm("PayList.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return create_historical_pay_list(
+        db,
+        client_id=payload.client_id,
+        currency=payload.currency,
+        planned_pay_date=payload.planned_pay_date,
+        remark=payload.remark,
+        actor_id=current_user.id,
+    )
+
+
 @router.post("/gov-payments", summary="Register official payment")
 def post_gov_payments(
     payload: GovPaymentCreateIn,
@@ -166,4 +325,25 @@ def post_gov_payments(
         paid_amount=payload.paid_amount,
         official_receipt_no=payload.official_receipt_no,
         remark=payload.remark,
+    )
+
+
+@router.post("/pay-lists/{pay_list_id}/manual-items", summary="Add manual gov payment item")
+def post_pay_list_manual_items(
+    pay_list_id: int,
+    payload: ManualGovPaymentCreateIn,
+    _perm: None = Depends(require_perm("GovPayment.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return add_manual_gov_payment(
+        db,
+        pay_list_id=pay_list_id,
+        case_id=payload.case_id,
+        fee_item_id=payload.fee_item_id,
+        paid_date=payload.paid_date,
+        paid_amount=payload.paid_amount,
+        official_receipt_no=payload.official_receipt_no,
+        remark=payload.remark,
+        actor_id=current_user.id,
     )

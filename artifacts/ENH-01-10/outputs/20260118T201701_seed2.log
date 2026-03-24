@@ -1,0 +1,8 @@
+Seeding default roles and permissions...
+✓ Roles and permissions seeded
+Seeding admin user...
+Admin user 'admin' already exists
+✓ Admin user seeded
+
+✅ Development database seeded successfully!
+   Login: username='admin', password='admin123'

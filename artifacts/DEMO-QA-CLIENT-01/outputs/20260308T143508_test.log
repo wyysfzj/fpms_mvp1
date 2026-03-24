@@ -1,0 +1,9 @@
+{"timestamp": "2026-03-08T06:35:09.871560+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "d32de928-605c-4516-8fab-f911728a044e"}
+{"timestamp": "2026-03-08T06:35:09.872466+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/auth/login \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T06:35:09.878299+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "150565b0-2021-4a16-8a7b-63f70ec76532"}
+{"timestamp": "2026-03-08T06:35:09.878901+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/clients?page=1&page_size=1 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T06:35:09.881560+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "ba30a3b9-c745-41c2-b497-c0bd9d3c30e4"}
+{"timestamp": "2026-03-08T06:35:09.882081+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/clients/e58e49d9-422e-42f7-b449-a9884e50ad93 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T06:35:09.884152+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "27a46641-6053-4161-abe0-51fa270406be"}
+{"timestamp": "2026-03-08T06:35:09.884698+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/clients/85e2abc0-6fc2-445e-be8e-c672f8257030 \"HTTP/1.1 404 Not Found\"", "request_id": null}
+{'existing_status': 200, 'missing_status': 404, 'client_id': 'e58e49d9-422e-42f7-b449-a9884e50ad93'}

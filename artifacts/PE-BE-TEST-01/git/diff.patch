@@ -1,0 +1,1192 @@
+diff --git a/backend/tests/test_annuity_e2e.py b/backend/tests/test_annuity_e2e.py
+new file mode 100644
+index 0000000..50b8597
+--- /dev/null
++++ b/backend/tests/test_annuity_e2e.py
+@@ -0,0 +1,339 @@
++from __future__ import annotations
++
++from datetime import date
++from uuid import uuid4
++
++from fastapi.testclient import TestClient
++from sqlalchemy import select
++from sqlalchemy.orm import sessionmaker
++
++from app.modules.annuity.models import AnnuityTask
++from app.modules.fees.models import FeeItem
++
++
++def _uid(prefix: str) -> str:
++    return f"{prefix}-{uuid4().hex[:8].upper()}"
++
++
++def _assert_error(response, status_code: int, error_code: str) -> dict:
++    assert response.status_code == status_code, response.text
++    payload = response.json()
++    assert "error" in payload, payload
++    assert payload["error"].get("code") == error_code, payload
++    assert payload["error"].get("message")
++    return payload
++
++
++def _create_client_and_case(client: TestClient, auth_headers: dict[str, str]) -> tuple[str, str]:
++    cli_resp = client.post(
++        "/api/v1/clients",
++        json={"name_cn": _uid("ANN-CLI"), "default_currency": "CNY"},
++        headers=auth_headers,
++    )
++    assert cli_resp.status_code == 201, cli_resp.text
++    client_id = cli_resp.json()["id"]
++
++    case_resp = client.post(
++        "/api/v1/cases",
++        json={
++            "case_no": _uid("ANN-CASE"),
++            "case_type": "NORMAL",
++            "patent_category": "INV",
++            "flow_dir": "CN_DOMESTIC",
++            "client_id": client_id,
++            "title_cn": "Annuity E2E Case",
++        },
++        headers=auth_headers,
++    )
++    assert case_resp.status_code == 201, case_resp.text
++    return client_id, case_resp.json()["id"]
++
++
++def _insert_annuity_task(
++    session_factory: sessionmaker,
++    *,
++    case_id: str,
++    client_id: str,
++    year_no: int,
++    due_date: date,
++    status: str = "OPEN",
++    notice_status: str = "PENDING",
++    client_instruction: str | None = None,
++) -> int:
++    with session_factory() as db:
++        task = AnnuityTask(
++            case_id=case_id,
++            client_id=client_id,
++            year_no=year_no,
++            due_date=due_date,
++            status=status,
++            notice_status=notice_status,
++            client_instruction=client_instruction,
++        )
++        db.add(task)
++        db.commit()
++        db.refresh(task)
++        return task.id
++
++
++def _create_annuity_rates(client: TestClient, auth_headers: dict[str, str], tag: str) -> None:
++    for fee_type, amount in (("GOV", "100.00"), ("SERVICE", "20.00")):
++        resp = client.post(
++            "/api/v1/fees/rates",
++            json={
++                "fee_code": f"ANN-{fee_type}-{tag}",
++                "fee_name": f"Annuity {fee_type} {tag}",
++                "fee_type": fee_type,
++                "currency": "CNY",
++                "default_amount": amount,
++                "enabled": True,
++                "rate_group": "ANNUITY",
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 201, resp.text
++
++
++def _first_fee_item_id_by_type(
++    session_factory: sessionmaker,
++    draft_id: str,
++    fee_type: str,
++) -> str:
++    with session_factory() as db:
++        fee_item = (
++            db.execute(
++                select(FeeItem)
++                .where(
++                    FeeItem.draft_id == draft_id,
++                    FeeItem.fee_type == fee_type,
++                )
++                .order_by(FeeItem.id.asc())
++            )
++            .scalars()
++            .first()
++        )
++        assert fee_item is not None
++        return fee_item.id
++
++
++def test_annuity_tasks_filters_and_instruction_status_matrix(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++
++    open_task_id = _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=1,
++        due_date=date(2026, 1, 15),
++        status="OPEN",
++        notice_status="PENDING",
++    )
++    _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=2,
++        due_date=date(2026, 1, 20),
++        status="DONE",
++        notice_status="SENT",
++    )
++
++    list_resp = client.get(
++        "/api/v1/annuity/tasks",
++        headers=auth_headers,
++        params={
++            "due_from": "2026-01-01",
++            "due_to": "2026-01-31",
++            "status": "OPEN",
++            "pending_mode": "pending",
++            "case_id": case_id,
++            "client_id": client_id,
++            "notice_status": "PENDING",
++            "page": 1,
++            "page_size": 10,
++        },
++    )
++    assert list_resp.status_code == 200, list_resp.text
++    list_payload = list_resp.json()
++    assert set(list_payload) == {"items", "page", "page_size", "total"}
++    assert list_payload["page"] == 1
++    assert list_payload["page_size"] == 10
++    returned_ids = {item["id"] for item in list_payload["items"]}
++    assert open_task_id in returned_ids
++
++    range_resp = client.get(
++        "/api/v1/annuity/tasks",
++        headers=auth_headers,
++        params={"due_from": "2026-02-01", "due_to": "2026-01-01"},
++    )
++    _assert_error(range_resp, 400, "ANNUITY_DATE_RANGE_INVALID")
++
++    page_size_resp = client.get(
++        "/api/v1/annuity/tasks",
++        headers=auth_headers,
++        params={"page_size": 101},
++    )
++    _assert_error(page_size_resp, 422, "VALIDATION_ERROR")
++
++    update_resp = client.put(
++        f"/api/v1/annuity/tasks/{open_task_id}/instruction",
++        headers=auth_headers,
++        json={"instruction": "PAY"},
++    )
++    assert update_resp.status_code == 200, update_resp.text
++    update_payload = update_resp.json()
++    assert update_payload["id"] == open_task_id
++    assert update_payload["client_instruction"] == "PAY"
++    assert update_payload["instruction_date"] is not None
++
++    transition_resp = client.put(
++        f"/api/v1/annuity/tasks/{open_task_id}/instruction",
++        headers=auth_headers,
++        json={"instruction": "DEFER"},
++    )
++    _assert_error(transition_resp, 400, "ANNUITY_INSTRUCTION_INVALID")
++
++    missing_resp = client.put(
++        "/api/v1/annuity/tasks/99999999/instruction",
++        headers=auth_headers,
++        json={"instruction": "PAY"},
++    )
++    _assert_error(missing_resp, 404, "ANNUITY_TASK_NOT_FOUND")
++
++    terminal_task_id = _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=9,
++        due_date=date(2026, 2, 1),
++        status="DONE",
++    )
++    terminal_resp = client.put(
++        f"/api/v1/annuity/tasks/{terminal_task_id}/instruction",
++        headers=auth_headers,
++        json={"instruction": "PAY"},
++    )
++    _assert_error(terminal_resp, 409, "ANNUITY_STATE_CONFLICT")
++
++
++def test_annuity_generate_drafts_pay_list_gov_payment_chain(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++    task_1 = _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=1,
++        due_date=date(2026, 3, 1),
++    )
++    _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=2,
++        due_date=date(2027, 3, 1),
++    )
++    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
++
++    generate_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [task_1], "pay_next_year": True, "currency": "CNY"},
++    )
++    assert generate_resp.status_code == 200, generate_resp.text
++    generate_payload = generate_resp.json()
++    assert {"summary", "success", "failed"}.issubset(generate_payload)
++    assert generate_payload["summary"]["success"] == 2
++    assert generate_payload["summary"]["failed"] == 0
++
++    repeat_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [task_1], "pay_next_year": True, "currency": "CNY"},
++    )
++    assert repeat_resp.status_code == 200, repeat_resp.text
++    repeat_payload = repeat_resp.json()
++    assert repeat_payload["summary"]["success"] == 0
++    assert repeat_payload["summary"]["failed"] >= 1
++    assert all(row["code"] == "ANNUITY_DRAFT_ALREADY_GENERATED" for row in repeat_payload["failed"])
++
++    draft_id = generate_payload["success"][0]["draft_id"]
++    gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
++    service_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "SERVICE")
++
++    pay_list_resp = client.post(
++        "/api/v1/pay-lists/from-fee-items",
++        headers=auth_headers,
++        json={"fee_item_ids": [gov_fee_item_id]},
++    )
++    assert pay_list_resp.status_code == 200, pay_list_resp.text
++    pay_list_payload = pay_list_resp.json()
++    assert pay_list_payload["summary"]["success"] == 1
++    assert pay_list_payload["pay_list"]["status"] == "DRAFT"
++    pay_list_id = pay_list_payload["pay_list"]["id"]
++
++    pay_list_repeat_resp = client.post(
++        "/api/v1/pay-lists/from-fee-items",
++        headers=auth_headers,
++        json={"fee_item_ids": [gov_fee_item_id]},
++    )
++    assert pay_list_repeat_resp.status_code == 200, pay_list_repeat_resp.text
++    pay_list_repeat_payload = pay_list_repeat_resp.json()
++    assert pay_list_repeat_payload["summary"]["success"] == 0
++    assert pay_list_repeat_payload["summary"]["failed"] >= 1
++    assert pay_list_repeat_payload["failed"][0]["code"] == "GOV_PAYMENT_DUPLICATE"
++
++    register_resp = client.post(
++        "/api/v1/gov-payments",
++        headers=auth_headers,
++        json={
++            "pay_list_id": pay_list_id,
++            "fee_item_id": gov_fee_item_id,
++            "paid_date": "2026-04-01",
++            "paid_amount": "120.00",
++            "official_receipt_no": _uid("OCR"),
++        },
++    )
++    assert register_resp.status_code == 200, register_resp.text
++    register_payload = register_resp.json()
++    assert register_payload["gov_payment"]["fee_item_id"] == gov_fee_item_id
++    assert register_payload["pay_list"]["status"] == "PAID"
++
++    duplicate_register = client.post(
++        "/api/v1/gov-payments",
++        headers=auth_headers,
++        json={"pay_list_id": pay_list_id, "fee_item_id": gov_fee_item_id},
++    )
++    _assert_error(duplicate_register, 409, "GOV_PAYMENT_DUPLICATE")
++
++    invalid_amount_resp = client.post(
++        "/api/v1/gov-payments",
++        headers=auth_headers,
++        json={
++            "pay_list_id": pay_list_id,
++            "fee_item_id": service_fee_item_id,
++            "paid_amount": "100.00",
++        },
++    )
++    _assert_error(invalid_amount_resp, 400, "PAY_LIST_SCOPE_INVALID")
++
++    missing_pay_list_resp = client.post(
++        "/api/v1/gov-payments",
++        headers=auth_headers,
++        json={"pay_list_id": 9999999, "fee_item_id": gov_fee_item_id},
++    )
++    _assert_error(missing_pay_list_resp, 404, "PAY_LIST_NOT_FOUND")
++
++    validation_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": []},
++    )
++    _assert_error(validation_resp, 422, "VALIDATION_ERROR")
+diff --git a/backend/tests/test_collections_e2e.py b/backend/tests/test_collections_e2e.py
+new file mode 100644
+index 0000000..c83fd87
+--- /dev/null
++++ b/backend/tests/test_collections_e2e.py
+@@ -0,0 +1,224 @@
++from __future__ import annotations
++
++from datetime import date
++from decimal import Decimal
++from uuid import uuid4
++
++from fastapi.testclient import TestClient
++from sqlalchemy.orm import sessionmaker
++
++from app.modules.billing.models import Bill
++
++
++def _uid(prefix: str) -> str:
++    return f"{prefix}-{uuid4().hex[:8].upper()}"
++
++
++def _assert_error(response, status_code: int, error_code: str) -> dict:
++    assert response.status_code == status_code, response.text
++    payload = response.json()
++    assert "error" in payload, payload
++    assert payload["error"].get("code") == error_code, payload
++    assert payload["error"].get("message")
++    return payload
++
++
++def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
++    resp = client.post(
++        "/api/v1/clients",
++        json={"name_cn": _uid("COL-CLI"), "default_currency": "CNY"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201, resp.text
++    return resp.json()["id"]
++
++
++def _insert_bill(
++    session_factory: sessionmaker,
++    *,
++    client_id: str,
++    amount: Decimal,
++    balance: Decimal,
++    due_date: date,
++    status: str = "UNSETTLED",
++    currency: str = "CNY",
++) -> str:
++    with session_factory() as db:
++        bill = Bill(
++            id=str(uuid4()),
++            bill_no=_uid("BILL"),
++            client_id=client_id,
++            currency=currency,
++            direction="AR",
++            status=status,
++            bill_date=due_date,
++            due_date=due_date,
++            total_gov=Decimal("0"),
++            total_service=amount,
++            total_misc=Decimal("0"),
++            amount=amount,
++            balance=balance,
++        )
++        db.add(bill)
++        db.commit()
++        db.refresh(bill)
++        return bill.id
++
++
++def test_collections_dunning_generation_idempotency_and_conflicts(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id = _create_client(client, auth_headers)
++    _insert_bill(
++        session_factory,
++        client_id=client_id,
++        amount=Decimal("100.00"),
++        balance=Decimal("100.00"),
++        due_date=date(2026, 1, 10),
++    )
++    _insert_bill(
++        session_factory,
++        client_id=client_id,
++        amount=Decimal("50.00"),
++        balance=Decimal("10.00"),
++        due_date=date(2026, 1, 12),
++    )
++
++    payload = {"to_date": "2026-01-31", "client_id": client_id}
++    create_resp = client.post("/api/v1/dunning", headers=auth_headers, json=payload)
++    assert create_resp.status_code == 200, create_resp.text
++    create_payload = create_resp.json()
++    assert {"summary", "batches"}.issubset(create_payload)
++    assert create_payload["summary"]["created"] == 1
++    assert create_payload["summary"]["reused"] == 0
++    assert len(create_payload["batches"]) == 1
++    assert create_payload["batches"][0]["line_count"] >= 2
++
++    reused_resp = client.post("/api/v1/dunning", headers=auth_headers, json=payload)
++    assert reused_resp.status_code == 200, reused_resp.text
++    reused_payload = reused_resp.json()
++    assert reused_payload["summary"]["created"] == 0
++    assert reused_payload["summary"]["reused"] == 1
++    assert reused_payload["batches"][0]["reused"] is True
++
++    strict_conflict_resp = client.post(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        json={**payload, "strict_conflict": True},
++    )
++    _assert_error(strict_conflict_resp, 409, "DUNNING_BATCH_STATE_INVALID")
++
++    invalid_scope_resp = client.post(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        json={
++            "to_date": "2026-01-31",
++            "include_statuses": ["UNSETTLED"],
++            "exclude_statuses": ["UNSETTLED"],
++        },
++    )
++    _assert_error(invalid_scope_resp, 400, "DUNNING_BATCH_STATE_INVALID")
++
++    missing_scope_resp = client.post(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        json={"to_date": "2026-01-31", "client_id": str(uuid4())},
++    )
++    _assert_error(missing_scope_resp, 404, "DUNNING_BATCH_NOT_FOUND")
++
++    validation_resp = client.post(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        json={"client_id": client_id},
++    )
++    _assert_error(validation_resp, 422, "VALIDATION_ERROR")
++
++
++def test_collections_dunning_list_and_bad_debt_lifecycle(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id = _create_client(client, auth_headers)
++    bill_id = _insert_bill(
++        session_factory,
++        client_id=client_id,
++        amount=Decimal("200.00"),
++        balance=Decimal("200.00"),
++        due_date=date(2026, 2, 1),
++    )
++
++    create_resp = client.post(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        json={"to_date": "2026-02-28", "client_id": client_id},
++    )
++    assert create_resp.status_code == 200, create_resp.text
++
++    list_resp = client.get(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        params={
++            "round_no": 1,
++            "status": "DRAFT",
++            "client_id": client_id,
++            "page": 1,
++            "page_size": 1,
++        },
++    )
++    assert list_resp.status_code == 200, list_resp.text
++    list_payload = list_resp.json()
++    assert set(list_payload) == {"items", "page", "page_size", "total"}
++    assert list_payload["page"] == 1
++    assert list_payload["page_size"] == 1
++    assert list_payload["total"] >= 1
++    assert all(item["client_id"] == client_id for item in list_payload["items"])
++
++    list_validation_resp = client.get(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        params={"page_size": 101},
++    )
++    _assert_error(list_validation_resp, 422, "VALIDATION_ERROR")
++
++    mark_resp = client.post(f"/api/v1/bills/{bill_id}/bad-debt", headers=auth_headers)
++    assert mark_resp.status_code == 200, mark_resp.text
++    mark_payload = mark_resp.json()
++    assert mark_payload["id"] == bill_id
++    assert mark_payload["status"] == "BAD_DEBT"
++
++    duplicate_mark_resp = client.post(f"/api/v1/bills/{bill_id}/bad-debt", headers=auth_headers)
++    _assert_error(duplicate_mark_resp, 409, "BAD_DEBT_ALREADY_MARKED")
++
++    restore_resp = client.post(f"/api/v1/bills/{bill_id}/bad-debt/restore", headers=auth_headers)
++    assert restore_resp.status_code == 200, restore_resp.text
++    restore_payload = restore_resp.json()
++    assert restore_payload["id"] == bill_id
++    assert restore_payload["status"] == "UNSETTLED"
++
++    restore_conflict_resp = client.post(
++        f"/api/v1/bills/{bill_id}/bad-debt/restore",
++        headers=auth_headers,
++    )
++    _assert_error(restore_conflict_resp, 409, "BAD_DEBT_RESTORE_INVALID")
++
++    missing_bill_resp = client.post(
++        f"/api/v1/bills/{uuid4()}/bad-debt",
++        headers=auth_headers,
++    )
++    _assert_error(missing_bill_resp, 404, "BILL_NOT_FOUND")
++
++    zero_balance_bill_id = _insert_bill(
++        session_factory,
++        client_id=client_id,
++        amount=Decimal("300.00"),
++        balance=Decimal("0.00"),
++        due_date=date(2026, 2, 2),
++    )
++    ineligible_resp = client.post(
++        f"/api/v1/bills/{zero_balance_bill_id}/bad-debt",
++        headers=auth_headers,
++    )
++    _assert_error(ineligible_resp, 400, "BAD_DEBT_NOT_ALLOWED")
+diff --git a/backend/tests/test_commission_e2e.py b/backend/tests/test_commission_e2e.py
+new file mode 100644
+index 0000000..8398613
+--- /dev/null
++++ b/backend/tests/test_commission_e2e.py
+@@ -0,0 +1,321 @@
++from __future__ import annotations
++
++from datetime import date, timedelta
++from decimal import Decimal
++from uuid import uuid4
++
++from fastapi.testclient import TestClient
++from sqlalchemy import select
++from sqlalchemy.orm import sessionmaker
++
++from app.modules.commission.models import Commission, CommissionSettlement
++
++
++def _uid(prefix: str) -> str:
++    return f"{prefix}-{uuid4().hex[:8].upper()}"
++
++
++def _assert_error(response, status_code: int, error_code: str) -> dict:
++    assert response.status_code == status_code, response.text
++    payload = response.json()
++    assert "error" in payload, payload
++    assert payload["error"].get("code") == error_code, payload
++    assert payload["error"].get("message")
++    return payload
++
++
++def _create_client_case_with_agent(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> tuple[str, str, str]:
++    cli_resp = client.post(
++        "/api/v1/clients",
++        json={"name_cn": _uid("COM-CLI"), "default_currency": "CNY"},
++        headers=auth_headers,
++    )
++    assert cli_resp.status_code == 201, cli_resp.text
++    client_id = cli_resp.json()["id"]
++
++    agent_id = _uid("AGT")
++    case_resp = client.post(
++        "/api/v1/cases",
++        json={
++            "case_no": _uid("COM-CASE"),
++            "case_type": "NORMAL",
++            "patent_category": "INV",
++            "flow_dir": "CN_DOMESTIC",
++            "client_id": client_id,
++            "title_cn": "Commission E2E Case",
++            "primary_agent_id": agent_id,
++        },
++        headers=auth_headers,
++    )
++    assert case_resp.status_code == 201, case_resp.text
++    return client_id, case_resp.json()["id"], agent_id
++
++
++def _insert_commission(
++    session_factory: sessionmaker,
++    *,
++    case_id: str,
++    agent_id: str,
++    settleable_date: date,
++) -> int:
++    with session_factory() as db:
++        commission = Commission(
++            case_id=case_id,
++            agent_id=agent_id,
++            rule_id=None,
++            fee_type="SERVICE",
++            base_fee=Decimal("1000.00"),
++            s1_rate=Decimal("0.10"),
++            s1_amount=Decimal("100.00"),
++            s1_done=False,
++            s2_rate=Decimal("0.05"),
++            s2_amount=Decimal("50.00"),
++            s2_done=False,
++            wait_pay=False,
++            force_settle=False,
++            status="OPEN",
++            is_settleable=True,
++            settleable_date=settleable_date,
++        )
++        db.add(commission)
++        db.commit()
++        db.refresh(commission)
++        return commission.id
++
++
++def test_commission_rule_lifecycle_and_error_matrix(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> None:
++    payload = {
++        "rule_name": _uid("RULE"),
++        "case_type": "NORMAL",
++        "fee_type": "SERVICE",
++        "flow_dir": "CN_DOMESTIC",
++        "patent_category": "INV",
++        "s1_rate": "0.10",
++        "s2_rate": "0.05",
++        "s1_fixed_amount": "0",
++        "s2_fixed_amount": "0",
++        "wait_pay": False,
++        "force_settle": False,
++        "enabled": True,
++        "effective_from": "2026-01-01",
++        "effective_to": "2026-12-31",
++        "remark": "base rule",
++    }
++
++    create_resp = client.post("/api/v1/commission/rules", headers=auth_headers, json=payload)
++    assert create_resp.status_code == 201, create_resp.text
++    create_data = create_resp.json()
++    rule_id = create_data["id"]
++    assert create_data["rule_name"] == payload["rule_name"]
++
++    list_resp = client.get(
++        "/api/v1/commission/rules",
++        headers=auth_headers,
++        params={
++            "enabled": True,
++            "case_type": "NORMAL",
++            "fee_type": "SERVICE",
++            "q": payload["rule_name"],
++            "page": 1,
++            "page_size": 20,
++        },
++    )
++    assert list_resp.status_code == 200, list_resp.text
++    list_payload = list_resp.json()
++    assert set(list_payload) == {"items", "page", "page_size", "total"}
++    assert any(item["id"] == rule_id for item in list_payload["items"])
++
++    update_resp = client.put(
++        f"/api/v1/commission/rules/{rule_id}",
++        headers=auth_headers,
++        json={"enabled": False, "remark": "updated", "s1_rate": "0.08"},
++    )
++    assert update_resp.status_code == 200, update_resp.text
++    update_data = update_resp.json()
++    assert update_data["id"] == rule_id
++    assert update_data["enabled"] is False
++    assert str(update_data["s1_rate"]) == "0.0800"
++
++    conflict_resp = client.post(
++        "/api/v1/commission/rules",
++        headers=auth_headers,
++        json={**payload, "rule_name": _uid("RULE-CONFLICT")},
++    )
++    _assert_error(conflict_resp, 409, "COMMISSION_RULE_CONFLICT")
++
++    invalid_resp = client.post(
++        "/api/v1/commission/rules",
++        headers=auth_headers,
++        json={
++            **payload,
++            "rule_name": _uid("RULE-BAD"),
++            "s1_rate": "-0.01",
++            "effective_from": "2027-01-01",
++            "effective_to": "2027-12-31",
++        },
++    )
++    _assert_error(invalid_resp, 400, "COMMISSION_RULE_INVALID")
++
++    missing_resp = client.put(
++        "/api/v1/commission/rules/99999999",
++        headers=auth_headers,
++        json={"remark": "missing"},
++    )
++    _assert_error(missing_resp, 404, "COMMISSION_RULE_NOT_FOUND")
++
++    validation_resp = client.post(
++        "/api/v1/commission/rules",
++        headers=auth_headers,
++        json={"case_type": "NORMAL"},
++    )
++    _assert_error(validation_resp, 422, "VALIDATION_ERROR")
++
++
++def test_commission_settlement_generate_lines_idempotency_and_reports(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    _client_id, case_id, agent_id = _create_client_case_with_agent(client, auth_headers)
++    commission_id = _insert_commission(
++        session_factory,
++        case_id=case_id,
++        agent_id=agent_id,
++        settleable_date=date(2026, 3, 10),
++    )
++
++    create_settlement_resp = client.post(
++        "/api/v1/commission/settlements",
++        headers=auth_headers,
++        json={
++            "agent_id": agent_id,
++            "period_from": "2026-03-01",
++            "period_to": "2026-03-31",
++            "currency": "cny",
++            "remark": "March settlement",
++        },
++    )
++    assert create_settlement_resp.status_code == 201, create_settlement_resp.text
++    settlement_payload = create_settlement_resp.json()
++    settlement_id = settlement_payload["id"]
++    assert settlement_payload["status"] == "DRAFT"
++    assert settlement_payload["line_count"] == 0
++
++    conflict_settlement_resp = client.post(
++        "/api/v1/commission/settlements",
++        headers=auth_headers,
++        json={
++            "agent_id": agent_id,
++            "period_from": "2026-03-01",
++            "period_to": "2026-03-31",
++            "currency": "CNY",
++        },
++    )
++    _assert_error(conflict_settlement_resp, 409, "COMMISSION_SETTLEMENT_CONFLICT")
++
++    invalid_settlement_resp = client.post(
++        "/api/v1/commission/settlements",
++        headers=auth_headers,
++        json={
++            "agent_id": agent_id,
++            "period_from": "2026-04-01",
++            "period_to": "2026-03-01",
++            "currency": "CNY",
++        },
++    )
++    _assert_error(invalid_settlement_resp, 400, "COMMISSION_SETTLEMENT_INVALID")
++
++    generate_resp = client.post(
++        f"/api/v1/commission/settlements/{settlement_id}/generate-lines",
++        headers=auth_headers,
++    )
++    assert generate_resp.status_code == 200, generate_resp.text
++    generate_payload = generate_resp.json()
++    assert generate_payload["settlement_id"] == settlement_id
++    assert generate_payload["line_count"] >= 1
++    assert generate_payload["created_count"] >= 1
++    assert generate_payload["status"] == "GENERATED"
++
++    repeat_generate_resp = client.post(
++        f"/api/v1/commission/settlements/{settlement_id}/generate-lines",
++        headers=auth_headers,
++    )
++    assert repeat_generate_resp.status_code == 200, repeat_generate_resp.text
++    repeat_generate_payload = repeat_generate_resp.json()
++    assert repeat_generate_payload["settlement_id"] == settlement_id
++    assert repeat_generate_payload["line_count"] >= 1
++    assert repeat_generate_payload["created_count"] == 0
++
++    commission_list_resp = client.get(
++        "/api/v1/commission",
++        headers=auth_headers,
++        params={
++            "agent_id": agent_id,
++            "case_id": case_id,
++            "status": "OPEN",
++            "settleable_date_from": "2026-03-01",
++            "settleable_date_to": "2026-03-31",
++            "page": 1,
++            "page_size": 20,
++        },
++    )
++    assert commission_list_resp.status_code == 200, commission_list_resp.text
++    commission_list_payload = commission_list_resp.json()
++    assert set(commission_list_payload) == {"items", "page", "page_size", "total"}
++    assert any(item["id"] == commission_id for item in commission_list_payload["items"])
++
++    invalid_commission_filter_resp = client.get(
++        "/api/v1/commission",
++        headers=auth_headers,
++        params={"created_at_from": "2026-05-01", "created_at_to": "2026-04-01"},
++    )
++    _assert_error(invalid_commission_filter_resp, 400, "COMMISSION_FILTER_INVALID")
++
++    today = date.today()
++    report_resp = client.get(
++        "/api/v1/commission/reports/settlement",
++        headers=auth_headers,
++        params={
++            "agent_id": agent_id,
++            "date_from": (today - timedelta(days=2)).isoformat(),
++            "date_to": (today + timedelta(days=2)).isoformat(),
++            "time_field": "line_created_at",
++        },
++    )
++    assert report_resp.status_code == 200, report_resp.text
++    report_payload = report_resp.json()
++    assert "totals" in report_payload
++    assert "details" in report_payload
++    assert report_payload["totals"]["line_count"] >= 1
++
++    invalid_report_resp = client.get(
++        "/api/v1/commission/reports/settlement",
++        headers=auth_headers,
++        params={"time_field": "invalid"},
++    )
++    _assert_error(invalid_report_resp, 400, "COMMISSION_REPORT_INVALID")
++
++    missing_settlement_resp = client.post(
++        "/api/v1/commission/settlements/99999999/generate-lines",
++        headers=auth_headers,
++    )
++    _assert_error(missing_settlement_resp, 404, "COMMISSION_SETTLEMENT_NOT_FOUND")
++
++    with session_factory() as db:
++        settlement = db.execute(
++            select(CommissionSettlement).where(CommissionSettlement.id == settlement_id)
++        ).scalar_one()
++        settlement.status = "CLOSED"
++        db.commit()
++
++    closed_state_resp = client.post(
++        f"/api/v1/commission/settlements/{settlement_id}/generate-lines",
++        headers=auth_headers,
++    )
++    _assert_error(closed_state_resp, 409, "COMMISSION_SETTLEMENT_CONFLICT")
+diff --git a/backend/tests/test_consulting_e2e.py b/backend/tests/test_consulting_e2e.py
+new file mode 100644
+index 0000000..192215e
+--- /dev/null
++++ b/backend/tests/test_consulting_e2e.py
+@@ -0,0 +1,284 @@
++from __future__ import annotations
++
++from uuid import uuid4
++
++from fastapi.testclient import TestClient
++
++
++def _uid(prefix: str) -> str:
++    return f"{prefix}-{uuid4().hex[:8].upper()}"
++
++
++def _assert_error(response, status_code: int, error_code: str) -> dict:
++    assert response.status_code == status_code, response.text
++    payload = response.json()
++    assert "error" in payload, payload
++    assert payload["error"].get("code") == error_code, payload
++    assert payload["error"].get("message")
++    return payload
++
++
++def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
++    resp = client.post(
++        "/api/v1/clients",
++        json={"name_cn": _uid("CS-CLI"), "default_currency": "CNY"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201, resp.text
++    return resp.json()["id"]
++
++
++def _create_consulting_case(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    *,
++    client_id: str,
++    case_type: str,
++    case_no: str | None = None,
++) -> dict:
++    payload = {
++        "case_no": case_no or _uid("CS-CASE"),
++        "case_type": case_type,
++        "client_id": client_id,
++        "title_cn": f"{case_type} case",
++        "primary_agent_id": _uid("AGT"),
++        "recv_date": "2026-04-01",
++    }
++    resp = client.post("/api/v1/consulting/cases", headers=auth_headers, json=payload)
++    assert resp.status_code == 201, resp.text
++    return resp.json()
++
++
++def test_consulting_case_creation_and_error_matrix(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> None:
++    client_id = _create_client(client, auth_headers)
++
++    consult_case_no = _uid("CONSULT")
++    consult_resp = client.post(
++        "/api/v1/consulting/cases",
++        headers=auth_headers,
++        json={
++            "case_no": consult_case_no,
++            "case_type": "CONSULTING",
++            "client_id": client_id,
++            "title_cn": "Consulting service",
++            "primary_agent_id": _uid("AGT"),
++            "recv_date": "2026-04-02",
++        },
++    )
++    assert consult_resp.status_code == 201, consult_resp.text
++    consult_payload = consult_resp.json()
++    assert consult_payload["case_no"] == consult_case_no
++    assert consult_payload["case_type"] == "CONSULTING"
++    assert consult_payload["status"] == "NOT_FILED"
++
++    search_resp = client.post(
++        "/api/v1/consulting/cases",
++        headers=auth_headers,
++        json={
++            "case_no": _uid("SEARCH"),
++            "case_type": "SEARCH",
++            "client_id": client_id,
++            "title_cn": "Search service",
++            "primary_agent_id": _uid("AGT"),
++            "recv_date": "2026-04-03",
++        },
++    )
++    assert search_resp.status_code == 201, search_resp.text
++    assert search_resp.json()["case_type"] == "SEARCH"
++
++    duplicate_resp = client.post(
++        "/api/v1/consulting/cases",
++        headers=auth_headers,
++        json={
++            "case_no": consult_case_no,
++            "case_type": "CONSULTING",
++            "client_id": client_id,
++            "title_cn": "Duplicate",
++            "primary_agent_id": _uid("AGT"),
++            "recv_date": "2026-04-04",
++        },
++    )
++    _assert_error(duplicate_resp, 409, "CASE_NO_DUPLICATE")
++
++    invalid_type_resp = client.post(
++        "/api/v1/consulting/cases",
++        headers=auth_headers,
++        json={
++            "case_no": _uid("BADTYPE"),
++            "case_type": "NORMAL",
++            "client_id": client_id,
++            "title_cn": "Invalid type",
++            "primary_agent_id": _uid("AGT"),
++            "recv_date": "2026-04-05",
++        },
++    )
++    _assert_error(invalid_type_resp, 400, "CONSULTING_CASE_INVALID")
++
++    missing_field_resp = client.post(
++        "/api/v1/consulting/cases",
++        headers=auth_headers,
++        json={
++            "case_no": _uid("BLANK"),
++            "case_type": "CONSULTING",
++            "client_id": client_id,
++            "title_cn": "   ",
++            "primary_agent_id": _uid("AGT"),
++            "recv_date": "2026-04-06",
++        },
++    )
++    _assert_error(missing_field_resp, 400, "CONSULTING_CASE_INVALID")
++
++    validation_resp = client.post(
++        "/api/v1/consulting/cases",
++        headers=auth_headers,
++        json={
++            "case_no": _uid("VAL"),
++            "case_type": "CONSULTING",
++            "client_id": client_id,
++            "title_cn": "Validation",
++            "primary_agent_id": _uid("AGT"),
++            "recv_date": "bad-date",
++        },
++    )
++    _assert_error(validation_resp, 422, "VALIDATION_ERROR")
++
++
++def test_consulting_fee_draft_modes_conflict_and_errors(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> None:
++    client_id = _create_client(client, auth_headers)
++
++    consult_case = _create_consulting_case(
++        client,
++        auth_headers,
++        client_id=client_id,
++        case_type="CONSULTING",
++    )
++    fixed_resp = client.post(
++        "/api/v1/consulting/fee-drafts",
++        headers=auth_headers,
++        json={
++            "case_id": consult_case["id"],
++            "mode": "FIXED",
++            "currency": "CNY",
++            "fixed_fee": "500.00",
++        },
++    )
++    assert fixed_resp.status_code == 201, fixed_resp.text
++    fixed_payload = fixed_resp.json()
++    assert fixed_payload["mode"] == "FIXED"
++    assert fixed_payload["draft_type"] == "CONSULT_FEE"
++    assert fixed_payload["created_line_count"] == 1
++    assert str(fixed_payload["totals"]["amount"]) == "500.00"
++
++    fixed_conflict_resp = client.post(
++        "/api/v1/consulting/fee-drafts",
++        headers=auth_headers,
++        json={
++            "case_id": consult_case["id"],
++            "mode": "FIXED",
++            "currency": "CNY",
++            "fixed_fee": "500.00",
++        },
++    )
++    _assert_error(fixed_conflict_resp, 409, "FEE_DRAFT_CONFLICT")
++
++    search_case = _create_consulting_case(
++        client,
++        auth_headers,
++        client_id=client_id,
++        case_type="SEARCH",
++    )
++    hourly_resp = client.post(
++        "/api/v1/consulting/fee-drafts",
++        headers=auth_headers,
++        json={
++            "case_id": search_case["id"],
++            "mode": "HOURLY",
++            "currency": "CNY",
++            "hourly_lines": [
++                {
++                    "fee_code": "SEARCH_H1",
++                    "fee_name": "Search review",
++                    "hours": "2",
++                    "hourly_rate": "300",
++                    "trace_key": "search-hourly-1",
++                }
++            ],
++            "misc_lines": [
++                {
++                    "fee_code": "SEARCH_MISC",
++                    "fee_name": "Translation",
++                    "amount": "80",
++                    "trace_key": "search-misc-1",
++                }
++            ],
++        },
++    )
++    assert hourly_resp.status_code == 201, hourly_resp.text
++    hourly_payload = hourly_resp.json()
++    assert hourly_payload["mode"] == "HOURLY"
++    assert hourly_payload["draft_type"] == "SEARCH_FEE"
++    assert hourly_payload["created_line_count"] == 2
++    trace_keys = {item["trace_key"] for item in hourly_payload["items"]}
++    assert "search-hourly-1" in trace_keys
++    assert "search-misc-1" in trace_keys
++
++    invalid_mode_resp = client.post(
++        "/api/v1/consulting/fee-drafts",
++        headers=auth_headers,
++        json={
++            "case_id": search_case["id"],
++            "mode": "UNKNOWN",
++            "currency": "CNY",
++        },
++    )
++    _assert_error(invalid_mode_resp, 400, "CONSULTING_FEE_INVALID")
++
++    missing_case_resp = client.post(
++        "/api/v1/consulting/fee-drafts",
++        headers=auth_headers,
++        json={
++            "case_id": str(uuid4()),
++            "mode": "FIXED",
++            "currency": "CNY",
++            "fixed_fee": "100.00",
++        },
++    )
++    _assert_error(missing_case_resp, 404, "CASE_NOT_FOUND")
++
++    bad_hourly_case = _create_consulting_case(
++        client,
++        auth_headers,
++        client_id=client_id,
++        case_type="SEARCH",
++    )
++    invalid_hourly_resp = client.post(
++        "/api/v1/consulting/fee-drafts",
++        headers=auth_headers,
++        json={
++            "case_id": bad_hourly_case["id"],
++            "mode": "HOURLY",
++            "currency": "CNY",
++            "hourly_lines": [
++                {
++                    "fee_code": "SEARCH_H2",
++                    "fee_name": "Invalid hours",
++                    "hours": "0",
++                    "hourly_rate": "100",
++                }
++            ],
++        },
++    )
++    _assert_error(invalid_hourly_resp, 400, "CONSULTING_FEE_INVALID")
++
++    validation_resp = client.post(
++        "/api/v1/consulting/fee-drafts",
++        headers=auth_headers,
++        json={"case_id": search_case["id"]},
++    )
++    _assert_error(validation_resp, 422, "VALIDATION_ERROR")

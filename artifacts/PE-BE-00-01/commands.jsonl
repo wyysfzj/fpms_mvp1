@@ -1,0 +1,4 @@
+{"ts":"20260228T155347","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ --fix\ ."}
+{"ts":"20260228T155347","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ ."}
+{"ts":"20260228T155347","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ ."}
+{"ts":"20260228T155347","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q"}

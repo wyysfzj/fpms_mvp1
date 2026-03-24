@@ -1,0 +1,48 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+B008 Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> app/core/dependencies.py:20:49
+   |
+19 | def get_current_user(
+20 |     credentials: HTTPAuthorizationCredentials = Depends(security),
+   |                                                 ^^^^^^^^^^^^^^^^^
+21 |     db: Session = Depends(get_db),
+22 | ) -> T_User:
+   |
+
+B008 Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> app/core/dependencies.py:21:19
+   |
+19 | def get_current_user(
+20 |     credentials: HTTPAuthorizationCredentials = Depends(security),
+21 |     db: Session = Depends(get_db),
+   |                   ^^^^^^^^^^^^^^^
+22 | ) -> T_User:
+23 |     """Get current authenticated user from JWT token."""
+   |
+
+B008 Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> app/core/dependencies.py:46:32
+   |
+45 |     def _perm_checker(
+46 |         current_user: T_User = Depends(get_current_user),
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^
+47 |         db: Session = Depends(get_db),
+48 |     ) -> None:
+   |
+
+B008 Do not perform function call `Depends` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable
+  --> app/core/dependencies.py:47:23
+   |
+45 |     def _perm_checker(
+46 |         current_user: T_User = Depends(get_current_user),
+47 |         db: Session = Depends(get_db),
+   |                       ^^^^^^^^^^^^^^^
+48 |     ) -> None:
+49 |         perms = get_user_permissions(db, current_user.id)
+   |
+
+Found 4 errors.

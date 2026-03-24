@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/scripts/seed_dev.py", line 8, in <module>
+    from app.core.security import get_password_hash
+ModuleNotFoundError: No module named 'app'

@@ -1,0 +1,39 @@
+# FRFE04-BE-04 Evidence Summary
+
+- Task/runbook executed: `FRFE04-BE-04`
+- Role executed: `backend worker`
+- Final per-task status: `PASS`
+- Modified files:
+  - `backend/app/modules/annuity/api.py`
+  - `backend/app/modules/annuity/service.py`
+  - `backend/app/modules/annuity/export_excel.py`
+  - `backend/tests/test_annuity_e2e.py`
+- Verification commands:
+  - `cd backend && ruff check --fix app/modules/annuity/api.py app/modules/annuity/service.py app/modules/annuity/export_excel.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff format app/modules/annuity/api.py app/modules/annuity/service.py app/modules/annuity/export_excel.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff check app/modules/annuity/api.py app/modules/annuity/service.py app/modules/annuity/export_excel.py tests/test_annuity_e2e.py`
+  - `cd backend && pytest -q tests/test_annuity_e2e.py -k pay_list_export`
+  - `./scripts/task_validate.sh FRFE04-BE-04`
+- Expected status codes:
+  - `200` export success
+  - `401` unauthenticated request
+  - `403` missing `PayList.Export`
+  - `404` missing pay list
+  - `409` export attempted from non-`DRAFT` state
+- Closure slice completed: generate one Excel export for one pay list and move header state from `DRAFT` to `EXPORTED`
+- Explicit non-closure boundary respected: no XML/text exports, remote official-client integration, cancellation, or invoice-range schema fields
+- API-level coverage exercised:
+  - binary Excel export response with OpenAPI Excel media type declaration
+  - workbook header reflects persisted `EXPORTED` state after successful export
+  - `DRAFT -> EXPORTED` state transition
+  - `401` unauthenticated request
+  - `403` permission denial for missing `PayList.Export`
+  - `404` missing pay list
+  - `409` repeat export from non-`DRAFT`
+- Evidence path: `artifacts/FRFE04-BE-04/**`
+- Evidence files:
+  - `artifacts/FRFE04-BE-04/results.jsonl`
+  - `artifacts/FRFE04-BE-04/summary.md`
+  - `artifacts/FRFE04-BE-04/git/diff.patch`
+  - `artifacts/FRFE04-BE-04/baseline_allowlist.diff`
+  - `artifacts/FRFE04-BE-04/baseline_external_files.txt`

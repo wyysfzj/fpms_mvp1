@@ -1,0 +1,26 @@
+# FRFE04-BE-STATE-01 Evidence Summary
+
+- Task/runbook executed: `FRFE04-BE-STATE-01`
+- Role executed: `backend worker`
+- Final per-task status: `PASS`
+- Modified files:
+  - `backend/app/modules/annuity/service.py`
+  - `backend/tests/test_annuity_e2e.py`
+- Verification commands:
+  - `cd backend && ruff check --fix app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff format app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff check app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && pytest -q tests/test_annuity_e2e.py -k gov_payment`
+  - `./scripts/task_validate.sh FRFE04-BE-STATE-01`
+- Expected status codes:
+  - `200` gov-payment registration keeps exported header exported
+- Closure slice completed: stop shared pay-list recompute logic from auto-advancing an exported pay list to `PAID` before the dedicated `mark-paid` slice runs
+- Explicit non-closure boundary respected: did not add the `mark-paid` endpoint itself, did not redesign duplicate protection or manual-row behavior, and did not add cancellation or blocked `SPEC` paid metadata fields
+- API-level coverage exercised:
+  - exported pay list remains `EXPORTED` after row-level gov-payment registration
+  - row-level registration still returns success without bypassing the dedicated header `mark-paid` transition
+- Evidence path: `artifacts/FRFE04-BE-STATE-01/**`
+- Evidence files:
+  - `artifacts/FRFE04-BE-STATE-01/results.jsonl`
+  - `artifacts/FRFE04-BE-STATE-01/summary.md`
+  - `artifacts/FRFE04-BE-STATE-01/git/diff.patch`

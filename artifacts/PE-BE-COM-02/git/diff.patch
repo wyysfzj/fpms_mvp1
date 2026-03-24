@@ -1,0 +1,140 @@
+diff --git a/backend/app/modules/commission/service.py b/backend/app/modules/commission/service.py
+index a3f00f0..51e20df 100644
+--- a/backend/app/modules/commission/service.py
++++ b/backend/app/modules/commission/service.py
+@@ -950,6 +950,19 @@ def _line_amount_for_commission(commission: Commission) -> Decimal:
+     return _quantize_money(s1_amount + s2_amount)
+ 
+ 
++def _apply_settlement_completion(commission: Commission, *, actor_id: str | None) -> None:
++    _to_decimal(commission.s1_amount, field_name="commission.s1_amount")
++    _to_decimal(commission.s2_amount, field_name="commission.s2_amount")
++
++    commission.s1_done = True
++    commission.s2_done = True
++    if commission.s1_done and commission.s2_done:
++        commission.status = "SETTLED"
++    elif not _normalize_optional_text(commission.status):
++        commission.status = "OPEN"
++    commission.updated_by = actor_id
++
++
+ def _normalize_report_time_field(value: str | None) -> str:
+     normalized = _normalize_optional_text(value)
+     effective = normalized or "line_created_at"
+@@ -1287,6 +1300,7 @@ def generate_commission_settlement_lines(
+                 updated_by=actor_id,
+             )
+             db.add(line)
++            _apply_settlement_completion(commission, actor_id=actor_id)
+             created_count += 1
+             continue
+ 
+@@ -1300,6 +1314,7 @@ def generate_commission_settlement_lines(
+         if changed:
+             existing.updated_by = actor_id
+             updated_count += 1
++        _apply_settlement_completion(commission, actor_id=actor_id)
+ 
+     db.flush()
+     aggregate = db.execute(
+diff --git a/backend/tests/test_commission_e2e.py b/backend/tests/test_commission_e2e.py
+index 8398613..ec31b20 100644
+--- a/backend/tests/test_commission_e2e.py
++++ b/backend/tests/test_commission_e2e.py
+@@ -242,6 +242,14 @@ def test_commission_settlement_generate_lines_idempotency_and_reports(
+     assert generate_payload["created_count"] >= 1
+     assert generate_payload["status"] == "GENERATED"
+ 
++    with session_factory() as db:
++        generated_commission = db.execute(
++            select(Commission).where(Commission.id == commission_id)
++        ).scalar_one()
++        assert generated_commission.s1_done is True
++        assert generated_commission.s2_done is True
++        assert generated_commission.status == "SETTLED"
++
+     repeat_generate_resp = client.post(
+         f"/api/v1/commission/settlements/{settlement_id}/generate-lines",
+         headers=auth_headers,
+@@ -258,7 +266,7 @@ def test_commission_settlement_generate_lines_idempotency_and_reports(
+         params={
+             "agent_id": agent_id,
+             "case_id": case_id,
+-            "status": "OPEN",
++            "status": "SETTLED",
+             "settleable_date_from": "2026-03-01",
+             "settleable_date_to": "2026-03-31",
+             "page": 1,
+@@ -319,3 +327,71 @@ def test_commission_settlement_generate_lines_idempotency_and_reports(
+         headers=auth_headers,
+     )
+     _assert_error(closed_state_resp, 409, "COMMISSION_SETTLEMENT_CONFLICT")
++
++
++def test_manual_bill_creation_triggers_commission_auto_generation(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> None:
++    client_id, case_id, agent_id = _create_client_case_with_agent(client, auth_headers)
++
++    rule_resp = client.post(
++        "/api/v1/commission/rules",
++        headers=auth_headers,
++        json={
++            "rule_name": _uid("RULE-MANUAL"),
++            "case_type": "NORMAL",
++            "fee_type": "SERVICE",
++            "flow_dir": "CN_DOMESTIC",
++            "patent_category": "INV",
++            "s1_rate": "0.10",
++            "s2_rate": "0.05",
++            "s1_fixed_amount": "0",
++            "s2_fixed_amount": "0",
++            "wait_pay": False,
++            "force_settle": False,
++            "enabled": True,
++            "effective_from": "2026-01-01",
++            "effective_to": "2026-12-31",
++        },
++    )
++    assert rule_resp.status_code == 201, rule_resp.text
++
++    manual_bill_resp = client.post(
++        "/api/v1/bills/manual",
++        headers=auth_headers,
++        json={
++            "client_id": client_id,
++            "case_id": case_id,
++            "currency": "CNY",
++            "direction": "AR",
++            "status": "UNSETTLED",
++            "bill_date": "2026-03-12",
++            "items": [
++                {
++                    "description": "Manual service bill",
++                    "quantity": 1,
++                    "unit_price": "1000.00",
++                    "fee_type": "SERVICE",
++                }
++            ],
++        },
++    )
++    assert manual_bill_resp.status_code == 201, manual_bill_resp.text
++
++    commission_list_resp = client.get(
++        "/api/v1/commission",
++        headers=auth_headers,
++        params={
++            "agent_id": agent_id,
++            "case_id": case_id,
++            "page": 1,
++            "page_size": 20,
++        },
++    )
++    assert commission_list_resp.status_code == 200, commission_list_resp.text
++    items = commission_list_resp.json()["items"]
++    assert len(items) == 1, items
++    assert items[0]["case_id"] == case_id
++    assert items[0]["agent_id"] == agent_id
++    assert Decimal(str(items[0]["base_fee"])) == Decimal("1000.00")

@@ -1,0 +1,4 @@
+{"ts":"20260131T160341","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/fees/models.py"}
+{"ts":"20260131T160347","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/fees/models.py"}
+{"ts":"20260131T160354","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/fees/models.py"}
+{"ts":"20260131T160400","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"import\ app.modules.fees.models\ as\ m\;\ print\(\'OK\'\)\""}

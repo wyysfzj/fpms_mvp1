@@ -1,0 +1,3 @@
+{"ts":"20260124T232957","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/documents/api.py"}
+{"ts":"20260124T233002","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/documents/api.py"}
+{"ts":"20260124T233006","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/documents/api.py"}

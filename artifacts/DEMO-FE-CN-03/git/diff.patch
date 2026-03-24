@@ -1,0 +1,363 @@
+diff --git a/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue b/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
+index 00c3c62..99cfabe 100644
+--- a/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
++++ b/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
+@@ -44,13 +44,13 @@
+           </el-col>
+ 
+           <el-col :xs="24" :sm="12" :md="8">
+-            <el-form-item label="客户 ID" prop="client_id">
+-              <el-input v-model.trim="form.client_id" placeholder="请输入客户 ID" />
++            <el-form-item label="客户编号" prop="client_id">
++              <el-input v-model.trim="form.client_id" placeholder="请输入客户编号" />
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12" :md="8">
+-            <el-form-item label="负责人 ID" prop="primary_agent_id">
+-              <el-input v-model.trim="form.primary_agent_id" placeholder="请输入负责人 ID" />
++            <el-form-item label="负责人编号" prop="primary_agent_id">
++              <el-input v-model.trim="form.primary_agent_id" placeholder="请输入负责人编号" />
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="24" :md="8">
+@@ -87,7 +87,7 @@
+           </el-col>
+           <el-col v-if="form.case_type === 'SEARCH'" :xs="24" :sm="12" :md="12">
+             <el-form-item label="检索数据库" prop="search_database">
+-              <el-input v-model.trim="form.search_database" placeholder="例如：PatBase / Derwent / Orbit" />
++              <el-input v-model.trim="form.search_database" placeholder="请输入检索数据库名称" />
+             </el-form-item>
+           </el-col>
+ 
+@@ -105,12 +105,12 @@
+       </template>
+ 
+       <el-descriptions :column="3" border>
+-        <el-descriptions-item label="案件 ID">{{ createdCase.id }}</el-descriptions-item>
++        <el-descriptions-item label="案件标识">{{ createdCase.id }}</el-descriptions-item>
+         <el-descriptions-item label="案件编号">{{ createdCase.case_no }}</el-descriptions-item>
+         <el-descriptions-item label="项目类型">{{ caseTypeLabel(createdCase.case_type) }}</el-descriptions-item>
+-        <el-descriptions-item label="状态">{{ createdCase.status }}</el-descriptions-item>
+-        <el-descriptions-item label="客户 ID">{{ createdCase.client_id || '—' }}</el-descriptions-item>
+-        <el-descriptions-item label="负责人 ID">{{ createdCase.primary_agent_id || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="状态">{{ getCaseStatusText(createdCase.status) }}</el-descriptions-item>
++        <el-descriptions-item label="客户编号">{{ createdCase.client_id || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="负责人编号">{{ createdCase.primary_agent_id || '—' }}</el-descriptions-item>
+         <el-descriptions-item label="接收日期">{{ createdCase.recv_date || '—' }}</el-descriptions-item>
+         <el-descriptions-item label="创建时间">{{ formatDateTime(createdCase.created_at) }}</el-descriptions-item>
+       </el-descriptions>
+@@ -131,6 +131,7 @@ import type {
+ } from '../../../api/consulting.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import { getCaseStatusText } from '../../../constants/displayText'
+ 
+ const router = useRouter()
+ const formRef = ref<FormInstance>()
+@@ -205,9 +206,9 @@ function validateSpecialFields() {
+ const formRules: FormRules = {
+   case_type: [{ required: true, message: '项目类型为必填项', trigger: 'change' }],
+   case_no: [{ required: true, message: '案件编号为必填项', trigger: 'blur' }],
+-  client_id: [{ required: true, message: '客户 ID 为必填项', trigger: 'blur' }],
++  client_id: [{ required: true, message: '客户编号为必填项', trigger: 'blur' }],
+   title_cn: [{ required: true, message: '项目标题为必填项', trigger: 'blur' }],
+-  primary_agent_id: [{ required: true, message: '负责人 ID 为必填项', trigger: 'blur' }],
++  primary_agent_id: [{ required: true, message: '负责人编号为必填项', trigger: 'blur' }],
+   recv_date: [{ required: true, message: '接收日期为必填项', trigger: 'change' }],
+ }
+ 
+diff --git a/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue b/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
+index 5dd5018..fd91707 100644
+--- a/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
++++ b/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
+@@ -21,22 +21,22 @@
+       <el-form label-position="top">
+         <el-row :gutter="12">
+           <el-col :xs="24" :sm="12" :md="8">
+-            <el-form-item label="案件 ID">
+-              <el-input v-model.trim="form.case_id" placeholder="请输入案件 ID" />
++            <el-form-item label="案件编号">
++              <el-input v-model.trim="form.case_id" placeholder="请输入案件编号" />
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12" :md="8">
+             <el-form-item label="生成模式">
+               <el-select v-model="form.mode" placeholder="请选择模式">
+-                <el-option label="固定模式（FIXED）" value="FIXED" />
+-                <el-option label="工时模式（HOURLY）" value="HOURLY" />
+-                <el-option label="混合模式（HYBRID）" value="HYBRID" />
++                <el-option label="固定模式" value="FIXED" />
++                <el-option label="工时模式" value="HOURLY" />
++                <el-option label="混合模式" value="HYBRID" />
+               </el-select>
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12" :md="8">
+             <el-form-item label="币种">
+-              <el-input v-model.trim="form.currency" placeholder="默认 CNY（可选）" />
++              <el-input v-model.trim="form.currency" placeholder="默认人民币（可选）" />
+             </el-form-item>
+           </el-col>
+ 
+@@ -72,12 +72,12 @@
+             <el-row :gutter="8">
+               <el-col :xs="24" :sm="12" :md="6">
+                 <el-form-item label="费用代码">
+-                  <el-input v-model.trim="line.fee_code" placeholder="例如：CONSULT_HOUR" />
++                  <el-input v-model.trim="line.fee_code" placeholder="请输入费用代码" />
+                 </el-form-item>
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="6">
+                 <el-form-item label="费用名称">
+-                  <el-input v-model.trim="line.fee_name" placeholder="例如：顾问工时费" />
++                  <el-input v-model.trim="line.fee_name" placeholder="请输入费用名称" />
+                 </el-form-item>
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="4">
+@@ -92,12 +92,12 @@
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="4">
+                 <el-form-item label="追踪键">
+-                  <el-input v-model.trim="line.trace_key" placeholder="可选" />
++                  <el-input v-model.trim="line.trace_key" placeholder="选填" />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="24">
+                 <el-form-item label="备注">
+-                  <el-input v-model.trim="line.remark" placeholder="可选" />
++                  <el-input v-model.trim="line.remark" placeholder="选填" />
+                 </el-form-item>
+               </el-col>
+             </el-row>
+@@ -122,12 +122,12 @@
+             <el-row :gutter="8">
+               <el-col :xs="24" :sm="12" :md="6">
+                 <el-form-item label="费用代码">
+-                  <el-input v-model.trim="line.fee_code" placeholder="例如：SEARCH_MISC" />
++                  <el-input v-model.trim="line.fee_code" placeholder="请输入费用代码" />
+                 </el-form-item>
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="6">
+                 <el-form-item label="费用名称">
+-                  <el-input v-model.trim="line.fee_name" placeholder="例如：检索附加费" />
++                  <el-input v-model.trim="line.fee_name" placeholder="请输入费用名称" />
+                 </el-form-item>
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="4">
+@@ -137,12 +137,12 @@
+               </el-col>
+               <el-col :xs="24" :sm="12" :md="4">
+                 <el-form-item label="追踪键">
+-                  <el-input v-model.trim="line.trace_key" placeholder="可选" />
++                  <el-input v-model.trim="line.trace_key" placeholder="选填" />
+                 </el-form-item>
+               </el-col>
+               <el-col :span="24">
+                 <el-form-item label="备注">
+-                  <el-input v-model.trim="line.remark" placeholder="可选" />
++                  <el-input v-model.trim="line.remark" placeholder="选填" />
+                 </el-form-item>
+               </el-col>
+             </el-row>
+@@ -164,10 +164,10 @@
+       </template>
+ 
+       <el-descriptions :column="4" border>
+-        <el-descriptions-item label="草单 ID">{{ result.draft_id }}</el-descriptions-item>
+-        <el-descriptions-item label="草单类型">{{ result.draft_type }}</el-descriptions-item>
+-        <el-descriptions-item label="模式">{{ result.mode }}</el-descriptions-item>
+-        <el-descriptions-item label="币种">{{ result.currency }}</el-descriptions-item>
++        <el-descriptions-item label="草单编号">{{ result.draft_id }}</el-descriptions-item>
++        <el-descriptions-item label="草单类型">{{ draftTypeLabel(result.draft_type) }}</el-descriptions-item>
++        <el-descriptions-item label="模式">{{ modeLabel(result.mode) }}</el-descriptions-item>
++        <el-descriptions-item label="币种">{{ currencyLabel(result.currency) }}</el-descriptions-item>
+         <el-descriptions-item label="行数">{{ result.created_line_count }}</el-descriptions-item>
+         <el-descriptions-item label="服务费合计">
+           {{ formatMoney(result.totals.total_service, result.currency) }}
+@@ -183,10 +183,14 @@
+       <div class="line-section">
+         <h3 class="line-section-title">草单明细</h3>
+         <el-table :data="result.items" size="small" border>
+-          <el-table-column prop="item_id" label="费用项 ID" min-width="200" />
++          <el-table-column prop="item_id" label="费用项编号" min-width="200" />
+           <el-table-column prop="fee_code" label="费用代码" min-width="140" />
+           <el-table-column prop="fee_name" label="费用名称" min-width="160" />
+-          <el-table-column prop="fee_type" label="费用类型" width="100" />
++          <el-table-column label="费用类型" width="100">
++            <template #default="{ row }">
++              {{ feeTypeLabel(row.fee_type) }}
++            </template>
++          </el-table-column>
+           <el-table-column prop="quantity" label="数量" width="90" />
+           <el-table-column prop="unit_price" label="单价" width="120" />
+           <el-table-column label="金额" width="140" align="right">
+@@ -397,7 +401,7 @@ function mapDraftCreateError(errorLike: unknown): string {
+     return '草单参数不合法，请检查模式与金额/工时配置。'
+   }
+   if (apiError.status === 404 && apiError.code === 'CASE_NOT_FOUND') {
+-    return '案件不存在，请确认案件 ID 后重试。'
++    return '案件不存在，请确认案件编号后重试。'
+   }
+   if (apiError.status === 409 && apiError.code === 'FEE_DRAFT_CONFLICT') {
+     const draftId = apiError.details?.draft_id
+@@ -428,7 +432,7 @@ function mapErrorToBanner(errorLike: unknown, message: string): ApiError {
+ }
+ 
+ function validateFormState(): string | null {
+-  if (!form.case_id.trim()) return '请填写案件 ID。'
++  if (!form.case_id.trim()) return '请填写案件编号。'
+ 
+   if (form.mode === 'FIXED') {
+     if (!(form.fixed_fee > 0)) return '固定模式下固定费用必须大于 0。'
+@@ -556,6 +560,27 @@ function formatMoney(amount: number, currency: string): string {
+   }).format(amount || 0)
+ }
+ 
++function modeLabel(mode: DraftMode): string {
++  if (mode === 'FIXED') return '固定模式'
++  if (mode === 'HOURLY') return '工时模式'
++  return '混合模式'
++}
++
++function draftTypeLabel(type: 'CONSULT_FEE' | 'SEARCH_FEE'): string {
++  return type === 'CONSULT_FEE' ? '顾问费草单' : '检索费草单'
++}
++
++function feeTypeLabel(type: string): string {
++  if (type === 'SERVICE') return '服务费'
++  if (type === 'MISC') return '杂费'
++  if (type === 'GOV') return '官费'
++  return type
++}
++
++function currencyLabel(currency: string): string {
++  return currency === 'CNY' ? '人民币' : currency
++}
++
+ function goBack() {
+   router.back()
+ }
+diff --git a/frontend/src/modules/system/pages/DocTemplateList.vue b/frontend/src/modules/system/pages/DocTemplateList.vue
+index b3142e7..ade017f 100644
+--- a/frontend/src/modules/system/pages/DocTemplateList.vue
++++ b/frontend/src/modules/system/pages/DocTemplateList.vue
+@@ -32,13 +32,13 @@
+         </template>
+       </el-table-column>
+       <el-table-column label="状态变更" width="120">
+-        <template #default="{ row }">{{ row.status_effect || '—' }}</template>
++        <template #default="{ row }">{{ getStatusEffectLabel(row.status_effect) }}</template>
+       </el-table-column>
+       <el-table-column label="期限模板" width="140">
+-        <template #default="{ row }">{{ row.deadline_template_code || '—' }}</template>
++        <template #default="{ row }">{{ getDeadlineTemplateLabel(row.deadline_template_code) }}</template>
+       </el-table-column>
+       <el-table-column label="费用类型" width="120">
+-        <template #default="{ row }">{{ row.fee_draft_type || '—' }}</template>
++        <template #default="{ row }">{{ getFeeDraftTypeLabel(row.fee_draft_type) }}</template>
+       </el-table-column>
+       <el-table-column label="需回复" width="80">
+         <template #default="{ row }">
+@@ -111,8 +111,8 @@
+           <el-col :span="12">
+             <el-form-item label="方向">
+               <el-select v-model="form.direction" style="width: 100%">
+-                <el-option label="收文 (IN)" value="IN" />
+-                <el-option label="发文 (OUT)" value="OUT" />
++                <el-option label="收文" value="IN" />
++                <el-option label="发文" value="OUT" />
+               </el-select>
+             </el-form-item>
+           </el-col>
+@@ -125,12 +125,12 @@
+         <el-row :gutter="16">
+           <el-col :span="12">
+             <el-form-item label="状态变更">
+-              <el-input v-model.trim="form.status_effect" placeholder="例如：PUBLISHED" />
++              <el-input v-model.trim="form.status_effect" placeholder="请输入状态编码" />
+             </el-form-item>
+           </el-col>
+           <el-col :span="12">
+             <el-form-item label="状态恢复">
+-              <el-input v-model.trim="form.status_restore" placeholder="例如：SUB_EXAM" />
++              <el-input v-model.trim="form.status_restore" placeholder="请输入恢复状态编码" />
+             </el-form-item>
+           </el-col>
+         </el-row>
+@@ -149,7 +149,7 @@
+           </el-col>
+           <el-col :span="12">
+             <el-form-item label="费用类型">
+-              <el-input v-model.trim="form.fee_draft_type" placeholder="例如：REG_FEE" />
++              <el-input v-model.trim="form.fee_draft_type" placeholder="请输入费用草稿类型编码" />
+             </el-form-item>
+           </el-col>
+         </el-row>
+@@ -165,20 +165,20 @@
+             </el-form-item>
+           </el-col>
+         </el-row>
+-        <el-form-item label="费用项目列表 (JSON)">
++        <el-form-item label="费用项目列表">
+           <el-input
+             v-model="form.fee_item_list"
+             type="textarea"
+             :rows="3"
+-            placeholder='[{"fee_code":"REG_FEE","fee_name":"登记费","amount":200}]'
++            placeholder="请输入费用项目配置"
+           />
+         </el-form-item>
+-        <el-form-item label="输入字段定义 (JSON)">
++        <el-form-item label="输入字段定义">
+           <el-input
+             v-model="form.input_fields"
+             type="textarea"
+             :rows="3"
+-            placeholder='{"field_name":{"label":"字段标签","type":"text"}}'
++            placeholder="请输入输入字段配置"
+           />
+         </el-form-item>
+       </el-form>
+@@ -201,6 +201,7 @@ import { getTaskTemplates } from '../../../api/tasks'
+ import type { TaskTemplate } from '../../../api/tasks.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import { getCaseStatusText } from '../../../constants/displayText'
+ 
+ const templates = ref<DocTemplate[]>([])
+ const loading = ref(false)
+@@ -237,6 +238,34 @@ const formRules: FormRules = {
+   name: [{ required: true, message: '名称为必填项', trigger: 'blur' }],
+ }
+ 
++const FEE_DRAFT_TYPE_TEXT: Record<string, string> = {
++  APPLY_FEE: '申请费草稿',
++  OA_FEE: '审查意见费草稿',
++  GRANT_FEE: '授权费草稿',
++  ANNUITY_FEE: '年费草稿',
++  INVALIDATION_FEE: '无效费草稿',
++  LITIGATION_FEE: '诉讼费草稿',
++  CONSULT_FEE: '顾问费草稿',
++  SEARCH_FEE: '检索费草稿',
++  INTERMEDIATE_FEE: '中间文件费草稿',
++}
++
++function getStatusEffectLabel(status?: string | null): string {
++  if (!status) return '—'
++  return getCaseStatusText(status)
++}
++
++function getDeadlineTemplateLabel(code?: string | null): string {
++  if (!code) return '—'
++  const matched = taskTemplateOptions.value.find((item) => item.code === code)
++  return matched?.name || code
++}
++
++function getFeeDraftTypeLabel(type?: string | null): string {
++  if (!type) return '—'
++  return FEE_DRAFT_TYPE_TEXT[type] || type
++}
++
+ async function fetchTemplates() {
+   loading.value = true
+   error.value = null

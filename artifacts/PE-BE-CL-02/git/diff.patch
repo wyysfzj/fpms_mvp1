@@ -1,0 +1,46 @@
+diff --git a/backend/app/modules/collections/api.py b/backend/app/modules/collections/api.py
+new file mode 100644
+index 0000000..d83088e
+--- /dev/null
++++ b/backend/app/modules/collections/api.py
+@@ -0,0 +1,40 @@
++from __future__ import annotations
++
++from datetime import date
++from typing import Any
++
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel
++from sqlalchemy.orm import Session
++
++from app.api.deps import require_perm
++from app.db.session import get_db
++from app.modules.collections.service import generate_dunning_batches
++
++router = APIRouter()
++
++
++class DunningGenerateIn(BaseModel):
++    to_date: date
++    client_id: str | None = None
++    client_ids: list[str] | None = None
++    include_statuses: list[str] | None = None
++    exclude_statuses: list[str] | None = None
++    strict_conflict: bool = False
++
++
++@router.post("/dunning", summary="Generate dunning batches")
++def post_dunning(
++    payload: DunningGenerateIn,
++    _perm: None = Depends(require_perm("Dunning.Create")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    return generate_dunning_batches(
++        db,
++        to_date=payload.to_date,
++        client_id=payload.client_id,
++        client_ids=payload.client_ids,
++        include_statuses=payload.include_statuses,
++        exclude_statuses=payload.exclude_statuses,
++        strict_conflict=payload.strict_conflict,
++    )

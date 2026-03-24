@@ -1,0 +1,244 @@
+diff --git a/backend/app/modules/annuity/service.py b/backend/app/modules/annuity/service.py
+index 5a4f7d6..431b2cf 100644
+--- a/backend/app/modules/annuity/service.py
++++ b/backend/app/modules/annuity/service.py
+@@ -156,15 +156,19 @@ def list_annuity_tasks(
+     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+ 
+     offset = (page - 1) * page_size
+-    items = db.execute(
+-        stmt.order_by(
+-            AnnuityTask.due_date.asc(),
+-            AnnuityTask.created_at.desc(),
+-            AnnuityTask.id.asc(),
++    items = (
++        db.execute(
++            stmt.order_by(
++                AnnuityTask.due_date.asc(),
++                AnnuityTask.created_at.desc(),
++                AnnuityTask.id.asc(),
++            )
++            .offset(offset)
++            .limit(page_size)
+         )
+-        .offset(offset)
+-        .limit(page_size)
+-    ).scalars().all()
++        .scalars()
++        .all()
++    )
+     return items, total
+ 
+ 
+@@ -776,7 +780,9 @@ def _recompute_pay_list_status(pay_list: PayList, payments: list[GovPayment]) ->
+         return
+ 
+     pay_list.status = "PAID"
+-    pay_list.paid_date = max((p.paid_date for p in paid_rows if p.paid_date is not None), default=None)
++    pay_list.paid_date = max(
++        (p.paid_date for p in paid_rows if p.paid_date is not None), default=None
++    )
+ 
+ 
+ def register_gov_payment(
+@@ -840,14 +846,11 @@ def register_gov_payment(
+         )
+ 
+     if target is None:
+-        fee_item_row = (
+-            db.execute(
+-                select(FeeItem, FeeDraft)
+-                .join(FeeDraft, FeeDraft.id == FeeItem.draft_id)
+-                .where(FeeItem.id == normalized_fee_item_id)
+-            )
+-            .first()
+-        )
++        fee_item_row = db.execute(
++            select(FeeItem, FeeDraft)
++            .join(FeeDraft, FeeDraft.id == FeeItem.draft_id)
++            .where(FeeItem.id == normalized_fee_item_id)
++        ).first()
+         if fee_item_row is None:
+             raise_business_error("FEE_ITEM_NOT_FOUND", "Fee item not found", status_code=404)
+ 
+@@ -884,7 +887,9 @@ def register_gov_payment(
+             status="PAID",
+             currency=pay_list.currency,
+             paid_date=paid_date or date.today(),
+-            paid_amount=Decimal(paid_amount) if paid_amount is not None else Decimal(fee_item.amount or 0),
++            paid_amount=Decimal(paid_amount)
++            if paid_amount is not None
++            else Decimal(fee_item.amount or 0),
+             official_receipt_no=official_receipt_no,
+             remark=remark,
+             created_by=actor_id,
+@@ -892,7 +897,9 @@ def register_gov_payment(
+         )
+         db.add(target)
+     else:
+-        if ((target.status or "").strip().upper() in {"PAID", "RECORDED"}) or target.paid_date is not None:
++        if (
++            (target.status or "").strip().upper() in {"PAID", "RECORDED"}
++        ) or target.paid_date is not None:
+             raise_business_error(
+                 "GOV_PAYMENT_DUPLICATE",
+                 "Official payment already registered",
+@@ -911,7 +918,11 @@ def register_gov_payment(
+ 
+     db.flush()
+     payments = (
+-        db.execute(select(GovPayment).where(GovPayment.pay_list_id == pay_list.id).order_by(GovPayment.id.asc()))
++        db.execute(
++            select(GovPayment)
++            .where(GovPayment.pay_list_id == pay_list.id)
++            .order_by(GovPayment.id.asc())
++        )
+         .scalars()
+         .all()
+     )
+diff --git a/backend/app/modules/documents/service.py b/backend/app/modules/documents/service.py
+index 20e6fb6..fc3d035 100644
+--- a/backend/app/modules/documents/service.py
++++ b/backend/app/modules/documents/service.py
+@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
+ from app.core.errors import raise_business_error
+ from app.core.storage import ensure_dir, safe_join
+ from app.modules.cases.models import Case
++from app.modules.cases.service import validate_case_status_transition
+ from app.modules.documents.enums import DocumentDirection
+ from app.modules.documents.models import DocAttachment, DocTemplate, Document
+ from app.modules.documents.schemas import (
+@@ -31,6 +32,8 @@ def list_documents(
+     doc_template_id: str | None = None,
+     case_id: str | None = None,
+     client_id: str | None = None,
++    need_reply: bool | None = None,
++    replied: bool | None = None,
+     date_from: date | None = None,
+     date_to: date | None = None,
+     page: int = 1,
+@@ -56,6 +59,12 @@ def list_documents(
+         stmt = stmt.where(Document.case_id == case_id)
+     if client_id:
+         stmt = stmt.join(Case, Document.case_id == Case.id).where(Case.client_id == client_id)
++    if need_reply is not None:
++        stmt = stmt.where(Document.need_reply.is_(need_reply))
++    if replied is True:
++        stmt = stmt.where(Document.reply_date.is_not(None))
++    elif replied is False:
++        stmt = stmt.where(Document.reply_date.is_(None))
+     if date_from:
+         stmt = stmt.where(Document.doc_date >= date_from)
+     if date_to:
+@@ -115,6 +124,7 @@ def create_document(db: Session, data: DocumentCreateIn) -> Document:
+ 
+         # Apply status_effect to case
+         if getattr(template, "status_effect", None):
++            validate_case_status_transition(case.status, template.status_effect)
+             case.status = template.status_effect
+ 
+     # B2: Reply chain — auto write-off
+diff --git a/backend/app/modules/tasks/api.py b/backend/app/modules/tasks/api.py
+index 5a8c510..7baefc7 100644
+--- a/backend/app/modules/tasks/api.py
++++ b/backend/app/modules/tasks/api.py
+@@ -34,6 +34,7 @@ from app.modules.tasks.service import cancel_task as cancel_task_service
+ from app.modules.tasks.service import close_task as close_task_service
+ from app.modules.tasks.service import create_task as create_task_service
+ from app.modules.tasks.service import create_task_template as create_task_template_service
++from app.modules.tasks.service import delete_task as delete_task_service
+ from app.modules.tasks.service import get_task as get_task_service
+ from app.modules.tasks.service import list_task_logs as list_task_logs_service
+ from app.modules.tasks.service import list_task_templates as list_task_templates_service
+@@ -471,6 +472,34 @@ def update_task(
+     return TaskOut.model_validate(task)
+ 
+ 
++@router.delete(
++    "/tasks/{task_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    response_class=Response,
++    summary="Delete a task",
++)
++def delete_task(
++    task_id: str,
++    _perm: None = Depends(require_perm("Task.Edit")),
++    current_user: T_User = current_user_dep,
++    db: Session = Depends(get_db),
++) -> Response:
++    """
++    Delete a manually maintained task by ID.
++
++    **Auth**: Bearer JWT
++    **Permission**: Task.Edit
++    **Responses**:
++    - 204: Task deleted
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Task not found
++    - 422: VALIDATION_ERROR
++    """
++    delete_task_service(db, task_id=task_id, actor_id=current_user.id)
++    return Response(status_code=status.HTTP_204_NO_CONTENT)
++
++
+ @router.get("/tasks/{task_id}/print", summary="Print a task sheet")
+ def print_task_sheet(
+     task_id: str,
+diff --git a/backend/app/modules/tasks/service.py b/backend/app/modules/tasks/service.py
+index 70f86f8..27d76ab 100644
+--- a/backend/app/modules/tasks/service.py
++++ b/backend/app/modules/tasks/service.py
+@@ -222,6 +222,17 @@ def update_task(
+     return task
+ 
+ 
++def delete_task(
++    db: Session,
++    *,
++    task_id: str,
++    actor_id: str | None,
++) -> None:
++    task = get_task(db, task_id=task_id)
++    db.delete(task)
++    db.commit()
++
++
+ def close_task(
+     db: Session,
+     *,
+diff --git a/backend/tests/test_task_template.py b/backend/tests/test_task_template.py
+index f2a1ec0..cb69757 100644
+--- a/backend/tests/test_task_template.py
++++ b/backend/tests/test_task_template.py
+@@ -161,6 +161,30 @@ def test_list_task_logs_includes_create(client: TestClient, auth_headers: dict)
+     assert "CLOSE" in actions
+ 
+ 
++def test_delete_manual_task_removes_it(client: TestClient, auth_headers: dict) -> None:
++    """Manual task maintenance includes delete within Batch 2 scope."""
++    case_id = _create_case(client, auth_headers)
++
++    task_resp = client.post(
++        "/api/v1/tasks",
++        headers=auth_headers,
++        json={
++            "case_id": case_id,
++            "title": "Delete Test Task",
++            "due_date": str(date.today() + timedelta(days=7)),
++        },
++    )
++    assert task_resp.status_code == 201, task_resp.text
++    task_id = task_resp.json()["id"]
++
++    delete_resp = client.delete(f"/api/v1/tasks/{task_id}", headers=auth_headers)
++    assert delete_resp.status_code == 204, delete_resp.text
++    assert delete_resp.text == ""
++
++    get_resp = client.get(f"/api/v1/tasks/{task_id}", headers=auth_headers)
++    assert get_resp.status_code == 404, get_resp.text
++
++
+ # ---------- Auto-generation via TaskGenerationService ----------
+ 
+ 

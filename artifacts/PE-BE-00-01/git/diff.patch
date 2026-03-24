@@ -1,0 +1,10 @@
+diff --git a/backend/app/modules/cases/enums.py b/backend/app/modules/cases/enums.py
+--- a/backend/app/modules/cases/enums.py
++++ b/backend/app/modules/cases/enums.py
+@@
+ class CaseType(str, Enum):
+@@
+     PCT_NATL = "PCT_NATL"  # PCT national phase
+     PRIORITY = "PRIORITY"  # Priority claim only
++    CONSULTING = "CONSULTING"  # Consulting project
++    SEARCH = "SEARCH"  # Prior-art / patent search project

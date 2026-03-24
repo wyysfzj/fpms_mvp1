@@ -1,0 +1,2 @@
+{"ts":"20260131T193249","step":"test","cmd":"bash -lc test\ -f\ docs/error_codes.md"}
+{"ts":"20260131T193258","step":"test","cmd":"bash -lc $'python3 - <<\'PY\'\nfrom pathlib import Path\np=Path(\'docs/error_codes.md\')\ntext=p.read_text(encoding=\'utf-8\')\nreq=[\'# FPMS Error Codes\',\'## Error envelope\',\'## BusinessError codes\']\nmissing=[s for s in req if s not in text]\nprint(\'missing:\', missing)\nassert not missing\nprint(\'OK\')\nPY'"}

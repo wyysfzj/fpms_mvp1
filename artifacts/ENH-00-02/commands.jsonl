@@ -1,0 +1,3 @@
+{"ts":"20260103T225118","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/main.py"}
+{"ts":"20260103T225122","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/main.py"}
+{"ts":"20260103T225126","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/main.py"}

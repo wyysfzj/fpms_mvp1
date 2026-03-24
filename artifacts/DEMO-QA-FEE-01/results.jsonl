@@ -1,0 +1,5 @@
+{"ts":"20260308T150454","step":"test","rc":1,"log":"artifacts/DEMO-QA-FEE-01/outputs/20260308T150454_test.log"}
+{"ts":"20260308T150454","step":"lint","rc":0,"log":"artifacts/DEMO-QA-FEE-01/outputs/20260308T150454_lint.log"}
+{"ts":"20260308T150625","step":"test","rc":1,"log":"artifacts/DEMO-QA-FEE-01/outputs/20260308T150625_test.log"}
+{"ts":"20260308T150757","step":"test","rc":1,"log":"artifacts/DEMO-QA-FEE-01/outputs/20260308T150757_test.log"}
+{"ts":"20260308T150828","step":"test","rc":0,"log":"artifacts/DEMO-QA-FEE-01/outputs/20260308T150828_test.log"}

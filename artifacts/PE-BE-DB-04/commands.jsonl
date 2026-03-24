@@ -1,0 +1,2 @@
+{"ts":"20260228T170822","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}
+{"ts":"20260228T170822","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}

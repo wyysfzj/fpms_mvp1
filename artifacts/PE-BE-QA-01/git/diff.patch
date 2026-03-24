@@ -1,0 +1,2163 @@
+diff --git a/tmp/pe-be-qa-01/cases.api.py.before b/backend/app/modules/cases/api.py
+index 2b745e6..f435c5c 100644
+--- a/tmp/pe-be-qa-01/cases.api.py.before
++++ b/backend/app/modules/cases/api.py
+@@ -4,19 +4,21 @@ from datetime import date
+ from typing import Any
+ from uuid import uuid4
+ 
+-from fastapi import APIRouter, Depends, HTTPException, Query, status
++from fastapi import APIRouter, Depends, Query, status
+ from sqlalchemy import or_
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import require_perm
++from app.core.errors import raise_business_error
+ from app.db.session import get_db
+ from app.modules.cases.models import Case
+ from app.modules.cases.schemas import CaseCreateIn
++from app.modules.masterdata.clients.models import Client
+ 
+ router = APIRouter()
+ 
+ 
+-@router.get("/cases")
++@router.get("/cases", summary="List cases")
+ def get_cases(
+     q: str | None = Query(default=None),
+     case_no: str | None = Query(default=None),
+@@ -25,6 +27,12 @@ def get_cases(
+     status: str | None = Query(default=None),
+     date_from: date | None = Query(default=None),
+     date_to: date | None = Query(default=None),
++    case_type: str | None = Query(default=None),
++    patent_category: str | None = Query(default=None),
++    flow_dir: str | None = Query(default=None),
++    filing_date_from: date | None = Query(default=None),
++    filing_date_to: date | None = Query(default=None),
++    primary_agent_id: str | None = Query(default=None),
+     sort_by: str | None = Query(default=None),
+     sort_dir: str = Query(default="asc"),
+     page: int = Query(default=1, ge=1),
+@@ -32,6 +40,24 @@ def get_cases(
+     _perm: None = Depends(require_perm("Case.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    List cases with filters and pagination.
++
++    **Auth**: Bearer JWT
++    **Permission**: Case.Read
++    **Request example**:
++    `GET /api/v1/cases?page=1&page_size=20&case_no=CURL_CASE_001`
++    **Curl example**:
++    ```bash
++    curl -s -X GET "http://localhost:8000/api/v1/cases?page=1&page_size=20" \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: List of cases
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
+     query = db.query(Case)
+ 
+     if q:
+@@ -56,6 +82,18 @@ def get_cases(
+         query = query.filter(Case.recv_date >= date_from)
+     if date_to:
+         query = query.filter(Case.recv_date <= date_to)
++    if case_type:
++        query = query.filter(Case.case_type == case_type)
++    if patent_category:
++        query = query.filter(Case.patent_category == patent_category)
++    if flow_dir:
++        query = query.filter(Case.flow_dir == flow_dir)
++    if filing_date_from:
++        query = query.filter(Case.filing_date >= filing_date_from)
++    if filing_date_to:
++        query = query.filter(Case.filing_date <= filing_date_to)
++    if primary_agent_id:
++        query = query.filter(Case.primary_agent_id == primary_agent_id)
+ 
+     total = query.count()
+ 
+@@ -76,12 +114,29 @@ def get_cases(
+ 
+     cases = query.offset((page - 1) * page_size).limit(page_size).all()
+ 
++    # Batch-resolve client names for all cases in this page
++    client_ids = {case.client_id for case in cases if case.client_id}
++    client_name_map: dict[str, str] = {}
++    if client_ids:
++        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
++        client_name_map = {c.id: c.name_cn for c in clients}
++
+     items = [
+         {
+             "id": case.id,
+             "case_no": case.case_no,
+             "case_type": case.case_type,
+             "patent_category": case.patent_category,
++            "client_id": case.client_id,
++            "client_name": client_name_map.get(case.client_id) if case.client_id else None,
++            "title_cn": case.title_cn,
++            "title_en": case.title_en,
++            "app_no": case.app_no,
++            "status": case.status,
++            "filing_date": str(case.filing_date) if case.filing_date else None,
++            "recv_date": str(case.recv_date) if case.recv_date else None,
++            "patent_no": case.patent_no,
++            "primary_agent_id": case.primary_agent_id,
+         }
+         for case in cases
+     ]
+@@ -89,19 +144,59 @@ def get_cases(
+     return {"items": items, "page": page, "page_size": page_size, "total": total}
+ 
+ 
+-@router.post("/cases", status_code=status.HTTP_201_CREATED)
++@router.post("/cases", status_code=status.HTTP_201_CREATED, summary="Create a case")
+ def create_case(
+     payload: CaseCreateIn,
+     _perm: None = Depends(require_perm("Case.Create")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Create a case.
++
++    **Auth**: Bearer JWT
++    **Permission**: Case.Create
++    **Request example**:
++    ```json
++    {
++      "case_no": "CURL_CASE_001",
++      "case_type": "NORMAL",
++      "patent_category": "INV",
++      "flow_dir": "CN_DOMESTIC",
++      "client_id": "CLIENT_ID"
++    }
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/cases \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"case_no":"CURL_CASE_001","case_type":"NORMAL","patent_category":"INV","flow_dir":"CN_DOMESTIC","client_id":"CLIENT_ID"}'
++    ```
++    **Responses**:
++    - 201: Case created
++    - 400: case_no is required
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 409: case_no already exists
++    - 422: VALIDATION_ERROR
++    """
+     case_no = payload.case_no
+     if not case_no:
+-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="case_no is required")
++        raise_business_error(
++            "CASE_INVALID",
++            "case_no is required",
++            status_code=status.HTTP_400_BAD_REQUEST,
++        )
+ 
+     exists = db.query(Case).filter(Case.case_no == case_no).first()
+     if exists:
+-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="case_no already exists")
++        raise_business_error(
++            "CASE_NO_DUPLICATE",
++            "case_no already exists",
++            status_code=status.HTTP_409_CONFLICT,
++        )
++
++    from sqlalchemy import text as sa_text
+ 
+     case = Case(
+         id=str(uuid4()),
+@@ -110,8 +205,86 @@ def create_case(
+         patent_category=payload.patent_category or "INV",
+         flow_dir=payload.flow_dir or "CN_DOMESTIC",
+         client_id=payload.client_id,
++        title_cn=payload.title_cn,
++        title_en=payload.title_en,
++        app_no=payload.app_no,
++        # A3 — Publication / Grant
++        pub_date=payload.pub_date,
++        pub_no=payload.pub_no,
++        grant_date=payload.grant_date,
++        grant_no=payload.grant_no,
++        patent_no=payload.patent_no,
++        valid_until=payload.valid_until,
++        # A3 — Spec details
++        spec_pages=payload.spec_pages,
++        claim_count=payload.claim_count,
++        has_exam_request=payload.has_exam_request,
++        # A3 — Agent assignment
++        primary_agent_id=payload.primary_agent_id,
++        second_agent_id=payload.second_agent_id,
++        draftor_id=payload.draftor_id,
++        # A3 — Control flags
++        is_fee_monitor=payload.is_fee_monitor,
++        fee_reduction=payload.fee_reduction,
++        applicant_kind=payload.applicant_kind,
+     )
+     db.add(case)
++    db.flush()
++
++    # Use raw SQL for sub-tables to avoid AuditMixin column mismatch
++    for applicant in payload.applicants:
++        db.execute(
++            sa_text(
++                "INSERT INTO t_case_applicant"
++                " (id, case_id, seq, is_first, name_cn, name_en, address_cn, address_en)"
++                " VALUES (:id, :case_id, :seq, :is_first, :name_cn, :name_en,"
++                " :address_cn, :address_en)"
++            ),
++            {
++                "id": str(uuid4()),
++                "case_id": case.id,
++                "seq": applicant.seq,
++                "is_first": applicant.is_first,
++                "name_cn": applicant.name_cn,
++                "name_en": applicant.name_en,
++                "address_cn": applicant.address_cn,
++                "address_en": applicant.address_en,
++            },
++        )
++
++    for inventor in payload.inventors:
++        db.execute(
++            sa_text(
++                "INSERT INTO t_case_inventor"
++                " (id, case_id, seq, name_cn, name_en)"
++                " VALUES (:id, :case_id, :seq, :name_cn, :name_en)"
++            ),
++            {
++                "id": str(uuid4()),
++                "case_id": case.id,
++                "seq": inventor.seq,
++                "name_cn": inventor.name_cn,
++                "name_en": inventor.name_en,
++            },
++        )
++
++    for prio in payload.priorities:
++        db.execute(
++            sa_text(
++                "INSERT INTO t_priority"
++                " (id, case_id, seq, country_code, prio_no, prio_date)"
++                " VALUES (:id, :case_id, :seq, :country_code, :prio_no, :prio_date)"
++            ),
++            {
++                "id": str(uuid4()),
++                "case_id": case.id,
++                "seq": prio.seq,
++                "country_code": prio.country_code,
++                "prio_no": prio.prio_no,
++                "prio_date": prio.prio_date,
++            },
++        )
++
+     db.commit()
+     db.refresh(case)
+ 
+@@ -122,30 +295,81 @@ def create_case(
+         "patent_category": case.patent_category,
+         "flow_dir": case.flow_dir,
+         "client_id": case.client_id,
++        "title_cn": case.title_cn,
++        "title_en": case.title_en,
++        "app_no": case.app_no,
++        "status": case.status,
++        "pub_date": str(case.pub_date) if case.pub_date else None,
++        "pub_no": case.pub_no,
++        "grant_date": str(case.grant_date) if case.grant_date else None,
++        "grant_no": case.grant_no,
++        "patent_no": case.patent_no,
++        "valid_until": str(case.valid_until) if case.valid_until else None,
++        "spec_pages": case.spec_pages,
++        "claim_count": case.claim_count,
++        "has_exam_request": case.has_exam_request,
++        "primary_agent_id": case.primary_agent_id,
++        "second_agent_id": case.second_agent_id,
++        "draftor_id": case.draftor_id,
++        "is_fee_monitor": case.is_fee_monitor,
++        "fee_reduction": case.fee_reduction,
++        "applicant_kind": case.applicant_kind,
+     }
+ 
+ 
+-@router.post("/cases/{case_id}/limited-edit")
++@router.post("/cases/{case_id}/limited-edit", summary="Limited edit of a case")
+ def limited_edit_case(
+     case_id: str,
+     payload: dict[str, Any],
+     _perm: None = Depends(require_perm("Case.EditLimited")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, str]:
++    """
++    Limited edit for a case (title fields only).
++
++    **Auth**: Bearer JWT
++    **Permission**: Case.EditLimited
++    **Request example**:
++    ```json
++    {"title_cn": "新标题", "title_en": "New Title"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/cases/CASE_ID/limited-edit \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"title_cn":"新标题","title_en":"New Title"}'
++    ```
++    **Responses**:
++    - 200: Updated
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Case not found
++    - 422: VALIDATION_ERROR
++    """
+     case = db.query(Case).filter(Case.id == case_id).first()
+     if not case:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
++        raise_business_error(
++            "CASE_NOT_FOUND",
++            "Case not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     if "title_cn" in payload:
+         case.title_cn = payload.get("title_cn")
+     if "title_en" in payload:
+         case.title_en = payload.get("title_en")
++    # A3 — Spec details (Agent-editable)
++    if "spec_pages" in payload:
++        case.spec_pages = payload.get("spec_pages")
++    if "claim_count" in payload:
++        case.claim_count = payload.get("claim_count")
+ 
+     db.commit()
+     return {"status": "ok"}
+ 
+ 
+-@router.get("/cases/export")
++@router.get("/cases/export", summary="Export cases (filtered list)")
+ def export_cases(
+     q: str | None = Query(default=None),
+     case_no: str | None = Query(default=None),
+@@ -154,6 +378,12 @@ def export_cases(
+     status: str | None = Query(default=None),
+     date_from: date | None = Query(default=None),
+     date_to: date | None = Query(default=None),
++    case_type: str | None = Query(default=None),
++    patent_category: str | None = Query(default=None),
++    flow_dir: str | None = Query(default=None),
++    filing_date_from: date | None = Query(default=None),
++    filing_date_to: date | None = Query(default=None),
++    primary_agent_id: str | None = Query(default=None),
+     sort_by: str | None = Query(default=None),
+     sort_dir: str = Query(default="asc"),
+     page: int = Query(default=1, ge=1),
+@@ -161,6 +391,24 @@ def export_cases(
+     _perm: None = Depends(require_perm("Case.Export")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Export cases with filters and pagination.
++
++    **Auth**: Bearer JWT
++    **Permission**: Case.Export
++    **Request example**:
++    `GET /api/v1/cases/export?page=1&page_size=20&status=NOT_FILED`
++    **Curl example**:
++    ```bash
++    curl -s -X GET "http://localhost:8000/api/v1/cases/export?page=1&page_size=20" \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Exported list
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
+     query = db.query(Case)
+ 
+     if q:
+@@ -185,6 +433,18 @@ def export_cases(
+         query = query.filter(Case.recv_date >= date_from)
+     if date_to:
+         query = query.filter(Case.recv_date <= date_to)
++    if case_type:
++        query = query.filter(Case.case_type == case_type)
++    if patent_category:
++        query = query.filter(Case.patent_category == patent_category)
++    if flow_dir:
++        query = query.filter(Case.flow_dir == flow_dir)
++    if filing_date_from:
++        query = query.filter(Case.filing_date >= filing_date_from)
++    if filing_date_to:
++        query = query.filter(Case.filing_date <= filing_date_to)
++    if primary_agent_id:
++        query = query.filter(Case.primary_agent_id == primary_agent_id)
+ 
+     total = query.count()
+ 
+@@ -205,12 +465,29 @@ def export_cases(
+ 
+     cases = query.offset((page - 1) * page_size).limit(page_size).all()
+ 
++    # Batch-resolve client names for all cases in this page
++    client_ids = {case.client_id for case in cases if case.client_id}
++    client_name_map: dict[str, str] = {}
++    if client_ids:
++        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
++        client_name_map = {c.id: c.name_cn for c in clients}
++
+     items = [
+         {
+             "id": case.id,
+             "case_no": case.case_no,
+             "case_type": case.case_type,
+             "patent_category": case.patent_category,
++            "client_id": case.client_id,
++            "client_name": client_name_map.get(case.client_id) if case.client_id else None,
++            "title_cn": case.title_cn,
++            "title_en": case.title_en,
++            "app_no": case.app_no,
++            "status": case.status,
++            "filing_date": str(case.filing_date) if case.filing_date else None,
++            "recv_date": str(case.recv_date) if case.recv_date else None,
++            "patent_no": case.patent_no,
++            "primary_agent_id": case.primary_agent_id,
+         }
+         for case in cases
+     ]
+@@ -218,23 +495,53 @@ def export_cases(
+     return {"items": items, "page": page, "page_size": page_size, "total": total}
+ 
+ 
+-@router.put("/cases/{case_id}")
++@router.put("/cases/{case_id}", summary="Update a case")
+ def update_case(
+     case_id: str,
+     payload: dict[str, Any],
+     _perm: None = Depends(require_perm("Case.Edit")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Update case fields.
++
++    **Auth**: Bearer JWT
++    **Permission**: Case.Edit
++    **Request example**:
++    ```json
++    {"case_no": "CURL_CASE_002", "case_type": "NORMAL"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X PUT http://localhost:8000/api/v1/cases/CASE_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"case_no":"CURL_CASE_002","case_type":"NORMAL"}'
++    ```
++    **Responses**:
++    - 200: Case updated
++    - 400: case_no already exists
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Case not found
++    - 422: VALIDATION_ERROR
++    """
+     case = db.query(Case).filter(Case.id == case_id).first()
+     if not case:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
++        raise_business_error(
++            "CASE_NOT_FOUND",
++            "Case not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     new_case_no = payload.get("case_no")
+     if new_case_no and new_case_no != case.case_no:
+         exists = db.query(Case).filter(Case.case_no == new_case_no, Case.id != case_id).first()
+         if exists:
+-            raise HTTPException(
+-                status_code=status.HTTP_400_BAD_REQUEST, detail="case_no already exists"
++            raise_business_error(
++                "CASE_NO_DUPLICATE",
++                "case_no already exists",
++                status_code=status.HTTP_400_BAD_REQUEST,
+             )
+         case.case_no = new_case_no
+ 
+@@ -243,6 +550,49 @@ def update_case(
+     case.flow_dir = payload.get("flow_dir", case.flow_dir)
+     case.client_id = payload.get("client_id", case.client_id)
+ 
++    # A3 — new scalar fields (only update if key present)
++    if "title_cn" in payload:
++        case.title_cn = payload["title_cn"]
++    if "title_en" in payload:
++        case.title_en = payload["title_en"]
++    if "app_no" in payload:
++        case.app_no = payload["app_no"]
++    if "status" in payload:
++        case.status = payload["status"]
++    if "pub_date" in payload:
++        v = payload["pub_date"]
++        case.pub_date = date.fromisoformat(v) if isinstance(v, str) else v
++    if "pub_no" in payload:
++        case.pub_no = payload["pub_no"]
++    if "grant_date" in payload:
++        v = payload["grant_date"]
++        case.grant_date = date.fromisoformat(v) if isinstance(v, str) else v
++    if "grant_no" in payload:
++        case.grant_no = payload["grant_no"]
++    if "patent_no" in payload:
++        case.patent_no = payload["patent_no"]
++    if "valid_until" in payload:
++        v = payload["valid_until"]
++        case.valid_until = date.fromisoformat(v) if isinstance(v, str) else v
++    if "spec_pages" in payload:
++        case.spec_pages = payload["spec_pages"]
++    if "claim_count" in payload:
++        case.claim_count = payload["claim_count"]
++    if "has_exam_request" in payload:
++        case.has_exam_request = payload["has_exam_request"]
++    if "primary_agent_id" in payload:
++        case.primary_agent_id = payload["primary_agent_id"]
++    if "second_agent_id" in payload:
++        case.second_agent_id = payload["second_agent_id"]
++    if "draftor_id" in payload:
++        case.draftor_id = payload["draftor_id"]
++    if "is_fee_monitor" in payload:
++        case.is_fee_monitor = payload["is_fee_monitor"]
++    if "fee_reduction" in payload:
++        case.fee_reduction = payload["fee_reduction"]
++    if "applicant_kind" in payload:
++        case.applicant_kind = payload["applicant_kind"]
++
+     db.commit()
+     db.refresh(case)
+ 
+@@ -253,18 +603,105 @@ def update_case(
+         "patent_category": case.patent_category,
+         "flow_dir": case.flow_dir,
+         "client_id": case.client_id,
++        "title_cn": case.title_cn,
++        "title_en": case.title_en,
++        "app_no": case.app_no,
++        "status": case.status,
++        "pub_date": str(case.pub_date) if case.pub_date else None,
++        "pub_no": case.pub_no,
++        "grant_date": str(case.grant_date) if case.grant_date else None,
++        "grant_no": case.grant_no,
++        "patent_no": case.patent_no,
++        "valid_until": str(case.valid_until) if case.valid_until else None,
++        "spec_pages": case.spec_pages,
++        "claim_count": case.claim_count,
++        "has_exam_request": case.has_exam_request,
++        "primary_agent_id": case.primary_agent_id,
++        "second_agent_id": case.second_agent_id,
++        "draftor_id": case.draftor_id,
++        "is_fee_monitor": case.is_fee_monitor,
++        "fee_reduction": case.fee_reduction,
++        "applicant_kind": case.applicant_kind,
+     }
+ 
+ 
+-@router.get("/cases/{case_id}")
++@router.get("/cases/{case_id}", summary="Get case by ID")
+ def get_case(
+     case_id: str,
+     _perm: None = Depends(require_perm("Case.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Get a case by ID.
++
++    **Auth**: Bearer JWT
++    **Permission**: Case.Read
++    **Request example**:
++    `GET /api/v1/cases/CASE_ID`
++    **Curl example**:
++    ```bash
++    curl -s -X GET http://localhost:8000/api/v1/cases/CASE_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Case details
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Case not found
++    - 422: VALIDATION_ERROR
++    """
+     case = db.query(Case).filter(Case.id == case_id).first()
+     if not case:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
++        raise_business_error(
++            "CASE_NOT_FOUND",
++            "Case not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
++
++    # Resolve client name
++    client_name = None
++    if case.client_id:
++        client = db.query(Client.name_cn).filter(Client.id == case.client_id).first()
++        if client:
++            client_name = client.name_cn
++
++    # Resolve applicants, inventors, priorities
++    from app.modules.cases.models import T_CaseApplicant, T_CaseInventor, T_Priority
++
++    applicants = (
++        db.query(
++            T_CaseApplicant.seq,
++            T_CaseApplicant.is_first,
++            T_CaseApplicant.name_cn,
++            T_CaseApplicant.name_en,
++            T_CaseApplicant.address_cn,
++            T_CaseApplicant.address_en,
++        )
++        .filter(T_CaseApplicant.case_id == case_id)
++        .order_by(T_CaseApplicant.seq)
++        .all()
++    )
++    inventors = (
++        db.query(
++            T_CaseInventor.seq,
++            T_CaseInventor.name_cn,
++            T_CaseInventor.name_en,
++        )
++        .filter(T_CaseInventor.case_id == case_id)
++        .order_by(T_CaseInventor.seq)
++        .all()
++    )
++    priorities = (
++        db.query(
++            T_Priority.seq,
++            T_Priority.country_code,
++            T_Priority.prio_no,
++            T_Priority.prio_date,
++        )
++        .filter(T_Priority.case_id == case_id)
++        .order_by(T_Priority.seq)
++        .all()
++    )
+ 
+     return {
+         "id": case.id,
+@@ -273,4 +710,56 @@ def get_case(
+         "patent_category": case.patent_category,
+         "flow_dir": case.flow_dir,
+         "client_id": case.client_id,
++        "client_name": client_name,
++        "title_cn": case.title_cn,
++        "title_en": case.title_en,
++        "app_no": case.app_no,
++        "status": case.status,
++        "filing_date": str(case.filing_date) if case.filing_date else None,
++        "recv_date": str(case.recv_date) if case.recv_date else None,
++        # A3 — Publication / Grant
++        "pub_date": str(case.pub_date) if case.pub_date else None,
++        "pub_no": case.pub_no,
++        "grant_date": str(case.grant_date) if case.grant_date else None,
++        "grant_no": case.grant_no,
++        "patent_no": case.patent_no,
++        "valid_until": str(case.valid_until) if case.valid_until else None,
++        # A3 — Spec details
++        "spec_pages": case.spec_pages,
++        "claim_count": case.claim_count,
++        "has_exam_request": case.has_exam_request,
++        # A3 — Agent assignment
++        "primary_agent_id": case.primary_agent_id,
++        "second_agent_id": case.second_agent_id,
++        "draftor_id": case.draftor_id,
++        # A3 — Control flags
++        "is_fee_monitor": case.is_fee_monitor,
++        "fee_reduction": case.fee_reduction,
++        "applicant_kind": case.applicant_kind,
++        # Sub-tables
++        "applicants": [
++            {
++                "seq": a.seq,
++                "is_first": a.is_first,
++                "name_cn": a.name_cn,
++                "name_en": a.name_en,
++                "address_cn": a.address_cn,
++                "address_en": a.address_en,
++            }
++            for a in applicants
++        ],
++        "inventors": [
++            {"seq": i.seq, "name_cn": i.name_cn, "name_en": i.name_en} for i in inventors
++        ],
++        "priorities": [
++            {
++                "seq": p.seq,
++                "country_code": p.country_code,
++                "prio_no": p.prio_no,
++                "prio_date": str(p.prio_date) if p.prio_date else None,
++            }
++            for p in priorities
++        ],
++        "created_at": str(case.created_at) if case.created_at else None,
++        "updated_at": str(case.updated_at) if case.updated_at else None,
+     }
+
+diff --git a/tmp/pe-be-qa-01/fees.api.py.before b/backend/app/modules/fees/api.py
+index ec35633..875d18d 100644
+--- a/tmp/pe-be-qa-01/fees.api.py.before
++++ b/backend/app/modules/fees/api.py
+@@ -1,201 +1,354 @@
+ from __future__ import annotations
+ 
+ from typing import Any
+-from uuid import uuid4
+ 
+-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
++from fastapi import APIRouter, Depends, Query, Response, status
+ from sqlalchemy.orm import Session
+ 
+-from app.api.deps import require_perm
++from app.api.deps import current_user_dep, require_perm
++from app.core.errors import raise_business_error
+ from app.db.session import get_db
+-from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
++from app.modules.auth.models import T_User
++from app.modules.fees.models import FeeDraft, FeeItem
++from app.modules.fees.schemas import (
++    FeeDraftCreateIn,
++    FeeDraftListItemOut,
++    FeeDraftOut,
++    FeeItemCreateIn,
++    FeeItemOut,
++    FeeItemUpdateIn,
++    FeeRateCreateIn,
++    FeeRateOut,
++    FeeRateUpdateIn,
++    OkOut,
++)
++from app.modules.fees.service import add_fee_item, list_fee_drafts, list_fee_rates
++from app.modules.fees.service import create_fee_draft as create_fee_draft_service
++from app.modules.fees.service import create_fee_rate as create_fee_rate_service
++from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
++from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
++from app.modules.fees.service import update_fee_item as update_fee_item_service
++from app.modules.fees.service import update_fee_rate as update_fee_rate_service
+ 
+ router = APIRouter()
+ 
+ 
+-@router.get("/fees/drafts")
++@router.get("/fees/drafts", summary="List fee drafts")
+ def get_fee_drafts(
+     page: int = Query(default=1, ge=1),
+     page_size: int = Query(default=20, ge=1),
+-    _perm: None = Depends(require_perm("Fee.Draft.Read")),
++    case_id: str | None = Query(default=None),
++    client_id: str | None = Query(default=None),
++    status_filter: str | None = Query(default=None, alias="status"),
++    _perm: None = Depends(require_perm("Fee.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+-    query = db.query(FeeDraft)
+-    total = query.count()
+-    drafts = (
+-        query.order_by(FeeDraft.created_at.desc())
+-        .offset((page - 1) * page_size)
+-        .limit(page_size)
+-        .all()
+-    )
++    """
++    List fee drafts with filters and pagination.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Read
++    **Request example**:
++    `GET /api/v1/fees/drafts?page=1&page_size=20&status=OPEN&case_id=CASE_ID`
++    **Curl example**:
++    ```bash
++    curl -s -X GET "http://localhost:8000/api/v1/fees/drafts?page=1&page_size=20" \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: List of fee drafts
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
++    filters = {
++        "case_id": case_id,
++        "client_id": client_id,
++        "status": status_filter,
++    }
++    drafts, total = list_fee_drafts(db, filters=filters, page=page, page_size=page_size)
+     items = [
+-        {
+-            "id": draft.id,
+-            "case_id": draft.case_id,
+-            "client_id": draft.client_id,
+-            "draft_type": draft.draft_type,
+-        }
++        FeeDraftListItemOut(
++            id=draft.id,
++            case_id=draft.case_id,
++            client_id=draft.client_id,
++            currency=draft.currency,
++            status=draft.status,
++            amount=draft.amount,
++        )
+         for draft in drafts
+     ]
+     return {"items": items, "page": page, "page_size": page_size, "total": total}
+ 
+ 
+-@router.post("/fees/drafts", status_code=status.HTTP_201_CREATED)
++@router.post(
++    "/fees/drafts",
++    status_code=status.HTTP_201_CREATED,
++    response_model=FeeDraftOut,
++    summary="Create a fee draft",
++)
+ def create_fee_draft(
+-    payload: dict[str, Any],
+-    _perm: None = Depends(require_perm("Fee.Draft.Create")),
++    payload: FeeDraftCreateIn,
++    _perm: None = Depends(require_perm("Fee.Create")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    case_id = payload.get("case_id")
+-    if not case_id:
+-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="case_id is required")
+-
+-    draft = FeeDraft(
+-        id=str(uuid4()),
+-        case_id=case_id,
+-        client_id=payload.get("client_id"),
+-        draft_type=payload.get("draft_type") or "GENERIC",
+-        currency=payload.get("currency") or "CNY",
+-        status=payload.get("status") or "OPEN",
+-    )
+-    db.add(draft)
+-    db.commit()
+-    db.refresh(draft)
+-
+-    return {
+-        "id": draft.id,
+-        "case_id": draft.case_id,
+-        "client_id": draft.client_id,
+-        "draft_type": draft.draft_type,
+-        "currency": draft.currency,
+-        "status": draft.status,
+-    }
+-
+-
+-@router.post("/fees/drafts/{draft_id}/lock")
++) -> FeeDraftOut:
++    """
++    Create a fee draft.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Create
++    **Request example**:
++    ```json
++    {"case_id": "CASE_ID", "client_id": "CLIENT_ID", "currency": "CNY"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/fees/drafts \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"case_id":"CASE_ID","client_id":"CLIENT_ID","currency":"CNY"}'
++    ```
++    **Responses**:
++    - 201: Fee draft created
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Case or client not found
++    - 422: VALIDATION_ERROR
++    """
++    draft = create_fee_draft_service(db, data=payload, actor_id=current_user.id)
++    return FeeDraftOut.model_validate(draft)
++
++
++@router.post("/fees/drafts/{draft_id}/lock", response_model=OkOut, summary="Lock a fee draft")
+ def lock_fee_draft(
+     draft_id: str,
+-    _perm: None = Depends(require_perm("Fee.Draft.Action")),
++    _perm: None = Depends(require_perm("Fee.Lock")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+-) -> dict[str, str]:
+-    draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
+-    if not draft:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
+-
+-    draft.status = "LOCKED"
+-    db.commit()
+-
+-    return {"status": "ok"}
+-
+-
+-@router.post("/fees/drafts/{draft_id}/unlock")
++) -> OkOut:
++    """
++    Lock a fee draft to prevent edits.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Lock
++    **Request example**:
++    `POST /api/v1/fees/drafts/DRAFT_ID/lock`
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/lock \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Fee draft locked
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Fee draft not found
++    - 409: Fee draft already locked
++    - 422: VALIDATION_ERROR
++    """
++    lock_fee_draft_service(db, draft_id=draft_id, actor_id=current_user.id)
++    return OkOut()
++
++
++@router.post(
++    "/fees/drafts/{draft_id}/unlock",
++    response_model=OkOut,
++    summary="Unlock a fee draft",
++)
+ def unlock_fee_draft(
+     draft_id: str,
+-    _perm: None = Depends(require_perm("Fee.Draft.Action")),
++    _perm: None = Depends(require_perm("Fee.Lock")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+-) -> dict[str, str]:
+-    draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
+-    if not draft:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
+-
+-    draft.status = "OPEN"
+-    db.commit()
+-
+-    return {"status": "ok"}
+-
+-
+-@router.post("/fees/drafts/{draft_id}/items", status_code=status.HTTP_201_CREATED)
++) -> OkOut:
++    """
++    Unlock a fee draft to allow edits.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Lock
++    **Request example**:
++    `POST /api/v1/fees/drafts/DRAFT_ID/unlock`
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/unlock \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Fee draft unlocked
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Fee draft not found
++    - 409: Fee draft not locked
++    - 422: VALIDATION_ERROR
++    """
++    unlock_fee_draft_service(db, draft_id=draft_id, actor_id=current_user.id)
++    return OkOut()
++
++
++@router.post(
++    "/fees/drafts/{draft_id}/items",
++    status_code=status.HTTP_201_CREATED,
++    response_model=FeeItemOut,
++    summary="Add a fee item to a draft",
++)
+ def create_fee_item(
+     draft_id: str,
+-    payload: dict[str, Any],
+-    _perm: None = Depends(require_perm("Fee.Item.Create")),
++    payload: FeeItemCreateIn,
++    _perm: None = Depends(require_perm("Fee.Edit")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
+-    if not draft:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
+-
+-    item = FeeItem(
+-        id=str(uuid4()),
+-        draft_id=draft_id,
+-        case_id=payload.get("case_id"),
+-        rate_id=payload.get("rate_id"),
+-        fee_code=payload.get("fee_code"),
+-        fee_name=payload.get("fee_name"),
+-    )
+-    db.add(item)
+-    db.commit()
+-    db.refresh(item)
+-
+-    return {
+-        "id": item.id,
+-        "draft_id": item.draft_id,
+-        "case_id": item.case_id,
+-        "rate_id": item.rate_id,
+-        "fee_code": item.fee_code,
+-        "fee_name": item.fee_name,
+-    }
+-
+-
+-@router.put("/fees/items/{item_id}")
++) -> FeeItemOut:
++    """
++    Add a fee item to a draft.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Edit
++    **Request example**:
++    ```json
++    {"rate_id": "RATE_ID", "quantity": 1, "unit_price": "100.00"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/items \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"rate_id":"RATE_ID","quantity":1,"unit_price":"100.00"}'
++    ```
++    **Responses**:
++    - 201: Fee item created
++    - 400: Rate disabled or currency mismatch
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Draft or rate not found
++    - 409: Draft is locked
++    - 422: VALIDATION_ERROR
++    """
++    item = add_fee_item(db, draft_id=draft_id, data=payload, actor_id=current_user.id)
++    return FeeItemOut.model_validate(item)
++
++
++@router.put(
++    "/fees/drafts/{draft_id}/items/{item_id}",
++    response_model=FeeItemOut,
++    summary="Update a fee item",
++)
+ def update_fee_item(
++    draft_id: str,
+     item_id: str,
+-    payload: dict[str, Any],
+-    _perm: None = Depends(require_perm("Fee.Item.Edit")),
++    payload: FeeItemUpdateIn,
++    _perm: None = Depends(require_perm("Fee.Edit")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    item = db.query(FeeItem).filter(FeeItem.id == item_id).first()
+-    if not item:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee item not found")
+-
+-    if "draft_id" in payload:
+-        item.draft_id = payload.get("draft_id")
+-    if "case_id" in payload:
+-        item.case_id = payload.get("case_id")
+-    if "rate_id" in payload:
+-        item.rate_id = payload.get("rate_id")
+-    if "fee_code" in payload:
+-        item.fee_code = payload.get("fee_code")
+-    if "fee_name" in payload:
+-        item.fee_name = payload.get("fee_name")
+-
+-    db.commit()
+-    db.refresh(item)
+-
+-    return {
+-        "id": item.id,
+-        "draft_id": item.draft_id,
+-        "case_id": item.case_id,
+-        "rate_id": item.rate_id,
+-        "fee_code": item.fee_code,
+-        "fee_name": item.fee_name,
+-    }
++) -> FeeItemOut:
++    """
++    Update a fee item in a draft.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Edit
++    **Request example**:
++    ```json
++    {"quantity": 2, "unit_price": "120.00"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X PUT http://localhost:8000/api/v1/fees/drafts/DRAFT_ID/items/ITEM_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"quantity":2,"unit_price":"120.00"}'
++    ```
++    **Responses**:
++    - 200: Fee item updated
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Draft or item not found
++    - 409: Draft is locked
++    - 422: VALIDATION_ERROR
++    """
++    item = update_fee_item_service(
++        db,
++        draft_id=draft_id,
++        item_id=item_id,
++        data=payload,
++        actor_id=current_user.id,
++    )
++    return FeeItemOut.model_validate(item)
+ 
+ 
+-@router.delete("/fees/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
++@router.delete(
++    "/fees/items/{item_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Delete a fee item",
++)
+ def delete_fee_item(
+     item_id: str,
+     _perm: None = Depends(require_perm("Fee.Item.Delete")),
+     db: Session = Depends(get_db),
+ ) -> Response:
++    """
++    Delete a fee item.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Item.Delete
++    **Request example**:
++    `DELETE /api/v1/fees/items/ITEM_ID`
++    **Curl example**:
++    ```bash
++    curl -s -X DELETE http://localhost:8000/api/v1/fees/items/ITEM_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 204: Fee item deleted
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Fee item not found
++    - 422: VALIDATION_ERROR
++    """
+     item = db.query(FeeItem).filter(FeeItem.id == item_id).first()
+     if not item:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee item not found")
++        raise_business_error(
++            "FEE_ITEM_NOT_FOUND",
++            "Fee item not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     db.delete(item)
+     db.commit()
+     return Response(status_code=status.HTTP_204_NO_CONTENT)
+ 
+ 
+-@router.get("/fees/drafts/{draft_id}")
++@router.get("/fees/drafts/{draft_id}", summary="Get a fee draft")
+ def get_fee_draft(
+     draft_id: str,
+     _perm: None = Depends(require_perm("Fee.Draft.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Get a fee draft by ID.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Draft.Read
++    **Request example**:
++    `GET /api/v1/fees/drafts/DRAFT_ID`
++    **Curl example**:
++    ```bash
++    curl -s -X GET http://localhost:8000/api/v1/fees/drafts/DRAFT_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Fee draft details
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Fee draft not found
++    - 422: VALIDATION_ERROR
++    """
+     draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
+     if not draft:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
++        raise_business_error(
++            "FEE_DRAFT_NOT_FOUND",
++            "Fee draft not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     return {
+         "id": draft.id,
+@@ -207,16 +360,43 @@ def get_fee_draft(
+     }
+ 
+ 
+-@router.put("/fees/drafts/{draft_id}")
++@router.put("/fees/drafts/{draft_id}", summary="Update a fee draft")
+ def update_fee_draft(
+     draft_id: str,
+     payload: dict[str, Any],
+     _perm: None = Depends(require_perm("Fee.Draft.Edit")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Update a fee draft fields.
++
++    **Auth**: Bearer JWT
++    **Permission**: Fee.Draft.Edit
++    **Request example**:
++    ```json
++    {"draft_type": "GENERIC", "currency": "CNY"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X PUT http://localhost:8000/api/v1/fees/drafts/DRAFT_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"draft_type":"GENERIC","currency":"CNY"}'
++    ```
++    **Responses**:
++    - 200: Fee draft updated
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Fee draft not found
++    - 422: VALIDATION_ERROR
++    """
+     draft = db.query(FeeDraft).filter(FeeDraft.id == draft_id).first()
+     if not draft:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee draft not found")
++        raise_business_error(
++            "FEE_DRAFT_NOT_FOUND",
++            "Fee draft not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     if "case_id" in payload:
+         draft.case_id = payload.get("case_id")
+@@ -242,90 +422,131 @@ def update_fee_draft(
+     }
+ 
+ 
+-@router.get("/fees/rates")
++@router.get("/fees/rates", summary="List fee rates")
+ def get_fee_rates(
+     page: int = Query(default=1, ge=1),
+     page_size: int = Query(default=20, ge=1),
+-    _perm: None = Depends(require_perm("Fee.Rate.Read")),
++    fee_code: str | None = Query(default=None),
++    fee_type: str | None = Query(default=None),
++    currency: str | None = Query(default=None),
++    enabled: bool | None = Query(default=None),
++    rate_group: str | None = Query(default=None),
++    country_code: str | None = Query(default=None),
++    case_type: str | None = Query(default=None),
++    patent_category: str | None = Query(default=None),
++    calc_mode: str | None = Query(default=None),
++    _perm: None = Depends(require_perm("FeeRate.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+-    query = db.query(FeeRate)
+-    total = query.count()
+-    rates = query.order_by(FeeRate.fee_code).offset((page - 1) * page_size).limit(page_size).all()
+-    items = [
+-        {
+-            "id": rate.id,
+-            "fee_code": rate.fee_code,
+-            "fee_name": rate.fee_name,
+-            "fee_type": rate.fee_type,
+-        }
+-        for rate in rates
+-    ]
++    """
++    List fee rates with filters and pagination.
++
++    **Auth**: Bearer JWT
++    **Permission**: FeeRate.Read
++    **Request example**:
++    `GET /api/v1/fees/rates?page=1&page_size=20&currency=CNY&enabled=true`
++    **Curl example**:
++    ```bash
++    curl -s -X GET "http://localhost:8000/api/v1/fees/rates?page=1&page_size=20" \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: List of fee rates
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
++    filters = {
++        "fee_code": fee_code,
++        "fee_type": fee_type,
++        "currency": currency,
++        "enabled": enabled,
++        "rate_group": rate_group,
++        "country_code": country_code,
++        "case_type": case_type,
++        "patent_category": patent_category,
++        "calc_mode": calc_mode,
++    }
++    rates, total = list_fee_rates(db, filters=filters, page=page, page_size=page_size)
++    items = [FeeRateOut.model_validate(rate) for rate in rates]
+     return {"items": items, "page": page, "page_size": page_size, "total": total}
+ 
+ 
+-@router.post("/fees/rates", status_code=status.HTTP_201_CREATED)
++@router.post(
++    "/fees/rates",
++    status_code=status.HTTP_201_CREATED,
++    response_model=FeeRateOut,
++    summary="Create a fee rate",
++)
+ def create_fee_rate(
+-    payload: dict[str, Any],
+-    _perm: None = Depends(require_perm("Fee.Rate.Create")),
++    payload: FeeRateCreateIn,
++    _perm: None = Depends(require_perm("FeeRate.Create")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    fee_code = payload.get("fee_code")
+-    if not fee_code:
+-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="fee_code is required")
+-
+-    rate = FeeRate(
+-        id=str(uuid4()),
+-        fee_code=fee_code,
+-        fee_name=payload.get("fee_name"),
+-        fee_type=payload.get("fee_type") or "SERVICE",
+-        currency=payload.get("currency") or "CNY",
+-        default_amount=payload.get("default_amount"),
+-    )
+-    db.add(rate)
+-    db.commit()
+-    db.refresh(rate)
+-
+-    return {
+-        "id": rate.id,
+-        "fee_code": rate.fee_code,
+-        "fee_name": rate.fee_name,
+-        "fee_type": rate.fee_type,
+-        "currency": rate.currency,
+-        "default_amount": rate.default_amount,
++) -> FeeRateOut:
++    """
++    Create a fee rate.
++
++    **Auth**: Bearer JWT
++    **Permission**: FeeRate.Create
++    **Request example**:
++    ```json
++    {
++      "fee_code": "FEE_CODE_001",
++      "fee_name": "Filing Fee",
++      "fee_type": "GOV",
++      "currency": "CNY",
++      "default_amount": "100.00",
++      "enabled": true
+     }
+-
+-
+-@router.put("/fees/rates/{rate_id}")
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/fees/rates \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"fee_code":"FEE_CODE_001","fee_name":"Filing Fee","fee_type":"GOV","currency":"CNY","default_amount":"100.00","enabled":true}'
++    ```
++    **Responses**:
++    - 201: Fee rate created
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
++    rate = create_fee_rate_service(db, data=payload, actor_id=current_user.id)
++    return FeeRateOut.model_validate(rate)
++
++
++@router.put("/fees/rates/{rate_id}", response_model=FeeRateOut, summary="Update a fee rate")
+ def update_fee_rate(
+     rate_id: str,
+-    payload: dict[str, Any],
+-    _perm: None = Depends(require_perm("Fee.Rate.Edit")),
++    payload: FeeRateUpdateIn,
++    _perm: None = Depends(require_perm("FeeRate.Edit")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    rate = db.query(FeeRate).filter(FeeRate.id == rate_id).first()
+-    if not rate:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fee rate not found")
+-
+-    if "fee_code" in payload:
+-        rate.fee_code = payload.get("fee_code") or rate.fee_code
+-    if "fee_name" in payload:
+-        rate.fee_name = payload.get("fee_name")
+-    if "fee_type" in payload:
+-        rate.fee_type = payload.get("fee_type") or rate.fee_type
+-    if "currency" in payload:
+-        rate.currency = payload.get("currency") or rate.currency
+-    if "default_amount" in payload:
+-        rate.default_amount = payload.get("default_amount")
+-
+-    db.commit()
+-    db.refresh(rate)
+-
+-    return {
+-        "id": rate.id,
+-        "fee_code": rate.fee_code,
+-        "fee_name": rate.fee_name,
+-        "fee_type": rate.fee_type,
+-        "currency": rate.currency,
+-        "default_amount": rate.default_amount,
+-    }
++) -> FeeRateOut:
++    """
++    Update a fee rate by ID.
++
++    **Auth**: Bearer JWT
++    **Permission**: FeeRate.Edit
++    **Request example**:
++    ```json
++    {"fee_name": "Updated Filing Fee", "enabled": false}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X PUT http://localhost:8000/api/v1/fees/rates/RATE_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"fee_name":"Updated Filing Fee","enabled":false}'
++    ```
++    **Responses**:
++    - 200: Fee rate updated
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Fee rate not found
++    - 422: VALIDATION_ERROR
++    """
++    rate = update_fee_rate_service(db, rate_id=rate_id, data=payload, actor_id=current_user.id)
++    return FeeRateOut.model_validate(rate)
+
+diff --git a/tmp/pe-be-qa-01/billing.api.py.before b/backend/app/modules/billing/api.py
+index 9c134b9..46f33ee 100644
+--- a/tmp/pe-be-qa-01/billing.api.py.before
++++ b/backend/app/modules/billing/api.py
+@@ -3,91 +3,186 @@ from __future__ import annotations
+ from typing import Any
+ from uuid import uuid4
+ 
+-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
++from fastapi import APIRouter, Depends, Query, Response, status
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import require_perm
+ from app.common.doc_render.renderer import DocxRenderer
++from app.core.errors import raise_business_error
+ from app.db.session import get_db
+ from app.models.letter_head import LetterHead
+ from app.models.system_param import SystemParam
+ from app.modules.billing.doc_render_bill_context import BillContextBuilder
+-from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Payment
++from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
++from app.modules.billing.schemas import (
++    BillFromDraftsRequest,
++    BillResponse,
++    OffsetCreateSchema,
++    OffsetResponse,
++    PaymentResponse,
++    PaymentSchema,
++)
++from app.modules.billing.service import (
++    create_offset as create_offset_service,
++)
++from app.modules.billing.service import (
++    generate_bill_from_drafts,
++    process_payment,
++)
++from app.modules.billing.service import (
++    reverse_offset as reverse_offset_service,
++)
+ from app.modules.masterdata.clients.models import Client
+ 
+ router = APIRouter()
+ 
+ 
+-@router.get("/bills")
++@router.get("/bills", summary="List bills")
+ def get_bills(
+     page: int = Query(default=1, ge=1),
+     page_size: int = Query(default=20, ge=1),
+     _perm: None = Depends(require_perm("Bill.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    List bills with pagination.
++
++    **Auth**: Bearer JWT
++    **Permission**: Bill.Read
++    **Request example**:
++    `GET /api/v1/bills?page=1&page_size=20`
++    **Curl example**:
++    ```bash
++    curl -s -X GET "http://localhost:8000/api/v1/bills?page=1&page_size=20" \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: List of bills
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
+     query = db.query(Bill)
+     total = query.count()
+     bills = (
+         query.order_by(Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+     )
++
++    # Batch-resolve client names for all bills in this page
++    client_ids = {bill.client_id for bill in bills if bill.client_id}
++    client_name_map: dict[str, str] = {}
++    if client_ids:
++        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
++        client_name_map = {c.id: c.name_cn for c in clients}
++
+     items = [
+         {
+             "id": bill.id,
+             "bill_no": bill.bill_no,
+             "client_id": bill.client_id,
++            "client_name": client_name_map.get(bill.client_id),
+             "currency": bill.currency,
++            "status": bill.status,
++            "amount": bill.amount,
++            "balance": bill.balance,
++            "bill_date": bill.bill_date,
++            "due_date": bill.due_date,
+         }
+         for bill in bills
+     ]
+     return {"items": items, "page": page, "page_size": page_size, "total": total}
+ 
+ 
+-@router.post("/bills/from-drafts", status_code=status.HTTP_201_CREATED)
++@router.post(
++    "/bills/from-drafts",
++    status_code=status.HTTP_201_CREATED,
++    response_model=BillResponse,
++    summary="Create a bill from fee drafts",
++)
+ def create_bill_from_drafts(
+-    payload: dict[str, Any],
++    payload: BillFromDraftsRequest,
+     _perm: None = Depends(require_perm("Bill.Create")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    client_id = payload.get("client_id")
+-    if not client_id:
+-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="client_id is required")
+-
+-    bill = Bill(
+-        id=str(uuid4()),
+-        bill_no=payload.get("bill_no"),
+-        client_id=client_id,
+-        currency=payload.get("currency") or "CNY",
+-        direction=payload.get("direction") or "AR",
+-        status=payload.get("status") or "UNSETTLED",
++) -> BillResponse:
++    """
++    Create a bill from fee drafts.
++
++    **Auth**: Bearer JWT
++    **Permission**: Bill.Create
++    **Request example**:
++    ```json
++    {"draft_ids": ["DRAFT_ID_1", "DRAFT_ID_2"], "bill_no": "BILL-001"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/bills/from-drafts \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"draft_ids":["DRAFT_ID_1","DRAFT_ID_2"],"bill_no":"BILL-001"}'
++    ```
++    **Responses**:
++    - 201: Bill created
++    - 400: Invalid drafts or totals
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Drafts not found
++    - 422: VALIDATION_ERROR
++    """
++    bill = generate_bill_from_drafts(db, payload)
++    return BillResponse(
++        id=bill.id,
++        bill_no=bill.bill_no,
++        client_id=bill.client_id,
++        currency=bill.currency,
++        direction=bill.direction,
++        status=bill.status,
+     )
+-    db.add(bill)
+-    db.commit()
+-    db.refresh(bill)
+-
+-    return {
+-        "id": bill.id,
+-        "bill_no": bill.bill_no,
+-        "client_id": bill.client_id,
+-        "currency": bill.currency,
+-        "direction": bill.direction,
+-        "status": bill.status,
+-    }
+ 
+ 
+-@router.get("/bills/{bill_id}/print")
++@router.get("/bills/{bill_id}/print", summary="Print a bill document")
+ def print_bill(
+     bill_id: str,
+     _perm: None = Depends(require_perm("Bill.Print")),
+     db: Session = Depends(get_db),
+ ) -> Response:
++    """
++    Generate and download a bill document.
++
++    **Auth**: Bearer JWT
++    **Permission**: Bill.Print
++    **Request example**:
++    `GET /api/v1/bills/BILL_ID/print`
++    **Curl example**:
++    ```bash
++    curl -s -X GET http://localhost:8000/api/v1/bills/BILL_ID/print \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -o bill.docx
++    ```
++    **Responses**:
++    - 200: Bill DOCX
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Bill or client not found
++    - 409: Bill template not configured
++    - 422: VALIDATION_ERROR
++    - 500: Template file missing
++    """
+     bill = db.query(Bill).filter(Bill.id == bill_id).first()
+     if not bill:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
++        raise_business_error(
++            "BILL_NOT_FOUND",
++            "Bill not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     bill_items = db.query(BillItem).filter(BillItem.bill_id == bill.id).all()
+     client = db.query(Client).filter(Client.id == bill.client_id).first()
+     if not client:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
++        raise_business_error(
++            "CLIENT_NOT_FOUND",
++            "Client not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     letter_head = (
+         db.query(LetterHead)
+@@ -104,8 +199,10 @@ def print_bill(
+         template_path = param.param_value if param else None
+ 
+     if not template_path:
+-        raise HTTPException(
+-            status_code=status.HTTP_409_CONFLICT, detail="Bill template not configured"
++        raise_business_error(
++            "BILL_TEMPLATE_NOT_CONFIGURED",
++            "Bill template not configured",
++            status_code=status.HTTP_409_CONFLICT,
+         )
+ 
+     context = BillContextBuilder().build(bill, bill_items, client, letter_head)
+@@ -113,10 +210,12 @@ def print_bill(
+     try:
+         docx_bytes = renderer.render_docx_bytes(template_path, context)
+     except FileNotFoundError as exc:
+-        raise HTTPException(
++        raise_business_error(
++            "BILL_TEMPLATE_FILE_MISSING",
++            "Template file missing",
+             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+-            detail="Template file missing",
+-        ) from exc
++            details={"reason": str(exc)},
++        )
+ 
+     headers = {
+         "Content-Disposition": f'attachment; filename="bill_{bill.id}.docx"',
+@@ -128,13 +227,31 @@ def print_bill(
+     )
+ 
+ 
+-@router.get("/payments")
++@router.get("/payments", summary="List payments")
+ def get_payments(
+     page: int = Query(default=1, ge=1),
+     page_size: int = Query(default=20, ge=1),
+     _perm: None = Depends(require_perm("Payment.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    List payments with pagination.
++
++    **Auth**: Bearer JWT
++    **Permission**: Payment.Read
++    **Request example**:
++    `GET /api/v1/payments?page=1&page_size=20`
++    **Curl example**:
++    ```bash
++    curl -s -X GET "http://localhost:8000/api/v1/payments?page=1&page_size=20" \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: List of payments
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
+     query = db.query(Payment)
+     total = query.count()
+     payments = (
+@@ -149,54 +266,98 @@ def get_payments(
+             "pay_no": payment.pay_no,
+             "client_id": payment.client_id,
+             "pay_date": payment.pay_date,
++            "currency": payment.currency,
++            "amount": payment.amount,
+         }
+         for payment in payments
+     ]
+     return {"items": items, "page": page, "page_size": page_size, "total": total}
+ 
+ 
+-@router.post("/payments", status_code=status.HTTP_201_CREATED)
++@router.post(
++    "/payments",
++    status_code=status.HTTP_201_CREATED,
++    response_model=PaymentResponse,
++    summary="Create a payment",
++)
+ def create_payment(
+-    payload: dict[str, Any],
++    payload: PaymentSchema,
+     _perm: None = Depends(require_perm("Payment.Create")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    client_id = payload.get("client_id")
+-    if not client_id:
+-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="client_id is required")
+-
+-    payment = Payment(
+-        id=str(uuid4()),
+-        pay_no=payload.get("pay_no"),
+-        client_id=client_id,
+-        pay_date=payload.get("pay_date"),
+-        currency=payload.get("currency") or "CNY",
+-        amount=payload.get("amount") or 0,
+-        remark=payload.get("remark"),
++) -> PaymentResponse:
++    """
++    Create a payment.
++
++    **Auth**: Bearer JWT
++    **Permission**: Payment.Create
++    **Request example**:
++    ```json
++    {"client_id": "CLIENT_ID", "amount": "1000.00", "currency": "CNY"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/payments \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"client_id":"CLIENT_ID","amount":"1000.00","currency":"CNY"}'
++    ```
++    **Responses**:
++    - 201: Payment created
++    - 400: Invalid payment amount
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
++    payment = process_payment(db, payload)
++    return PaymentResponse(
++        id=payment.id,
++        pay_no=payment.pay_no,
++        client_id=payment.client_id,
++        pay_date=payment.pay_date,
++        currency=payment.currency,
++        amount=payment.amount,
+     )
+-    db.add(payment)
+-    db.commit()
+-    db.refresh(payment)
+-
+-    return {
+-        "id": payment.id,
+-        "pay_no": payment.pay_no,
+-        "client_id": payment.client_id,
+-        "pay_date": payment.pay_date,
+-        "currency": payment.currency,
+-        "amount": payment.amount,
+-    }
+ 
+ 
+-@router.get("/payments/{payment_id}")
++@router.get("/payments/{payment_id}", summary="Get a payment")
+ def get_payment(
+     payment_id: str,
+     _perm: None = Depends(require_perm("Payment.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Get a payment by ID.
++
++    **Auth**: Bearer JWT
++    **Permission**: Payment.Read
++    **Request example**:
++    `GET /api/v1/payments/PAYMENT_ID`
++    **Curl example**:
++    ```bash
++    curl -s -X GET http://localhost:8000/api/v1/payments/PAYMENT_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Payment details
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Payment not found
++    - 422: VALIDATION_ERROR
++    """
+     payment = db.query(Payment).filter(Payment.id == payment_id).first()
+     if not payment:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
++        raise_business_error(
++            "PAYMENT_NOT_FOUND",
++            "Payment not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
++
++    payment_lines = (
++        db.query(PaymentLine)
++        .filter(PaymentLine.payment_id == payment.id)
++        .order_by(PaymentLine.created_at.asc())
++        .all()
++    )
+ 
+     return {
+         "id": payment.id,
+@@ -205,78 +366,143 @@ def get_payment(
+         "pay_date": payment.pay_date,
+         "currency": payment.currency,
+         "amount": payment.amount,
++        "payment_lines": [
++            {
++                "id": line.id,
++                "payment_id": line.payment_id,
++                "case_id": line.case_id,
++                "raw_amount": line.raw_amount,
++                "allocated_amt": line.allocated_amt,
++                "balance_amt": line.balance_amt,
++            }
++            for line in payment_lines
++        ],
+     }
+ 
+ 
+-@router.post("/offsets", status_code=status.HTTP_201_CREATED)
++@router.post(
++    "/offsets",
++    status_code=status.HTTP_201_CREATED,
++    response_model=OffsetResponse,
++    summary="Create a payment offset",
++)
+ def create_offset(
+-    payload: dict[str, Any],
++    payload: OffsetCreateSchema,
+     _perm: None = Depends(require_perm("Payment.Create")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    payment_line_id = payload.get("payment_line_id")
+-    bill_id = payload.get("bill_id")
+-    if not payment_line_id or not bill_id:
+-        raise HTTPException(
+-            status_code=status.HTTP_400_BAD_REQUEST,
+-            detail="payment_line_id and bill_id are required",
+-        )
+-
+-    offset = Offset(
+-        id=str(uuid4()),
+-        payment_line_id=payment_line_id,
+-        bill_id=bill_id,
+-        offset_amt=payload.get("offset_amt") or 0,
+-        offset_date=payload.get("offset_date"),
+-        is_reversed=payload.get("is_reversed") or False,
++) -> OffsetResponse:
++    """
++    Create an offset between a payment line and a bill.
++
++    **Auth**: Bearer JWT
++    **Permission**: Payment.Create
++    **Request example**:
++    ```json
++    {"payment_line_id": "PAYMENT_LINE_ID", "bill_id": "BILL_ID", "offset_amt": "500.00"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/offsets \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"payment_line_id":"PAYMENT_LINE_ID","bill_id":"BILL_ID","offset_amt":"500.00"}'
++    ```
++    **Responses**:
++    - 201: Offset created
++    - 400: Invalid or mismatched payment/bill data
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Payment line, payment, or bill not found
++    - 422: VALIDATION_ERROR
++    """
++    offset = create_offset_service(db, payload)
++    return OffsetResponse(
++        id=offset.id,
++        payment_line_id=offset.payment_line_id,
++        bill_id=offset.bill_id,
++        offset_amt=offset.offset_amt,
++        offset_date=offset.offset_date,
++        is_reversed=offset.is_reversed,
+     )
+-    db.add(offset)
+-    db.commit()
+-    db.refresh(offset)
+ 
+-    return {
+-        "id": offset.id,
+-        "payment_line_id": offset.payment_line_id,
+-        "bill_id": offset.bill_id,
+-        "offset_amt": offset.offset_amt,
+-        "offset_date": offset.offset_date,
+-        "is_reversed": offset.is_reversed,
+-    }
+ 
+-
+-@router.post("/offsets/{offset_id}/reverse", status_code=status.HTTP_201_CREATED)
++@router.post(
++    "/offsets/{offset_id}/reverse",
++    summary="Reverse an offset",
++    response_model=OffsetResponse,
++)
+ def reverse_offset(
+     offset_id: str,
+-    _perm: None = Depends(require_perm("Payment.Create")),
++    _perm: None = Depends(require_perm("Billing.Edit")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
+-    offset = db.query(Offset).filter(Offset.id == offset_id).first()
+-    if not offset:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Offset not found")
+-
+-    offset.is_reversed = True
+-    db.commit()
+-    db.refresh(offset)
+-
+-    return {
+-        "id": offset.id,
+-        "payment_line_id": offset.payment_line_id,
+-        "bill_id": offset.bill_id,
+-        "offset_amt": offset.offset_amt,
+-        "offset_date": offset.offset_date,
+-        "is_reversed": offset.is_reversed,
+-    }
++) -> OffsetResponse:
++    """
++    Reverse an offset (mark as reversed, restore bill and payment balances).
++
++    **Auth**: Bearer JWT
++    **Permission**: Billing.Edit
++    **Request example**:
++    `POST /api/v1/offsets/OFFSET_ID/reverse`
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/offsets/OFFSET_ID/reverse \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Offset reversed
++    - 400: Offset already reversed
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Offset not found
++    - 422: VALIDATION_ERROR
++    """
++    offset = reverse_offset_service(db, offset_id)
++    return OffsetResponse(
++        id=offset.id,
++        payment_line_id=offset.payment_line_id,
++        bill_id=offset.bill_id,
++        offset_amt=offset.offset_amt,
++        offset_date=offset.offset_date,
++        is_reversed=offset.is_reversed,
++    )
+ 
+ 
+-@router.post("/bills/manual", status_code=status.HTTP_201_CREATED)
++@router.post("/bills/manual", status_code=status.HTTP_201_CREATED, summary="Create a bill manually")
+ def create_manual_bill(
+     payload: dict[str, Any],
+     _perm: None = Depends(require_perm("Bill.Create")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Create a manual bill record.
++
++    **Auth**: Bearer JWT
++    **Permission**: Bill.Create
++    **Request example**:
++    ```json
++    {"client_id": "CLIENT_ID", "bill_no": "BILL-001", "currency": "CNY"}
++    ```
++    **Curl example**:
++    ```bash
++    curl -s -X POST http://localhost:8000/api/v1/bills/manual \\
++      -H "Authorization: Bearer $FPMS_TOKEN" \\
++      -H "Content-Type: application/json" \\
++      -d '{"client_id":"CLIENT_ID","bill_no":"BILL-001","currency":"CNY"}'
++    ```
++    **Responses**:
++    - 201: Manual bill created
++    - 400: client_id is required
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 422: VALIDATION_ERROR
++    """
+     client_id = payload.get("client_id")
+     if not client_id:
+-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="client_id is required")
++        raise_business_error(
++            "BILL_INVALID",
++            "client_id is required",
++            status_code=status.HTTP_400_BAD_REQUEST,
++        )
+ 
+     bill = Bill(
+         id=str(uuid4()),
+@@ -300,15 +526,38 @@ def create_manual_bill(
+     }
+ 
+ 
+-@router.get("/bills/{bill_id}")
++@router.get("/bills/{bill_id}", summary="Get a bill")
+ def get_bill(
+     bill_id: str,
+     _perm: None = Depends(require_perm("Bill.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Get a bill by ID.
++
++    **Auth**: Bearer JWT
++    **Permission**: Bill.Read
++    **Request example**:
++    `GET /api/v1/bills/BILL_ID`
++    **Curl example**:
++    ```bash
++    curl -s -X GET http://localhost:8000/api/v1/bills/BILL_ID \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Bill details
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Bill not found
++    - 422: VALIDATION_ERROR
++    """
+     bill = db.query(Bill).filter(Bill.id == bill_id).first()
+     if not bill:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bill not found")
++        raise_business_error(
++            "BILL_NOT_FOUND",
++            "Bill not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     return {
+         "id": bill.id,
+@@ -320,15 +569,38 @@ def get_bill(
+     }
+ 
+ 
+-@router.get("/cases/{case_id}/receipts")
++@router.get("/cases/{case_id}/receipts", summary="Get case receipt")
+ def get_case_receipt(
+     case_id: str,
+     _perm: None = Depends(require_perm("CaseReceipt.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
++    """
++    Get the case receipt summary.
++
++    **Auth**: Bearer JWT
++    **Permission**: CaseReceipt.Read
++    **Request example**:
++    `GET /api/v1/cases/CASE_ID/receipts`
++    **Curl example**:
++    ```bash
++    curl -s -X GET http://localhost:8000/api/v1/cases/CASE_ID/receipts \\
++      -H "Authorization: Bearer $FPMS_TOKEN"
++    ```
++    **Responses**:
++    - 200: Case receipt details
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Case receipt not found
++    - 422: VALIDATION_ERROR
++    """
+     receipt = db.query(CaseReceipt).filter(CaseReceipt.case_id == case_id).first()
+     if not receipt:
+-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case receipt not found")
++        raise_business_error(
++            "CASE_RECEIPT_NOT_FOUND",
++            "Case receipt not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
+ 
+     return {
+         "id": receipt.id,
+@@ -337,4 +609,10 @@ def get_case_receipt(
+         "currency": receipt.currency,
+         "receivable_amt": receipt.receivable_amt,
+         "received_amt": receipt.received_amt,
++        "last_receipt_date": receipt.last_receipt_date,
++        "fee_code": receipt.fee_code,
++        "year_no": receipt.year_no,
++        "is_arrears": receipt.is_arrears,
++        "invoice_no": receipt.invoice_no,
++        "is_commissionable": receipt.is_commissionable,
+     }

@@ -1,0 +1,4 @@
+{"step":"test","cmd":"cd backend && pytest -q tests/test_annuity_e2e.py -k 'case_receipt_endpoint_includes_bills_overview_list'","rc":1}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_annuity_e2e.py -k 'case_receipt_endpoint_includes_bills_overview_list'","rc":0}
+{"step":"lint","cmd":"ruff check backend/app/modules/fees/api.py backend/app/modules/fees/service.py backend/app/modules/billing/api.py backend/app/modules/billing/schemas.py backend/tests/test_annuity_e2e.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_annuity_e2e.py -k 'receipt or overview or pay_list or gov_payment'","rc":0}

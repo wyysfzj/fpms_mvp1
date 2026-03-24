@@ -1,0 +1,150 @@
+ALL_CODES
+AdminUser.Create
+AdminUser.Edit
+AdminUser.Read
+Bill.Create
+Bill.Print
+Bill.Read
+Case.Create
+Case.Edit
+Case.EditLimited
+Case.Export
+Case.Read
+CaseReceipt.Read
+Client.Action
+Client.Create
+Client.Edit
+Client.Read
+Doc.Attach
+Doc.Create
+Doc.Edit
+Doc.Read
+Fee.Create
+Fee.Draft.Action
+Fee.Draft.Edit
+Fee.Draft.Read
+Fee.Item.Create
+Fee.Item.Delete
+Fee.Item.Edit
+Fee.Rate.Create
+Fee.Rate.Edit
+Fee.Rate.Read
+Fee.Read
+LetterHead.Create
+LetterHead.Read
+Payment.Create
+Payment.Read
+SystemParam.Edit
+SystemParam.Read
+Task.Action
+Task.Create
+Task.Edit
+Task.Read
+Template.Create
+Template.Read
+ADMIN_MISSING
+Fee.Create
+Fee.Read
+ROLE_MISSING
+Agent:
+  AdminUser.Create
+  AdminUser.Edit
+  AdminUser.Read
+  Bill.Create
+  Bill.Print
+  Case.Create
+  Case.Edit
+  Case.Export
+  CaseReceipt.Read
+  Client.Action
+  Client.Create
+  Client.Edit
+  Client.Read
+  Doc.Edit
+  Fee.Create
+  Fee.Draft.Action
+  Fee.Draft.Edit
+  Fee.Draft.Read
+  Fee.Item.Create
+  Fee.Item.Delete
+  Fee.Item.Edit
+  Fee.Rate.Create
+  Fee.Rate.Edit
+  Fee.Rate.Read
+  LetterHead.Create
+  LetterHead.Read
+  Payment.Create
+  Payment.Read
+  SystemParam.Edit
+  SystemParam.Read
+  Task.Action
+  Template.Create
+  Template.Read
+Finance:
+  AdminUser.Create
+  AdminUser.Edit
+  AdminUser.Read
+  Bill.Create
+  Case.Create
+  Case.Edit
+  Case.EditLimited
+  Case.Export
+  CaseReceipt.Read
+  Client.Action
+  Client.Create
+  Client.Edit
+  Client.Read
+  Doc.Attach
+  Doc.Create
+  Doc.Edit
+  Fee.Create
+  Fee.Draft.Action
+  Fee.Draft.Edit
+  Fee.Draft.Read
+  Fee.Item.Create
+  Fee.Item.Delete
+  Fee.Item.Edit
+  Fee.Rate.Create
+  Fee.Rate.Edit
+  Fee.Rate.Read
+  LetterHead.Create
+  LetterHead.Read
+  Payment.Read
+  SystemParam.Edit
+  SystemParam.Read
+  Task.Action
+  Task.Create
+  Task.Edit
+  Template.Create
+  Template.Read
+Formalities:
+  AdminUser.Create
+  AdminUser.Edit
+  AdminUser.Read
+  Bill.Create
+  Bill.Print
+  Case.EditLimited
+  Case.Export
+  CaseReceipt.Read
+  Client.Action
+  Client.Create
+  Client.Edit
+  Client.Read
+  Fee.Create
+  Fee.Draft.Action
+  Fee.Draft.Read
+  Fee.Item.Create
+  Fee.Item.Delete
+  Fee.Item.Edit
+  Fee.Rate.Create
+  Fee.Rate.Edit
+  Fee.Rate.Read
+  LetterHead.Create
+  LetterHead.Read
+  Payment.Create
+  Payment.Read
+  SystemParam.Edit
+  SystemParam.Read
+  Task.Action
+  Template.Create
+  Template.Read

@@ -1,0 +1,31 @@
+diff --git a/frontend/src/api/annuity.ts b/frontend/src/api/annuity.ts
+index bb31f24..154a613 100644
+--- a/frontend/src/api/annuity.ts
++++ b/frontend/src/api/annuity.ts
+@@ -112,6 +112,11 @@ function mapGenerateFailedItem(
+     }
+ }
+ 
++function normalizeDraftCurrency(input?: string): string {
++    const normalized = (input || '').trim().toUpperCase()
++    return normalized || 'CNY'
++}
++
+ /**
+  * Get paginated annuity task list
+  */
+@@ -173,12 +178,13 @@ export async function updateAnnuityTaskInstruction(
+ export async function generateAnnuityDrafts(
+     payload: AnnuityGenerateDraftsPayload,
+ ): Promise<AnnuityGenerateDraftResult> {
++    const currency = normalizeDraftCurrency(payload.currency)
+     const response = await http.post<BackendAnnuityGenerateDraftResult>(
+         '/annuity/tasks/generate-drafts',
+         {
+             task_ids: payload.task_ids,
+             pay_next_year: payload.pay_next_year,
+-            currency: payload.currency,
++            currency,
+         },
+     )
+ 

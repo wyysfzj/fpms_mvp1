@@ -1,0 +1,8 @@
+{"ts":"20260324T000000","step":"lint","rc":0,"log":"npm run lint -- src/modules/annuity/pages/PayList.vue src/api/govPayments.ts src/api/govPayments.types.ts"}
+{"ts":"20260324T000000","step":"typecheck","rc":0,"log":"npm run typecheck"}
+{"ts":"20260324T155618","step":"lint","rc":127,"log":"artifacts/FRFE04-FE-02/outputs/20260324T155618_lint.log"}
+{"ts":"20260324T155618","step":"test","rc":127,"log":"artifacts/FRFE04-FE-02/outputs/20260324T155618_test.log"}
+{"ts":"20260324T155639","step":"lint","rc":0,"log":"artifacts/FRFE04-FE-02/outputs/20260324T155639_lint.log"}
+{"ts":"20260324T155639","step":"test","rc":0,"log":"artifacts/FRFE04-FE-02/outputs/20260324T155639_test.log"}
+{"ts":"20260324T155842","step":"lint","rc":0,"log":"artifacts/FRFE04-FE-02/outputs/20260324T155842_lint.log"}
+{"ts":"20260324T155842","step":"test","rc":0,"log":"artifacts/FRFE04-FE-02/outputs/20260324T155842_test.log"}

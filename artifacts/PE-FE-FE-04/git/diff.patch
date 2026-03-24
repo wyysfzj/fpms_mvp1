@@ -1,0 +1,68 @@
+diff --git a/frontend/src/api/billing.ts b/frontend/src/api/billing.ts
+--- a/frontend/src/api/billing.ts
++++ b/frontend/src/api/billing.ts
+@@
+ function mapCaseReceipt(input: BackendCaseReceipt): CaseReceiptsSummary {
+     return {
+         bill_count: asNumber(input.bill_count),
+         total_billed: asNumber(input.total_billed),
+         total_received: asNumber(input.total_received),
+         outstanding: asNumber(input.outstanding),
+         currency: input.currency || 'CNY',
+         fee_type: input.fee_type || undefined,
+         fee_code: input.fee_code || undefined,
+         year_no: input.year_no ?? undefined,
++        last_receipt_date: input.last_receipt_date || undefined,
+         is_arrears: input.is_arrears ?? undefined,
+         invoice_no: input.invoice_no || undefined,
+         is_commissionable: input.is_commissionable ?? undefined,
+         bills: (input.bills || []).map(mapBillListItem),
+     }
+ }
+diff --git a/frontend/src/api/billing.types.ts b/frontend/src/api/billing.types.ts
+--- a/frontend/src/api/billing.types.ts
++++ b/frontend/src/api/billing.types.ts
+@@
+ export interface CaseReceiptsSummary {
+     bill_count: number
+     total_billed: number
+     total_received: number
+     outstanding: number
+     currency: string
+     fee_type?: string
+     fee_code?: string
+     year_no?: number
++    last_receipt_date?: string
+     is_arrears?: boolean
+     invoice_no?: string
+     is_commissionable?: boolean
+     bills: BillListItem[]
+ }
+diff --git a/frontend/src/modules/cases/components/CaseReceiptsSummary.vue b/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
+--- a/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
++++ b/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
+@@
+           <div v-if="receipts.year_no != null" class="info-item">
+             <span class="info-label">年度</span>
+             <span class="info-value">{{ receipts.year_no }}</span>
+           </div>
++          <div v-if="receipts.last_receipt_date" class="info-item">
++            <span class="info-label">最后回款日</span>
++            <span class="info-value">{{ formatDate(receipts.last_receipt_date) }}</span>
++          </div>
+           <div v-if="receipts.invoice_no" class="info-item">
+             <span class="info-label">发票号</span>
+             <span class="info-value mono-num">{{ receipts.invoice_no }}</span>
+           </div>
+@@
+ const hasEnrichedFields = computed(() => {
+   return !!(
+     receipts.value.fee_code ||
+     receipts.value.fee_type ||
+     receipts.value.year_no != null ||
++    receipts.value.last_receipt_date ||
+     receipts.value.invoice_no ||
+     receipts.value.is_arrears != null ||
+     receipts.value.is_commissionable != null
+   )
+ })

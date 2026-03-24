@@ -1,0 +1,128 @@
+{
+  "executedAt": "2026-03-22T05:41:02.517Z",
+  "baseUrl": "http://127.0.0.1:5173",
+  "headless": false,
+  "browserChannel": "chrome",
+  "sampleData": {
+    "user": {
+      "username": "admin",
+      "password": "admin123",
+      "source": "samples/users.json"
+    }
+  },
+  "pageErrors": [],
+  "results": [
+    {
+      "step": 1,
+      "title": "首页",
+      "screenshot": "01-首页.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/"
+    },
+    {
+      "step": 2,
+      "title": "登录页",
+      "screenshot": "02-登录页.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/login"
+    },
+    {
+      "step": 3,
+      "title": "登录-使用samples真实账号",
+      "screenshot": "03-登录-使用samples真实账号.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/dashboard"
+    },
+    {
+      "step": 4,
+      "title": "总览页",
+      "screenshot": "04-总览页.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/dashboard"
+    },
+    {
+      "step": 5,
+      "title": "案件管理列表",
+      "screenshot": "05-案件管理列表.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/cases"
+    },
+    {
+      "step": 6,
+      "title": "中间文件列表",
+      "screenshot": "06-中间文件列表.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/documents"
+    },
+    {
+      "step": 7,
+      "title": "今日任务提醒",
+      "screenshot": "07-今日任务提醒.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/tasks/today"
+    },
+    {
+      "step": 8,
+      "title": "费用草稿列表",
+      "screenshot": "08-费用草稿列表.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/fees/drafts"
+    },
+    {
+      "step": 9,
+      "title": "账单列表",
+      "screenshot": "09-账单列表.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/billing/bills"
+    },
+    {
+      "step": 10,
+      "title": "回款与核销列表",
+      "screenshot": "10-回款与核销列表.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/billing/payments"
+    },
+    {
+      "step": 11,
+      "title": "催款管理列表",
+      "screenshot": "11-催款管理列表.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/collections/dunning"
+    },
+    {
+      "step": 12,
+      "title": "提成规则列表",
+      "screenshot": "12-提成规则列表.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/commission/rules"
+    },
+    {
+      "step": 13,
+      "title": "顾问项目立案页",
+      "screenshot": "13-顾问项目立案页.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/consulting/cases/new"
+    },
+    {
+      "step": 14,
+      "title": "支出管理列表",
+      "screenshot": "14-支出管理列表.png",
+      "status": "PASS",
+      "error": null,
+      "url": "http://127.0.0.1:5173/expenses"
+    }
+  ]
+}

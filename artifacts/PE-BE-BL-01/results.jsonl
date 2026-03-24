@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"ruff check backend/app/modules/billing/api.py backend/app/modules/billing/service.py backend/app/modules/billing/schemas.py backend/tests/test_b5_billing_polish.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_b5_billing_polish.py -k 'manual_bill'","rc":0}

@@ -1,0 +1,4 @@
+{"step":"proof","command":"rg -n \"阶段完成概览\" frontend/src/modules/commission/pages/CommissionSettlement.vue","rc":0,"note":"proof of missing explicit stage-completion overview before implementation"}
+{"step":"lint","command":"cd frontend && npm run lint","rc":0}
+{"step":"test","command":"cd frontend && npm run typecheck","rc":0}
+{"step":"task_gate","command":"./scripts/task_validate.sh PE-FE-COM-02","rc":0,"note":"Task Gate PASS"}

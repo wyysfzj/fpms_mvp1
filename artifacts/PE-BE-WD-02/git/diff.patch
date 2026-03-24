@@ -1,0 +1,196 @@
+diff --git a/backend/app/modules/documents/api.py b/backend/app/modules/documents/api.py
+index 711b6cf..54f6317 100644
+--- a/backend/app/modules/documents/api.py
++++ b/backend/app/modules/documents/api.py
+@@ -125,6 +125,8 @@ def get_documents(
+     doc_template_id: str | None = Query(default=None),
+     case_id: str | None = Query(default=None),
+     client_id: str | None = Query(default=None),
++    need_reply: bool | None = Query(default=None),
++    replied: bool | None = Query(default=None),
+     date_from: date | None = Query(default=None),
+     date_to: date | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+@@ -157,6 +159,8 @@ def get_documents(
+         doc_template_id=doc_template_id,
+         case_id=case_id,
+         client_id=client_id,
++        need_reply=need_reply,
++        replied=replied,
+         date_from=date_from,
+         date_to=date_to,
+         page=page,
+diff --git a/backend/app/modules/documents/service.py b/backend/app/modules/documents/service.py
+index 20e6fb6..fc3d035 100644
+--- a/backend/app/modules/documents/service.py
++++ b/backend/app/modules/documents/service.py
+@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
+ from app.core.errors import raise_business_error
+ from app.core.storage import ensure_dir, safe_join
+ from app.modules.cases.models import Case
++from app.modules.cases.service import validate_case_status_transition
+ from app.modules.documents.enums import DocumentDirection
+ from app.modules.documents.models import DocAttachment, DocTemplate, Document
+ from app.modules.documents.schemas import (
+@@ -31,6 +32,8 @@ def list_documents(
+     doc_template_id: str | None = None,
+     case_id: str | None = None,
+     client_id: str | None = None,
++    need_reply: bool | None = None,
++    replied: bool | None = None,
+     date_from: date | None = None,
+     date_to: date | None = None,
+     page: int = 1,
+@@ -56,6 +59,12 @@ def list_documents(
+         stmt = stmt.where(Document.case_id == case_id)
+     if client_id:
+         stmt = stmt.join(Case, Document.case_id == Case.id).where(Case.client_id == client_id)
++    if need_reply is not None:
++        stmt = stmt.where(Document.need_reply.is_(need_reply))
++    if replied is True:
++        stmt = stmt.where(Document.reply_date.is_not(None))
++    elif replied is False:
++        stmt = stmt.where(Document.reply_date.is_(None))
+     if date_from:
+         stmt = stmt.where(Document.doc_date >= date_from)
+     if date_to:
+@@ -115,6 +124,7 @@ def create_document(db: Session, data: DocumentCreateIn) -> Document:
+ 
+         # Apply status_effect to case
+         if getattr(template, "status_effect", None):
++            validate_case_status_transition(case.status, template.status_effect)
+             case.status = template.status_effect
+ 
+     # B2: Reply chain — auto write-off
+diff --git a/backend/tests/test_b2_reply_chain.py b/backend/tests/test_b2_reply_chain.py
+index 1ac36b5..5f7fb9b 100644
+--- a/backend/tests/test_b2_reply_chain.py
++++ b/backend/tests/test_b2_reply_chain.py
+@@ -361,6 +361,43 @@ def test_doc_template_cascade_status_effect(client: TestClient, auth_headers: di
+     )
+ 
+ 
++def test_doc_template_cascade_rejects_illegal_status_regression(
++    client: TestClient, auth_headers: dict
++) -> None:
++    """Terminal case status must not be regressed by document status_effect."""
++    case = _create_case(client, auth_headers)
++
++    promote_resp = client.put(
++        f"{CASE_BASE}/{case['id']}",
++        headers=auth_headers,
++        json={
++            "status": "GRANTED",
++            "app_no": "CN202510123456.7",
++            "filing_date": "2025-01-15",
++        },
++    )
++    assert promote_resp.status_code == 200, promote_resp.text
++
++    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
++    resp = client.post(
++        DOC_BASE,
++        headers=auth_headers,
++        json={
++            "case_id": case["id"],
++            "direction": "IN",
++            "doc_date": "2026-01-15",
++            "title": "Illegal regression OA",
++            "doc_template_id": oa_in_tmpl["id"],
++        },
++    )
++    assert resp.status_code == 409, resp.text
++    payload = resp.json()["error"]
++    assert payload["code"] == "CASE_STATUS_TRANSITION_INVALID"
++
++    case_after = _get_case(client, auth_headers, case["id"])
++    assert case_after["status"] == "GRANTED"
++
++
+ # ---------------------------------------------------------------------------
+ # 7. DocTemplate cascade — need_reply
+ # ---------------------------------------------------------------------------
+@@ -463,6 +500,83 @@ def test_document_list_includes_reply_fields(client: TestClient, auth_headers: d
+         assert "reply_date" in item, "List item must include reply_date"
+ 
+ 
++def test_document_list_can_filter_by_reply_state(
++    client: TestClient, auth_headers: dict
++) -> None:
++    """GET /documents supports need_reply/replied filters for Batch 2 query scope."""
++    case = _create_case(client, auth_headers)
++    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
++    oa_out_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_OUT")
++
++    awaiting_reply = _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="IN",
++        doc_template_id=oa_in_tmpl["id"],
++        title="OA awaiting reply",
++    )
++    replied_doc = _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="IN",
++        doc_template_id=oa_in_tmpl["id"],
++        title="OA replied",
++        doc_date="2026-01-20",
++    )
++    _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="OUT",
++        doc_template_id=oa_out_tmpl["id"],
++        title="OA reply sent",
++        doc_date="2026-02-01",
++        reply_to_id=replied_doc["id"],
++    )
++    plain_doc = _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="IN",
++        title="Plain incoming doc",
++        doc_date="2026-01-25",
++    )
++
++    need_reply_resp = client.get(
++        DOC_BASE,
++        headers=auth_headers,
++        params={"case_id": case["id"], "need_reply": True, "page_size": 100},
++    )
++    assert need_reply_resp.status_code == 200, need_reply_resp.text
++    need_reply_ids = {item["id"] for item in need_reply_resp.json()["items"]}
++    assert awaiting_reply["id"] in need_reply_ids
++    assert replied_doc["id"] in need_reply_ids
++    assert plain_doc["id"] not in need_reply_ids
++
++    pending_resp = client.get(
++        DOC_BASE,
++        headers=auth_headers,
++        params={"case_id": case["id"], "need_reply": True, "replied": False, "page_size": 100},
++    )
++    assert pending_resp.status_code == 200, pending_resp.text
++    pending_ids = {item["id"] for item in pending_resp.json()["items"]}
++    assert awaiting_reply["id"] in pending_ids
++    assert replied_doc["id"] not in pending_ids
++
++    replied_resp = client.get(
++        DOC_BASE,
++        headers=auth_headers,
++        params={"case_id": case["id"], "replied": True, "page_size": 100},
++    )
++    assert replied_resp.status_code == 200, replied_resp.text
++    replied_ids = {item["id"] for item in replied_resp.json()["items"]}
++    assert replied_doc["id"] in replied_ids
++    assert awaiting_reply["id"] not in replied_ids
++    assert plain_doc["id"] not in replied_ids
++
++
+ # ---------------------------------------------------------------------------
+ # 11. Auto write-off task log
+ # ---------------------------------------------------------------------------

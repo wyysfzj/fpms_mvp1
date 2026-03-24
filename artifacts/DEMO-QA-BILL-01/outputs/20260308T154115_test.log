@@ -1,0 +1,22 @@
+{"timestamp": "2026-03-08T07:41:16.432137+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "3547b481-962d-431b-8341-689c3be96f39"}
+{"timestamp": "2026-03-08T07:41:16.432998+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/auth/login \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.441310+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "93b05b83-0fa1-42ff-8940-027aa8f77ec0"}
+{"timestamp": "2026-03-08T07:41:16.441924+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/clients \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.449429+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "af7b554f-4396-411c-a152-bca5a54d366a"}
+{"timestamp": "2026-03-08T07:41:16.450003+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/cases \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.455718+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "26fd6712-e52b-409e-8f08-ba26355e3bbb"}
+{"timestamp": "2026-03-08T07:41:16.456229+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/fees/rates \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.460990+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "d0ffcd82-67e0-4b10-9f62-d749d11c5c36"}
+{"timestamp": "2026-03-08T07:41:16.461479+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/fees/drafts \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.468685+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "8327d87b-d000-43eb-a492-9d36a80b996a"}
+{"timestamp": "2026-03-08T07:41:16.469166+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/fees/drafts/9874b2b6-bef8-4827-a945-56ef8515cd78/items \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.471877+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "3b383a8e-f1ca-4909-b895-a15509b60165"}
+{"timestamp": "2026-03-08T07:41:16.472336+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/fees/drafts/9874b2b6-bef8-4827-a945-56ef8515cd78/lock \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.478224+00:00", "level": "INFO", "logger": "app.modules.billing.service", "message": "Billing commission hook completed", "request_id": "25e4d0a3-47ea-4e2a-91cb-aac568e68ee3"}
+{"timestamp": "2026-03-08T07:41:16.479014+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "25e4d0a3-47ea-4e2a-91cb-aac568e68ee3"}
+{"timestamp": "2026-03-08T07:41:16.479502+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/bills/from-drafts \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.483431+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "c59a127c-6f67-45c8-bb23-f6635828c03d"}
+{"timestamp": "2026-03-08T07:41:16.483915+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/bills/a3e3edd8-7e2e-4412-acb4-b6f7b6e6efee \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T07:41:16.486085+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "9124de0d-41b3-42d6-8688-02e8a56bb2c2"}
+{"timestamp": "2026-03-08T07:41:16.486547+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/bills/a3ce896f-b2db-4607-a167-36e30f962c04 \"HTTP/1.1 404 Not Found\"", "request_id": null}
+{'login': 200, 'create_bill': 201, 'bill_detail': 200, 'missing_bill': 404, 'bill_id': 'a3e3edd8-7e2e-4412-acb4-b6f7b6e6efee', 'draft_label': 'GRANT_FEE-9874B2B6', 'case_no': 'ZY-BILL-D4E1324F', 'client_name': '苏州星桥知识产权代理有限公司'}

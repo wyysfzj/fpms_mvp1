@@ -1,0 +1,125 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+F821 Undefined name `status`
+  --> app/modules/masterdata/clients/api.py:36:38
+   |
+36 | @router.post("/clients", status_code=status.HTTP_201_CREATED)
+   |                                      ^^^^^^
+37 | def create_client(
+38 |     payload: dict[str, Any],
+   |
+
+F821 Undefined name `Client`
+  --> app/modules/masterdata/clients/api.py:42:14
+   |
+40 |     db: Session = Depends(get_db),
+41 | ) -> dict[str, Any]:
+42 |     client = Client(
+   |              ^^^^^^
+43 |         id=str(uuid4()),
+44 |         client_code=payload.get("client_code"),
+   |
+
+F821 Undefined name `uuid4`
+  --> app/modules/masterdata/clients/api.py:43:16
+   |
+41 | ) -> dict[str, Any]:
+42 |     client = Client(
+43 |         id=str(uuid4()),
+   |                ^^^^^
+44 |         client_code=payload.get("client_code"),
+45 |         name_cn=payload.get("name_cn") or "",
+   |
+
+F821 Undefined name `Client`
+  --> app/modules/masterdata/clients/api.py:69:23
+   |
+67 |     db: Session = Depends(get_db),
+68 | ) -> dict[str, str]:
+69 |     client = db.query(Client).filter(Client.id == client_id).first()
+   |                       ^^^^^^
+70 |     if not client:
+71 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+   |
+
+F821 Undefined name `Client`
+  --> app/modules/masterdata/clients/api.py:69:38
+   |
+67 |     db: Session = Depends(get_db),
+68 | ) -> dict[str, str]:
+69 |     client = db.query(Client).filter(Client.id == client_id).first()
+   |                                      ^^^^^^
+70 |     if not client:
+71 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+   |
+
+F821 Undefined name `HTTPException`
+  --> app/modules/masterdata/clients/api.py:71:15
+   |
+69 |     client = db.query(Client).filter(Client.id == client_id).first()
+70 |     if not client:
+71 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+   |               ^^^^^^^^^^^^^
+72 |
+73 |     client.is_active = False
+   |
+
+F821 Undefined name `status`
+  --> app/modules/masterdata/clients/api.py:71:41
+   |
+69 |     client = db.query(Client).filter(Client.id == client_id).first()
+70 |     if not client:
+71 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+   |                                         ^^^^^^
+72 |
+73 |     client.is_active = False
+   |
+
+F821 Undefined name `Client`
+  --> app/modules/masterdata/clients/api.py:85:23
+   |
+83 |     db: Session = Depends(get_db),
+84 | ) -> dict[str, Any]:
+85 |     client = db.query(Client).filter(Client.id == client_id).first()
+   |                       ^^^^^^
+86 |     if not client:
+87 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+   |
+
+F821 Undefined name `Client`
+  --> app/modules/masterdata/clients/api.py:85:38
+   |
+83 |     db: Session = Depends(get_db),
+84 | ) -> dict[str, Any]:
+85 |     client = db.query(Client).filter(Client.id == client_id).first()
+   |                                      ^^^^^^
+86 |     if not client:
+87 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+   |
+
+F821 Undefined name `HTTPException`
+  --> app/modules/masterdata/clients/api.py:87:15
+   |
+85 |     client = db.query(Client).filter(Client.id == client_id).first()
+86 |     if not client:
+87 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+   |               ^^^^^^^^^^^^^
+88 |
+89 |     client.client_code = payload.get("client_code", client.client_code)
+   |
+
+F821 Undefined name `status`
+  --> app/modules/masterdata/clients/api.py:87:41
+   |
+85 |     client = db.query(Client).filter(Client.id == client_id).first()
+86 |     if not client:
+87 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
+   |                                         ^^^^^^
+88 |
+89 |     client.client_code = payload.get("client_code", client.client_code)
+   |
+
+Found 11 errors.

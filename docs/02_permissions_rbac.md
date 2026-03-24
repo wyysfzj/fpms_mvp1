@@ -1,5 +1,7 @@
 # RBAC & Permission Model
 
+This document captures the MVP1 RBAC model, core permission vocabulary, and menu-to-role expectations. The detailed endpoint-to-permission mapping lives in `docs/permissions_matrix.md`, while `backend/app/modules/rbac/service.py` remains the executable runtime seed and may contain additional task-level codes as modules land.
+
 ## Roles (MVP1)
 - Admin (系统管理员)
 - Formalities (流程/案卷管理员)
@@ -47,6 +49,8 @@ Use `MODULE.ACTION` string codes to keep API enforcement stable.
 - `Bill.CreateFromDraft`
 - `Bill.CreateManual`
 - `Bill.Print`
+- `PayList.Read`
+- `PayList.Export`
 - `Payment.Create`
 - `Payment.Offset`
 
@@ -70,14 +74,16 @@ Use `MODULE.ACTION` string codes to keep API enforcement stable.
 | Fees: drafts | R/W | R/W | R | R |
 | Fees: rates | R/W | R/W | - | - |
 | Billing: bills | R/W | R | R | R/W |
+| Billing: pay lists (list/detail + export) | R+Export | - | - | R+Export |
 | Billing: payments/offset | R/W | - | - | R/W |
 | Settings: clients | R/W | R/W | R | R |
 | Settings: users/roles | R/W | - | - | - |
 | Settings: templates/system | R/W | - | - | - |
 
-Legend: R = read, W = write, "-" = no access.
+Legend: R = read, W = write/create/edit, Export = export/download action without create/edit authority, "-" = no access.
 
 ## API enforcement
-- Every endpoint declares required permission(s) via `Depends(require_perm("..."))`.
+- Every protected endpoint injects the permission check as a parameter, for example `_perm: None = Depends(require_perm("Title.Action"))`.
+- Read-only pay-list routes use `PayList.Read` for `GET /pay-lists` and `GET /pay-lists/{id}`.
+- Pay-list export uses `PayList.Export` for `POST /pay-lists/{id}/export`.
 - Frontend hides menus by permission, but **backend is source of truth**.
-

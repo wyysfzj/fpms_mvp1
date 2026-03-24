@@ -1,0 +1,34 @@
+diff --git a/frontend/src/constants/labels.zh.ts b/frontend/src/constants/labels.zh.ts
+index 31ca005..3a0428c 100644
+--- a/frontend/src/constants/labels.zh.ts
++++ b/frontend/src/constants/labels.zh.ts
+@@ -97,7 +97,7 @@ export const ZH = {
+     caseDetail: {
+         editCase: '编辑案件',
+         overview: '概览',
+-        claims: '权利要求',
++        claims: '申请人/发明人',
+         officialDocs: '官方文件',
+         fees: '费用',
+         billing: '账单',
+@@ -116,7 +116,7 @@ export const ZH = {
+         notFound: '未找到案件',
+         notFoundMsg: '请求的案件不存在。',
+         untitled: '未命名案件',
+-        claimsPlaceholder: '权利要求内容将在后续任务中实现。',
++        claimsPlaceholder: '申请人和发明人信息将在此处展示。',
+         docsPlaceholder: '官方文件将在后续任务中实现。',
+         feesPlaceholder: '费用管理将在后续任务中实现。',
+         tasksPlaceholder: '任务管理将在后续任务中实现。',
+diff --git a/frontend/src/modules/cases/components/CaseClaimsTab.vue b/frontend/src/modules/cases/components/CaseClaimsTab.vue
+index e758346..2b2230d 100644
+--- a/frontend/src/modules/cases/components/CaseClaimsTab.vue
++++ b/frontend/src/modules/cases/components/CaseClaimsTab.vue
+@@ -1,5 +1,7 @@
+ <template>
+   <div class="case-panel">
++    <h3 class="panel-heading">申请人/发明人</h3>
++
+     <!-- Applicants -->
+     <div class="claims-section">
+       <h3 class="panel-heading">申请人</h3>

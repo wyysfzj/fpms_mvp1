@@ -1,0 +1,14 @@
+{"ts":"20260104T000752","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ --fix\ ."}
+{"ts":"20260104T000756","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ ."}
+{"ts":"20260104T000800","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ ."}
+{"ts":"20260104T000804","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/cases/api.py"}
+{"ts":"20260104T000825","step":"e2e","cmd":"curl -sS -X POST http://localhost:8000/api/v1/cases -H Content-Type:\ application/json -H Authorization:\ Bearer\  -d \{\"invalid\":\"data\"\}"}
+{"ts":"20260104T001008","step":"e2e-create","cmd":"curl -sS -X POST http://localhost:8000/api/v1/cases -H Content-Type:\ application/json -H Authorization:\ Bearer\  -d \{\"case_no\":\"ENH-00-11-1767456585\"\}"}
+{"ts":"20260104T001015","step":"e2e-dup","cmd":"curl -sS -X POST http://localhost:8000/api/v1/cases -H Content-Type:\ application/json -H Authorization:\ Bearer\  -d \{\"case_no\":\"ENH-00-11-1767456585\"\}"}
+{"ts":"20260104T001136","step":"e2e-dup-status","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/cases -H Content-Type:\ application/json -H Authorization:\ Bearer\  -d \{\"case_no\":\"ENH-00-11-1767456585\"\}"}
+{"ts":"20260104T001202","step":"e2e-422","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/cases -H Content-Type:\ application/json -H Authorization:\ Bearer\  -d \{\"invalid\":\"data\"\}"}
+{"ts":"20260104T101554","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ --fix\ app/modules/cases/api.py\ app/modules/cases/schemas.py"}
+{"ts":"20260104T101557","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/cases/api.py\ app/modules/cases/schemas.py"}
+{"ts":"20260104T101602","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/cases/api.py"}
+{"ts":"20260104T101607","step":"e2e-422","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/cases -H Content-Type:\ application/json -H Authorization:\ Bearer\  -d \{\"invalid\":\"data\"\}"}
+{"ts":"20260104T101614","step":"e2e-dup-status","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/cases -H Content-Type:\ application/json -H Authorization:\ Bearer\  -d \{\"case_no\":\"ENH-00-11-1767456585\"\}"}

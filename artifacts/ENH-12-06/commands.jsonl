@@ -1,0 +1,2 @@
+{"ts":"20260131T193546","step":"test","cmd":"bash -lc test\ -f\ docs/database_schema_diagram.md"}
+{"ts":"20260131T193617","step":"test","cmd":"bash -lc $'python3 - <<\'PY\'\nfrom pathlib import Path\np=Path("docs/database_schema_diagram.md")\ntext=p.read_text(encoding="utf-8")\nassert "```mermaid" in text and "erDiagram" in text, "missing mermaid erDiagram"\nprint("OK")\nPY'"}

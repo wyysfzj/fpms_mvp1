@@ -1,0 +1,7 @@
+frontend/src/views/FocusDemo.vue:24:            权利要求书：一种基于激光雷达点云数据的车辆自动驾驶避障方法，其特征在于，
+frontend/src/modules/cases/pages/CaseEdit.vue:132:                <el-form-item label="权利要求项数">
+frontend/src/modules/cases/pages/CaseCreate.vue:118:                <el-form-item label="权利要求项数">
+frontend/src/modules/fees/components/FeeRateForm.vue:74:              <el-option label="按权利要求" value="PER_CLAIM" />
+frontend/src/modules/fees/pages/FeeRates.vue:178:    FIXED: '固定', PER_CLAIM: '按权利要求', PER_PAGE: '按页', TIER: '阶梯'
+frontend/src/modules/cases/pages/CaseDetail.vue:134:                      <span class="info-label">权利要求项数</span>
+frontend/src/modules/system/pages/DocTemplateList.vue:250:  INTERMEDIATE_FEE: '中间文件费草稿',

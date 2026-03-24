@@ -1,0 +1,4 @@
+{"command":"npm run lint","cwd":"frontend","rc":0}
+{"command":"npm run typecheck","cwd":"frontend","rc":0}
+{"command":"npm run build","cwd":"frontend","rc":0}
+{"command":"git diff -- frontend/src/modules/cases/pages/CaseEdit.vue > artifacts/DEMO-FE-CN-02/git/diff.patch","cwd":".","rc":0}

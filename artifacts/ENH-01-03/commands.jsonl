@@ -1,0 +1,3 @@
+{"ts":"20260111T155019","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/service.py"}
+{"ts":"20260111T155025","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/service.py"}
+{"ts":"20260111T155030","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/service.py"}

@@ -1,0 +1,3 @@
+docs/FPMS_SPEC2_2nd_Review.md
+docs/superpowers/plans/
+tasks/fr-fe-04/

@@ -1,0 +1,26 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+F811 Redefinition of unused `create_task` from line 19
+   --> app/modules/tasks/api.py:99:5
+    |
+ 98 | @router.post("/tasks", status_code=status.HTTP_201_CREATED, response_model=TaskOut)
+ 99 | def create_task(
+    |     ^^^^^^^^^^^ `create_task` redefined here
+100 |     payload: TaskCreateIn,
+101 |     _perm: None = Depends(require_perm("Task.Create")),
+    |
+   ::: app/modules/tasks/api.py:19:39
+    |
+ 17 | from app.modules.tasks.models import Task
+ 18 | from app.modules.tasks.schemas import TaskCreateIn, TaskListItemOut, TaskOut
+ 19 | from app.modules.tasks.service import create_task, list_tasks
+    |                                       ----------- previous definition of `create_task` here
+ 20 |
+ 21 | router = APIRouter()
+    |
+help: Remove definition: `create_task`
+
+Found 3 errors (2 fixed, 1 remaining).

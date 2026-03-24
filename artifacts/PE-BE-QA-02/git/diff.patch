@@ -1,0 +1,208 @@
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_admin_api.py.before b/backend/app/modules/admin/api.py
+index 4aa0d1a..0d37e45 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_admin_api.py.before
++++ b/backend/app/modules/admin/api.py
+@@ -19,7 +19,7 @@ router = APIRouter()
+ @router.get("/admin/users")
+ def list_admin_users(
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("AdminUser.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_annuity_api.py.before b/backend/app/modules/annuity/api.py
+index a72f067..c16d448 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_annuity_api.py.before
++++ b/backend/app/modules/annuity/api.py
+@@ -57,7 +57,7 @@ def get_annuity_tasks(
+     client_id: str | None = Query(default=None),
+     notice_status: str | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("AnnuityTask.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_billing_api.py.before b/backend/app/modules/billing/api.py
+index 46f33ee..8fc9d63 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_billing_api.py.before
++++ b/backend/app/modules/billing/api.py
+@@ -40,7 +40,7 @@ router = APIRouter()
+ @router.get("/bills", summary="List bills")
+ def get_bills(
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Bill.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+@@ -230,7 +230,7 @@ def print_bill(
+ @router.get("/payments", summary="List payments")
+ def get_payments(
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Payment.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_cases_api.py.before b/backend/app/modules/cases/api.py
+index f435c5c..c83d26b 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_cases_api.py.before
++++ b/backend/app/modules/cases/api.py
+@@ -36,7 +36,7 @@ def get_cases(
+     sort_by: str | None = Query(default=None),
+     sort_dir: str = Query(default="asc"),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Case.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+@@ -387,7 +387,7 @@ def export_cases(
+     sort_by: str | None = Query(default=None),
+     sort_dir: str = Query(default="asc"),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Case.Export")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_collections_api.py.before b/backend/app/modules/collections/api.py
+index ea07af4..69652c1 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_collections_api.py.before
++++ b/backend/app/modules/collections/api.py
+@@ -35,7 +35,7 @@ def get_dunning(
+     status: str | None = Query(default=None),
+     client_id: str | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Dunning.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_commission_api.py.before b/backend/app/modules/commission/api.py
+index 9a1dc52..bcca1f8 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_commission_api.py.before
++++ b/backend/app/modules/commission/api.py
+@@ -179,7 +179,7 @@ def get_commission(
+     created_at_from: date | None = Query(default=None),
+     created_at_to: date | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Commission.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+@@ -305,7 +305,7 @@ def get_commission_rules(
+     fee_type: str | None = Query(default=None),
+     q: str | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("CommissionRule.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_documents_api.py.before b/backend/app/modules/documents/api.py
+index 58225e1..711b6cf 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_documents_api.py.before
++++ b/backend/app/modules/documents/api.py
+@@ -54,7 +54,7 @@ def list_doc_templates_endpoint(
+     direction: DocumentDirection | None = Query(default=None),
+     enabled: bool | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("DocTemplate.Read")),
+     db: Session = Depends(get_db),
+ ) -> DocTemplateListOut:
+@@ -128,7 +128,7 @@ def get_documents(
+     date_from: date | None = Query(default=None),
+     date_to: date | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Doc.Read")),
+     db: Session = Depends(get_db),
+ ) -> DocumentListOut:
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_expenses_api.py.before b/backend/app/modules/expenses/api.py
+index 738337b..29acbad 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_expenses_api.py.before
++++ b/backend/app/modules/expenses/api.py
+@@ -56,7 +56,7 @@ def get_expenses(
+     q: str | None = Query(default=None),
+     include_stats: bool = Query(default=False),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Expense.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_fees_api.py.before b/backend/app/modules/fees/api.py
+index 875d18d..70a1ce4 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_fees_api.py.before
++++ b/backend/app/modules/fees/api.py
+@@ -36,7 +36,7 @@ router = APIRouter()
+ @router.get("/fees/drafts", summary="List fee drafts")
+ def get_fee_drafts(
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     case_id: str | None = Query(default=None),
+     client_id: str | None = Query(default=None),
+     status_filter: str | None = Query(default=None, alias="status"),
+@@ -425,7 +425,7 @@ def update_fee_draft(
+ @router.get("/fees/rates", summary="List fee rates")
+ def get_fee_rates(
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     fee_code: str | None = Query(default=None),
+     fee_type: str | None = Query(default=None),
+     currency: str | None = Query(default=None),
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_tasks_api.py.before b/backend/app/modules/tasks/api.py
+index 80e31d0..5a8c510 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_tasks_api.py.before
++++ b/backend/app/modules/tasks/api.py
+@@ -105,7 +105,7 @@ def get_tasks(
+     case_id: str | None = Query(default=None),
+     client_id: str | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Task.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+@@ -183,7 +183,7 @@ def get_tasks(
+ def get_tasks_today(
+     as_role: TaskTodayAs = Query(default=TaskTodayAs.WORKER, alias="as"),
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     _perm: None = Depends(require_perm("Task.Read")),
+     current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+
+diff --git a/tmp/pe-be-qa-02/backend_app_modules_templates_api.py.before b/backend/app/modules/templates/api.py
+index 63a3b5e..82f43fa 100644
+--- a/tmp/pe-be-qa-02/backend_app_modules_templates_api.py.before
++++ b/backend/app/modules/templates/api.py
+@@ -68,7 +68,7 @@ def create_template(
+ @router.get("/templates", summary="List templates")
+ def list_templates(
+     page: int = Query(default=1, ge=1),
+-    page_size: int = Query(default=20, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
+     group: str | None = Query(default=None),
+     language: str | None = Query(default=None),
+     enabled: bool | None = Query(default=None),
+

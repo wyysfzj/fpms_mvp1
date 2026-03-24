@@ -1,0 +1,4 @@
+{"cmd":"cd backend && alembic upgrade head","rc":0,"notes":"upgraded pe_be_db_03_gov_payment_01 -> pe_be_db_04_annuity_task_01"}
+{"cmd":"write artifacts/PE-BE-DB-04/git/diff.patch (task-scoped delta for annuity_task migration/model)","rc":0}
+{"ts":"20260228T170822","step":"lint","rc":0,"log":"artifacts/PE-BE-DB-04/outputs/20260228T170822_lint.log"}
+{"ts":"20260228T170822","step":"test","rc":0,"log":"artifacts/PE-BE-DB-04/outputs/20260228T170822_test.log"}

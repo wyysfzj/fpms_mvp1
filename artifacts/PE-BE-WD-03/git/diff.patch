@@ -1,0 +1,555 @@
+diff --git a/backend/app/modules/documents/api.py b/backend/app/modules/documents/api.py
+index 711b6cf..fee87f1 100644
+--- a/backend/app/modules/documents/api.py
++++ b/backend/app/modules/documents/api.py
+@@ -43,6 +43,26 @@ from app.modules.tasks.task_generation_service import TaskGenerationService
+ router = APIRouter()
+ 
+ 
++def _build_document_out(document, *, case_no: str | None = None, attachments: list | None = None) -> DocumentOut:
++    return DocumentOut(
++        id=document.id,
++        case_id=document.case_id,
++        case_no=case_no,
++        doc_template_id=document.doc_template_id,
++        direction=document.direction,
++        doc_date=document.doc_date,
++        title=document.title,
++        ref_no=document.ref_no,
++        extra_data=document.extra_data,
++        reply_to_id=document.reply_to_id,
++        need_reply=document.need_reply,
++        reply_date=document.reply_date,
++        created_at=document.created_at,
++        updated_at=document.updated_at,
++        attachments=attachments or [],
++    )
++
++
+ # ---------------------------------------------------------------------------
+ # B1: DocTemplate CRUD endpoints (registered BEFORE /documents/{id} routes)
+ # ---------------------------------------------------------------------------
+@@ -125,6 +145,8 @@ def get_documents(
+     doc_template_id: str | None = Query(default=None),
+     case_id: str | None = Query(default=None),
+     client_id: str | None = Query(default=None),
++    need_reply: bool | None = Query(default=None),
++    replied: bool | None = Query(default=None),
+     date_from: date | None = Query(default=None),
+     date_to: date | None = Query(default=None),
+     page: int = Query(default=1, ge=1),
+@@ -157,6 +179,8 @@ def get_documents(
+         doc_template_id=doc_template_id,
+         case_id=case_id,
+         client_id=client_id,
++        need_reply=need_reply,
++        replied=replied,
+         date_from=date_from,
+         date_to=date_to,
+         page=page,
+@@ -264,21 +288,8 @@ def create_document(
+     response.headers["X-Auto-Tasks-Created"] = str(len(created_tasks))
+     if auto_fee_draft_id:
+         response.headers["X-Auto-Fee-Draft-Created"] = auto_fee_draft_id
+-    return DocumentOut(
+-        id=document.id,
+-        case_id=document.case_id,
+-        doc_template_id=document.doc_template_id,
+-        direction=document.direction,
+-        doc_date=document.doc_date,
+-        title=document.title,
+-        ref_no=document.ref_no,
+-        extra_data=document.extra_data,
+-        reply_to_id=document.reply_to_id,
+-        need_reply=document.need_reply,
+-        reply_date=document.reply_date,
+-        created_at=document.created_at,
+-        updated_at=document.updated_at,
+-    )
++    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
++    return _build_document_out(document, case_no=case.case_no if case else None)
+ 
+ 
+ @router.get(
+@@ -352,20 +363,10 @@ def get_document(
+     - 422: VALIDATION_ERROR
+     """
+     document = get_document_service(db, document_id)
+-    return DocumentOut(
+-        id=document.id,
+-        case_id=document.case_id,
+-        doc_template_id=document.doc_template_id,
+-        direction=document.direction,
+-        doc_date=document.doc_date,
+-        title=document.title,
+-        ref_no=document.ref_no,
+-        extra_data=document.extra_data,
+-        reply_to_id=document.reply_to_id,
+-        need_reply=document.need_reply,
+-        reply_date=document.reply_date,
+-        created_at=document.created_at,
+-        updated_at=document.updated_at,
++    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
++    return _build_document_out(
++        document,
++        case_no=case.case_no if case else None,
+         attachments=[
+             {
+                 "id": attachment.id,
+@@ -415,21 +416,8 @@ def update_document(
+     - 422: VALIDATION_ERROR
+     """
+     document = update_document_service(db, document_id, payload)
+-    return DocumentOut(
+-        id=document.id,
+-        case_id=document.case_id,
+-        doc_template_id=document.doc_template_id,
+-        direction=document.direction,
+-        doc_date=document.doc_date,
+-        title=document.title,
+-        ref_no=document.ref_no,
+-        extra_data=document.extra_data,
+-        reply_to_id=document.reply_to_id,
+-        need_reply=document.need_reply,
+-        reply_date=document.reply_date,
+-        created_at=document.created_at,
+-        updated_at=document.updated_at,
+-    )
++    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
++    return _build_document_out(document, case_no=case.case_no if case else None)
+ 
+ 
+ @router.post(
+diff --git a/backend/app/modules/documents/service.py b/backend/app/modules/documents/service.py
+index 20e6fb6..3039d60 100644
+--- a/backend/app/modules/documents/service.py
++++ b/backend/app/modules/documents/service.py
+@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
+ from app.core.errors import raise_business_error
+ from app.core.storage import ensure_dir, safe_join
+ from app.modules.cases.models import Case
++from app.modules.cases.service import validate_case_status_transition
+ from app.modules.documents.enums import DocumentDirection
+ from app.modules.documents.models import DocAttachment, DocTemplate, Document
+ from app.modules.documents.schemas import (
+@@ -23,6 +24,70 @@ from app.modules.tasks.models import Task
+ from app.modules.tasks.service import _create_task_log
+ 
+ 
++def _apply_template_defaults(
++    *,
++    case: Case,
++    document: Document,
++    template: DocTemplate | None,
++    need_reply_overridden: bool = False,
++) -> None:
++    if not template:
++        return
++
++    if not need_reply_overridden and getattr(template, "need_reply", None) is not None:
++        document.need_reply = template.need_reply
++
++    if getattr(template, "status_effect", None) and document.direction == DocumentDirection.IN:
++        validate_case_status_transition(case.status, template.status_effect)
++        case.status = template.status_effect
++
++    if (
++        getattr(template, "status_restore", None)
++        and document.direction == DocumentDirection.OUT
++        and document.reply_to_id
++    ):
++        validate_case_status_transition(case.status, template.status_restore)
++        case.status = template.status_restore
++
++
++def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None) -> None:
++    if not document.reply_to_id or document.direction != DocumentDirection.OUT:
++        return
++
++    original_doc = db.execute(
++        select(Document).where(Document.id == document.reply_to_id)
++    ).scalar_one_or_none()
++    if not original_doc:
++        raise_business_error(
++            "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
++        )
++
++    open_tasks = (
++        db.execute(
++            select(Task).where(
++                Task.document_id == document.reply_to_id,
++                Task.status == TaskStatus.OPEN.value,
++            )
++        )
++        .scalars()
++        .all()
++    )
++
++    for task in open_tasks:
++        task.status = TaskStatus.DONE.value
++        task.done_at = datetime.utcnow()
++        _create_task_log(
++            db,
++            task_id=task.id,
++            action=TaskAction.AUTO_WRITEOFF,
++            from_status=TaskStatus.OPEN.value,
++            to_status=TaskStatus.DONE.value,
++            remark=f"Auto write-off: reply document {document.id}",
++        )
++
++    original_doc.reply_date = doc_date
++
++
+ def list_documents(
+     db: Session,
+     *,
+@@ -31,6 +96,8 @@ def list_documents(
+     doc_template_id: str | None = None,
+     case_id: str | None = None,
+     client_id: str | None = None,
++    need_reply: bool | None = None,
++    replied: bool | None = None,
+     date_from: date | None = None,
+     date_to: date | None = None,
+     page: int = 1,
+@@ -56,6 +123,12 @@ def list_documents(
+         stmt = stmt.where(Document.case_id == case_id)
+     if client_id:
+         stmt = stmt.join(Case, Document.case_id == Case.id).where(Case.client_id == client_id)
++    if need_reply is not None:
++        stmt = stmt.where(Document.need_reply.is_(need_reply))
++    if replied is True:
++        stmt = stmt.where(Document.reply_date.is_not(None))
++    elif replied is False:
++        stmt = stmt.where(Document.reply_date.is_(None))
+     if date_from:
+         stmt = stmt.where(Document.doc_date >= date_from)
+     if date_to:
+@@ -107,52 +180,8 @@ def create_document(db: Session, data: DocumentCreateIn) -> Document:
+     )
+     db.add(document)
+ 
+-    # B2: DocTemplate cascade
+-    if data.doc_template_id and template:
+-        # Propagate need_reply from template to document
+-        if getattr(template, "need_reply", None):
+-            document.need_reply = True
+-
+-        # Apply status_effect to case
+-        if getattr(template, "status_effect", None):
+-            case.status = template.status_effect
+-
+-    # B2: Reply chain — auto write-off
+-    if data.reply_to_id and data.direction == DocumentDirection.OUT:
+-        original_doc = db.execute(
+-            select(Document).where(Document.id == data.reply_to_id)
+-        ).scalar_one_or_none()
+-        if not original_doc:
+-            raise_business_error(
+-                "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
+-            )
+-
+-        # Find OPEN tasks linked to the original document
+-        open_tasks = (
+-            db.execute(
+-                select(Task).where(
+-                    Task.document_id == data.reply_to_id,
+-                    Task.status == TaskStatus.OPEN.value,
+-                )
+-            )
+-            .scalars()
+-            .all()
+-        )
+-
+-        for task in open_tasks:
+-            task.status = TaskStatus.DONE.value
+-            task.done_at = datetime.utcnow()
+-            _create_task_log(
+-                db,
+-                task_id=task.id,
+-                action=TaskAction.AUTO_WRITEOFF,
+-                from_status=TaskStatus.OPEN.value,
+-                to_status=TaskStatus.DONE.value,
+-                remark=f"Auto write-off: reply document {document.id}",
+-            )
+-
+-        # Update original document's reply_date
+-        original_doc.reply_date = data.doc_date
++    _apply_template_defaults(case=case, document=document, template=template)
++    _apply_reply_chain(db, document=document, doc_date=data.doc_date)
+ 
+     db.commit()
+     db.refresh(document)
+@@ -177,6 +206,11 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
+         raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
+ 
+     updates = data.model_dump(exclude_unset=True)
++    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
++    if not case:
++        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
++
++    template = None
+ 
+     if "case_id" in updates:
+         case = db.execute(select(Case).where(Case.id == updates["case_id"])).scalar_one_or_none()
+@@ -191,10 +225,25 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
+             raise_business_error(
+                 "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
+             )
++    elif document.doc_template_id:
++        template = db.execute(
++            select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
++        ).scalar_one_or_none()
+ 
+     for field, value in updates.items():
+         setattr(document, field, value)
+ 
++    _apply_template_defaults(
++        case=case,
++        document=document,
++        template=template,
++        need_reply_overridden="need_reply" in updates,
++    )
++    if "reply_to_id" in updates or (
++        "doc_template_id" in updates and getattr(template, "status_restore", None)
++    ):
++        _apply_reply_chain(db, document=document, doc_date=document.doc_date)
++
+     db.commit()
+     db.refresh(document)
+     return document
+diff --git a/backend/tests/test_b2_reply_chain.py b/backend/tests/test_b2_reply_chain.py
+index 1ac36b5..8e4549b 100644
+--- a/backend/tests/test_b2_reply_chain.py
++++ b/backend/tests/test_b2_reply_chain.py
+@@ -64,6 +64,18 @@ def _get_doc_template_by_code(client: TestClient, auth_headers: dict, code: str)
+     return match[0]
+ 
+ 
++def _create_doc_template(client: TestClient, auth_headers: dict, **overrides) -> dict:
++    payload = {
++        "code": f"WD-{uuid.uuid4().hex[:8].upper()}",
++        "name": "B2 Custom Template",
++        "direction": "OUT",
++        **overrides,
++    }
++    resp = client.post(DOC_TMPL_BASE, json=payload, headers=auth_headers)
++    assert resp.status_code == 201, f"Doc template creation failed: {resp.text}"
++    return resp.json()
++
++
+ def _create_document(
+     client: TestClient,
+     auth_headers: dict,
+@@ -144,6 +156,7 @@ def test_create_document_with_reply_fields(client: TestClient, auth_headers: dic
+     assert "need_reply" in doc, "Response must include need_reply field"
+     assert "reply_date" in doc, "Response must include reply_date field"
+     assert doc["reply_date"] is None
++    assert doc["case_no"].startswith("B2-")
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -361,6 +374,43 @@ def test_doc_template_cascade_status_effect(client: TestClient, auth_headers: di
+     )
+ 
+ 
++def test_doc_template_cascade_rejects_illegal_status_regression(
++    client: TestClient, auth_headers: dict
++) -> None:
++    """Terminal case status must not be regressed by document status_effect."""
++    case = _create_case(client, auth_headers)
++
++    promote_resp = client.put(
++        f"{CASE_BASE}/{case['id']}",
++        headers=auth_headers,
++        json={
++            "status": "GRANTED",
++            "app_no": "CN202510123456.7",
++            "filing_date": "2025-01-15",
++        },
++    )
++    assert promote_resp.status_code == 200, promote_resp.text
++
++    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
++    resp = client.post(
++        DOC_BASE,
++        headers=auth_headers,
++        json={
++            "case_id": case["id"],
++            "direction": "IN",
++            "doc_date": "2026-01-15",
++            "title": "Illegal regression OA",
++            "doc_template_id": oa_in_tmpl["id"],
++        },
++    )
++    assert resp.status_code == 409, resp.text
++    payload = resp.json()["error"]
++    assert payload["code"] == "CASE_STATUS_TRANSITION_INVALID"
++
++    case_after = _get_case(client, auth_headers, case["id"])
++    assert case_after["status"] == "GRANTED"
++
++
+ # ---------------------------------------------------------------------------
+ # 7. DocTemplate cascade — need_reply
+ # ---------------------------------------------------------------------------
+@@ -386,6 +436,25 @@ def test_doc_template_cascade_need_reply(client: TestClient, auth_headers: dict)
+     assert doc.get("need_reply") is True, "Document should inherit need_reply=True from DocTemplate"
+ 
+ 
++def test_document_update_applies_template_defaults_and_returns_case_no(
++    client: TestClient, auth_headers: dict
++) -> None:
++    """Updating template should apply template-backed defaults needed by FE and preserve case_no."""
++    case = _create_case(client, auth_headers)
++    doc = _create_document(client, auth_headers, case["id"], title="Update defaults target")
++    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
++
++    resp = client.put(
++        f"{DOC_BASE}/{doc['id']}",
++        headers=auth_headers,
++        json={"doc_template_id": oa_in_tmpl["id"]},
++    )
++    assert resp.status_code == 200, resp.text
++    updated = resp.json()
++    assert updated["case_no"] == case["case_no"]
++    assert updated["need_reply"] is True
++
++
+ # ---------------------------------------------------------------------------
+ # 8. DocTemplate cascade — no effect when null
+ # ---------------------------------------------------------------------------
+@@ -437,6 +506,49 @@ def test_document_update_reply_fields(client: TestClient, auth_headers: dict) ->
+     assert updated["need_reply"] is True
+ 
+ 
++def test_reply_document_applies_status_restore_when_template_configured(
++    client: TestClient, auth_headers: dict
++) -> None:
++    """Reply template status_restore should bring the case back to configured status."""
++    case = _create_case(client, auth_headers)
++    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
++
++    incoming = _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="IN",
++        doc_template_id=oa_in_tmpl["id"],
++        title="Incoming OA",
++    )
++    case_after_in = _get_case(client, auth_headers, case["id"])
++    assert case_after_in["status"] == "OA1"
++
++    restore_tmpl = _create_doc_template(
++        client,
++        auth_headers,
++        code=f"OA-OUT-{uuid.uuid4().hex[:6].upper()}",
++        name="OA 回复恢复状态",
++        direction="OUT",
++        status_restore="ACCEPTED",
++        reply_to_template_code="OA_IN",
++    )
++
++    reply = _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="OUT",
++        doc_template_id=restore_tmpl["id"],
++        title="Reply with restore",
++        reply_to_id=incoming["id"],
++    )
++    assert reply["case_no"] == case["case_no"]
++
++    case_after_reply = _get_case(client, auth_headers, case["id"])
++    assert case_after_reply["status"] == "ACCEPTED"
++
++
+ # ---------------------------------------------------------------------------
+ # 10. Document list includes reply fields
+ # ---------------------------------------------------------------------------
+@@ -463,6 +575,83 @@ def test_document_list_includes_reply_fields(client: TestClient, auth_headers: d
+         assert "reply_date" in item, "List item must include reply_date"
+ 
+ 
++def test_document_list_can_filter_by_reply_state(
++    client: TestClient, auth_headers: dict
++) -> None:
++    """GET /documents supports need_reply/replied filters for Batch 2 query scope."""
++    case = _create_case(client, auth_headers)
++    oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
++    oa_out_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_OUT")
++
++    awaiting_reply = _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="IN",
++        doc_template_id=oa_in_tmpl["id"],
++        title="OA awaiting reply",
++    )
++    replied_doc = _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="IN",
++        doc_template_id=oa_in_tmpl["id"],
++        title="OA replied",
++        doc_date="2026-01-20",
++    )
++    _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="OUT",
++        doc_template_id=oa_out_tmpl["id"],
++        title="OA reply sent",
++        doc_date="2026-02-01",
++        reply_to_id=replied_doc["id"],
++    )
++    plain_doc = _create_document(
++        client,
++        auth_headers,
++        case["id"],
++        direction="IN",
++        title="Plain incoming doc",
++        doc_date="2026-01-25",
++    )
++
++    need_reply_resp = client.get(
++        DOC_BASE,
++        headers=auth_headers,
++        params={"case_id": case["id"], "need_reply": True, "page_size": 100},
++    )
++    assert need_reply_resp.status_code == 200, need_reply_resp.text
++    need_reply_ids = {item["id"] for item in need_reply_resp.json()["items"]}
++    assert awaiting_reply["id"] in need_reply_ids
++    assert replied_doc["id"] in need_reply_ids
++    assert plain_doc["id"] not in need_reply_ids
++
++    pending_resp = client.get(
++        DOC_BASE,
++        headers=auth_headers,
++        params={"case_id": case["id"], "need_reply": True, "replied": False, "page_size": 100},
++    )
++    assert pending_resp.status_code == 200, pending_resp.text
++    pending_ids = {item["id"] for item in pending_resp.json()["items"]}
++    assert awaiting_reply["id"] in pending_ids
++    assert replied_doc["id"] not in pending_ids
++
++    replied_resp = client.get(
++        DOC_BASE,
++        headers=auth_headers,
++        params={"case_id": case["id"], "replied": True, "page_size": 100},
++    )
++    assert replied_resp.status_code == 200, replied_resp.text
++    replied_ids = {item["id"] for item in replied_resp.json()["items"]}
++    assert replied_doc["id"] in replied_ids
++    assert awaiting_reply["id"] not in replied_ids
++    assert plain_doc["id"] not in replied_ids
++
++
+ # ---------------------------------------------------------------------------
+ # 11. Auto write-off task log
+ # ---------------------------------------------------------------------------

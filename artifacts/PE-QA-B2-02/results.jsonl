@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"cd frontend && npm run lint","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_b2_reply_chain.py tests/test_b3_fee_linking.py tests/test_task_template.py","rc":0}

@@ -1,0 +1,3 @@
+{"ts":"20260309T004706","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint"}
+{"ts":"20260309T004706","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260309T004706","step":"build","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ build"}

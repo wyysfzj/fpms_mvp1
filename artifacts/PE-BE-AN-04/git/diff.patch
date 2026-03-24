@@ -1,0 +1,554 @@
+diff --git a/backend/app/modules/annuity/service.py b/backend/app/modules/annuity/service.py
+new file mode 100644
+index 0000000..d4d0445
+--- /dev/null
++++ b/backend/app/modules/annuity/service.py
+@@ -0,0 +1,548 @@
++from __future__ import annotations
++
++from datetime import date
++from decimal import Decimal
++from typing import Any
++from uuid import uuid4
++
++from sqlalchemy import func, select
++from sqlalchemy.orm import Session
++
++from app.core.errors import BusinessError, raise_business_error
++from app.modules.annuity.models import AnnuityTask
++from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
++
++_ALLOWED_INSTRUCTIONS = ("PAY", "ABANDON", "DEFER")
++_ANNUITY_DRAFT_TYPE = "ANNUITY_FEE"
++_TERMINAL_STATUSES = (
++    "DONE",
++    "CLOSED",
++    "CANCELLED",
++    "ABANDONED",
++    "PAID",
++    "SETTLED",
++    "COMPLETED",
++)
++
++
++def _coerce_date(value: Any, field_name: str) -> date | None:
++    if value is None or value == "":
++        return None
++    if isinstance(value, date):
++        return value
++    if isinstance(value, str):
++        try:
++            return date.fromisoformat(value)
++        except ValueError:
++            raise_business_error(
++                "ANNUITY_DATE_RANGE_INVALID",
++                f"Invalid {field_name}; expected YYYY-MM-DD",
++                status_code=400,
++            )
++    raise_business_error(
++        "ANNUITY_DATE_RANGE_INVALID",
++        f"Invalid {field_name}; expected YYYY-MM-DD",
++        status_code=400,
++    )
++
++
++def _normalize_statuses(value: Any) -> list[str]:
++    if value is None:
++        return []
++    if isinstance(value, (list, tuple, set)):
++        values = [str(item).strip().upper() for item in value if str(item).strip()]
++        return values
++    text = str(value).strip()
++    return [text.upper()] if text else []
++
++
++def _normalize_pending_mode(value: Any) -> str:
++    if value is None:
++        return "all"
++    if isinstance(value, bool):
++        return "pending" if value else "all"
++
++    mode = str(value).strip().lower()
++    aliases = {
++        "": "all",
++        "all": "all",
++        "pending": "pending",
++        "open": "pending",
++        "todo": "pending",
++        "processed": "processed",
++        "done": "processed",
++        "completed": "processed",
++        "closed": "processed",
++    }
++    if mode in aliases:
++        return aliases[mode]
++
++    raise_business_error(
++        "ANNUITY_PENDING_MODE_INVALID",
++        "Invalid pending filter mode",
++        details={"pending_mode": value},
++        status_code=400,
++    )
++
++
++def list_annuity_tasks(
++    db: Session,
++    *,
++    filters: dict[str, Any] | None = None,
++    page: int = 1,
++    page_size: int = 20,
++) -> tuple[list[AnnuityTask], int]:
++    """List annuity tasks with range/status/pending filters and pagination."""
++    filters = filters or {}
++
++    due_from = _coerce_date(
++        filters.get("due_from")
++        or filters.get("due_date_from")
++        or filters.get("date_from")
++        or filters.get("from"),
++        "due_from",
++    )
++    due_to = _coerce_date(
++        filters.get("due_to")
++        or filters.get("due_date_to")
++        or filters.get("date_to")
++        or filters.get("to"),
++        "due_to",
++    )
++    if due_from and due_to and due_from > due_to:
++        raise_business_error(
++            "ANNUITY_DATE_RANGE_INVALID",
++            "due_from must be <= due_to",
++            status_code=400,
++        )
++
++    status_values = _normalize_statuses(filters.get("status"))
++    pending_mode = _normalize_pending_mode(
++        filters.get("pending_mode", filters.get("pending_filter", filters.get("pending")))
++    )
++
++    stmt = select(AnnuityTask)
++
++    case_id = filters.get("case_id")
++    client_id = filters.get("client_id")
++    notice_status_values = _normalize_statuses(filters.get("notice_status"))
++
++    if case_id:
++        stmt = stmt.where(AnnuityTask.case_id == case_id)
++    if client_id:
++        stmt = stmt.where(AnnuityTask.client_id == client_id)
++    if due_from:
++        stmt = stmt.where(AnnuityTask.due_date >= due_from)
++    if due_to:
++        stmt = stmt.where(AnnuityTask.due_date <= due_to)
++    if status_values:
++        if len(status_values) == 1:
++            stmt = stmt.where(func.upper(AnnuityTask.status) == status_values[0])
++        else:
++            stmt = stmt.where(func.upper(AnnuityTask.status).in_(status_values))
++    if notice_status_values:
++        if len(notice_status_values) == 1:
++            stmt = stmt.where(func.upper(AnnuityTask.notice_status) == notice_status_values[0])
++        else:
++            stmt = stmt.where(func.upper(AnnuityTask.notice_status).in_(notice_status_values))
++
++    if pending_mode == "pending":
++        stmt = stmt.where(
++            AnnuityTask.status.is_(None) | (~func.upper(AnnuityTask.status).in_(_TERMINAL_STATUSES))
++        )
++    elif pending_mode == "processed":
++        stmt = stmt.where(func.upper(AnnuityTask.status).in_(_TERMINAL_STATUSES))
++
++    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
++
++    offset = (page - 1) * page_size
++    items = db.execute(
++        stmt.order_by(
++            AnnuityTask.due_date.asc(),
++            AnnuityTask.created_at.desc(),
++            AnnuityTask.id.asc(),
++        )
++        .offset(offset)
++        .limit(page_size)
++    ).scalars().all()
++    return items, total
++
++
++def extract_annuity_tasks(
++    db: Session,
++    *,
++    filters: dict[str, Any] | None = None,
++    page: int = 1,
++    page_size: int = 20,
++) -> tuple[list[AnnuityTask], int]:
++    """Compatibility alias for task-extraction wording in enhancement runbooks."""
++    return list_annuity_tasks(db, filters=filters, page=page, page_size=page_size)
++
++
++def update_annuity_task_instruction(
++    db: Session,
++    *,
++    task_id: int,
++    instruction: str,
++    instruction_date: date | None = None,
++) -> AnnuityTask:
++    """Update client instruction with legal transition checks."""
++    task = db.execute(select(AnnuityTask).where(AnnuityTask.id == task_id)).scalar_one_or_none()
++    if not task:
++        raise_business_error("ANNUITY_TASK_NOT_FOUND", "Annuity task not found", status_code=404)
++
++    new_instruction = (instruction or "").strip().upper()
++    if new_instruction not in _ALLOWED_INSTRUCTIONS:
++        raise_business_error(
++            "ANNUITY_INSTRUCTION_INVALID",
++            "Invalid instruction; allowed values are PAY/ABANDON/DEFER",
++            status_code=400,
++        )
++
++    current_status = ((task.status or "") if task.status is not None else "").strip().upper()
++    if current_status in _TERMINAL_STATUSES:
++        raise_business_error(
++            "ANNUITY_STATE_CONFLICT",
++            "Instruction update is not allowed for current task state",
++            details={"status": task.status},
++            status_code=409,
++        )
++
++    current_instruction = (
++        ((task.client_instruction or "") if task.client_instruction is not None else "")
++        .strip()
++        .upper()
++    )
++    if not current_instruction:
++        current_instruction = "NONE"
++
++    allowed_transitions = {
++        "NONE": {"PAY", "ABANDON", "DEFER"},
++        "DEFER": {"PAY", "ABANDON", "DEFER"},
++        "PAY": {"PAY"},
++        "ABANDON": {"ABANDON"},
++    }
++    if new_instruction not in allowed_transitions.get(current_instruction, set()):
++        raise_business_error(
++            "ANNUITY_INSTRUCTION_INVALID",
++            "Invalid instruction transition",
++            details={"from": current_instruction, "to": new_instruction},
++            status_code=400,
++        )
++
++    instruction_changed = task.client_instruction != new_instruction
++    task.client_instruction = new_instruction
++    if instruction_date is not None:
++        task.instruction_date = instruction_date
++    elif instruction_changed and task.instruction_date is None:
++        task.instruction_date = date.today()
++
++    db.commit()
++    db.refresh(task)
++    return task
++
++
++def _annuity_marker(task_id: int, year_no: int) -> str:
++    return f"ANNUITY_TASK:{task_id};YEAR:{year_no}"
++
++
++def _rate_amount(
++    db: Session,
++    *,
++    fee_type: str,
++    currency: str,
++) -> Decimal:
++    rate = (
++        db.execute(
++            select(FeeRate)
++            .where(
++                FeeRate.enabled.is_(True),
++                FeeRate.rate_group == "ANNUITY",
++                FeeRate.fee_type == fee_type,
++                FeeRate.currency == currency,
++            )
++            .order_by(FeeRate.updated_at.desc())
++        )
++        .scalars()
++        .first()
++    )
++    if not rate or rate.default_amount is None:
++        return Decimal("0")
++    return Decimal(rate.default_amount)
++
++
++def _draft_exists_for_target(
++    db: Session,
++    *,
++    task_id: int,
++    year_no: int,
++) -> bool:
++    marker = _annuity_marker(task_id, year_no)
++    row = db.execute(
++        select(FeeItem.id)
++        .join(FeeDraft, FeeDraft.id == FeeItem.draft_id)
++        .where(
++            FeeDraft.draft_type == _ANNUITY_DRAFT_TYPE,
++            FeeItem.remark == marker,
++        )
++        .limit(1)
++    ).scalar_one_or_none()
++    return row is not None
++
++
++def _build_generation_targets(
++    db: Session,
++    *,
++    task_ids: list[int],
++    pay_next_year: bool,
++) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
++    failed: list[dict[str, Any]] = []
++    targets: list[dict[str, Any]] = []
++
++    tasks = db.execute(select(AnnuityTask).where(AnnuityTask.id.in_(task_ids))).scalars().all()
++    task_map = {task.id: task for task in tasks}
++
++    for task_id in task_ids:
++        task = task_map.get(task_id)
++        if task is None:
++            failed.append(
++                {
++                    "source_task_id": task_id,
++                    "task_id": task_id,
++                    "year_no": None,
++                    "pay_next_year": False,
++                    "code": "ANNUITY_TASK_NOT_FOUND",
++                    "message": "Annuity task not found",
++                    "status_code": 404,
++                }
++            )
++            continue
++
++        targets.append(
++            {
++                "source_task_id": task.id,
++                "task": task,
++                "task_id": task.id,
++                "year_no": task.year_no,
++                "pay_next_year": False,
++            }
++        )
++
++        if not pay_next_year:
++            continue
++
++        next_task = (
++            db.execute(
++                select(AnnuityTask)
++                .where(
++                    AnnuityTask.case_id == task.case_id,
++                    AnnuityTask.year_no == task.year_no + 1,
++                )
++                .order_by(AnnuityTask.due_date.asc(), AnnuityTask.id.asc())
++            )
++            .scalars()
++            .first()
++        )
++        if next_task is None:
++            failed.append(
++                {
++                    "source_task_id": task.id,
++                    "task_id": None,
++                    "year_no": task.year_no + 1,
++                    "pay_next_year": True,
++                    "code": "ANNUITY_TASK_NOT_FOUND",
++                    "message": "Next-year annuity task not found",
++                    "status_code": 404,
++                }
++            )
++            continue
++
++        targets.append(
++            {
++                "source_task_id": task.id,
++                "task": next_task,
++                "task_id": next_task.id,
++                "year_no": next_task.year_no,
++                "pay_next_year": True,
++            }
++        )
++
++    return targets, failed
++
++
++def generate_fee_drafts_from_annuity_tasks(
++    db: Session,
++    *,
++    task_ids: list[int],
++    pay_next_year: bool = False,
++    currency: str = "CNY",
++    actor_id: str | None = None,
++) -> dict[str, Any]:
++    """Generate annuity fee drafts for selected tasks with per-task result details."""
++    normalized_task_ids: list[int] = []
++    seen_ids: set[int] = set()
++    for task_id in task_ids:
++        try:
++            normalized = int(task_id)
++        except (TypeError, ValueError):
++            continue
++        if normalized in seen_ids:
++            continue
++        seen_ids.add(normalized)
++        normalized_task_ids.append(normalized)
++
++    if not normalized_task_ids:
++        raise_business_error(
++            "ANNUITY_TASK_REQUIRED",
++            "At least one annuity task is required",
++            status_code=400,
++        )
++
++    targets, failed = _build_generation_targets(
++        db,
++        task_ids=normalized_task_ids,
++        pay_next_year=pay_next_year,
++    )
++
++    success: list[dict[str, Any]] = []
++    processed_targets: set[tuple[int, int]] = set()
++
++    for target in targets:
++        task: AnnuityTask = target["task"]
++        task_id = int(target["task_id"])
++        year_no = int(target["year_no"])
++        key = (task_id, year_no)
++
++        if key in processed_targets:
++            failed.append(
++                {
++                    "source_task_id": target["source_task_id"],
++                    "task_id": task_id,
++                    "year_no": year_no,
++                    "pay_next_year": target["pay_next_year"],
++                    "code": "ANNUITY_DRAFT_ALREADY_GENERATED",
++                    "message": "Annuity draft already generated in this request",
++                    "status_code": 409,
++                }
++            )
++            continue
++        processed_targets.add(key)
++
++        try:
++            task_status = (task.status or "").strip().upper()
++            if task_status in _TERMINAL_STATUSES:
++                raise_business_error(
++                    "ANNUITY_STATE_CONFLICT",
++                    "Cannot generate draft for terminal task status",
++                    details={"status": task.status},
++                    status_code=409,
++                )
++
++            instruction = (task.client_instruction or "").strip().upper()
++            if instruction == "ABANDON":
++                raise_business_error(
++                    "ANNUITY_STATE_CONFLICT",
++                    "Cannot generate draft for ABANDON instruction",
++                    status_code=409,
++                )
++
++            if _draft_exists_for_target(db, task_id=task_id, year_no=year_no):
++                raise_business_error(
++                    "ANNUITY_DRAFT_ALREADY_GENERATED",
++                    "Draft already generated for task/year",
++                    status_code=409,
++                )
++
++            gov_amount = _rate_amount(db, fee_type="GOV", currency=currency)
++            service_amount = _rate_amount(db, fee_type="SERVICE", currency=currency)
++            total_amount = gov_amount + service_amount
++            marker = _annuity_marker(task_id, year_no)
++
++            draft = FeeDraft(
++                id=str(uuid4()),
++                case_id=task.case_id,
++                client_id=task.client_id,
++                draft_type=_ANNUITY_DRAFT_TYPE,
++                currency=currency,
++                status="OPEN",
++                total_gov=gov_amount,
++                total_service=service_amount,
++                total_misc=Decimal("0"),
++                amount=total_amount,
++                created_by=actor_id,
++                updated_by=actor_id,
++            )
++            db.add(draft)
++
++            db.add(
++                FeeItem(
++                    id=str(uuid4()),
++                    draft_id=draft.id,
++                    case_id=task.case_id,
++                    fee_code="ANNUITY_GOV",
++                    fee_name="Annuity Government Fee",
++                    fee_type="GOV",
++                    year_no=year_no,
++                    quantity=Decimal("1"),
++                    unit_price=gov_amount,
++                    amount=gov_amount,
++                    remark=marker,
++                    created_by=actor_id,
++                    updated_by=actor_id,
++                )
++            )
++            db.add(
++                FeeItem(
++                    id=str(uuid4()),
++                    draft_id=draft.id,
++                    case_id=task.case_id,
++                    fee_code="ANNUITY_SERVICE",
++                    fee_name="Annuity Service Fee",
++                    fee_type="SERVICE",
++                    year_no=year_no,
++                    quantity=Decimal("1"),
++                    unit_price=service_amount,
++                    amount=service_amount,
++                    remark=marker,
++                    created_by=actor_id,
++                    updated_by=actor_id,
++                )
++            )
++
++            db.commit()
++            success.append(
++                {
++                    "source_task_id": target["source_task_id"],
++                    "task_id": task_id,
++                    "year_no": year_no,
++                    "draft_id": draft.id,
++                    "currency": currency,
++                    "amount": str(total_amount),
++                    "pay_next_year": target["pay_next_year"],
++                }
++            )
++        except BusinessError as exc:
++            db.rollback()
++            failed.append(
++                {
++                    "source_task_id": target["source_task_id"],
++                    "task_id": task_id,
++                    "year_no": year_no,
++                    "pay_next_year": target["pay_next_year"],
++                    "code": exc.code,
++                    "message": exc.message,
++                    "status_code": exc.status_code,
++                }
++            )
++
++    return {
++        "summary": {
++            "requested": len(normalized_task_ids),
++            "targets": len(targets),
++            "success": len(success),
++            "failed": len(failed),
++            "pay_next_year": pay_next_year,
++        },
++        "success": success,
++        "failed": failed,
++    }

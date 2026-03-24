@@ -1,0 +1,230 @@
+diff --git a/frontend/src/api/collections.ts b/frontend/src/api/collections.ts
+index d54a47a..2dcb512 100644
+--- a/frontend/src/api/collections.ts
++++ b/frontend/src/api/collections.ts
+@@ -5,6 +5,8 @@ import type {
+     CollectionsApiError,
+     CollectionsErrorCategory,
+     DunningBatchListItem,
++    DunningDetail,
++    DunningDetailLine,
+     DunningGenerateBatch,
+     DunningGenerateBatchLine,
+     DunningGeneratePayload,
+@@ -81,6 +83,40 @@ interface BackendBadDebtBillResult {
+     updated_at: string
+ }
+ 
++interface BackendDunningDetailLine {
++    id: number
++    line_no: number
++    bill_id: string
++    bill_no_snapshot: string | null
++    due_date_snapshot: string | null
++    bill_status_snapshot: string | null
++    outstanding_amount: number | string | null
++    currency_snapshot: string | null
++    remark: string | null
++}
++
++interface BackendDunningDetail {
++    id: number
++    dunning_no: string | null
++    client_id: string
++    round_no: number
++    to_date: string | null
++    currency: string
++    total_amount: number | string | null
++    status: string
++    sent_date: string | null
++    remark: string | null
++    created_at: string
++    updated_at: string
++    line_count: number
++    lines: BackendDunningDetailLine[]
++    summary: {
++        line_count: number
++        bill_count: number
++        bad_debt_line_count: number
++    }
++}
++
+ function asNumber(input: number | string | null | undefined): number {
+     if (input === null || input === undefined || input === '') return 0
+     const parsed = Number(input)
+@@ -212,6 +248,40 @@ export function mapCollectionsError(error: unknown): CollectionsApiError {
+     return mapped
+ }
+ 
++function mapDunningDetailLine(input: BackendDunningDetailLine): DunningDetailLine {
++    return {
++        id: input.id,
++        line_no: input.line_no,
++        bill_id: input.bill_id,
++        bill_no_snapshot: input.bill_no_snapshot,
++        due_date_snapshot: input.due_date_snapshot,
++        bill_status_snapshot: input.bill_status_snapshot,
++        outstanding_amount: asNumber(input.outstanding_amount),
++        currency_snapshot: input.currency_snapshot,
++        remark: input.remark || undefined,
++    }
++}
++
++function mapDunningDetail(input: BackendDunningDetail): DunningDetail {
++    return {
++        id: input.id,
++        dunning_no: input.dunning_no,
++        client_id: input.client_id,
++        round_no: input.round_no,
++        to_date: input.to_date,
++        currency: input.currency,
++        total_amount: asNumber(input.total_amount),
++        status: input.status,
++        sent_date: input.sent_date,
++        remark: input.remark,
++        created_at: input.created_at,
++        updated_at: input.updated_at,
++        line_count: input.line_count,
++        summary: input.summary,
++        lines: input.lines.map(mapDunningDetailLine),
++    }
++}
++
+ export async function getDunning(params: DunningListParams = {}): Promise<Pagination<DunningBatchListItem>> {
+     const {
+         round_no,
+@@ -261,3 +331,8 @@ export async function restoreBillBadDebt(billId: string): Promise<BadDebtBillRes
+     const response = await http.post<BackendBadDebtBillResult>(`/bills/${billId}/bad-debt/restore`)
+     return mapBadDebtBillResult(response.data)
+ }
++
++export async function getDunningDetail(id: number): Promise<DunningDetail> {
++    const response = await http.get<BackendDunningDetail>(`/dunning/${id}`)
++    return mapDunningDetail(response.data)
++}
+diff --git a/frontend/src/api/collections.types.ts b/frontend/src/api/collections.types.ts
+index 5f8209b..dbe569e 100644
+--- a/frontend/src/api/collections.types.ts
++++ b/frontend/src/api/collections.types.ts
+@@ -66,6 +66,40 @@ export interface DunningGenerateBatch {
+     lines: DunningGenerateBatchLine[]
+ }
+ 
++export interface DunningDetailLine {
++    id: number
++    line_no: number
++    bill_id: string
++    bill_no_snapshot: string | null
++    due_date_snapshot: string | null
++    bill_status_snapshot: string | null
++    outstanding_amount: number
++    currency_snapshot: string | null
++    remark?: string | null
++}
++
++export interface DunningDetail {
++    id: number
++    dunning_no: string | null
++    client_id: string
++    round_no: number
++    to_date: string | null
++    currency: string
++    total_amount: number
++    status: string
++    sent_date: string | null
++    remark: string | null
++    created_at: string
++    updated_at: string
++    line_count: number
++    lines: DunningDetailLine[]
++    summary: {
++        line_count: number
++        bill_count: number
++        bad_debt_line_count: number
++    }
++}
++
+ export interface DunningGenerateResult {
+     summary: DunningGenerateSummary
+     batches: DunningGenerateBatch[]
+diff --git a/frontend/src/modules/collections/pages/DunningDetail.vue b/frontend/src/modules/collections/pages/DunningDetail.vue
+index ce88c1d..e2deece 100644
+--- a/frontend/src/modules/collections/pages/DunningDetail.vue
++++ b/frontend/src/modules/collections/pages/DunningDetail.vue
+@@ -54,20 +54,18 @@
+ <script setup lang="ts">
+ import { computed, onMounted, ref } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+-import { getDunning, mapCollectionsError } from '../../../api/collections'
+-import type { CollectionsApiError, DunningBatchListItem } from '../../../api/collections.types'
++import { getDunningDetail, mapCollectionsError } from '../../../api/collections'
++import type { CollectionsApiError, DunningDetail } from '../../../api/collections.types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+ import LoadingBlock from '../../../components/state/LoadingBlock.vue'
+ 
+ type TagType = '' | 'success' | 'warning' | 'info' | 'danger'
+ 
+-const LOOKUP_PAGE_SIZE = 50
+-
+ const route = useRoute()
+ const router = useRouter()
+ 
+ const loading = ref(false)
+-const dunningItem = ref<DunningBatchListItem | null>(null)
++const dunningItem = ref<DunningDetail | null>(null)
+ const error = ref<CollectionsApiError | null>(null)
+ 
+ const dunningId = computed(() => {
+@@ -91,30 +89,6 @@ function extractListQuery(): Record<string, string> {
+   return query
+ }
+ 
+-async function findDunningById(id: number): Promise<DunningBatchListItem | null> {
+-  let currentPage = 1
+-  let fetchedCount = 0
+-  let total = 0
+-
+-  while (currentPage <= 100) {
+-    const result = await getDunning({
+-      page: currentPage,
+-      page_size: LOOKUP_PAGE_SIZE,
+-    })
+-
+-    const found = result.items.find((item) => item.id === id)
+-    if (found) return found
+-
+-    total = result.total
+-    fetchedCount += result.items.length
+-    if (fetchedCount >= total || result.items.length === 0) break
+-
+-    currentPage += 1
+-  }
+-
+-  return null
+-}
+-
+ async function fetchDunningItem() {
+   if (dunningId.value === null) {
+     error.value = {
+@@ -131,19 +105,8 @@ async function fetchDunningItem() {
+   error.value = null
+ 
+   try {
+-    const result = await findDunningById(dunningId.value)
+-    if (!result) {
+-      error.value = {
+-        status: 404,
+-        code: 'DUNNING_NOT_FOUND',
+-        message: '未找到该催款批次，请返回列表确认筛选条件。',
+-        category: 'not_found',
+-      }
+-      dunningItem.value = null
+-      return
+-    }
+-
+-    dunningItem.value = result
++    const detail = await getDunningDetail(dunningId.value)
++    dunningItem.value = detail
+   } catch (err) {
+     error.value = mapCollectionsError(err)
+     dunningItem.value = null

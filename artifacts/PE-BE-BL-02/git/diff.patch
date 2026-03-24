@@ -1,0 +1,132 @@
+diff --git a/backend/app/modules/collections/api.py b/backend/app/modules/collections/api.py
+index 69652c1..9a371d8 100644
+--- a/backend/app/modules/collections/api.py
++++ b/backend/app/modules/collections/api.py
+@@ -13,6 +13,7 @@ from app.db.session import get_db
+ from app.modules.collections.models import Dunning
+ from app.modules.collections.service import (
+     generate_dunning_batches,
++    get_dunning_detail,
+     mark_bill_bad_debt,
+     restore_bill_from_bad_debt,
+ )
+@@ -102,6 +103,15 @@ def post_dunning(
+     )
+ 
+ 
++@router.get("/dunning/{dunning_id}", summary="Get dunning batch detail")
++def get_dunning_batch_detail(
++    dunning_id: int,
++    _perm: None = Depends(require_perm("Dunning.Read")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    return get_dunning_detail(db, dunning_id=dunning_id)
++
++
+ @router.post("/bills/{bill_id}/bad-debt", summary="Mark bill as bad debt")
+ def post_bill_bad_debt(
+     bill_id: str,
+diff --git a/backend/app/modules/collections/service.py b/backend/app/modules/collections/service.py
+index 5db9cfe..403c42a 100644
+--- a/backend/app/modules/collections/service.py
++++ b/backend/app/modules/collections/service.py
+@@ -164,6 +164,56 @@ def _serialize_batch(db: Session, batch: Dunning, *, reused: bool) -> dict[str,
+     }
+ 
+ 
++def get_dunning_detail(db: Session, *, dunning_id: int) -> dict[str, Any]:
++    batch = db.execute(select(Dunning).where(Dunning.id == dunning_id)).scalar_one_or_none()
++    if not batch:
++        raise_business_error(
++            "DUNNING_NOT_FOUND",
++            "No such dunning batch",
++            status_code=404,
++        )
++
++    lines = (
++        db.execute(
++            select(DunningLine)
++            .where(DunningLine.dunning_id == batch.id)
++            .order_by(DunningLine.line_no.asc(), DunningLine.id.asc())
++        )
++        .scalars()
++        .all()
++    )
++
++    return {
++        "id": batch.id,
++        "dunning_no": batch.dunning_no,
++        "client_id": batch.client_id,
++        "round_no": batch.round_no,
++        "to_date": batch.to_date,
++        "currency": batch.currency,
++        "total_amount": str(batch.total_amount),
++        "status": batch.status,
++        "sent_date": batch.sent_date,
++        "remark": batch.remark,
++        "created_at": batch.created_at,
++        "updated_at": batch.updated_at,
++        "line_count": len(lines),
++        "lines": [
++            {
++                "id": line.id,
++                "line_no": line.line_no,
++                "bill_id": line.bill_id,
++                "bill_no_snapshot": line.bill_no_snapshot,
++                "due_date_snapshot": line.due_date_snapshot,
++                "bill_status_snapshot": line.bill_status_snapshot,
++                "outstanding_amount": str(line.outstanding_amount),
++                "currency_snapshot": line.currency_snapshot,
++                "remark": line.remark,
++            }
++            for line in lines
++        ],
++    }
++
++
+ def generate_dunning_batches(
+     db: Session,
+     *,
+diff --git a/backend/tests/test_collections_e2e.py b/backend/tests/test_collections_e2e.py
+index c83fd87..704ffb0 100644
+--- a/backend/tests/test_collections_e2e.py
++++ b/backend/tests/test_collections_e2e.py
+@@ -222,3 +222,38 @@ def test_collections_dunning_list_and_bad_debt_lifecycle(
+         headers=auth_headers,
+     )
+     _assert_error(ineligible_resp, 400, "BAD_DEBT_NOT_ALLOWED")
++
++
++def test_collections_dunning_detail_includes_lines(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id = _create_client(client, auth_headers)
++    bill_id = _insert_bill(
++        session_factory,
++        client_id=client_id,
++        amount=Decimal("120.00"),
++        balance=Decimal("120.00"),
++        due_date=date(2026, 3, 1),
++    )
++
++    create_resp = client.post(
++        "/api/v1/dunning",
++        headers=auth_headers,
++        json={"to_date": "2026-03-31", "client_id": client_id},
++    )
++    assert create_resp.status_code == 200, create_resp.text
++    create_payload = create_resp.json()
++    assert create_payload["summary"]["created"] >= 1
++    batch = create_payload["batches"][0]
++
++    detail_resp = client.get(f"/api/v1/dunning/{batch['id']}", headers=auth_headers)
++    assert detail_resp.status_code == 200, detail_resp.text
++    detail_payload = detail_resp.json()
++    assert detail_payload["id"] == batch["id"]
++    assert detail_payload["round_no"] == batch["round_no"]
++    assert "lines" in detail_payload
++    assert isinstance(detail_payload["lines"], list)
++    assert len(detail_payload["lines"]) >= 1
++    assert any(line["bill_id"] == bill_id for line in detail_payload["lines"])

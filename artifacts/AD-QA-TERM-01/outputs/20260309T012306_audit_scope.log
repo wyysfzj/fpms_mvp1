@@ -1,0 +1,37 @@
+frontend/src/modules/cases/components/CaseDocumentsTab.vue:4:      <h3 class="panel-heading">往来文件记录</h3>
+frontend/src/modules/cases/components/CaseDocumentsTab.vue:5:      <el-button type="primary" size="small" @click="handleCreate">登记往来文件</el-button>
+frontend/src/modules/cases/components/CaseDocumentsTab.vue:9:      <p>暂无往来文件记录</p>
+frontend/src/modules/documents/pages/DocumentCreate.vue:5:        <h1 class="page-title">登记往来文件</h1>
+frontend/src/modules/documents/pages/DocumentCreate.vue:10:          登记往来文件
+frontend/src/modules/documents/pages/DocumentCreate.vue:269:      message: '关联案件不存在或已失效，请返回案件详情页后重新登记往来文件。',
+frontend/src/modules/documents/pages/DocumentCreate.vue:306:        message: '未找到有效案件，当前无法登记往来文件。',
+frontend/src/modules/cases/components/CaseReceiptsSummary.vue:115:      <p>暂无账单与收款信息。</p>
+frontend/src/modules/cases/components/CaseClaimsTab.vue:3:    <h3 class="panel-heading">申请人/发明人</h3>
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:299:- `/documents` — 标题「往来文件列表」，列头含「方向/类型/日期」
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:303:- `/cases/{id}` — 按钮「返回/编辑案件」，tab「概览/申请人/发明人/往来文件/费用/账单与收款/任务」，字段标签「案件信息/案号/标题/客户/状态/申请日/优先权日/备注」
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:304:- `/documents/{id}` — 按钮「返回/编辑往来文件」，标签「文件内容/文件信息/编号/方向/创建时间/更新时间」
+docs/demo2.md:25:- 从案件详情页进入“登记往来文件”，系统自动带入案件上下文
+docs/demo2.md:33:- 案件收款摘要
+docs/demo2.md:293:  - 概览、申请人/发明人、往来文件、费用、账单与收款、任务等页签
+docs/demo2.md:304:- 鼠标依次扫过 `概览 / 申请人/发明人 / 往来文件 / 费用 / 账单与收款 / 任务`
+docs/demo2.md:384:`案件详情 > 往来文件 > 登记往来文件`
+docs/demo2.md:389:2. 点击右上角 `登记往来文件`
+docs/demo2.md:390:3. 进入“登记往来文件”页后，先停一下，让客户看到：
+docs/demo2.md:400:5. 点击右上角 `登记往来文件`
+docs/demo2.md:401:6. 创建成功后，系统会回到 `往来文件列表`
+docs/demo2.md:408:- 登记往来文件时案件已自动带入，且为只读显示
+docs/demo2.md:417:> 我是从案件详情里点“登记往来文件”进来的，所以系统已经把案件自动带过来了，前台看到的是案号，内部提交用的是案件内部 ID。  
+docs/demo2.md:495:`案件详情 > 往来文件 > 登记往来文件`
+docs/demo2.md:500:2. 再次点击 `往来文件 > 登记往来文件`
+docs/demo2.md:508:4. 点击 `登记往来文件`
+docs/demo2.md:509:5. 创建成功后进入往来文件详情或回到往来文件列表查看
+docs/demo2.md:552:`案件详情 > 往来文件 > 登记往来文件`
+docs/demo2.md:557:2. 在案件详情点击 `往来文件 > 登记往来文件`
+docs/demo2.md:564:4. 点击 `登记往来文件`
+docs/demo2.md:704:- 案件账单与收款页签里可看到：
+docs/demo2.md:720:- 在案件收款摘要处停 2 秒
+docs/demo2.md:729:## 第十一幕：回到案件账单与收款页，做一次“经营视角复盘”
+docs/demo2.md:858:3. 从案件详情进入“登记往来文件”，所属案件自动带入且只读时  
+docs/demo2.md:867:6. 账单余额归零、案件收款摘要更新时  
+docs/demo2.md:886:> 当前版本建议管理层日常先看工作台，再从流程总览点进案件，再回到案件账单与收款页看收费状态。  
+docs/demo2.md:893:> 当前版本已经把费用草稿、账单、回款、核销、案件收款摘要这条主链路打通了。  

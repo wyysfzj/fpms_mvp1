@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"cd frontend && npm run lint","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}

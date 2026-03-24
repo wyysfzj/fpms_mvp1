@@ -1,0 +1,4 @@
+{"step":"lint","cmd":"cd frontend && npm run lint","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_b5_billing_polish.py tests/test_collections_e2e.py","rc":0}
+{"step":"task_gate","cmd":"./scripts/task_validate.sh PE-BE-BL-01 && ./scripts/task_validate.sh PE-FE-BL-01 && ./scripts/task_validate.sh PE-BE-BL-02 && ./scripts/task_validate.sh PE-FE-BL-02 && ./scripts/task_validate.sh PE-BE-BL-03 && ./scripts/task_validate.sh PE-FE-BL-03","rc":0}
+{"step":"typecheck","cmd":"cd frontend && npm run typecheck","rc":0}

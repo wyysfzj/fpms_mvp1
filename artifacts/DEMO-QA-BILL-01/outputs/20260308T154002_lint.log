@@ -1,0 +1,136 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+All checks passed!
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0
+
+
+> fpms-spa@0.1.0 typecheck
+> vue-tsc --noEmit
+
+
+> fpms-spa@0.1.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 1741 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                                    0.65 kB │ gzip:   0.46 kB
+dist/assets/TaskList-CLNOfM_I.css                                                  0.06 kB │ gzip:   0.07 kB
+dist/assets/TaskTemplateList-CsyvQY5t.css                                          0.07 kB │ gzip:   0.09 kB
+dist/assets/DocTemplateList-KK9sQyfy.css                                           0.07 kB │ gzip:   0.09 kB
+dist/assets/ClientForm-CS6EmrVh.css                                                0.12 kB │ gzip:   0.12 kB
+dist/assets/ClientDetail-BCG9_piq.css                                              0.17 kB │ gzip:   0.17 kB
+dist/assets/DocumentEdit-9LuVoBpY.css                                              0.18 kB │ gzip:   0.13 kB
+dist/assets/FeeRates-BIre_kfD.css                                                  0.19 kB │ gzip:   0.15 kB
+dist/assets/BillList-CB8KyW1T.css                                                  0.19 kB │ gzip:   0.13 kB
+dist/assets/CaseList-1_tj2h0_.css                                                  0.25 kB │ gzip:   0.16 kB
+dist/assets/DocumentList-zgujAAzi.css                                              0.26 kB │ gzip:   0.15 kB
+dist/assets/CaseCreate-BnIK5HHJ.css                                                0.27 kB │ gzip:   0.17 kB
+dist/assets/FeeDraftCreate-BiPQmJTz.css                                            0.33 kB │ gzip:   0.19 kB
+dist/assets/TaskCreate-ChcytJSl.css                                                0.33 kB │ gzip:   0.19 kB
+dist/assets/PaymentCreate-Dhn2Zh77.css                                             0.39 kB │ gzip:   0.22 kB
+dist/assets/DocumentCreate-DSfrjqGh.css                                            0.48 kB │ gzip:   0.23 kB
+dist/assets/FeeDraftList-CM-Xz2Fq.css                                              0.51 kB │ gzip:   0.24 kB
+dist/assets/SystemParams-DT5fwFt_.css                                              0.73 kB │ gzip:   0.34 kB
+dist/assets/TaskDetail-BBBJEcoy.css                                                0.81 kB │ gzip:   0.34 kB
+dist/assets/PaymentList-n5NTapnG.css                                               0.87 kB │ gzip:   0.38 kB
+dist/assets/DunningList-DsoMDsSt.css                                               1.01 kB │ gzip:   0.39 kB
+dist/assets/LetterheadList-C9IBvdjX.css                                            1.04 kB │ gzip:   0.39 kB
+dist/assets/BillDetail-Cmr-S9OO.css                                                1.08 kB │ gzip:   0.43 kB
+dist/assets/CommissionRuleList-D4XMKIkH.css                                        1.10 kB │ gzip:   0.42 kB
+dist/assets/CommissionList-CadBp5Xz.css                                            1.10 kB │ gzip:   0.42 kB
+dist/assets/ConsultingCaseCreate-D-a1Ko3F.css                                      1.14 kB │ gzip:   0.43 kB
+dist/assets/ExpenseCreate-Bvo07WB8.css                                             1.16 kB │ gzip:   0.45 kB
+dist/assets/Dashboard-D0A1NG1Z.css                                                 1.18 kB │ gzip:   0.41 kB
+dist/assets/GovPaymentCreate-BLV4_zHn.css                                          1.21 kB │ gzip:   0.46 kB
+dist/assets/DunningCreate-D2d5OZNx.css                                             1.22 kB │ gzip:   0.47 kB
+dist/assets/FeeDraftDetail-DHJuFDYb.css                                            1.24 kB │ gzip:   0.49 kB
+dist/assets/TodayReminders-BPte7rxC.css                                            1.26 kB │ gzip:   0.44 kB
+dist/assets/PayList-YlOGsU6w.css                                                   1.26 kB │ gzip:   0.47 kB
+dist/assets/AnnuityTaskList-BjIwKcEf.css                                           1.32 kB │ gzip:   0.49 kB
+dist/assets/DocumentDetail-Bc-mxXzO.css                                            1.38 kB │ gzip:   0.52 kB
+dist/assets/BillCreate-7EJA5F4z.css                                                1.39 kB │ gzip:   0.48 kB
+dist/assets/DunningDetail-DEhDcbLM.css                                             1.48 kB │ gzip:   0.55 kB
+dist/assets/ExpenseList-jqq2GD8O.css                                               1.58 kB │ gzip:   0.59 kB
+dist/assets/CommissionSettlement-CCjEgYmx.css                                      1.70 kB │ gzip:   0.57 kB
+dist/assets/ConsultingFeeDraftCreate-1IWAvW-Q.css                                  1.71 kB │ gzip:   0.56 kB
+dist/assets/ConsultingProfitability-BTM2Gg6s.css                                   1.83 kB │ gzip:   0.66 kB
+dist/assets/CaseDetail-BetkytGm.css                                                1.88 kB │ gzip:   0.58 kB
+dist/assets/index-C23FIES_.css                                                   378.97 kB │ gzip:  52.90 kB
+dist/assets/ClientList-C8Ajscxc.js                                                 0.17 kB │ gzip:   0.19 kB
+dist/assets/LoadingBlock.vue_vue_type_script_setup_true_lang-DyPOSr3w.js           0.43 kB │ gzip:   0.31 kB
+dist/assets/PaginationBar.vue_vue_type_script_setup_true_lang-D9iAg_kE.js          0.68 kB │ gzip:   0.39 kB
+dist/assets/system-D5DtfRx6.js                                                     0.71 kB │ gzip:   0.36 kB
+dist/assets/EmptyState.vue_vue_type_script_setup_true_lang-oXMDqvvc.js             1.07 kB │ gzip:   0.59 kB
+dist/assets/displayText-CwzWHq2C.js                                                1.09 kB │ gzip:   0.81 kB
+dist/assets/validation-CQlPBMiH.js                                                 1.10 kB │ gzip:   0.50 kB
+dist/assets/ApiErrorBanner.vue_vue_type_script_setup_true_lang-DP_-JKVv.js         1.42 kB │ gzip:   0.73 kB
+dist/assets/tasks-CJNBsFYV.js                                                      1.95 kB │ gzip:   0.74 kB
+dist/assets/clients-D-Fvhj0K.js                                                    2.08 kB │ gzip:   0.63 kB
+dist/assets/govPayments-Cejjvc_b.js                                                2.13 kB │ gzip:   1.28 kB
+dist/assets/RelationChainCard.vue_vue_type_script_setup_true_lang-ClRlmzz9.js      2.16 kB │ gzip:   0.99 kB
+dist/assets/collections-NlKoCwmY.js                                                2.60 kB │ gzip:   0.96 kB
+dist/assets/documents-CAV0_OTE.js                                                  2.73 kB │ gzip:   0.93 kB
+dist/assets/ClientList-CmXsWZ6b.js                                                 2.97 kB │ gzip:   1.47 kB
+dist/assets/workflow-Ci_YPtfb.js                                                   3.04 kB │ gzip:   1.39 kB
+dist/assets/cases-DGWpEs_T.js                                                      3.33 kB │ gzip:   1.00 kB
+dist/assets/expenses-qg8atxj1.js                                                   3.33 kB │ gzip:   1.68 kB
+dist/assets/FeeDraftCreate-DB6Mzjp0.js                                             3.39 kB │ gzip:   1.68 kB
+dist/assets/TodayReminders-R16UzH3j.js                                             3.47 kB │ gzip:   1.78 kB
+dist/assets/commission-_ZrMoW1s.js                                                 3.71 kB │ gzip:   1.03 kB
+dist/assets/BillList-BjeDpejt.js                                                   4.10 kB │ gzip:   1.81 kB
+dist/assets/DunningDetail-CvLKZQ8x.js                                              4.14 kB │ gzip:   2.00 kB
+dist/assets/billing-4Z6H_Oix.js                                                    4.30 kB │ gzip:   1.48 kB
+dist/assets/TaskCreate-QbgCGkik.js                                                 4.48 kB │ gzip:   1.92 kB
+dist/assets/fees-CTNtzVgj.js                                                       4.61 kB │ gzip:   1.40 kB
+dist/assets/DocumentEdit-DoIyB19Z.js                                               4.75 kB │ gzip:   2.00 kB
+dist/assets/FeeDraftList-LnPYNbxS.js                                               4.80 kB │ gzip:   2.06 kB
+dist/assets/PaymentCreate-D7jIn-oK.js                                              4.83 kB │ gzip:   2.05 kB
+dist/assets/DunningCreate-C0W2eorY.js                                              4.93 kB │ gzip:   2.46 kB
+dist/assets/DocumentList-HV1Ffi1C.js                                               4.99 kB │ gzip:   2.01 kB
+dist/assets/SystemParams-DGqAjTU2.js                                               5.49 kB │ gzip:   2.25 kB
+dist/assets/DunningList-BStiO_kr.js                                                5.67 kB │ gzip:   2.51 kB
+dist/assets/LetterheadList-C90f_DIi.js                                             5.70 kB │ gzip:   2.44 kB
+dist/assets/ClientForm-Drn0wPXc.js                                                 5.96 kB │ gzip:   2.52 kB
+dist/assets/TaskTemplateList-CLVKTwlz.js                                           6.19 kB │ gzip:   2.34 kB
+dist/assets/ExpenseList-DaqNbk68.js                                                6.32 kB │ gzip:   2.80 kB
+dist/assets/CommissionList-DRxbMEQj.js                                             6.46 kB │ gzip:   2.56 kB
+dist/assets/ExpenseCreate-ksE_vpWa.js                                              6.58 kB │ gzip:   2.49 kB
+dist/assets/PayList-CnMFkboK.js                                                    6.70 kB │ gzip:   2.89 kB
+dist/assets/GovPaymentCreate--D0xZqb6.js                                           7.09 kB │ gzip:   2.61 kB
+dist/assets/TaskList-BLWdjFXl.js                                                   7.48 kB │ gzip:   2.80 kB
+dist/assets/DocumentCreate-CpmgxvwX.js                                             7.72 kB │ gzip:   3.11 kB
+dist/assets/CaseCreate-u33fFVnr.js                                                 7.92 kB │ gzip:   2.66 kB
+dist/assets/ConsultingCaseCreate-ioynJyXt.js                                       7.99 kB │ gzip:   2.93 kB
+dist/assets/DocumentDetail-CbzKZin9.js                                             8.08 kB │ gzip:   3.01 kB
+dist/assets/CaseList-BvnjOVi4.js                                                   8.17 kB │ gzip:   2.93 kB
+dist/assets/TaskDetail-C-VS2XLY.js                                                 8.42 kB │ gzip:   3.32 kB
+dist/assets/ConsultingProfitability-AioXC83z.js                                    8.70 kB │ gzip:   3.68 kB
+dist/assets/DocTemplateList-BGNZmTqt.js                                            9.30 kB │ gzip:   3.13 kB
+dist/assets/CaseEdit-zwg_wrTg.js                                                   9.32 kB │ gzip:   2.99 kB
+dist/assets/BillCreate-DKddS5yH.js                                                 9.88 kB │ gzip:   3.71 kB
+dist/assets/PaymentList-rJZ1BngT.js                                               10.65 kB │ gzip:   4.06 kB
+dist/assets/FeeRates-B51_sBlv.js                                                  11.55 kB │ gzip:   4.04 kB
+dist/assets/ConsultingFeeDraftCreate-21EUgUXk.js                                  12.72 kB │ gzip:   4.13 kB
+dist/assets/CommissionRuleList-Ch6rQT0h.js                                        12.86 kB │ gzip:   3.90 kB
+dist/assets/ClientDetail-3wCwava3.js                                              13.05 kB │ gzip:   4.10 kB
+dist/assets/BillDetail-Cr4XmJAP.js                                                13.19 kB │ gzip:   4.55 kB
+dist/assets/FeeDraftDetail-DtjN6lGB.js                                            13.48 kB │ gzip:   4.65 kB
+dist/assets/CommissionSettlement-C4-w4TUx.js                                      14.27 kB │ gzip:   4.38 kB
+dist/assets/AnnuityTaskList-C0yRC91R.js                                           15.05 kB │ gzip:   5.63 kB
+dist/assets/Dashboard-ChORtNSs.js                                                 16.37 kB │ gzip:   5.92 kB
+dist/assets/CaseDetail-Lj10oWV0.js                                                24.98 kB │ gzip:   7.60 kB
+dist/assets/index-DXPE_IEr.js                                                  1,073.49 kB │ gzip: 357.68 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.56s

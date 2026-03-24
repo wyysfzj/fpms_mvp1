@@ -1,0 +1,14 @@
+diff --git a/tmp/pe-fe-00-01-perms.before.ts b/frontend/src/constants/perms.ts
+index bc1763b..d515bec 100644
+--- a/tmp/pe-fe-00-01-perms.before.ts
++++ b/frontend/src/constants/perms.ts
+@@ -3,9 +3,6 @@
+  * These should match backend permission strings
+  */
+ 
+-// Dashboard
+-export const DASHBOARD_READ = 'Dashboard.Read'
+-
+ // Cases
+ export const CASES_READ = 'Case.Read'
+ export const CASES_WRITE = 'Case.Edit'

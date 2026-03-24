@@ -1,0 +1,2 @@
+{"ts":"20260228T164525","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}
+{"ts":"20260228T164525","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/expenses/models.py"}

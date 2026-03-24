@@ -1,0 +1,8 @@
+{"ts":"20260124T111342","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/billing/api.py\ app/modules/billing/service.py\ app/modules/billing/schemas.py"}
+{"ts":"20260124T111350","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/billing/api.py\ app/modules/billing/service.py\ app/modules/billing/schemas.py"}
+{"ts":"20260124T111403","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/billing/api.py\ app/modules/billing/service.py\ app/modules/billing/schemas.py"}
+{"ts":"20260124T111413","step":"curl","cmd":"bash -lc export\ FPMS_TOKEN=REPLACE_ME\ \&\&\ curl\ -i\ -H\ \'Authorization:\ Bearer\ \'\ -H\ \'Content-Type:\ application/json\'\ -d\ \'\{\}\'\ \'http://localhost:8000/api/v1/payments\'"}
+{"ts":"20260124T111459","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/billing/api.py\ app/modules/billing/service.py\ app/modules/billing/schemas.py"}
+{"ts":"20260124T111510","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/billing/api.py\ app/modules/billing/service.py\ app/modules/billing/schemas.py"}
+{"ts":"20260124T111516","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/billing/api.py\ app/modules/billing/service.py\ app/modules/billing/schemas.py"}
+{"ts":"20260124T111735","step":"curl","cmd":"bash -lc export\ FPMS_TOKEN=REPLACE_ME\ \&\&\ curl\ -i\ -H\ \'Authorization:\ Bearer\ \'\ -H\ \'Content-Type:\ application/json\'\ -d\ \'\{\}\'\ \'http://localhost:8000/api/v1/payments\'"}

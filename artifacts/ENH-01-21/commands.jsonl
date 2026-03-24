@@ -1,0 +1,4 @@
+{"ts":"20260117T143833","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/core/config.py"}
+{"ts":"20260117T143842","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/core/config.py"}
+{"ts":"20260117T143850","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/core/config.py"}
+{"ts":"20260117T143905","step":"e2e","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/auth/login -H Content-Type:\ application/json -d \{\"username\":\"admin\"\,\"password\":\"admin123\"\}"}

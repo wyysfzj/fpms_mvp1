@@ -1,0 +1,17 @@
+{"timestamp": "2026-03-08T07:08:29.595402+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "fa02cc14-1a39-4cd9-a33b-70954d391902"}
+{"timestamp": "2026-03-08T07:08:29.596365+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/auth/login \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T07:08:29.604695+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "c19dc687-329a-4045-975f-5046f1edfadb"}
+{"timestamp": "2026-03-08T07:08:29.605229+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/clients \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:08:29.612651+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "e323fca8-3619-4366-ad26-e9c227a3350c"}
+{"timestamp": "2026-03-08T07:08:29.613202+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/cases \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:08:29.618241+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "e6c2af72-6b55-457f-9bc4-ff5cf2b88915"}
+{"timestamp": "2026-03-08T07:08:29.618753+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: POST http://testserver/api/v1/fees/drafts \"HTTP/1.1 201 Created\"", "request_id": null}
+{"timestamp": "2026-03-08T07:08:29.622592+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "dc910b5f-e4c7-4a31-aa23-10800eb8461c"}
+{"timestamp": "2026-03-08T07:08:29.623065+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/fees/drafts?page=1&page_size=20&case_id=a951534d-4962-4640-8550-9c09a98aa303 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T07:08:29.625837+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "7941e074-1028-4aff-827c-7132986634f1"}
+{"timestamp": "2026-03-08T07:08:29.626330+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/fees/drafts/06ecc361-47e7-46fd-942f-bf7611715bb7 \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T07:08:29.629654+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "388d417c-0408-4ae9-b3c5-b0bbdadfa0e9"}
+{"timestamp": "2026-03-08T07:08:29.630127+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/fees/drafts/06ecc361-47e7-46fd-942f-bf7611715bb7/items \"HTTP/1.1 200 OK\"", "request_id": null}
+{"timestamp": "2026-03-08T07:08:29.632156+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "80c77425-e52f-48ab-9a3d-847c0f19a8c9"}
+{"timestamp": "2026-03-08T07:08:29.632672+00:00", "level": "INFO", "logger": "httpx", "message": "HTTP Request: GET http://testserver/api/v1/fees/drafts/8d8af5c5-7bc1-46c5-a9df-6e8ad08bb0c0/items \"HTTP/1.1 404 Not Found\"", "request_id": null}
+{'login': 200, 'create_client': 201, 'create_case': 201, 'create_draft': 201, 'list': 200, 'detail': 200, 'items': 200, 'missing_items': 404, 'draft_id': '06ecc361-47e7-46fd-942f-bf7611715bb7', 'case_no': 'ZY-FEE-2840B457', 'client_name': '上海启衡知识产权服务有限公司'}

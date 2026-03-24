@@ -1,0 +1,48 @@
+## master
+ M backend/app/modules/billing/api.py
+ M backend/app/modules/billing/schemas.py
+ M backend/app/modules/cases/api.py
+ M backend/app/modules/cases/schemas.py
+ M backend/app/modules/cases/service.py
+ M backend/app/modules/fees/api.py
+ M backend/app/modules/fees/schemas.py
+ M backend/app/modules/fees/service.py
+ M backend/app/modules/masterdata/clients/api.py
+ M docs/FPMS_Frontend_Manual_Test_User_Guide.md
+ M frontend/src/api/billing.ts
+ M frontend/src/api/billing.types.ts
+ M frontend/src/api/cases.ts
+ M frontend/src/api/cases.types.ts
+ M frontend/src/api/clients.types.ts
+ M frontend/src/api/fees.ts
+ M frontend/src/api/fees.types.ts
+ M frontend/src/constants/displayText.ts
+ M frontend/src/constants/labels.zh.ts
+ M frontend/src/constants/workflow.ts
+ M frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+ M frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+ M frontend/src/modules/billing/pages/BillCreate.vue
+ M frontend/src/modules/billing/pages/BillDetail.vue
+ M frontend/src/modules/cases/components/CaseClaimsTab.vue
+ M frontend/src/modules/cases/components/CaseDocumentsTab.vue
+ M frontend/src/modules/cases/components/CaseReceiptsSummary.vue
+ M frontend/src/modules/cases/pages/CaseEdit.vue
+ M frontend/src/modules/clients/pages/ClientDetail.vue
+ M frontend/src/modules/clients/pages/ClientForm.vue
+ M frontend/src/modules/clients/pages/ClientList.vue
+ M frontend/src/modules/commission/pages/CommissionList.vue
+ M frontend/src/modules/commission/pages/CommissionSettlement.vue
+ M frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
+ M frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
+ M frontend/src/modules/documents/pages/DocumentCreate.vue
+ M frontend/src/modules/fees/pages/FeeDraftDetail.vue
+ M frontend/src/modules/fees/pages/FeeDraftList.vue
+ M frontend/src/modules/system/pages/DocTemplateList.vue
+ M frontend/src/router/index.ts
+?? docs/FPMS_Final_Enhancement_Plan_and_Task_Breakdown_SPEC_2.0_20260228.md
+?? docs/demo.md
+?? docs/demo2.md
+?? frontend/src/constants/terminology.ts
+?? tasks/afterdemon/
+?? tasks/demo/
+?? tasks/dmmo/

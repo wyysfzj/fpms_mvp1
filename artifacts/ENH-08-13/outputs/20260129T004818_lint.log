@@ -1,0 +1,39 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+F821 Undefined name `SystemParam`
+  --> app/modules/system/api.py:48:22
+   |
+46 |     description = payload.get("description")
+47 |
+48 |     param = db.query(SystemParam).filter(SystemParam.param_key == param_key).first()
+   |                      ^^^^^^^^^^^
+49 |     if not param:
+50 |         param = SystemParam(
+   |
+
+F821 Undefined name `SystemParam`
+  --> app/modules/system/api.py:48:42
+   |
+46 |     description = payload.get("description")
+47 |
+48 |     param = db.query(SystemParam).filter(SystemParam.param_key == param_key).first()
+   |                                          ^^^^^^^^^^^
+49 |     if not param:
+50 |         param = SystemParam(
+   |
+
+F821 Undefined name `SystemParam`
+  --> app/modules/system/api.py:50:17
+   |
+48 |     param = db.query(SystemParam).filter(SystemParam.param_key == param_key).first()
+49 |     if not param:
+50 |         param = SystemParam(
+   |                 ^^^^^^^^^^^
+51 |             param_key=param_key,
+52 |             param_value=str(param_value),
+   |
+
+Found 3 errors.

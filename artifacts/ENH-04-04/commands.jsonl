@@ -1,0 +1,4 @@
+{"ts":"20260124T231657","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/documents/service.py"}
+{"ts":"20260124T231702","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/documents/service.py"}
+{"ts":"20260124T231706","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/documents/service.py"}
+{"ts":"20260124T231712","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"from\ app.modules.documents.service\ import\ list_documents\;\ print\(list_documents.__name__\)\""}

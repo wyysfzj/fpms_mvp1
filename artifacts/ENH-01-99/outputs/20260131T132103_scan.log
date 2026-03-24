@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/scripts/scan_perms.py", line 6, in <module>
+    from app.modules.rbac.service import ROLE_PERMISSIONS
+ModuleNotFoundError: No module named 'app'

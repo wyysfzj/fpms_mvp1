@@ -1,0 +1,5 @@
+
+> fpms-spa@0.1.0 typecheck
+> vue-tsc --noEmit
+
+src/stores/auth.ts(38,42): error TS18047: 'perms.value' is possibly 'null'.

@@ -1,0 +1,105 @@
+docs/frontend_smoke_flows.md:295:### 8A.1 年费链路（Annuity）
+docs/frontend_smoke_flows.md:297:- `/annuity/tasks`：年费任务列表（筛选、编辑指示、批量生成草单）。
+docs/frontend_smoke_flows.md:298:- `/annuity/pay-lists`：官费清单生成与回执。
+docs/frontend_smoke_flows.md:299:- `/annuity/gov-payments/new`：官方缴费登记。
+docs/frontend_smoke_flows.md:302:1. 打开 `/annuity/tasks`，确认列表可加载并可按状态/范围筛选。
+docs/frontend_smoke_flows.md:305:4. 打开 `/annuity/pay-lists`，输入费用项编号并点击`生成官费清单`。
+docs/frontend_smoke_flows.md:306:5. 在回执中点击`登记缴费`，跳转 `/annuity/gov-payments/new` 并自动带入参数。
+docs/frontend_smoke_flows.md:307:6. 在 `/annuity/gov-payments/new` 提交`官方缴费登记`并检查结果卡片。
+docs/frontend_smoke_flows.md:310:- `GET /annuity/tasks` -> `200`。
+docs/frontend_smoke_flows.md:311:- `PUT /annuity/tasks/{taskId}/instruction` -> `200`。
+docs/frontend_smoke_flows.md:312:- `POST /annuity/tasks/generate-drafts` -> `200`。
+docs/frontend_smoke_flows.md:317:### 8A.2 催款链路（Collections）
+docs/frontend_smoke_flows.md:319:- `/collections/dunning`：催款批次列表。
+docs/frontend_smoke_flows.md:320:- `/collections/dunning/new`：创建催款批次。
+docs/frontend_smoke_flows.md:321:- `/collections/dunning/{id}`：催款批次详情。
+docs/frontend_smoke_flows.md:324:1. 打开 `/collections/dunning`，确认列表与筛选正常。
+docs/frontend_smoke_flows.md:325:2. 点击`创建催款批次`进入 `/collections/dunning/new`。
+docs/frontend_smoke_flows.md:328:5. 进入 `/collections/dunning/{id}`，核对批次信息、状态、金额与日期字段。
+docs/frontend_smoke_flows.md:335:### 8A.3 提成链路（Commission）
+docs/frontend_smoke_flows.md:337:- `/commission/rules`：提成规则管理。
+docs/frontend_smoke_flows.md:338:- `/commission`（别名 `/commission/records`）：提成记录查询。
+docs/frontend_smoke_flows.md:339:- `/commission/settlements`：提成结算批次、明细生成与报表。
+docs/frontend_smoke_flows.md:342:1. 打开 `/commission/rules`，新增一条规则并保存；再编辑该规则并切换启停状态。
+docs/frontend_smoke_flows.md:343:2. 打开 `/commission`，按案件/代理人/状态筛选并查询。
+docs/frontend_smoke_flows.md:344:3. 打开 `/commission/settlements`，创建结算批次。
+docs/frontend_smoke_flows.md:349:- `GET /commission/rules` -> `200`。
+docs/frontend_smoke_flows.md:350:- `POST /commission/rules` -> `201`（部分环境可能返回 `200`）。
+docs/frontend_smoke_flows.md:351:- `PUT /commission/rules/{id}` -> `200`。
+docs/frontend_smoke_flows.md:352:- `GET /commission` -> `200`。
+docs/frontend_smoke_flows.md:353:- `POST /commission/settlements` -> `201`（部分环境可能返回 `200`）。
+docs/frontend_smoke_flows.md:354:- `POST /commission/settlements/{id}/generate-lines` -> `200`。
+docs/frontend_smoke_flows.md:355:- `GET /commission/reports/settlement` -> `200`。
+docs/frontend_smoke_flows.md:357:### 8A.4 顾问链路（Consulting）
+docs/frontend_smoke_flows.md:359:- `/consulting/cases/new`：顾问/检索项目立案。
+docs/frontend_smoke_flows.md:360:- `/consulting/fee-drafts/new`：顾问/检索服务费草单生成。
+docs/frontend_smoke_flows.md:361:- `/consulting/profitability`：顾问项目收益视图。
+docs/frontend_smoke_flows.md:364:1. 打开 `/consulting/cases/new`，按项目类型填写必填项并提交。
+docs/frontend_smoke_flows.md:366:3. 打开 `/consulting/fee-drafts/new`，按模式填写参数并点击`生成服务费草单`。
+docs/frontend_smoke_flows.md:368:5. 打开 `/consulting/profitability`，输入项目 ID 并查询收益，核对收入/支出/毛利统计。
+docs/frontend_smoke_flows.md:371:- `POST /consulting/cases` -> `201`（部分环境可能返回 `200`）。
+docs/frontend_smoke_flows.md:372:- `POST /consulting/fee-drafts` -> `201` 或 `200`。
+docs/frontend_smoke_flows.md:374:- `GET /expenses`（按项目筛选）-> `200`。
+docs/frontend_smoke_flows.md:377:### 8A.5 支出链路（Expense）
+docs/frontend_smoke_flows.md:379:- `/expenses`：支出列表、筛选、统计卡片。
+docs/frontend_smoke_flows.md:380:- `/expenses/new`：录入支出。
+docs/frontend_smoke_flows.md:383:1. 打开 `/expenses`，按项目编号/类别/日期范围筛选并查询。
+docs/frontend_smoke_flows.md:384:2. 点击`录入支出`进入 `/expenses/new`。
+docs/frontend_smoke_flows.md:389:- `GET /expenses` -> `200`。
+docs/frontend_smoke_flows.md:390:- `POST /expenses` -> `201`（部分环境可能返回 `200`）。
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:317:### 5.9 Annuity（年费链路）
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:318:**目标：** 年费任务 → 草单生成 → 官费清单 → 官方缴费登记
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:321:- `/annuity/tasks`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:322:- `/annuity/pay-lists`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:323:- `/annuity/gov-payments/new`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:326:1) 进入 `/annuity/tasks`，确认列表与筛选可用。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:329:4) 进入 `/annuity/pay-lists`，输入费用项编号并点击 `生成官费清单`。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:330:5) 在回执区点击 `登记缴费`，应跳转到 `/annuity/gov-payments/new` 且自动带入参数。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:334:- `GET /annuity/tasks` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:335:- `PUT /annuity/tasks/{id}/instruction` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:336:- `POST /annuity/tasks/generate-drafts` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:340:### 5.10 Collections（催款链路）
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:341:**目标：** 催款批次列表 → 创建催款批次 → 详情校验
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:344:- `/collections/dunning`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:345:- `/collections/dunning/new`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:346:- `/collections/dunning/{id}`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:349:1) 进入 `/collections/dunning`，验证筛选（轮次、状态）与分页。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:350:2) 点击 `创建催款批次` 进入 `/collections/dunning/new`。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:359:### 5.11 Commission（提成链路）
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:363:- `/commission/rules`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:364:- `/commission`（兼容别名 `/commission/records`）
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:365:- `/commission/settlements`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:368:1) 进入 `/commission/rules`，新增规则并保存。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:370:3) 进入 `/commission`，按案件/代理人/状态查询记录。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:371:4) 进入 `/commission/settlements`，创建结算批次。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:376:- `GET /commission/rules` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:377:- `POST /commission/rules` -> `201/200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:378:- `PUT /commission/rules/{id}` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:379:- `GET /commission` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:380:- `POST /commission/settlements` -> `201/200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:381:- `POST /commission/settlements/{id}/generate-lines` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:382:- `GET /commission/reports/settlement` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:384:### 5.12 Consulting（顾问链路）
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:388:- `/consulting/cases/new`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:389:- `/consulting/fee-drafts/new`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:390:- `/consulting/profitability`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:393:1) 进入 `/consulting/cases/new`，按项目类型填写必填项并提交。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:395:3) 进入 `/consulting/fee-drafts/new`，按 `FIXED/HOURLY/HYBRID` 任一模式填写并提交。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:397:5) 进入 `/consulting/profitability`，输入项目 ID 后查询收益。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:398:6) 核对“应收/已收/支出/毛利/毛利率”及支出分类统计。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:401:- `POST /consulting/cases` -> `201/200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:402:- `POST /consulting/fee-drafts` -> `201/200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:404:- `GET /expenses`（`case_id` 过滤）-> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:406:### 5.13 Expense（支出链路）
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:407:**目标：** 支出列表筛选 → 新增支出 → 列表与统计回显
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:410:- `/expenses`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:411:- `/expenses/new`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:414:1) 进入 `/expenses`，按项目编号、类别、日期范围筛选。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:415:2) 点击 `录入支出` 进入 `/expenses/new`。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:416:3) 填写必填字段（案件/项目编号、支出类别、支出日期、金额、币种）并提交。  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:420:- `GET /expenses` -> `200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:421:- `POST /expenses` -> `201/200`
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:436:9) `/annuity/tasks` 批量生成草单成功  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:437:10) `/collections/dunning/new` 创建催款批次成功  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:438:11) `/commission/settlements` 创建批次并生成明细成功  
+docs/FPMS_Frontend_Manual_Test_User_Guide.md:439:12) `/consulting/profitability` 与 `/expenses` 查询成功

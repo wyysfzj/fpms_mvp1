@@ -1,0 +1,3 @@
+{"step":"lint","cmd":"ruff check backend/app/modules/documents/api.py backend/app/modules/documents/service.py backend/app/modules/documents/schemas.py backend/app/modules/documents/fee_linking_service.py backend/app/modules/tasks/task_generation_service.py backend/tests/test_b2_reply_chain.py backend/tests/test_b3_fee_linking.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_b2_reply_chain.py tests/test_b3_fee_linking.py","rc":0}
+{"step":"task_gate","cmd":"./scripts/task_validate.sh PE-BE-WD-02","rc":0}

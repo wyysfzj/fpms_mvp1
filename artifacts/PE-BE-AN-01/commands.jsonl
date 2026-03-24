@@ -1,0 +1,3 @@
+{"ts":"20260228T173733","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/annuity/service.py"}
+{"ts":"20260228T173748","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_b6_search_filters.py"}
+{"ts":"20260228T173752","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_b6_search_filters.py"}

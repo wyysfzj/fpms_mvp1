@@ -1,0 +1,6052 @@
+diff --git a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+new file mode 100644
+index 0000000..00e1beb
+--- /dev/null
++++ b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+@@ -0,0 +1,548 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">年费任务列表</h1>
++        <span class="page-count" aria-live="polite">{{ total }} 条</span>
++      </div>
++    </div>
++
++    <el-row :gutter="12" style="margin-bottom: 16px">
++      <el-col :xs="24" :sm="12" :md="6">
++        <el-select
++          v-model="filterStatus"
++          aria-label="任务状态筛选"
++          placeholder="任务状态"
++          clearable
++          @change="onFilterChange"
++        >
++          <el-option label="全部状态" value="" />
++          <el-option label="待处理" value="OPEN" />
++          <el-option label="已完成" value="DONE" />
++          <el-option label="已取消" value="CANCELLED" />
++        </el-select>
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6">
++        <el-select
++          v-model="filterPendingMode"
++          aria-label="处理范围筛选"
++          placeholder="处理范围"
++          clearable
++          @change="onFilterChange"
++        >
++          <el-option label="全部范围" value="" />
++          <el-option label="仅待处理" value="pending" />
++          <el-option label="仅已处理" value="processed" />
++        </el-select>
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6">
++        <el-select
++          v-model="filterNoticeStatus"
++          aria-label="通知状态筛选"
++          placeholder="通知状态"
++          clearable
++          @change="onFilterChange"
++        >
++          <el-option label="全部通知状态" value="" />
++          <el-option label="待通知" value="PENDING" />
++          <el-option label="已通知" value="SENT" />
++          <el-option label="无需通知" value="SKIPPED" />
++        </el-select>
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6">
++        <el-date-picker
++          v-model="filterDueRange"
++          aria-label="到期日期范围筛选"
++          type="daterange"
++          range-separator="至"
++          start-placeholder="到期开始日期"
++          end-placeholder="到期结束日期"
++          value-format="YYYY-MM-DD"
++          format="YYYY-MM-DD"
++          clearable
++          @change="onFilterChange"
++        />
++      </el-col>
++    </el-row>
++
++    <div class="batch-action-bar">
++      <span class="batch-action-text">已选择 {{ selectedTaskIds.length }} 项</span>
++      <el-checkbox v-model="generatePayNextYear">同时生成下一年度</el-checkbox>
++      <el-button
++        type="primary"
++        aria-label="批量生成草单"
++        :loading="generatingDrafts"
++        :disabled="selectedTaskIds.length === 0"
++        @click="handleBatchGenerateDrafts"
++      >
++        批量生成草单
++      </el-button>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="10" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无年费任务"
++        message="请调整筛选条件后重试。"
++        icon="📄"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table
++        :data="tasks"
++        aria-label="年费任务列表"
++        stripe
++        size="small"
++        class="compact-table"
++        @selection-change="handleSelectionChange"
++      >
++        <el-table-column type="selection" width="48" />
++        <el-table-column prop="id" label="任务ID" width="90" />
++        <el-table-column label="案件" min-width="180">
++          <template #default="{ row }">
++            <router-link :to="`/cases/${row.case_id}`" class="case-link">
++              {{ row.case_id }}
++            </router-link>
++          </template>
++        </el-table-column>
++        <el-table-column prop="client_id" label="客户ID" min-width="180" />
++        <el-table-column prop="year_no" label="年度" width="90" />
++        <el-table-column label="到期日" width="130">
++          <template #default="{ row }">
++            {{ formatDate(row.due_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="任务状态" width="120">
++          <template #default="{ row }">
++            <el-tag :type="statusTagType(row.status)" size="small">
++              {{ taskStatusText(row.status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="通知状态" width="120">
++          <template #default="{ row }">
++            <el-tag :type="noticeTagType(row.notice_status)" size="small">
++              {{ noticeStatusText(row.notice_status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="客户指示" width="120">
++          <template #default="{ row }">
++            {{ instructionText(row.client_instruction) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="指示日期" width="130">
++          <template #default="{ row }">
++            {{ formatDate(row.instruction_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="操作" width="120" fixed="right">
++          <template #default="{ row }">
++            <el-button type="primary" link @click="openInstructionDialog(row)">
++              编辑指示
++            </el-button>
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar
++        v-model:page="page"
++        v-model:page-size="pageSize"
++        :total="total"
++        :page-sizes="[10, 20, 50]"
++      />
++    </div>
++
++    <InstructionDialog
++      v-model="instructionDialogVisible"
++      :task-id="activeTask?.id ?? null"
++      :initial-instruction="activeTask?.client_instruction"
++      :initial-instruction-date="activeTask?.instruction_date"
++      @success="handleInstructionSaved"
++    />
++
++    <el-dialog
++      v-model="generateReceiptVisible"
++      title="草单生成回执"
++      width="900px"
++    >
++      <template v-if="generateReceipt">
++        <el-descriptions :column="3" border style="margin-bottom: 16px">
++          <el-descriptions-item label="请求数">{{ generateReceipt.summary.requested }}</el-descriptions-item>
++          <el-descriptions-item label="目标数">{{ generateReceipt.summary.targets }}</el-descriptions-item>
++          <el-descriptions-item label="成功数">{{ generateReceipt.summary.success }}</el-descriptions-item>
++          <el-descriptions-item label="失败数">{{ generateReceipt.summary.failed }}</el-descriptions-item>
++          <el-descriptions-item label="下一年度">
++            {{ generateReceipt.summary.pay_next_year ? '是' : '否' }}
++          </el-descriptions-item>
++        </el-descriptions>
++
++        <div class="receipt-block">
++          <h3 class="receipt-title">成功明细</h3>
++          <el-table :data="generateReceipt.success" size="small" border>
++            <el-table-column prop="source_task_id" label="来源任务ID" width="110" />
++            <el-table-column prop="task_id" label="任务ID" width="90" />
++            <el-table-column prop="year_no" label="年度" width="80" />
++            <el-table-column prop="draft_id" label="草单ID" min-width="210" />
++            <el-table-column label="金额" width="140" align="right">
++              <template #default="{ row }">
++                {{ formatMoney(row.amount, row.currency) }}
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++
++        <div class="receipt-block" style="margin-top: 16px">
++          <h3 class="receipt-title">失败明细</h3>
++          <el-table :data="generateReceipt.failed" size="small" border>
++            <el-table-column prop="source_task_id" label="来源任务ID" width="110" />
++            <el-table-column prop="task_id" label="任务ID" width="90">
++              <template #default="{ row }">
++                {{ row.task_id ?? '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="year_no" label="年度" width="80" />
++            <el-table-column prop="code" label="错误码" width="220" />
++            <el-table-column prop="status_code" label="状态码" width="90" />
++            <el-table-column label="后端返回" min-width="240">
++              <template #default="{ row }">
++                {{ formatBackendMessage(row.message) }}
++              </template>
++            </el-table-column>
++            <el-table-column label="失败原因" min-width="220">
++              <template #default="{ row }">
++                {{ mapDraftFailureMessage(row.code, row.message) }}
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++      </template>
++
++      <template #footer>
++        <el-button @click="generateReceiptVisible = false">关闭</el-button>
++      </template>
++    </el-dialog>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref, watch } from 'vue'
++import dayjs from 'dayjs'
++import { ElMessage, ElMessageBox } from 'element-plus'
++import { generateAnnuityDrafts, getAnnuityTasks } from '../../../api/annuity'
++import type { AnnuityGenerateDraftResult, AnnuityPendingMode, AnnuityTask } from '../../../api/annuity.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++import InstructionDialog from '../components/InstructionDialog.vue'
++
++const tasks = ref<AnnuityTask[]>([])
++const loading = ref(false)
++const error = ref<ApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++
++const filterStatus = ref('')
++const filterPendingMode = ref<AnnuityPendingMode | ''>('')
++const filterNoticeStatus = ref('')
++const filterDueRange = ref<string[]>([])
++const instructionDialogVisible = ref(false)
++const activeTask = ref<AnnuityTask | null>(null)
++const selectedTaskIds = ref<number[]>([])
++const generatingDrafts = ref(false)
++const generatePayNextYear = ref(false)
++const generateReceiptVisible = ref(false)
++const generateReceipt = ref<AnnuityGenerateDraftResult | null>(null)
++
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++function onFilterChange() {
++  page.value = 1
++  fetchTasks()
++}
++
++async function fetchTasks() {
++  loading.value = true
++  error.value = null
++  try {
++    const dueFrom = filterDueRange.value.length === 2 ? filterDueRange.value[0] : undefined
++    const dueTo = filterDueRange.value.length === 2 ? filterDueRange.value[1] : undefined
++
++    const result = await getAnnuityTasks({
++      page: page.value,
++      page_size: pageSize.value,
++      status: filterStatus.value || undefined,
++      pending_mode: filterPendingMode.value || undefined,
++      notice_status: filterNoticeStatus.value || undefined,
++      due_from: dueFrom,
++      due_to: dueTo,
++    })
++    tasks.value = result.items
++    total.value = result.total
++    selectedTaskIds.value = []
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    loading.value = false
++  }
++}
++
++function formatDate(dateValue?: string): string {
++  if (!dateValue) return '—'
++  const parsed = dayjs(dateValue)
++  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : dateValue
++}
++
++function statusTagType(status: string): 'warning' | 'success' | 'info' | 'danger' {
++  switch (status?.toUpperCase()) {
++    case 'OPEN':
++      return 'warning'
++    case 'DONE':
++      return 'success'
++    case 'CANCELLED':
++    case 'CANCELED':
++      return 'info'
++    default:
++      return 'danger'
++  }
++}
++
++function taskStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'OPEN':
++      return '待处理'
++    case 'DONE':
++      return '已完成'
++    case 'CANCELLED':
++    case 'CANCELED':
++      return '已取消'
++    default:
++      return status || '未知'
++  }
++}
++
++function noticeTagType(status: string): 'warning' | 'success' | 'info' {
++  switch (status?.toUpperCase()) {
++    case 'PENDING':
++      return 'warning'
++    case 'SENT':
++      return 'success'
++    default:
++      return 'info'
++  }
++}
++
++function noticeStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'PENDING':
++      return '待通知'
++    case 'SENT':
++      return '已通知'
++    case 'SKIPPED':
++      return '无需通知'
++    default:
++      return status || '未知'
++  }
++}
++
++function instructionText(instruction?: string): string {
++  switch (instruction?.toUpperCase()) {
++    case 'PAY':
++      return '缴费'
++    case 'DEFER':
++      return '延期'
++    case 'ABANDON':
++      return '放弃'
++    default:
++      return '未指示'
++  }
++}
++
++function openInstructionDialog(task: AnnuityTask) {
++  activeTask.value = task
++  instructionDialogVisible.value = true
++}
++
++function handleInstructionSaved() {
++  fetchTasks()
++}
++
++function handleSelectionChange(rows: AnnuityTask[]) {
++  selectedTaskIds.value = rows.map((row) => row.id)
++}
++
++function mapGenerateErrorMessage(apiError: ApiError): string {
++  switch (apiError.code) {
++    case 'ANNUITY_TASK_REQUIRED':
++      return '请至少选择一条任务后再生成草单。'
++    case 'ANNUITY_STATE_CONFLICT':
++      return '存在任务状态冲突，无法生成草单。'
++    case 'ANNUITY_TASK_NOT_FOUND':
++      return '部分任务不存在或已失效，请刷新后重试。'
++    case 'VALIDATION_ERROR':
++      return '请求参数校验失败，请检查后重试。'
++    default:
++      if (apiError.status === 401) return '登录已失效，请重新登录。'
++      if (apiError.status === 403) return '无权限执行该操作。'
++      if (apiError.status === 409) return '状态冲突，暂时无法生成草单。'
++      if (apiError.status === 422) return '输入参数不符合要求，请检查后重试。'
++      return '生成草单失败，请稍后重试。'
++  }
++}
++
++function mapDraftFailureMessage(code: string, backendMessage?: string): string {
++  switch (code) {
++    case 'ANNUITY_DRAFT_ALREADY_GENERATED':
++      return '该任务对应年度草单已生成。'
++    case 'ANNUITY_TASK_NOT_FOUND':
++      return '未找到对应的年费任务。'
++    case 'ANNUITY_STATE_CONFLICT':
++      return '任务状态不允许生成草单。'
++    case 'FEE_RATE_NOT_FOUND':
++      return '缺少年费费率配置，无法生成草单。'
++    default:
++      return backendMessage
++        ? `生成失败（${code}），后端信息：${backendMessage}`
++        : `生成失败（${code}）`
++  }
++}
++
++function formatBackendMessage(message?: string): string {
++  return message ? `后端信息：${message}` : '后端信息：无'
++}
++
++function formatMoney(amount: number, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(amount || 0)
++}
++
++async function handleBatchGenerateDrafts() {
++  if (selectedTaskIds.value.length === 0) {
++    ElMessage.warning('请先选择至少一条任务。')
++    return
++  }
++
++  try {
++    await ElMessageBox.confirm(
++      `将为选中的 ${selectedTaskIds.value.length} 条任务生成草单，是否继续？`,
++      '确认批量生成',
++      {
++        confirmButtonText: '确认生成',
++        cancelButtonText: '取消',
++        type: 'warning',
++      },
++    )
++  } catch {
++    return
++  }
++
++  generatingDrafts.value = true
++  try {
++    const result = await generateAnnuityDrafts({
++      task_ids: selectedTaskIds.value,
++      pay_next_year: generatePayNextYear.value,
++      currency: 'CNY',
++    })
++    generateReceipt.value = result
++    generateReceiptVisible.value = true
++    ElMessage.success(
++      `生成完成：成功 ${result.summary.success} 条，失败 ${result.summary.failed} 条。`,
++    )
++    fetchTasks()
++  } catch (err) {
++    const apiError = err as ApiError
++    ElMessage.error(mapGenerateErrorMessage(apiError))
++  } finally {
++    generatingDrafts.value = false
++  }
++}
++
++watch([page, pageSize], () => {
++  fetchTasks()
++})
++
++onMounted(() => {
++  fetchTasks()
++})
++</script>
++
++<style scoped>
++.case-link {
++  color: var(--color-primary);
++  text-decoration: none;
++  font-weight: 500;
++}
++
++.case-link:hover {
++  text-decoration: underline;
++}
++
++.batch-action-bar {
++  margin-bottom: 16px;
++  display: flex;
++  gap: 12px;
++  align-items: center;
++  flex-wrap: wrap;
++}
++
++.batch-action-text {
++  color: var(--color-text-secondary);
++}
++
++.receipt-title {
++  margin: 0 0 8px;
++  font-size: 14px;
++  font-weight: 600;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/annuity/pages/PayList.vue b/frontend/src/modules/annuity/pages/PayList.vue
+new file mode 100644
+index 0000000..5937c20
+--- /dev/null
++++ b/frontend/src/modules/annuity/pages/PayList.vue
+@@ -0,0 +1,342 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">官费清单</h1>
++        <span class="page-count">生成与状态查询</span>
++      </div>
++      <div class="page-header-right">
++        <el-button @click="goToGovPaymentCreate()">去登记缴费</el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <div class="form-card">
++      <h2 class="form-card-title">清单生成条件</h2>
++      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="pay-list-form">
++        <el-form-item
++          label="费用项编号"
++          prop="fee_item_ids"
++          :error="fieldErrors.get('fee_item_ids')?.join('，')"
++        >
++          <el-input
++            v-model="form.fee_item_ids"
++            type="textarea"
++            :rows="4"
++            placeholder="请输入费用项编号，支持逗号、空格或换行分隔"
++          />
++          <div class="field-hint">示例：`fee-item-001, fee-item-002`</div>
++        </el-form-item>
++
++        <el-row :gutter="12">
++          <el-col :xs="24" :sm="12">
++            <el-form-item label="计划缴费日期" prop="planned_pay_date">
++              <el-date-picker
++                v-model="form.planned_pay_date"
++                type="date"
++                placeholder="请选择日期（可选）"
++                value-format="YYYY-MM-DD"
++                format="YYYY-MM-DD"
++                style="width: 100%"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item label="备注" prop="remark">
++              <el-input
++                v-model.trim="form.remark"
++                placeholder="可填写本次清单说明（可选）"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <div class="form-actions">
++          <el-button @click="resetForm">重置</el-button>
++          <el-button type="primary" :loading="generating" @click="handleGenerate">
++            生成官费清单
++          </el-button>
++        </div>
++      </el-form>
++    </div>
++
++    <div v-if="result" class="result-card">
++      <h2 class="form-card-title">生成回执</h2>
++
++      <el-descriptions :column="4" border>
++        <el-descriptions-item label="请求数量">{{ result.summary.requested }}</el-descriptions-item>
++        <el-descriptions-item label="成功数量">{{ result.summary.success }}</el-descriptions-item>
++        <el-descriptions-item label="失败数量">{{ result.summary.failed }}</el-descriptions-item>
++        <el-descriptions-item label="已生成清单">
++          {{ result.summary.pay_list_created ? '是' : '否' }}
++        </el-descriptions-item>
++      </el-descriptions>
++
++      <div v-if="result.pay_list" class="pay-list-info">
++        <h3 class="section-title">清单状态</h3>
++        <el-descriptions :column="3" border>
++          <el-descriptions-item label="清单编号">
++            {{ result.pay_list.pay_list_no || `#${result.pay_list.id}` }}
++          </el-descriptions-item>
++          <el-descriptions-item label="客户ID">{{ result.pay_list.client_id }}</el-descriptions-item>
++          <el-descriptions-item label="状态">
++            <el-tag :type="payListStatusTag(result.pay_list.status)">
++              {{ payListStatusText(result.pay_list.status) }}
++            </el-tag>
++          </el-descriptions-item>
++          <el-descriptions-item label="币种">{{ result.pay_list.currency }}</el-descriptions-item>
++          <el-descriptions-item label="计划缴费日期">
++            {{ result.pay_list.planned_pay_date || '—' }}
++          </el-descriptions-item>
++          <el-descriptions-item label="清单金额">
++            {{ formatMoney(result.pay_list.total_amount, result.pay_list.currency) }}
++          </el-descriptions-item>
++        </el-descriptions>
++      </div>
++
++      <div v-if="result.success.length > 0" class="receipt-section">
++        <h3 class="section-title">成功明细</h3>
++        <el-table :data="result.success" size="small" border>
++          <el-table-column prop="fee_item_id" label="费用项ID" min-width="200" />
++          <el-table-column prop="case_id" label="案件ID" min-width="180" />
++          <el-table-column label="金额" width="150" align="right">
++            <template #default="{ row }">
++              {{ formatMoney(row.amount, row.currency) }}
++            </template>
++          </el-table-column>
++          <el-table-column prop="pay_list_id" label="清单ID" width="100" />
++          <el-table-column label="操作" width="120">
++            <template #default="{ row }">
++              <el-button text type="primary" @click="goToGovPaymentCreate(row.fee_item_id, row.pay_list_id)">
++                登记缴费
++              </el-button>
++            </template>
++          </el-table-column>
++        </el-table>
++      </div>
++
++      <div v-if="result.failed.length > 0" class="receipt-section">
++        <h3 class="section-title">失败明细</h3>
++        <el-table :data="result.failed" size="small" border>
++          <el-table-column prop="fee_item_id" label="费用项ID" min-width="200" />
++          <el-table-column prop="code" label="错误码" min-width="180" />
++          <el-table-column prop="status_code" label="状态码" width="100" />
++          <el-table-column label="失败说明" min-width="240">
++            <template #default="{ row }">
++              {{ formatFailedMessage(row.message) }}
++            </template>
++          </el-table-column>
++        </el-table>
++      </div>
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { reactive, ref } from 'vue'
++import { useRouter } from 'vue-router'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import { createPayListFromFeeItems, mapGovPaymentsError } from '../../../api/govPayments'
++import type { GovPaymentsApiError, PayListCreateResult } from '../../../api/govPayments.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++interface PayListForm {
++  fee_item_ids: string
++  planned_pay_date: string
++  remark: string
++}
++
++const router = useRouter()
++
++const formRef = ref<FormInstance>()
++const generating = ref(false)
++const error = ref<GovPaymentsApiError | null>(null)
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++const result = ref<PayListCreateResult | null>(null)
++
++const form = reactive<PayListForm>({
++  fee_item_ids: '',
++  planned_pay_date: '',
++  remark: '',
++})
++
++const rules: FormRules<PayListForm> = {
++  fee_item_ids: [
++    { required: true, message: '费用项编号为必填项', trigger: 'blur' },
++  ],
++}
++
++function normalizeFeeItemIds(raw: string): string[] {
++  const values = raw
++    .split(/[\s,，;；\n]+/g)
++    .map((item) => item.trim())
++    .filter(Boolean)
++  return Array.from(new Set(values))
++}
++
++function payListStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'DRAFT':
++      return '草稿'
++    case 'PARTIAL':
++      return '部分完成'
++    case 'PAID':
++      return '已完成'
++    default:
++      return status || '未知'
++  }
++}
++
++function payListStatusTag(status: string): 'info' | 'warning' | 'success' {
++  switch (status?.toUpperCase()) {
++    case 'PAID':
++      return 'success'
++    case 'PARTIAL':
++      return 'warning'
++    default:
++      return 'info'
++  }
++}
++
++function formatMoney(amount: number, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(amount || 0)
++}
++
++function formatFailedMessage(message?: string): string {
++  return message ? `后端信息：${message}` : '后端信息：无'
++}
++
++function goToGovPaymentCreate(feeItemId?: string, payListId?: number) {
++  router.push({
++    path: '/annuity/gov-payments/new',
++    query: {
++      ...(payListId ? { pay_list_id: String(payListId) } : {}),
++      ...(feeItemId ? { fee_item_id: feeItemId } : {}),
++    },
++  })
++}
++
++function resetForm() {
++  form.fee_item_ids = ''
++  form.planned_pay_date = ''
++  form.remark = ''
++  fieldErrors.value = new Map()
++  error.value = null
++}
++
++async function handleGenerate() {
++  fieldErrors.value = new Map()
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  const feeItemIds = normalizeFeeItemIds(form.fee_item_ids)
++  if (feeItemIds.length === 0) {
++    ElMessage.warning('请至少输入一个费用项编号。')
++    return
++  }
++
++  generating.value = true
++  error.value = null
++  try {
++    const response = await createPayListFromFeeItems({
++      fee_item_ids: feeItemIds,
++      planned_pay_date: form.planned_pay_date || undefined,
++      remark: form.remark || undefined,
++    })
++    result.value = response
++
++    if (response.summary.success > 0 && response.summary.failed > 0) {
++      ElMessage.warning(`处理完成：成功 ${response.summary.success} 条，失败 ${response.summary.failed} 条。`)
++    } else if (response.summary.success > 0) {
++      ElMessage.success(`清单生成成功，共 ${response.summary.success} 条。`)
++    } else {
++      ElMessage.info('处理完成，未生成可用清单。')
++    }
++  } catch (err) {
++    const mapped = mapGovPaymentsError(err)
++    error.value = mapped
++    if (mapped.field_errors && mapped.field_errors.size > 0) {
++      fieldErrors.value = mapped.field_errors
++    }
++  } finally {
++    generating.value = false
++  }
++}
++</script>
++
++<style scoped>
++.pay-list-form {
++  max-width: 920px;
++}
++
++.field-hint {
++  margin-top: 6px;
++  font-size: 12px;
++  color: var(--text-sub);
++}
++
++.result-card {
++  margin-top: 20px;
++}
++
++.section-title {
++  margin: 14px 0 8px;
++  font-size: 14px;
++  font-weight: 600;
++}
++
++.pay-list-info {
++  margin-top: 14px;
++}
++
++.receipt-section {
++  margin-top: 16px;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/annuity/pages/GovPaymentCreate.vue b/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+new file mode 100644
+index 0000000..220d069
+--- /dev/null
++++ b/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+@@ -0,0 +1,353 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <el-button text @click="goBack">
++          <span class="back-icon">←</span> 返回
++        </el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <div class="form-card">
++      <h2 class="form-card-title">官方缴费登记</h2>
++
++      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="gov-payment-form">
++        <el-row :gutter="12">
++          <el-col :xs="24" :sm="12">
++            <el-form-item
++              label="官费清单ID"
++              prop="pay_list_id"
++              :error="fieldErrors.get('pay_list_id')?.join('，')"
++            >
++              <el-input-number
++                v-model="form.pay_list_id"
++                :min="1"
++                :precision="0"
++                controls-position="right"
++                style="width: 100%"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item
++              label="费用项ID"
++              prop="fee_item_id"
++              :error="fieldErrors.get('fee_item_id')?.join('，')"
++            >
++              <el-input v-model.trim="form.fee_item_id" placeholder="请输入费用项编号" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item label="缴费日期" prop="paid_date" :error="fieldErrors.get('paid_date')?.join('，')">
++              <el-date-picker
++                v-model="form.paid_date"
++                type="date"
++                placeholder="请选择缴费日期（可选）"
++                value-format="YYYY-MM-DD"
++                format="YYYY-MM-DD"
++                style="width: 100%"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item
++              label="缴费金额"
++              prop="paid_amount"
++              :error="fieldErrors.get('paid_amount')?.join('，')"
++            >
++              <el-input-number
++                v-model="form.paid_amount"
++                :min="0.01"
++                :precision="2"
++                :step="10"
++                controls-position="right"
++                style="width: 100%"
++              />
++              <div class="field-hint">可选；不填时由后端按费用项金额处理。</div>
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item
++              label="官方收据号"
++              prop="official_receipt_no"
++              :error="fieldErrors.get('official_receipt_no')?.join('，')"
++            >
++              <el-input v-model.trim="form.official_receipt_no" placeholder="请输入收据号（可选）" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item label="备注" prop="remark" :error="fieldErrors.get('remark')?.join('，')">
++              <el-input v-model.trim="form.remark" placeholder="可填写说明（可选）" />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <div class="form-actions">
++          <el-button @click="goBack">取消</el-button>
++          <el-button type="primary" :loading="saving" @click="handleSubmit">提交登记</el-button>
++        </div>
++      </el-form>
++    </div>
++
++    <div v-if="result" class="result-card">
++      <h2 class="form-card-title">登记结果</h2>
++
++      <el-descriptions :column="3" border>
++        <el-descriptions-item label="缴费记录ID">{{ result.gov_payment.id }}</el-descriptions-item>
++        <el-descriptions-item label="费用项ID">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
++        <el-descriptions-item label="缴费状态">{{ govPaymentStatusText(result.gov_payment.status) }}</el-descriptions-item>
++        <el-descriptions-item label="缴费日期">{{ result.gov_payment.paid_date || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="缴费金额">
++          {{ formatMoney(result.gov_payment.paid_amount, result.gov_payment.currency) }}
++        </el-descriptions-item>
++        <el-descriptions-item label="收据号">
++          {{ result.gov_payment.official_receipt_no || '—' }}
++        </el-descriptions-item>
++      </el-descriptions>
++
++      <div class="result-section">
++        <h3 class="section-title">官费清单状态</h3>
++        <el-descriptions :column="3" border>
++          <el-descriptions-item label="清单编号">
++            {{ result.pay_list.pay_list_no || `#${result.pay_list.id}` }}
++          </el-descriptions-item>
++          <el-descriptions-item label="清单状态">
++            <el-tag :type="payListStatusTag(result.pay_list.status)">
++              {{ payListStatusText(result.pay_list.status) }}
++            </el-tag>
++          </el-descriptions-item>
++          <el-descriptions-item label="客户ID">{{ result.pay_list.client_id }}</el-descriptions-item>
++          <el-descriptions-item label="更新后总额">
++            {{ formatMoney(result.pay_list.total_amount, result.pay_list.currency) }}
++          </el-descriptions-item>
++          <el-descriptions-item label="清单缴费日期">
++            {{ result.pay_list.paid_date || '—' }}
++          </el-descriptions-item>
++          <el-descriptions-item label="币种">{{ result.pay_list.currency }}</el-descriptions-item>
++        </el-descriptions>
++      </div>
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { reactive, ref } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import { mapGovPaymentsError, registerGovPayment } from '../../../api/govPayments'
++import type { GovPaymentRegisterResult, GovPaymentsApiError } from '../../../api/govPayments.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++interface GovPaymentForm {
++  pay_list_id: number
++  fee_item_id: string
++  paid_date: string
++  paid_amount: number | null
++  official_receipt_no: string
++  remark: string
++}
++
++const route = useRoute()
++const router = useRouter()
++
++const formRef = ref<FormInstance>()
++const saving = ref(false)
++const error = ref<GovPaymentsApiError | null>(null)
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++const result = ref<GovPaymentRegisterResult | null>(null)
++
++const queryPayListId = Number(route.query.pay_list_id || 0)
++const queryFeeItemId = String(route.query.fee_item_id || '')
++
++const form = reactive<GovPaymentForm>({
++  pay_list_id: Number.isFinite(queryPayListId) && queryPayListId > 0 ? queryPayListId : 0,
++  fee_item_id: queryFeeItemId,
++  paid_date: new Date().toISOString().split('T')[0],
++  paid_amount: null,
++  official_receipt_no: '',
++  remark: '',
++})
++
++const rules: FormRules<GovPaymentForm> = {
++  pay_list_id: [
++    { required: true, message: '官费清单ID为必填项', trigger: 'blur' },
++    {
++      validator: (_rule, value: unknown, callback) => {
++        const numeric = Number(value)
++        if (!Number.isFinite(numeric) || numeric <= 0) {
++          callback(new Error('官费清单ID必须大于 0'))
++          return
++        }
++        callback()
++      },
++      trigger: 'blur',
++    },
++  ],
++  fee_item_id: [{ required: true, message: '费用项ID为必填项', trigger: 'blur' }],
++  paid_amount: [
++    {
++      validator: (_rule, value: unknown, callback) => {
++        if (value === null || value === undefined || value === '') {
++          callback()
++          return
++        }
++        const numeric = Number(value)
++        if (!Number.isFinite(numeric) || numeric <= 0) {
++          callback(new Error('缴费金额必须大于 0'))
++          return
++        }
++        callback()
++      },
++      trigger: 'blur',
++    },
++  ],
++}
++
++function goBack() {
++  router.push('/annuity/pay-lists')
++}
++
++function govPaymentStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'PAID':
++      return '已缴费'
++    case 'RECORDED':
++      return '已登记'
++    case 'PLANNED':
++      return '已计划'
++    default:
++      return status || '未知'
++  }
++}
++
++function payListStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'DRAFT':
++      return '草稿'
++    case 'PARTIAL':
++      return '部分完成'
++    case 'PAID':
++      return '已完成'
++    default:
++      return status || '未知'
++  }
++}
++
++function payListStatusTag(status: string): 'info' | 'warning' | 'success' {
++  switch (status?.toUpperCase()) {
++    case 'PAID':
++      return 'success'
++    case 'PARTIAL':
++      return 'warning'
++    default:
++      return 'info'
++  }
++}
++
++function formatMoney(amount: number, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(amount || 0)
++}
++
++async function handleSubmit() {
++  fieldErrors.value = new Map()
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++  error.value = null
++  try {
++    const response = await registerGovPayment({
++      pay_list_id: form.pay_list_id,
++      fee_item_id: form.fee_item_id,
++      paid_date: form.paid_date || undefined,
++      paid_amount: form.paid_amount ?? undefined,
++      official_receipt_no: form.official_receipt_no || undefined,
++      remark: form.remark || undefined,
++    })
++    result.value = response
++    ElMessage.success('官方缴费登记成功。')
++  } catch (err) {
++    const mapped = mapGovPaymentsError(err)
++    error.value = mapped
++    if (mapped.field_errors && mapped.field_errors.size > 0) {
++      fieldErrors.value = mapped.field_errors
++    }
++  } finally {
++    saving.value = false
++  }
++}
++</script>
++
++<style scoped>
++.gov-payment-form {
++  max-width: 920px;
++}
++
++.field-hint {
++  margin-top: 6px;
++  font-size: 12px;
++  color: var(--text-sub);
++}
++
++.result-card {
++  margin-top: 20px;
++}
++
++.result-section {
++  margin-top: 16px;
++}
++
++.section-title {
++  margin: 0 0 8px;
++  font-size: 14px;
++  font-weight: 600;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/collections/pages/DunningCreate.vue b/frontend/src/modules/collections/pages/DunningCreate.vue
+new file mode 100644
+index 0000000..5a3f774
+--- /dev/null
++++ b/frontend/src/modules/collections/pages/DunningCreate.vue
+@@ -0,0 +1,305 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <el-button text @click="goBack">
++          <span class="back-icon">←</span> 返回
++        </el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <div class="form-card">
++      <h2 class="form-card-title">创建催款批次</h2>
++
++      <el-form
++        ref="formRef"
++        :model="form"
++        :rules="rules"
++        label-position="top"
++        class="dunning-form"
++      >
++        <div class="form-section">
++          <h3 class="form-section-title">批次条件</h3>
++
++          <el-form-item
++            label="截止日期"
++            prop="to_date"
++            :error="fieldErrors.get('to_date')?.join('，')"
++          >
++            <el-date-picker
++              v-model="form.to_date"
++              type="date"
++              placeholder="请选择截止日期"
++              format="YYYY-MM-DD"
++              value-format="YYYY-MM-DD"
++              class="full-width"
++            />
++          </el-form-item>
++
++          <el-form-item label="冲突策略">
++            <el-switch
++              v-model="form.strict_conflict"
++              active-text="严格冲突校验"
++              inactive-text="允许复用既有批次"
++            />
++            <div class="field-hint">开启后，若存在冲突将由后端返回冲突错误。</div>
++          </el-form-item>
++        </div>
++
++        <div class="form-section">
++          <h3 class="form-section-title">客户过滤</h3>
++
++          <el-form-item label="客户范围">
++            <el-radio-group v-model="form.customer_scope">
++              <el-radio value="all">全部客户</el-radio>
++              <el-radio value="selected">指定客户</el-radio>
++            </el-radio-group>
++          </el-form-item>
++
++          <el-form-item
++            v-if="form.customer_scope === 'selected'"
++            label="选择客户"
++            prop="client_ids"
++            :error="fieldErrors.get('client_ids')?.join('，')"
++          >
++            <el-select
++              v-model="form.client_ids"
++              multiple
++              filterable
++              allow-create
++              default-first-option
++              clearable
++              collapse-tags
++              collapse-tags-tooltip
++              :loading="clientsLoading"
++              placeholder="请输入或选择客户编号"
++              class="full-width"
++            >
++              <el-option
++                v-for="client in clientOptions"
++                :key="client.id"
++                :label="formatClientLabel(client)"
++                :value="client.id"
++              />
++            </el-select>
++            <div class="field-hint">可直接输入客户编号；不指定时表示全部客户。</div>
++            <div v-if="clientsError" class="field-hint warning-text">{{ clientsError }}</div>
++          </el-form-item>
++        </div>
++
++        <div class="form-actions">
++          <el-button @click="goBack">取消</el-button>
++          <el-button type="primary" :loading="saving" @click="handleSubmit">
++            生成催款批次
++          </el-button>
++        </div>
++      </el-form>
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { onMounted, reactive, ref } from 'vue'
++import { useRouter } from 'vue-router'
++import { ElMessage } from 'element-plus'
++import type { FormInstance, FormRules } from 'element-plus'
++import { generateDunning, mapCollectionsError } from '../../../api/collections'
++import { getClients } from '../../../api/clients'
++import type { CollectionsApiError, DunningGenerateBatch, DunningGeneratePayload } from '../../../api/collections.types'
++import type { Client } from '../../../api/clients.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++interface DunningCreateForm {
++  to_date: string
++  strict_conflict: boolean
++  customer_scope: 'all' | 'selected'
++  client_ids: string[]
++}
++
++const router = useRouter()
++
++const formRef = ref<FormInstance>()
++const saving = ref(false)
++const error = ref<CollectionsApiError | null>(null)
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++const clientsLoading = ref(false)
++const clientsError = ref('')
++const clientOptions = ref<Client[]>([])
++
++const form = reactive<DunningCreateForm>({
++  to_date: new Date().toISOString().split('T')[0],
++  strict_conflict: false,
++  customer_scope: 'all',
++  client_ids: [],
++})
++
++const rules: FormRules<DunningCreateForm> = {
++  to_date: [{ required: true, message: '截止日期为必填项', trigger: 'change' }],
++  client_ids: [
++    {
++      validator: (_rule, value: unknown, callback) => {
++        if (form.customer_scope === 'selected' && (!Array.isArray(value) || value.length === 0)) {
++          callback(new Error('请至少选择一个客户'))
++          return
++        }
++        callback()
++      },
++      trigger: 'change',
++    },
++  ],
++}
++
++function formatClientLabel(client: Client): string {
++  if (client.name) {
++    return `${client.name}（${client.id}）`
++  }
++  return `客户 ${client.id}`
++}
++
++function normalizeClientIds(input: string[]): string[] {
++  const normalized = input.map((id) => id.trim()).filter(Boolean)
++  return Array.from(new Set(normalized))
++}
++
++async function loadClients() {
++  clientsLoading.value = true
++  clientsError.value = ''
++
++  try {
++    const result = await getClients({ page: 1, page_size: 200 })
++    clientOptions.value = result.items.filter((client) => client.is_active)
++  } catch {
++    clientOptions.value = []
++    clientsError.value = '客户列表加载失败，可手动输入客户编号。'
++  } finally {
++    clientsLoading.value = false
++  }
++}
++
++function goBack() {
++  router.push('/collections/dunning')
++}
++
++async function navigateAfterSuccess(batches: DunningGenerateBatch[]) {
++  if (batches.length === 1) {
++    await router.push(`/collections/dunning/${batches[0].id}`)
++    return
++  }
++  await router.push('/collections/dunning')
++}
++
++async function handleSubmit() {
++  fieldErrors.value = new Map()
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++  error.value = null
++
++  try {
++    const payload: DunningGeneratePayload = {
++      to_date: form.to_date,
++      strict_conflict: form.strict_conflict,
++    }
++
++    if (form.customer_scope === 'selected') {
++      const ids = normalizeClientIds(form.client_ids)
++      if (ids.length > 0) {
++        payload.client_ids = ids
++      }
++    }
++
++    const result = await generateDunning(payload)
++
++    if (result.summary.batches > 0) {
++      ElMessage.success(`催款批次生成成功，共 ${result.summary.batches} 个`)
++    } else {
++      ElMessage.success('处理完成，未生成新批次')
++    }
++
++    await navigateAfterSuccess(result.batches)
++  } catch (err) {
++    const mappedError = mapCollectionsError(err)
++    error.value = mappedError
++    if (mappedError.field_errors && mappedError.field_errors.size > 0) {
++      fieldErrors.value = mappedError.field_errors
++    }
++  } finally {
++    saving.value = false
++  }
++}
++
++onMounted(() => {
++  loadClients()
++})
++</script>
++
++<style scoped>
++.form-card-title {
++  margin: 0 0 24px 0;
++  font-size: 20px;
++  font-weight: 600;
++}
++
++.dunning-form {
++  max-width: 640px;
++}
++
++.full-width {
++  width: 100%;
++}
++
++.field-hint {
++  font-size: 12px;
++  color: var(--text-sub);
++  margin-top: 6px;
++}
++
++.warning-text {
++  color: var(--color-warning);
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/collections/pages/DunningList.vue b/frontend/src/modules/collections/pages/DunningList.vue
+new file mode 100644
+index 0000000..15ffe9c
+--- /dev/null
++++ b/frontend/src/modules/collections/pages/DunningList.vue
+@@ -0,0 +1,337 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">催款批次</h1>
++        <span class="page-count" aria-live="polite">{{ total }} 条</span>
++      </div>
++      <div class="page-header-right">
++        <router-link to="/collections/dunning/new">
++          <el-button type="primary" aria-label="创建催款批次">创建催款批次</el-button>
++        </router-link>
++      </div>
++    </div>
++
++    <el-row :gutter="16" style="margin-bottom: 16px">
++      <el-col :span="6">
++        <el-select
++          v-model="filterRoundNo"
++          aria-label="催款轮次筛选"
++          clearable
++          placeholder="选择催款轮次"
++          class="full-width"
++          @change="onFilterChange"
++        >
++          <el-option label="全部轮次" :value="undefined" />
++          <el-option v-for="option in roundOptions" :key="option" :label="`第 ${option} 轮`" :value="option" />
++        </el-select>
++      </el-col>
++      <el-col :span="6">
++        <el-select
++          v-model="filterStatus"
++          aria-label="催款状态筛选"
++          clearable
++          placeholder="选择批次状态"
++          class="full-width"
++          @change="onFilterChange"
++        >
++          <el-option label="全部状态" :value="undefined" />
++          <el-option
++            v-for="option in statusOptions"
++            :key="option"
++            :label="getStatusText(option)"
++            :value="option"
++          />
++        </el-select>
++      </el-col>
++      <el-col :span="6">
++        <el-button aria-label="重置催款筛选" @click="resetFilters">重置筛选</el-button>
++      </el-col>
++    </el-row>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="10" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无催款批次"
++        message="请调整筛选条件或先创建新的催款批次。"
++        icon="DN"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table
++        :data="dunningItems"
++        aria-label="催款批次列表"
++        stripe
++        size="small"
++        class="compact-table"
++        @row-click="handleRowClick"
++      >
++        <el-table-column label="催款单号" min-width="170">
++          <template #default="{ row }">
++            <span class="mono-text">{{ row.dunning_no || `DN-${row.id}` }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="client_id" label="客户编号" min-width="140" />
++        <el-table-column label="轮次" width="90" align="center">
++          <template #default="{ row }">
++            第 {{ row.round_no }} 轮
++          </template>
++        </el-table-column>
++        <el-table-column label="状态" width="120" align="center">
++          <template #default="{ row }">
++            <el-tag :type="getStatusTagType(row.status)" size="small">
++              {{ getStatusText(row.status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="截止日期" width="130">
++          <template #default="{ row }">
++            {{ formatDate(row.to_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="总金额" width="170" align="right">
++          <template #default="{ row }">
++            <span class="mono-text">{{ formatAmount(row.total_amount, row.currency) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column label="发送日期" width="130">
++          <template #default="{ row }">
++            {{ formatDate(row.sent_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="操作" width="120" fixed="right">
++          <template #default="{ row }">
++            <el-button type="primary" link @click.stop="goToDetail(row.id)">查看明细</el-button>
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar v-model:page="page" v-model:page-size="pageSize" :total="total" />
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref, watch } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import { getDunning, mapCollectionsError } from '../../../api/collections'
++import type { CollectionsApiError, DunningBatchListItem } from '../../../api/collections.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++
++type DunningStatus = 'DRAFT' | 'SENT' | 'CANCELLED' | 'CLOSED' | 'UNKNOWN'
++type TagType = '' | 'success' | 'warning' | 'info' | 'danger'
++
++const router = useRouter()
++const route = useRoute()
++
++const dunningItems = ref<DunningBatchListItem[]>([])
++const loading = ref(false)
++const error = ref<CollectionsApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++const filterRoundNo = ref<number | undefined>(undefined)
++const filterStatus = ref<string | undefined>(undefined)
++
++const roundOptions = [1, 2, 3, 4, 5]
++const statusOptions: DunningStatus[] = ['DRAFT', 'SENT', 'CANCELLED', 'CLOSED', 'UNKNOWN']
++
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++function parsePositiveInt(value: unknown, fallback: number): number {
++  if (typeof value !== 'string') return fallback
++  const parsed = Number.parseInt(value, 10)
++  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
++}
++
++function parseRoundNo(value: unknown): number | undefined {
++  if (typeof value !== 'string' || value.trim() === '') return undefined
++  const parsed = Number.parseInt(value, 10)
++  if (!Number.isInteger(parsed) || parsed <= 0) return undefined
++  return parsed
++}
++
++function parseStatus(value: unknown): string | undefined {
++  if (typeof value !== 'string' || value.trim() === '') return undefined
++  return value
++}
++
++function hydrateStateFromQuery() {
++  page.value = parsePositiveInt(route.query.page, 1)
++  pageSize.value = parsePositiveInt(route.query.page_size, 20)
++  filterRoundNo.value = parseRoundNo(route.query.round_no)
++  filterStatus.value = parseStatus(route.query.status)
++}
++
++function buildListQuery(): Record<string, string> {
++  const query: Record<string, string> = {
++    page: String(page.value),
++    page_size: String(pageSize.value),
++  }
++
++  if (filterRoundNo.value !== undefined) {
++    query.round_no = String(filterRoundNo.value)
++  }
++  if (filterStatus.value) {
++    query.status = filterStatus.value
++  }
++
++  return query
++}
++
++async function fetchDunningList() {
++  loading.value = true
++  error.value = null
++
++  try {
++    const result = await getDunning({
++      page: page.value,
++      page_size: pageSize.value,
++      round_no: filterRoundNo.value,
++      status: filterStatus.value,
++    })
++    dunningItems.value = result.items
++    total.value = result.total
++  } catch (err) {
++    error.value = mapCollectionsError(err)
++  } finally {
++    loading.value = false
++  }
++}
++
++function onFilterChange() {
++  page.value = 1
++  fetchDunningList()
++}
++
++function resetFilters() {
++  filterRoundNo.value = undefined
++  filterStatus.value = undefined
++  page.value = 1
++  fetchDunningList()
++}
++
++function goToDetail(id: number) {
++  router.push({
++    path: `/collections/dunning/${id}`,
++    query: buildListQuery(),
++  })
++}
++
++function handleRowClick(row: DunningBatchListItem) {
++  goToDetail(row.id)
++}
++
++function getStatusText(status: string): string {
++  switch (status) {
++    case 'DRAFT':
++      return '草稿'
++    case 'SENT':
++      return '已发送'
++    case 'CANCELLED':
++      return '已取消'
++    case 'CLOSED':
++      return '已关闭'
++    default:
++      return '未知'
++  }
++}
++
++function getStatusTagType(status: string): TagType {
++  switch (status) {
++    case 'DRAFT':
++      return 'warning'
++    case 'SENT':
++      return 'success'
++    case 'CANCELLED':
++      return 'info'
++    case 'CLOSED':
++      return 'danger'
++    default:
++      return ''
++  }
++}
++
++function formatDate(input: string | null): string {
++  if (!input) return '—'
++  const date = new Date(input)
++  if (Number.isNaN(date.getTime())) return input
++  return date.toLocaleDateString('zh-CN')
++}
++
++function formatAmount(amount: number, currency?: string): string {
++  const curr = currency || 'CNY'
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: curr,
++  }).format(amount)
++}
++
++watch([page, pageSize], () => {
++  fetchDunningList()
++})
++
++onMounted(() => {
++  hydrateStateFromQuery()
++  fetchDunningList()
++})
++</script>
++
++<style scoped>
++.full-width {
++  width: 100%;
++}
++
++.mono-text {
++  font-family: var(--font-mono);
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/collections/pages/DunningDetail.vue b/frontend/src/modules/collections/pages/DunningDetail.vue
+new file mode 100644
+index 0000000..ce88c1d
+--- /dev/null
++++ b/frontend/src/modules/collections/pages/DunningDetail.vue
+@@ -0,0 +1,298 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <el-button text @click="goBack">
++          <span class="back-icon">←</span> 返回列表
++        </el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="6" />
++
++    <div v-else-if="dunningItem" class="detail-content">
++      <div class="detail-card">
++        <div class="detail-card-header">
++          <h1 class="detail-title">催款批次详情</h1>
++          <el-tag :type="getStatusTagType(dunningItem.status)" size="large">
++            {{ getStatusText(dunningItem.status) }}
++          </el-tag>
++        </div>
++        <p class="detail-subtitle">
++          催款单号：<span class="mono-text">{{ dunningItem.dunning_no || `DN-${dunningItem.id}` }}</span>
++        </p>
++      </div>
++
++      <div class="detail-card">
++        <h2 class="section-title">批次信息</h2>
++        <el-descriptions :column="2" border>
++          <el-descriptions-item label="批次编号">{{ dunningItem.id }}</el-descriptions-item>
++          <el-descriptions-item label="客户编号">{{ dunningItem.client_id }}</el-descriptions-item>
++          <el-descriptions-item label="催款轮次">第 {{ dunningItem.round_no }} 轮</el-descriptions-item>
++          <el-descriptions-item label="批次状态">{{ getStatusText(dunningItem.status) }}</el-descriptions-item>
++          <el-descriptions-item label="截止日期">{{ formatDate(dunningItem.to_date) }}</el-descriptions-item>
++          <el-descriptions-item label="发送日期">{{ formatDate(dunningItem.sent_date) }}</el-descriptions-item>
++          <el-descriptions-item label="批次总金额">
++            <span class="mono-text">{{ formatAmount(dunningItem.total_amount, dunningItem.currency) }}</span>
++          </el-descriptions-item>
++          <el-descriptions-item label="币种">{{ dunningItem.currency || '—' }}</el-descriptions-item>
++          <el-descriptions-item label="备注" :span="2">
++            {{ dunningItem.remark?.trim() || '—' }}
++          </el-descriptions-item>
++          <el-descriptions-item label="创建时间">{{ formatDateTime(dunningItem.created_at) }}</el-descriptions-item>
++          <el-descriptions-item label="更新时间">{{ formatDateTime(dunningItem.updated_at) }}</el-descriptions-item>
++        </el-descriptions>
++      </div>
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import { getDunning, mapCollectionsError } from '../../../api/collections'
++import type { CollectionsApiError, DunningBatchListItem } from '../../../api/collections.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++
++type TagType = '' | 'success' | 'warning' | 'info' | 'danger'
++
++const LOOKUP_PAGE_SIZE = 50
++
++const route = useRoute()
++const router = useRouter()
++
++const loading = ref(false)
++const dunningItem = ref<DunningBatchListItem | null>(null)
++const error = ref<CollectionsApiError | null>(null)
++
++const dunningId = computed(() => {
++  const raw = route.params.id
++  const numericId = Number(raw)
++  if (!Number.isInteger(numericId) || numericId <= 0) return null
++  return numericId
++})
++
++function extractListQuery(): Record<string, string> {
++  const query: Record<string, string> = {}
++  const maybeKeys = ['round_no', 'status', 'page', 'page_size']
++
++  for (const key of maybeKeys) {
++    const value = route.query[key]
++    if (typeof value === 'string' && value.trim() !== '') {
++      query[key] = value
++    }
++  }
++
++  return query
++}
++
++async function findDunningById(id: number): Promise<DunningBatchListItem | null> {
++  let currentPage = 1
++  let fetchedCount = 0
++  let total = 0
++
++  while (currentPage <= 100) {
++    const result = await getDunning({
++      page: currentPage,
++      page_size: LOOKUP_PAGE_SIZE,
++    })
++
++    const found = result.items.find((item) => item.id === id)
++    if (found) return found
++
++    total = result.total
++    fetchedCount += result.items.length
++    if (fetchedCount >= total || result.items.length === 0) break
++
++    currentPage += 1
++  }
++
++  return null
++}
++
++async function fetchDunningItem() {
++  if (dunningId.value === null) {
++    error.value = {
++      status: 404,
++      code: 'DUNNING_NOT_FOUND',
++      message: '催款批次不存在或编号无效。',
++      category: 'not_found',
++    }
++    dunningItem.value = null
++    return
++  }
++
++  loading.value = true
++  error.value = null
++
++  try {
++    const result = await findDunningById(dunningId.value)
++    if (!result) {
++      error.value = {
++        status: 404,
++        code: 'DUNNING_NOT_FOUND',
++        message: '未找到该催款批次，请返回列表确认筛选条件。',
++        category: 'not_found',
++      }
++      dunningItem.value = null
++      return
++    }
++
++    dunningItem.value = result
++  } catch (err) {
++    error.value = mapCollectionsError(err)
++    dunningItem.value = null
++  } finally {
++    loading.value = false
++  }
++}
++
++function goBack() {
++  const query = extractListQuery()
++  router.push({
++    path: '/collections/dunning',
++    query,
++  })
++}
++
++function getStatusText(status: string): string {
++  switch (status) {
++    case 'DRAFT':
++      return '草稿'
++    case 'SENT':
++      return '已发送'
++    case 'CANCELLED':
++      return '已取消'
++    case 'CLOSED':
++      return '已关闭'
++    default:
++      return '未知'
++  }
++}
++
++function getStatusTagType(status: string): TagType {
++  switch (status) {
++    case 'DRAFT':
++      return 'warning'
++    case 'SENT':
++      return 'success'
++    case 'CANCELLED':
++      return 'info'
++    case 'CLOSED':
++      return 'danger'
++    default:
++      return ''
++  }
++}
++
++function formatDate(input: string | null): string {
++  if (!input) return '—'
++  const date = new Date(input)
++  if (Number.isNaN(date.getTime())) return input
++  return date.toLocaleDateString('zh-CN')
++}
++
++function formatDateTime(input: string): string {
++  const date = new Date(input)
++  if (Number.isNaN(date.getTime())) return input
++  return date.toLocaleString('zh-CN')
++}
++
++function formatAmount(amount: number, currency?: string): string {
++  const curr = currency || 'CNY'
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: curr,
++  }).format(amount)
++}
++
++onMounted(() => {
++  fetchDunningItem()
++})
++</script>
++
++<style scoped>
++.detail-content {
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.detail-card {
++  background: var(--bg-elevated);
++  border: 1px solid var(--border-light);
++  border-radius: 12px;
++  padding: 16px;
++}
++
++.detail-card-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
++}
++
++.detail-title {
++  margin: 0;
++  font-size: 24px;
++}
++
++.detail-subtitle {
++  margin: 10px 0 0;
++  color: var(--text-secondary);
++}
++
++.section-title {
++  margin: 0 0 12px;
++  font-size: 18px;
++}
++
++.mono-text {
++  font-family: var(--font-mono);
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/commission/pages/CommissionRuleList.vue b/frontend/src/modules/commission/pages/CommissionRuleList.vue
+new file mode 100644
+index 0000000..b204524
+--- /dev/null
++++ b/frontend/src/modules/commission/pages/CommissionRuleList.vue
+@@ -0,0 +1,549 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">提成规则管理</h1>
++        <span class="page-count" aria-live="polite">{{ total }} 条</span>
++      </div>
++      <div class="page-header-right">
++        <el-button type="primary" aria-label="新增提成规则" @click="openCreate">新增规则</el-button>
++      </div>
++    </div>
++
++    <el-row :gutter="12" class="filter-bar">
++      <el-col :xs="24" :sm="12" :md="8" :lg="6">
++        <el-input
++          v-model.trim="filters.q"
++          aria-label="规则关键词筛选"
++          placeholder="按规则名称或备注搜索"
++          clearable
++          @keyup.enter="onFilterChange"
++        />
++      </el-col>
++      <el-col :xs="12" :sm="6" :md="4" :lg="3">
++        <el-select v-model="filters.enabled" aria-label="规则状态筛选" placeholder="状态" clearable>
++          <el-option label="全部状态" value="" />
++          <el-option label="启用" value="true" />
++          <el-option label="停用" value="false" />
++        </el-select>
++      </el-col>
++      <el-col :xs="12" :sm="6" :md="4" :lg="3">
++        <el-input v-model.trim="filters.case_type" aria-label="案件类型筛选" placeholder="案件类型" clearable @keyup.enter="onFilterChange" />
++      </el-col>
++      <el-col :xs="12" :sm="6" :md="4" :lg="3">
++        <el-input v-model.trim="filters.fee_type" aria-label="费用类型筛选" placeholder="费用类型" clearable @keyup.enter="onFilterChange" />
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="4" :lg="3" class="filter-actions">
++        <el-button type="primary" aria-label="查询提成规则" @click="onFilterChange">查询</el-button>
++        <el-button aria-label="重置提成规则筛选" @click="resetFilters">重置</el-button>
++      </el-col>
++    </el-row>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="10" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无提成规则"
++        message="可点击“新增规则”创建第一条提成规则。"
++        icon="📘"
++        cta-label="新增规则"
++        @cta="openCreate"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table :data="rules" aria-label="提成规则列表" stripe size="small" class="compact-table">
++        <el-table-column prop="id" label="ID" width="80" />
++        <el-table-column prop="rule_name" label="规则名称" min-width="180" />
++        <el-table-column prop="case_type" label="案件类型" min-width="120">
++          <template #default="{ row }">
++            {{ row.case_type || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="fee_type" label="费用类型" min-width="120">
++          <template #default="{ row }">
++            {{ row.fee_type || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="s1_rate" label="S1 比例" width="110" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ formatPercent(row.s1_rate) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="s2_rate" label="S2 比例" width="110" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ formatPercent(row.s2_rate) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="wait_pay" label="待回款" width="100">
++          <template #default="{ row }">
++            <el-tag :type="row.wait_pay ? 'warning' : 'info'" size="small">
++              {{ row.wait_pay ? '是' : '否' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="force_settle" label="强制结算" width="100">
++          <template #default="{ row }">
++            <el-tag :type="row.force_settle ? 'success' : 'info'" size="small">
++              {{ row.force_settle ? '是' : '否' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="enabled" label="状态" width="90">
++          <template #default="{ row }">
++            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
++              {{ row.enabled ? '启用' : '停用' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="生效区间" min-width="190">
++          <template #default="{ row }">
++            <span v-if="row.effective_from || row.effective_to">
++              {{ row.effective_from || '—' }} ~ {{ row.effective_to || '—' }}
++            </span>
++            <span v-else>—</span>
++          </template>
++        </el-table-column>
++        <el-table-column label="操作" width="180" fixed="right">
++          <template #default="{ row }">
++            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
++            <el-button
++              text
++              size="small"
++              :loading="togglingRuleId === row.id"
++              :type="row.enabled ? 'warning' : 'success'"
++              @click="toggleEnabled(row)"
++            >
++              {{ row.enabled ? '停用' : '启用' }}
++            </el-button>
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar
++        v-model:page="page"
++        v-model:page-size="pageSize"
++        :total="total"
++        :page-sizes="[20, 50, 100]"
++      />
++    </div>
++
++    <el-dialog
++      v-model="dialogVisible"
++      :title="isEdit ? '编辑提成规则' : '新增提成规则'"
++      width="760px"
++      :close-on-click-modal="false"
++    >
++      <el-form ref="formRef" :model="form" :rules="formRules" label-position="top">
++        <el-row :gutter="12">
++          <el-col :span="12">
++            <el-form-item label="规则名称" prop="rule_name">
++              <el-input v-model.trim="form.rule_name" placeholder="请输入规则名称" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="12">
++            <el-form-item label="状态">
++              <el-switch v-model="form.enabled" active-text="启用" inactive-text="停用" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="案件类型">
++              <el-input v-model.trim="form.case_type" placeholder="例如：NORMAL" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="费用类型">
++              <el-input v-model.trim="form.fee_type" placeholder="例如：SERVICE" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="流程方向">
++              <el-input v-model.trim="form.flow_dir" placeholder="例如：INBOUND" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="专利类别">
++              <el-input v-model.trim="form.patent_category" placeholder="例如：INV" />
++            </el-form-item>
++          </el-col>
++
++          <el-col :span="6">
++            <el-form-item label="S1 比例" prop="s1_rate">
++              <el-input-number v-model="form.s1_rate" :min="0" :precision="4" :step="0.01" controls-position="right" class="w-full" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="S2 比例" prop="s2_rate">
++              <el-input-number v-model="form.s2_rate" :min="0" :precision="4" :step="0.01" controls-position="right" class="w-full" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="S1 固定金额">
++              <el-input-number v-model="form.s1_fixed_amount" :min="0" :precision="2" :step="10" controls-position="right" class="w-full" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="S2 固定金额">
++              <el-input-number v-model="form.s2_fixed_amount" :min="0" :precision="2" :step="10" controls-position="right" class="w-full" />
++            </el-form-item>
++          </el-col>
++
++          <el-col :span="6">
++            <el-form-item label="待回款">
++              <el-switch v-model="form.wait_pay" active-text="是" inactive-text="否" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="强制结算">
++              <el-switch v-model="form.force_settle" active-text="是" inactive-text="否" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="生效开始">
++              <el-date-picker
++                v-model="form.effective_from"
++                type="date"
++                placeholder="选择日期"
++                format="YYYY-MM-DD"
++                value-format="YYYY-MM-DD"
++                class="w-full"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :span="6">
++            <el-form-item label="生效结束">
++              <el-date-picker
++                v-model="form.effective_to"
++                type="date"
++                placeholder="选择日期"
++                format="YYYY-MM-DD"
++                value-format="YYYY-MM-DD"
++                class="w-full"
++              />
++            </el-form-item>
++          </el-col>
++
++          <el-col :span="24">
++            <el-form-item label="备注">
++              <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="可选备注" />
++            </el-form-item>
++          </el-col>
++        </el-row>
++      </el-form>
++
++      <template #footer>
++        <el-button @click="dialogVisible = false">取消</el-button>
++        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
++      </template>
++    </el-dialog>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, reactive, ref, watch } from 'vue'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import {
++  createCommissionRule,
++  getCommissionRules,
++  updateCommissionRule,
++} from '../../../api/commission'
++import type {
++  CommissionRule,
++  CommissionRuleCreatePayload,
++  CommissionRuleUpdatePayload,
++} from '../../../api/commission.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++
++const rules = ref<CommissionRule[]>([])
++const loading = ref(false)
++const error = ref<ApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++const filters = reactive({
++  q: '',
++  enabled: '',
++  case_type: '',
++  fee_type: '',
++})
++
++const dialogVisible = ref(false)
++const isEdit = ref(false)
++const editingRuleId = ref<number | null>(null)
++const togglingRuleId = ref<number | null>(null)
++const saving = ref(false)
++const formRef = ref<FormInstance>()
++
++const form = reactive({
++  rule_name: '',
++  case_type: '',
++  fee_type: '',
++  flow_dir: '',
++  patent_category: '',
++  s1_rate: 0,
++  s2_rate: 0,
++  s1_fixed_amount: 0,
++  s2_fixed_amount: 0,
++  wait_pay: false,
++  force_settle: false,
++  enabled: true,
++  effective_from: '',
++  effective_to: '',
++  remark: '',
++})
++
++const formRules: FormRules = {
++  rule_name: [{ required: true, message: '规则名称为必填项', trigger: 'blur' }],
++  s1_rate: [{ required: true, message: 'S1 比例为必填项', trigger: 'blur' }],
++  s2_rate: [{ required: true, message: 'S2 比例为必填项', trigger: 'blur' }],
++}
++
++function normalizeOptional(value: string): string | undefined {
++  const trimmed = value.trim()
++  return trimmed || undefined
++}
++
++function buildFilterParams() {
++  return {
++    q: normalizeOptional(filters.q),
++    case_type: normalizeOptional(filters.case_type),
++    fee_type: normalizeOptional(filters.fee_type),
++    enabled: filters.enabled === '' ? undefined : filters.enabled === 'true',
++    page: page.value,
++    page_size: pageSize.value,
++  }
++}
++
++async function fetchRules() {
++  loading.value = true
++  error.value = null
++  try {
++    const result = await getCommissionRules(buildFilterParams())
++    rules.value = result.items
++    total.value = result.total
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    loading.value = false
++  }
++}
++
++function onFilterChange() {
++  page.value = 1
++  fetchRules()
++}
++
++function resetFilters() {
++  filters.q = ''
++  filters.enabled = ''
++  filters.case_type = ''
++  filters.fee_type = ''
++  onFilterChange()
++}
++
++function resetForm() {
++  form.rule_name = ''
++  form.case_type = ''
++  form.fee_type = ''
++  form.flow_dir = ''
++  form.patent_category = ''
++  form.s1_rate = 0
++  form.s2_rate = 0
++  form.s1_fixed_amount = 0
++  form.s2_fixed_amount = 0
++  form.wait_pay = false
++  form.force_settle = false
++  form.enabled = true
++  form.effective_from = ''
++  form.effective_to = ''
++  form.remark = ''
++}
++
++function openCreate() {
++  resetForm()
++  isEdit.value = false
++  editingRuleId.value = null
++  dialogVisible.value = true
++}
++
++function openEdit(rule: CommissionRule) {
++  form.rule_name = rule.rule_name
++  form.case_type = rule.case_type || ''
++  form.fee_type = rule.fee_type || ''
++  form.flow_dir = rule.flow_dir || ''
++  form.patent_category = rule.patent_category || ''
++  form.s1_rate = rule.s1_rate
++  form.s2_rate = rule.s2_rate
++  form.s1_fixed_amount = rule.s1_fixed_amount
++  form.s2_fixed_amount = rule.s2_fixed_amount
++  form.wait_pay = rule.wait_pay
++  form.force_settle = rule.force_settle
++  form.enabled = rule.enabled
++  form.effective_from = rule.effective_from || ''
++  form.effective_to = rule.effective_to || ''
++  form.remark = rule.remark || ''
++  isEdit.value = true
++  editingRuleId.value = rule.id
++  dialogVisible.value = true
++}
++
++function buildCreatePayload(): CommissionRuleCreatePayload {
++  return {
++    rule_name: form.rule_name.trim(),
++    case_type: normalizeOptional(form.case_type),
++    fee_type: normalizeOptional(form.fee_type),
++    flow_dir: normalizeOptional(form.flow_dir),
++    patent_category: normalizeOptional(form.patent_category),
++    s1_rate: form.s1_rate,
++    s2_rate: form.s2_rate,
++    s1_fixed_amount: form.s1_fixed_amount,
++    s2_fixed_amount: form.s2_fixed_amount,
++    wait_pay: form.wait_pay,
++    force_settle: form.force_settle,
++    enabled: form.enabled,
++    effective_from: normalizeOptional(form.effective_from),
++    effective_to: normalizeOptional(form.effective_to),
++    remark: normalizeOptional(form.remark),
++  }
++}
++
++function buildUpdatePayload(): CommissionRuleUpdatePayload {
++  return {
++    rule_name: form.rule_name.trim(),
++    case_type: normalizeOptional(form.case_type),
++    fee_type: normalizeOptional(form.fee_type),
++    flow_dir: normalizeOptional(form.flow_dir),
++    patent_category: normalizeOptional(form.patent_category),
++    s1_rate: form.s1_rate,
++    s2_rate: form.s2_rate,
++    s1_fixed_amount: form.s1_fixed_amount,
++    s2_fixed_amount: form.s2_fixed_amount,
++    wait_pay: form.wait_pay,
++    force_settle: form.force_settle,
++    enabled: form.enabled,
++    effective_from: normalizeOptional(form.effective_from),
++    effective_to: normalizeOptional(form.effective_to),
++    remark: normalizeOptional(form.remark),
++  }
++}
++
++async function handleSave() {
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++  try {
++    if (isEdit.value && editingRuleId.value !== null) {
++      await updateCommissionRule(editingRuleId.value, buildUpdatePayload())
++      ElMessage.success('规则更新成功')
++    } else {
++      await createCommissionRule(buildCreatePayload())
++      ElMessage.success('规则创建成功')
++    }
++
++    dialogVisible.value = false
++    await fetchRules()
++  } catch (err) {
++    const apiError = err as ApiError
++    ElMessage.error(apiError.message || '保存失败')
++  } finally {
++    saving.value = false
++  }
++}
++
++async function toggleEnabled(rule: CommissionRule) {
++  togglingRuleId.value = rule.id
++  try {
++    await updateCommissionRule(rule.id, { enabled: !rule.enabled })
++    ElMessage.success(rule.enabled ? '规则已停用' : '规则已启用')
++    await fetchRules()
++  } catch (err) {
++    const apiError = err as ApiError
++    ElMessage.error(apiError.message || '状态更新失败')
++  } finally {
++    togglingRuleId.value = null
++  }
++}
++
++function formatPercent(value: number): string {
++  return `${(value * 100).toFixed(2)}%`
++}
++
++watch([page, pageSize], () => {
++  fetchRules()
++})
++
++onMounted(() => {
++  fetchRules()
++})
++</script>
++
++<style scoped>
++.filter-bar {
++  margin-bottom: 16px;
++}
++
++.filter-actions {
++  display: flex;
++  gap: 8px;
++}
++
++.mono-num {
++  font-family: var(--font-mono);
++}
++
++.w-full {
++  width: 100%;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/commission/pages/CommissionList.vue b/frontend/src/modules/commission/pages/CommissionList.vue
+new file mode 100644
+index 0000000..41662c2
+--- /dev/null
++++ b/frontend/src/modules/commission/pages/CommissionList.vue
+@@ -0,0 +1,332 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">提成记录查询</h1>
++        <span class="page-count" aria-live="polite">{{ total }} 条</span>
++      </div>
++    </div>
++
++    <el-row :gutter="12" class="filter-bar">
++      <el-col :xs="24" :sm="12" :md="6" :lg="5">
++        <el-input
++          v-model.trim="filters.agent_id"
++          aria-label="代理人筛选"
++          placeholder="代理人 ID"
++          clearable
++          @keyup.enter="onFilterChange"
++        />
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6" :lg="5">
++        <el-input
++          v-model.trim="filters.case_id"
++          aria-label="案件筛选"
++          placeholder="案件 ID"
++          clearable
++          @keyup.enter="onFilterChange"
++        />
++      </el-col>
++      <el-col :xs="12" :sm="8" :md="4" :lg="3">
++        <el-select v-model="filters.status" aria-label="提成状态筛选" placeholder="状态" clearable>
++          <el-option label="全部状态" value="" />
++          <el-option label="进行中" value="OPEN" />
++          <el-option label="已结算" value="SETTLED" />
++          <el-option label="已取消" value="CANCELLED" />
++          <el-option label="已作废" value="VOID" />
++          <el-option label="已关闭" value="CLOSED" />
++        </el-select>
++      </el-col>
++      <el-col :xs="12" :sm="16" :md="8" :lg="7">
++        <el-date-picker
++          v-model="filters.settleable_date_range"
++          aria-label="可结算日期范围筛选"
++          type="daterange"
++          range-separator="至"
++          start-placeholder="可结算日期开始"
++          end-placeholder="可结算日期结束"
++          format="YYYY-MM-DD"
++          value-format="YYYY-MM-DD"
++          class="w-full"
++        />
++      </el-col>
++      <el-col :xs="24" :sm="16" :md="8" :lg="7">
++        <el-date-picker
++          v-model="filters.created_at_range"
++          aria-label="创建日期范围筛选"
++          type="daterange"
++          range-separator="至"
++          start-placeholder="创建日期开始"
++          end-placeholder="创建日期结束"
++          format="YYYY-MM-DD"
++          value-format="YYYY-MM-DD"
++          class="w-full"
++        />
++      </el-col>
++      <el-col :xs="24" :sm="8" :md="4" :lg="3" class="filter-actions">
++        <el-button type="primary" aria-label="查询提成记录" @click="onFilterChange">查询</el-button>
++        <el-button aria-label="重置提成筛选" @click="resetFilters">重置</el-button>
++      </el-col>
++    </el-row>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="10" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无提成记录"
++        message="调整筛选条件后重试。"
++        icon="📄"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table :data="records" aria-label="提成记录列表" stripe size="small" class="compact-table">
++        <el-table-column prop="id" label="ID" width="80" />
++        <el-table-column prop="case_id" label="案件 ID" min-width="160" />
++        <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++          <template #default="{ row }">
++            {{ row.agent_id || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="fee_type" label="费用类型" width="120">
++          <template #default="{ row }">
++            {{ row.fee_type || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="base_fee" label="基础费用" width="140" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ formatAmount(row.base_fee) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="s1_amount" label="S1 金额" width="120" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ formatAmount(row.s1_amount) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="s2_amount" label="S2 金额" width="120" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ formatAmount(row.s2_amount) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="status" label="状态" width="110">
++          <template #default="{ row }">
++            <el-tag :type="statusTagType(row.status)" size="small">
++              {{ statusLabel(row.status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="is_settleable" label="可结算" width="90">
++          <template #default="{ row }">
++            <el-tag :type="row.is_settleable ? 'success' : 'info'" size="small">
++              {{ row.is_settleable ? '是' : '否' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="settleable_date" label="可结算日期" width="130">
++          <template #default="{ row }">
++            {{ row.settleable_date || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="created_at" label="创建时间" min-width="180">
++          <template #default="{ row }">
++            {{ formatDateTime(row.created_at) }}
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar
++        v-model:page="page"
++        v-model:page-size="pageSize"
++        :total="total"
++        :page-sizes="[20, 50, 100]"
++      />
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, reactive, ref, watch } from 'vue'
++import { getCommission } from '../../../api/commission'
++import type { CommissionListParams, CommissionRecord } from '../../../api/commission.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++
++const records = ref<CommissionRecord[]>([])
++const loading = ref(false)
++const error = ref<ApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++const filters = reactive({
++  agent_id: '',
++  case_id: '',
++  status: '',
++  settleable_date_range: [] as string[],
++  created_at_range: [] as string[],
++})
++
++function normalizeOptional(value: string): string | undefined {
++  const trimmed = value.trim()
++  return trimmed || undefined
++}
++
++function buildParams(): CommissionListParams {
++  const settleableFrom = filters.settleable_date_range[0]
++  const settleableTo = filters.settleable_date_range[1]
++  const createdFrom = filters.created_at_range[0]
++  const createdTo = filters.created_at_range[1]
++
++  return {
++    agent_id: normalizeOptional(filters.agent_id),
++    case_id: normalizeOptional(filters.case_id),
++    status: normalizeOptional(filters.status),
++    settleable_date_from: settleableFrom || undefined,
++    settleable_date_to: settleableTo || undefined,
++    created_at_from: createdFrom || undefined,
++    created_at_to: createdTo || undefined,
++    page: page.value,
++    page_size: pageSize.value,
++  }
++}
++
++async function fetchRecords() {
++  loading.value = true
++  error.value = null
++  try {
++    const result = await getCommission(buildParams())
++    records.value = result.items
++    total.value = result.total
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    loading.value = false
++  }
++}
++
++function onFilterChange() {
++  page.value = 1
++  fetchRecords()
++}
++
++function resetFilters() {
++  filters.agent_id = ''
++  filters.case_id = ''
++  filters.status = ''
++  filters.settleable_date_range = []
++  filters.created_at_range = []
++  onFilterChange()
++}
++
++function formatAmount(value: number): string {
++  return value.toLocaleString('zh-CN', {
++    minimumFractionDigits: 2,
++    maximumFractionDigits: 2,
++  })
++}
++
++function formatDateTime(value: string): string {
++  const date = new Date(value)
++  if (Number.isNaN(date.getTime())) return value
++  return date.toLocaleString('zh-CN', { hour12: false })
++}
++
++function statusLabel(status: string): string {
++  const map: Record<string, string> = {
++    OPEN: '进行中',
++    SETTLED: '已结算',
++    CANCELLED: '已取消',
++    VOID: '已作废',
++    CLOSED: '已关闭',
++  }
++  return map[status] || status || '—'
++}
++
++function statusTagType(status: string): 'success' | 'warning' | 'danger' | 'info' {
++  switch (status) {
++    case 'SETTLED':
++      return 'success'
++    case 'OPEN':
++      return 'warning'
++    case 'CANCELLED':
++    case 'VOID':
++      return 'danger'
++    default:
++      return 'info'
++  }
++}
++
++watch([page, pageSize], () => {
++  fetchRecords()
++})
++
++onMounted(() => {
++  fetchRecords()
++})
++</script>
++
++<style scoped>
++.filter-bar {
++  margin-bottom: 16px;
++}
++
++.filter-actions {
++  display: flex;
++  gap: 8px;
++}
++
++.mono-num {
++  font-family: var(--font-mono);
++}
++
++.w-full {
++  width: 100%;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/commission/pages/CommissionSettlement.vue b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+new file mode 100644
+index 0000000..c34a356
+--- /dev/null
++++ b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+@@ -0,0 +1,634 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">提成结算批次</h1>
++        <span class="page-count" aria-live="polite">统计行数：{{ report?.totals.line_count ?? 0 }}</span>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <el-card class="section-card" shadow="never">
++      <template #header>
++        <div class="section-title">创建结算批次</div>
++      </template>
++
++      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-position="top">
++        <el-row :gutter="12">
++          <el-col :xs="24" :sm="12" :md="8" :lg="6">
++            <el-form-item label="代理人 ID" prop="agent_id">
++              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人 ID" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8" :lg="6">
++            <el-form-item label="结算币种" prop="currency">
++              <el-input v-model.trim="createForm.currency" placeholder="例如：CNY" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="24" :md="8" :lg="8">
++            <el-form-item label="结算期间">
++              <el-date-picker
++                v-model="createForm.period_range"
++                type="daterange"
++                range-separator="至"
++                start-placeholder="开始日期"
++                end-placeholder="结束日期"
++                format="YYYY-MM-DD"
++                value-format="YYYY-MM-DD"
++                class="w-full"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="24" :md="24" :lg="24">
++            <el-form-item label="备注">
++              <el-input v-model="createForm.remark" type="textarea" :rows="2" placeholder="可选备注" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="24" class="action-row">
++            <el-button type="primary" :loading="creating" @click="handleCreateSettlement">创建批次</el-button>
++          </el-col>
++        </el-row>
++      </el-form>
++    </el-card>
++
++    <el-card class="section-card" shadow="never">
++      <template #header>
++        <div class="section-title">生成结算明细</div>
++      </template>
++
++      <el-row :gutter="12" class="generate-row">
++        <el-col :xs="24" :sm="12" :md="8" :lg="6">
++          <el-input-number
++            v-model="generateForm.settlement_id"
++            aria-label="结算批次编号"
++            :min="1"
++            :controls="false"
++            placeholder="结算批次 ID"
++            class="w-full"
++          />
++        </el-col>
++        <el-col :xs="24" :sm="12" :md="8" :lg="6">
++          <el-button
++            type="success"
++            aria-label="生成结算明细"
++            :loading="generating"
++            :disabled="!generateForm.settlement_id"
++            @click="handleGenerateLines"
++          >
++            生成明细
++          </el-button>
++        </el-col>
++      </el-row>
++
++      <div v-if="lastGenerate" class="result-block">
++        <el-descriptions :column="3" border>
++          <el-descriptions-item label="批次 ID">{{ lastGenerate.settlement_id }}</el-descriptions-item>
++          <el-descriptions-item label="状态">{{ lastGenerate.status }}</el-descriptions-item>
++          <el-descriptions-item label="明细总数">{{ lastGenerate.line_count }}</el-descriptions-item>
++          <el-descriptions-item label="新增明细">{{ lastGenerate.created_count }}</el-descriptions-item>
++          <el-descriptions-item label="更新明细">{{ lastGenerate.updated_count }}</el-descriptions-item>
++          <el-descriptions-item label="明细总额">{{ formatMoney(lastGenerate.total_amount) }}</el-descriptions-item>
++        </el-descriptions>
++      </div>
++
++      <div v-if="recentSettlements.length" class="result-block">
++        <div class="sub-title">本页创建的批次</div>
++        <el-table :data="recentSettlements" stripe size="small" class="compact-table">
++          <el-table-column prop="id" label="ID" width="80" />
++          <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
++            <template #default="{ row }">
++              {{ row.agent_id || '—' }}
++            </template>
++          </el-table-column>
++          <el-table-column prop="status" label="状态" width="100" />
++          <el-table-column prop="currency" label="币种" width="90" />
++          <el-table-column prop="line_count" label="明细数" width="90" />
++          <el-table-column label="总额" width="120" align="right">
++            <template #default="{ row }">
++              <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++            </template>
++          </el-table-column>
++          <el-table-column label="操作" width="120" fixed="right">
++            <template #default="{ row }">
++              <el-button text size="small" @click="useSettlement(row.id)">用于生成</el-button>
++            </template>
++          </el-table-column>
++        </el-table>
++      </div>
++    </el-card>
++
++    <el-card class="section-card" shadow="never">
++      <template #header>
++        <div class="section-title">结算报表与统计</div>
++      </template>
++
++      <el-row :gutter="12" class="filter-bar">
++        <el-col :xs="24" :sm="12" :md="8" :lg="6">
++          <el-input v-model.trim="reportFilters.agent_id" aria-label="报表代理人筛选" placeholder="代理人 ID" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="24" :sm="12" :md="8" :lg="6">
++          <el-input v-model.trim="reportFilters.case_id" aria-label="报表案件筛选" placeholder="案件 ID" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="12" :sm="8" :md="4" :lg="3">
++          <el-input v-model.trim="reportFilters.currency" aria-label="报表币种筛选" placeholder="币种" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="12" :sm="8" :md="4" :lg="3">
++          <el-select v-model="reportFilters.time_field" aria-label="报表时间维度筛选" placeholder="时间维度">
++            <el-option label="按明细创建时间" value="line_created_at" />
++            <el-option label="按可结算日期" value="settleable_date" />
++            <el-option label="按结算期间" value="settlement_period" />
++          </el-select>
++        </el-col>
++        <el-col :xs="12" :sm="8" :md="4" :lg="3">
++          <el-input v-model.trim="reportFilters.settlement_status" aria-label="报表批次状态筛选" placeholder="批次状态" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="12" :sm="8" :md="4" :lg="3">
++          <el-input v-model.trim="reportFilters.line_status" aria-label="报表明细状态筛选" placeholder="明细状态" clearable @keyup.enter="queryReport" />
++        </el-col>
++        <el-col :xs="24" :sm="16" :md="8" :lg="7">
++          <el-date-picker
++            v-model="reportFilters.date_range"
++            aria-label="报表日期范围筛选"
++            type="daterange"
++            range-separator="至"
++            start-placeholder="报表开始日期"
++            end-placeholder="报表结束日期"
++            format="YYYY-MM-DD"
++            value-format="YYYY-MM-DD"
++            class="w-full"
++          />
++        </el-col>
++        <el-col :xs="24" :sm="8" :md="4" :lg="3" class="filter-actions">
++          <el-button type="primary" aria-label="查询提成报表" :loading="reportLoading" @click="queryReport">查询报表</el-button>
++          <el-button aria-label="重置报表筛选" @click="resetReportFilters">重置</el-button>
++        </el-col>
++      </el-row>
++
++      <LoadingBlock v-if="reportLoading" :rows="6" />
++
++      <div v-else-if="!report" class="page-empty">
++        <EmptyState title="暂无报表数据" message="请先设置条件并查询报表。" icon="📊" />
++      </div>
++
++      <div v-else>
++        <el-row :gutter="12" class="stat-grid">
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-card shadow="never" class="stat-card">
++              <div class="stat-label">明细总数</div>
++              <div class="stat-value">{{ report.totals.line_count }}</div>
++            </el-card>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-card shadow="never" class="stat-card">
++              <div class="stat-label">提成总额</div>
++              <div class="stat-value mono-num">{{ formatMoney(report.totals.total_amount) }}</div>
++            </el-card>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-card shadow="never" class="stat-card">
++              <div class="stat-label">分组维度</div>
++              <div class="stat-value">{{ report.filters.time_field }}</div>
++            </el-card>
++          </el-col>
++        </el-row>
++
++        <div class="table-section">
++          <div class="sub-title">按代理人统计</div>
++          <el-table :data="report.by_agent" stripe size="small" class="compact-table">
++            <el-table-column prop="agent_id" label="代理人 ID" min-width="160">
++              <template #default="{ row }">
++                {{ row.agent_id || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="line_count" label="明细数" width="100" />
++            <el-table-column label="总额" width="140" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++
++        <div class="table-section">
++          <div class="sub-title">按案件统计</div>
++          <el-table :data="report.by_case" stripe size="small" class="compact-table">
++            <el-table-column prop="case_id" label="案件 ID" min-width="180">
++              <template #default="{ row }">
++                {{ row.case_id || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="line_count" label="明细数" width="100" />
++            <el-table-column label="总额" width="140" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++
++        <div class="table-section">
++          <div class="sub-title">按时间统计</div>
++          <el-table :data="report.by_time" stripe size="small" class="compact-table">
++            <el-table-column prop="time_bucket" label="时间桶" min-width="160" />
++            <el-table-column prop="line_count" label="明细数" width="100" />
++            <el-table-column label="总额" width="140" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++
++        <div class="table-section">
++          <div class="sub-title">明细列表</div>
++          <el-table :data="report.details" stripe size="small" class="compact-table">
++            <el-table-column prop="settlement_id" label="批次 ID" width="90" />
++            <el-table-column prop="commission_id" label="提成 ID" width="90" />
++            <el-table-column prop="agent_id" label="代理人 ID" min-width="140">
++              <template #default="{ row }">
++                {{ row.agent_id || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="case_id" label="案件 ID" min-width="150" />
++            <el-table-column prop="settlement_status" label="批次状态" width="100">
++              <template #default="{ row }">
++                {{ row.settlement_status || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="line_status" label="明细状态" width="100">
++              <template #default="{ row }">
++                {{ row.line_status || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column label="金额" width="120" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatMoney(row.amount) }}</span>
++              </template>
++            </el-table-column>
++            <el-table-column prop="settleable_date" label="可结算日期" width="120">
++              <template #default="{ row }">
++                {{ row.settleable_date || '—' }}
++              </template>
++            </el-table-column>
++            <el-table-column prop="created_at" label="创建时间" min-width="170">
++              <template #default="{ row }">
++                {{ formatDateTime(row.created_at) }}
++              </template>
++            </el-table-column>
++          </el-table>
++        </div>
++      </div>
++    </el-card>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { onMounted, reactive, ref } from 'vue'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import {
++  createCommissionSettlement,
++  generateCommissionSettlementLines,
++  getCommissionSettlementReport,
++} from '../../../api/commission'
++import type {
++  CommissionSettlement,
++  CommissionSettlementCreatePayload,
++  CommissionSettlementGenerateLinesResult,
++  CommissionSettlementReportParams,
++  CommissionSettlementReportResult,
++} from '../../../api/commission.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++
++const error = ref<ApiError | null>(null)
++
++const createFormRef = ref<FormInstance>()
++const creating = ref(false)
++const createForm = reactive({
++  agent_id: '',
++  currency: 'CNY',
++  period_range: [] as string[],
++  remark: '',
++})
++
++const createRules: FormRules = {
++  agent_id: [{ required: true, message: '代理人 ID 为必填项', trigger: 'blur' }],
++  currency: [{ required: true, message: '币种为必填项', trigger: 'blur' }],
++}
++
++const generateForm = reactive({
++  settlement_id: undefined as number | undefined,
++})
++const generating = ref(false)
++const lastGenerate = ref<CommissionSettlementGenerateLinesResult | null>(null)
++const recentSettlements = ref<CommissionSettlement[]>([])
++
++const reportLoading = ref(false)
++const report = ref<CommissionSettlementReportResult | null>(null)
++const reportFilters = reactive({
++  agent_id: '',
++  case_id: '',
++  currency: '',
++  settlement_status: '',
++  line_status: '',
++  date_range: [] as string[],
++  time_field: 'line_created_at' as CommissionSettlementReportParams['time_field'],
++})
++
++function toApiError(errorLike: unknown): ApiError | null {
++  if (!errorLike || typeof errorLike !== 'object') return null
++  const candidate = errorLike as Partial<ApiError>
++  if (typeof candidate.status !== 'number') return null
++  if (typeof candidate.code !== 'string') return null
++  if (typeof candidate.message !== 'string') return null
++  return candidate as ApiError
++}
++
++function mapCreateSettlementError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
++
++  if (apiError.status === 400 && apiError.code === 'COMMISSION_SETTLEMENT_INVALID') {
++    return '结算批次参数无效，请检查代理人、期间和币种。'
++  }
++  if (apiError.status === 409 && apiError.code === 'COMMISSION_SETTLEMENT_CONFLICT') {
++    return '结算批次冲突：当前条件下已存在进行中的批次。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限创建结算批次。'
++  if (apiError.status === 422) return '提交数据校验失败，请检查输入后重试。'
++
++  return '创建结算批次失败，请稍后重试。'
++}
++
++function mapGenerateLinesError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
++
++  if (apiError.status === 404 && apiError.code === 'COMMISSION_SETTLEMENT_NOT_FOUND') {
++    return '结算批次不存在，请确认批次 ID。'
++  }
++  if (apiError.status === 400 && apiError.code === 'COMMISSION_SETTLEMENT_INVALID') {
++    return '结算批次参数或状态无效，无法生成明细。'
++  }
++  if (apiError.status === 409 && apiError.code === 'COMMISSION_SETTLEMENT_CONFLICT') {
++    return '结算批次冲突：当前状态不允许生成或存在重复明细。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限生成结算明细。'
++  if (apiError.status === 422) return '请求参数校验失败，请检查后重试。'
++
++  return '生成结算明细失败，请稍后重试。'
++}
++
++function mapReportError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
++
++  if (apiError.status === 400 && apiError.code === 'COMMISSION_REPORT_INVALID') {
++    return '报表查询条件无效，请检查时间范围和筛选项。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限查看结算报表。'
++  if (apiError.status === 422) return '报表查询参数校验失败，请检查后重试。'
++
++  return '查询结算报表失败，请稍后重试。'
++}
++
++function normalizeOptional(value: string): string | undefined {
++  const trimmed = value.trim()
++  return trimmed || undefined
++}
++
++function formatMoney(value: number): string {
++  return value.toLocaleString('zh-CN', {
++    minimumFractionDigits: 2,
++    maximumFractionDigits: 2,
++  })
++}
++
++function formatDateTime(value: string): string {
++  const date = new Date(value)
++  if (Number.isNaN(date.getTime())) return value
++  return date.toLocaleString('zh-CN', { hour12: false })
++}
++
++function buildCreatePayload(): CommissionSettlementCreatePayload {
++  return {
++    agent_id: createForm.agent_id.trim(),
++    currency: createForm.currency.trim(),
++    period_from: createForm.period_range[0] || undefined,
++    period_to: createForm.period_range[1] || undefined,
++    remark: normalizeOptional(createForm.remark),
++  }
++}
++
++function buildReportParams(): CommissionSettlementReportParams {
++  return {
++    agent_id: normalizeOptional(reportFilters.agent_id),
++    case_id: normalizeOptional(reportFilters.case_id),
++    currency: normalizeOptional(reportFilters.currency),
++    settlement_status: normalizeOptional(reportFilters.settlement_status),
++    line_status: normalizeOptional(reportFilters.line_status),
++    date_from: reportFilters.date_range[0] || undefined,
++    date_to: reportFilters.date_range[1] || undefined,
++    time_field: reportFilters.time_field,
++  }
++}
++
++function useSettlement(id: number) {
++  generateForm.settlement_id = id
++}
++
++async function handleCreateSettlement() {
++  const valid = await createFormRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  creating.value = true
++  error.value = null
++  try {
++    const settlement = await createCommissionSettlement(buildCreatePayload())
++    recentSettlements.value = [settlement, ...recentSettlements.value.filter((s) => s.id !== settlement.id)]
++    generateForm.settlement_id = settlement.id
++    ElMessage.success(`批次创建成功（ID: ${settlement.id}）`)
++  } catch (err) {
++    error.value = toApiError(err)
++    ElMessage.error(mapCreateSettlementError(err))
++  } finally {
++    creating.value = false
++  }
++}
++
++async function handleGenerateLines() {
++  if (!generateForm.settlement_id) {
++    ElMessage.warning('请先输入结算批次 ID')
++    return
++  }
++
++  generating.value = true
++  error.value = null
++  try {
++    const result = await generateCommissionSettlementLines(generateForm.settlement_id)
++    lastGenerate.value = result
++
++    const index = recentSettlements.value.findIndex((s) => s.id === result.settlement_id)
++    if (index >= 0) {
++      recentSettlements.value[index] = {
++        ...recentSettlements.value[index],
++        line_count: result.line_count,
++        total_amount: result.total_amount,
++        status: result.status,
++      }
++    }
++
++    ElMessage.success('明细生成成功')
++  } catch (err) {
++    error.value = toApiError(err)
++    ElMessage.error(mapGenerateLinesError(err))
++  } finally {
++    generating.value = false
++  }
++}
++
++async function queryReport() {
++  reportLoading.value = true
++  error.value = null
++  try {
++    report.value = await getCommissionSettlementReport(buildReportParams())
++  } catch (err) {
++    error.value = toApiError(err)
++    ElMessage.error(mapReportError(err))
++  } finally {
++    reportLoading.value = false
++  }
++}
++
++function resetReportFilters() {
++  reportFilters.agent_id = ''
++  reportFilters.case_id = ''
++  reportFilters.currency = ''
++  reportFilters.settlement_status = ''
++  reportFilters.line_status = ''
++  reportFilters.date_range = []
++  reportFilters.time_field = 'line_created_at'
++  queryReport()
++}
++
++onMounted(() => {
++  queryReport()
++})
++</script>
++
++<style scoped>
++.section-card {
++  margin-top: 16px;
++}
++
++.section-title {
++  font-weight: 600;
++}
++
++.action-row {
++  display: flex;
++  justify-content: flex-end;
++}
++
++.generate-row {
++  align-items: center;
++}
++
++.result-block {
++  margin-top: 16px;
++}
++
++.sub-title {
++  margin-bottom: 8px;
++  font-weight: 600;
++}
++
++.filter-bar {
++  margin-bottom: 16px;
++}
++
++.filter-actions {
++  display: flex;
++  gap: 8px;
++}
++
++.stat-grid {
++  margin-bottom: 16px;
++}
++
++.stat-card {
++  min-height: 96px;
++}
++
++.stat-label {
++  font-size: 13px;
++  color: var(--text-sub);
++}
++
++.stat-value {
++  margin-top: 8px;
++  font-size: 24px;
++  font-weight: 700;
++}
++
++.table-section {
++  margin-top: 16px;
++}
++
++.mono-num {
++  font-family: var(--font-mono);
++}
++
++.w-full {
++  width: 100%;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue b/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
+new file mode 100644
+index 0000000..00c3c62
+--- /dev/null
++++ b/frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
+@@ -0,0 +1,334 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">顾问/检索项目立案</h1>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <el-card shadow="never" class="form-card">
++      <template #header>
++        <div class="form-card-title">创建项目</div>
++      </template>
++
++      <el-form ref="formRef" :model="form" :rules="formRules" label-position="top">
++        <el-row :gutter="12">
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-form-item label="项目类型" prop="case_type">
++              <el-select v-model="form.case_type" placeholder="请选择项目类型">
++                <el-option label="顾问项目" value="CONSULTING" />
++                <el-option label="检索项目" value="SEARCH" />
++              </el-select>
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-form-item label="案件编号" prop="case_no">
++              <el-input v-model.trim="form.case_no" placeholder="请输入案件编号" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-form-item label="接收日期" prop="recv_date">
++              <el-date-picker
++                v-model="form.recv_date"
++                type="date"
++                placeholder="请选择接收日期"
++                format="YYYY-MM-DD"
++                value-format="YYYY-MM-DD"
++                class="w-full"
++              />
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-form-item label="客户 ID" prop="client_id">
++              <el-input v-model.trim="form.client_id" placeholder="请输入客户 ID" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-form-item label="负责人 ID" prop="primary_agent_id">
++              <el-input v-model.trim="form.primary_agent_id" placeholder="请输入负责人 ID" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="24" :md="8">
++            <el-form-item label="项目标题（中文）" prop="title_cn">
++              <el-input v-model.trim="form.title_cn" placeholder="请输入项目标题" />
++            </el-form-item>
++          </el-col>
++
++          <el-col v-if="form.case_type === 'CONSULTING'" :xs="24" :sm="12" :md="12">
++            <el-form-item label="咨询范围" prop="consulting_scope">
++              <el-input
++                v-model.trim="form.consulting_scope"
++                type="textarea"
++                :rows="2"
++                placeholder="请输入咨询范围"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col v-if="form.case_type === 'CONSULTING'" :xs="24" :sm="12" :md="12">
++            <el-form-item label="预估工时" prop="estimated_hours">
++              <el-input-number v-model="form.estimated_hours" :min="0.5" :step="0.5" :precision="1" class="w-full" />
++            </el-form-item>
++          </el-col>
++
++          <el-col v-if="form.case_type === 'SEARCH'" :xs="24" :sm="12" :md="12">
++            <el-form-item label="检索关键词" prop="search_keywords">
++              <el-input
++                v-model.trim="form.search_keywords"
++                type="textarea"
++                :rows="2"
++                placeholder="请输入检索关键词"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col v-if="form.case_type === 'SEARCH'" :xs="24" :sm="12" :md="12">
++            <el-form-item label="检索数据库" prop="search_database">
++              <el-input v-model.trim="form.search_database" placeholder="例如：PatBase / Derwent / Orbit" />
++            </el-form-item>
++          </el-col>
++
++          <el-col :span="24" class="action-row">
++            <el-button @click="resetForm">重置</el-button>
++            <el-button type="primary" :loading="submitting" @click="handleSubmit">创建项目</el-button>
++          </el-col>
++        </el-row>
++      </el-form>
++    </el-card>
++
++    <el-card v-if="createdCase" shadow="never" class="result-card">
++      <template #header>
++        <div class="form-card-title">创建结果</div>
++      </template>
++
++      <el-descriptions :column="3" border>
++        <el-descriptions-item label="案件 ID">{{ createdCase.id }}</el-descriptions-item>
++        <el-descriptions-item label="案件编号">{{ createdCase.case_no }}</el-descriptions-item>
++        <el-descriptions-item label="项目类型">{{ caseTypeLabel(createdCase.case_type) }}</el-descriptions-item>
++        <el-descriptions-item label="状态">{{ createdCase.status }}</el-descriptions-item>
++        <el-descriptions-item label="客户 ID">{{ createdCase.client_id || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="负责人 ID">{{ createdCase.primary_agent_id || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="接收日期">{{ createdCase.recv_date || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="创建时间">{{ formatDateTime(createdCase.created_at) }}</el-descriptions-item>
++      </el-descriptions>
++    </el-card>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { reactive, ref } from 'vue'
++import { useRouter } from 'vue-router'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import { createConsultingCase } from '../../../api/consulting'
++import type {
++  ConsultingCase,
++  ConsultingCaseCreatePayload,
++  ConsultingCaseType,
++} from '../../../api/consulting.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++const router = useRouter()
++const formRef = ref<FormInstance>()
++const submitting = ref(false)
++const error = ref<ApiError | null>(null)
++const createdCase = ref<ConsultingCase | null>(null)
++
++const form = reactive({
++  case_type: 'CONSULTING' as ConsultingCaseType,
++  case_no: '',
++  client_id: '',
++  title_cn: '',
++  primary_agent_id: '',
++  recv_date: '',
++  consulting_scope: '',
++  estimated_hours: undefined as number | undefined,
++  search_keywords: '',
++  search_database: '',
++})
++
++function toApiError(errorLike: unknown): ApiError | null {
++  if (!errorLike || typeof errorLike !== 'object') return null
++  const candidate = errorLike as Partial<ApiError>
++  if (typeof candidate.status !== 'number') return null
++  if (typeof candidate.code !== 'string') return null
++  if (typeof candidate.message !== 'string') return null
++  return candidate as ApiError
++}
++
++function mapCreateCaseError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，请稍后重试。'
++
++  if (apiError.status === 400 && apiError.code === 'CONSULTING_CASE_INVALID') {
++    return '项目参数无效，请检查项目类型与必填字段。'
++  }
++  if (apiError.status === 409 && apiError.code === 'CASE_NO_DUPLICATE') {
++    return '案件编号已存在，请更换后重试。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限创建顾问/检索项目。'
++  if (apiError.status === 422) return '提交数据校验失败，请检查日期和字段格式。'
++
++  return '创建项目失败，请稍后重试。'
++}
++
++function validateSpecialFields() {
++  if (form.case_type === 'CONSULTING') {
++    const scope = form.consulting_scope.trim()
++    if (!scope) {
++      return '顾问项目必须填写咨询范围。'
++    }
++    if (!form.estimated_hours || form.estimated_hours <= 0) {
++      return '顾问项目必须填写有效的预估工时。'
++    }
++  }
++
++  if (form.case_type === 'SEARCH') {
++    const keywords = form.search_keywords.trim()
++    const db = form.search_database.trim()
++    if (!keywords) {
++      return '检索项目必须填写检索关键词。'
++    }
++    if (!db) {
++      return '检索项目必须填写检索数据库。'
++    }
++  }
++
++  return null
++}
++
++const formRules: FormRules = {
++  case_type: [{ required: true, message: '项目类型为必填项', trigger: 'change' }],
++  case_no: [{ required: true, message: '案件编号为必填项', trigger: 'blur' }],
++  client_id: [{ required: true, message: '客户 ID 为必填项', trigger: 'blur' }],
++  title_cn: [{ required: true, message: '项目标题为必填项', trigger: 'blur' }],
++  primary_agent_id: [{ required: true, message: '负责人 ID 为必填项', trigger: 'blur' }],
++  recv_date: [{ required: true, message: '接收日期为必填项', trigger: 'change' }],
++}
++
++function buildPayload(): ConsultingCaseCreatePayload {
++  return {
++    case_no: form.case_no.trim(),
++    case_type: form.case_type,
++    client_id: form.client_id.trim(),
++    title_cn: form.title_cn.trim(),
++    primary_agent_id: form.primary_agent_id.trim(),
++    recv_date: form.recv_date,
++  }
++}
++
++function resetForm() {
++  form.case_type = 'CONSULTING'
++  form.case_no = ''
++  form.client_id = ''
++  form.title_cn = ''
++  form.primary_agent_id = ''
++  form.recv_date = ''
++  form.consulting_scope = ''
++  form.estimated_hours = undefined
++  form.search_keywords = ''
++  form.search_database = ''
++}
++
++function caseTypeLabel(caseType: ConsultingCaseType): string {
++  return caseType === 'CONSULTING' ? '顾问项目' : '检索项目'
++}
++
++function formatDateTime(value: string): string {
++  const date = new Date(value)
++  if (Number.isNaN(date.getTime())) return value
++  return date.toLocaleString('zh-CN', { hour12: false })
++}
++
++async function handleSubmit() {
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  const specialFieldError = validateSpecialFields()
++  if (specialFieldError) {
++    ElMessage.error(specialFieldError)
++    return
++  }
++
++  submitting.value = true
++  error.value = null
++  try {
++    const created = await createConsultingCase(buildPayload())
++    createdCase.value = created
++    ElMessage.success('项目创建成功，正在跳转。')
++    const targetPath = created.id ? `/cases/${created.id}` : '/cases'
++    await router.push(targetPath)
++  } catch (err) {
++    error.value = toApiError(err)
++    ElMessage.error(mapCreateCaseError(err))
++  } finally {
++    submitting.value = false
++  }
++}
++</script>
++
++<style scoped>
++.form-card,
++.result-card {
++  margin-top: 16px;
++}
++
++.form-card-title {
++  font-weight: 600;
++}
++
++.action-row {
++  display: flex;
++  justify-content: flex-end;
++  gap: 8px;
++}
++
++.w-full {
++  width: 100%;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue b/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
+new file mode 100644
+index 0000000..5dd5018
+--- /dev/null
++++ b/frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
+@@ -0,0 +1,682 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">顾问/检索服务费草单生成</h1>
++      </div>
++      <div class="page-header-right">
++        <el-button @click="goBack">返回</el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <el-card shadow="never" class="form-card">
++      <template #header>
++        <div class="form-card-title">参数设置</div>
++      </template>
++
++      <el-form label-position="top">
++        <el-row :gutter="12">
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-form-item label="案件 ID">
++              <el-input v-model.trim="form.case_id" placeholder="请输入案件 ID" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-form-item label="生成模式">
++              <el-select v-model="form.mode" placeholder="请选择模式">
++                <el-option label="固定模式（FIXED）" value="FIXED" />
++                <el-option label="工时模式（HOURLY）" value="HOURLY" />
++                <el-option label="混合模式（HYBRID）" value="HYBRID" />
++              </el-select>
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8">
++            <el-form-item label="币种">
++              <el-input v-model.trim="form.currency" placeholder="默认 CNY（可选）" />
++            </el-form-item>
++          </el-col>
++
++          <el-col v-if="showFixedFee" :xs="24" :sm="12" :md="8">
++            <el-form-item :label="form.mode === 'HYBRID' ? '固定费用（可为 0）' : '固定费用（必须大于 0）'">
++              <el-input-number
++                v-model="form.fixed_fee"
++                :min="0"
++                :precision="2"
++                :step="100"
++                controls-position="right"
++                style="width: 100%"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <div v-if="showHourlyLines" class="line-section">
++          <div class="line-section-header">
++            <h3 class="line-section-title">工时行</h3>
++            <el-button size="small" @click="addHourlyLine">新增工时行</el-button>
++          </div>
++
++          <div v-if="form.hourly_lines.length === 0" class="section-empty">
++            当前无工时行，请点击“新增工时行”。
++          </div>
++
++          <div v-for="(line, index) in form.hourly_lines" :key="line.key" class="line-card">
++            <div class="line-card-header">
++              <span>工时行 #{{ index + 1 }}</span>
++              <el-button text type="danger" @click="removeHourlyLine(index)">删除</el-button>
++            </div>
++            <el-row :gutter="8">
++              <el-col :xs="24" :sm="12" :md="6">
++                <el-form-item label="费用代码">
++                  <el-input v-model.trim="line.fee_code" placeholder="例如：CONSULT_HOUR" />
++                </el-form-item>
++              </el-col>
++              <el-col :xs="24" :sm="12" :md="6">
++                <el-form-item label="费用名称">
++                  <el-input v-model.trim="line.fee_name" placeholder="例如：顾问工时费" />
++                </el-form-item>
++              </el-col>
++              <el-col :xs="24" :sm="12" :md="4">
++                <el-form-item label="工时">
++                  <el-input-number v-model="line.hours" :min="0" :step="0.5" :precision="2" style="width: 100%" />
++                </el-form-item>
++              </el-col>
++              <el-col :xs="24" :sm="12" :md="4">
++                <el-form-item label="小时单价">
++                  <el-input-number v-model="line.hourly_rate" :min="0" :step="100" :precision="2" style="width: 100%" />
++                </el-form-item>
++              </el-col>
++              <el-col :xs="24" :sm="12" :md="4">
++                <el-form-item label="追踪键">
++                  <el-input v-model.trim="line.trace_key" placeholder="可选" />
++                </el-form-item>
++              </el-col>
++              <el-col :span="24">
++                <el-form-item label="备注">
++                  <el-input v-model.trim="line.remark" placeholder="可选" />
++                </el-form-item>
++              </el-col>
++            </el-row>
++          </div>
++        </div>
++
++        <div class="line-section">
++          <div class="line-section-header">
++            <h3 class="line-section-title">杂费行（可选）</h3>
++            <el-button size="small" @click="addMiscLine">新增杂费行</el-button>
++          </div>
++
++          <div v-if="form.misc_lines.length === 0" class="section-empty">
++            当前无杂费行。
++          </div>
++
++          <div v-for="(line, index) in form.misc_lines" :key="line.key" class="line-card">
++            <div class="line-card-header">
++              <span>杂费行 #{{ index + 1 }}</span>
++              <el-button text type="danger" @click="removeMiscLine(index)">删除</el-button>
++            </div>
++            <el-row :gutter="8">
++              <el-col :xs="24" :sm="12" :md="6">
++                <el-form-item label="费用代码">
++                  <el-input v-model.trim="line.fee_code" placeholder="例如：SEARCH_MISC" />
++                </el-form-item>
++              </el-col>
++              <el-col :xs="24" :sm="12" :md="6">
++                <el-form-item label="费用名称">
++                  <el-input v-model.trim="line.fee_name" placeholder="例如：检索附加费" />
++                </el-form-item>
++              </el-col>
++              <el-col :xs="24" :sm="12" :md="4">
++                <el-form-item label="金额">
++                  <el-input-number v-model="line.amount" :min="0" :step="100" :precision="2" style="width: 100%" />
++                </el-form-item>
++              </el-col>
++              <el-col :xs="24" :sm="12" :md="4">
++                <el-form-item label="追踪键">
++                  <el-input v-model.trim="line.trace_key" placeholder="可选" />
++                </el-form-item>
++              </el-col>
++              <el-col :span="24">
++                <el-form-item label="备注">
++                  <el-input v-model.trim="line.remark" placeholder="可选" />
++                </el-form-item>
++              </el-col>
++            </el-row>
++          </div>
++        </div>
++
++        <div class="action-row">
++          <el-button @click="resetForm">重置</el-button>
++          <el-button type="primary" :loading="submitting" @click="handleSubmit">
++            生成服务费草单
++          </el-button>
++        </div>
++      </el-form>
++    </el-card>
++
++    <el-card v-if="result" shadow="never" class="result-card">
++      <template #header>
++        <div class="form-card-title">生成结果</div>
++      </template>
++
++      <el-descriptions :column="4" border>
++        <el-descriptions-item label="草单 ID">{{ result.draft_id }}</el-descriptions-item>
++        <el-descriptions-item label="草单类型">{{ result.draft_type }}</el-descriptions-item>
++        <el-descriptions-item label="模式">{{ result.mode }}</el-descriptions-item>
++        <el-descriptions-item label="币种">{{ result.currency }}</el-descriptions-item>
++        <el-descriptions-item label="行数">{{ result.created_line_count }}</el-descriptions-item>
++        <el-descriptions-item label="服务费合计">
++          {{ formatMoney(result.totals.total_service, result.currency) }}
++        </el-descriptions-item>
++        <el-descriptions-item label="杂费合计">
++          {{ formatMoney(result.totals.total_misc, result.currency) }}
++        </el-descriptions-item>
++        <el-descriptions-item label="总金额">
++          {{ formatMoney(result.totals.amount, result.currency) }}
++        </el-descriptions-item>
++      </el-descriptions>
++
++      <div class="line-section">
++        <h3 class="line-section-title">草单明细</h3>
++        <el-table :data="result.items" size="small" border>
++          <el-table-column prop="item_id" label="费用项 ID" min-width="200" />
++          <el-table-column prop="fee_code" label="费用代码" min-width="140" />
++          <el-table-column prop="fee_name" label="费用名称" min-width="160" />
++          <el-table-column prop="fee_type" label="费用类型" width="100" />
++          <el-table-column prop="quantity" label="数量" width="90" />
++          <el-table-column prop="unit_price" label="单价" width="120" />
++          <el-table-column label="金额" width="140" align="right">
++            <template #default="{ row }">
++              {{ formatMoney(row.amount, result.currency) }}
++            </template>
++          </el-table-column>
++          <el-table-column prop="trace_key" label="追踪键" min-width="160" />
++          <el-table-column prop="remark" label="备注" min-width="180">
++            <template #default="{ row }">
++              {{ row.remark || '—' }}
++            </template>
++          </el-table-column>
++        </el-table>
++      </div>
++    </el-card>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, reactive, ref } from 'vue'
++import { useRouter } from 'vue-router'
++import { ElMessage } from 'element-plus'
++import { http } from '../../../api/http'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++type DraftMode = 'FIXED' | 'HOURLY' | 'HYBRID'
++
++interface HourlyLineForm {
++  key: number
++  fee_code: string
++  fee_name: string
++  hours: number
++  hourly_rate: number
++  remark: string
++  trace_key: string
++}
++
++interface MiscLineForm {
++  key: number
++  fee_code: string
++  fee_name: string
++  amount: number
++  remark: string
++  trace_key: string
++}
++
++interface ConsultingFeeDraftCreatePayload {
++  case_id: string
++  mode: DraftMode
++  currency?: string
++  fixed_fee?: number
++  hourly_lines?: Array<{
++    fee_code: string
++    fee_name: string
++    hours: number
++    hourly_rate: number
++    remark?: string
++    trace_key?: string
++  }>
++  misc_lines?: Array<{
++    fee_code: string
++    fee_name: string
++    amount: number
++    remark?: string
++    trace_key?: string
++  }>
++}
++
++interface ConsultingFeeDraftResult {
++  draft_id: string
++  draft_type: 'CONSULT_FEE' | 'SEARCH_FEE'
++  mode: DraftMode
++  currency: string
++  totals: {
++    total_gov: number
++    total_service: number
++    total_misc: number
++    amount: number
++  }
++  items: Array<{
++    item_id: string
++    fee_code: string | null
++    fee_name: string | null
++    fee_type: string
++    quantity: number | null
++    unit_price: number | null
++    amount: number
++    trace_key: string
++    remark: string | null
++  }>
++  created_line_count: number
++}
++
++interface BackendConsultingFeeDraftResult {
++  draft_id: string
++  draft_type: 'CONSULT_FEE' | 'SEARCH_FEE'
++  mode: DraftMode
++  currency: string
++  totals: {
++    total_gov: number | string | null
++    total_service: number | string | null
++    total_misc: number | string | null
++    amount: number | string | null
++  }
++  items: Array<{
++    item_id: string
++    fee_code: string | null
++    fee_name: string | null
++    fee_type: string
++    quantity: number | string | null
++    unit_price: number | string | null
++    amount: number | string | null
++    trace_key: string
++    remark: string | null
++  }>
++  created_line_count: number
++}
++
++const router = useRouter()
++const submitting = ref(false)
++const error = ref<ApiError | null>(null)
++const result = ref<ConsultingFeeDraftResult | null>(null)
++const seed = ref(1)
++
++const form = reactive<{
++  case_id: string
++  mode: DraftMode
++  currency: string
++  fixed_fee: number
++  hourly_lines: HourlyLineForm[]
++  misc_lines: MiscLineForm[]
++}>({
++  case_id: '',
++  mode: 'FIXED',
++  currency: 'CNY',
++  fixed_fee: 0,
++  hourly_lines: [],
++  misc_lines: [],
++})
++
++const showFixedFee = computed(() => form.mode === 'FIXED' || form.mode === 'HYBRID')
++const showHourlyLines = computed(() => form.mode === 'HOURLY' || form.mode === 'HYBRID')
++
++function nextKey(): number {
++  seed.value += 1
++  return seed.value
++}
++
++function addHourlyLine() {
++  form.hourly_lines.push({
++    key: nextKey(),
++    fee_code: '',
++    fee_name: '',
++    hours: 1,
++    hourly_rate: 0,
++    remark: '',
++    trace_key: '',
++  })
++}
++
++function removeHourlyLine(index: number) {
++  form.hourly_lines.splice(index, 1)
++}
++
++function addMiscLine() {
++  form.misc_lines.push({
++    key: nextKey(),
++    fee_code: '',
++    fee_name: '',
++    amount: 0,
++    remark: '',
++    trace_key: '',
++  })
++}
++
++function removeMiscLine(index: number) {
++  form.misc_lines.splice(index, 1)
++}
++
++function resetForm() {
++  form.case_id = ''
++  form.mode = 'FIXED'
++  form.currency = 'CNY'
++  form.fixed_fee = 0
++  form.hourly_lines = []
++  form.misc_lines = []
++  error.value = null
++}
++
++function toApiError(errorLike: unknown): ApiError | null {
++  if (!errorLike || typeof errorLike !== 'object') return null
++  const candidate = errorLike as Partial<ApiError>
++  if (typeof candidate.status !== 'number') return null
++  if (typeof candidate.code !== 'string') return null
++  if (typeof candidate.message !== 'string') return null
++  return candidate as ApiError
++}
++
++function mapDraftCreateError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) {
++    return '网络异常或服务不可用，请稍后重试。'
++  }
++
++  if (apiError.status === 400 && apiError.code === 'CONSULTING_FEE_INVALID') {
++    return '草单参数不合法，请检查模式与金额/工时配置。'
++  }
++  if (apiError.status === 404 && apiError.code === 'CASE_NOT_FOUND') {
++    return '案件不存在，请确认案件 ID 后重试。'
++  }
++  if (apiError.status === 409 && apiError.code === 'FEE_DRAFT_CONFLICT') {
++    const draftId = apiError.details?.draft_id
++    return typeof draftId === 'string'
++      ? `当前案件已有开启中的草单（${draftId}），请先处理冲突。`
++      : '当前案件已有开启中的草单，请先处理冲突。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限生成顾问/检索服务费草单。'
++  if (apiError.status === 422) return '请求参数校验失败，请检查输入格式。'
++
++  return '生成草单失败，请稍后重试。'
++}
++
++function mapErrorToBanner(errorLike: unknown, message: string): ApiError {
++  const apiError = toApiError(errorLike)
++  if (apiError) {
++    return {
++      ...apiError,
++      message,
++    }
++  }
++  return {
++    status: 0,
++    code: 'UNKNOWN_ERROR',
++    message,
++  }
++}
++
++function validateFormState(): string | null {
++  if (!form.case_id.trim()) return '请填写案件 ID。'
++
++  if (form.mode === 'FIXED') {
++    if (!(form.fixed_fee > 0)) return '固定模式下固定费用必须大于 0。'
++  }
++
++  if (form.mode === 'HOURLY' || form.mode === 'HYBRID') {
++    if (form.hourly_lines.length === 0) return '工时模式/混合模式至少需要一条工时行。'
++
++    for (let i = 0; i < form.hourly_lines.length; i += 1) {
++      const line = form.hourly_lines[i]
++      if (!line.fee_code.trim() || !line.fee_name.trim()) {
++        return `工时行 #${i + 1} 的费用代码和费用名称不能为空。`
++      }
++      if (!(line.hours > 0)) {
++        return `工时行 #${i + 1} 的工时必须大于 0。`
++      }
++      if (line.hourly_rate < 0) {
++        return `工时行 #${i + 1} 的小时单价不能为负数。`
++      }
++    }
++  }
++
++  if (form.mode === 'HYBRID' && form.fixed_fee < 0) {
++    return '混合模式下固定费用不能小于 0。'
++  }
++
++  for (let i = 0; i < form.misc_lines.length; i += 1) {
++    const line = form.misc_lines[i]
++    if (!line.fee_code.trim() || !line.fee_name.trim()) {
++      return `杂费行 #${i + 1} 的费用代码和费用名称不能为空。`
++    }
++    if (line.amount < 0) {
++      return `杂费行 #${i + 1} 的金额不能为负数。`
++    }
++  }
++
++  if (form.mode === 'HYBRID') {
++    const hourlyTotal = form.hourly_lines.reduce(
++      (sum, line) => sum + line.hours * line.hourly_rate,
++      0,
++    )
++    const miscTotal = form.misc_lines.reduce((sum, line) => sum + line.amount, 0)
++    if (form.fixed_fee + hourlyTotal + miscTotal <= 0) {
++      return '混合模式总金额必须大于 0。'
++    }
++  }
++
++  return null
++}
++
++function buildPayload(): ConsultingFeeDraftCreatePayload {
++  const payload: ConsultingFeeDraftCreatePayload = {
++    case_id: form.case_id.trim(),
++    mode: form.mode,
++    currency: form.currency.trim() || undefined,
++  }
++
++  if (form.mode === 'FIXED' || form.mode === 'HYBRID') {
++    payload.fixed_fee = form.fixed_fee
++  }
++
++  if (form.mode === 'HOURLY' || form.mode === 'HYBRID') {
++    payload.hourly_lines = form.hourly_lines.map((line) => ({
++      fee_code: line.fee_code.trim(),
++      fee_name: line.fee_name.trim(),
++      hours: line.hours,
++      hourly_rate: line.hourly_rate,
++      remark: line.remark.trim() || undefined,
++      trace_key: line.trace_key.trim() || undefined,
++    }))
++  }
++
++  if (form.misc_lines.length > 0) {
++    payload.misc_lines = form.misc_lines.map((line) => ({
++      fee_code: line.fee_code.trim(),
++      fee_name: line.fee_name.trim(),
++      amount: line.amount,
++      remark: line.remark.trim() || undefined,
++      trace_key: line.trace_key.trim() || undefined,
++    }))
++  }
++
++  return payload
++}
++
++function asNumber(input: number | string | null | undefined): number {
++  if (input === null || input === undefined || input === '') return 0
++  const parsed = Number(input)
++  return Number.isFinite(parsed) ? parsed : 0
++}
++
++function mapDraftResult(raw: BackendConsultingFeeDraftResult): ConsultingFeeDraftResult {
++  return {
++    draft_id: String(raw.draft_id),
++    draft_type: raw.draft_type,
++    mode: raw.mode,
++    currency: raw.currency,
++    totals: {
++      total_gov: asNumber(raw.totals?.total_gov),
++      total_service: asNumber(raw.totals?.total_service),
++      total_misc: asNumber(raw.totals?.total_misc),
++      amount: asNumber(raw.totals?.amount),
++    },
++    items: Array.isArray(raw.items)
++      ? raw.items.map((item) => ({
++        item_id: String(item.item_id),
++        fee_code: item.fee_code ?? null,
++        fee_name: item.fee_name ?? null,
++        fee_type: String(item.fee_type),
++        quantity: item.quantity == null ? null : asNumber(item.quantity),
++        unit_price: item.unit_price == null ? null : asNumber(item.unit_price),
++        amount: asNumber(item.amount),
++        trace_key: String(item.trace_key),
++        remark: item.remark ?? null,
++      }))
++      : [],
++    created_line_count: Number(raw.created_line_count || 0),
++  }
++}
++
++function formatMoney(amount: number, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(amount || 0)
++}
++
++function goBack() {
++  router.back()
++}
++
++async function handleSubmit() {
++  const validationMessage = validateFormState()
++  if (validationMessage) {
++    ElMessage.error(validationMessage)
++    return
++  }
++
++  submitting.value = true
++  error.value = null
++  try {
++    const response = await http.post<BackendConsultingFeeDraftResult>(
++      '/consulting/fee-drafts',
++      buildPayload(),
++    )
++    result.value = mapDraftResult(response.data)
++    ElMessage.success('服务费草单生成成功。')
++  } catch (err) {
++    const message = mapDraftCreateError(err)
++    error.value = mapErrorToBanner(err, message)
++    ElMessage.error(message)
++  } finally {
++    submitting.value = false
++  }
++}
++</script>
++
++<style scoped>
++.form-card,
++.result-card {
++  margin-top: 16px;
++}
++
++.form-card-title {
++  font-weight: 600;
++}
++
++.line-section {
++  margin-top: 16px;
++}
++
++.line-section-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 8px;
++}
++
++.line-section-title {
++  margin: 0;
++  font-size: 14px;
++  font-weight: 600;
++}
++
++.section-empty {
++  padding: 12px;
++  border: 1px dashed var(--el-border-color);
++  border-radius: 6px;
++  color: var(--text-sub);
++  margin-bottom: 8px;
++}
++
++.line-card {
++  border: 1px solid var(--el-border-color);
++  border-radius: 8px;
++  padding: 10px;
++  margin-bottom: 10px;
++}
++
++.line-card-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.action-row {
++  display: flex;
++  justify-content: flex-end;
++  gap: 8px;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/consulting/pages/ConsultingProfitability.vue b/frontend/src/modules/consulting/pages/ConsultingProfitability.vue
+new file mode 100644
+index 0000000..c466e32
+--- /dev/null
++++ b/frontend/src/modules/consulting/pages/ConsultingProfitability.vue
+@@ -0,0 +1,513 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">顾问项目收益视图</h1>
++      </div>
++    </div>
++
++    <el-row :gutter="12" class="filter-row">
++      <el-col :xs="24" :sm="12" :md="8" :lg="6">
++        <el-input
++          v-model.trim="caseId"
++          aria-label="项目编号筛选"
++          placeholder="项目 ID（必填）"
++          clearable
++          @keyup.enter="handleSearch"
++        />
++      </el-col>
++      <el-col :xs="24" :sm="24" :md="10" :lg="8">
++        <el-date-picker
++          v-model="expenseDateRange"
++          aria-label="支出日期范围筛选"
++          type="daterange"
++          class="full-width"
++          range-separator="至"
++          start-placeholder="支出开始日期"
++          end-placeholder="支出结束日期"
++          value-format="YYYY-MM-DD"
++          format="YYYY-MM-DD"
++          clearable
++        />
++      </el-col>
++      <el-col :xs="24" :sm="24" :md="6" :lg="10" class="filter-actions">
++        <el-button type="primary" aria-label="查询项目收益" :loading="loading" @click="handleSearch">查询收益</el-button>
++        <el-button aria-label="重置收益筛选" :disabled="loading" @click="handleReset">重置</el-button>
++      </el-col>
++    </el-row>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <el-alert
++      v-if="incomeMissingHint"
++      type="warning"
++      :closable="false"
++      show-icon
++      title="该项目暂无收入汇总记录，收入按 0 显示。"
++      class="hint-alert"
++    />
++
++    <LoadingBlock v-if="loading" :rows="8" />
++
++    <div v-else-if="!queried" class="page-empty">
++      <EmptyState
++        title="请输入项目后查询"
++        message="按项目查看收入、支出与毛利。"
++        icon="📈"
++      />
++    </div>
++
++    <div v-else class="result-container">
++      <div class="source-note">数据来源：案件收款汇总（收入）+ 支出台账（支出）</div>
++
++      <div class="stats-grid">
++        <div class="stat-card">
++          <div class="stat-label">应收收入</div>
++          <div class="stat-value mono-num">{{ formatMoney(income.total_billed, currency) }}</div>
++        </div>
++        <div class="stat-card">
++          <div class="stat-label">已收收入</div>
++          <div class="stat-value mono-num">{{ formatMoney(income.total_paid, currency) }}</div>
++        </div>
++        <div class="stat-card">
++          <div class="stat-label">支出总额</div>
++          <div class="stat-value mono-num">{{ formatMoney(expenseTotal, currency) }}</div>
++        </div>
++        <div class="stat-card">
++          <div class="stat-label">毛利</div>
++          <div class="stat-value mono-num" :class="{ 'negative-value': grossProfit < 0 }">
++            {{ formatMoney(grossProfit, currency) }}
++          </div>
++        </div>
++        <div class="stat-card">
++          <div class="stat-label">毛利率（按已收）</div>
++          <div class="stat-value">{{ grossMarginText }}</div>
++        </div>
++        <div class="stat-card">
++          <div class="stat-label">未收收入</div>
++          <div class="stat-value mono-num">{{ formatMoney(income.total_outstanding, currency) }}</div>
++        </div>
++      </div>
++
++      <el-card shadow="never" class="section-card">
++        <template #header>
++          <div class="section-title">项目收益汇总</div>
++        </template>
++        <el-descriptions :column="3" border>
++          <el-descriptions-item label="项目 ID">{{ income.case_id || caseId }}</el-descriptions-item>
++          <el-descriptions-item label="统计币种">{{ currency }}</el-descriptions-item>
++          <el-descriptions-item label="可计提提成">{{ income.is_commissionable === true ? '是' : income.is_commissionable === false ? '否' : '—' }}</el-descriptions-item>
++          <el-descriptions-item label="费用类型">{{ income.fee_type || '—' }}</el-descriptions-item>
++          <el-descriptions-item label="费用代码">{{ income.fee_code || '—' }}</el-descriptions-item>
++          <el-descriptions-item label="年度">{{ income.year_no ?? '—' }}</el-descriptions-item>
++        </el-descriptions>
++      </el-card>
++
++      <el-card shadow="never" class="section-card">
++        <template #header>
++          <div class="section-title">支出分类统计</div>
++        </template>
++
++        <el-table :data="expenseCategoryRows" stripe size="small" class="compact-table">
++          <el-table-column prop="label" label="支出类别" min-width="180" />
++          <el-table-column prop="count" label="笔数" width="100" />
++          <el-table-column label="金额" width="160" align="right">
++            <template #default="{ row }">
++              <span class="mono-num">{{ formatMoney(row.amount, currency) }}</span>
++            </template>
++          </el-table-column>
++        </el-table>
++      </el-card>
++
++      <el-card shadow="never" class="section-card">
++        <template #header>
++          <div class="section-title">支出明细</div>
++        </template>
++
++        <el-table :data="expenseItems" stripe size="small" class="compact-table">
++          <el-table-column prop="expense_no" label="支出编号" min-width="160">
++            <template #default="{ row }">
++              <span class="mono-num">{{ row.expense_no || '—' }}</span>
++            </template>
++          </el-table-column>
++          <el-table-column prop="expense_date" label="支出日期" width="120">
++            <template #default="{ row }">
++              {{ formatDate(row.expense_date) }}
++            </template>
++          </el-table-column>
++          <el-table-column prop="category" label="类别" width="140">
++            <template #default="{ row }">
++              <el-tag size="small" type="info">{{ categoryLabel(row.category) }}</el-tag>
++            </template>
++          </el-table-column>
++          <el-table-column label="金额" width="140" align="right">
++            <template #default="{ row }">
++              <span class="mono-num">{{ formatMoney(row.amount, row.currency || currency) }}</span>
++            </template>
++          </el-table-column>
++          <el-table-column prop="status" label="状态" width="120">
++            <template #default="{ row }">
++              {{ row.status || '—' }}
++            </template>
++          </el-table-column>
++          <el-table-column prop="remark" label="备注" min-width="180">
++            <template #default="{ row }">
++              {{ row.remark || '—' }}
++            </template>
++          </el-table-column>
++        </el-table>
++      </el-card>
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, ref } from 'vue'
++import { useRoute } from 'vue-router'
++import { getCaseReceipts } from '../../../api/billing'
++import { getExpenses } from '../../../api/expenses'
++import type { CaseReceiptsSummary } from '../../../api/billing.types'
++import type { ExpenseItem, ExpenseStats } from '../../../api/expenses.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import { ElMessage } from 'element-plus'
++
++interface CategoryStatRow {
++  key: string
++  label: string
++  count: number
++  amount: number
++}
++
++const CATEGORY_LABELS: Record<string, string> = {
++  SEARCH_DB: '检索数据库费用',
++  TRANSLATION: '翻译费用',
++  TRANSPORT: '交通费用',
++  OTHER: '其他费用',
++}
++
++const route = useRoute()
++
++const loading = ref(false)
++const queried = ref(false)
++const error = ref<ApiError | null>(null)
++const incomeMissingHint = ref(false)
++
++const caseId = ref(typeof route.query.case_id === 'string' ? route.query.case_id : '')
++const expenseDateRange = ref<string[]>([])
++
++function createEmptyIncome(targetCaseId = ''): CaseReceiptsSummary {
++  return {
++    case_id: targetCaseId,
++    total_billed: 0,
++    total_paid: 0,
++    total_outstanding: 0,
++    currency: 'CNY',
++    bills: [],
++  }
++}
++
++const expenseItems = ref<ExpenseItem[]>([])
++
++function createEmptyExpenseStats(): ExpenseStats {
++  return {
++    count_by_category: {},
++    sum_by_category: {},
++    count_total: 0,
++    sum_total: 0,
++  }
++}
++
++function deriveExpenseStatsFromItems(items: ExpenseItem[]): ExpenseStats {
++  const count_by_category: Record<string, number> = {}
++  const sum_by_category: Record<string, number> = {}
++  let sum_total = 0
++
++  for (const item of items) {
++    const category = item.category || 'OTHER'
++    const amount = Number(item.amount) || 0
++    count_by_category[category] = (count_by_category[category] || 0) + 1
++    sum_by_category[category] = (sum_by_category[category] || 0) + amount
++    sum_total += amount
++  }
++
++  return {
++    count_by_category,
++    sum_by_category,
++    count_total: items.length,
++    sum_total,
++  }
++}
++
++const income = ref<CaseReceiptsSummary>(createEmptyIncome())
++const expenseStats = ref<ExpenseStats>(createEmptyExpenseStats())
++
++const currency = computed(() => income.value.currency || 'CNY')
++const expenseTotal = computed(() => expenseStats.value.sum_total || 0)
++const grossProfit = computed(() => income.value.total_paid - expenseTotal.value)
++
++const grossMarginText = computed(() => {
++  if (income.value.total_paid <= 0) return '—'
++  const ratio = (grossProfit.value / income.value.total_paid) * 100
++  return `${ratio.toFixed(2)}%`
++})
++
++const expenseCategoryRows = computed<CategoryStatRow[]>(() => {
++  const keys = new Set([
++    ...Object.keys(expenseStats.value.count_by_category || {}),
++    ...Object.keys(expenseStats.value.sum_by_category || {}),
++  ])
++
++  return Array.from(keys)
++    .map((key) => ({
++      key,
++      label: categoryLabel(key),
++      count: expenseStats.value.count_by_category[key] || 0,
++      amount: expenseStats.value.sum_by_category[key] || 0,
++    }))
++    .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
++})
++
++function toApiError(errorLike: unknown): ApiError | null {
++  if (!errorLike || typeof errorLike !== 'object') return null
++  const candidate = errorLike as Partial<ApiError>
++  if (typeof candidate.status !== 'number') return null
++  if (typeof candidate.code !== 'string') return null
++  if (typeof candidate.message !== 'string') return null
++  return candidate as ApiError
++}
++
++function mapIncomeError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，收入数据加载失败。'
++
++  if (apiError.status === 404 && apiError.code === 'CASE_RECEIPT_NOT_FOUND') {
++    return '该项目暂无收入汇总记录。'
++  }
++  if (apiError.status === 400) return '项目参数不合法，请检查后重试。'
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限查看项目收入数据。'
++  if (apiError.status === 422) return '收入查询参数校验失败，请检查后重试。'
++
++  return '收入数据加载失败，请稍后重试。'
++}
++
++function mapExpenseError(errorLike: unknown): string {
++  const apiError = toApiError(errorLike)
++  if (!apiError || apiError.status === 0) return '网络异常或服务不可用，支出数据加载失败。'
++
++  if (apiError.status === 400 && apiError.code === 'EXPENSE_INVALID') {
++    return '支出筛选条件不合法，请调整后重试。'
++  }
++  if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
++  if (apiError.status === 403) return '无权限查看项目支出数据。'
++  if (apiError.status === 422) return '支出查询参数校验失败，请检查后重试。'
++
++  return '支出数据加载失败，请稍后重试。'
++}
++
++function categoryLabel(key: string): string {
++  return CATEGORY_LABELS[key] || key
++}
++
++function formatDate(value?: string | null): string {
++  if (!value) return '—'
++  return value.slice(0, 10)
++}
++
++function formatMoney(value: number, curr: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: curr || 'CNY',
++  }).format(value)
++}
++
++function handleReset() {
++  caseId.value = ''
++  expenseDateRange.value = []
++  queried.value = false
++  incomeMissingHint.value = false
++  error.value = null
++  income.value = createEmptyIncome()
++  expenseItems.value = []
++  expenseStats.value = createEmptyExpenseStats()
++}
++
++function handleSearch() {
++  if (loading.value) return
++  void queryProfitability()
++}
++
++async function queryProfitability() {
++  if (loading.value) return
++
++  const normalizedCaseId = caseId.value.trim()
++  if (!normalizedCaseId) {
++    ElMessage.error('请输入项目 ID 后再查询。')
++    return
++  }
++
++  loading.value = true
++  queried.value = true
++  error.value = null
++  incomeMissingHint.value = false
++  income.value = createEmptyIncome(normalizedCaseId)
++  expenseItems.value = []
++  expenseStats.value = createEmptyExpenseStats()
++
++  const [incomeResult, expenseResult] = await Promise.allSettled([
++    getCaseReceipts(normalizedCaseId),
++    getExpenses({
++      case_id: normalizedCaseId,
++      date_from: expenseDateRange.value[0] || undefined,
++      date_to: expenseDateRange.value[1] || undefined,
++      include_stats: true,
++      page: 1,
++      page_size: 100,
++    }),
++  ])
++
++  if (incomeResult.status === 'fulfilled') {
++    income.value = incomeResult.value
++  } else {
++    const apiError = toApiError(incomeResult.reason)
++    if (apiError?.status === 404 && apiError.code === 'CASE_RECEIPT_NOT_FOUND') {
++      income.value = createEmptyIncome(normalizedCaseId)
++      incomeMissingHint.value = true
++    } else {
++      income.value = createEmptyIncome(normalizedCaseId)
++      error.value = apiError
++      ElMessage.error(mapIncomeError(incomeResult.reason))
++    }
++  }
++
++  if (expenseResult.status === 'fulfilled') {
++    const items = expenseResult.value.items
++    expenseItems.value = items
++    expenseStats.value = expenseResult.value.stats || deriveExpenseStatsFromItems(items)
++  } else {
++    if (!error.value) {
++      error.value = toApiError(expenseResult.reason)
++    }
++    ElMessage.error(mapExpenseError(expenseResult.reason))
++    expenseItems.value = []
++    expenseStats.value = createEmptyExpenseStats()
++  }
++
++  loading.value = false
++}
++</script>
++
++<style scoped>
++.filter-row {
++  margin-bottom: 16px;
++}
++
++.filter-actions {
++  display: flex;
++  gap: 8px;
++}
++
++.full-width {
++  width: 100%;
++}
++
++.hint-alert {
++  margin-bottom: 12px;
++}
++
++.result-container {
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.source-note {
++  color: var(--text-sub);
++  font-size: 13px;
++}
++
++.stats-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
++  gap: 12px;
++}
++
++.stat-card {
++  border: 1px solid var(--border-subtle);
++  border-radius: 10px;
++  padding: 14px;
++  background: var(--bg-surface-2);
++}
++
++.stat-label {
++  font-size: 13px;
++  color: var(--text-sub);
++}
++
++.stat-value {
++  margin-top: 8px;
++  font-size: 22px;
++  font-weight: 700;
++}
++
++.section-card {
++  margin-top: 4px;
++}
++
++.section-title {
++  font-weight: 600;
++}
++
++.mono-num {
++  font-family: var(--font-mono);
++}
++
++.negative-value {
++  color: var(--color-danger);
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/expenses/pages/ExpenseList.vue b/frontend/src/modules/expenses/pages/ExpenseList.vue
+new file mode 100644
+index 0000000..cbf35eb
+--- /dev/null
++++ b/frontend/src/modules/expenses/pages/ExpenseList.vue
+@@ -0,0 +1,396 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">支出列表</h1>
++        <span class="page-count" aria-live="polite">{{ total }} 条</span>
++      </div>
++      <div class="page-header-right">
++        <el-button type="primary" aria-label="录入支出" @click="goToCreate">
++          录入支出
++        </el-button>
++      </div>
++    </div>
++
++    <el-row :gutter="12" class="filter-row">
++      <el-col :xs="24" :sm="12" :md="7" :lg="6">
++        <el-input
++          v-model.trim="filterCaseId"
++          aria-label="案件或项目筛选"
++          placeholder="案件/项目编号"
++          clearable
++          @keyup.enter="handleSearch"
++        />
++      </el-col>
++      <el-col :xs="24" :sm="12" :md="6" :lg="5">
++        <el-select
++          v-model="filterCategory"
++          aria-label="支出类别筛选"
++          class="full-width"
++          placeholder="支出类别"
++          clearable
++        >
++          <el-option
++            v-for="option in categoryOptions"
++            :key="option.value"
++            :label="option.label"
++            :value="option.value"
++          />
++        </el-select>
++      </el-col>
++      <el-col :xs="24" :sm="24" :md="8" :lg="7">
++        <el-date-picker
++          v-model="filterDateRange"
++          aria-label="支出日期范围筛选"
++          type="daterange"
++          class="full-width"
++          range-separator="至"
++          start-placeholder="开始日期"
++          end-placeholder="结束日期"
++          value-format="YYYY-MM-DD"
++          format="YYYY-MM-DD"
++          clearable
++        />
++      </el-col>
++      <el-col :xs="24" :sm="24" :md="3" :lg="6" class="filter-actions">
++        <el-button type="primary" aria-label="查询支出记录" @click="handleSearch">查询</el-button>
++        <el-button aria-label="重置支出筛选" @click="handleReset">重置</el-button>
++      </el-col>
++    </el-row>
++
++    <div v-if="stats" class="stats-grid">
++      <div class="stat-card">
++        <div class="stat-label">总笔数</div>
++        <div class="stat-value">{{ stats.count_total }}</div>
++      </div>
++      <div class="stat-card">
++        <div class="stat-label">总金额</div>
++        <div class="stat-value mono-num">{{ formatAmount(stats.sum_total, 'CNY') }}</div>
++      </div>
++      <div
++        v-for="stat in categoryStats"
++        :key="stat.category"
++        class="stat-card"
++      >
++        <div class="stat-label">{{ stat.label }}</div>
++        <div class="stat-value">{{ stat.count }} 笔</div>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="8" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无支出记录"
++        message="请调整筛选条件，或先录入一条支出。"
++        icon="🧾"
++        cta-label="录入支出"
++        @cta="goToCreate"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table :data="expenses" aria-label="支出记录列表" stripe size="small" class="compact-table">
++        <el-table-column prop="expense_no" label="支出编号" min-width="180">
++          <template #default="{ row }">
++            <span class="mono-num">{{ row.expense_no || '—' }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="case_id" label="案件/项目" min-width="200">
++          <template #default="{ row }">
++            <span class="mono-num">{{ row.case_id || '—' }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="category" label="类别" width="140">
++          <template #default="{ row }">
++            <el-tag size="small" type="info">{{ getCategoryText(row.category) }}</el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="expense_date" label="支出日期" width="120">
++          <template #default="{ row }">
++            {{ formatDate(row.expense_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="金额" width="160" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ formatAmount(row.amount, row.currency) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="status" label="状态" width="120">
++          <template #default="{ row }">
++            <el-tag size="small" :type="getStatusTagType(row.status)">{{ getStatusText(row.status) }}</el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="remark" label="备注" min-width="180">
++          <template #default="{ row }">
++            {{ row.remark || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column label="创建时间" width="120">
++          <template #default="{ row }">
++            {{ formatDate(row.created_at) }}
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar
++        v-model:page="page"
++        v-model:page-size="pageSize"
++        :total="total"
++        :page-sizes="[10, 20, 50, 100]"
++      />
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref, watch } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import { getExpenses, mapExpenseError } from '../../../api/expenses'
++import type {
++  ExpenseApiError,
++  ExpenseCategory,
++  ExpenseItem,
++  ExpenseStats,
++} from '../../../api/expenses.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++
++interface CategoryOption {
++  label: string
++  value: ExpenseCategory
++}
++
++interface CategoryStatView {
++  category: string
++  label: string
++  count: number
++}
++
++const CATEGORY_TEXT: Record<string, string> = {
++  SEARCH_DB: '检索费',
++  TRANSLATION: '翻译费',
++  TRANSPORT: '交通费',
++  OTHER: '其他',
++}
++
++const STATUS_TEXT: Record<string, string> = {
++  DRAFT: '草稿',
++}
++
++const categoryOptions: CategoryOption[] = [
++  { label: '检索费', value: 'SEARCH_DB' },
++  { label: '翻译费', value: 'TRANSLATION' },
++  { label: '交通费', value: 'TRANSPORT' },
++  { label: '其他', value: 'OTHER' },
++]
++
++const router = useRouter()
++const route = useRoute()
++
++const expenses = ref<ExpenseItem[]>([])
++const loading = ref(false)
++const error = ref<ExpenseApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++const stats = ref<ExpenseStats | null>(null)
++
++const filterCaseId = ref(typeof route.query.case_id === 'string' ? route.query.case_id : '')
++const filterCategory = ref<ExpenseCategory | ''>('')
++const filterDateRange = ref<string[]>([])
++
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++const categoryStats = computed<CategoryStatView[]>(() => {
++  if (!stats.value) return []
++
++  return Object.entries(stats.value.count_by_category)
++    .map(([category, count]) => ({
++      category,
++      label: getCategoryText(category),
++      count,
++    }))
++    .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
++})
++
++function getCategoryText(category: string): string {
++  return CATEGORY_TEXT[category] || category
++}
++
++function getStatusText(status: string): string {
++  return STATUS_TEXT[status] || status
++}
++
++function getStatusTagType(status: string): 'info' | 'success' {
++  if (status === 'DRAFT') return 'info'
++  return 'success'
++}
++
++function formatDate(value?: string | null): string {
++  if (!value) return '—'
++  return value.slice(0, 10)
++}
++
++function formatAmount(amount: number, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(amount)
++}
++
++function handleSearch() {
++  if (page.value !== 1) {
++    page.value = 1
++    return
++  }
++  void fetchExpenses()
++}
++
++function handleReset() {
++  filterCaseId.value = ''
++  filterCategory.value = ''
++  filterDateRange.value = []
++  handleSearch()
++}
++
++function goToCreate() {
++  const query: Record<string, string> = {}
++  if (filterCaseId.value) {
++    query.case_id = filterCaseId.value
++  }
++  query.return_to = '/expenses'
++
++  void router.push({ path: '/expenses/new', query })
++}
++
++async function fetchExpenses() {
++  loading.value = true
++  error.value = null
++
++  try {
++    const [dateFrom, dateTo] = filterDateRange.value
++    const result = await getExpenses({
++      case_id: filterCaseId.value || undefined,
++      category: filterCategory.value || undefined,
++      date_from: dateFrom || undefined,
++      date_to: dateTo || undefined,
++      include_stats: true,
++      page: page.value,
++      page_size: pageSize.value,
++    })
++
++    expenses.value = result.items
++    total.value = result.total
++    stats.value = result.stats || null
++  } catch (err) {
++    error.value = mapExpenseError(err, 'list')
++  } finally {
++    loading.value = false
++  }
++}
++
++watch([page, pageSize], () => {
++  void fetchExpenses()
++})
++
++onMounted(() => {
++  void fetchExpenses()
++})
++</script>
++
++<style scoped>
++.filter-row {
++  margin-bottom: 16px;
++}
++
++.filter-actions {
++  display: flex;
++  gap: 8px;
++}
++
++.full-width {
++  width: 100%;
++}
++
++.stats-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
++  gap: 12px;
++  margin-bottom: 16px;
++}
++
++.stat-card {
++  border: 1px solid var(--border-default);
++  border-radius: 8px;
++  background: var(--surface-1);
++  padding: 12px;
++}
++
++.stat-label {
++  color: var(--text-sub);
++  font-size: 12px;
++}
++
++.stat-value {
++  margin-top: 6px;
++  font-size: 18px;
++  font-weight: 600;
++}
++
++.mono-num {
++  font-family: var(--font-mono);
++}
++
++@media (max-width: 768px) {
++  .filter-actions {
++    margin-top: 4px;
++  }
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>
+diff --git a/frontend/src/modules/expenses/pages/ExpenseCreate.vue b/frontend/src/modules/expenses/pages/ExpenseCreate.vue
+new file mode 100644
+index 0000000..427b480
+--- /dev/null
++++ b/frontend/src/modules/expenses/pages/ExpenseCreate.vue
+@@ -0,0 +1,345 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <el-button text @click="goBack">
++          <span class="back-icon">←</span> 返回
++        </el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <div class="form-card">
++      <h2 class="form-card-title">录入支出</h2>
++
++      <el-form
++        ref="formRef"
++        :model="form"
++        :rules="rules"
++        label-position="top"
++        class="expense-form"
++      >
++        <el-row :gutter="16">
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="案件/项目编号"
++              prop="case_id"
++              :error="fieldErrors.get('case_id')?.join('，')"
++            >
++              <el-input
++                v-model.trim="form.case_id"
++                placeholder="请输入案件或顾问项目编号"
++              />
++              <div class="field-hint">普通案件与顾问项目共用该编号字段。</div>
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="支出类别"
++              prop="category"
++              :error="fieldErrors.get('category')?.join('，')"
++            >
++              <el-select v-model="form.category" class="full-width" placeholder="请选择支出类别">
++                <el-option
++                  v-for="option in categoryOptions"
++                  :key="option.value"
++                  :label="option.label"
++                  :value="option.value"
++                />
++              </el-select>
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-row :gutter="16">
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="支出日期"
++              prop="expense_date"
++              :error="fieldErrors.get('expense_date')?.join('，')"
++            >
++              <el-date-picker
++                v-model="form.expense_date"
++                type="date"
++                class="full-width"
++                placeholder="请选择支出日期"
++                value-format="YYYY-MM-DD"
++                format="YYYY-MM-DD"
++              />
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="支出金额"
++              prop="amount"
++              :error="fieldErrors.get('amount')?.join('，')"
++            >
++              <el-input-number
++                v-model="form.amount"
++                class="full-width"
++                :min="0.01"
++                :precision="2"
++                :step="100"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-row :gutter="16">
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="币种"
++              prop="currency"
++              :error="fieldErrors.get('currency')?.join('，')"
++            >
++              <el-select v-model="form.currency" class="full-width" placeholder="请选择币种">
++                <el-option label="人民币（CNY）" value="CNY" />
++                <el-option label="美元（USD）" value="USD" />
++                <el-option label="欧元（EUR）" value="EUR" />
++              </el-select>
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="税额（可选）"
++              prop="tax_amount"
++              :error="fieldErrors.get('tax_amount')?.join('，')"
++            >
++              <el-input-number
++                v-model="form.tax_amount"
++                class="full-width"
++                :min="0"
++                :precision="2"
++                :step="100"
++                placeholder="请输入税额"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-row :gutter="16">
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="支出编号（可选）"
++              prop="expense_no"
++              :error="fieldErrors.get('expense_no')?.join('，')"
++            >
++              <el-input
++                v-model.trim="form.expense_no"
++                placeholder="留空则由系统自动生成"
++              />
++            </el-form-item>
++          </el-col>
++
++          <el-col :xs="24" :md="12">
++            <el-form-item
++              label="供应商（可选）"
++              prop="vendor_name"
++              :error="fieldErrors.get('vendor_name')?.join('，')"
++            >
++              <el-input
++                v-model.trim="form.vendor_name"
++                placeholder="请输入供应商名称"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-form-item
++          label="备注（可选）"
++          prop="remark"
++          :error="fieldErrors.get('remark')?.join('，')"
++        >
++          <el-input
++            v-model="form.remark"
++            type="textarea"
++            :rows="3"
++            maxlength="500"
++            show-word-limit
++            placeholder="请输入备注"
++          />
++        </el-form-item>
++
++        <div class="form-actions">
++          <el-button @click="goBack">取消</el-button>
++          <el-button type="primary" :loading="saving" @click="handleSubmit">
++            保存支出
++          </el-button>
++        </div>
++      </el-form>
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { reactive, ref } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import { createExpense, mapExpenseError } from '../../../api/expenses'
++import type {
++  ExpenseApiError,
++  ExpenseCategory,
++} from '../../../api/expenses.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++interface CategoryOption {
++  label: string
++  value: ExpenseCategory
++}
++
++const categoryOptions: CategoryOption[] = [
++  { label: '检索费', value: 'SEARCH_DB' },
++  { label: '翻译费', value: 'TRANSLATION' },
++  { label: '交通费', value: 'TRANSPORT' },
++  { label: '其他', value: 'OTHER' },
++]
++
++const router = useRouter()
++const route = useRoute()
++
++const formRef = ref<FormInstance>()
++const saving = ref(false)
++const error = ref<ExpenseApiError | null>(null)
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++
++const form = reactive({
++  case_id: typeof route.query.case_id === 'string' ? route.query.case_id : '',
++  category: 'OTHER' as ExpenseCategory,
++  expense_date: new Date().toISOString().slice(0, 10),
++  amount: 0,
++  currency: 'CNY',
++  tax_amount: undefined as number | undefined,
++  expense_no: '',
++  vendor_name: '',
++  remark: '',
++})
++
++const rules: FormRules = {
++  case_id: [{ required: true, message: '案件/项目编号为必填项', trigger: 'blur' }],
++  category: [{ required: true, message: '支出类别为必填项', trigger: 'change' }],
++  expense_date: [{ required: true, message: '支出日期为必填项', trigger: 'change' }],
++  amount: [
++    { required: true, message: '支出金额为必填项', trigger: 'blur' },
++    { type: 'number', min: 0.01, message: '支出金额必须大于 0', trigger: 'blur' },
++  ],
++  currency: [{ required: true, message: '币种为必填项', trigger: 'change' }],
++}
++
++function goBack() {
++  const returnTo = typeof route.query.return_to === 'string' ? route.query.return_to : ''
++
++  if (returnTo) {
++    void router.push(returnTo)
++    return
++  }
++
++  if (window.history.length > 1) {
++    router.back()
++    return
++  }
++
++  void router.push('/dashboard')
++}
++
++async function handleSubmit() {
++  fieldErrors.value = new Map()
++  error.value = null
++
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++
++  try {
++    const created = await createExpense({
++      case_id: form.case_id,
++      category: form.category,
++      expense_date: form.expense_date,
++      amount: form.amount,
++      currency: form.currency,
++      ...(form.tax_amount !== undefined ? { tax_amount: form.tax_amount } : {}),
++      ...(form.expense_no ? { expense_no: form.expense_no } : {}),
++      ...(form.vendor_name ? { vendor_name: form.vendor_name } : {}),
++      ...(form.remark ? { remark: form.remark } : {}),
++    })
++
++    ElMessage.success(`支出录入成功${created.expense_no ? `（${created.expense_no}）` : ''}`)
++    goBack()
++  } catch (err) {
++    const apiError = mapExpenseError(err, 'create')
++    error.value = apiError
++    fieldErrors.value = apiError.field_errors || new Map()
++  } finally {
++    saving.value = false
++  }
++}
++</script>
++
++<style scoped>
++.form-card-title {
++  margin: 0 0 24px 0;
++  font-size: 20px;
++  font-weight: 600;
++}
++
++.expense-form {
++  max-width: 760px;
++}
++
++.full-width {
++  width: 100%;
++}
++
++.field-hint {
++  margin-top: 6px;
++  color: var(--text-sub);
++  font-size: 12px;
++}
++
++.page-error {
++  outline: none;
++}
++
++:deep(.el-button:focus-visible),
++:deep(.el-input__wrapper:focus-within),
++:deep(.el-select__wrapper.is-focused),
++:deep(.el-textarea__inner:focus-visible),
++:deep(.el-date-editor:focus-within) {
++  outline: 2px solid var(--el-color-primary);
++  outline-offset: 2px;
++}
++@media (max-width: 768px) {
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 10px;
++  }
++
++  .page-header-right,
++  .filter-actions,
++  .action-row,
++  .form-actions,
++  .batch-action-bar {
++    width: 100%;
++    display: flex;
++    flex-wrap: wrap;
++    gap: 8px;
++  }
++
++  .page-header-right :deep(.el-button),
++  .filter-actions :deep(.el-button),
++  .action-row :deep(.el-button),
++  .form-actions :deep(.el-button),
++  .batch-action-bar :deep(.el-button) {
++    flex: 1;
++    min-width: 120px;
++  }
++}
++</style>

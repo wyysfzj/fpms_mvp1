@@ -1,0 +1,2 @@
+{"ts":"20260131T192556","step":"test","cmd":"bash -lc test\ -f\ docs/environment_variables.md"}
+{"ts":"20260131T192605","step":"test","cmd":"bash -lc $'python3 - <<\'PY\'\nfrom pathlib import Path\np=Path(\'docs/environment_variables.md\')\ntext=p.read_text(encoding=\'utf-8\')\nreq=[\'# FPMS Environment Variables\',\'## Variables\',\'## Minimal dev .env example\']\nmissing=[s for s in req if s not in text]\nprint(\'missing:\', missing)\nassert not missing\nprint(\'OK\')\nPY'"}

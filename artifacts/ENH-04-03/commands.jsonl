@@ -1,0 +1,4 @@
+{"ts":"20260124T231428","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/documents/schemas.py"}
+{"ts":"20260124T231432","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/documents/schemas.py"}
+{"ts":"20260124T231438","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/documents/schemas.py"}
+{"ts":"20260124T231445","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"from\ app.modules.documents.schemas\ import\ DocumentCreateIn\,\ DocumentOut\;\ print\(\'Schemas\ OK\'\)\""}

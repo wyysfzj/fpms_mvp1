@@ -1,0 +1,8 @@
+{"ts":"20260111T181839","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/auth/schemas.py"}
+{"ts":"20260111T181845","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/auth/schemas.py"}
+{"ts":"20260111T181851","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/auth/schemas.py"}
+{"ts":"20260111T181858","step":"quick","cmd":"bash -lc $'cd backend && python3 - <<\'PY\'\nfrom app.modules.auth.schemas import LoginRequest, TokenResponse, MeResponse\n\nlr = LoginRequest(username=\'  test  \', password=\'pass\')\nassert lr.username == \'test\', \'whitespace not stripped\'\n\nTokenResponse(access_token=\'token\')\nMeResponse(user={\'id\': \'u1\', \'username\': \'u\', \'display_name\': None}, roles=[\'Admin\'], permissions=[\'Case.Read\'])\nprint(\'Schemas OK\')\nPY'"}
+{"ts":"20260111T181944","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/auth/schemas.py"}
+{"ts":"20260111T181951","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/auth/schemas.py"}
+{"ts":"20260111T181958","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/auth/schemas.py"}
+{"ts":"20260111T182009","step":"quick","cmd":"bash -lc $'cd backend && python3 - <<\'PY\'\nfrom app.modules.auth.schemas import LoginRequest, TokenResponse, MeResponse\n\nlr = LoginRequest(username=\'  test  \', password=\'pass\')\nassert lr.username == \'test\', \'whitespace not stripped\'\n\nTokenResponse(access_token=\'token\')\nMeResponse(user={\'id\': \'u1\', \'username\': \'u\', \'display_name\': None}, roles=[\'Admin\'], permissions=[\'Case.Read\'])\nprint(\'Schemas OK\')\nPY'"}

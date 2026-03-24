@@ -1,0 +1,4 @@
+{"ts":"20260308T120050","step":"lint","rc":0,"log":"artifacts/DEMO-QA-CASE-01/outputs/20260308T120050_lint.log"}
+{"ts":"20260308T120200","step":"test","rc":7,"log":"artifacts/DEMO-QA-CASE-01/outputs/20260308T120200_test.log"}
+{"ts":"20260308T120235","step":"test","rc":1,"log":"artifacts/DEMO-QA-CASE-01/outputs/20260308T120235_test.log"}
+{"ts":"20260308T120319","step":"test","rc":0,"log":"artifacts/DEMO-QA-CASE-01/outputs/20260308T120319_test.log"}

@@ -1,0 +1,4 @@
+{"ts":"20260131T123900","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/core/errors.py"}
+{"ts":"20260131T123905","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/core/errors.py"}
+{"ts":"20260131T123909","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/core/errors.py"}
+{"ts":"20260131T123914","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"from\ app.core.errors\ import\ BusinessError\,\ ErrorDetail\,\ ErrorResponse\,\ to_error_response\;\ print\(to_error_response\(\'X\'\,\'Y\'\,None\)\)\""}

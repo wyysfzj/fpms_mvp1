@@ -1,0 +1,124 @@
+diff --git a/frontend/src/constants/labels.zh.ts b/frontend/src/constants/labels.zh.ts
+index 31ca005..1f3adca 100644
+--- a/frontend/src/constants/labels.zh.ts
++++ b/frontend/src/constants/labels.zh.ts
+@@ -45,10 +45,10 @@ export const ZH = {
+         case_new: '新建案件',
+         case_detail: '案件详情',
+         case_edit: '编辑案件',
+-        documents: '文档列表',
+-        document_new: '新建文档',
+-        document_detail: '文档详情',
+-        document_edit: '编辑文档',
++        documents: '往来文件列表',
++        document_new: '登记往来文件',
++        document_detail: '往来文件详情',
++        document_edit: '编辑往来文件',
+         tasks: '任务列表',
+         task_new: '新建任务',
+         tasks_today: '今日提醒',
+@@ -97,10 +97,10 @@ export const ZH = {
+     caseDetail: {
+         editCase: '编辑案件',
+         overview: '概览',
+-        claims: '权利要求',
+-        officialDocs: '官方文件',
++        claims: '申请人/发明人',
++        officialDocs: '往来文件',
+         fees: '费用',
+-        billing: '账单',
++        billing: '账单与收款',
+         tasks: '任务',
+         caseInfo: '案件信息',
+         caseNumber: '案号',
+@@ -116,23 +116,23 @@ export const ZH = {
+         notFound: '未找到案件',
+         notFoundMsg: '请求的案件不存在。',
+         untitled: '未命名案件',
+-        claimsPlaceholder: '权利要求内容将在后续任务中实现。',
+-        docsPlaceholder: '官方文件将在后续任务中实现。',
++        claimsPlaceholder: '申请人和发明人信息将在此处展示。',
++        docsPlaceholder: '往来文件将在后续任务中实现。',
+         feesPlaceholder: '费用管理将在后续任务中实现。',
+         tasksPlaceholder: '任务管理将在后续任务中实现。',
+     },
+     docDetail: {
+-        editDoc: '编辑文档',
+-        docContent: '文档内容',
+-        docInfo: '文档信息',
++        editDoc: '编辑往来文件',
++        docContent: '文件内容',
++        docInfo: '文件信息',
+         id: '编号',
+         direction: '方向',
+         created: '创建时间',
+         updated: '更新时间',
+         quickActions: '快捷操作',
+-        notFound: '未找到文档',
+-        notFoundMsg: '请求的文档不存在。',
+-        noContent: '该文档暂无内容。',
++        notFound: '未找到往来文件',
++        notFoundMsg: '请求的往来文件不存在。',
++        noContent: '该文件暂无内容。',
+     },
+     feeDetail: {
+         refresh: '刷新',
+@@ -260,8 +260,8 @@ export const ZH = {
+         emptyMsg: '创建您的第一个草稿以开始跟踪费用。',
+     },
+     docList: {
+-        title: '文档列表',
+-        newDoc: '新建文档',
++        title: '往来文件列表',
++        newDoc: '登记往来文件',
+         id: '编号',
+         direction: '方向',
+         docTitle: '标题',
+@@ -271,8 +271,8 @@ export const ZH = {
+         created: '创建时间',
+         actions: '操作',
+         view: '查看',
+-        emptyTitle: '暂无文档',
+-        emptyMsg: '创建您的第一个文档。',
++        emptyTitle: '暂无往来文件',
++        emptyMsg: '登记第一条往来文件。',
+     },
+     pipeline: {
+         newCases: '新委托',
+diff --git a/frontend/src/modules/cases/components/CaseReceiptsSummary.vue b/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
+index f36f9b4..79c3e60 100644
+--- a/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
++++ b/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
+@@ -13,6 +13,7 @@
+     <!-- Content -->
+     <template v-else-if="receipts">
+       <!-- Summary Cards -->
++      <h4 class="section-title">收款摘要</h4>
+       <div class="summary-cards">
+         <div class="summary-card">
+           <div class="card-label">累计开票</div>
+@@ -63,7 +64,7 @@
+ 
+       <!-- Bills Table -->
+       <div v-if="receipts.bills.length > 0" class="bills-section">
+-        <h4 class="section-title">账单</h4>
++        <h4 class="section-title">相关账单</h4>
+         <el-table
+           :data="receipts.bills"
+           stripe
+@@ -105,13 +106,13 @@
+ 
+       <!-- Empty State -->
+       <div v-else class="no-bills">
+-        <p>该案件暂无账单。</p>
++        <p>该案件暂无相关账单，收款摘要已展示在上方。</p>
+       </div>
+     </template>
+ 
+     <!-- No Data -->
+     <div v-else-if="!loading && !error" class="no-data">
+-      <p>暂无账务信息。</p>
++      <p>暂无账单与收款信息。</p>
+     </div>
+   </div>
+ </template>

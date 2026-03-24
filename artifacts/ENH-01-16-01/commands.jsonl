@@ -1,0 +1,5 @@
+{"ts":"20260125T001201","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ scripts/seed_dev.py"}
+{"ts":"20260125T001206","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ scripts/seed_dev.py"}
+{"ts":"20260125T001210","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ scripts/seed_dev.py"}
+{"ts":"20260125T001214","step":"run","cmd":"bash -lc cd\ backend\ \&\&\ python3\ scripts/seed_dev.py"}
+{"ts":"20260125T001219","step":"sql","cmd":"bash -lc cd\ backend\ \&\&\ sqlite3\ fpms_dev.db\ \"select\ u.username\,\ r.code\ from\ t_user\ u\ join\ t_user_role\ ur\ on\ ur.user_id=u.id\ join\ t_role\ r\ on\ r.id=ur.role_id\ where\ u.username=\'admin\'\;\""}

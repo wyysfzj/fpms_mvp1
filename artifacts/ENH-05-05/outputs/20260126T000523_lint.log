@@ -1,0 +1,203 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+F821 Undefined name `Task`
+  --> app/modules/tasks/api.py:74:22
+   |
+72 |         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid role")
+73 |
+74 |     query = db.query(Task).filter(Task.due_date == date.today())
+   |                      ^^^^
+75 |     if as_role == "worker":
+76 |         query = query.filter(Task.worker_id.isnot(None))
+   |
+
+F821 Undefined name `Task`
+  --> app/modules/tasks/api.py:74:35
+   |
+72 |         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid role")
+73 |
+74 |     query = db.query(Task).filter(Task.due_date == date.today())
+   |                                   ^^^^
+75 |     if as_role == "worker":
+76 |         query = query.filter(Task.worker_id.isnot(None))
+   |
+
+F821 Undefined name `Task`
+  --> app/modules/tasks/api.py:76:30
+   |
+74 |     query = db.query(Task).filter(Task.due_date == date.today())
+75 |     if as_role == "worker":
+76 |         query = query.filter(Task.worker_id.isnot(None))
+   |                              ^^^^
+77 |     else:
+78 |         query = query.filter(Task.supervisor_id.isnot(None))
+   |
+
+F821 Undefined name `Task`
+  --> app/modules/tasks/api.py:78:30
+   |
+76 |         query = query.filter(Task.worker_id.isnot(None))
+77 |     else:
+78 |         query = query.filter(Task.supervisor_id.isnot(None))
+   |                              ^^^^
+79 |
+80 |     total = query.count()
+   |
+
+F821 Undefined name `Task`
+  --> app/modules/tasks/api.py:82:24
+   |
+80 |     total = query.count()
+81 |     tasks = (
+82 |         query.order_by(Task.due_date.asc()).offset((page - 1) * page_size).limit(page_size).all()
+   |                        ^^^^
+83 |     )
+   |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:107:12
+    |
+105 |         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="case_id is required")
+106 |
+107 |     task = Task(
+    |            ^^^^
+108 |         id=str(uuid4()),
+109 |         case_id=case_id,
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:135:21
+    |
+133 |     db: Session = Depends(get_db),
+134 | ) -> dict[str, str]:
+135 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                     ^^^^
+136 |     if not task:
+137 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:135:34
+    |
+133 |     db: Session = Depends(get_db),
+134 | ) -> dict[str, str]:
+135 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                                  ^^^^
+136 |     if not task:
+137 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:152:21
+    |
+150 |     db: Session = Depends(get_db),
+151 | ) -> dict[str, str]:
+152 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                     ^^^^
+153 |     if not task:
+154 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:152:34
+    |
+150 |     db: Session = Depends(get_db),
+151 | ) -> dict[str, str]:
+152 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                                  ^^^^
+153 |     if not task:
+154 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:169:21
+    |
+167 |     db: Session = Depends(get_db),
+168 | ) -> dict[str, str]:
+169 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                     ^^^^
+170 |     if not task:
+171 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:169:34
+    |
+167 |     db: Session = Depends(get_db),
+168 | ) -> dict[str, str]:
+169 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                                  ^^^^
+170 |     if not task:
+171 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:187:21
+    |
+185 |     db: Session = Depends(get_db),
+186 | ) -> dict[str, Any]:
+187 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                     ^^^^
+188 |     if not task:
+189 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:187:34
+    |
+185 |     db: Session = Depends(get_db),
+186 | ) -> dict[str, Any]:
+187 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                                  ^^^^
+188 |     if not task:
+189 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:221:21
+    |
+219 |     db: Session = Depends(get_db),
+220 | ) -> Response:
+221 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                     ^^^^
+222 |     if not task:
+223 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:221:34
+    |
+219 |     db: Session = Depends(get_db),
+220 | ) -> Response:
+221 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                                  ^^^^
+222 |     if not task:
+223 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:268:21
+    |
+266 |     db: Session = Depends(get_db),
+267 | ) -> dict[str, Any]:
+268 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                     ^^^^
+269 |     if not task:
+270 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+F821 Undefined name `Task`
+   --> app/modules/tasks/api.py:268:34
+    |
+266 |     db: Session = Depends(get_db),
+267 | ) -> dict[str, Any]:
+268 |     task = db.query(Task).filter(Task.id == task_id).first()
+    |                                  ^^^^
+269 |     if not task:
+270 |         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    |
+
+Found 18 errors.

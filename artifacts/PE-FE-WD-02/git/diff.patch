@@ -1,0 +1,483 @@
+diff --git a/frontend/src/api/documents.ts b/frontend/src/api/documents.ts
+index 6806477..485c70e 100644
+--- a/frontend/src/api/documents.ts
++++ b/frontend/src/api/documents.ts
+@@ -102,9 +102,33 @@ function toUpdatePayload(data: DocumentUpdatePayload): Record<string, unknown> {
+  * Get paginated list of documents
+  */
+ export async function getDocuments(params: DocumentListParams = {}): Promise<Pagination<Document>> {
+-    const { page = 1, page_size = 20, direction, case_id, client_id } = params
++    const {
++        page = 1,
++        page_size = 20,
++        q,
++        direction,
++        doc_template_id,
++        case_id,
++        client_id,
++        need_reply,
++        replied,
++        date_from,
++        date_to,
++    } = params
+     const response = await http.get<Pagination<BackendDocument>>('/documents', {
+-        params: { page, page_size, ...(direction ? { direction } : {}), ...(case_id ? { case_id } : {}), ...(client_id ? { client_id } : {}) }
++        params: {
++            page,
++            page_size,
++            ...(q ? { q } : {}),
++            ...(direction ? { direction } : {}),
++            ...(doc_template_id ? { doc_template_id } : {}),
++            ...(case_id ? { case_id } : {}),
++            ...(client_id ? { client_id } : {}),
++            ...(need_reply !== undefined ? { need_reply } : {}),
++            ...(replied !== undefined ? { replied } : {}),
++            ...(date_from ? { date_from } : {}),
++            ...(date_to ? { date_to } : {}),
++        }
+     })
+ 
+     return {
+diff --git a/frontend/src/api/documents.types.ts b/frontend/src/api/documents.types.ts
+index d4a9e79..8cced86 100644
+--- a/frontend/src/api/documents.types.ts
++++ b/frontend/src/api/documents.types.ts
+@@ -23,9 +23,15 @@ export interface Document {
+ export interface DocumentListParams {
+     page?: number
+     page_size?: number
++    q?: string
+     direction?: 'IN' | 'OUT'
++    doc_template_id?: string
+     case_id?: string
+     client_id?: string
++    need_reply?: boolean
++    replied?: boolean
++    date_from?: string
++    date_to?: string
+ }
+ 
+ export interface DocumentCreatePayload {
+diff --git a/frontend/src/modules/documents/pages/DocumentCreate.vue b/frontend/src/modules/documents/pages/DocumentCreate.vue
+index 23eeb77..9d36421 100644
+--- a/frontend/src/modules/documents/pages/DocumentCreate.vue
++++ b/frontend/src/modules/documents/pages/DocumentCreate.vue
+@@ -2,19 +2,19 @@
+   <div class="page-container">
+     <div class="page-header">
+       <div class="page-header-left">
+-        <h1 class="page-title">新建文档</h1>
++        <h1 class="page-title">登记往来文件</h1>
+       </div>
+       <div class="page-header-right">
+         <el-button @click="handleCancel">取消</el-button>
+-        <el-button type="primary" :loading="saving" @click="handleSave">
+-          创建文档
++        <el-button type="primary" :loading="saving" :disabled="isCaseContextUnavailable" @click="handleSave">
++          登记往来文件
+         </el-button>
+       </div>
+     </div>
+ 
+     <!-- Error Banner -->
+-    <div v-if="error" class="page-error">
+-      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    <div v-if="activeError" class="page-error">
++      <ApiErrorBanner :error="activeError" @dismiss="handleDismissError" />
+     </div>
+ 
+     <!-- Form -->
+@@ -27,10 +27,10 @@
+         class="document-form"
+       >
+         <div class="form-section">
+-          <h3 class="form-section-title">文档信息</h3>
++          <h3 class="form-section-title">往来文件信息</h3>
+           
+           <el-form-item label="标题" prop="title" :error="fieldErrors.get('title')?.join(', ')">
+-            <el-input v-model="form.title" placeholder="请输入文档标题" />
++            <el-input v-model="form.title" placeholder="请输入文件标题" />
+           </el-form-item>
+ 
+           <el-row :gutter="20">
+@@ -47,7 +47,7 @@
+               </el-form-item>
+             </el-col>
+             <el-col :span="12">
+-              <el-form-item label="文档日期" prop="doc_date" :error="fieldErrors.get('doc_date')?.join(', ')">
++              <el-form-item label="文件日期" prop="doc_date" :error="fieldErrors.get('doc_date')?.join(', ')">
+                 <el-date-picker
+                   v-model="form.doc_date"
+                   type="date"
+@@ -62,7 +62,7 @@
+ 
+           <el-row :gutter="20">
+             <el-col :span="12">
+-              <el-form-item label="文档模板">
++              <el-form-item label="文件模板">
+                 <el-select
+                   v-model="form.doc_template_id"
+                   placeholder="选择模板（可选）"
+@@ -84,10 +84,10 @@
+               </el-form-item>
+             </el-col>
+             <el-col :span="12">
+-              <el-form-item label="回复来源文档">
++              <el-form-item label="回复来源文件">
+                 <el-select
+                   v-model="form.reply_to_id"
+-                  placeholder="选择回复的文档（可选）"
++                  placeholder="选择回复来源文件（可选）"
+                   clearable
+                   filterable
+                   style="width: 100%"
+@@ -109,7 +109,23 @@
+ 
+           <el-row :gutter="20">
+             <el-col :span="12">
+-              <el-form-item label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
++              <el-form-item
++                v-if="hasLockedCaseContext"
++                label="所属案件"
++                prop="case_id"
++                :error="fieldErrors.get('case_id')?.join(', ')"
++              >
++                <el-input
++                  :model-value="lockedCaseNo"
++                  readonly
++                  class="full-width"
++                  placeholder="案件编号已自动带入"
++                />
++                <div class="field-hint">
++                  该案件已从案件详情页带入，当前流程不可修改
++                </div>
++              </el-form-item>
++              <el-form-item v-else label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
+                 <el-input
+                   v-model.trim="form.case_id"
+                   placeholder="请输入案件编号"
+@@ -121,7 +137,7 @@
+               </el-form-item>
+             </el-col>
+             <el-col :span="12">
+-              <el-form-item label="文档类型" prop="doc_type" :error="fieldErrors.get('doc_type')?.join(', ')">
++              <el-form-item label="文件类型" prop="doc_type" :error="fieldErrors.get('doc_type')?.join(', ')">
+                 <el-input v-model="form.doc_type" placeholder="例如：审查意见通知书、答复文件" />
+               </el-form-item>
+             </el-col>
+@@ -132,7 +148,7 @@
+               v-model="form.description" 
+               type="textarea" 
+               :rows="3" 
+-              placeholder="请输入文档描述" 
++              placeholder="请输入文件说明" 
+             />
+           </el-form-item>
+         </div>
+@@ -143,9 +159,10 @@
+ 
+ <script setup lang="ts">
+ import { ref, reactive, computed, onMounted, watch } from 'vue'
+-import { useRouter } from 'vue-router'
++import { useRoute, useRouter } from 'vue-router'
+ import { ElMessage } from 'element-plus'
+ import type { FormInstance, FormRules } from 'element-plus'
++import { getCase } from '../../../api/cases'
+ import { createDocument, getDocTemplates, getDocuments } from '../../../api/documents'
+ import type { DocumentCreatePayload } from '../../../api/documents.types'
+ import type { DocTemplate, Document as Doc } from '../../../api/documents.types'
+@@ -153,12 +170,17 @@ import type { ApiError } from '../../../api/types'
+ import { mapFieldErrors } from '../../../api/errors'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+ 
++const route = useRoute()
+ const router = useRouter()
+ 
+ const formRef = ref<FormInstance>()
+ const saving = ref(false)
+ const error = ref<ApiError | null>(null)
++const caseContextError = ref<ApiError | null>(null)
+ const fieldErrors = ref<Map<string, string[]>>(new Map())
++const lockedCaseNo = ref('')
++const hasLockedCaseContext = ref(false)
++const caseContextReady = ref(false)
+ 
+ const form = reactive<DocumentCreatePayload>({
+   title: '',
+@@ -179,6 +201,15 @@ const selectedTemplate = ref<DocTemplate | null>(null)
+ const filteredTemplates = computed(() =>
+   docTemplates.value.filter(t => t.direction === form.direction)
+ )
++const activeError = computed(() => caseContextError.value ?? error.value)
++const isCaseContextUnavailable = computed(() => !caseContextReady.value)
++
++function getQueryParam(value: unknown): string {
++  if (Array.isArray(value)) {
++    return typeof value[0] === 'string' ? value[0].trim() : ''
++  }
++  return typeof value === 'string' ? value.trim() : ''
++}
+ 
+ function onTemplateChange(templateId: string | null) {
+   if (!templateId) {
+@@ -205,7 +236,44 @@ watch(() => form.case_id, async (newCaseId) => {
+   }
+ })
+ 
++async function initializeCaseContext() {
++  const routeCaseId = getQueryParam(route.query.case_id)
++  const routeCaseNo = getQueryParam(route.query.case_no)
++
++  if (!routeCaseId) {
++    hasLockedCaseContext.value = false
++    caseContextReady.value = false
++    caseContextError.value = {
++      status: 400,
++      code: 'CASE_CONTEXT_REQUIRED',
++      message: '未找到关联案件，请从案件详情页重新进入往来文件登记。',
++    }
++    return
++  }
++
++  form.case_id = routeCaseId
++  lockedCaseNo.value = routeCaseNo
++  hasLockedCaseContext.value = true
++
++  try {
++    const caseData = await getCase(routeCaseId)
++    lockedCaseNo.value = caseData.case_no || lockedCaseNo.value
++    caseContextReady.value = true
++    caseContextError.value = null
++  } catch {
++    form.case_id = ''
++    caseContextReady.value = false
++    caseContextError.value = {
++      status: 404,
++      code: 'CASE_CONTEXT_INVALID',
++      message: '关联案件不存在或已失效，请返回案件详情页后重新登记往来文件。',
++    }
++  }
++}
++
+ onMounted(async () => {
++  await initializeCaseContext()
++
+   try {
+     const result = await getDocTemplates({ enabled: true, page_size: 100 })
+     docTemplates.value = result.items
+@@ -225,11 +293,22 @@ const rules: FormRules = {
+     { required: true, message: '案件编号为必填项', trigger: 'blur' },
+   ],
+   doc_date: [
+-    { required: true, message: '文档日期为必填项', trigger: 'change' },
++    { required: true, message: '文件日期为必填项', trigger: 'change' },
+   ],
+ }
+ 
+ async function handleSave() {
++  if (isCaseContextUnavailable.value) {
++    if (!caseContextError.value) {
++      caseContextError.value = {
++        status: 400,
++        code: 'CASE_CONTEXT_REQUIRED',
++        message: '未找到有效案件，当前无法登记往来文件。',
++      }
++    }
++    return
++  }
++
+   fieldErrors.value = new Map()
+   
+   const valid = await formRef.value?.validate().catch(() => false)
+@@ -252,7 +331,7 @@ async function handleSave() {
+     if (form.reply_to_id) payload.reply_to_id = form.reply_to_id
+ 
+     await createDocument(payload)
+-    ElMessage.success('文档创建成功')
++    ElMessage.success('往来文件登记成功')
+     router.push('/documents')
+   } catch (err) {
+     const apiError = err as ApiError
+@@ -266,6 +345,14 @@ async function handleSave() {
+   }
+ }
+ 
++function handleDismissError() {
++  if (caseContextError.value) {
++    caseContextError.value = null
++    return
++  }
++  error.value = null
++}
++
+ function handleCancel() {
+   router.push('/documents')
+ }
+diff --git a/frontend/src/modules/documents/pages/DocumentList.vue b/frontend/src/modules/documents/pages/DocumentList.vue
+index fc6944b..27fd731 100644
+--- a/frontend/src/modules/documents/pages/DocumentList.vue
++++ b/frontend/src/modules/documents/pages/DocumentList.vue
+@@ -14,6 +14,15 @@
+ 
+     <!-- Filter Bar -->
+     <el-row :gutter="16" style="margin-bottom: 16px">
++      <el-col :span="6">
++        <el-input
++          v-model="filterKeyword"
++          placeholder="按标题或文号搜索"
++          clearable
++          @keyup.enter="onFilterChange"
++          @clear="onFilterChange"
++        />
++      </el-col>
+       <el-col :span="6">
+         <el-select v-model="filterDirection" placeholder="全部" clearable @change="onFilterChange">
+           <el-option label="全部" value="" />
+@@ -37,6 +46,52 @@
+           />
+         </el-select>
+       </el-col>
++      <el-col :span="6">
++        <el-select
++          v-model="filterTemplateId"
++          placeholder="全部模板"
++          clearable
++          filterable
++          @change="onFilterChange"
++        >
++          <el-option
++            v-for="t in templateOptions"
++            :key="t.id"
++            :label="`${t.code} — ${t.name}`"
++            :value="t.id"
++          />
++        </el-select>
++      </el-col>
++    </el-row>
++    <el-row :gutter="16" style="margin-bottom: 16px">
++      <el-col :span="6">
++        <el-date-picker
++          v-model="filterDateRange"
++          type="daterange"
++          start-placeholder="起始日期"
++          end-placeholder="结束日期"
++          value-format="YYYY-MM-DD"
++          class="full-width"
++          clearable
++          @change="onFilterChange"
++        />
++      </el-col>
++      <el-col :span="6">
++        <el-select
++          v-model="filterReplyState"
++          placeholder="全部回复状态"
++          clearable
++          @change="onFilterChange"
++        >
++          <el-option label="全部回复状态" value="" />
++          <el-option label="需回复" value="PENDING" />
++          <el-option label="已回复" value="DONE" />
++          <el-option label="无需回复" value="NONE" />
++        </el-select>
++      </el-col>
++      <el-col :span="6">
++        <el-button @click="resetFilters">重置筛选</el-button>
++      </el-col>
+     </el-row>
+ 
+     <!-- Error State -->
+@@ -127,10 +182,10 @@
+ import { computed, onMounted, ref, watch } from 'vue'
+ import { useRouter } from 'vue-router'
+ import dayjs from 'dayjs'
+-import { getDocuments } from '../../../api/documents'
++import { getDocuments, getDocTemplates } from '../../../api/documents'
+ import { getClients } from '../../../api/clients'
+ import type { Client } from '../../../api/clients.types'
+-import type { Document } from '../../../api/documents.types'
++import type { DocTemplate, Document } from '../../../api/documents.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+ import EmptyState from '../../../components/state/EmptyState.vue'
+@@ -146,9 +201,14 @@ const error = ref<ApiError | null>(null)
+ const page = ref(1)
+ const pageSize = ref(20)
+ const total = ref(0)
++const filterKeyword = ref('')
+ const filterDirection = ref<'' | 'IN' | 'OUT'>('')
+ const filterClientId = ref('')
++const filterTemplateId = ref('')
++const filterDateRange = ref<string[]>([])
++const filterReplyState = ref<'' | 'PENDING' | 'DONE' | 'NONE'>('')
+ const clientOptions = ref<Client[]>([])
++const templateOptions = ref<DocTemplate[]>([])
+ const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+ 
+ function onFilterChange() {
+@@ -160,7 +220,27 @@ async function fetchDocuments() {
+   loading.value = true
+   error.value = null
+   try {
+-    const result = await getDocuments({ page: page.value, page_size: pageSize.value, direction: filterDirection.value || undefined, client_id: filterClientId.value || undefined })
++    const [date_from, date_to] = filterDateRange.value
++    const need_reply =
++      filterReplyState.value === 'NONE' ? false : filterReplyState.value ? true : undefined
++    const replied =
++      filterReplyState.value === 'PENDING'
++        ? false
++        : filterReplyState.value === 'DONE'
++          ? true
++          : undefined
++    const result = await getDocuments({
++      page: page.value,
++      page_size: pageSize.value,
++      q: filterKeyword.value.trim() || undefined,
++      direction: filterDirection.value || undefined,
++      client_id: filterClientId.value || undefined,
++      doc_template_id: filterTemplateId.value || undefined,
++      need_reply,
++      replied,
++      date_from: date_from || undefined,
++      date_to: date_to || undefined,
++    })
+     documents.value = result.items
+     total.value = result.total
+   } catch (err) {
+@@ -197,13 +277,37 @@ async function loadClients() {
+   }
+ }
+ 
++async function loadTemplates() {
++  try {
++    const result = await getDocTemplates({ enabled: true, page_size: 100 })
++    templateOptions.value = result.items
++  } catch {
++    // silently ignore
++  }
++}
++
++function resetFilters() {
++  filterKeyword.value = ''
++  filterDirection.value = ''
++  filterClientId.value = ''
++  filterTemplateId.value = ''
++  filterDateRange.value = []
++  filterReplyState.value = ''
++  onFilterChange()
++}
++
+ onMounted(() => {
+   fetchDocuments()
+   loadClients()
++  loadTemplates()
+ })
+ </script>
+ 
+ <style scoped>
++.full-width {
++  width: 100%;
++}
++
+ .doc-case-link {
+   color: var(--color-primary);
+   text-decoration: none;

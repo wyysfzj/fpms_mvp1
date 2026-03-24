@@ -1,0 +1,36 @@
+# FRFE04-BE-05 Evidence Summary
+
+- Task/runbook executed: `FRFE04-BE-05`
+- Role executed: `backend worker`
+- Final per-task status: `PASS`
+- Modified files:
+  - `backend/app/modules/annuity/api.py`
+  - `backend/app/modules/annuity/service.py`
+  - `backend/tests/test_annuity_e2e.py`
+- Verification commands:
+  - `cd backend && ruff check --fix app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff format app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && ruff check app/modules/annuity/api.py app/modules/annuity/service.py tests/test_annuity_e2e.py`
+  - `cd backend && pytest -q tests/test_annuity_e2e.py -k pay_list_mark_paid`
+  - `./scripts/task_validate.sh FRFE04-BE-05`
+- Expected status codes:
+  - `200` header marked paid from exported state
+  - `401` unauthenticated request
+  - `403` missing `Billing.Edit`
+  - `404` missing pay list
+  - `409` non-`EXPORTED` state or row-level paid conditions not satisfied
+- Closure slice completed: record compatible header paid date and move header state from `EXPORTED` to `PAID`
+- Explicit non-closure boundary respected: did not skip export state, did not add cancellation, and did not implement blocked `SPEC` paid metadata fields
+- API-level coverage exercised:
+  - `POST /pay-lists/{id}/mark-paid`
+  - successful `paid_date` round-trip via export plus public `gov-payments` registration
+  - `EXPORTED -> PAID` transition
+  - `401` unauthenticated rejection
+  - `403` permission denial via existing `Billing.Edit` gating
+  - `404` missing pay list
+  - `409` draft-state rejection
+- Evidence path: `artifacts/FRFE04-BE-05/**`
+- Evidence files:
+  - `artifacts/FRFE04-BE-05/results.jsonl`
+  - `artifacts/FRFE04-BE-05/summary.md`
+  - `artifacts/FRFE04-BE-05/git/diff.patch`

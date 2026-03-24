@@ -1,0 +1,2 @@
+{"step":"lint","rc":0,"cmd":"ruff check backend/app/modules/commission/api.py backend/app/modules/commission/service.py backend/tests/test_commission_e2e.py"}
+{"step":"test","rc":0,"cmd":"cd backend && pytest -q tests/test_commission_e2e.py -k 'settlement_generate_lines'"}

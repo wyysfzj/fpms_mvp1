@@ -1,0 +1,2 @@
+{"ts":"20260131T191950","step":"quick","cmd":"bash -lc test\ -f\ docs/api_usage_guide.md\ \&\&\ grep\ -R\ \"/auth/me\"\ -n\ docs/api_usage_guide.md\ \&\&\ exit\ 1\ \|\|\ echo\ OK"}
+{"ts":"20260131T192026","step":"quick","cmd":"bash -lc test\ -f\ docs/api_usage_guide.md\ \&\&\ grep\ -R\ \"/auth/me\"\ -n\ docs/api_usage_guide.md\ \&\&\ exit\ 1\ \|\|\ echo\ OK"}

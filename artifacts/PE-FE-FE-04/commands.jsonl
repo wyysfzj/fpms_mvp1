@@ -1,0 +1,4 @@
+{"ts":"20260318T001702","step":"proof_head_absent_case_receipt","cmd":"/bin/zsh -lc $'! git show HEAD:frontend/src/modules/cases/components/CaseReceiptsSummary.vue | rg -q \'last_receipt_date|æ\234\200å\220\216å\233\236æ¬¾æ\227¥\''"}
+{"ts":"20260318T001702","step":"proof_head_absent_billing_types","cmd":"/bin/zsh -lc \!\ git\ show\ HEAD:frontend/src/api/billing.types.ts\ \|\ rg\ -q\ \'last_receipt_date\'"}
+{"ts":"20260318T001705","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint"}
+{"ts":"20260318T001712","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}

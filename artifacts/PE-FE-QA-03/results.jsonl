@@ -1,0 +1,11 @@
+{"ts":"20260228T234654","step":"doc_chain_coverage","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T234654_doc_chain_coverage.log"}
+{"ts":"20260228T234654","step":"route_name_check","rc":1,"log":"artifacts/PE-FE-QA-03/outputs/20260228T234654_route_name_check.log"}
+{"ts":"20260228T234654","step":"route_doc_presence_check","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T234654_route_doc_presence_check.log"}
+{"ts":"20260228T234700","step":"route_name_check_fix","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T234700_route_name_check_fix.log"}
+{"ts":"20260228T235042","step":"lint","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T235042_lint.log"}
+{"ts":"20260228T235047","step":"test","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T235047_test.log"}
+{"ts":"20260228T235711","step":"chain_coverage_regression_check","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T235711_chain_coverage_regression_check.log"}
+{"ts":"20260228T235711","step":"zh_narrative_check","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T235711_zh_narrative_check.log"}
+{"ts":"20260228T235711","step":"zh_heading_block_check","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T235711_zh_heading_block_check.log"}
+{"ts":"20260228T235711","step":"route_presence_recheck","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T235711_route_presence_recheck.log"}
+{"ts":"20260228T235741","step":"diff_patch_refresh","rc":0,"log":"artifacts/PE-FE-QA-03/outputs/20260228T235741_diff_patch_refresh.log"}

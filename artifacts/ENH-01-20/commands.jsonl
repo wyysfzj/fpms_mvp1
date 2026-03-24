@@ -1,0 +1,4 @@
+{"ts":"20260117T140944","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/api/router.py"}
+{"ts":"20260117T140953","step":"format","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/api/router.py"}
+{"ts":"20260117T141002","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/api/router.py"}
+{"ts":"20260117T141240","step":"e2e","cmd":"curl -i -sS -X POST http://localhost:8000/api/v1/auth/login -H Content-Type:\ application/json -d \{\"username\":\"admin\"\,\"password\":\"admin123\"\}"}

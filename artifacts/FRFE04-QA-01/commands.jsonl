@@ -1,0 +1,24 @@
+{"ts":"20260324T170347","step":"validate_FRFE04-BE-00","cmd":"./scripts/task_validate.sh FRFE04-BE-00"}
+{"ts":"20260324T170348","step":"validate_FRFE04-BE-01","cmd":"./scripts/task_validate.sh FRFE04-BE-01"}
+{"ts":"20260324T170348","step":"validate_FRFE04-BE-02","cmd":"./scripts/task_validate.sh FRFE04-BE-02"}
+{"ts":"20260324T170348","step":"validate_FRFE04-BE-03","cmd":"./scripts/task_validate.sh FRFE04-BE-03"}
+{"ts":"20260324T170348","step":"validate_FRFE04-BE-04","cmd":"./scripts/task_validate.sh FRFE04-BE-04"}
+{"ts":"20260324T170348","step":"validate_FRFE04-BE-05","cmd":"./scripts/task_validate.sh FRFE04-BE-05"}
+{"ts":"20260324T170348","step":"validate_FRFE04-BE-06","cmd":"./scripts/task_validate.sh FRFE04-BE-06"}
+{"ts":"20260324T170348","step":"validate_FRFE04-BE-07","cmd":"./scripts/task_validate.sh FRFE04-BE-07"}
+{"ts":"20260324T170348","step":"validate_FRFE04-FE-01","cmd":"./scripts/task_validate.sh FRFE04-FE-01"}
+{"ts":"20260324T170348","step":"validate_FRFE04-FE-02","cmd":"./scripts/task_validate.sh FRFE04-FE-02"}
+{"ts":"20260324T170348","step":"validate_FRFE04-FE-03","cmd":"./scripts/task_validate.sh FRFE04-FE-03"}
+{"ts":"20260324T170348","step":"validate_FRFE04-FE-04","cmd":"./scripts/task_validate.sh FRFE04-FE-04"}
+{"ts":"20260324T170348","step":"validate_FRFE04-FE-05","cmd":"./scripts/task_validate.sh FRFE04-FE-05"}
+{"ts":"20260324T170501","step":"make_diff_patch","cmd":"bash -lc \{\ git\ diff\ --no-index\ --\ /dev/null\ artifacts/FRFE04-QA-01/commands.jsonl\ \|\|\ true\;\ git\ diff\ --no-index\ --\ /dev/null\ artifacts/FRFE04-QA-01/results.jsonl\ \|\|\ true\;\ git\ diff\ --no-index\ --\ /dev/null\ artifacts/FRFE04-QA-01/summary.md\ \|\|\ true\;\ \}\ \>\ artifacts/FRFE04-QA-01/git/diff.patch"}
+{"ts":"20260324T170509","step":"make_diff_patch","cmd":"bash -lc \{\ git\ diff\ --no-index\ --\ /dev/null\ artifacts/FRFE04-QA-01/commands.jsonl\ \|\|\ true\;\ git\ diff\ --no-index\ --\ /dev/null\ artifacts/FRFE04-QA-01/results.jsonl\ \|\|\ true\;\ git\ diff\ --no-index\ --\ /dev/null\ artifacts/FRFE04-QA-01/summary.md\ \|\|\ true\;\ \}\ \>\ artifacts/FRFE04-QA-01/git/diff.patch"}
+{"ts":"20260324T170521","step":"make_diff_patch","cmd":"bash -lc \{\ diff\ -u\ --label\ a/artifacts/FRFE04-QA-01/commands.jsonl\ --label\ b/artifacts/FRFE04-QA-01/commands.jsonl\ /dev/null\ artifacts/FRFE04-QA-01/commands.jsonl\ \|\|\ true\;\ diff\ -u\ --label\ a/artifacts/FRFE04-QA-01/results.jsonl\ --label\ b/artifacts/FRFE04-QA-01/results.jsonl\ /dev/null\ artifacts/FRFE04-QA-01/results.jsonl\ \|\|\ true\;\ diff\ -u\ --label\ a/artifacts/FRFE04-QA-01/summary.md\ --label\ b/artifacts/FRFE04-QA-01/summary.md\ /dev/null\ artifacts/FRFE04-QA-01/summary.md\ \|\|\ true\;\ \}\ \>\ artifacts/FRFE04-QA-01/git/diff.patch"}
+{"ts":"20260324T170635","step":"validate_FRFE04-BE-00","cmd":"./scripts/task_validate.sh FRFE04-BE-00"}
+{"ts":"20260324T170635","step":"validate_FRFE04-BE-03","cmd":"./scripts/task_validate.sh FRFE04-BE-03"}
+{"ts":"20260324T170635","step":"validate_FRFE04-BE-01","cmd":"./scripts/task_validate.sh FRFE04-BE-01"}
+{"ts":"20260324T170635","step":"validate_FRFE04-BE-02","cmd":"./scripts/task_validate.sh FRFE04-BE-02"}
+{"ts":"20260324T170727","step":"validate_FRFE04-BE-00","cmd":"./scripts/task_validate.sh FRFE04-BE-00"}
+{"ts":"20260324T170727","step":"validate_FRFE04-BE-01","cmd":"./scripts/task_validate.sh FRFE04-BE-01"}
+{"ts":"20260324T170847","step":"lint","cmd":"/bin/zsh -lc for\ t\ in\ FRFE04-BE-00\ FRFE04-BE-01\ FRFE04-BE-02\ FRFE04-BE-03\ FRFE04-BE-04\ FRFE04-BE-05\ FRFE04-BE-06\ FRFE04-BE-07\ FRFE04-FE-01\ FRFE04-FE-02\ FRFE04-FE-03\ FRFE04-FE-04\ FRFE04-FE-05\;\ do\ ./scripts/task_validate.sh\ \"\$t\"\ \|\|\ exit\ 1\;\ done"}
+{"ts":"20260324T170847","step":"test","cmd":"/bin/zsh -lc for\ t\ in\ FRFE04-BE-00\ FRFE04-BE-01\ FRFE04-BE-02\ FRFE04-BE-03\ FRFE04-BE-04\ FRFE04-BE-05\ FRFE04-BE-06\ FRFE04-BE-07\ FRFE04-FE-01\ FRFE04-FE-02\ FRFE04-FE-03\ FRFE04-FE-04\ FRFE04-FE-05\;\ do\ ./scripts/task_validate.sh\ \"\$t\"\ \|\|\ exit\ 1\;\ done"}

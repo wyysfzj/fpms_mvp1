@@ -1,0 +1,13 @@
+diff --git a/backend/app/main.py b/backend/app/main.py
+index bbf8a38..77ba389 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
+             error={
+                 "code": "VALIDATION_ERROR",
+                 "message": "Invalid request",
+-                "details": exc.errors(),
++                "details": {"errors": exc.errors()},
+             }
+         )
+         return JSONResponse(

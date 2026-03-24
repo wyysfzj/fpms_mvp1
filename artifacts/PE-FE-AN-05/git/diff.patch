@@ -1,0 +1,915 @@
+--- /dev/null	2026-02-28 23:00:01
++++ frontend/src/api/govPayments.ts	2026-02-28 22:58:33
+@@ -0,0 +1,200 @@
++import { mapFieldErrors } from './errors'
++import { http } from './http'
++import type {
++    GovPaymentRegisterPayload,
++    GovPaymentRegisterResult,
++    GovPaymentsApiError,
++    GovPaymentsErrorCategory,
++    PayListCreatePayload,
++    PayListCreateResult,
++} from './govPayments.types'
++import type { ApiError } from './types'
++
++interface BackendPayListCreateResult {
++    summary: {
++        requested: number
++        success: number
++        failed: number
++        pay_list_created: boolean
++    }
++    pay_list: {
++        id: number
++        pay_list_no: string | null
++        client_id: string
++        currency: string
++        status: string
++        planned_pay_date: string | null
++        total_amount: number | string | null
++    } | null
++    success: {
++        fee_item_id: string
++        case_id: string
++        amount: number | string | null
++        currency: string
++        pay_list_id: number
++    }[]
++    failed: {
++        fee_item_id: string
++        code: string
++        message: string
++        status_code: number
++    }[]
++}
++
++interface BackendGovPaymentRegisterResult {
++    gov_payment: {
++        id: number
++        pay_list_id: number
++        case_id: string
++        fee_item_id: string
++        status: string
++        currency: string
++        paid_date: string | null
++        paid_amount: number | string | null
++        official_receipt_no: string | null
++        remark: string | null
++    }
++    pay_list: {
++        id: number
++        pay_list_no: string | null
++        status: string
++        paid_date: string | null
++        total_amount: number | string | null
++        currency: string
++        client_id: string
++    }
++}
++
++function asNumber(input: number | string | null | undefined): number {
++    if (input === null || input === undefined || input === '') return 0
++    const parsed = Number(input)
++    return Number.isFinite(parsed) ? parsed : 0
++}
++
++function isApiError(error: unknown): error is ApiError {
++    if (!error || typeof error !== 'object') return false
++    const candidate = error as Partial<ApiError>
++    return (
++        typeof candidate.status === 'number'
++        && typeof candidate.code === 'string'
++        && typeof candidate.message === 'string'
++    )
++}
++
++function resolveGovPaymentsErrorCategory(status: number): GovPaymentsErrorCategory {
++    if (status === 401) return 'unauthenticated'
++    if (status === 403) return 'permission_denied'
++    if (status === 422) return 'validation'
++    if (status === 404) return 'not_found'
++    if (status === 409) return 'conflict'
++    if (status === 400) return 'business'
++    return 'unknown'
++}
++
++function mapGovPaymentsErrorMessage(status: number, code: string): string {
++    switch (code) {
++        case 'FEE_ITEM_REQUIRED':
++            return '请至少提供一条费用项编号。'
++        case 'PAY_LIST_SCOPE_INVALID':
++            return '费用项范围不合法，请确认客户与币种一致。'
++        case 'FEE_ITEM_NOT_FOUND':
++            return '费用项不存在，请检查后重试。'
++        case 'PAY_LIST_NOT_FOUND':
++            return '官费清单不存在，请检查后重试。'
++        case 'GOV_PAYMENT_INVALID':
++            return '缴费金额不合法，请输入大于 0 的金额。'
++        case 'GOV_PAYMENT_DUPLICATE':
++            return '该费用项已登记官方缴费，不能重复提交。'
++        case 'VALIDATION_ERROR':
++            return '参数校验失败，请检查输入后重试。'
++        default:
++            if (status === 400) return '业务校验失败，请检查输入后重试。'
++            if (status === 401) return '登录已失效，请重新登录。'
++            if (status === 403) return '无权限执行该操作。'
++            if (status === 404) return '目标资源不存在，请确认后重试。'
++            if (status === 409) return '数据冲突，当前请求无法完成。'
++            if (status === 422) return '请求参数不符合要求，请检查后重试。'
++            return '请求失败，请稍后重试。'
++    }
++}
++
++export function mapGovPaymentsError(error: unknown): GovPaymentsApiError {
++    if (!isApiError(error)) {
++        return {
++            status: 0,
++            code: 'UNKNOWN_ERROR',
++            message: '网络或服务异常，请稍后重试。',
++            category: 'unknown',
++        }
++    }
++
++    const category = resolveGovPaymentsErrorCategory(error.status)
++    const mapped: GovPaymentsApiError = {
++        status: error.status,
++        code: error.code,
++        message: mapGovPaymentsErrorMessage(error.status, error.code),
++        details: error.details,
++        requestId: error.requestId,
++        category,
++    }
++
++    if (category === 'validation') {
++        const fieldErrors = mapFieldErrors(error.details)
++        if (fieldErrors.size > 0) {
++            mapped.field_errors = fieldErrors
++        }
++    }
++
++    return mapped
++}
++
++export async function createPayListFromFeeItems(
++    payload: PayListCreatePayload,
++): Promise<PayListCreateResult> {
++    const response = await http.post<BackendPayListCreateResult>('/pay-lists/from-fee-items', {
++        fee_item_ids: payload.fee_item_ids,
++        planned_pay_date: payload.planned_pay_date,
++        remark: payload.remark,
++    })
++
++    return {
++        summary: response.data.summary,
++        pay_list: response.data.pay_list
++            ? {
++                ...response.data.pay_list,
++                total_amount: asNumber(response.data.pay_list.total_amount),
++                paid_date: null,
++            }
++            : null,
++        success: response.data.success.map((item) => ({
++            ...item,
++            amount: asNumber(item.amount),
++        })),
++        failed: response.data.failed,
++    }
++}
++
++export async function registerGovPayment(
++    payload: GovPaymentRegisterPayload,
++): Promise<GovPaymentRegisterResult> {
++    const response = await http.post<BackendGovPaymentRegisterResult>('/gov-payments', {
++        pay_list_id: payload.pay_list_id,
++        fee_item_id: payload.fee_item_id,
++        paid_date: payload.paid_date,
++        paid_amount: payload.paid_amount,
++        official_receipt_no: payload.official_receipt_no,
++        remark: payload.remark,
++    })
++
++    return {
++        gov_payment: {
++            ...response.data.gov_payment,
++            paid_amount: asNumber(response.data.gov_payment.paid_amount),
++        },
++        pay_list: {
++            ...response.data.pay_list,
++            planned_pay_date: null,
++            total_amount: asNumber(response.data.pay_list.total_amount),
++        },
++    }
++}
+--- /dev/null	2026-02-28 23:00:01
++++ frontend/src/api/govPayments.types.ts	2026-02-28 22:58:11
+@@ -0,0 +1,88 @@
++import type { ApiError } from './types'
++
++export interface PayListCreatePayload {
++    fee_item_ids: string[]
++    planned_pay_date?: string
++    remark?: string
++}
++
++export interface PayListCreateSummary {
++    requested: number
++    success: number
++    failed: number
++    pay_list_created: boolean
++}
++
++export interface PayListInfo {
++    id: number
++    pay_list_no: string | null
++    client_id: string
++    currency: string
++    status: string
++    planned_pay_date: string | null
++    total_amount: number
++    paid_date?: string | null
++}
++
++export interface PayListCreateSuccessItem {
++    fee_item_id: string
++    case_id: string
++    amount: number
++    currency: string
++    pay_list_id: number
++}
++
++export interface PayListCreateFailedItem {
++    fee_item_id: string
++    code: string
++    message: string
++    status_code: number
++}
++
++export interface PayListCreateResult {
++    summary: PayListCreateSummary
++    pay_list: PayListInfo | null
++    success: PayListCreateSuccessItem[]
++    failed: PayListCreateFailedItem[]
++}
++
++export interface GovPaymentRegisterPayload {
++    pay_list_id: number
++    fee_item_id: string
++    paid_date?: string
++    paid_amount?: number | string
++    official_receipt_no?: string
++    remark?: string
++}
++
++export interface GovPaymentInfo {
++    id: number
++    pay_list_id: number
++    case_id: string
++    fee_item_id: string
++    status: string
++    currency: string
++    paid_date: string | null
++    paid_amount: number
++    official_receipt_no: string | null
++    remark: string | null
++}
++
++export interface GovPaymentRegisterResult {
++    gov_payment: GovPaymentInfo
++    pay_list: PayListInfo
++}
++
++export type GovPaymentsErrorCategory =
++    | 'unauthenticated'
++    | 'permission_denied'
++    | 'validation'
++    | 'business'
++    | 'not_found'
++    | 'conflict'
++    | 'unknown'
++
++export interface GovPaymentsApiError extends ApiError {
++    category: GovPaymentsErrorCategory
++    field_errors?: Map<string, string[]>
++}
+--- /dev/null	2026-02-28 23:00:01
++++ frontend/src/modules/annuity/pages/PayList.vue	2026-02-28 22:59:12
+@@ -0,0 +1,302 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">官费清单</h1>
++        <span class="page-count">生成与状态查询</span>
++      </div>
++      <div class="page-header-right">
++        <el-button @click="goToGovPaymentCreate()">去登记缴费</el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <div class="form-card">
++      <h2 class="form-card-title">清单生成条件</h2>
++      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="pay-list-form">
++        <el-form-item
++          label="费用项编号"
++          prop="fee_item_ids"
++          :error="fieldErrors.get('fee_item_ids')?.join('，')"
++        >
++          <el-input
++            v-model="form.fee_item_ids"
++            type="textarea"
++            :rows="4"
++            placeholder="请输入费用项编号，支持逗号、空格或换行分隔"
++          />
++          <div class="field-hint">示例：`fee-item-001, fee-item-002`</div>
++        </el-form-item>
++
++        <el-row :gutter="12">
++          <el-col :xs="24" :sm="12">
++            <el-form-item label="计划缴费日期" prop="planned_pay_date">
++              <el-date-picker
++                v-model="form.planned_pay_date"
++                type="date"
++                placeholder="请选择日期（可选）"
++                value-format="YYYY-MM-DD"
++                format="YYYY-MM-DD"
++                style="width: 100%"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item label="备注" prop="remark">
++              <el-input
++                v-model.trim="form.remark"
++                placeholder="可填写本次清单说明（可选）"
++              />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <div class="form-actions">
++          <el-button @click="resetForm">重置</el-button>
++          <el-button type="primary" :loading="generating" @click="handleGenerate">
++            生成官费清单
++          </el-button>
++        </div>
++      </el-form>
++    </div>
++
++    <div v-if="result" class="result-card">
++      <h2 class="form-card-title">生成回执</h2>
++
++      <el-descriptions :column="4" border>
++        <el-descriptions-item label="请求数量">{{ result.summary.requested }}</el-descriptions-item>
++        <el-descriptions-item label="成功数量">{{ result.summary.success }}</el-descriptions-item>
++        <el-descriptions-item label="失败数量">{{ result.summary.failed }}</el-descriptions-item>
++        <el-descriptions-item label="已生成清单">
++          {{ result.summary.pay_list_created ? '是' : '否' }}
++        </el-descriptions-item>
++      </el-descriptions>
++
++      <div v-if="result.pay_list" class="pay-list-info">
++        <h3 class="section-title">清单状态</h3>
++        <el-descriptions :column="3" border>
++          <el-descriptions-item label="清单编号">
++            {{ result.pay_list.pay_list_no || `#${result.pay_list.id}` }}
++          </el-descriptions-item>
++          <el-descriptions-item label="客户ID">{{ result.pay_list.client_id }}</el-descriptions-item>
++          <el-descriptions-item label="状态">
++            <el-tag :type="payListStatusTag(result.pay_list.status)">
++              {{ payListStatusText(result.pay_list.status) }}
++            </el-tag>
++          </el-descriptions-item>
++          <el-descriptions-item label="币种">{{ result.pay_list.currency }}</el-descriptions-item>
++          <el-descriptions-item label="计划缴费日期">
++            {{ result.pay_list.planned_pay_date || '—' }}
++          </el-descriptions-item>
++          <el-descriptions-item label="清单金额">
++            {{ formatMoney(result.pay_list.total_amount, result.pay_list.currency) }}
++          </el-descriptions-item>
++        </el-descriptions>
++      </div>
++
++      <div v-if="result.success.length > 0" class="receipt-section">
++        <h3 class="section-title">成功明细</h3>
++        <el-table :data="result.success" size="small" border>
++          <el-table-column prop="fee_item_id" label="费用项ID" min-width="200" />
++          <el-table-column prop="case_id" label="案件ID" min-width="180" />
++          <el-table-column label="金额" width="150" align="right">
++            <template #default="{ row }">
++              {{ formatMoney(row.amount, row.currency) }}
++            </template>
++          </el-table-column>
++          <el-table-column prop="pay_list_id" label="清单ID" width="100" />
++          <el-table-column label="操作" width="120">
++            <template #default="{ row }">
++              <el-button text type="primary" @click="goToGovPaymentCreate(row.fee_item_id, row.pay_list_id)">
++                登记缴费
++              </el-button>
++            </template>
++          </el-table-column>
++        </el-table>
++      </div>
++
++      <div v-if="result.failed.length > 0" class="receipt-section">
++        <h3 class="section-title">失败明细</h3>
++        <el-table :data="result.failed" size="small" border>
++          <el-table-column prop="fee_item_id" label="费用项ID" min-width="200" />
++          <el-table-column prop="code" label="错误码" min-width="180" />
++          <el-table-column prop="status_code" label="状态码" width="100" />
++          <el-table-column label="失败说明" min-width="240">
++            <template #default="{ row }">
++              {{ formatFailedMessage(row.message) }}
++            </template>
++          </el-table-column>
++        </el-table>
++      </div>
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { reactive, ref } from 'vue'
++import { useRouter } from 'vue-router'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import { createPayListFromFeeItems, mapGovPaymentsError } from '../../../api/govPayments'
++import type { GovPaymentsApiError, PayListCreateResult } from '../../../api/govPayments.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++interface PayListForm {
++  fee_item_ids: string
++  planned_pay_date: string
++  remark: string
++}
++
++const router = useRouter()
++
++const formRef = ref<FormInstance>()
++const generating = ref(false)
++const error = ref<GovPaymentsApiError | null>(null)
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++const result = ref<PayListCreateResult | null>(null)
++
++const form = reactive<PayListForm>({
++  fee_item_ids: '',
++  planned_pay_date: '',
++  remark: '',
++})
++
++const rules: FormRules<PayListForm> = {
++  fee_item_ids: [
++    { required: true, message: '费用项编号为必填项', trigger: 'blur' },
++  ],
++}
++
++function normalizeFeeItemIds(raw: string): string[] {
++  const values = raw
++    .split(/[\s,，;；\n]+/g)
++    .map((item) => item.trim())
++    .filter(Boolean)
++  return Array.from(new Set(values))
++}
++
++function payListStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'DRAFT':
++      return '草稿'
++    case 'PARTIAL':
++      return '部分完成'
++    case 'PAID':
++      return '已完成'
++    default:
++      return status || '未知'
++  }
++}
++
++function payListStatusTag(status: string): 'info' | 'warning' | 'success' {
++  switch (status?.toUpperCase()) {
++    case 'PAID':
++      return 'success'
++    case 'PARTIAL':
++      return 'warning'
++    default:
++      return 'info'
++  }
++}
++
++function formatMoney(amount: number, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(amount || 0)
++}
++
++function formatFailedMessage(message?: string): string {
++  return message ? `后端信息：${message}` : '后端信息：无'
++}
++
++function goToGovPaymentCreate(feeItemId?: string, payListId?: number) {
++  router.push({
++    path: '/annuity/gov-payments/new',
++    query: {
++      ...(payListId ? { pay_list_id: String(payListId) } : {}),
++      ...(feeItemId ? { fee_item_id: feeItemId } : {}),
++    },
++  })
++}
++
++function resetForm() {
++  form.fee_item_ids = ''
++  form.planned_pay_date = ''
++  form.remark = ''
++  fieldErrors.value = new Map()
++  error.value = null
++}
++
++async function handleGenerate() {
++  fieldErrors.value = new Map()
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  const feeItemIds = normalizeFeeItemIds(form.fee_item_ids)
++  if (feeItemIds.length === 0) {
++    ElMessage.warning('请至少输入一个费用项编号。')
++    return
++  }
++
++  generating.value = true
++  error.value = null
++  try {
++    const response = await createPayListFromFeeItems({
++      fee_item_ids: feeItemIds,
++      planned_pay_date: form.planned_pay_date || undefined,
++      remark: form.remark || undefined,
++    })
++    result.value = response
++
++    if (response.summary.success > 0 && response.summary.failed > 0) {
++      ElMessage.warning(`处理完成：成功 ${response.summary.success} 条，失败 ${response.summary.failed} 条。`)
++    } else if (response.summary.success > 0) {
++      ElMessage.success(`清单生成成功，共 ${response.summary.success} 条。`)
++    } else {
++      ElMessage.info('处理完成，未生成可用清单。')
++    }
++  } catch (err) {
++    const mapped = mapGovPaymentsError(err)
++    error.value = mapped
++    if (mapped.field_errors && mapped.field_errors.size > 0) {
++      fieldErrors.value = mapped.field_errors
++    }
++  } finally {
++    generating.value = false
++  }
++}
++</script>
++
++<style scoped>
++.pay-list-form {
++  max-width: 920px;
++}
++
++.field-hint {
++  margin-top: 6px;
++  font-size: 12px;
++  color: var(--text-sub);
++}
++
++.result-card {
++  margin-top: 20px;
++}
++
++.section-title {
++  margin: 14px 0 8px;
++  font-size: 14px;
++  font-weight: 600;
++}
++
++.pay-list-info {
++  margin-top: 14px;
++}
++
++.receipt-section {
++  margin-top: 16px;
++}
++</style>
+--- /dev/null	2026-02-28 23:00:01
++++ frontend/src/modules/annuity/pages/GovPaymentCreate.vue	2026-02-28 22:59:51
+@@ -0,0 +1,313 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <el-button text @click="goBack">
++          <span class="back-icon">←</span> 返回
++        </el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <div class="form-card">
++      <h2 class="form-card-title">官方缴费登记</h2>
++
++      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="gov-payment-form">
++        <el-row :gutter="12">
++          <el-col :xs="24" :sm="12">
++            <el-form-item
++              label="官费清单ID"
++              prop="pay_list_id"
++              :error="fieldErrors.get('pay_list_id')?.join('，')"
++            >
++              <el-input-number
++                v-model="form.pay_list_id"
++                :min="1"
++                :precision="0"
++                controls-position="right"
++                style="width: 100%"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item
++              label="费用项ID"
++              prop="fee_item_id"
++              :error="fieldErrors.get('fee_item_id')?.join('，')"
++            >
++              <el-input v-model.trim="form.fee_item_id" placeholder="请输入费用项编号" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item label="缴费日期" prop="paid_date" :error="fieldErrors.get('paid_date')?.join('，')">
++              <el-date-picker
++                v-model="form.paid_date"
++                type="date"
++                placeholder="请选择缴费日期（可选）"
++                value-format="YYYY-MM-DD"
++                format="YYYY-MM-DD"
++                style="width: 100%"
++              />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item
++              label="缴费金额"
++              prop="paid_amount"
++              :error="fieldErrors.get('paid_amount')?.join('，')"
++            >
++              <el-input-number
++                v-model="form.paid_amount"
++                :min="0.01"
++                :precision="2"
++                :step="10"
++                controls-position="right"
++                style="width: 100%"
++              />
++              <div class="field-hint">可选；不填时由后端按费用项金额处理。</div>
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item
++              label="官方收据号"
++              prop="official_receipt_no"
++              :error="fieldErrors.get('official_receipt_no')?.join('，')"
++            >
++              <el-input v-model.trim="form.official_receipt_no" placeholder="请输入收据号（可选）" />
++            </el-form-item>
++          </el-col>
++          <el-col :xs="24" :sm="12">
++            <el-form-item label="备注" prop="remark" :error="fieldErrors.get('remark')?.join('，')">
++              <el-input v-model.trim="form.remark" placeholder="可填写说明（可选）" />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <div class="form-actions">
++          <el-button @click="goBack">取消</el-button>
++          <el-button type="primary" :loading="saving" @click="handleSubmit">提交登记</el-button>
++        </div>
++      </el-form>
++    </div>
++
++    <div v-if="result" class="result-card">
++      <h2 class="form-card-title">登记结果</h2>
++
++      <el-descriptions :column="3" border>
++        <el-descriptions-item label="缴费记录ID">{{ result.gov_payment.id }}</el-descriptions-item>
++        <el-descriptions-item label="费用项ID">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
++        <el-descriptions-item label="缴费状态">{{ govPaymentStatusText(result.gov_payment.status) }}</el-descriptions-item>
++        <el-descriptions-item label="缴费日期">{{ result.gov_payment.paid_date || '—' }}</el-descriptions-item>
++        <el-descriptions-item label="缴费金额">
++          {{ formatMoney(result.gov_payment.paid_amount, result.gov_payment.currency) }}
++        </el-descriptions-item>
++        <el-descriptions-item label="收据号">
++          {{ result.gov_payment.official_receipt_no || '—' }}
++        </el-descriptions-item>
++      </el-descriptions>
++
++      <div class="result-section">
++        <h3 class="section-title">官费清单状态</h3>
++        <el-descriptions :column="3" border>
++          <el-descriptions-item label="清单编号">
++            {{ result.pay_list.pay_list_no || `#${result.pay_list.id}` }}
++          </el-descriptions-item>
++          <el-descriptions-item label="清单状态">
++            <el-tag :type="payListStatusTag(result.pay_list.status)">
++              {{ payListStatusText(result.pay_list.status) }}
++            </el-tag>
++          </el-descriptions-item>
++          <el-descriptions-item label="客户ID">{{ result.pay_list.client_id }}</el-descriptions-item>
++          <el-descriptions-item label="更新后总额">
++            {{ formatMoney(result.pay_list.total_amount, result.pay_list.currency) }}
++          </el-descriptions-item>
++          <el-descriptions-item label="清单缴费日期">
++            {{ result.pay_list.paid_date || '—' }}
++          </el-descriptions-item>
++          <el-descriptions-item label="币种">{{ result.pay_list.currency }}</el-descriptions-item>
++        </el-descriptions>
++      </div>
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { reactive, ref } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import type { FormInstance, FormRules } from 'element-plus'
++import { ElMessage } from 'element-plus'
++import { mapGovPaymentsError, registerGovPayment } from '../../../api/govPayments'
++import type { GovPaymentRegisterResult, GovPaymentsApiError } from '../../../api/govPayments.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++
++interface GovPaymentForm {
++  pay_list_id: number
++  fee_item_id: string
++  paid_date: string
++  paid_amount: number | null
++  official_receipt_no: string
++  remark: string
++}
++
++const route = useRoute()
++const router = useRouter()
++
++const formRef = ref<FormInstance>()
++const saving = ref(false)
++const error = ref<GovPaymentsApiError | null>(null)
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++const result = ref<GovPaymentRegisterResult | null>(null)
++
++const queryPayListId = Number(route.query.pay_list_id || 0)
++const queryFeeItemId = String(route.query.fee_item_id || '')
++
++const form = reactive<GovPaymentForm>({
++  pay_list_id: Number.isFinite(queryPayListId) && queryPayListId > 0 ? queryPayListId : 0,
++  fee_item_id: queryFeeItemId,
++  paid_date: new Date().toISOString().split('T')[0],
++  paid_amount: null,
++  official_receipt_no: '',
++  remark: '',
++})
++
++const rules: FormRules<GovPaymentForm> = {
++  pay_list_id: [
++    { required: true, message: '官费清单ID为必填项', trigger: 'blur' },
++    {
++      validator: (_rule, value: unknown, callback) => {
++        const numeric = Number(value)
++        if (!Number.isFinite(numeric) || numeric <= 0) {
++          callback(new Error('官费清单ID必须大于 0'))
++          return
++        }
++        callback()
++      },
++      trigger: 'blur',
++    },
++  ],
++  fee_item_id: [{ required: true, message: '费用项ID为必填项', trigger: 'blur' }],
++  paid_amount: [
++    {
++      validator: (_rule, value: unknown, callback) => {
++        if (value === null || value === undefined || value === '') {
++          callback()
++          return
++        }
++        const numeric = Number(value)
++        if (!Number.isFinite(numeric) || numeric <= 0) {
++          callback(new Error('缴费金额必须大于 0'))
++          return
++        }
++        callback()
++      },
++      trigger: 'blur',
++    },
++  ],
++}
++
++function goBack() {
++  router.push('/annuity/pay-lists')
++}
++
++function govPaymentStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'PAID':
++      return '已缴费'
++    case 'RECORDED':
++      return '已登记'
++    case 'PLANNED':
++      return '已计划'
++    default:
++      return status || '未知'
++  }
++}
++
++function payListStatusText(status: string): string {
++  switch (status?.toUpperCase()) {
++    case 'DRAFT':
++      return '草稿'
++    case 'PARTIAL':
++      return '部分完成'
++    case 'PAID':
++      return '已完成'
++    default:
++      return status || '未知'
++  }
++}
++
++function payListStatusTag(status: string): 'info' | 'warning' | 'success' {
++  switch (status?.toUpperCase()) {
++    case 'PAID':
++      return 'success'
++    case 'PARTIAL':
++      return 'warning'
++    default:
++      return 'info'
++  }
++}
++
++function formatMoney(amount: number, currency: string): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: currency || 'CNY',
++  }).format(amount || 0)
++}
++
++async function handleSubmit() {
++  fieldErrors.value = new Map()
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++  error.value = null
++  try {
++    const response = await registerGovPayment({
++      pay_list_id: form.pay_list_id,
++      fee_item_id: form.fee_item_id,
++      paid_date: form.paid_date || undefined,
++      paid_amount: form.paid_amount ?? undefined,
++      official_receipt_no: form.official_receipt_no || undefined,
++      remark: form.remark || undefined,
++    })
++    result.value = response
++    ElMessage.success('官方缴费登记成功。')
++  } catch (err) {
++    const mapped = mapGovPaymentsError(err)
++    error.value = mapped
++    if (mapped.field_errors && mapped.field_errors.size > 0) {
++      fieldErrors.value = mapped.field_errors
++    }
++  } finally {
++    saving.value = false
++  }
++}
++</script>
++
++<style scoped>
++.gov-payment-form {
++  max-width: 920px;
++}
++
++.field-hint {
++  margin-top: 6px;
++  font-size: 12px;
++  color: var(--text-sub);
++}
++
++.result-card {
++  margin-top: 20px;
++}
++
++.result-section {
++  margin-top: 16px;
++}
++
++.section-title {
++  margin: 0 0 8px;
++  font-size: 14px;
++  font-weight: 600;
++}
++</style>

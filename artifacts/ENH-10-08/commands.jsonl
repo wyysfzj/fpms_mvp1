@@ -1,0 +1,4 @@
+{"ts":"20260131T154007","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/rbac/models.py"}
+{"ts":"20260131T154012","step":"fmt","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ format\ app/modules/rbac/models.py"}
+{"ts":"20260131T154019","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ python3\ -m\ py_compile\ app/modules/rbac/models.py"}
+{"ts":"20260131T154027","step":"quick","cmd":"bash -lc PYTHONPATH=backend\ python3\ -c\ \"import\ app.modules.rbac.models\ as\ m\;\ print\(\'OK\'\)\""}

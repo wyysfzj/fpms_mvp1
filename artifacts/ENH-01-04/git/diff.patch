@@ -1,0 +1,224 @@
+diff --git a/backend/app/main.py b/backend/app/main.py
+index bbf8a38..77ba389 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
+             error={
+                 "code": "VALIDATION_ERROR",
+                 "message": "Invalid request",
+-                "details": exc.errors(),
++                "details": {"errors": exc.errors()},
+             }
+         )
+         return JSONResponse(
+diff --git a/backend/app/modules/auth/models.py b/backend/app/modules/auth/models.py
+index adfb8dc..7222df0 100644
+--- a/backend/app/modules/auth/models.py
++++ b/backend/app/modules/auth/models.py
+@@ -1,8 +1,9 @@
+ from __future__ import annotations
+ 
+ from datetime import datetime
++from uuid import uuid4
+ 
+-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, text
++from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func, text
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ 
+ from app.db.base import Base
+@@ -49,6 +50,31 @@ class T_Role(Base):
+     )
+ 
+ 
++class T_RolePerm(Base):
++    """Maps permissions to roles."""
++
++    __tablename__ = "t_role_perm"
++
++    id: Mapped[str] = mapped_column(
++        String(36),
++        primary_key=True,
++        default=lambda: str(uuid4()),
++    )
++    role_id: Mapped[str] = mapped_column(
++        String(36),
++        ForeignKey("t_role.id", ondelete="CASCADE"),
++        index=True,
++    )
++    perm_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=False),
++        nullable=False,
++        server_default=text("CURRENT_TIMESTAMP"),
++    )
++
++    __table_args__ = (UniqueConstraint("role_id", "perm_code", name="uq_role_perm"),)
++
++
+ class T_UserRole(Base):
+     __tablename__ = "t_user_role"
+ 
+diff --git a/backend/app/modules/rbac/models.py b/backend/app/modules/rbac/models.py
+index 2c3608a..dba7d26 100644
+--- a/backend/app/modules/rbac/models.py
++++ b/backend/app/modules/rbac/models.py
+@@ -1 +1,5 @@
+-# TODO: Implement models for this module
++from __future__ import annotations
++
++from app.modules.auth.models import T_RolePerm
++
++__all__ = ["T_RolePerm"]
+diff --git a/backend/app/modules/rbac/service.py b/backend/app/modules/rbac/service.py
+index cee10e4..a48c2d0 100644
+--- a/backend/app/modules/rbac/service.py
++++ b/backend/app/modules/rbac/service.py
+@@ -1 +1,147 @@
+-# TODO: Implement service layer for this module
++from __future__ import annotations
++
++from uuid import uuid4
++
++from sqlalchemy.orm import Session
++
++from app.modules.auth.models import T_Role, T_UserRole
++from app.modules.rbac.models import T_RolePerm
++
++# Permission definitions from docs/02_permissions_rbac.md
++ROLE_PERMISSIONS = {
++    "Admin": [
++        "Auth.Login",
++        "User.Manage",
++        "Role.Manage",
++        "Case.Read",
++        "Case.Create",
++        "Case.Edit",
++        "Case.EditLimited",
++        "Case.Export",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Edit",
++        "Doc.Attach",
++        "Doc.TemplateRender",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Fee.Draft.Create",
++        "Fee.Draft.Edit",
++        "Fee.Rate.Manage",
++        "Bill.Read",
++        "Bill.CreateFromDraft",
++        "Bill.CreateManual",
++        "Bill.Print",
++        "Payment.Create",
++        "Payment.Offset",
++        "Client.Manage",
++        "Template.Manage",
++        "SystemParam.Manage",
++    ],
++    "Formalities": [
++        "Auth.Login",
++        "Case.Read",
++        "Case.Create",
++        "Case.Edit",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Edit",
++        "Doc.Attach",
++        "Doc.TemplateRender",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Fee.Draft.Create",
++        "Fee.Draft.Edit",
++        "Fee.Rate.Manage",
++        "Bill.Read",
++        "Client.Manage",
++    ],
++    "Agent": [
++        "Auth.Login",
++        "Case.Read",
++        "Case.EditLimited",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Attach",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Bill.Read",
++        "Client.Manage",
++    ],
++    "Finance": [
++        "Auth.Login",
++        "Case.Read",
++        "Doc.Read",
++        "Task.Read",
++        "Fee.Read",
++        "Bill.Read",
++        "Bill.CreateFromDraft",
++        "Bill.CreateManual",
++        "Bill.Print",
++        "Payment.Create",
++        "Payment.Offset",
++        "Client.Manage",
++    ],
++}
++
++
++def get_user_permissions(db: Session, user_id: str) -> set[str]:
++    """
++    Get all permission codes for a user.
++
++    Returns:
++        Set of permission code strings (e.g., {"Case.Read", "Bill.Create"})
++    """
++    user_roles = db.query(T_UserRole).filter(T_UserRole.user_id == user_id).all()
++
++    if not user_roles:
++        return set()
++
++    role_ids = [ur.role_id for ur in user_roles]
++
++    role_perms = db.query(T_RolePerm).filter(T_RolePerm.role_id.in_(role_ids)).all()
++
++    return {rp.perm_code for rp in role_perms}
++
++
++def seed_default_roles_perms(db: Session) -> None:
++    """Seed default roles and their permissions. Idempotent."""
++    for role_code, perm_codes in ROLE_PERMISSIONS.items():
++        role = db.query(T_Role).filter(T_Role.code == role_code).first()
++        if not role:
++            role = T_Role(
++                id=str(uuid4()),
++                code=role_code,
++                name=role_code,
++            )
++            db.add(role)
++            db.flush()
++
++        existing = db.query(T_RolePerm).filter(T_RolePerm.role_id == role.id).all()
++        existing_codes = {ep.perm_code for ep in existing}
++
++        for perm_code in perm_codes:
++            if perm_code not in existing_codes:
++                rp = T_RolePerm(
++                    id=str(uuid4()),
++                    role_id=role.id,
++                    perm_code=perm_code,
++                )
++                db.add(rp)
++
++    db.commit()

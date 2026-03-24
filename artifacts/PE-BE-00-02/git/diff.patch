@@ -1,0 +1,74 @@
+diff --git a/backend/app/modules/rbac/service.py b/backend/app/modules/rbac/service.py
+--- a/backend/app/modules/rbac/service.py
++++ b/backend/app/modules/rbac/service.py
+@@
+ ROLE_PERMISSIONS = {
+     "Admin": [
+         "AdminUser.Create",
+         "AdminUser.Edit",
+         "AdminUser.Read",
++        # Annuity / Collections / Commission / Consulting-Search (post-enhancement)
++        "AnnuityTask.Action",
++        "AnnuityTask.Read",
++        "BadDebt.Action",
++        "Commission.Read",
++        "CommissionReport.Read",
++        "CommissionRule.Create",
++        "CommissionRule.Edit",
++        "CommissionRule.Read",
++        "CommissionSettlement.Action",
++        "CommissionSettlement.Create",
++        "ConsultingCase.Create",
++        "ConsultingFeeDraft.Create",
++        "Dunning.Create",
++        "Dunning.Read",
++        "Expense.Create",
++        "Expense.Read",
++        "GovPayment.Create",
++        "PayList.Create",
+@@
+ def seed_default_roles_perms(db: Session) -> None:
+@@
+-        for perm_code in perm_codes:
++        # Deduplicate list entries defensively to avoid duplicate role-perm inserts.
++        for perm_code in dict.fromkeys(perm_codes):
+             if perm_code not in existing_codes:
+@@
+                 db.add(rp)
++                existing_codes.add(perm_code)
+ 
+ diff --git a/docs/permissions_matrix.md b/docs/permissions_matrix.md
+--- a/docs/permissions_matrix.md
++++ b/docs/permissions_matrix.md
+@@
+ - `GET /tasks/{id}/print` → `Task.Read`  (task: `BL-DOC-05_add_task_print_endpoint`)
++
++## Post-enhancement Domain Matrix (Wave 02 Contract)
++
++### Annuity
++- `GET /annuity/tasks` → `AnnuityTask.Read`  (task: `PE-BE-AN-02`)
++- `PUT /annuity/tasks/{task_id}/instruction` → `AnnuityTask.Action`  (task: `PE-BE-AN-03`)
++- `POST /annuity/tasks/generate-drafts` → `AnnuityTask.Action`  (task: `PE-BE-AN-05`)
++- `POST /pay-lists/from-fee-items` → `PayList.Create`  (task: `PE-BE-AN-06`)
++- `POST /gov-payments` → `GovPayment.Create`  (task: `PE-BE-AN-07`)
++
++### Collections (Dunning / Bad Debt)
++- `POST /dunning` → `Dunning.Create`  (task: `PE-BE-CL-02`)
++- `GET /dunning` → `Dunning.Read`  (task: `PE-BE-CL-03`)
++- `POST /bills/{bill_id}/bad-debt` → `BadDebt.Action`  (task: `PE-BE-CL-04`)
++- `POST /bills/{bill_id}/bad-debt/restore` → `BadDebt.Action`  (task: `PE-BE-CL-05`)
++
++### Commission
++- `POST /commission/rules` → `CommissionRule.Create`  (task: `PE-BE-COM-01`)
++- `GET /commission/rules` → `CommissionRule.Read`  (task: `PE-BE-COM-02`)
++- `PUT /commission/rules/{rule_id}` → `CommissionRule.Edit`  (task: `PE-BE-COM-03`)
++- `GET /commission` → `Commission.Read`  (task: `PE-BE-COM-07`)
++- `POST /commission/settlements` → `CommissionSettlement.Create`  (task: `PE-BE-COM-08`)
++- `POST /commission/settlements/{id}/generate-lines` → `CommissionSettlement.Action`  (task: `PE-BE-COM-09`)
++- `GET /commission/reports/settlement` → `CommissionReport.Read`  (task: `PE-BE-COM-10`)
++
++### Consulting / Search / Expense
++- `POST /consulting/cases` → `ConsultingCase.Create`  (task: `PE-BE-CS-01`)
++- `POST /consulting/fee-drafts` → `ConsultingFeeDraft.Create`  (task: `PE-BE-CS-05`)
++- `POST /expenses` → `Expense.Create`  (task: `PE-BE-CS-02`)
++- `GET /expenses` → `Expense.Read`  (task: `PE-BE-CS-03`)

@@ -1,0 +1,26 @@
+# FRFE04-FE-01 Evidence Summary
+
+- Task/runbook executed: `FRFE04-FE-01`
+- Role executed: `frontend worker`
+- Final per-task status: `PASS`
+- Modified files:
+  - `frontend/src/constants/menu.ts`
+  - `frontend/src/router/index.ts`
+  - `frontend/src/api/govPayments.ts`
+  - `frontend/src/api/govPayments.types.ts`
+- Verification commands:
+  - `cd frontend && npm run lint -- src/constants/menu.ts src/router/index.ts src/api/govPayments.ts src/api/govPayments.types.ts`
+  - `cd frontend && npm run typecheck`
+- Closure slice completed: add Fee Management-semantic route and menu entry points and extend shared gov-payment API typings only for already-approved backend contracts
+- Explicit non-closure boundary respected: did not complete page behavior, detail UI, manual-row UI, or blocked query fields
+- UI language requirement respected:
+  - menu entry label uses Simplified Chinese `官费清单`
+- Shared frontend wiring exercised:
+  - Fee Management semantic menu entry routes to shared pay-list shell
+  - route aliases expose Fee Management semantic entry points while reusing annuity pages
+  - shared `govPayments` API typings/functions now cover approved backend contracts for later FE slices
+- Evidence path: `artifacts/FRFE04-FE-01/**`
+- Evidence files:
+  - `artifacts/FRFE04-FE-01/results.jsonl`
+  - `artifacts/FRFE04-FE-01/summary.md`
+  - `artifacts/FRFE04-FE-01/git/diff.patch`

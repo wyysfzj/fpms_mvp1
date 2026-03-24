@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.modules.auth.models import T_Role, T_UserRole
 from app.modules.rbac.models import T_RolePerm
 
-# Permission definitions from docs/02_permissions_rbac.md
+# Core RBAC intent is documented in docs/02_permissions_rbac.md; detailed endpoint mapping lives in docs/permissions_matrix.md.
 ROLE_PERMISSIONS = {
     "Admin": [
         "AdminUser.Create",
@@ -86,6 +86,8 @@ ROLE_PERMISSIONS = {
         "GovPayment.Create",
         "LetterHead.Edit",
         "Template.Edit",
+        "PayList.Read",
+        "PayList.Export",
         "PayList.Create",
     ],
     "Formalities": [
@@ -137,6 +139,8 @@ ROLE_PERMISSIONS = {
         "Task.Read",
         "Fee.Read",
         "Bill.Read",
+        "PayList.Read",
+        "PayList.Export",
         "Bill.CreateFromDraft",
         "Bill.CreateManual",
         "Bill.Print",

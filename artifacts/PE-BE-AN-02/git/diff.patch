@@ -1,0 +1,67 @@
+diff --git a/backend/app/modules/annuity/api.py b/backend/app/modules/annuity/api.py
+new file mode 100644
+index 0000000..9c6b36a
+--- /dev/null
++++ b/backend/app/modules/annuity/api.py
+@@ -0,0 +1,61 @@
++from __future__ import annotations
++
++from datetime import date
++from typing import Any
++
++from fastapi import APIRouter, Depends, Query
++from sqlalchemy.orm import Session
++
++from app.api.deps import require_perm
++from app.db.session import get_db
++from app.modules.annuity.service import list_annuity_tasks
++
++router = APIRouter()
++
++
++@router.get("/annuity/tasks", summary="List annuity tasks")
++def get_annuity_tasks(
++    due_from: date | None = Query(default=None),
++    due_to: date | None = Query(default=None),
++    status: str | None = Query(default=None),
++    pending_mode: str | None = Query(default=None),
++    case_id: str | None = Query(default=None),
++    client_id: str | None = Query(default=None),
++    notice_status: str | None = Query(default=None),
++    page: int = Query(default=1, ge=1),
++    page_size: int = Query(default=20, ge=1),
++    _perm: None = Depends(require_perm("AnnuityTask.Read")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    """List annuity tasks with filters and pagination."""
++    filters = {
++        "due_from": due_from,
++        "due_to": due_to,
++        "status": status,
++        "pending_mode": pending_mode,
++        "case_id": case_id,
++        "client_id": client_id,
++        "notice_status": notice_status,
++    }
++    tasks, total = list_annuity_tasks(db, filters=filters, page=page, page_size=page_size)
++
++    items = [
++        {
++            "id": task.id,
++            "case_id": task.case_id,
++            "client_id": task.client_id,
++            "year_no": task.year_no,
++            "due_date": task.due_date,
++            "client_instruction": task.client_instruction,
++            "instruction_date": task.instruction_date,
++            "notice_status": task.notice_status,
++            "notice_sent_date": task.notice_sent_date,
++            "status": task.status,
++            "remark": task.remark,
++            "created_at": task.created_at,
++            "updated_at": task.updated_at,
++        }
++        for task in tasks
++    ]
++    return {"items": items, "page": page, "page_size": page_size, "total": total}
++

@@ -1,0 +1,8 @@
+{"cmd":"sed -n '1,220p' tasks/postenhancement/frontend/PE-FE-CM-01.md","rc":0,"kind":"review","note":"task definition and allowlist"}
+{"cmd":"sed -n '1,220p' tasks/postenhancement/BATCH1_CASES_MANIFEST_20260315.md","rc":0,"kind":"review","note":"batch manifest and shared-file ownership"}
+{"cmd":"rg -n \"US-CM-01|US-CM-02|US-CM-03|FR-CM-02|FR-CM-03|FR-CM-04|FR-CM-05|FE-Enh-001\" docs/FPMS_Final_Enhancement_Plan_and_Task_Breakdown_SPEC_2.0_20260228.md tasks/postenhancement/frontend/PE-FE-CM-01.md","rc":0,"kind":"review","note":"Batch 1 item mapping"}
+{"cmd":"git diff --name-only -- frontend/src/modules/cases/pages/CaseCreate.vue frontend/src/modules/cases/pages/CaseEdit.vue frontend/src/modules/cases/pages/CaseDetail.vue frontend/src/api/cases.ts frontend/src/api/cases.types.ts frontend/src/api/clients.ts","rc":0,"kind":"review","note":"allowlist diff files"}
+{"cmd":"git diff --name-only -- frontend/src | sort -u","rc":0,"kind":"review","note":"frontend worktree scope audit"}
+{"cmd":"git diff -- frontend/src/modules/cases/pages/CaseCreate.vue frontend/src/modules/cases/pages/CaseEdit.vue frontend/src/modules/cases/pages/CaseDetail.vue frontend/src/api/cases.ts frontend/src/api/cases.types.ts frontend/src/api/clients.ts > artifacts/PE-FE-CM-01/git/diff.patch","rc":0,"kind":"evidence","note":"scoped diff artifact"}
+{"cmd":"npm run lint","rc":0,"kind":"verification","note":"main thread pre-verified before this narrow takeover; not rerun in this worker review"}
+{"cmd":"npm run typecheck","rc":0,"kind":"verification","note":"main thread pre-verified before this narrow takeover; not rerun in this worker review"}

@@ -1,0 +1,420 @@
+diff --git a/backend/app/modules/cases/api.py b/backend/app/modules/cases/api.py
+index c83d26b..48dc594 100644
+--- a/backend/app/modules/cases/api.py
++++ b/backend/app/modules/cases/api.py
+@@ -8,11 +8,13 @@ from fastapi import APIRouter, Depends, Query, status
+ from sqlalchemy import or_
+ from sqlalchemy.orm import Session
+ 
+-from app.api.deps import require_perm
++from app.api.deps import current_user_dep, require_perm
+ from app.core.errors import raise_business_error
+ from app.db.session import get_db
++from app.modules.auth.models import T_User
+ from app.modules.cases.models import Case
+-from app.modules.cases.schemas import CaseCreateIn
++from app.modules.cases.schemas import CaseCreateIn, CaseUpdateFull
++from app.modules.cases.service import update_case_full as update_case_full_service
+ from app.modules.masterdata.clients.models import Client
+ 
+ router = APIRouter()
+@@ -498,8 +500,9 @@ def export_cases(
+ @router.put("/cases/{case_id}", summary="Update a case")
+ def update_case(
+     case_id: str,
+-    payload: dict[str, Any],
++    payload: CaseUpdateFull,
+     _perm: None = Depends(require_perm("Case.Edit")),
++    current_user: T_User = current_user_dep,
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+     """
+@@ -526,75 +529,7 @@ def update_case(
+     - 404: Case not found
+     - 422: VALIDATION_ERROR
+     """
+-    case = db.query(Case).filter(Case.id == case_id).first()
+-    if not case:
+-        raise_business_error(
+-            "CASE_NOT_FOUND",
+-            "Case not found",
+-            status_code=status.HTTP_404_NOT_FOUND,
+-        )
+-
+-    new_case_no = payload.get("case_no")
+-    if new_case_no and new_case_no != case.case_no:
+-        exists = db.query(Case).filter(Case.case_no == new_case_no, Case.id != case_id).first()
+-        if exists:
+-            raise_business_error(
+-                "CASE_NO_DUPLICATE",
+-                "case_no already exists",
+-                status_code=status.HTTP_400_BAD_REQUEST,
+-            )
+-        case.case_no = new_case_no
+-
+-    case.case_type = payload.get("case_type", case.case_type)
+-    case.patent_category = payload.get("patent_category", case.patent_category)
+-    case.flow_dir = payload.get("flow_dir", case.flow_dir)
+-    case.client_id = payload.get("client_id", case.client_id)
+-
+-    # A3 — new scalar fields (only update if key present)
+-    if "title_cn" in payload:
+-        case.title_cn = payload["title_cn"]
+-    if "title_en" in payload:
+-        case.title_en = payload["title_en"]
+-    if "app_no" in payload:
+-        case.app_no = payload["app_no"]
+-    if "status" in payload:
+-        case.status = payload["status"]
+-    if "pub_date" in payload:
+-        v = payload["pub_date"]
+-        case.pub_date = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "pub_no" in payload:
+-        case.pub_no = payload["pub_no"]
+-    if "grant_date" in payload:
+-        v = payload["grant_date"]
+-        case.grant_date = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "grant_no" in payload:
+-        case.grant_no = payload["grant_no"]
+-    if "patent_no" in payload:
+-        case.patent_no = payload["patent_no"]
+-    if "valid_until" in payload:
+-        v = payload["valid_until"]
+-        case.valid_until = date.fromisoformat(v) if isinstance(v, str) else v
+-    if "spec_pages" in payload:
+-        case.spec_pages = payload["spec_pages"]
+-    if "claim_count" in payload:
+-        case.claim_count = payload["claim_count"]
+-    if "has_exam_request" in payload:
+-        case.has_exam_request = payload["has_exam_request"]
+-    if "primary_agent_id" in payload:
+-        case.primary_agent_id = payload["primary_agent_id"]
+-    if "second_agent_id" in payload:
+-        case.second_agent_id = payload["second_agent_id"]
+-    if "draftor_id" in payload:
+-        case.draftor_id = payload["draftor_id"]
+-    if "is_fee_monitor" in payload:
+-        case.is_fee_monitor = payload["is_fee_monitor"]
+-    if "fee_reduction" in payload:
+-        case.fee_reduction = payload["fee_reduction"]
+-    if "applicant_kind" in payload:
+-        case.applicant_kind = payload["applicant_kind"]
+-
+-    db.commit()
+-    db.refresh(case)
++    case = update_case_full_service(db, case_id, payload, current_user.id)
+ 
+     return {
+         "id": case.id,
+@@ -607,6 +542,7 @@ def update_case(
+         "title_en": case.title_en,
+         "app_no": case.app_no,
+         "status": case.status,
++        "filing_date": str(case.filing_date) if case.filing_date else None,
+         "pub_date": str(case.pub_date) if case.pub_date else None,
+         "pub_no": case.pub_no,
+         "grant_date": str(case.grant_date) if case.grant_date else None,
+diff --git a/backend/app/modules/cases/schemas.py b/backend/app/modules/cases/schemas.py
+index 2a02f55..098e8e8 100644
+--- a/backend/app/modules/cases/schemas.py
++++ b/backend/app/modules/cases/schemas.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ from datetime import date
+ 
+-from pydantic import BaseModel, Field
++from pydantic import AliasChoices, BaseModel, Field, field_validator
+ 
+ from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
+ 
+@@ -68,10 +68,11 @@ class CaseCreateIn(CaseCreate):
+ 
+ 
+ class CaseUpdateFull(BaseModel):
+-    title_cn: str | None = None
++    title_cn: str | None = Field(default=None, validation_alias=AliasChoices("title_cn", "title"))
+     title_en: str | None = None
+     app_no: str | None = Field(None, max_length=64)
+     status: CaseStatus | None = None
++    filing_date: date | None = None
+     # A3 — Publication / Grant
+     pub_date: date | None = None
+     pub_no: str | None = Field(None, max_length=64)
+@@ -96,6 +97,13 @@ class CaseUpdateFull(BaseModel):
+     inventors: list[CaseInventorIn] | None = None
+     priorities: list[PriorityIn] | None = None
+ 
++    @field_validator("filing_date", "pub_date", "grant_date", "valid_until", mode="before")
++    @classmethod
++    def _blank_dates_to_none(cls, value):
++        if isinstance(value, str) and not value.strip():
++            return None
++        return value
++
+ 
+ class CaseUpdateLimited(BaseModel):
+     """Limited fields editable by Agent role."""
+diff --git a/backend/app/modules/cases/service.py b/backend/app/modules/cases/service.py
+index 1844931..f094c4f 100644
+--- a/backend/app/modules/cases/service.py
++++ b/backend/app/modules/cases/service.py
+@@ -296,47 +296,51 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
+     if not case:
+         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+ 
+-    if data.title_cn is not None:
++    provided_fields = data.model_fields_set
++
++    if "title_cn" in provided_fields:
+         case.title_cn = data.title_cn
+-    if data.title_en is not None:
++    if "title_en" in provided_fields:
+         case.title_en = data.title_en
+-    if data.app_no is not None:
++    if "app_no" in provided_fields:
+         case.app_no = data.app_no
++    if "filing_date" in provided_fields:
++        case.filing_date = data.filing_date
+     if data.status is not None:
+         case.status = data.status
+     # A3 — Publication / Grant
+-    if data.pub_date is not None:
++    if "pub_date" in provided_fields:
+         case.pub_date = data.pub_date
+-    if data.pub_no is not None:
++    if "pub_no" in provided_fields:
+         case.pub_no = data.pub_no
+-    if data.grant_date is not None:
++    if "grant_date" in provided_fields:
+         case.grant_date = data.grant_date
+-    if data.grant_no is not None:
++    if "grant_no" in provided_fields:
+         case.grant_no = data.grant_no
+-    if data.patent_no is not None:
++    if "patent_no" in provided_fields:
+         case.patent_no = data.patent_no
+-    if data.valid_until is not None:
++    if "valid_until" in provided_fields:
+         case.valid_until = data.valid_until
+     # A3 — Spec details
+-    if data.spec_pages is not None:
++    if "spec_pages" in provided_fields:
+         case.spec_pages = data.spec_pages
+-    if data.claim_count is not None:
++    if "claim_count" in provided_fields:
+         case.claim_count = data.claim_count
+-    if data.has_exam_request is not None:
++    if "has_exam_request" in provided_fields:
+         case.has_exam_request = data.has_exam_request
+     # A3 — Agent assignment
+-    if data.primary_agent_id is not None:
++    if "primary_agent_id" in provided_fields:
+         case.primary_agent_id = data.primary_agent_id
+-    if data.second_agent_id is not None:
++    if "second_agent_id" in provided_fields:
+         case.second_agent_id = data.second_agent_id
+-    if data.draftor_id is not None:
++    if "draftor_id" in provided_fields:
+         case.draftor_id = data.draftor_id
+     # A3 — Control flags
+-    if data.is_fee_monitor is not None:
++    if "is_fee_monitor" in provided_fields:
+         case.is_fee_monitor = data.is_fee_monitor
+-    if data.fee_reduction is not None:
++    if "fee_reduction" in provided_fields:
+         case.fee_reduction = data.fee_reduction
+-    if data.applicant_kind is not None:
++    if "applicant_kind" in provided_fields:
+         case.applicant_kind = data.applicant_kind
+ 
+     case.updated_by = user_id
+diff --git a/frontend/src/api/cases.ts b/frontend/src/api/cases.ts
+index 6752b65..60dd56c 100644
+--- a/frontend/src/api/cases.ts
++++ b/frontend/src/api/cases.ts
+@@ -91,6 +91,48 @@ function mapCase(input: BackendCase): Case {
+     }
+ }
+ 
++function trimToUndefined(value: string | null | undefined): string | undefined {
++    if (typeof value !== 'string') return value ?? undefined
++    const normalized = value.trim()
++    return normalized ? normalized : undefined
++}
++
++function trimToNull(value: string | null | undefined): string | null | undefined {
++    if (value === undefined) return undefined
++    if (value === null) return null
++    const normalized = value.trim()
++    return normalized ? normalized : null
++}
++
++function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
++    const payload: Record<string, unknown> = {}
++
++    if (data.title !== undefined) payload.title = trimToNull(data.title)
++    if (data.status !== undefined) payload.status = trimToNull(data.status)
++    if (data.filing_date !== undefined) payload.filing_date = trimToNull(data.filing_date)
++    if (data.pub_date !== undefined) payload.pub_date = trimToNull(data.pub_date)
++    if (data.pub_no !== undefined) payload.pub_no = trimToNull(data.pub_no)
++    if (data.grant_date !== undefined) payload.grant_date = trimToNull(data.grant_date)
++    if (data.grant_no !== undefined) payload.grant_no = trimToNull(data.grant_no)
++    if (data.patent_no !== undefined) payload.patent_no = trimToNull(data.patent_no)
++    if (data.valid_until !== undefined) payload.valid_until = trimToNull(data.valid_until)
++    if (data.spec_pages !== undefined) payload.spec_pages = data.spec_pages
++    if (data.claim_count !== undefined) payload.claim_count = data.claim_count
++    if (data.has_exam_request !== undefined) payload.has_exam_request = data.has_exam_request
++    if (data.primary_agent_id !== undefined) {
++        payload.primary_agent_id = trimToNull(data.primary_agent_id)
++    }
++    if (data.second_agent_id !== undefined) {
++        payload.second_agent_id = trimToNull(data.second_agent_id)
++    }
++    if (data.draftor_id !== undefined) payload.draftor_id = trimToNull(data.draftor_id)
++    if (data.is_fee_monitor !== undefined) payload.is_fee_monitor = data.is_fee_monitor
++    if (data.fee_reduction !== undefined) payload.fee_reduction = trimToNull(data.fee_reduction)
++    if (data.applicant_kind !== undefined) payload.applicant_kind = trimToNull(data.applicant_kind)
++
++    return payload
++}
++
+ /**
+  * Get paginated list of cases
+  */
+@@ -129,24 +171,24 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
+     const payload: Record<string, unknown> = {
+         case_no: data.case_no,
+         client_id: data.client_id,
+-        title_cn: data.title || undefined,
++        title_cn: trimToUndefined(data.title),
+         patent_category: data.patent_category || undefined,
+         // A3 fields
+-        pub_date: data.pub_date || undefined,
+-        pub_no: data.pub_no || undefined,
+-        grant_date: data.grant_date || undefined,
+-        grant_no: data.grant_no || undefined,
+-        patent_no: data.patent_no || undefined,
+-        valid_until: data.valid_until || undefined,
++        pub_date: trimToUndefined(data.pub_date),
++        pub_no: trimToUndefined(data.pub_no),
++        grant_date: trimToUndefined(data.grant_date),
++        grant_no: trimToUndefined(data.grant_no),
++        patent_no: trimToUndefined(data.patent_no),
++        valid_until: trimToUndefined(data.valid_until),
+         spec_pages: data.spec_pages ?? undefined,
+         claim_count: data.claim_count ?? undefined,
+         has_exam_request: data.has_exam_request ?? undefined,
+-        primary_agent_id: data.primary_agent_id || undefined,
+-        second_agent_id: data.second_agent_id || undefined,
+-        draftor_id: data.draftor_id || undefined,
++        primary_agent_id: trimToUndefined(data.primary_agent_id),
++        second_agent_id: trimToUndefined(data.second_agent_id),
++        draftor_id: trimToUndefined(data.draftor_id),
+         is_fee_monitor: data.is_fee_monitor ?? undefined,
+-        fee_reduction: data.fee_reduction || undefined,
+-        applicant_kind: data.applicant_kind || undefined,
++        fee_reduction: trimToUndefined(data.fee_reduction),
++        applicant_kind: trimToUndefined(data.applicant_kind),
+     }
+     const response = await http.post<BackendCase>('/cases', payload)
+     return mapCase(response.data)
+@@ -156,7 +198,7 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
+  * Update an existing case
+  */
+ export async function updateCase(id: string | number, data: CaseUpdatePayload): Promise<Case> {
+-    const response = await http.put<BackendCase>(`/cases/${id}`, data)
++    const response = await http.put<BackendCase>(`/cases/${id}`, toUpdatePayload(data))
+     return mapCase(response.data)
+ }
+ 
+diff --git a/frontend/src/api/cases.types.ts b/frontend/src/api/cases.types.ts
+index 78bd13b..f12f218 100644
+--- a/frontend/src/api/cases.types.ts
++++ b/frontend/src/api/cases.types.ts
+@@ -86,8 +86,6 @@ export interface CaseUpdatePayload {
+     title?: string
+     status?: string
+     filing_date?: string
+-    app_date?: string
+-    notes?: string
+     // A3 fields (all optional on update, | null for explicit clearing)
+     pub_date?: string | null
+     pub_no?: string | null
+diff --git a/frontend/src/modules/cases/pages/CaseEdit.vue b/frontend/src/modules/cases/pages/CaseEdit.vue
+index 78b3bbe..0152d9f 100644
+--- a/frontend/src/modules/cases/pages/CaseEdit.vue
++++ b/frontend/src/modules/cases/pages/CaseEdit.vue
+@@ -45,6 +45,7 @@
+           <el-form-item label="法律状态" prop="status" :error="fieldErrors.get('status')?.join(', ')">
+             <el-select v-model="form.status" placeholder="请选择法律状态" clearable>
+               <el-option label="未递交" value="NOT_FILED" />
++              <el-option label="审查中" value="PENDING" />
+               <el-option label="等待受理" value="WAITING_RECEIPT" />
+               <el-option label="初审" value="PRELIM_EXAM" />
+               <el-option label="补正中" value="AMENDMENT" />
+@@ -56,9 +57,11 @@
+               <el-option label="复审中" value="REEXAM" />
+               <el-option label="已授权" value="GRANTED" />
+               <el-option label="驳回" value="REJECTED" />
++              <el-option label="已撤回" value="WITHDRAWN" />
++              <el-option label="视为放弃" value="ABANDONED" />
++              <el-option label="已失效" value="EXPIRED" />
+               <el-option label="中止/终止" value="TERMINATED" />
+               <el-option label="全部无效" value="INVALIDATED" />
+-              <el-option label="部分无效" value="INVALIDATED_PARTIAL" />
+             </el-select>
+           </el-form-item>
+         </div>
+@@ -79,34 +82,9 @@
+                 />
+               </el-form-item>
+             </el-col>
+-            <el-col :span="12">
+-              <el-form-item label="优先权日" prop="app_date" :error="fieldErrors.get('app_date')?.join(', ')">
+-                <el-date-picker
+-                  v-model="form.app_date"
+-                  type="date"
+-                  placeholder="请选择优先权日"
+-                  format="YYYY-MM-DD"
+-                  value-format="YYYY-MM-DD"
+-                  style="width: 100%"
+-                />
+-              </el-form-item>
+-            </el-col>
+           </el-row>
+         </div>
+ 
+-        <div class="form-section">
+-          <h3 class="form-section-title">备注</h3>
+-
+-          <el-form-item prop="notes" :error="fieldErrors.get('notes')?.join(', ')">
+-            <el-input
+-              v-model="form.notes"
+-              type="textarea"
+-              :rows="4"
+-              placeholder="请输入案件备注"
+-            />
+-          </el-form-item>
+-        </div>
+-
+         <el-collapse v-model="expandedSections" class="case-extra-sections">
+           <el-collapse-item title="公告与授权" name="pub_grant">
+             <el-row :gutter="20">
+@@ -252,8 +230,6 @@ const form = reactive<CaseUpdatePayload>({
+   title: '',
+   status: '',
+   filing_date: '',
+-  app_date: '',
+-  notes: '',
+ })
+ 
+ const rules: FormRules = {
+@@ -277,8 +253,6 @@ async function fetchCase() {
+     form.title = caseData.value.title || ''
+     form.status = caseData.value.status || ''
+     form.filing_date = caseData.value.filing_date || ''
+-    form.app_date = caseData.value.app_date || ''
+-    form.notes = caseData.value.notes || ''
+     // A3 fields
+     form.pub_date = caseData.value.pub_date || ''
+     form.pub_no = caseData.value.pub_no || ''

@@ -1,0 +1,345 @@
+diff --git a/backend/app/main.py b/backend/app/main.py
+index bbf8a38..77ba389 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
+             error={
+                 "code": "VALIDATION_ERROR",
+                 "message": "Invalid request",
+-                "details": exc.errors(),
++                "details": {"errors": exc.errors()},
+             }
+         )
+         return JSONResponse(
+diff --git a/backend/app/modules/auth/models.py b/backend/app/modules/auth/models.py
+index adfb8dc..7222df0 100644
+--- a/backend/app/modules/auth/models.py
++++ b/backend/app/modules/auth/models.py
+@@ -1,8 +1,9 @@
+ from __future__ import annotations
+ 
+ from datetime import datetime
++from uuid import uuid4
+ 
+-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, text
++from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func, text
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ 
+ from app.db.base import Base
+@@ -49,6 +50,31 @@ class T_Role(Base):
+     )
+ 
+ 
++class T_RolePerm(Base):
++    """Maps permissions to roles."""
++
++    __tablename__ = "t_role_perm"
++
++    id: Mapped[str] = mapped_column(
++        String(36),
++        primary_key=True,
++        default=lambda: str(uuid4()),
++    )
++    role_id: Mapped[str] = mapped_column(
++        String(36),
++        ForeignKey("t_role.id", ondelete="CASCADE"),
++        index=True,
++    )
++    perm_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=False),
++        nullable=False,
++        server_default=text("CURRENT_TIMESTAMP"),
++    )
++
++    __table_args__ = (UniqueConstraint("role_id", "perm_code", name="uq_role_perm"),)
++
++
+ class T_UserRole(Base):
+     __tablename__ = "t_user_role"
+ 
+diff --git a/backend/app/modules/rbac/models.py b/backend/app/modules/rbac/models.py
+index 2c3608a..dba7d26 100644
+--- a/backend/app/modules/rbac/models.py
++++ b/backend/app/modules/rbac/models.py
+@@ -1 +1,5 @@
+-# TODO: Implement models for this module
++from __future__ import annotations
++
++from app.modules.auth.models import T_RolePerm
++
++__all__ = ["T_RolePerm"]
+diff --git a/backend/app/modules/rbac/service.py b/backend/app/modules/rbac/service.py
+index cee10e4..a48c2d0 100644
+--- a/backend/app/modules/rbac/service.py
++++ b/backend/app/modules/rbac/service.py
+@@ -1 +1,147 @@
+-# TODO: Implement service layer for this module
++from __future__ import annotations
++
++from uuid import uuid4
++
++from sqlalchemy.orm import Session
++
++from app.modules.auth.models import T_Role, T_UserRole
++from app.modules.rbac.models import T_RolePerm
++
++# Permission definitions from docs/02_permissions_rbac.md
++ROLE_PERMISSIONS = {
++    "Admin": [
++        "Auth.Login",
++        "User.Manage",
++        "Role.Manage",
++        "Case.Read",
++        "Case.Create",
++        "Case.Edit",
++        "Case.EditLimited",
++        "Case.Export",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Edit",
++        "Doc.Attach",
++        "Doc.TemplateRender",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Fee.Draft.Create",
++        "Fee.Draft.Edit",
++        "Fee.Rate.Manage",
++        "Bill.Read",
++        "Bill.CreateFromDraft",
++        "Bill.CreateManual",
++        "Bill.Print",
++        "Payment.Create",
++        "Payment.Offset",
++        "Client.Manage",
++        "Template.Manage",
++        "SystemParam.Manage",
++    ],
++    "Formalities": [
++        "Auth.Login",
++        "Case.Read",
++        "Case.Create",
++        "Case.Edit",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Edit",
++        "Doc.Attach",
++        "Doc.TemplateRender",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Fee.Draft.Create",
++        "Fee.Draft.Edit",
++        "Fee.Rate.Manage",
++        "Bill.Read",
++        "Client.Manage",
++    ],
++    "Agent": [
++        "Auth.Login",
++        "Case.Read",
++        "Case.EditLimited",
++        "Doc.Read",
++        "Doc.Create",
++        "Doc.Attach",
++        "Task.Read",
++        "Task.Create",
++        "Task.Edit",
++        "Task.Close",
++        "Task.Reopen",
++        "Task.Assign",
++        "Fee.Read",
++        "Bill.Read",
++        "Client.Manage",
++    ],
++    "Finance": [
++        "Auth.Login",
++        "Case.Read",
++        "Doc.Read",
++        "Task.Read",
++        "Fee.Read",
++        "Bill.Read",
++        "Bill.CreateFromDraft",
++        "Bill.CreateManual",
++        "Bill.Print",
++        "Payment.Create",
++        "Payment.Offset",
++        "Client.Manage",
++    ],
++}
++
++
++def get_user_permissions(db: Session, user_id: str) -> set[str]:
++    """
++    Get all permission codes for a user.
++
++    Returns:
++        Set of permission code strings (e.g., {"Case.Read", "Bill.Create"})
++    """
++    user_roles = db.query(T_UserRole).filter(T_UserRole.user_id == user_id).all()
++
++    if not user_roles:
++        return set()
++
++    role_ids = [ur.role_id for ur in user_roles]
++
++    role_perms = db.query(T_RolePerm).filter(T_RolePerm.role_id.in_(role_ids)).all()
++
++    return {rp.perm_code for rp in role_perms}
++
++
++def seed_default_roles_perms(db: Session) -> None:
++    """Seed default roles and their permissions. Idempotent."""
++    for role_code, perm_codes in ROLE_PERMISSIONS.items():
++        role = db.query(T_Role).filter(T_Role.code == role_code).first()
++        if not role:
++            role = T_Role(
++                id=str(uuid4()),
++                code=role_code,
++                name=role_code,
++            )
++            db.add(role)
++            db.flush()
++
++        existing = db.query(T_RolePerm).filter(T_RolePerm.role_id == role.id).all()
++        existing_codes = {ep.perm_code for ep in existing}
++
++        for perm_code in perm_codes:
++            if perm_code not in existing_codes:
++                rp = T_RolePerm(
++                    id=str(uuid4()),
++                    role_id=role.id,
++                    perm_code=perm_code,
++                )
++                db.add(rp)
++
++    db.commit()
+diff --git a/tasks/backend/mvp1enhance/ENH-01-02.md b/tasks/backend/mvp1enhance/ENH-01-02.md
+index 632527f..287bca0 100644
+--- a/tasks/backend/mvp1enhance/ENH-01-02.md
++++ b/tasks/backend/mvp1enhance/ENH-01-02.md
+@@ -1,92 +1,46 @@
+-# ENH-01-02 — Create Alembic migration for T_RolePerm
++# ENH-01-02 — Add `created_at` column to `t_role_perm`
+ 
+ ## Design references
+-- `docs/02_permissions_rbac.md`
+-- `docs/03_database_mvp1_subset.md`
++- `docs/04_backend_architecture.md`
++- `tasks/backend_tasks_atomic.md` (BE-00-05)
++- `mvp1_backend_review_report.md` (Section 1.1)
+ 
+ ## Target
+-- **File:** `backend/alembic/versions/XXXXXX_add_t_role_perm.py` (NEW)
+-- **Atomic rule:** create ONLY this migration file; add ONLY T_RolePerm table.
+-
+-## Prerequisites
+-- ENH-01-01 complete (T_RolePerm model exists)
++- **File:** `backend/alembic/versions/ea0de36a1dde_add_t_role_perm.py`
++- **Atomic rule:** Modify ONLY this migration file to add the `created_at` column to `t_role_perm`.
+ 
+ ## Scope decision (MVP1 – FIXED)
+-- Create Alembic migration for T_RolePerm table ONLY.
+-- This task does NOT modify existing tables.
+-- No data seeding in migration.
++- Add `created_at` column to `t_role_perm` table in migration.
++- Ensure the `created_at` column uses the `CURRENT_TIMESTAMP` default for SQLite compatibility.
++- The migration must be applied without modifying any other tables or models.
+ 
+ ## Components to implement (EXACT)
+-Create migration with `alembic revision -m "add_t_role_perm"`:
+-
+-```python
+-def upgrade() -> None:
+-    op.create_table(
+-        't_role_perm',
+-        sa.Column('id', sa.String(36), primary_key=True),
+-        sa.Column('role_id', sa.String(36), nullable=False, index=True),
+-        sa.Column('perm_code', sa.String(128), nullable=False, index=True),
+-        sa.ForeignKeyConstraint(['role_id'], ['t_role.id'], ondelete='CASCADE'),
+-        sa.UniqueConstraint('role_id', 'perm_code', name='uq_role_perm')
+-    )
+-
+-def downgrade() -> None:
+-    op.drop_table('t_role_perm')
+-```
++1. Modify migration file `ea0de36a1dde_add_t_role_perm.py` to include:
++   - `created_at` column (SQLite-safe with default `CURRENT_TIMESTAMP`).
++   - `nullable=False`, `server_default=sa.text("CURRENT_TIMESTAMP")`.
+ 
+ ## Non-scope (explicitly excluded)
+-- Seeding permissions (separate task)
+-- Modifying other tables
+-- Adding indexes to other tables
+-
+-## Prompt
+-Create Alembic migration for T_RolePerm table with:
+-- UUID primary key  
+-- Foreign key to t_role with CASCADE delete
+-- Unique constraint on (role_id, perm_code)
+-- Indexes on role_id and perm_code
+-
+-SQLite compatible:
+-- Use String(36) for UUIDs
+-- Use server_default=text("CURRENT_TIMESTAMP") if needed
+-
+-Do NOT:
+-- Add data seeding
+-- Modify existing tables
+-- Ask clarification questions
+-## Non-Goals
+-- Do NOT introduce new frameworks/libraries unless explicitly required by this task.
+-- Do NOT refactor unrelated modules or perform repository-wide formatting.
+-- Do NOT change data models / database schema / migrations unless this task explicitly says so.
+-- Do NOT modify authentication/authorization model beyond the scope explicitly described in this task (if applicable).
+-
++- Do NOT modify `models.py` or add any migrations to other tables.
++- No refactor in any other modules.
+ 
+ ## Acceptance checklist
+-- [ ] Migration file created in alembic/versions/
+-- [ ] Creates t_role_perm table correctly
+-- [ ] Has upgrade() and downgrade()
+-- [ ] SQLite compatible
+-- [ ] Migration runs without errors
++- [ ] `created_at` column added to `t_role_perm`
++- [ ] Migration applied successfully (run `alembic upgrade head`)
++- [ ] Schema verified via `sqlite3 fpms_dev.db ".schema t_role_perm"`
++- [ ] No other migrations or models were modified
+ 
+ ## Evidence
+-Provide objective proof of completion (attach/quote in PR or task result):
+-
+-- Commands executed (lint/test/e2e if applicable) and their outputs (or links to logs).
+-- Example requests demonstrating the behavior (e.g., curl) and expected responses.
+-- Test coverage: new/updated test file paths and passing results.
+-- Code change evidence: `git diff` for files within this task’s scope.
+-
++Provide:
++- Migration outputs showing the column was added.
++- `git diff` showing only the migration file changes.
++- Verification of the new column in the schema using SQLite.
+ 
+ ## Validation commands
+ ```bash
+ cd backend
++# Run migration
+ alembic upgrade head
+-# Should succeed
+ 
+-# Check table created
++# Verify schema
+ sqlite3 fpms_dev.db ".schema t_role_perm"
+-
+-# Test rollback
+-alembic downgrade -1
+-alembic upgrade head
+ ```

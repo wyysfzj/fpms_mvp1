@@ -1,0 +1,113 @@
+diff --git a/tmp/pe-be-cs-05/consulting.api.py.before b/backend/app/modules/consulting/api.py
+index b239684..2e806a2 100644
+--- a/tmp/pe-be-cs-05/consulting.api.py.before
++++ b/backend/app/modules/consulting/api.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from datetime import date, datetime
++from decimal import Decimal
+ from typing import Any
+ 
+ from fastapi import APIRouter, Depends, status
+@@ -9,7 +10,10 @@ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import require_perm
+ from app.db.session import get_db
+-from app.modules.consulting.service import create_consulting_case
++from app.modules.consulting.service import (
++    create_consulting_case,
++    generate_consulting_fee_draft,
++)
+ 
+ router = APIRouter()
+ 
+@@ -35,6 +39,61 @@ class ConsultingCaseOut(BaseModel):
+     created_at: datetime
+ 
+ 
++class ConsultingFeeDraftHourlyLineIn(BaseModel):
++    fee_code: str
++    fee_name: str
++    hours: Decimal
++    hourly_rate: Decimal
++    remark: str | None = None
++    trace_key: str | None = None
++
++
++class ConsultingFeeDraftMiscLineIn(BaseModel):
++    fee_code: str
++    fee_name: str
++    amount: Decimal
++    remark: str | None = None
++    trace_key: str | None = None
++
++
++class ConsultingFeeDraftCreateIn(BaseModel):
++    case_id: str
++    mode: str
++    currency: str | None = None
++    fixed_fee: Decimal | None = None
++    hourly_lines: list[ConsultingFeeDraftHourlyLineIn] | None = None
++    misc_lines: list[ConsultingFeeDraftMiscLineIn] | None = None
++
++
++class ConsultingFeeDraftTotalsOut(BaseModel):
++    total_gov: Decimal
++    total_service: Decimal
++    total_misc: Decimal
++    amount: Decimal
++
++
++class ConsultingFeeDraftLineOut(BaseModel):
++    item_id: str
++    fee_code: str | None
++    fee_name: str | None
++    fee_type: str
++    quantity: Decimal | None
++    unit_price: Decimal | None
++    amount: Decimal
++    trace_key: str
++    remark: str | None
++
++
++class ConsultingFeeDraftOut(BaseModel):
++    draft_id: str
++    draft_type: str
++    mode: str
++    currency: str
++    totals: ConsultingFeeDraftTotalsOut
++    items: list[ConsultingFeeDraftLineOut]
++    created_line_count: int
++
++
+ @router.post(
+     "/consulting/cases",
+     status_code=status.HTTP_201_CREATED,
+@@ -66,3 +125,25 @@ def post_consulting_case(
+         "recv_date": case.recv_date,
+         "created_at": case.created_at,
+     }
++
++
++@router.post(
++    "/consulting/fee-drafts",
++    status_code=status.HTTP_201_CREATED,
++    response_model=ConsultingFeeDraftOut,
++    summary="Generate consulting/search fee draft",
++)
++def post_consulting_fee_drafts(
++    payload: ConsultingFeeDraftCreateIn,
++    _perm: None = Depends(require_perm("ConsultingFeeDraft.Create")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    return generate_consulting_fee_draft(
++        db,
++        case_id=payload.case_id,
++        mode=payload.mode,
++        currency=payload.currency,
++        fixed_fee=payload.fixed_fee,
++        hourly_lines=[line.model_dump(exclude_none=True) for line in (payload.hourly_lines or [])],
++        misc_lines=[line.model_dump(exclude_none=True) for line in (payload.misc_lines or [])],
++    )
+

@@ -1,0 +1,6 @@
+{"step":"lint","cmd":"cd frontend && npm run lint","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}
+{"ts":"20260318T001702","step":"proof_head_absent_case_receipt","rc":0,"log":"artifacts/PE-FE-FE-04/outputs/20260318T001702_proof_head_absent_case_receipt.log"}
+{"ts":"20260318T001702","step":"proof_head_absent_billing_types","rc":0,"log":"artifacts/PE-FE-FE-04/outputs/20260318T001702_proof_head_absent_billing_types.log"}
+{"ts":"20260318T001705","step":"lint","rc":0,"log":"artifacts/PE-FE-FE-04/outputs/20260318T001705_lint.log"}
+{"ts":"20260318T001712","step":"test","rc":0,"log":"artifacts/PE-FE-FE-04/outputs/20260318T001712_test.log"}

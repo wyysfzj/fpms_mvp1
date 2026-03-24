@@ -1,0 +1,4 @@
+{"ts":"20260308T120050","step":"lint","cmd":"bash -lc cd\ backend\ \&\&\ ruff\ check\ app/modules/cases/api.py\ app/modules/cases/schemas.py\ app/modules/cases/service.py\ \&\&\ cd\ ../frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260308T120200","step":"test","cmd":"/bin/bash /tmp/demo_qa_case.sh"}
+{"ts":"20260308T120235","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ python3\ /tmp/demo_qa_case_testclient.py"}
+{"ts":"20260308T120319","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ python3\ /tmp/demo_qa_case_testclient.py"}

@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"ruff check backend/app/modules/fees/api.py backend/app/modules/fees/service.py backend/app/modules/fees/schemas.py backend/tests/test_annuity_e2e.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_annuity_e2e.py -k 'calculate_fee_amount_per_claim_with_reduction_and_discount or annuity_generate_drafts_pay_list_gov_payment_chain'","rc":0}

@@ -1,0 +1,53 @@
+diff --git a/backend/app/main.py b/backend/app/main.py
+index bbf8a38..77ba389 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -42,7 +42,7 @@ def create_app() -> FastAPI:
+             error={
+                 "code": "VALIDATION_ERROR",
+                 "message": "Invalid request",
+-                "details": exc.errors(),
++                "details": {"errors": exc.errors()},
+             }
+         )
+         return JSONResponse(
+diff --git a/backend/app/modules/rbac/models.py b/backend/app/modules/rbac/models.py
+index 2c3608a..e22c45c 100644
+--- a/backend/app/modules/rbac/models.py
++++ b/backend/app/modules/rbac/models.py
+@@ -1 +1,34 @@
+-# TODO: Implement models for this module
++from __future__ import annotations
++
++from datetime import datetime
++from uuid import uuid4
++
++from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, text
++from sqlalchemy.orm import Mapped, mapped_column
++
++from app.db.base import Base
++
++
++class T_RolePerm(Base):
++    """Maps permissions to roles."""
++
++    __tablename__ = "t_role_perm"
++
++    id: Mapped[str] = mapped_column(
++        String(36),
++        primary_key=True,
++        default=lambda: str(uuid4()),
++    )
++    role_id: Mapped[str] = mapped_column(
++        String(36),
++        ForeignKey("t_role.id", ondelete="CASCADE"),
++        index=True,
++    )
++    perm_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=False),
++        nullable=False,
++        server_default=text("CURRENT_TIMESTAMP"),
++    )
++
++    __table_args__ = (UniqueConstraint("role_id", "perm_code", name="uq_role_perm"),)

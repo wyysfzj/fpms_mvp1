@@ -1,0 +1,7 @@
+HTTP/1.1 403 Forbidden
+date: Sun, 18 Jan 2026 11:23:26 GMT
+server: uvicorn
+content-length: 100
+content-type: application/json
+
+{"error":{"code":"FORBIDDEN","message":"Permission denied","details":{"required_perm":"Case.Read"}}}

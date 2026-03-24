@@ -1,0 +1,564 @@
+diff --git a/frontend/src/modules/collections/pages/DunningList.vue b/frontend/src/modules/collections/pages/DunningList.vue
+new file mode 100644
+index 0000000..c79ea8d
+--- /dev/null
++++ b/frontend/src/modules/collections/pages/DunningList.vue
+@@ -0,0 +1,294 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">催款批次</h1>
++        <span class="page-count">{{ total }} 条</span>
++      </div>
++      <div class="page-header-right">
++        <router-link to="/collections/dunning/new">
++          <el-button type="primary">创建催款批次</el-button>
++        </router-link>
++      </div>
++    </div>
++
++    <el-row :gutter="16" style="margin-bottom: 16px">
++      <el-col :span="6">
++        <el-select
++          v-model="filterRoundNo"
++          clearable
++          placeholder="选择催款轮次"
++          class="full-width"
++          @change="onFilterChange"
++        >
++          <el-option label="全部轮次" :value="undefined" />
++          <el-option v-for="option in roundOptions" :key="option" :label="`第 ${option} 轮`" :value="option" />
++        </el-select>
++      </el-col>
++      <el-col :span="6">
++        <el-select
++          v-model="filterStatus"
++          clearable
++          placeholder="选择批次状态"
++          class="full-width"
++          @change="onFilterChange"
++        >
++          <el-option label="全部状态" :value="undefined" />
++          <el-option
++            v-for="option in statusOptions"
++            :key="option"
++            :label="getStatusText(option)"
++            :value="option"
++          />
++        </el-select>
++      </el-col>
++      <el-col :span="6">
++        <el-button @click="resetFilters">重置筛选</el-button>
++      </el-col>
++    </el-row>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="10" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无催款批次"
++        message="请调整筛选条件或先创建新的催款批次。"
++        icon="DN"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table
++        :data="dunningItems"
++        stripe
++        size="small"
++        class="compact-table"
++        @row-click="handleRowClick"
++      >
++        <el-table-column label="催款单号" min-width="170">
++          <template #default="{ row }">
++            <span class="mono-text">{{ row.dunning_no || `DN-${row.id}` }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="client_id" label="客户编号" min-width="140" />
++        <el-table-column label="轮次" width="90" align="center">
++          <template #default="{ row }">
++            第 {{ row.round_no }} 轮
++          </template>
++        </el-table-column>
++        <el-table-column label="状态" width="120" align="center">
++          <template #default="{ row }">
++            <el-tag :type="getStatusTagType(row.status)" size="small">
++              {{ getStatusText(row.status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="截止日期" width="130">
++          <template #default="{ row }">
++            {{ formatDate(row.to_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="总金额" width="170" align="right">
++          <template #default="{ row }">
++            <span class="mono-text">{{ formatAmount(row.total_amount, row.currency) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column label="发送日期" width="130">
++          <template #default="{ row }">
++            {{ formatDate(row.sent_date) }}
++          </template>
++        </el-table-column>
++        <el-table-column label="操作" width="120" fixed="right">
++          <template #default="{ row }">
++            <el-button type="primary" link @click.stop="goToDetail(row.id)">查看明细</el-button>
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar v-model:page="page" v-model:page-size="pageSize" :total="total" />
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref, watch } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import { getDunning, mapCollectionsError } from '../../../api/collections'
++import type { CollectionsApiError, DunningBatchListItem } from '../../../api/collections.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++
++type DunningStatus = 'DRAFT' | 'SENT' | 'CANCELLED' | 'CLOSED' | 'UNKNOWN'
++type TagType = '' | 'success' | 'warning' | 'info' | 'danger'
++
++const router = useRouter()
++const route = useRoute()
++
++const dunningItems = ref<DunningBatchListItem[]>([])
++const loading = ref(false)
++const error = ref<CollectionsApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++const filterRoundNo = ref<number | undefined>(undefined)
++const filterStatus = ref<string | undefined>(undefined)
++
++const roundOptions = [1, 2, 3, 4, 5]
++const statusOptions: DunningStatus[] = ['DRAFT', 'SENT', 'CANCELLED', 'CLOSED', 'UNKNOWN']
++
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++function parsePositiveInt(value: unknown, fallback: number): number {
++  if (typeof value !== 'string') return fallback
++  const parsed = Number.parseInt(value, 10)
++  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
++}
++
++function parseRoundNo(value: unknown): number | undefined {
++  if (typeof value !== 'string' || value.trim() === '') return undefined
++  const parsed = Number.parseInt(value, 10)
++  if (!Number.isInteger(parsed) || parsed <= 0) return undefined
++  return parsed
++}
++
++function parseStatus(value: unknown): string | undefined {
++  if (typeof value !== 'string' || value.trim() === '') return undefined
++  return value
++}
++
++function hydrateStateFromQuery() {
++  page.value = parsePositiveInt(route.query.page, 1)
++  pageSize.value = parsePositiveInt(route.query.page_size, 20)
++  filterRoundNo.value = parseRoundNo(route.query.round_no)
++  filterStatus.value = parseStatus(route.query.status)
++}
++
++function buildListQuery(): Record<string, string> {
++  const query: Record<string, string> = {
++    page: String(page.value),
++    page_size: String(pageSize.value),
++  }
++
++  if (filterRoundNo.value !== undefined) {
++    query.round_no = String(filterRoundNo.value)
++  }
++  if (filterStatus.value) {
++    query.status = filterStatus.value
++  }
++
++  return query
++}
++
++async function fetchDunningList() {
++  loading.value = true
++  error.value = null
++
++  try {
++    const result = await getDunning({
++      page: page.value,
++      page_size: pageSize.value,
++      round_no: filterRoundNo.value,
++      status: filterStatus.value,
++    })
++    dunningItems.value = result.items
++    total.value = result.total
++  } catch (err) {
++    error.value = mapCollectionsError(err)
++  } finally {
++    loading.value = false
++  }
++}
++
++function onFilterChange() {
++  page.value = 1
++  fetchDunningList()
++}
++
++function resetFilters() {
++  filterRoundNo.value = undefined
++  filterStatus.value = undefined
++  page.value = 1
++  fetchDunningList()
++}
++
++function goToDetail(id: number) {
++  router.push({
++    path: `/collections/dunning/${id}`,
++    query: buildListQuery(),
++  })
++}
++
++function handleRowClick(row: DunningBatchListItem) {
++  goToDetail(row.id)
++}
++
++function getStatusText(status: string): string {
++  switch (status) {
++    case 'DRAFT':
++      return '草稿'
++    case 'SENT':
++      return '已发送'
++    case 'CANCELLED':
++      return '已取消'
++    case 'CLOSED':
++      return '已关闭'
++    default:
++      return '未知'
++  }
++}
++
++function getStatusTagType(status: string): TagType {
++  switch (status) {
++    case 'DRAFT':
++      return 'warning'
++    case 'SENT':
++      return 'success'
++    case 'CANCELLED':
++      return 'info'
++    case 'CLOSED':
++      return 'danger'
++    default:
++      return ''
++  }
++}
++
++function formatDate(input: string | null): string {
++  if (!input) return '—'
++  const date = new Date(input)
++  if (Number.isNaN(date.getTime())) return input
++  return date.toLocaleDateString('zh-CN')
++}
++
++function formatAmount(amount: number, currency?: string): string {
++  const curr = currency || 'CNY'
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: curr,
++  }).format(amount)
++}
++
++watch([page, pageSize], () => {
++  fetchDunningList()
++})
++
++onMounted(() => {
++  hydrateStateFromQuery()
++  fetchDunningList()
++})
++</script>
++
++<style scoped>
++.full-width {
++  width: 100%;
++}
++
++.mono-text {
++  font-family: var(--font-mono);
++}
++</style>
+diff --git a/frontend/src/modules/collections/pages/DunningDetail.vue b/frontend/src/modules/collections/pages/DunningDetail.vue
+new file mode 100644
+index 0000000..5523a2a
+--- /dev/null
++++ b/frontend/src/modules/collections/pages/DunningDetail.vue
+@@ -0,0 +1,258 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <el-button text @click="goBack">
++          <span class="back-icon">←</span> 返回列表
++        </el-button>
++      </div>
++    </div>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading" :rows="6" />
++
++    <div v-else-if="dunningItem" class="detail-content">
++      <div class="detail-card">
++        <div class="detail-card-header">
++          <h1 class="detail-title">催款批次详情</h1>
++          <el-tag :type="getStatusTagType(dunningItem.status)" size="large">
++            {{ getStatusText(dunningItem.status) }}
++          </el-tag>
++        </div>
++        <p class="detail-subtitle">
++          催款单号：<span class="mono-text">{{ dunningItem.dunning_no || `DN-${dunningItem.id}` }}</span>
++        </p>
++      </div>
++
++      <div class="detail-card">
++        <h2 class="section-title">批次信息</h2>
++        <el-descriptions :column="2" border>
++          <el-descriptions-item label="批次编号">{{ dunningItem.id }}</el-descriptions-item>
++          <el-descriptions-item label="客户编号">{{ dunningItem.client_id }}</el-descriptions-item>
++          <el-descriptions-item label="催款轮次">第 {{ dunningItem.round_no }} 轮</el-descriptions-item>
++          <el-descriptions-item label="批次状态">{{ getStatusText(dunningItem.status) }}</el-descriptions-item>
++          <el-descriptions-item label="截止日期">{{ formatDate(dunningItem.to_date) }}</el-descriptions-item>
++          <el-descriptions-item label="发送日期">{{ formatDate(dunningItem.sent_date) }}</el-descriptions-item>
++          <el-descriptions-item label="批次总金额">
++            <span class="mono-text">{{ formatAmount(dunningItem.total_amount, dunningItem.currency) }}</span>
++          </el-descriptions-item>
++          <el-descriptions-item label="币种">{{ dunningItem.currency || '—' }}</el-descriptions-item>
++          <el-descriptions-item label="备注" :span="2">
++            {{ dunningItem.remark?.trim() || '—' }}
++          </el-descriptions-item>
++          <el-descriptions-item label="创建时间">{{ formatDateTime(dunningItem.created_at) }}</el-descriptions-item>
++          <el-descriptions-item label="更新时间">{{ formatDateTime(dunningItem.updated_at) }}</el-descriptions-item>
++        </el-descriptions>
++      </div>
++    </div>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, ref } from 'vue'
++import { useRoute, useRouter } from 'vue-router'
++import { getDunning, mapCollectionsError } from '../../../api/collections'
++import type { CollectionsApiError, DunningBatchListItem } from '../../../api/collections.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++
++type TagType = '' | 'success' | 'warning' | 'info' | 'danger'
++
++const LOOKUP_PAGE_SIZE = 50
++
++const route = useRoute()
++const router = useRouter()
++
++const loading = ref(false)
++const dunningItem = ref<DunningBatchListItem | null>(null)
++const error = ref<CollectionsApiError | null>(null)
++
++const dunningId = computed(() => {
++  const raw = route.params.id
++  const numericId = Number(raw)
++  if (!Number.isInteger(numericId) || numericId <= 0) return null
++  return numericId
++})
++
++function extractListQuery(): Record<string, string> {
++  const query: Record<string, string> = {}
++  const maybeKeys = ['round_no', 'status', 'page', 'page_size']
++
++  for (const key of maybeKeys) {
++    const value = route.query[key]
++    if (typeof value === 'string' && value.trim() !== '') {
++      query[key] = value
++    }
++  }
++
++  return query
++}
++
++async function findDunningById(id: number): Promise<DunningBatchListItem | null> {
++  let currentPage = 1
++  let fetchedCount = 0
++  let total = 0
++
++  while (currentPage <= 100) {
++    const result = await getDunning({
++      page: currentPage,
++      page_size: LOOKUP_PAGE_SIZE,
++    })
++
++    const found = result.items.find((item) => item.id === id)
++    if (found) return found
++
++    total = result.total
++    fetchedCount += result.items.length
++    if (fetchedCount >= total || result.items.length === 0) break
++
++    currentPage += 1
++  }
++
++  return null
++}
++
++async function fetchDunningItem() {
++  if (dunningId.value === null) {
++    error.value = {
++      status: 404,
++      code: 'DUNNING_NOT_FOUND',
++      message: '催款批次不存在或编号无效。',
++      category: 'not_found',
++    }
++    dunningItem.value = null
++    return
++  }
++
++  loading.value = true
++  error.value = null
++
++  try {
++    const result = await findDunningById(dunningId.value)
++    if (!result) {
++      error.value = {
++        status: 404,
++        code: 'DUNNING_NOT_FOUND',
++        message: '未找到该催款批次，请返回列表确认筛选条件。',
++        category: 'not_found',
++      }
++      dunningItem.value = null
++      return
++    }
++
++    dunningItem.value = result
++  } catch (err) {
++    error.value = mapCollectionsError(err)
++    dunningItem.value = null
++  } finally {
++    loading.value = false
++  }
++}
++
++function goBack() {
++  const query = extractListQuery()
++  router.push({
++    path: '/collections/dunning',
++    query,
++  })
++}
++
++function getStatusText(status: string): string {
++  switch (status) {
++    case 'DRAFT':
++      return '草稿'
++    case 'SENT':
++      return '已发送'
++    case 'CANCELLED':
++      return '已取消'
++    case 'CLOSED':
++      return '已关闭'
++    default:
++      return '未知'
++  }
++}
++
++function getStatusTagType(status: string): TagType {
++  switch (status) {
++    case 'DRAFT':
++      return 'warning'
++    case 'SENT':
++      return 'success'
++    case 'CANCELLED':
++      return 'info'
++    case 'CLOSED':
++      return 'danger'
++    default:
++      return ''
++  }
++}
++
++function formatDate(input: string | null): string {
++  if (!input) return '—'
++  const date = new Date(input)
++  if (Number.isNaN(date.getTime())) return input
++  return date.toLocaleDateString('zh-CN')
++}
++
++function formatDateTime(input: string): string {
++  const date = new Date(input)
++  if (Number.isNaN(date.getTime())) return input
++  return date.toLocaleString('zh-CN')
++}
++
++function formatAmount(amount: number, currency?: string): string {
++  const curr = currency || 'CNY'
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: curr,
++  }).format(amount)
++}
++
++onMounted(() => {
++  fetchDunningItem()
++})
++</script>
++
++<style scoped>
++.detail-content {
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.detail-card {
++  background: var(--bg-elevated);
++  border: 1px solid var(--border-light);
++  border-radius: 12px;
++  padding: 16px;
++}
++
++.detail-card-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
++}
++
++.detail-title {
++  margin: 0;
++  font-size: 24px;
++}
++
++.detail-subtitle {
++  margin: 10px 0 0;
++  color: var(--text-secondary);
++}
++
++.section-title {
++  margin: 0 0 12px;
++  font-size: 18px;
++}
++
++.mono-text {
++  font-family: var(--font-mono);
++}
++</style>

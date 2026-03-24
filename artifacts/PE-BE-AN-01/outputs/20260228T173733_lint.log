@@ -1,0 +1,4 @@
+  File "app/modules/annuity/service.py", line 36
+    ) from exc
+      ^^^^
+SyntaxError: invalid syntax

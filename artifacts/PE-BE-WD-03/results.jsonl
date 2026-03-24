@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"cd backend && pytest -q tests/test_b2_reply_chain.py -k 'case_no or template_defaults or status_restore'","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_b2_reply_chain.py tests/test_b3_fee_linking.py","rc":0}

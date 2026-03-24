@@ -1,0 +1,3 @@
+{"ts":"20260308T154002","step":"lint","rc":0,"log":"artifacts/DEMO-QA-BILL-01/outputs/20260308T154002_lint.log"}
+{"ts":"20260308T154030","step":"test","rc":1,"log":"artifacts/DEMO-QA-BILL-01/outputs/20260308T154030_test.log"}
+{"ts":"20260308T154115","step":"test","rc":0,"log":"artifacts/DEMO-QA-BILL-01/outputs/20260308T154115_test.log"}

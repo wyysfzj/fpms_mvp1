@@ -1,0 +1,398 @@
+diff --git a/frontend/src/api/govPayments.ts b/frontend/src/api/govPayments.ts
+index 0994b5f..07ebae5 100644
+--- a/frontend/src/api/govPayments.ts
++++ b/frontend/src/api/govPayments.ts
+@@ -3,6 +3,15 @@ import { http } from './http'
+ import type {
+     GovPaymentRegisterPayload,
+     GovPaymentRegisterResult,
++    HistoricalPayListCreatePayload,
++    HistoricalPayListCreateResult,
++    ManualGovPaymentCreatePayload,
++    ManualGovPaymentCreateResult,
++    PayListDetailResult,
++    PayListListResult,
++    PayListMarkPaidPayload,
++    PayListMarkPaidResult,
++    PayListQuery,
+     GovPaymentsApiError,
+     GovPaymentsErrorCategory,
+     PayListCreatePayload,
+@@ -65,6 +74,110 @@ interface BackendGovPaymentRegisterResult {
+     }
+ }
+ 
++interface BackendPayListListResult {
++    items: {
++        id: number
++        pay_list_no: string | null
++        client_id: string
++        client_name: string | null
++        currency: string
++        status: string
++        planned_pay_date: string | null
++        paid_date: string | null
++        total_amount: number | string | null
++        remark: string | null
++        created_at: string
++        updated_at: string
++        created_by: string | null
++        updated_by: string | null
++    }[]
++    page: number
++    page_size: number
++    total: number
++}
++
++interface BackendPayListDetailResult {
++    pay_list: {
++        id: number
++        pay_list_no: string | null
++        client_id: string
++        currency: string
++        status: string
++        planned_pay_date: string | null
++        paid_date: string | null
++        total_amount: number | string | null
++        remark: string | null
++        created_at: string
++        updated_at: string
++        created_by: string | null
++        updated_by: string | null
++    }
++    gov_payments: {
++        id: number
++        pay_list_id: number
++        case_id: string
++        fee_item_id: string | null
++        status: string
++        currency: string
++        paid_date: string | null
++        paid_amount: number | string | null
++        official_receipt_no: string | null
++        remark: string | null
++    }[]
++}
++
++interface BackendHistoricalPayListCreateResult {
++    id: number
++    pay_list_no: string | null
++    client_id: string
++    currency: string
++    status: string
++    planned_pay_date: string | null
++    paid_date: string | null
++    total_amount: number | string | null
++    remark: string | null
++}
++
++interface BackendPayListMarkPaidResult {
++    pay_list: {
++        id: number
++        pay_list_no: string | null
++        client_id: string
++        currency: string
++        status: string
++        planned_pay_date?: string | null
++        paid_date: string | null
++        total_amount: number | string | null
++        remark: string | null
++        updated_by: string | null
++    }
++}
++
++interface BackendManualGovPaymentCreateResult {
++    gov_payment: {
++        id: number
++        pay_list_id: number
++        case_id: string
++        fee_item_id: string | null
++        status: string
++        currency: string
++        paid_date: string | null
++        paid_amount: number | string | null
++        official_receipt_no: string | null
++        remark: string | null
++    }
++    pay_list: {
++        id: number
++        pay_list_no: string | null
++        client_id: string
++        currency: string
++        status: string
++        planned_pay_date?: string | null
++        paid_date: string | null
++        total_amount: number | string | null
++    }
++}
++
+ function asNumber(input: number | string | null | undefined): number {
+     if (input === null || input === undefined || input === '') return 0
+     const parsed = Number(input)
+@@ -101,10 +214,16 @@ function mapGovPaymentsErrorMessage(status: number, code: string): string {
+             return '费用项不存在，请检查后重试。'
+         case 'PAY_LIST_NOT_FOUND':
+             return '官费清单不存在，请检查后重试。'
++        case 'CASE_NOT_FOUND':
++            return '案件不存在，请检查后重试。'
++        case 'CASE_REQUIRED':
++            return '案件编号为必填项。'
+         case 'GOV_PAYMENT_INVALID':
+             return '缴费金额不合法，请输入大于 0 的金额。'
+         case 'GOV_PAYMENT_DUPLICATE':
+             return '该费用项已登记官方缴费，不能重复提交。'
++        case 'PAY_LIST_STATE_CONFLICT':
++            return '当前官费清单状态不允许执行此操作。'
+         case 'VALIDATION_ERROR':
+             return '参数校验失败，请检查输入后重试。'
+         default:
+@@ -198,3 +317,92 @@ export async function registerGovPayment(
+         },
+     }
+ }
++
++export async function listPayLists(
++    query: PayListQuery = {},
++): Promise<PayListListResult> {
++    const response = await http.get<BackendPayListListResult>('/pay-lists', {
++        params: query,
++    })
++
++    return {
++        ...response.data,
++        items: response.data.items.map((item) => ({
++            ...item,
++            total_amount: asNumber(item.total_amount),
++        })),
++    }
++}
++
++export async function getPayListDetail(payListId: number): Promise<PayListDetailResult> {
++    const response = await http.get<BackendPayListDetailResult>(`/pay-lists/${payListId}`)
++
++    return {
++        pay_list: {
++            ...response.data.pay_list,
++            total_amount: asNumber(response.data.pay_list.total_amount),
++        },
++        gov_payments: response.data.gov_payments.map((item) => ({
++            ...item,
++            paid_amount: asNumber(item.paid_amount),
++        })),
++    }
++}
++
++export async function createHistoricalPayList(
++    payload: HistoricalPayListCreatePayload,
++): Promise<HistoricalPayListCreateResult> {
++    const response = await http.post<BackendHistoricalPayListCreateResult>('/pay-lists', payload)
++
++    return {
++        ...response.data,
++        total_amount: asNumber(response.data.total_amount),
++    }
++}
++
++export async function exportPayList(payListId: number): Promise<Blob> {
++    const response = await http.post<Blob>(`/pay-lists/${payListId}/export`, undefined, {
++        responseType: 'blob',
++    })
++    return response.data
++}
++
++export async function markPayListPaid(
++    payListId: number,
++    payload: PayListMarkPaidPayload,
++): Promise<PayListMarkPaidResult> {
++    const response = await http.post<BackendPayListMarkPaidResult>(
++        `/pay-lists/${payListId}/mark-paid`,
++        payload,
++    )
++
++    return {
++        pay_list: {
++            ...response.data.pay_list,
++            planned_pay_date: response.data.pay_list.planned_pay_date ?? null,
++            total_amount: asNumber(response.data.pay_list.total_amount),
++        },
++    }
++}
++
++export async function addManualGovPayment(
++    payListId: number,
++    payload: ManualGovPaymentCreatePayload,
++): Promise<ManualGovPaymentCreateResult> {
++    const response = await http.post<BackendManualGovPaymentCreateResult>(
++        `/pay-lists/${payListId}/manual-items`,
++        payload,
++    )
++
++    return {
++        gov_payment: {
++            ...response.data.gov_payment,
++            paid_amount: asNumber(response.data.gov_payment.paid_amount),
++        },
++        pay_list: {
++            ...response.data.pay_list,
++            total_amount: asNumber(response.data.pay_list.total_amount),
++            planned_pay_date: null,
++        },
++    }
++}
+diff --git a/frontend/src/api/govPayments.types.ts b/frontend/src/api/govPayments.types.ts
+index 4e2dd84..6a4d5a3 100644
+--- a/frontend/src/api/govPayments.types.ts
++++ b/frontend/src/api/govPayments.types.ts
+@@ -17,11 +17,17 @@ export interface PayListInfo {
+     id: number
+     pay_list_no: string | null
+     client_id: string
++    client_name?: string | null
+     currency: string
+     status: string
+     planned_pay_date: string | null
+     total_amount: number
+     paid_date?: string | null
++    remark?: string | null
++    created_at?: string
++    updated_at?: string
++    created_by?: string | null
++    updated_by?: string | null
+ }
+ 
+ export interface PayListCreateSuccessItem {
+@@ -59,13 +65,17 @@ export interface GovPaymentInfo {
+     id: number
+     pay_list_id: number
+     case_id: string
+-    fee_item_id: string
++    fee_item_id: string | null
+     status: string
+     currency: string
+     paid_date: string | null
+     paid_amount: number
+     official_receipt_no: string | null
+     remark: string | null
++    created_at?: string
++    updated_at?: string
++    created_by?: string | null
++    updated_by?: string | null
+ }
+ 
+ export interface GovPaymentRegisterResult {
+@@ -73,6 +83,78 @@ export interface GovPaymentRegisterResult {
+     pay_list: PayListInfo
+ }
+ 
++export interface PayListQuery {
++    pay_list_no?: string
++    client_id?: string
++    status?: string
++    currency?: string
++    planned_pay_date_from?: string
++    planned_pay_date_to?: string
++    page?: number
++    page_size?: number
++}
++
++export interface PayListListItem extends PayListInfo {
++    client_name: string | null
++    remark: string | null
++    created_at: string
++    updated_at: string
++    created_by: string | null
++    updated_by: string | null
++}
++
++export interface PayListListResult {
++    items: PayListListItem[]
++    page: number
++    page_size: number
++    total: number
++}
++
++export interface PayListDetailResult {
++    pay_list: PayListInfo & {
++        remark: string | null
++        created_at: string
++        updated_at: string
++        created_by: string | null
++        updated_by: string | null
++    }
++    gov_payments: GovPaymentInfo[]
++}
++
++export interface HistoricalPayListCreatePayload {
++    client_id?: string
++    currency: string
++    planned_pay_date?: string
++    remark?: string
++}
++
++export type HistoricalPayListCreateResult = PayListInfo
++
++export interface PayListMarkPaidPayload {
++    paid_date: string
++}
++
++export interface PayListMarkPaidResult {
++    pay_list: PayListInfo & {
++        remark?: string | null
++        updated_by?: string | null
++    }
++}
++
++export interface ManualGovPaymentCreatePayload {
++    case_id: string
++    fee_item_id?: string
++    paid_date: string
++    paid_amount: number | string
++    official_receipt_no?: string
++    remark?: string
++}
++
++export interface ManualGovPaymentCreateResult {
++    gov_payment: GovPaymentInfo
++    pay_list: PayListInfo
++}
++
+ export type GovPaymentsErrorCategory =
+     | 'unauthenticated'
+     | 'permission_denied'
+diff --git a/frontend/src/constants/menu.ts b/frontend/src/constants/menu.ts
+index 2de033f..7ab3dcc 100644
+--- a/frontend/src/constants/menu.ts
++++ b/frontend/src/constants/menu.ts
+@@ -51,6 +51,7 @@ export const MENU_GROUPS: MenuGroup[] = [
+         label: '财务',
+         children: [
+             { key: 'fees', label: '费用草稿', icon: '💰', route: '/fees/drafts', requiredPerms: [Perms.FEES_READ] },
++            { key: 'fee_management_pay_lists', label: '官费清单', icon: '📑', route: '/fee-management/pay-lists', requiredPerms: [Perms.BILLING_WRITE] },
+             { key: 'bills', label: '账单管理', icon: '🧾', route: '/billing/bills', requiredPerms: [Perms.BILLING_READ] },
+             { key: 'payments', label: '回款与核销', icon: '💳', route: '/billing/payments', requiredPerms: [Perms.BILLING_READ] },
+             { key: 'expenses', label: '支出管理', icon: '📉', route: '/expenses', requiredPerms: [Perms.FEES_WRITE] },
+diff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts
+index a61c89e..296ee44 100644
+--- a/frontend/src/router/index.ts
++++ b/frontend/src/router/index.ts
+@@ -38,8 +38,18 @@ const routes = [
+ 
+       // Annuity
+       { path: 'annuity/tasks', name: 'annuity_tasks', component: () => import('../modules/annuity/pages/AnnuityTaskList.vue') },
+-      { path: 'annuity/pay-lists', name: 'annuity_pay_lists', component: () => import('../modules/annuity/pages/PayList.vue') },
+-      { path: 'annuity/gov-payments/new', name: 'annuity_gov_payment_new', component: () => import('../modules/annuity/pages/GovPaymentCreate.vue') },
++      {
++        path: 'annuity/pay-lists',
++        alias: '/fee-management/pay-lists',
++        name: 'annuity_pay_lists',
++        component: () => import('../modules/annuity/pages/PayList.vue'),
++      },
++      {
++        path: 'annuity/gov-payments/new',
++        alias: '/fee-management/gov-payments/new',
++        name: 'annuity_gov_payment_new',
++        component: () => import('../modules/annuity/pages/GovPaymentCreate.vue'),
++      },
+ 
+       // Fees
+       { path: 'fees/drafts', name: 'fee_drafts', component: () => import('../modules/fees/pages/FeeDraftList.vue') },

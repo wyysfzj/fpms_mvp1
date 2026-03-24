@@ -1,0 +1,6 @@
+{"ts":"20260324T160943","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/modules/annuity/pages/PayListDetail.vue\ src/router/index.ts\ src/api/govPayments.ts\ src/api/govPayments.types.ts"}
+{"ts":"20260324T160943","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260324T161004","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260324T161004","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/modules/annuity/pages/PayListDetail.vue\ src/router/index.ts\ src/api/govPayments.ts\ src/api/govPayments.types.ts"}
+{"ts":"20260324T161310","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/modules/annuity/pages/PayListDetail.vue\ src/router/index.ts\ src/api/govPayments.ts\ src/api/govPayments.types.ts"}
+{"ts":"20260324T161310","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}

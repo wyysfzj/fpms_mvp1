@@ -1,0 +1,133 @@
+ M AGENTS.md
+ M backend/app/modules/annuity/service.py
+ M backend/app/modules/billing/schemas.py
+ M backend/app/modules/cases/api.py
+ M backend/app/modules/cases/enums.py
+ M backend/app/modules/cases/models.py
+ M backend/app/modules/cases/schemas.py
+ M backend/app/modules/cases/service.py
+ M backend/app/modules/collections/api.py
+ M backend/app/modules/documents/api.py
+ M backend/app/modules/documents/service.py
+ M backend/app/modules/fees/api.py
+ M backend/app/modules/fees/schemas.py
+ M backend/app/modules/fees/service.py
+ M backend/app/modules/masterdata/clients/api.py
+ M backend/app/modules/tasks/api.py
+ M backend/app/modules/tasks/schemas.py
+ M backend/app/modules/tasks/service.py
+ M backend/tests/test_annuity_e2e.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_fields.py
+ M backend/tests/test_task_template.py
+ M docs/FPMS_Frontend_Manual_Test_User_Guide.md
+ M frontend/src/api/annuity.ts
+ M frontend/src/api/billing.ts
+ M frontend/src/api/billing.types.ts
+ M frontend/src/api/cases.ts
+ M frontend/src/api/cases.types.ts
+ M frontend/src/api/clients.types.ts
+ M frontend/src/api/collections.ts
+ M frontend/src/api/collections.types.ts
+ M frontend/src/api/documents.ts
+ M frontend/src/api/documents.types.ts
+ M frontend/src/api/fees.ts
+ M frontend/src/api/fees.types.ts
+ M frontend/src/api/tasks.ts
+ M frontend/src/api/tasks.types.ts
+ M frontend/src/constants/displayText.ts
+ M frontend/src/constants/labels.zh.ts
+ M frontend/src/constants/workflow.ts
+ M frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+ M frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+ M frontend/src/modules/billing/pages/BillCreate.vue
+ M frontend/src/modules/billing/pages/BillDetail.vue
+ M frontend/src/modules/cases/components/CaseClaimsTab.vue
+ M frontend/src/modules/cases/components/CaseDocumentsTab.vue
+ M frontend/src/modules/cases/components/CaseReceiptsSummary.vue
+ M frontend/src/modules/cases/pages/CaseCreate.vue
+ M frontend/src/modules/cases/pages/CaseDetail.vue
+ M frontend/src/modules/cases/pages/CaseEdit.vue
+ M frontend/src/modules/clients/pages/ClientDetail.vue
+ M frontend/src/modules/clients/pages/ClientForm.vue
+ M frontend/src/modules/clients/pages/ClientList.vue
+ M frontend/src/modules/collections/pages/DunningDetail.vue
+ M frontend/src/modules/commission/pages/CommissionList.vue
+ M frontend/src/modules/commission/pages/CommissionSettlement.vue
+ M frontend/src/modules/consulting/pages/ConsultingCaseCreate.vue
+ M frontend/src/modules/consulting/pages/ConsultingFeeDraftCreate.vue
+ M frontend/src/modules/dashboard/components/TodoTable.vue
+ M frontend/src/modules/dashboard/pages/Dashboard.vue
+ M frontend/src/modules/documents/pages/DocumentCreate.vue
+ M frontend/src/modules/documents/pages/DocumentDetail.vue
+ M frontend/src/modules/documents/pages/DocumentEdit.vue
+ M frontend/src/modules/documents/pages/DocumentList.vue
+ M frontend/src/modules/fees/components/FeeRateForm.vue
+ M frontend/src/modules/fees/pages/FeeDraftDetail.vue
+ M frontend/src/modules/fees/pages/FeeDraftList.vue
+ M frontend/src/modules/system/pages/DocTemplateList.vue
+ M frontend/src/modules/tasks/pages/TaskDetail.vue
+ M frontend/src/modules/tasks/pages/TaskList.vue
+ M frontend/src/modules/tasks/pages/TodayReminders.vue
+ M frontend/src/router/index.ts
+ M tasks/postenhancement/backend/INDEX.md
+ M tasks/postenhancement/frontend/INDEX.md
+?? backend/alembic/versions/pe_be_db_cm_02_case_ext_fields.py
+?? docs/BATCH_EXECUTION_QA_LEDGER_TEMPLATE_20260318.md
+?? docs/BATCH_EXECUTION_TAKEOVER_RULES_20260318.md
+?? docs/BATCH_EXECUTION_TASK_TEMPLATE_20260318.md
+?? docs/Batch_Execution_Improvement_Plan_20260316.md
+?? docs/FPMS_Batch1_Scope_Adjustment_20260315.md
+?? docs/FPMS_Final_Enhancement_Plan_Native_20260315.md
+?? docs/FPMS_Final_Enhancement_Plan_and_Task_Breakdown_SPEC_2.0_20260228.md
+?? docs/FPMS_Final_Enhancement_execution_summary_20260315.md
+?? docs/MVP2_GAP_Decision_Matrix_and_Phased_Recommendation_20260315.md
+?? docs/demo.md
+?? docs/demo2.md
+?? docs/gap.md
+?? frontend/src/constants/terminology.ts
+?? tasks/afterdemon/
+?? tasks/demo/
+?? tasks/dmmo/
+?? tasks/postenhancement/BATCH1A_CASES_FOLLOWUP_MANIFEST_20260315.md
+?? tasks/postenhancement/BATCH1B_CASES_DEFERRED_MANIFEST_20260315.md
+?? tasks/postenhancement/BATCH1_CASES_MANIFEST_20260315.md
+?? tasks/postenhancement/BATCH2_DOCS_TASKS_MANIFEST_20260315.md
+?? tasks/postenhancement/BATCH2_REMAINING_MANIFEST_20260316.md
+?? tasks/postenhancement/BATCH3_EXECUTION_RUNBOOK_20260316.md
+?? tasks/postenhancement/BATCH3_EXECUTION_RUNBOOK_v2_20260318.md
+?? tasks/postenhancement/BATCH3_FEES_ANNUITY_MANIFEST_20260317.md
+?? tasks/postenhancement/BATCH4_BILLING_COLLECTIONS_MANIFEST_20260318.md
+?? tasks/postenhancement/backend/PE-BE-AN-08.md
+?? tasks/postenhancement/backend/PE-BE-BL-01.md
+?? tasks/postenhancement/backend/PE-BE-BL-02.md
+?? tasks/postenhancement/backend/PE-BE-BL-03.md
+?? tasks/postenhancement/backend/PE-BE-CM-01.md
+?? tasks/postenhancement/backend/PE-BE-CM-02.md
+?? tasks/postenhancement/backend/PE-BE-DB-CM-02.md
+?? tasks/postenhancement/backend/PE-BE-DL-02.md
+?? tasks/postenhancement/backend/PE-BE-DL-03.md
+?? tasks/postenhancement/backend/PE-BE-FE-03.md
+?? tasks/postenhancement/backend/PE-BE-FE-04.md
+?? tasks/postenhancement/backend/PE-BE-WD-02.md
+?? tasks/postenhancement/backend/PE-BE-WD-03.md
+?? tasks/postenhancement/backend/PE-QA-B2-01.md
+?? tasks/postenhancement/backend/PE-QA-B2-02.md
+?? tasks/postenhancement/backend/PE-QA-B3-01.md
+?? tasks/postenhancement/backend/PE-QA-B4-01.md
+?? tasks/postenhancement/backend/PE-QA-CM-01.md
+?? tasks/postenhancement/backend/PE-QA-CM-02.md
+?? tasks/postenhancement/backend/PE-QA-CM-03.md
+?? tasks/postenhancement/frontend/PE-FE-AN-06.md
+?? tasks/postenhancement/frontend/PE-FE-BL-01.md
+?? tasks/postenhancement/frontend/PE-FE-BL-02.md
+?? tasks/postenhancement/frontend/PE-FE-BL-03.md
+?? tasks/postenhancement/frontend/PE-FE-CM-01.md
+?? tasks/postenhancement/frontend/PE-FE-CM-02.md
+?? tasks/postenhancement/frontend/PE-FE-CM-03.md
+?? tasks/postenhancement/frontend/PE-FE-DL-02.md
+?? tasks/postenhancement/frontend/PE-FE-DL-03.md
+?? tasks/postenhancement/frontend/PE-FE-FE-03.md
+?? tasks/postenhancement/frontend/PE-FE-FE-04.md
+?? tasks/postenhancement/frontend/PE-FE-WD-02.md
+?? tasks/postenhancement/frontend/PE-FE-WD-03.md

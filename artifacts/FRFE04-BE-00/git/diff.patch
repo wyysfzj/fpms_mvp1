@@ -1,0 +1,229 @@
+diff --git a/backend/app/modules/annuity/service.py b/backend/app/modules/annuity/service.py
+index 0a04815..f22cbe9 100644
+--- a/backend/app/modules/annuity/service.py
++++ b/backend/app/modules/annuity/service.py
+@@ -658,26 +658,27 @@ def create_pay_list_from_fee_items(
+     baseline_client: str | None = None
+     baseline_currency: str | None = None
+     scoped_items: list[tuple[FeeItem, FeeDraft]] = []
++    candidate_scopes = {(draft.client_id, draft.currency) for _, draft in candidates}
++    scope_conflict = len(candidate_scopes) > 1
+ 
+-    for item, draft in candidates:
+-        if baseline_client is None:
+-            baseline_client = draft.client_id
+-            baseline_currency = draft.currency
+-
+-        if draft.client_id != baseline_client or draft.currency != baseline_currency:
+-            failed.append(
+-                {
+-                    "fee_item_id": item.id,
+-                    "code": "PAY_LIST_SCOPE_INVALID",
+-                    "message": "Selected fee items must belong to the same client and currency",
+-                    "status_code": 400,
+-                }
+-            )
+-            continue
+-
+-        scoped_items.append((item, draft))
++    if scope_conflict:
++        failed.extend(
++            {
++                "fee_item_id": item.id,
++                "code": "PAY_LIST_SCOPE_INVALID",
++                "message": "Selected fee items must belong to the same client and currency",
++                "status_code": 400,
++            }
++            for item, _draft in candidates
++        )
++    else:
++        for item, draft in candidates:
++            if baseline_client is None:
++                baseline_client = draft.client_id
++                baseline_currency = draft.currency
++            scoped_items.append((item, draft))
+ 
+-    if not scoped_items or baseline_client is None or baseline_currency is None:
++    if scope_conflict or not scoped_items or baseline_client is None or baseline_currency is None:
+         return {
+             "summary": {
+                 "requested": len(normalized_ids),
+diff --git a/backend/tests/test_annuity_e2e.py b/backend/tests/test_annuity_e2e.py
+index ceea73b..fd2f28b 100644
+--- a/backend/tests/test_annuity_e2e.py
++++ b/backend/tests/test_annuity_e2e.py
+@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
+ from sqlalchemy import select
+ from sqlalchemy.orm import sessionmaker
+ 
+-from app.modules.annuity.models import AnnuityTask
++from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
+ from app.modules.billing.models import Bill, BillItem, CaseReceipt
+ from app.modules.cases.models import Case
+ from app.modules.fees.models import FeeItem, FeeRate
+@@ -343,6 +343,165 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
+     _assert_error(validation_resp, 422, "VALIDATION_ERROR")
+ 
+ 
++def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persistence(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++    other_client_id, other_client_case_id = _create_client_and_case(client, auth_headers)
++
++    other_case_resp = client.post(
++        "/api/v1/cases",
++        json={
++            "case_no": _uid("ANN-CASE"),
++            "case_type": "NORMAL",
++            "patent_category": "INV",
++            "flow_dir": "CN_DOMESTIC",
++            "client_id": client_id,
++            "title_cn": "Annuity E2E Case USD",
++        },
++        headers=auth_headers,
++    )
++    assert other_case_resp.status_code == 201, other_case_resp.text
++    other_case_id = other_case_resp.json()["id"]
++
++    same_client_cny_task_id = _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=1,
++        due_date=date(2026, 7, 1),
++    )
++    usd_task_id = _insert_annuity_task(
++        session_factory,
++        case_id=other_case_id,
++        client_id=client_id,
++        year_no=1,
++        due_date=date(2026, 7, 2),
++    )
++    other_client_cny_task_id = _insert_annuity_task(
++        session_factory,
++        case_id=other_client_case_id,
++        client_id=other_client_id,
++        year_no=1,
++        due_date=date(2026, 7, 3),
++    )
++    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
++
++    cny_draft_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [same_client_cny_task_id], "pay_next_year": False, "currency": "CNY"},
++    )
++    assert cny_draft_resp.status_code == 200, cny_draft_resp.text
++    usd_draft_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [usd_task_id], "pay_next_year": False, "currency": "USD"},
++    )
++    assert usd_draft_resp.status_code == 200, usd_draft_resp.text
++    other_client_cny_draft_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [other_client_cny_task_id], "pay_next_year": False, "currency": "CNY"},
++    )
++    assert other_client_cny_draft_resp.status_code == 200, other_client_cny_draft_resp.text
++
++    same_client_cny_fee_item_id = _first_fee_item_id_by_type(
++        session_factory,
++        cny_draft_resp.json()["success"][0]["draft_id"],
++        "GOV",
++    )
++    same_client_usd_fee_item_id = _first_fee_item_id_by_type(
++        session_factory,
++        usd_draft_resp.json()["success"][0]["draft_id"],
++        "GOV",
++    )
++    other_client_cny_fee_item_id = _first_fee_item_id_by_type(
++        session_factory,
++        other_client_cny_draft_resp.json()["success"][0]["draft_id"],
++        "GOV",
++    )
++
++    requested_ids = [
++        same_client_cny_fee_item_id,
++        same_client_usd_fee_item_id,
++        other_client_cny_fee_item_id,
++    ]
++
++    pay_list_resp = client.post(
++        "/api/v1/pay-lists/from-fee-items",
++        headers=auth_headers,
++        json={"fee_item_ids": requested_ids},
++    )
++    assert pay_list_resp.status_code == 200, pay_list_resp.text
++    pay_list_payload = pay_list_resp.json()
++    assert pay_list_payload["summary"]["success"] == 0
++    assert pay_list_payload["summary"]["failed"] == len(requested_ids)
++    assert pay_list_payload["pay_list"] is None
++    assert pay_list_payload["success"] == []
++
++    failed_ids = {row["fee_item_id"] for row in pay_list_payload["failed"]}
++    assert failed_ids == set(requested_ids)
++    assert all(row["code"] == "PAY_LIST_SCOPE_INVALID" for row in pay_list_payload["failed"])
++
++    with session_factory() as db:
++        assert db.execute(select(PayList)).scalars().all() == []
++        assert db.execute(select(GovPayment)).scalars().all() == []
++
++
++def test_pay_list_from_fee_items_keeps_valid_same_scope_candidates_when_other_items_fail(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++    task_id = _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=1,
++        due_date=date(2026, 7, 10),
++    )
++    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
++
++    draft_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [task_id], "pay_next_year": False, "currency": "CNY"},
++    )
++    assert draft_resp.status_code == 200, draft_resp.text
++    draft_id = draft_resp.json()["success"][0]["draft_id"]
++
++    gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
++    service_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "SERVICE")
++
++    pay_list_resp = client.post(
++        "/api/v1/pay-lists/from-fee-items",
++        headers=auth_headers,
++        json={"fee_item_ids": [gov_fee_item_id, service_fee_item_id]},
++    )
++    assert pay_list_resp.status_code == 200, pay_list_resp.text
++    pay_list_payload = pay_list_resp.json()
++    assert pay_list_payload["summary"]["success"] == 1
++    assert pay_list_payload["summary"]["failed"] == 1
++    assert pay_list_payload["pay_list"] is not None
++    assert pay_list_payload["success"][0]["fee_item_id"] == gov_fee_item_id
++    assert pay_list_payload["failed"][0]["fee_item_id"] == service_fee_item_id
++    assert pay_list_payload["failed"][0]["code"] == "PAY_LIST_SCOPE_INVALID"
++
++    with session_factory() as db:
++        pay_lists = db.execute(select(PayList)).scalars().all()
++        gov_payments = db.execute(select(GovPayment)).scalars().all()
++
++    assert len(pay_lists) == 1
++    assert pay_lists[0].client_id == client_id
++    assert pay_lists[0].currency == "CNY"
++    assert len(gov_payments) == 1
++    assert gov_payments[0].fee_item_id == gov_fee_item_id
++
++
+ def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:
+     rate = FeeRate(
+         fee_code=_uid("RATE"),
