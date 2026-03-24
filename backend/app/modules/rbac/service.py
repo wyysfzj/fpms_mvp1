@@ -87,6 +87,7 @@ ROLE_PERMISSIONS = {
         "LetterHead.Edit",
         "Template.Edit",
         "PayList.Read",
+        "PayList.Export",
         "PayList.Create",
     ],
     "Formalities": [
@@ -139,6 +140,7 @@ ROLE_PERMISSIONS = {
         "Fee.Read",
         "Bill.Read",
         "PayList.Read",
+        "PayList.Export",
         "Bill.CreateFromDraft",
         "Bill.CreateManual",
         "Bill.Print",

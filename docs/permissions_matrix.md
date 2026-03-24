@@ -80,6 +80,7 @@ Permission codes below are the runtime contract to keep `ROLE_PERMISSIONS` and A
 - `POST /annuity/tasks/generate-drafts` → `AnnuityTask.Action`  (task: `PE-BE-AN-05`)
 - `GET /pay-lists` → `PayList.Read`  (task: `FRFE04-BE-02`)
 - `GET /pay-lists/{id}` → `PayList.Read`  (next planned slice: `FRFE04-BE-03`)
+- `POST /pay-lists/{id}/export` → `PayList.Export`  (task: `FRFE04-BE-RBAC-02`)
 - `POST /pay-lists/from-fee-items` → `PayList.Create`  (task: `PE-BE-AN-06`)
 - `POST /gov-payments` → `GovPayment.Create`  (task: `PE-BE-AN-07`)
 

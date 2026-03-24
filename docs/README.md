@@ -12,7 +12,7 @@ Start here:
 8. `07_db_ddl_and_sqlite.md` — database definition
 9. `TODO.md` — decisions pending / open questions
 
-RBAC contract split: `02_permissions_rbac.md` owns the high-level RBAC model and role/menu expectations, `permissions_matrix.md` owns endpoint-to-permission mapping for API tasks, and `backend/app/modules/rbac/service.py` is the executable runtime seed.
+RBAC contract split: `02_permissions_rbac.md` owns the high-level RBAC model and role/menu expectations, `permissions_matrix.md` owns endpoint-to-permission mapping for API tasks, including export routes, and `backend/app/modules/rbac/service.py` is the executable runtime seed.
 
 ## Execution Order (Authoritative)
 

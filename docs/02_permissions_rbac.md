@@ -50,6 +50,7 @@ Use `MODULE.ACTION` string codes to keep API enforcement stable.
 - `Bill.CreateManual`
 - `Bill.Print`
 - `PayList.Read`
+- `PayList.Export`
 - `Payment.Create`
 - `Payment.Offset`
 
@@ -73,15 +74,16 @@ Use `MODULE.ACTION` string codes to keep API enforcement stable.
 | Fees: drafts | R/W | R/W | R | R |
 | Fees: rates | R/W | R/W | - | - |
 | Billing: bills | R/W | R | R | R/W |
-| Billing: pay lists (list/detail) | R | - | - | R |
+| Billing: pay lists (list/detail + export) | R+Export | - | - | R+Export |
 | Billing: payments/offset | R/W | - | - | R/W |
 | Settings: clients | R/W | R/W | R | R |
 | Settings: users/roles | R/W | - | - | - |
 | Settings: templates/system | R/W | - | - | - |
 
-Legend: R = read, W = write, "-" = no access.
+Legend: R = read, W = write/create/edit, Export = export/download action without create/edit authority, "-" = no access.
 
 ## API enforcement
 - Every protected endpoint injects the permission check as a parameter, for example `_perm: None = Depends(require_perm("Title.Action"))`.
 - Read-only pay-list routes use `PayList.Read` for `GET /pay-lists` and `GET /pay-lists/{id}`.
+- Pay-list export uses `PayList.Export` for `POST /pay-lists/{id}/export`.
 - Frontend hides menus by permission, but **backend is source of truth**.
