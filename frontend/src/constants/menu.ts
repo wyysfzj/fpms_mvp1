@@ -54,6 +54,7 @@ export const MENU_GROUPS: MenuGroup[] = [
             { key: 'fee_management_pay_lists', label: '官费清单', icon: '📑', route: '/fee-management/pay-lists', requiredPerms: [Perms.BILLING_WRITE] },
             { key: 'bills', label: '账单管理', icon: '🧾', route: '/billing/bills', requiredPerms: [Perms.BILLING_READ] },
             { key: 'payments', label: '回款与核销', icon: '💳', route: '/billing/payments', requiredPerms: [Perms.BILLING_READ] },
+            { key: 'case_receipts', label: '个案收款登记', icon: '📋', route: '/billing/case-receipts', requiredPerms: [Perms.BILLING_READ] },
             { key: 'expenses', label: '支出管理', icon: '📉', route: '/expenses', requiredPerms: [Perms.FEES_WRITE] },
             { key: 'commission_rules', label: '提成规则', icon: '🧮', route: '/commission/rules', requiredPerms: [Perms.FEES_WRITE] },
             { key: 'commission_records', label: '提成记录', icon: '📚', route: '/commission', requiredPerms: [Perms.FEES_WRITE] },

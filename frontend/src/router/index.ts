@@ -69,6 +69,7 @@ const routes = [
       { path: 'billing/bills/:id', name: 'bill_detail', component: () => import('../modules/billing/pages/BillDetail.vue') },
       { path: 'billing/payments', name: 'payments', component: () => import('../modules/billing/pages/PaymentList.vue') },
       { path: 'billing/payments/new', name: 'payment_new', component: () => import('../modules/billing/pages/PaymentCreate.vue') },
+      { path: 'billing/case-receipts', name: 'case_receipts', component: () => import('../modules/billing/pages/CaseReceiptList.vue') },
 
       // Collections
       { path: 'collections/dunning', name: 'dunning_list', component: () => import('../modules/collections/pages/DunningList.vue') },
