@@ -258,18 +258,18 @@ def _rate_amount(
     *,
     fee_type: str,
     currency: str,
+    year_no: int | None = None,
 ) -> Decimal:
+    conditions = [
+        FeeRate.enabled.is_(True),
+        FeeRate.rate_group == "ANNUITY",
+        FeeRate.fee_type == fee_type,
+        FeeRate.currency == currency,
+    ]
+    if year_no is not None:
+        conditions.append(FeeRate.year_no == year_no)
     rate = (
-        db.execute(
-            select(FeeRate)
-            .where(
-                FeeRate.enabled.is_(True),
-                FeeRate.rate_group == "ANNUITY",
-                FeeRate.fee_type == fee_type,
-                FeeRate.currency == currency,
-            )
-            .order_by(FeeRate.updated_at.desc())
-        )
+        db.execute(select(FeeRate).where(*conditions).order_by(FeeRate.updated_at.desc()))
         .scalars()
         .first()
     )
@@ -518,6 +518,7 @@ def generate_fee_drafts_from_annuity_tasks(
                 )
             )
 
+            task.draft_generated = True
             db.commit()
             success.append(
                 {
@@ -1449,4 +1450,80 @@ def add_manual_gov_payment(
             "currency": pay_list.currency,
             "client_id": pay_list.client_id,
         },
+    }
+
+
+def generate_annuity_tasks_for_case(
+    db: Session,
+    *,
+    case_id: str,
+) -> dict:
+    """Generate multi-year annuity tasks for a GRANTED case."""
+    from app.modules.cases.models import Case
+
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "案卷不存在", status_code=404)
+
+    if case.status != "GRANTED":
+        raise_business_error("CASE_NOT_GRANTED", "案卷状态不是已授权", status_code=400)
+
+    if not case.first_annuity_year:
+        raise_business_error("NO_FIRST_ANNUITY_YEAR", "未设置首年年费年度", status_code=400)
+
+    # Calculate last year: valid_until or filing_date + 20 years (standard CN patent term)
+    if case.valid_until and case.filing_date:
+        last_year = case.valid_until.year - case.filing_date.year + 1
+    else:
+        last_year = 20
+
+    first_year = case.first_annuity_year
+    tasks_created = 0
+    tasks_skipped = 0
+
+    for year_no in range(first_year, last_year + 1):
+        # Check if task already exists for this case + year
+        existing = (
+            db.query(AnnuityTask)
+            .filter(AnnuityTask.case_id == case_id, AnnuityTask.year_no == year_no)
+            .first()
+        )
+        if existing:
+            tasks_skipped += 1
+            continue
+
+        # Calculate due date: filing_date + year_no years
+        if case.filing_date:
+            try:
+                due = case.filing_date.replace(year=case.filing_date.year + year_no)
+            except ValueError:
+                # Handle Feb 29 edge case
+                due = case.filing_date.replace(year=case.filing_date.year + year_no, day=28)
+        else:
+            due = date.today()
+
+        # Look up fee rates (with year_no for year-specific rates)
+        gov_amt = _rate_amount(db, fee_type="GOV", currency="CNY", year_no=year_no)
+        svc_amt = _rate_amount(db, fee_type="SERVICE", currency="CNY", year_no=year_no)
+
+        task = AnnuityTask(
+            case_id=case_id,
+            client_id=case.client_id,
+            year_no=year_no,
+            due_date=due,
+            status="OPEN",
+            gov_fee_amt=gov_amt,
+            service_fee_amt=svc_amt,
+        )
+        db.add(task)
+        tasks_created += 1
+
+    db.flush()
+    return {
+        "case_id": case_id,
+        "case_no": case.case_no,
+        "first_year": first_year,
+        "last_year": last_year,
+        "tasks_created": tasks_created,
+        "tasks_skipped": tasks_skipped,
     }
