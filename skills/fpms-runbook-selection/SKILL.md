@@ -137,7 +137,16 @@ Use a compact structure like this in the spec and plan:
 ## Preflight Dependency Audit
 - ...
 
+## Execution Mode
+- ...
+
 ## Baseline Promotion Protocol
+- ...
+
+## Atomic Task Inventory
+- ...
+
+## Wave Plan
 - ...
 
 ## Replan Triggers
