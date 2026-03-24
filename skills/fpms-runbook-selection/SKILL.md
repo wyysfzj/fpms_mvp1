@@ -7,6 +7,10 @@ description: "Use when preparing any multi-step FPMS task that needs writing-pla
 
 Use this skill before `writing-plans` for any multi-step story. The goal is not automation; the goal is to force an explicit, auditable choice of execution shape before planning starts.
 
+## First Pass
+
+Before any classification or output-format rules, read the current story background and the existing constraints first. Use the task/spec context, the task file, and any governing repo rules as the source of truth before choosing a runbook.
+
 ## When To Use
 
 Use this skill when a task is more than a simple single-file change and needs a plan, wave structure, or follow-up tasks.

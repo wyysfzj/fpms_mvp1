@@ -1,7 +1,6 @@
 # RBSEL-SKILL-01 Evidence Summary
 
-- Task: `RBSEL-SKILL-01`
-- Closure slice: update the minimum output template in `skills/fpms-runbook-selection/SKILL.md` so it includes `Execution Mode`, `Atomic Task Inventory`, and `Wave Plan`.
-- Non-closure boundary respected: no other sections were rewritten, and no files outside the allowlist were modified.
-- Verification: `rg -n "Execution Mode|Atomic Task Inventory|Wave Plan|Story Shape|Chosen Runbook|Runbook Rationale|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers" skills/fpms-runbook-selection/SKILL.md`
-- Result: the required fields are present in both the requirements list and the minimum output template.
+- Task: add a repo-local runbook selection skill instruction that forces reading the current story background and existing constraints before classification/output rules.
+- Modified file: `skills/fpms-runbook-selection/SKILL.md`
+- Verification: `rg -n "First Pass|current story background|existing constraints|classification or output-format rules" skills/fpms-runbook-selection/SKILL.md`
+- Result: passed, with the new instruction present at the top of the skill body.

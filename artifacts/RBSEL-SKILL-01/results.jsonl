@@ -1,2 +1,1 @@
-{"step":"lint","command":"rg -n \"Execution Mode|Atomic Task Inventory|Wave Plan|Story Shape|Chosen Runbook|Runbook Rationale|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers\" skills/fpms-runbook-selection/SKILL.md","rc":0,"expected_status":"0","note":"Verified the minimum output template now includes the required planning fields."}
-{"step":"test","command":"test -f artifacts/RBSEL-SKILL-01/summary.md && test -f artifacts/RBSEL-SKILL-01/results.jsonl && test -f artifacts/RBSEL-SKILL-01/git/diff.patch","rc":0,"expected_status":"0","note":"Verified the required evidence files exist."}
+{"cmd":"rg -n \"First Pass|current story background|existing constraints|classification or output-format rules\" skills/fpms-runbook-selection/SKILL.md","rc":0}
