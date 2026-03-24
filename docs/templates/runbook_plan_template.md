@@ -35,10 +35,10 @@ Use this template for any multi-step plan that must classify story shape and sel
 
 ## Baseline Promotion Protocol
 
-- One atomic task equals one fresh worktree.
-- Reviewer diff is evaluated as `HEAD^..HEAD`.
-- Accepted work is committed immediately as the new baseline.
-- The next task starts from the latest accepted baseline only.
+- Establish the baseline before editing: note whether the worktree starts clean or dirty.
+- If the worktree is dirty, capture the task-scoped allowlist diff and any external-file inventory before making changes.
+- Reviewer validation should compare the completed task against the recorded pre-execution baseline for this worktree, not assume a pre-existing `HEAD^..HEAD` review range.
+- Accepted work is promoted only after verification and becomes the next task's starting baseline.
 
 ## Replan Triggers
 
@@ -51,8 +51,12 @@ Use this template for any multi-step plan that must classify story shape and sel
 ## Atomic Task Inventory
 
 - `<TASK-ID>`:
+  - Task file path: `<relative/original task file path>`
+  - Owner role: `<worker|monitor|explorer|lead>`
   - Exact closure slice:
   - Explicit non-closure:
+  - Required verification:
+  - Dependency notes:
   - Remaining follow-up task ids:
   - Allowlist:
   - Done definition:
