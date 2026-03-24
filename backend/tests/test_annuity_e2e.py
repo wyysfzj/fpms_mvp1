@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+import app.api.deps as deps
 from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.billing.models import Bill, BillItem, CaseReceipt
 from app.modules.cases.models import Case
@@ -51,6 +52,30 @@ def _create_client_and_case(client: TestClient, auth_headers: dict[str, str]) ->
     )
     assert case_resp.status_code == 201, case_resp.text
     return client_id, case_resp.json()["id"]
+
+
+def _create_case(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    *,
+    client_id: str,
+    case_no: str,
+    app_no: str | None = None,
+) -> str:
+    payload = {
+        "case_no": case_no,
+        "case_type": "NORMAL",
+        "patent_category": "INV",
+        "flow_dir": "CN_DOMESTIC",
+        "client_id": client_id,
+        "title_cn": "Annuity E2E Case",
+    }
+    if app_no is not None:
+        payload["app_no"] = app_no
+
+    case_resp = client.post("/api/v1/cases", json=payload, headers=auth_headers)
+    assert case_resp.status_code == 201, case_resp.text
+    return case_resp.json()["id"]
 
 
 def _insert_annuity_task(
@@ -557,6 +582,204 @@ def test_historical_pay_list_create_requires_client_and_round_trips_supported_fi
     assert pay_list.created_by == payload["created_by"]
     assert pay_list.updated_by == payload["updated_by"]
     assert len(gov_payments) == 0
+
+
+def test_pay_list_query_filters_supported_headers_and_case_join_semantics(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+    monkeypatch,
+) -> None:
+    client_name = _uid("ANN-CLI")
+    client_resp = client.post(
+        "/api/v1/clients",
+        json={"name_cn": client_name, "default_currency": "CNY"},
+        headers=auth_headers,
+    )
+    assert client_resp.status_code == 201, client_resp.text
+    client_id = client_resp.json()["id"]
+
+    case_one_no = _uid("ANN-CASE-A")
+    case_two_no = _uid("ANN-CASE-B")
+    case_one_id = _create_case(
+        client,
+        auth_headers,
+        client_id=client_id,
+        case_no=case_one_no,
+        app_no="APP-0001",
+    )
+    case_two_id = _create_case(
+        client,
+        auth_headers,
+        client_id=client_id,
+        case_no=case_two_no,
+        app_no="APP-0002",
+    )
+
+    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+
+    task_one_id = _insert_annuity_task(
+        session_factory,
+        case_id=case_one_id,
+        client_id=client_id,
+        year_no=1,
+        due_date=date(2026, 8, 1),
+    )
+    task_two_id = _insert_annuity_task(
+        session_factory,
+        case_id=case_two_id,
+        client_id=client_id,
+        year_no=1,
+        due_date=date(2026, 8, 2),
+    )
+
+    draft_one_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [task_one_id], "pay_next_year": False, "currency": "CNY"},
+    )
+    assert draft_one_resp.status_code == 200, draft_one_resp.text
+    draft_two_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [task_two_id], "pay_next_year": False, "currency": "CNY"},
+    )
+    assert draft_two_resp.status_code == 200, draft_two_resp.text
+
+    draft_one_id = draft_one_resp.json()["success"][0]["draft_id"]
+    draft_two_id = draft_two_resp.json()["success"][0]["draft_id"]
+    fee_item_one_id = _first_fee_item_id_by_type(session_factory, draft_one_id, "GOV")
+    fee_item_two_id = _first_fee_item_id_by_type(session_factory, draft_two_id, "GOV")
+
+    generated_resp = client.post(
+        "/api/v1/pay-lists/from-fee-items",
+        headers=auth_headers,
+        json={
+            "fee_item_ids": [fee_item_one_id, fee_item_two_id],
+            "planned_pay_date": "2026-08-15",
+            "remark": "组合查询",
+        },
+    )
+    assert generated_resp.status_code == 200, generated_resp.text
+    generated_payload = generated_resp.json()
+    assert generated_payload["summary"]["success"] == 2
+    generated_pay_list = generated_payload["pay_list"]
+    assert generated_pay_list is not None
+
+    historical_resp = client.post(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        json={
+            "client_id": client_id,
+            "currency": "USD",
+            "planned_pay_date": "2026-09-01",
+            "remark": "历史清单",
+        },
+    )
+    assert historical_resp.status_code == 201, historical_resp.text
+
+    page_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={"page": 1, "page_size": 1},
+    )
+    assert page_resp.status_code == 200, page_resp.text
+    page_payload = page_resp.json()
+    assert page_payload["page"] == 1
+    assert page_payload["page_size"] == 1
+    assert page_payload["total"] == 2
+    assert len(page_payload["items"]) == 1
+
+    filtered_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={
+            "pay_list_no": generated_pay_list["pay_list_no"],
+            "client_id": client_id,
+            "status": "DRAFT",
+            "currency": "CNY",
+            "planned_pay_date_from": "2026-08-01",
+            "planned_pay_date_to": "2026-08-31",
+            "page": 1,
+            "page_size": 20,
+        },
+    )
+    assert filtered_resp.status_code == 200, filtered_resp.text
+    filtered_payload = filtered_resp.json()
+    assert filtered_payload["total"] == 1
+    assert len(filtered_payload["items"]) == 1
+    item = filtered_payload["items"][0]
+    assert item["pay_list_no"] == generated_pay_list["pay_list_no"]
+    assert item["client_id"] == client_id
+    assert item["client_name"] == client_name
+    assert item["status"] == "DRAFT"
+    assert item["currency"] == "CNY"
+    assert item["planned_pay_date"] == "2026-08-15"
+    assert item["total_amount"] == "200.00"
+
+    explicit_range_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={
+            "planned_pay_date_from": "2026-08-01",
+            "planned_pay_date_to": "2026-08-31",
+            "page": 1,
+            "page_size": 20,
+        },
+    )
+    assert explicit_range_resp.status_code == 200, explicit_range_resp.text
+    explicit_range_payload = explicit_range_resp.json()
+    assert explicit_range_payload["total"] == 1
+    assert [row["id"] for row in explicit_range_payload["items"]] == [generated_pay_list["id"]]
+
+    invalid_range_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={
+            "planned_pay_date_from": "2026-08-31",
+            "planned_pay_date_to": "2026-08-01",
+            "page": 1,
+            "page_size": 20,
+        },
+    )
+    _assert_error(invalid_range_resp, 400, "PAY_LIST_DATE_RANGE_INVALID")
+
+    invalid_page_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={"page": 0, "page_size": 20},
+    )
+    assert invalid_page_resp.status_code == 422, invalid_page_resp.text
+
+    unauthenticated_resp = client.get("/api/v1/pay-lists", params={"page": 1, "page_size": 20})
+    assert unauthenticated_resp.status_code == 401, unauthenticated_resp.text
+
+    same_row_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={
+            "case_no": case_one_no,
+            "app_no": "APP-0002",
+            "page": 1,
+            "page_size": 20,
+        },
+    )
+    assert same_row_resp.status_code == 200, same_row_resp.text
+    same_row_payload = same_row_resp.json()
+    assert same_row_payload["total"] == 0
+    assert same_row_payload["items"] == []
+
+    def _no_perms(_db, _user_id) -> set[str]:
+        return set()
+
+    monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
+    forbidden_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={"page": 1, "page_size": 20},
+    )
+    _assert_error(forbidden_resp, 403, "FORBIDDEN")
+    assert forbidden_resp.json()["error"]["details"]["required_perm"] == "PayList.Read"
 
 
 def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:

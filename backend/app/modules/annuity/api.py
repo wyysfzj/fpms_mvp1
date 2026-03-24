@@ -15,6 +15,7 @@ from app.modules.annuity.service import (
     create_pay_list_from_fee_items,
     generate_fee_drafts_from_annuity_tasks,
     list_annuity_tasks,
+    list_pay_lists,
     register_gov_payment,
     update_annuity_task_instruction,
 )
@@ -159,6 +160,64 @@ def post_pay_list_from_fee_items(
         planned_pay_date=payload.planned_pay_date,
         remark=payload.remark,
     )
+
+
+@router.get("/pay-lists", summary="List pay lists")
+def get_pay_lists(
+    pay_list_no: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    planned_pay_date_from: date | None = Query(default=None),
+    planned_pay_date_to: date | None = Query(default=None),
+    currency: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
+    app_no: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _perm: None = Depends(require_perm("PayList.Read")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """List pay-list headers with supported read-only filters and pagination."""
+    filters = {
+        "pay_list_no": pay_list_no,
+        "client_id": client_id,
+        "status": status,
+        "planned_pay_date_from": planned_pay_date_from,
+        "planned_pay_date_to": planned_pay_date_to,
+        "currency": currency,
+        "case_no": case_no,
+        "app_no": app_no,
+    }
+    pay_lists, total = list_pay_lists(db, filters=filters, page=page, page_size=page_size)
+
+    client_ids = {pay_list.client_id for pay_list in pay_lists if pay_list.client_id}
+    client_name_map: dict[str, str] = {}
+    if client_ids:
+        from app.modules.masterdata.clients.models import Client
+
+        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
+        client_name_map = {client.id: client.name_cn for client in clients}
+
+    items = [
+        {
+            "id": pay_list.id,
+            "pay_list_no": pay_list.pay_list_no,
+            "client_id": pay_list.client_id,
+            "client_name": client_name_map.get(pay_list.client_id),
+            "status": pay_list.status,
+            "currency": pay_list.currency,
+            "planned_pay_date": pay_list.planned_pay_date,
+            "paid_date": pay_list.paid_date,
+            "total_amount": str(pay_list.total_amount),
+            "remark": pay_list.remark,
+            "created_at": pay_list.created_at,
+            "updated_at": pay_list.updated_at,
+            "created_by": pay_list.created_by,
+            "updated_by": pay_list.updated_by,
+        }
+        for pay_list in pay_lists
+    ]
+    return {"items": items, "page": page, "page_size": page_size, "total": total}
 
 
 @router.post(

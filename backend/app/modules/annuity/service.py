@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
+from app.modules.cases.models import Case
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
 from app.modules.masterdata.clients.models import Client
 
@@ -815,6 +816,80 @@ def create_historical_pay_list(
         "created_by": pay_list.created_by,
         "updated_by": pay_list.updated_by,
     }
+
+
+def list_pay_lists(
+    db: Session,
+    *,
+    filters: dict[str, Any] | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[PayList], int]:
+    """List pay-list headers with supported Phase 3 filters and pagination."""
+    filters = filters or {}
+
+    pay_list_no = str(filters.get("pay_list_no") or "").strip()
+    client_id = str(filters.get("client_id") or "").strip()
+    status_values = _normalize_statuses(filters.get("status"))
+    currency = str(filters.get("currency") or "").strip().upper()
+    case_no = str(filters.get("case_no") or "").strip()
+    app_no = str(filters.get("app_no") or "").strip()
+
+    planned_from = _coerce_date(
+        filters.get("planned_pay_date_from"),
+        "planned_pay_date_from",
+    )
+    planned_to = _coerce_date(
+        filters.get("planned_pay_date_to"),
+        "planned_pay_date_to",
+    )
+    if planned_from and planned_to and planned_from > planned_to:
+        raise_business_error(
+            "PAY_LIST_DATE_RANGE_INVALID",
+            "planned_pay_date_from must be <= planned_pay_date_to",
+            status_code=400,
+        )
+
+    stmt = select(PayList)
+    if pay_list_no:
+        stmt = stmt.where(PayList.pay_list_no == pay_list_no)
+    if client_id:
+        stmt = stmt.where(PayList.client_id == client_id)
+    if status_values:
+        if len(status_values) == 1:
+            stmt = stmt.where(func.upper(PayList.status) == status_values[0])
+        else:
+            stmt = stmt.where(func.upper(PayList.status).in_(status_values))
+    if currency:
+        stmt = stmt.where(func.upper(PayList.currency) == currency)
+    if planned_from:
+        stmt = stmt.where(PayList.planned_pay_date >= planned_from)
+    if planned_to:
+        stmt = stmt.where(PayList.planned_pay_date <= planned_to)
+    if case_no or app_no:
+        case_stmt = (
+            select(GovPayment.id)
+            .join(Case, Case.id == GovPayment.case_id)
+            .where(GovPayment.pay_list_id == PayList.id)
+        )
+        if case_no:
+            case_stmt = case_stmt.where(Case.case_no == case_no)
+        if app_no:
+            case_stmt = case_stmt.where(Case.app_no == app_no)
+        stmt = stmt.where(case_stmt.exists())
+
+    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+    offset = (page - 1) * page_size
+    items = (
+        db.execute(
+            stmt.order_by(PayList.created_at.desc(), PayList.id.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        .scalars()
+        .all()
+    )
+    return items, total
 
 
 def _recompute_pay_list_status(pay_list: PayList, payments: list[GovPayment]) -> None:
