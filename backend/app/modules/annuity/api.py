@@ -40,6 +40,10 @@ class AnnuityGenerateDraftsIn(BaseModel):
     currency: str = Field(default="CNY", min_length=1, max_length=8)
 
 
+class AnnuityTaskGenerateIn(BaseModel):
+    case_id: str = Field(..., min_length=1)
+
+
 class PayListFromFeeItemsIn(BaseModel):
     fee_item_ids: list[str] = Field(..., min_length=1)
     planned_pay_date: date | None = None
@@ -116,6 +120,13 @@ def get_annuity_tasks(
             "remark": task.remark,
             "created_at": task.created_at,
             "updated_at": task.updated_at,
+            "gov_fee_amt": task.gov_fee_amt,
+            "service_fee_amt": task.service_fee_amt,
+            "notify_count": task.notify_count,
+            "pay_next_year": task.pay_next_year,
+            "draft_generated": task.draft_generated,
+            "notice_sent": task.notice_sent,
+            "is_overdue": task.due_date < date.today() and task.status == "OPEN",
         }
         for task in tasks
     ]
@@ -164,6 +175,29 @@ def post_annuity_generate_drafts(
         pay_next_year=payload.pay_next_year,
         currency=payload.currency,
     )
+
+
+@router.post(
+    "/annuity/tasks/generate",
+    status_code=status.HTTP_201_CREATED,
+    summary="Generate annuity tasks for a case",
+)
+def generate_annuity_tasks_endpoint(
+    payload: AnnuityTaskGenerateIn,
+    _perm: None = Depends(require_perm("AnnuityTask.Action")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Generate multi-year annuity tasks for a GRANTED case.
+
+    **Auth**: Bearer JWT
+    **Permission**: AnnuityTask.Action
+    """
+    from app.modules.annuity.service import generate_annuity_tasks_for_case
+
+    result = generate_annuity_tasks_for_case(db, case_id=payload.case_id)
+    db.commit()
+    return result
 
 
 @router.post("/pay-lists/from-fee-items", summary="Create pay list from fee items")

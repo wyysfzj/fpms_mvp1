@@ -266,8 +266,6 @@ def _rate_amount(
         FeeRate.fee_type == fee_type,
         FeeRate.currency == currency,
     ]
-    if year_no is not None:
-        conditions.append(FeeRate.year_no == year_no)
     rate = (
         db.execute(select(FeeRate).where(*conditions).order_by(FeeRate.updated_at.desc()))
         .scalars()

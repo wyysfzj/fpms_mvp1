@@ -42,6 +42,7 @@ class CaseCreate(BaseModel):
     case_type: CaseType = CaseType.NORMAL
     patent_category: PatentCategory = PatentCategory.INV
     flow_dir: FlowDir = FlowDir.CN_DOMESTIC
+    status: CaseStatus | None = None
     client_id: str | None = None
     foreign_agent_id: str | None = None
     foreign_ref: str | None = Field(None, max_length=64)

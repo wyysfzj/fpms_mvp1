@@ -402,7 +402,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         title_cn=data.title_cn,
         title_en=data.title_en,
         app_no=data.app_no,
-        status="NOT_FILED",
+        status=data.status.value if data.status else "NOT_FILED",
         # A3 — Publication / Grant
         pub_date=data.pub_date,
         pub_no=data.pub_no,
