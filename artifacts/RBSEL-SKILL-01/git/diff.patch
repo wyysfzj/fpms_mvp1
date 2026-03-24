@@ -1,0 +1,27 @@
+diff --git a/skills/fpms-runbook-selection/SKILL.md b/skills/fpms-runbook-selection/SKILL.md
+index 2dc1bdb..15bf610 100644
+--- a/skills/fpms-runbook-selection/SKILL.md
++++ b/skills/fpms-runbook-selection/SKILL.md
+@@ -7,6 +7,10 @@ description: "Use when preparing any multi-step FPMS task that needs writing-pla
+ 
+ Use this skill before `writing-plans` for any multi-step story. The goal is not automation; the goal is to force an explicit, auditable choice of execution shape before planning starts.
+ 
++## First Pass
++
++Before any classification or output-format rules, read the current story background and the existing constraints first. Use the task/spec context, the task file, and any governing repo rules as the source of truth before choosing a runbook.
++
+ ## When To Use
+ 
+ Use this skill when a task is more than a simple single-file change and needs a plan, wave structure, or follow-up tasks.
+@@ -57,8 +61,10 @@ Choose one of these runbooks:
+ 
+ Apply these rules in order:
+ 
++- If the story cannot start until shared prerequisites are frozen, or if `prereq_dependency_density = high`, you must choose `P0-prereq-heavy-story`.
++- This prereq-heavy rule overrides every other runbook choice. Do not select `P0-single-lane-story`, `P0-multi-lane-parallel-story`, or `P0-frontend-heavy-story` when the prereq-heavy condition applies.
+ - If `shared_file_density = high` and `be_fe_coupling = chained`, prefer `P0-single-lane-story`.
+-- If `prereq_dependency_density = high`, require a `Preflight Dependency Audit` even if another runbook is chosen.
++- When `P0-prereq-heavy-story` is chosen, require a `Preflight Dependency Audit` before execution.
+ - If shared files are low and the slices are independent, allow `P0-multi-lane-parallel-story`.
+ - If backend contract is frozen and the UI is the main workload, allow `P0-frontend-heavy-story`.
+ 

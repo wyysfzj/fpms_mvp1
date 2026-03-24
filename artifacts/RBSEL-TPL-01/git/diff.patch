@@ -1,0 +1,83 @@
+diff --git a/docs/templates/runbook_plan_template.md b/docs/templates/runbook_plan_template.md
+new file mode 100644
+index 0000000..e1aab5d
+--- /dev/null
++++ b/docs/templates/runbook_plan_template.md
+@@ -0,0 +1,77 @@
++# Runbook Plan Template
++
++Use this template for any multi-step plan that must classify story shape and select a runbook before execution.
++
++---
++
++## Story Shape
++
++- shared_file_density: `<low|medium|high>`
++- prereq_dependency_density: `<low|medium|high>`
++- be_fe_coupling: `<none|chained (BE -> FE)|parallel>`
++- evidence_cost: `<low|medium|high>`
++
++## Chosen Runbook
++
++- chosen_runbook: `<P0-single-lane-story|P0-prereq-heavy-story|P0-multi-lane-parallel-story|P0-frontend-heavy-story>`
++
++## Runbook Rationale
++
++- Why this runbook fits the story shape:
++- Why the other runbooks were not chosen:
++
++## Preflight Dependency Audit
++
++- Permission / RBAC prerequisites:
++- State machine reachability:
++- Shared ownership file conflicts:
++- Shared test file conflicts:
++- Router / shared schema / export helper / permission registry / shared API client checks:
++
++## Execution Mode
++
++- Mode: `<single-thread|serialized subagent|multi-lane parallel>`
++- Why this execution mode is safe for the current story shape:
++
++## Baseline Promotion Protocol
++
++- Establish the baseline before editing: note whether the worktree starts clean or dirty.
++- If the worktree is dirty, capture the task-scoped allowlist diff and any external-file inventory before making changes.
++- Reviewer validation should compare the completed task against the recorded pre-execution baseline for this worktree, not assume a pre-existing `HEAD^..HEAD` review range.
++- Accepted work is promoted only after verification and becomes the next task's starting baseline.
++
++## Replan Triggers
++
++- A new shared prerequisite is discovered.
++- A shared file conflict exceeds the current allowlist.
++- The state machine is no longer reachable from the current baseline.
++- The closure slice depends on a second unplanned slice.
++- The reviewer determines the current plan is missing a prerequisite wave.
++
++## Atomic Task Inventory
++
++- `<TASK-ID>`:
++  - Task file path: `<exact task file path>`
++  - Owner role: `<worker|monitor|explorer|lead>`
++  - Exact closure slice:
++  - Explicit non-closure:
++  - Required verification:
++  - Dependency notes:
++  - Remaining follow-up task ids:
++  - Allowlist:
++  - Done definition:
++
++## Wave Plan
++
++- Wave 1:
++  - Tasks:
++  - Mode:
++  - Shared ownership notes:
++- Wave 2:
++  - Tasks:
++  - Mode:
++  - Shared ownership notes:
++- Wave 3:
++  - Tasks:
++  - Mode:
++  - Shared ownership notes:
