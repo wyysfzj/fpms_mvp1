@@ -13,7 +13,10 @@
     <!-- Content -->
     <template v-else-if="receipts">
       <!-- Summary Cards -->
-      <h4 class="section-title">收款摘要</h4>
+      <div class="section-header">
+        <h4 class="section-title">收款摘要</h4>
+        <el-button size="small" type="primary" @click="showDialog = true">新增收款记录</el-button>
+      </div>
       <div class="summary-cards">
         <div class="summary-card">
           <div class="card-label">累计开票</div>
@@ -121,8 +124,16 @@
     <!-- No Data -->
     <div v-else-if="!loading && !error" class="no-data">
       <p>暂无账单与收款信息。</p>
+      <el-button size="small" type="primary" @click="showDialog = true">新增收款记录</el-button>
     </div>
   </div>
+
+  <CaseReceiptDialog
+    v-model="showDialog"
+    :receipt-id="null"
+    :prefill-case-id="String(props.caseId)"
+    @saved="fetchReceipts"
+  />
 </template>
 
 <script setup lang="ts">
@@ -133,6 +144,7 @@ import type { CaseReceiptsSummary, BillStatus } from '../../../api/billing.types
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import { getBillStatusText } from '../../../constants/displayText'
+import CaseReceiptDialog from '../../billing/components/CaseReceiptDialog.vue'
 
 const props = defineProps<{
   caseId: number | string
@@ -143,6 +155,7 @@ const router = useRouter()
 const receipts = ref<CaseReceiptsSummary | null>(null)
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
+const showDialog = ref(false)
 
 const hasEnrichedFields = computed(() => {
   if (!receipts.value) return false
@@ -276,6 +289,17 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-main);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-header .section-title {
+  margin-bottom: 0;
 }
 
 .bill-no {
