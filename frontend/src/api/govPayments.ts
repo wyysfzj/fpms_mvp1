@@ -5,8 +5,11 @@ import type {
     GovPaymentRegisterResult,
     GovPaymentsApiError,
     GovPaymentsErrorCategory,
+    PayListDetail,
     PayListCreatePayload,
     PayListCreateResult,
+    PayListGovPaymentRow,
+    PayListMarkPaidPayload,
 } from './govPayments.types'
 import type { ApiError } from './types'
 
@@ -65,10 +68,77 @@ interface BackendGovPaymentRegisterResult {
     }
 }
 
+interface BackendPayListGovPaymentRow {
+    id: number
+    pay_list_id: number
+    case_id: string
+    fee_item_id: string | null
+    status: string
+    currency: string
+    paid_date: string | null
+    paid_amount: number | string | null
+    official_receipt_no: string | null
+    remark: string | null
+    created_at?: string | null
+    updated_at?: string | null
+}
+
+interface BackendPayListDetail {
+    id: number
+    pay_list_no: string | null
+    client_id: string
+    currency: string
+    status: string
+    planned_pay_date: string | null
+    paid_date: string | null
+    total_amount: number | string | null
+    remark?: string | null
+    created_at?: string | null
+    updated_at?: string | null
+    gov_payments?: BackendPayListGovPaymentRow[]
+    items?: BackendPayListGovPaymentRow[]
+    rows?: BackendPayListGovPaymentRow[]
+}
+
 function asNumber(input: number | string | null | undefined): number {
     if (input === null || input === undefined || input === '') return 0
     const parsed = Number(input)
     return Number.isFinite(parsed) ? parsed : 0
+}
+
+function mapPayListGovPaymentRow(input: BackendPayListGovPaymentRow): PayListGovPaymentRow {
+    return {
+        id: input.id,
+        pay_list_id: input.pay_list_id,
+        case_id: input.case_id,
+        fee_item_id: input.fee_item_id || null,
+        status: input.status,
+        currency: input.currency,
+        paid_date: input.paid_date,
+        paid_amount: asNumber(input.paid_amount),
+        official_receipt_no: input.official_receipt_no,
+        remark: input.remark,
+        created_at: input.created_at || undefined,
+        updated_at: input.updated_at || undefined,
+    }
+}
+
+function mapPayListDetail(input: BackendPayListDetail): PayListDetail {
+    const rows = input.gov_payments || input.items || input.rows || []
+    return {
+        id: input.id,
+        pay_list_no: input.pay_list_no,
+        client_id: input.client_id,
+        currency: input.currency,
+        status: input.status,
+        planned_pay_date: input.planned_pay_date,
+        paid_date: input.paid_date,
+        total_amount: asNumber(input.total_amount),
+        remark: input.remark || undefined,
+        created_at: input.created_at || undefined,
+        updated_at: input.updated_at || undefined,
+        gov_payments: rows.map(mapPayListGovPaymentRow),
+    }
 }
 
 function isApiError(error: unknown): error is ApiError {
@@ -197,4 +267,26 @@ export async function registerGovPayment(
             total_amount: asNumber(response.data.pay_list.total_amount),
         },
     }
+}
+
+export async function getPayListDetail(payListId: number | string): Promise<PayListDetail> {
+    const response = await http.get<BackendPayListDetail>(`/pay-lists/${payListId}`)
+    return mapPayListDetail(response.data)
+}
+
+export async function exportPayList(payListId: number | string): Promise<Blob> {
+    const response = await http.post(`/pay-lists/${payListId}/export`, {}, {
+        responseType: 'blob',
+    })
+    return response.data
+}
+
+export async function markPayListPaid(
+    payListId: number | string,
+    payload: PayListMarkPaidPayload = {},
+): Promise<PayListDetail> {
+    const response = await http.post<BackendPayListDetail>(`/pay-lists/${payListId}/mark-paid`, {
+        paid_date: payload.paid_date || undefined,
+    })
+    return mapPayListDetail(response.data)
 }

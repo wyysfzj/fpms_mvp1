@@ -39,6 +39,7 @@ const routes = [
       // Annuity
       { path: 'annuity/tasks', name: 'annuity_tasks', component: () => import('../modules/annuity/pages/AnnuityTaskList.vue') },
       { path: 'annuity/pay-lists', name: 'annuity_pay_lists', component: () => import('../modules/annuity/pages/PayList.vue') },
+      { path: 'annuity/pay-lists/:id', name: 'annuity_pay_list_detail', component: () => import('../modules/annuity/pages/PayListDetail.vue') },
       { path: 'annuity/gov-payments/new', name: 'annuity_gov_payment_new', component: () => import('../modules/annuity/pages/GovPaymentCreate.vue') },
 
       // Fees

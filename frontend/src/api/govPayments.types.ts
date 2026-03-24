@@ -24,6 +24,28 @@ export interface PayListInfo {
     paid_date?: string | null
 }
 
+export interface PayListGovPaymentRow {
+    id: number
+    pay_list_id: number
+    case_id: string
+    fee_item_id: string | null
+    status: string
+    currency: string
+    paid_date: string | null
+    paid_amount: number
+    official_receipt_no: string | null
+    remark: string | null
+    created_at?: string | null
+    updated_at?: string | null
+}
+
+export interface PayListDetail extends PayListInfo {
+    remark?: string | null
+    created_at?: string | null
+    updated_at?: string | null
+    gov_payments: PayListGovPaymentRow[]
+}
+
 export interface PayListCreateSuccessItem {
     fee_item_id: string
     case_id: string
@@ -71,6 +93,10 @@ export interface GovPaymentInfo {
 export interface GovPaymentRegisterResult {
     gov_payment: GovPaymentInfo
     pay_list: PayListInfo
+}
+
+export interface PayListMarkPaidPayload {
+    paid_date?: string
 }
 
 export type GovPaymentsErrorCategory =
