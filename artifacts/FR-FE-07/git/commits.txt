@@ -1,0 +1,9 @@
+6f76ec6 feat(cases): add create receipt button on case detail (FR-FE-07)
+d3c2c2f feat(billing): add CaseReceiptList page + route + menu (FR-FE-07)
+c22f517 feat(billing): add CaseReceiptDialog component (FR-FE-07)
+b328737 feat(billing): add CaseReceipt CRUD API client (FR-FE-07)
+7e35a28 feat(billing): add CaseReceipt CRUD endpoints (FR-FE-07)
+ffd335c feat(billing): add CaseReceipt service functions + tests (FR-FE-07)
+0e78d0d docs: add runbook selection implementation plan
+107a1a5 feat(billing): add CaseReceipt CRUD schemas (FR-FE-07)
+f776603 docs: add runbook selection design spec

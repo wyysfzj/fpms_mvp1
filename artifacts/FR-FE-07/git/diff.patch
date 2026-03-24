@@ -1,0 +1,2359 @@
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 2c19fec..954cacb 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from fastapi import FastAPI, Request
++from fastapi.encoders import jsonable_encoder
+ from fastapi.exceptions import RequestValidationError
+ from fastapi.middleware.cors import CORSMiddleware
+ from fastapi.responses import JSONResponse
+@@ -58,10 +59,12 @@ def create_app() -> FastAPI:
+     async def validation_error_handler(request: Request, exc: RequestValidationError):
+         return JSONResponse(
+             status_code=422,
+-            content=to_error_response(
+-                "VALIDATION_ERROR",
+-                "Invalid request",
+-                {"errors": exc.errors()},
++            content=jsonable_encoder(
++                to_error_response(
++                    "VALIDATION_ERROR",
++                    "Invalid request",
++                    {"errors": exc.errors()},
++                )
+             ),
+         )
+ 
+diff --git a/backend/app/modules/billing/api.py b/backend/app/modules/billing/api.py
+index 2ce4ef5..e2931e1 100644
+--- a/backend/app/modules/billing/api.py
++++ b/backend/app/modules/billing/api.py
+@@ -1,8 +1,10 @@
+ from __future__ import annotations
+ 
++from datetime import date
+ from typing import Any
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
++from fastapi.encoders import jsonable_encoder
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import require_perm
+@@ -19,16 +21,21 @@ from app.modules.billing.schemas import (
+     BillItemDetailResponse,
+     BillManualCreateSchema,
+     BillResponse,
++    CaseReceiptCreate,
+     CaseReceiptResponse,
++    CaseReceiptUpdate,
+     OffsetCreateSchema,
+     OffsetResponse,
+     PaymentResponse,
+     PaymentSchema,
+ )
+ from app.modules.billing.service import (
++    create_case_receipt,
+     create_manual_bill_record,
+     generate_bill_from_drafts,
++    list_case_receipts,
+     process_payment,
++    update_case_receipt,
+ )
+ from app.modules.billing.service import (
+     create_offset as create_offset_service,
+@@ -554,7 +561,12 @@ def create_manual_bill(
+         )
+ 
+     bill = create_manual_bill_record(db, payload)
+-    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill.id).order_by(BillItem.created_at.asc()).all()
++    bill_items = (
++        db.query(BillItem)
++        .filter(BillItem.bill_id == bill.id)
++        .order_by(BillItem.created_at.asc())
++        .all()
++    )
+ 
+     return {
+         "id": bill.id,
+@@ -618,7 +630,12 @@ def get_bill(
+             status_code=status.HTTP_404_NOT_FOUND,
+         )
+ 
+-    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill_id).order_by(BillItem.created_at.asc()).all()
++    bill_items = (
++        db.query(BillItem)
++        .filter(BillItem.bill_id == bill_id)
++        .order_by(BillItem.created_at.asc())
++        .all()
++    )
+     client = db.query(Client).filter(Client.id == bill.client_id).first()
+ 
+     case_ids = [item.case_id for item in bill_items if item.case_id]
+@@ -772,3 +789,123 @@ def get_case_receipt(
+         is_commissionable=receipt.is_commissionable,
+         bills=bill_overview_rows,
+     )
++
++
++@router.post(
++    "/case-receipts",
++    response_model=CaseReceiptResponse,
++    status_code=status.HTTP_201_CREATED,
++    summary="Create case receipt",
++)
++def create_case_receipt_endpoint(
++    payload: CaseReceiptCreate,
++    _perm: None = Depends(require_perm("CaseReceipt.Create")),
++    db: Session = Depends(get_db),
++) -> CaseReceiptResponse:
++    """
++    Create a manual case receipt.
++
++    **Auth**: Bearer JWT
++    **Permission**: CaseReceipt.Create
++    """
++    receipt = create_case_receipt(db, payload)
++    db.commit()
++    return CaseReceiptResponse(
++        id=receipt.id,
++        case_id=receipt.case_id,
++        fee_type=receipt.fee_type,
++        currency=receipt.currency,
++        receivable_amt=receipt.receivable_amt,
++        received_amt=receipt.received_amt,
++        last_receipt_date=receipt.last_receipt_date,
++        fee_code=receipt.fee_code,
++        fee_name=receipt.fee_name,
++        year_no=receipt.year_no,
++        due_date=receipt.due_date,
++        is_arrears=receipt.is_arrears,
++        is_prepayment=receipt.is_prepayment,
++        is_commissionable=receipt.is_commissionable,
++        invoice_no=receipt.invoice_no,
++        remark=receipt.remark,
++        bills=[],
++    )
++
++
++@router.put(
++    "/case-receipts/{receipt_id}",
++    response_model=CaseReceiptResponse,
++    summary="Update case receipt",
++)
++def update_case_receipt_endpoint(
++    receipt_id: str,
++    payload: CaseReceiptUpdate,
++    _perm: None = Depends(require_perm("CaseReceipt.Update")),
++    db: Session = Depends(get_db),
++) -> CaseReceiptResponse:
++    """
++    Update a case receipt (partial).
++
++    **Auth**: Bearer JWT
++    **Permission**: CaseReceipt.Update
++    """
++    receipt = update_case_receipt(db, receipt_id, payload)
++    db.commit()
++    return CaseReceiptResponse(
++        id=receipt.id,
++        case_id=receipt.case_id,
++        fee_type=receipt.fee_type,
++        currency=receipt.currency,
++        receivable_amt=receipt.receivable_amt,
++        received_amt=receipt.received_amt,
++        last_receipt_date=receipt.last_receipt_date,
++        fee_code=receipt.fee_code,
++        fee_name=receipt.fee_name,
++        year_no=receipt.year_no,
++        due_date=receipt.due_date,
++        is_arrears=receipt.is_arrears,
++        is_prepayment=receipt.is_prepayment,
++        is_commissionable=receipt.is_commissionable,
++        invoice_no=receipt.invoice_no,
++        remark=receipt.remark,
++        bills=[],
++    )
++
++
++@router.get(
++    "/case-receipts",
++    summary="List case receipts",
++)
++def list_case_receipts_endpoint(
++    client_id: str | None = None,
++    case_no: str | None = None,
++    fee_type: str | None = None,
++    is_arrears: bool | None = None,
++    is_commissionable: bool | None = None,
++    currency: str | None = None,
++    date_from: date | None = None,
++    date_to: date | None = None,
++    page: int = 1,
++    page_size: int = 20,
++    _perm: None = Depends(require_perm("CaseReceipt.Read")),
++    db: Session = Depends(get_db),
++) -> dict:
++    """
++    List case receipts with cross-case filters.
++
++    **Auth**: Bearer JWT
++    **Permission**: CaseReceipt.Read
++    """
++    result = list_case_receipts(
++        db,
++        client_id=client_id,
++        case_no=case_no,
++        fee_type=fee_type,
++        is_arrears=is_arrears,
++        is_commissionable=is_commissionable,
++        currency=currency,
++        date_from=date_from,
++        date_to=date_to,
++        page=page,
++        page_size=page_size,
++    )
++    return jsonable_encoder(result)
+diff --git a/backend/app/modules/billing/schemas.py b/backend/app/modules/billing/schemas.py
+index 12b7a99..2bc02e2 100644
+--- a/backend/app/modules/billing/schemas.py
++++ b/backend/app/modules/billing/schemas.py
+@@ -145,16 +145,20 @@ class CaseReceiptResponse(BaseModel):
+ 
+     id: str
+     case_id: str
+-    fee_type: str | None
++    fee_type: str | None = None
+     currency: str
+     receivable_amt: Decimal
+     received_amt: Decimal
+-    last_receipt_date: date | None
++    last_receipt_date: date | None = None
+     fee_code: str | None = None
++    fee_name: str | None = None
+     year_no: int | None = None
++    due_date: date | None = None
+     is_arrears: bool | None = None
+-    invoice_no: str | None = None
++    is_prepayment: bool | None = None
+     is_commissionable: bool | None = None
++    invoice_no: str | None = None
++    remark: str | None = None
+     bills: list["CaseReceiptBillResponse"] = []
+ 
+ 
+@@ -169,6 +173,68 @@ class CaseReceiptBillResponse(BaseModel):
+     issue_date: date | None = None
+ 
+ 
++class CaseReceiptCreate(BaseModel):
++    """Schema for creating a case receipt manually."""
++
++    case_id: str = Field(..., min_length=1)
++    fee_type: str | None = Field(None, max_length=16)
++    fee_code: str | None = Field(None, max_length=64)
++    fee_name: str | None = Field(None, max_length=128)
++    year_no: int | None = None
++    currency: str = Field("CNY", max_length=8)
++    receivable_amt: Decimal = Field(..., ge=0)
++    received_amt: Decimal = Field(..., ge=0)
++    last_receipt_date: date | None = None
++    due_date: date | None = None
++    is_arrears: bool | None = None
++    is_prepayment: bool | None = None
++    is_commissionable: bool | None = None
++    invoice_no: str | None = Field(None, max_length=64)
++    remark: str | None = Field(None, max_length=512)
++
++
++class CaseReceiptUpdate(BaseModel):
++    """Schema for updating a case receipt (partial)."""
++
++    fee_type: str | None = Field(None, max_length=16)
++    fee_code: str | None = Field(None, max_length=64)
++    fee_name: str | None = Field(None, max_length=128)
++    year_no: int | None = None
++    currency: str | None = Field(None, max_length=8)
++    receivable_amt: Decimal | None = Field(None, ge=0)
++    received_amt: Decimal | None = Field(None, ge=0)
++    last_receipt_date: date | None = None
++    due_date: date | None = None
++    is_arrears: bool | None = None
++    is_prepayment: bool | None = None
++    is_commissionable: bool | None = None
++    invoice_no: str | None = Field(None, max_length=64)
++    remark: str | None = Field(None, max_length=512)
++
++
++class CaseReceiptListItem(BaseModel):
++    """List item for cross-case receipt query."""
++
++    id: str
++    case_id: str
++    case_no: str | None = None
++    client_name: str | None = None
++    fee_type: str | None = None
++    currency: str
++    receivable_amt: Decimal
++    received_amt: Decimal
++    last_receipt_date: date | None = None
++    fee_code: str | None = None
++    fee_name: str | None = None
++    year_no: int | None = None
++    due_date: date | None = None
++    is_arrears: bool | None = None
++    is_prepayment: bool | None = None
++    is_commissionable: bool | None = None
++    invoice_no: str | None = None
++    remark: str | None = None
++
++
+ class BillManualItemSchema(BaseModel):
+     description: str = Field(..., max_length=256)
+     quantity: int = Field(1, gt=0)
+diff --git a/backend/app/modules/billing/service.py b/backend/app/modules/billing/service.py
+index 720a280..d6cb21d 100644
+--- a/backend/app/modules/billing/service.py
++++ b/backend/app/modules/billing/service.py
+@@ -14,6 +14,8 @@ from app.modules.billing.schemas import (
+     BillFromDraftsRequest,
+     BillManualCreateSchema,
+     BillStatusSchema,
++    CaseReceiptCreate,
++    CaseReceiptUpdate,
+     OffsetCreateSchema,
+     PaymentSchema,
+ )
+@@ -748,3 +750,138 @@ def reverse_offset(db: Session, offset_id: str, actor_id: str | None = None) ->
+         as_of_date=date.today(),
+     )
+     return offset
++
++
++def create_case_receipt(db: Session, payload: CaseReceiptCreate) -> CaseReceipt:
++    """Create a manual case receipt."""
++    from app.modules.cases.models import Case
++
++    case = db.query(Case).filter(Case.id == payload.case_id).first()
++    if not case:
++        raise_business_error("CASE_NOT_FOUND", "案卷不存在", status_code=404)
++
++    data = payload.model_dump()
++
++    # V-CR-03: auto-set is_arrears if not explicitly provided
++    if data.get("is_arrears") is None and data["received_amt"] < data["receivable_amt"]:
++        data["is_arrears"] = True
++
++    # V-CR-02: auto-set is_prepayment if not explicitly provided
++    if data.get("is_prepayment") is None and data["received_amt"] > data["receivable_amt"]:
++        data["is_prepayment"] = True
++
++    receipt = CaseReceipt(**data)
++    db.add(receipt)
++    db.flush()
++    return receipt
++
++
++def update_case_receipt(db: Session, receipt_id: str, payload: CaseReceiptUpdate) -> CaseReceipt:
++    """Update a case receipt (partial)."""
++    receipt = db.query(CaseReceipt).filter(CaseReceipt.id == receipt_id).first()
++    if not receipt:
++        raise_business_error("CASE_RECEIPT_NOT_FOUND", "收款记录不存在", status_code=404)
++
++    changes = payload.model_dump(exclude_unset=True)
++    for key, value in changes.items():
++        setattr(receipt, key, value)
++
++    # Recompute flags if amounts changed but flags not explicitly provided
++    new_receivable = changes.get("receivable_amt", receipt.receivable_amt)
++    new_received = changes.get("received_amt", receipt.received_amt)
++
++    if "receivable_amt" in changes or "received_amt" in changes:
++        if "is_arrears" not in changes and new_received < new_receivable:
++            receipt.is_arrears = True
++        if "is_prepayment" not in changes and new_received > new_receivable:
++            receipt.is_prepayment = True
++
++    db.flush()
++    return receipt
++
++
++def list_case_receipts(
++    db: Session,
++    *,
++    client_id: str | None = None,
++    case_no: str | None = None,
++    fee_type: str | None = None,
++    is_arrears: bool | None = None,
++    is_commissionable: bool | None = None,
++    currency: str | None = None,
++    date_from: date | None = None,
++    date_to: date | None = None,
++    page: int = 1,
++    page_size: int = 20,
++) -> dict:
++    """List case receipts with cross-case filters."""
++    from sqlalchemy import case as sa_case
++
++    from app.modules.cases.models import Case
++    from app.modules.masterdata.clients.models import Client
++
++    query = (
++        db.query(
++            CaseReceipt,
++            Case.case_no.label("case_no"),
++            Client.name_cn.label("client_name"),
++        )
++        .join(Case, Case.id == CaseReceipt.case_id)
++        .outerjoin(Client, Client.id == Case.client_id)
++    )
++
++    if client_id:
++        query = query.filter(Case.client_id == client_id)
++    if case_no:
++        query = query.filter(Case.case_no.contains(case_no))
++    if fee_type:
++        query = query.filter(CaseReceipt.fee_type == fee_type)
++    if is_arrears is not None:
++        query = query.filter(CaseReceipt.is_arrears == is_arrears)
++    if is_commissionable is not None:
++        query = query.filter(CaseReceipt.is_commissionable == is_commissionable)
++    if currency:
++        query = query.filter(CaseReceipt.currency == currency)
++    if date_from:
++        query = query.filter(CaseReceipt.last_receipt_date >= date_from)
++    if date_to:
++        query = query.filter(CaseReceipt.last_receipt_date <= date_to)
++
++    total = query.count()
++
++    null_last = sa_case((CaseReceipt.last_receipt_date.is_(None), 1), else_=0)
++    rows = (
++        query.order_by(
++            null_last, CaseReceipt.last_receipt_date.desc(), CaseReceipt.created_at.desc()
++        )
++        .offset((page - 1) * page_size)
++        .limit(page_size)
++        .all()
++    )
++
++    items = []
++    for receipt, c_no, c_name in rows:
++        items.append(
++            {
++                "id": receipt.id,
++                "case_id": receipt.case_id,
++                "case_no": c_no,
++                "client_name": c_name,
++                "fee_type": receipt.fee_type,
++                "currency": receipt.currency,
++                "receivable_amt": receipt.receivable_amt,
++                "received_amt": receipt.received_amt,
++                "last_receipt_date": receipt.last_receipt_date,
++                "fee_code": receipt.fee_code,
++                "fee_name": receipt.fee_name,
++                "year_no": receipt.year_no,
++                "due_date": receipt.due_date,
++                "is_arrears": receipt.is_arrears,
++                "is_prepayment": receipt.is_prepayment,
++                "is_commissionable": receipt.is_commissionable,
++                "invoice_no": receipt.invoice_no,
++                "remark": receipt.remark,
++            }
++        )
++
++    return {"items": items, "page": page, "page_size": page_size, "total": total}
+diff --git a/backend/tests/test_case_receipt_crud.py b/backend/tests/test_case_receipt_crud.py
+new file mode 100644
+index 0000000..025bbc8
+--- /dev/null
++++ b/backend/tests/test_case_receipt_crud.py
+@@ -0,0 +1,292 @@
++"""Tests for CaseReceipt manual CRUD (FR-FE-07)."""
++from __future__ import annotations
++
++from decimal import Decimal
++from uuid import uuid4
++
++import pytest
++from fastapi.testclient import TestClient
++
++
++@pytest.fixture
++def case_id(client: TestClient, auth_headers: dict) -> str:
++    """Create a test case and return its ID."""
++    resp = client.post(
++        "/api/v1/cases",
++        json={
++            "case_no": f"CR-TEST-{uuid4().hex[:8]}",
++            "case_type": "NORMAL",
++            "patent_category": "INV",
++            "flow_dir": "CN_DOMESTIC",
++            "title_cn": "Test Case for Receipt",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    return resp.json()["id"]
++
++
++# --- CREATE ---
++
++def test_create_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
++    resp = client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "fee_type": "SERVICE",
++            "fee_code": "SVC-001",
++            "fee_name": "服务费",
++            "currency": "CNY",
++            "receivable_amt": "1000.00",
++            "received_amt": "1000.00",
++            "last_receipt_date": "2026-03-01",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    data = resp.json()
++    assert data["case_id"] == case_id
++    assert data["fee_type"] == "SERVICE"
++    assert data["fee_name"] == "服务费"
++    assert Decimal(str(data["receivable_amt"])) == Decimal("1000.00")
++
++
++def test_create_case_receipt_invalid_case(client: TestClient, auth_headers: dict):
++    resp = client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": "nonexistent-id",
++            "receivable_amt": "100.00",
++            "received_amt": "100.00",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 404
++
++
++def test_create_case_receipt_negative_amt(client: TestClient, auth_headers: dict, case_id: str):
++    resp = client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "receivable_amt": "-10.00",
++            "received_amt": "100.00",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 422
++
++
++def test_create_auto_arrears(client: TestClient, auth_headers: dict, case_id: str):
++    resp = client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "receivable_amt": "1000.00",
++            "received_amt": "500.00",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    assert resp.json()["is_arrears"] is True
++
++
++def test_create_auto_prepayment(client: TestClient, auth_headers: dict, case_id: str):
++    resp = client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "receivable_amt": "500.00",
++            "received_amt": "1000.00",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    assert resp.json()["is_prepayment"] is True
++
++
++def test_create_user_override_arrears(client: TestClient, auth_headers: dict, case_id: str):
++    resp = client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "receivable_amt": "1000.00",
++            "received_amt": "500.00",
++            "is_arrears": False,
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    assert resp.json()["is_arrears"] is False
++
++
++def test_create_user_override_prepayment(client: TestClient, auth_headers: dict, case_id: str):
++    resp = client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "receivable_amt": "500.00",
++            "received_amt": "1000.00",
++            "is_prepayment": False,
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    assert resp.json()["is_prepayment"] is False
++
++
++# --- UPDATE ---
++
++def test_update_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
++    create_resp = client.post(
++        "/api/v1/case-receipts",
++        json={"case_id": case_id, "receivable_amt": "100.00", "received_amt": "100.00"},
++        headers=auth_headers,
++    )
++    receipt_id = create_resp.json()["id"]
++
++    resp = client.put(
++        f"/api/v1/case-receipts/{receipt_id}",
++        json={"remark": "已核实", "invoice_no": "INV-001"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200
++    assert resp.json()["remark"] == "已核实"
++    assert resp.json()["invoice_no"] == "INV-001"
++
++
++def test_update_recompute_flags(client: TestClient, auth_headers: dict, case_id: str):
++    create_resp = client.post(
++        "/api/v1/case-receipts",
++        json={"case_id": case_id, "receivable_amt": "100.00", "received_amt": "100.00"},
++        headers=auth_headers,
++    )
++    receipt_id = create_resp.json()["id"]
++
++    resp = client.put(
++        f"/api/v1/case-receipts/{receipt_id}",
++        json={"received_amt": "50.00"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200
++    assert resp.json()["is_arrears"] is True
++
++
++def test_update_not_found(client: TestClient, auth_headers: dict):
++    resp = client.put(
++        "/api/v1/case-receipts/nonexistent-id",
++        json={"remark": "test"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 404
++
++
++# --- LIST ---
++
++def test_list_case_receipts_no_filter(client: TestClient, auth_headers: dict, case_id: str):
++    client.post(
++        "/api/v1/case-receipts",
++        json={"case_id": case_id, "receivable_amt": "100.00", "received_amt": "100.00"},
++        headers=auth_headers,
++    )
++    resp = client.get("/api/v1/case-receipts", headers=auth_headers)
++    assert resp.status_code == 200
++    data = resp.json()
++    assert "items" in data
++    assert "total" in data
++    assert "page" in data
++    assert "page_size" in data
++    assert data["total"] >= 1
++
++
++def test_list_filter_by_client(client: TestClient, auth_headers: dict):
++    resp = client.get(
++        "/api/v1/case-receipts",
++        params={"client_id": "nonexistent"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200
++    assert resp.json()["total"] == 0
++
++
++def test_list_filter_by_arrears(client: TestClient, auth_headers: dict, case_id: str):
++    client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "receivable_amt": "1000.00",
++            "received_amt": "500.00",
++        },
++        headers=auth_headers,
++    )
++    resp = client.get(
++        "/api/v1/case-receipts",
++        params={"is_arrears": "true"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200
++    for item in resp.json()["items"]:
++        assert item["is_arrears"] is True
++
++
++def test_list_filter_by_date_range(client: TestClient, auth_headers: dict, case_id: str):
++    client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "receivable_amt": "100.00",
++            "received_amt": "100.00",
++            "last_receipt_date": "2026-03-15",
++        },
++        headers=auth_headers,
++    )
++    resp = client.get(
++        "/api/v1/case-receipts",
++        params={"date_from": "2026-03-01", "date_to": "2026-03-31"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200
++    assert resp.json()["total"] >= 1
++
++
++def test_list_pagination(client: TestClient, auth_headers: dict):
++    resp = client.get(
++        "/api/v1/case-receipts",
++        params={"page": 1, "page_size": 2},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200
++    assert resp.json()["page"] == 1
++    assert resp.json()["page_size"] == 2
++    assert len(resp.json()["items"]) <= 2
++
++
++# --- PERMISSIONS ---
++
++def test_permissions_create(client: TestClient):
++    resp = client.post("/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"})
++    assert resp.status_code == 401
++
++
++def test_permissions_update(client: TestClient):
++    resp = client.put("/api/v1/case-receipts/some-id", json={"remark": "x"})
++    assert resp.status_code == 401
++
++
++# --- INTEGRATION ---
++
++def test_manual_receipt_no_conflict_with_auto(client: TestClient, auth_headers: dict, case_id: str):
++    resp = client.post(
++        "/api/v1/case-receipts",
++        json={
++            "case_id": case_id,
++            "fee_type": "MISC",
++            "receivable_amt": "200.00",
++            "received_amt": "200.00",
++            "remark": "手工录入",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    get_resp = client.get(f"/api/v1/cases/{case_id}/receipts", headers=auth_headers)
++    assert get_resp.status_code in (200, 404)
+diff --git a/docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md b/docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md
+new file mode 100644
+index 0000000..92e27de
+--- /dev/null
++++ b/docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md
+@@ -0,0 +1,185 @@
++# Runbook Selection and Story Shape Classification Implementation Plan
++
++> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
++
++**Goal:** 为本仓库落地“先做 Story Shape Classification，再选择 runbook，再进入 planning / execution”的最小可执行机制。
++
++**Architecture:** 先在 `AGENTS.md` 增加强制规则，再补一个 repo-local 指引 skill 文件，随后补统一的计划模板和轻量 plan gate，最后用单独 QA close audit 验证这 4 个载体已经形成闭环。执行上采用文档 / 流程文件单路径原子任务，避免把规则、skill、模板、脚本混在一个 slice 里。
++
++**Tech Stack:** Markdown, Python 3, repository policy docs, lightweight validation script
++
++---
++
++## Story Shape
++
++- `shared_file_density: low`
++- `prereq_dependency_density: medium`
++- `be_fe_coupling: none`
++- `evidence_cost: medium`
++
++## Chosen Runbook
++
++- `chosen_runbook: P0-prereq-heavy-story`
++- Rationale: 本次目标不是产品功能，而是执行协议治理。真正的风险不在共享产品代码，而在是否先冻结规则、skill、模板与 gate 这组共享前置依赖；因此应先完成 prerequisite-style 基础设施，再允许后续故事使用。
++- Non-selected runbooks:
++  - `P0-single-lane-story`: 不适用，本次不围绕单一热点产品文件串行推进
++  - `P0-multi-lane-parallel-story`: 不适用，规则与模板/脚本存在共享约束，不宜并行写入
++  - `P0-frontend-heavy-story`: 不适用，本次不以前端交互为主
++
++## Runbook Rationale
++
++先冻结规则，再提供 skill，再统一计划模板，最后用脚本 gate 做可审计检查。任何顺序反过来都会造成“有模板没规则”或“有规则没执行入口”的失配。
++
++## Preflight Dependency Audit
++
++- `AGENTS.md` 必须先定义硬约束，否则后续 skill/plan 无法成为 repo 级强制
++- repo-local skill 路径必须在仓库内稳定、可被 `AGENTS.md` 引用
++- plan template 必须独立成文件，避免 runbook 结构只存在于单次计划文本
++- gate 脚本必须基于固定标题进行最小校验，不能依赖模型推断
++- QA close audit 需要在所有前述文件存在后执行
++
++## Execution Mode
++
++- Mode: serialized single-thread
++- Why: 四个任务分别命中共享规则文件、共享 skill 文件、共享模板文件、共享 gate 脚本，不适合多 agent 并行写入
++
++## Baseline Promotion Protocol
++
++- 一个原子任务对应一个 fresh worktree
++- reviewer diff 以 `HEAD^..HEAD` 为准
++- 接受后立即固化为新基线提交
++- 下一任务只能从最新接受基线开新 worktree
++- 若某任务仅修改文档/脚本，也不得与其他任务共用未提交 worktree
++
++## Replan Triggers
++
++- 新发现 repo 已存在更高优先级的本地 skill / template 约定，与本计划路径冲突
++- `AGENTS.md` 新增规则导致后续 task allowlist 失真
++- gate 脚本实现时发现模板标题集合需要重定义
++- reviewer 认定某任务实际跨越两个文件路径或两个 closure slice
++
++## File Structure Lock
++
++### Shared ownership
++
++- `AGENTS.md`
++- `skills/fpms-runbook-selection/SKILL.md`
++- `docs/templates/runbook_plan_template.md`
++- `scripts/validate_plan_runbook.py`
++
++### Task document root
++
++- `tasks/runbook-selection/`
++
++## Atomic Task Inventory
++
++Executable task docs:
++
++- `tasks/runbook-selection/RBSEL-RULE-01.md`
++- `tasks/runbook-selection/RBSEL-SKILL-01.md`
++- `tasks/runbook-selection/RBSEL-TPL-01.md`
++- `tasks/runbook-selection/RBSEL-GATE-01.md`
++- `tasks/runbook-selection/RBSEL-QA-01.md`
++
++## Wave Plan
++
++Wave 1:
++- `RBSEL-RULE-01`
++- Mode: serialized, sole owner of `AGENTS.md`
++
++Wave 2:
++- `RBSEL-SKILL-01`
++- Mode: serialized, sole owner of `skills/fpms-runbook-selection/SKILL.md`
++
++Wave 3:
++- `RBSEL-TPL-01`
++- Mode: serialized, sole owner of `docs/templates/runbook_plan_template.md`
++
++Wave 4:
++- `RBSEL-GATE-01`
++- Mode: serialized, sole owner of `scripts/validate_plan_runbook.py`
++
++Wave 5:
++- `RBSEL-QA-01`
++- Mode: serialized, monitor-only final close audit after Waves 1-4 pass
++
++## Task Steps
++
++### Task 1: `RBSEL-RULE-01` Add mandatory repo rule
++
++**Files:**
++- Modify: `AGENTS.md`
++- Spec: `tasks/runbook-selection/RBSEL-RULE-01.md`
++
++- [ ] Read the approved spec and identify the exact mandatory rule set to add.
++- [ ] Add a new `Story Shape Classification & Runbook Selection (MANDATORY)` section without weakening existing rules.
++- [ ] Ensure the section explicitly requires classification in both spec and plan, requires `chosen_runbook`, and mandates replanning on new shared prerequisites.
++- [ ] Verify wording does not accidentally apply to simple single-file or doc-only tasks.
++- [ ] Run a focused text check:
++  - `rg -n "Story Shape Classification|chosen_runbook|Replan|planning" AGENTS.md`
++- [ ] Generate `artifacts/RBSEL-RULE-01/**`.
++- [ ] Commit only task-allowlist changes.
++
++### Task 2: `RBSEL-SKILL-01` Add repo-local skill
++
++**Files:**
++- Create: `skills/fpms-runbook-selection/SKILL.md`
++- Spec: `tasks/runbook-selection/RBSEL-SKILL-01.md`
++
++- [ ] Write the repo-local skill with one clear entry purpose: classify story shape and choose a runbook before `writing-plans`.
++- [ ] Include the 4 required dimensions, the 4 runbook families, selection rules, and required outputs.
++- [ ] Include explicit prompts for `Preflight Dependency Audit`, `Baseline Promotion Protocol`, and `Replan Triggers`.
++- [ ] Keep the skill repo-local and self-contained; do not rewrite global superpowers skills.
++- [ ] Run a focused text check:
++  - `rg -n "shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers" skills/fpms-runbook-selection/SKILL.md`
++- [ ] Generate `artifacts/RBSEL-SKILL-01/**`.
++- [ ] Commit only task-allowlist changes.
++
++### Task 3: `RBSEL-TPL-01` Add plan template
++
++**Files:**
++- Create: `docs/templates/runbook_plan_template.md`
++- Spec: `tasks/runbook-selection/RBSEL-TPL-01.md`
++
++- [ ] Create a reusable plan template section set for all multi-step tasks covered by the new mechanism.
++- [ ] Ensure the template includes `Story Shape`, `Chosen Runbook`, `Runbook Rationale`, `Preflight Dependency Audit`, `Execution Mode`, `Baseline Promotion Protocol`, `Replan Triggers`, `Atomic Task Inventory`, and `Wave Plan`.
++- [ ] Keep the template compatible with the existing `writing-plans` header style already used in the repo.
++- [ ] Run a focused text check:
++  - `rg -n "^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers" docs/templates/runbook_plan_template.md`
++- [ ] Generate `artifacts/RBSEL-TPL-01/**`.
++- [ ] Commit only task-allowlist changes.
++
++### Task 4: `RBSEL-GATE-01` Add lightweight plan gate
++
++**Files:**
++- Create: `scripts/validate_plan_runbook.py`
++- Spec: `tasks/runbook-selection/RBSEL-GATE-01.md`
++
++- [ ] Write a small Python CLI that accepts a plan path and exits non-zero when any required section heading is missing.
++- [ ] Require at least these headings: `Story Shape`, `Chosen Runbook`, `Preflight Dependency Audit`, `Baseline Promotion Protocol`, `Replan Triggers`.
++- [ ] Print concise missing-section diagnostics suitable for task evidence logs.
++- [ ] Verify the script passes against the plan created in this story and fails against a minimal malformed sample.
++- [ ] Run targeted verification:
++  - `python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md`
++- [ ] Generate `artifacts/RBSEL-GATE-01/**`.
++- [ ] Commit only task-allowlist changes.
++
++### Task 5: `RBSEL-QA-01` Final close audit
++
++**Files:**
++- Modify: `artifacts/RBSEL-RULE-01/**`
++- Modify: `artifacts/RBSEL-SKILL-01/**`
++- Modify: `artifacts/RBSEL-TPL-01/**`
++- Modify: `artifacts/RBSEL-GATE-01/**`
++- Create: `artifacts/RBSEL-QA-01/results.jsonl`
++- Create: `artifacts/RBSEL-QA-01/summary.md`
++- Create: `artifacts/RBSEL-QA-01/git/diff.patch`
++- Spec: `tasks/runbook-selection/RBSEL-QA-01.md`
++
++- [ ] Run the task gate or equivalent focused verification for `RBSEL-RULE-01`, `RBSEL-SKILL-01`, `RBSEL-TPL-01`, and `RBSEL-GATE-01`.
++- [ ] Confirm the new rule, skill, template, and gate all exist on the accepted baseline.
++- [ ] Validate that the implementation plan itself satisfies the new gate.
++- [ ] Produce a summary ledger mapping each mechanism layer to its concrete file path and verification evidence.
++- [ ] Generate `artifacts/RBSEL-QA-01/**`.
++- [ ] Commit only evidence-only changes allowed by the task.
++
+diff --git a/docs/superpowers/specs/2026-03-24-runbook-selection-and-story-shape-design.md b/docs/superpowers/specs/2026-03-24-runbook-selection-and-story-shape-design.md
+new file mode 100644
+index 0000000..136528f
+--- /dev/null
++++ b/docs/superpowers/specs/2026-03-24-runbook-selection-and-story-shape-design.md
+@@ -0,0 +1,282 @@
++# Runbook Selection and Story Shape Classification Design
++
++Date: 2026-03-24
++
++Scope: 为当前仓库增加一套可审计的“先分类、再选 runbook、再进入 planning/execution”的机制，降低类似 `FR-FE-04` 这类多步骤故事在执行中的返工、worktree 污染和共享前置依赖漏判问题。
++
++---
++
++## 1. Goal
++
++本设计的目标不是引入“自动智能编排器”，而是把多步骤任务的执行协议前移、标准化、可审计化。
++
++机制必须实现以下效果：
++
++1. 进入 `writing-plans` 之前，先做 `Story Shape Classification`
++2. 在 spec 和 plan 中显式记录 `chosen_runbook`
++3. 遇到新的共享前置依赖时，强制回退到 planning，而不是继续在错误基线上执行
++4. reviewer / lead 能依据统一结构审查执行协议，而不是依赖个人记忆
++
++本机制覆盖范围：
++
++- 所有需要 `writing-plans` 的多步骤任务
++
++本机制不覆盖：
++
++- 简单单文件修复
++- 纯文档修订
++- 纯问答类任务
++- 自动业务拆分
++- 自动生成 atomic task
++
++---
++
++## 2. Problem Statement
++
++`FR-FE-04` 的最终闭环已经完成，但过程暴露出 3 类系统性问题：
++
++1. 共享前置依赖识别过晚
++- `PayList.Read`、`PayList.Export`、状态机前置规则并未在初始计划阶段冻结
++- 导致执行中途插入 `RBAC` 与 `STATE` 任务，打断基线推进
++
++2. worktree / baseline 协议未前置冻结
++- 早期任务曾在同一 worktree 上串行推进，导致 diff 污染
++- reviewer 不能把任务视为干净的单 slice
++
++3. evidence gate 触发过晚
++- 早期任务 evidence 在最终 QA 阶段才补齐和规范化
++- 把本应在任务关闭时暴露的问题推迟到故事关闭时才显现
++
++因此，本设计要解决的是“执行拓扑与协议治理”，不是单个业务故事本身。
++
++---
++
++## 3. Core Model
++
++### 3.1 Story Shape Classification
++
++任何进入 `writing-plans` 的多步骤任务，必须先记录以下 4 个维度：
++
++- `shared_file_density`
++- `prereq_dependency_density`
++- `be_fe_coupling`
++- `evidence_cost`
++
++记录格式不追求复杂打分，采用简洁定性值即可，例如：
++
++- `shared_file_density: high`
++- `prereq_dependency_density: high`
++- `be_fe_coupling: chained (BE -> FE)`
++- `evidence_cost: high`
++
++必须再补一个汇总结论：
++
++- `chosen_runbook: <runbook-id>`
++
++### 3.2 Runbook Family
++
++初始版本只定义 4 个 runbook：
++
++1. `P0-single-lane-story`
++- 适用：热点文件集中、整体只能串行推进
++
++2. `P0-prereq-heavy-story`
++- 适用：真正难点在共享前置依赖冻结，未先清 prereq 会反复返工
++
++3. `P0-multi-lane-parallel-story`
++- 适用：多个任务切片分布在不同文件群，可安全并行分波
++
++4. `P0-frontend-heavy-story`
++- 适用：后端 contract 基本稳定，主要工作量在前端交互与页面闭环
++
++### 3.3 Selection Rules
++
++选择规则采用简单优先级，而非复杂算法：
++
++- 若 `shared_file_density = high` 且 `be_fe_coupling = chained`，优先 `P0-single-lane-story`
++- 若 `prereq_dependency_density = high`，无论主 runbook 是什么，都必须执行 `Preflight Dependency Audit`
++- 若共享文件低且任务切片彼此独立，才允许 `P0-multi-lane-parallel-story`
++- 若后端 contract 已冻结且 UI 是主要工作量，才允许 `P0-frontend-heavy-story`
++
++### 3.4 Example Classification
++
++`FR-FE-04` 应作为标准样例记录为：
++
++- `shared_file_density: high`
++- `prereq_dependency_density: high`
++- `be_fe_coupling: chained (BE -> FE)`
++- `evidence_cost: high`
++- `chosen_runbook: P0-single-lane-story`
++
++---
++
++## 4. Layered Enforcement Model
++
++该机制采用三层叠加：
++
++### 4.1 AGENTS.md
++
++`AGENTS.md` 负责铁律与强制条件：
++
++- 所有进入 `writing-plans` 的多步骤任务，必须先做 `Story Shape Classification`
++- classification 必须同时记录在 spec 与 plan 中
++- 必须显式写出 `chosen_runbook`
++- 未完成 classification 和 runbook 选择前，不得进入 execution
++- 若执行中发现新的共享前置依赖、共享 ownership 冲突、或主状态机不可达，必须回退到 planning
++- reviewer / lead 不得接受未声明 `chosen_runbook` 的多步骤计划
++
++### 4.2 Repo-local Skill
++
++新增 repo-local skill，建议命名为：
++
++- `fpms-runbook-selection`
++
++该 skill 负责：
++
++- 读取当前故事背景与已有约束
++- 产出 4 维 classification
++- 选择 `chosen_runbook`
++- 生成 `Preflight Dependency Audit`
++- 指定推荐执行方式：
++  - `single-thread`
++  - `serialized subagent`
++  - `multi-lane parallel`
++- 为 plan 生成固定章节骨架
++
++### 4.3 Template / Gate
++
++为防止流程流于形式，新增：
++
++- plan 模板段落
++- 轻量校验脚本
++
++模板必须要求的章节：
++
++- `Story Shape`
++- `Chosen Runbook`
++- `Runbook Rationale`
++- `Preflight Dependency Audit`
++- `Execution Mode`
++- `Baseline Promotion Protocol`
++- `Replan Triggers`
++- `Atomic Task Inventory`
++- `Wave Plan`
++
++轻量 gate 建议为：
++
++- `scripts/validate_plan_runbook.py`
++
++职责仅为结构校验，不做复杂智能判断。
++
++---
++
++## 5. Required Plan Structure
++
++所有适用本机制的计划文档，必须包含以下最小结构：
++
++### 5.1 Story Shape
++
++记录：
++
++- `shared_file_density`
++- `prereq_dependency_density`
++- `be_fe_coupling`
++- `evidence_cost`
++
++### 5.2 Chosen Runbook
++
++记录：
++
++- `chosen_runbook`
++- 为什么选择它
++- 为什么没有选择其他 runbook
++
++### 5.3 Preflight Dependency Audit
++
++至少检查：
++
++- 权限 / RBAC 前置依赖
++- 状态机可达性
++- 共享所有权文件冲突
++- 共享测试文件冲突
++- router / shared schema / export helper / permission registry / shared API client 等共享文件是否需前置切出
++
++### 5.4 Baseline Promotion Protocol
++
++计划必须显式写明：
++
++- 一个原子任务对应一个 fresh worktree
++- reviewer diff 以 `HEAD^..HEAD` 为准
++- 接受后立即固化为新基线提交
++- 下一任务只能从“最新接受基线”开新 worktree
++
++### 5.5 Replan Triggers
++
++计划必须列出触发回退到 planning 的条件，例如：
++
++- 新的共享前置依赖被发现
++- 共享文件冲突超出当前 allowlist
++- 状态机不可达
++- 任务 closure slice 实际依赖第二个未拆分 slice
++- reviewer 认定当前计划缺失 prerequisite wave
++
++---
++
++## 6. First-phase Implementation Scope
++
++第一阶段只做最小可执行版：
++
++1. 修改 `AGENTS.md`
++- 新增 `Story Shape Classification & Runbook Selection (MANDATORY)` 章节
++
++2. 新增 repo-local skill
++- `fpms-runbook-selection`
++
++3. 新增 plan 模板或模板段落
++- 强制出现上述结构
++
++4. 新增轻量 gate 脚本
++- `scripts/validate_plan_runbook.py`
++
++第一阶段明确不做：
++
++- 自动评分或自动分类引擎
++- 过多 runbook 类型
++- 现有所有旧计划的全面迁移
++- 与全局 superpowers 技能的深度侵入式改造
++- 自动生成 atomic task
++
++---
++
++## 7. Success Criteria
++
++第一阶段成功标准：
++
++1. 新的多步骤故事在 planning 前会显式完成 classification
++2. spec 和 plan 都包含 `chosen_runbook`
++3. 新共享前置依赖出现时，执行会回退到 planning，而不是继续硬推
++4. reviewer 可基于统一结构审查执行协议
++5. 类似 `FR-FE-04` 的单泳道故事不会再出现“执行中临时发明基线协议”的情况
++
++---
++
++## 8. Open Decisions Resolved
++
++本设计已确认以下决策：
++
++- 覆盖范围：所有需要 `writing-plans` 的多步骤任务
++- 记录载体：spec 与 plan 都要有，plan 是最终执行依据
++- 失配处理：发现新共享前置依赖时必须回退到 planning
++- 主入口：`AGENTS.md` 与 skill 并列强制，模板/gate 提供可审计约束
++
++---
++
++## 9. Recommended Next Step
++
++下一步应使用 `writing-plans` 为本设计生成实施计划，并拆分为原子任务，至少包括：
++
++- `AGENTS.md` 规则增补
++- repo-local skill 新建
++- plan template / template section 新建
++- `scripts/validate_plan_runbook.py` 新建
++
+diff --git a/frontend/src/api/billing.ts b/frontend/src/api/billing.ts
+index d98d1e8..fdc5a73 100644
+--- a/frontend/src/api/billing.ts
++++ b/frontend/src/api/billing.ts
+@@ -6,7 +6,10 @@ import type {
+     BillListItem,
+     BillListParams,
+     BillManualPayload,
++    CaseReceiptCreate,
++    CaseReceiptListResponse,
+     CaseReceiptsSummary,
++    CaseReceiptUpdate,
+     OffsetCreatePayload,
+     OffsetListItem,
+     PaymentCreatePayload,
+@@ -396,3 +399,18 @@ export async function getCaseReceipts(caseId: number | string): Promise<CaseRece
+     const response = await http.get<BackendCaseReceipt>(`/cases/${caseId}/receipts`)
+     return mapCaseReceipt(response.data)
+ }
++
++export async function createCaseReceipt(payload: CaseReceiptCreate) {
++    const { data } = await http.post('/case-receipts', payload)
++    return data
++}
++
++export async function updateCaseReceipt(id: string, payload: CaseReceiptUpdate) {
++    const { data } = await http.put(`/case-receipts/${id}`, payload)
++    return data
++}
++
++export async function listCaseReceipts(params: Record<string, unknown> = {}): Promise<CaseReceiptListResponse> {
++    const { data } = await http.get<CaseReceiptListResponse>('/case-receipts', { params })
++    return data
++}
+diff --git a/frontend/src/api/billing.types.ts b/frontend/src/api/billing.types.ts
+index 0dca2a9..3a887c6 100644
+--- a/frontend/src/api/billing.types.ts
++++ b/frontend/src/api/billing.types.ts
+@@ -187,3 +187,66 @@ export interface CaseReceiptBill {
+     balance: number
+     issue_date?: string
+ }
++
++export interface CaseReceiptCreate {
++  case_id: string
++  fee_type?: string | null
++  fee_code?: string | null
++  fee_name?: string | null
++  year_no?: number | null
++  currency?: string
++  receivable_amt: number | string
++  received_amt: number | string
++  last_receipt_date?: string | null
++  due_date?: string | null
++  is_arrears?: boolean | null
++  is_prepayment?: boolean | null
++  is_commissionable?: boolean | null
++  invoice_no?: string | null
++  remark?: string | null
++}
++
++export interface CaseReceiptUpdate {
++  fee_type?: string | null
++  fee_code?: string | null
++  fee_name?: string | null
++  year_no?: number | null
++  currency?: string | null
++  receivable_amt?: number | string | null
++  received_amt?: number | string | null
++  last_receipt_date?: string | null
++  due_date?: string | null
++  is_arrears?: boolean | null
++  is_prepayment?: boolean | null
++  is_commissionable?: boolean | null
++  invoice_no?: string | null
++  remark?: string | null
++}
++
++export interface CaseReceiptListItem {
++  id: string
++  case_id: string
++  case_no?: string | null
++  client_name?: string | null
++  fee_type?: string | null
++  currency: string
++  receivable_amt: number
++  received_amt: number
++  last_receipt_date?: string | null
++  fee_code?: string | null
++  fee_name?: string | null
++  year_no?: number | null
++  due_date?: string | null
++  is_arrears?: boolean | null
++  is_prepayment?: boolean | null
++  is_commissionable?: boolean | null
++  invoice_no?: string | null
++  remark?: string | null
++}
++
++export interface CaseReceiptListResponse {
++  items: CaseReceiptListItem[]
++  page: number
++  page_size: number
++  total: number
++}
+diff --git a/frontend/src/constants/menu.ts b/frontend/src/constants/menu.ts
+index 7ab3dcc..cd94c58 100644
+--- a/frontend/src/constants/menu.ts
++++ b/frontend/src/constants/menu.ts
+@@ -54,6 +54,7 @@ export const MENU_GROUPS: MenuGroup[] = [
+             { key: 'fee_management_pay_lists', label: '官费清单', icon: '📑', route: '/fee-management/pay-lists', requiredPerms: [Perms.BILLING_WRITE] },
+             { key: 'bills', label: '账单管理', icon: '🧾', route: '/billing/bills', requiredPerms: [Perms.BILLING_READ] },
+             { key: 'payments', label: '回款与核销', icon: '💳', route: '/billing/payments', requiredPerms: [Perms.BILLING_READ] },
++            { key: 'case_receipts', label: '个案收款登记', icon: '📋', route: '/billing/case-receipts', requiredPerms: [Perms.BILLING_READ] },
+             { key: 'expenses', label: '支出管理', icon: '📉', route: '/expenses', requiredPerms: [Perms.FEES_WRITE] },
+             { key: 'commission_rules', label: '提成规则', icon: '🧮', route: '/commission/rules', requiredPerms: [Perms.FEES_WRITE] },
+             { key: 'commission_records', label: '提成记录', icon: '📚', route: '/commission', requiredPerms: [Perms.FEES_WRITE] },
+diff --git a/frontend/src/modules/billing/components/CaseReceiptDialog.vue b/frontend/src/modules/billing/components/CaseReceiptDialog.vue
+new file mode 100644
+index 0000000..e459967
+--- /dev/null
++++ b/frontend/src/modules/billing/components/CaseReceiptDialog.vue
+@@ -0,0 +1,459 @@
++<template>
++  <el-dialog
++    v-model="visible"
++    :title="dialogTitle"
++    width="760px"
++    :close-on-click-modal="false"
++    destroy-on-close
++    @close="handleClose"
++  >
++    <el-alert
++      v-if="amountHint"
++      :title="amountHint"
++      type="warning"
++      :closable="false"
++      show-icon
++      style="margin-bottom: 16px"
++    />
++
++    <el-form
++      ref="formRef"
++      :model="form"
++      :rules="rules"
++      label-position="top"
++      class="case-receipt-form"
++    >
++      <el-row :gutter="12">
++        <!-- 案卷 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="案卷" prop="case_id">
++            <el-select
++              v-model="form.case_id"
++              filterable
++              remote
++              clearable
++              :remote-method="searchCases"
++              :loading="caseSearchLoading"
++              :disabled="isEditMode || !!prefillCaseId"
++              placeholder="请输入案卷编号搜索"
++              style="width: 100%"
++            >
++              <el-option
++                v-for="c in caseOptions"
++                :key="c.id"
++                :label="c.case_no"
++                :value="c.id"
++              />
++            </el-select>
++          </el-form-item>
++        </el-col>
++
++        <!-- 费用类型 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="费用类型" prop="fee_type">
++            <el-select
++              v-model="form.fee_type"
++              clearable
++              placeholder="请选择费用类型"
++              style="width: 100%"
++            >
++              <el-option value="GOV" label="官费" />
++              <el-option value="SERVICE" label="服务费" />
++              <el-option value="MISC" label="其他" />
++            </el-select>
++          </el-form-item>
++        </el-col>
++
++        <!-- 费用代码 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="费用代码" prop="fee_code">
++            <el-input
++              v-model.trim="form.fee_code"
++              placeholder="请输入费用代码"
++              clearable
++            />
++          </el-form-item>
++        </el-col>
++
++        <!-- 费用名称 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="费用名称" prop="fee_name">
++            <el-input
++              v-model.trim="form.fee_name"
++              placeholder="请输入费用名称"
++              clearable
++            />
++          </el-form-item>
++        </el-col>
++
++        <!-- 年度 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="年度" prop="year_no">
++            <el-input-number
++              v-model="form.year_no"
++              :min="1900"
++              :max="2100"
++              controls-position="right"
++              placeholder="请输入年度"
++              style="width: 100%"
++            />
++          </el-form-item>
++        </el-col>
++
++        <!-- 币种 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="币种" prop="currency">
++            <el-select
++              v-model="form.currency"
++              placeholder="请选择币种"
++              style="width: 100%"
++            >
++              <el-option value="CNY" label="CNY" />
++              <el-option value="USD" label="USD" />
++              <el-option value="EUR" label="EUR" />
++              <el-option value="JPY" label="JPY" />
++            </el-select>
++          </el-form-item>
++        </el-col>
++
++        <!-- 应收金额 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="应收金额" prop="receivable_amt">
++            <el-input-number
++              v-model="form.receivable_amt"
++              :min="0"
++              :precision="2"
++              controls-position="right"
++              placeholder="请输入应收金额"
++              style="width: 100%"
++            />
++          </el-form-item>
++        </el-col>
++
++        <!-- 实收金额 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="实收金额" prop="received_amt">
++            <el-input-number
++              v-model="form.received_amt"
++              :min="0"
++              :precision="2"
++              controls-position="right"
++              placeholder="请输入实收金额"
++              style="width: 100%"
++            />
++          </el-form-item>
++        </el-col>
++
++        <!-- 收款日期 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="收款日期" prop="last_receipt_date">
++            <el-date-picker
++              v-model="form.last_receipt_date"
++              type="date"
++              placeholder="请选择收款日期"
++              value-format="YYYY-MM-DD"
++              format="YYYY-MM-DD"
++              style="width: 100%"
++            />
++          </el-form-item>
++        </el-col>
++
++        <!-- 到期日 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="到期日" prop="due_date">
++            <el-date-picker
++              v-model="form.due_date"
++              type="date"
++              placeholder="请选择到期日"
++              value-format="YYYY-MM-DD"
++              format="YYYY-MM-DD"
++              style="width: 100%"
++            />
++          </el-form-item>
++        </el-col>
++
++        <!-- 发票号 -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="发票号" prop="invoice_no">
++            <el-input
++              v-model.trim="form.invoice_no"
++              placeholder="请输入发票号"
++              clearable
++            />
++          </el-form-item>
++        </el-col>
++
++        <!-- Checkboxes -->
++        <el-col :xs="24" :sm="12">
++          <el-form-item label="标记选项">
++            <el-checkbox v-model="form.is_arrears">是否欠款</el-checkbox>
++            <el-checkbox v-model="form.is_prepayment" style="margin-left: 16px">是否预收</el-checkbox>
++            <el-checkbox v-model="form.is_commissionable" style="margin-left: 16px">是否可提成</el-checkbox>
++          </el-form-item>
++        </el-col>
++
++        <!-- 备注 -->
++        <el-col :xs="24">
++          <el-form-item label="备注" prop="remark">
++            <el-input
++              v-model.trim="form.remark"
++              type="textarea"
++              :rows="3"
++              placeholder="请输入备注"
++            />
++          </el-form-item>
++        </el-col>
++      </el-row>
++    </el-form>
++
++    <template #footer>
++      <el-button @click="handleClose">取消</el-button>
++      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
++    </template>
++  </el-dialog>
++</template>
++
++<script setup lang="ts">
++import { computed, reactive, ref, watch } from 'vue'
++import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
++import { createCaseReceipt, updateCaseReceipt } from '../../../api/billing'
++import type { CaseReceiptCreate, CaseReceiptUpdate, CaseReceiptListItem } from '../../../api/billing.types'
++import { getCases } from '../../../api/cases'
++
++interface CaseOption {
++  id: string
++  case_no: string
++}
++
++interface ReceiptForm {
++  case_id: string
++  fee_type: string | null
++  fee_code: string
++  fee_name: string
++  year_no: number | null
++  currency: string
++  receivable_amt: number | null
++  received_amt: number | null
++  last_receipt_date: string | null
++  due_date: string | null
++  is_arrears: boolean
++  is_prepayment: boolean
++  is_commissionable: boolean
++  invoice_no: string
++  remark: string
++}
++
++const props = defineProps<{
++  modelValue: boolean
++  receiptId: string | null
++  prefillCaseId: string | null
++  initialData?: CaseReceiptListItem | null
++}>()
++
++const emit = defineEmits<{
++  'update:modelValue': [value: boolean]
++  saved: []
++}>()
++
++const visible = ref(props.modelValue)
++const formRef = ref<FormInstance>()
++const saving = ref(false)
++const caseSearchLoading = ref(false)
++const caseOptions = ref<CaseOption[]>([])
++
++const isEditMode = computed(() => !!props.receiptId)
++
++const dialogTitle = computed(() => (isEditMode.value ? '编辑收款记录' : '新增收款记录'))
++
++function makeEmptyForm(): ReceiptForm {
++  return {
++    case_id: props.prefillCaseId || '',
++    fee_type: null,
++    fee_code: '',
++    fee_name: '',
++    year_no: null,
++    currency: 'CNY',
++    receivable_amt: null,
++    received_amt: null,
++    last_receipt_date: null,
++    due_date: null,
++    is_arrears: false,
++    is_prepayment: false,
++    is_commissionable: false,
++    invoice_no: '',
++    remark: '',
++  }
++}
++
++const form = reactive<ReceiptForm>(makeEmptyForm())
++
++const amountHint = computed(() => {
++  const rec = form.receivable_amt ?? 0
++  const paid = form.received_amt ?? 0
++  if (paid > 0 && rec > 0) {
++    if (paid < rec) return '实收金额小于应收金额，将标记为欠款'
++    if (paid > rec) return '实收金额大于应收金额，将标记为预收'
++  }
++  return ''
++})
++
++const rules: FormRules<ReceiptForm> = {
++  case_id: [{ required: true, message: '请选择案卷', trigger: 'change' }],
++  currency: [{ required: true, message: '请选择币种', trigger: 'change' }],
++  receivable_amt: [
++    {
++      validator: (_rule, value: unknown, callback) => {
++        const n = Number(value)
++        if (value === null || value === undefined || !Number.isFinite(n) || n < 0) {
++          callback(new Error('请输入有效的应收金额'))
++          return
++        }
++        callback()
++      },
++      trigger: 'blur',
++    },
++  ],
++  received_amt: [
++    {
++      validator: (_rule, value: unknown, callback) => {
++        const n = Number(value)
++        if (value === null || value === undefined || !Number.isFinite(n) || n < 0) {
++          callback(new Error('请输入有效的实收金额'))
++          return
++        }
++        callback()
++      },
++      trigger: 'blur',
++    },
++  ],
++}
++
++function populateFromInitialData(data: CaseReceiptListItem) {
++  form.case_id = data.case_id || ''
++  form.fee_type = data.fee_type || null
++  form.fee_code = data.fee_code || ''
++  form.fee_name = data.fee_name || ''
++  form.year_no = data.year_no ?? null
++  form.currency = data.currency || 'CNY'
++  form.receivable_amt = data.receivable_amt ?? null
++  form.received_amt = data.received_amt ?? null
++  form.last_receipt_date = data.last_receipt_date || null
++  form.due_date = data.due_date || null
++  form.is_arrears = data.is_arrears ?? false
++  form.is_prepayment = data.is_prepayment ?? false
++  form.is_commissionable = data.is_commissionable ?? false
++  form.invoice_no = data.invoice_no || ''
++  form.remark = data.remark || ''
++
++  // Ensure the case appears in the options list when editing
++  if (data.case_id && data.case_no) {
++    const exists = caseOptions.value.some((c) => c.id === data.case_id)
++    if (!exists) {
++      caseOptions.value = [{ id: data.case_id, case_no: data.case_no }, ...caseOptions.value]
++    }
++  }
++}
++
++function resetForm() {
++  const empty = makeEmptyForm()
++  Object.assign(form, empty)
++  caseOptions.value = []
++
++  if (props.prefillCaseId) {
++    form.case_id = props.prefillCaseId
++  }
++
++  if (isEditMode.value && props.initialData) {
++    populateFromInitialData(props.initialData)
++  }
++}
++
++watch(
++  () => props.modelValue,
++  (value) => {
++    visible.value = value
++    if (value) {
++      resetForm()
++    }
++  },
++)
++
++watch(visible, (value) => {
++  emit('update:modelValue', value)
++})
++
++async function searchCases(query: string) {
++  if (!query || query.trim().length < 1) {
++    caseOptions.value = []
++    return
++  }
++  caseSearchLoading.value = true
++  try {
++    // getCases accepts extended filter params including case_no (server-side filter)
++    const result = await getCases({ page: 1, page_size: 20, case_no: query.trim() } as Parameters<typeof getCases>[0])
++    caseOptions.value = result.items.map((c) => ({ id: c.id, case_no: c.case_no }))
++  } catch {
++    caseOptions.value = []
++  } finally {
++    caseSearchLoading.value = false
++  }
++}
++
++function handleClose() {
++  visible.value = false
++}
++
++async function handleSubmit() {
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++  try {
++    if (isEditMode.value && props.receiptId) {
++      const payload: CaseReceiptUpdate = {
++        fee_type: form.fee_type || null,
++        fee_code: form.fee_code || null,
++        fee_name: form.fee_name || null,
++        year_no: form.year_no ?? null,
++        currency: form.currency || null,
++        receivable_amt: form.receivable_amt ?? 0,
++        received_amt: form.received_amt ?? 0,
++        last_receipt_date: form.last_receipt_date || null,
++        due_date: form.due_date || null,
++        is_arrears: form.is_arrears,
++        is_prepayment: form.is_prepayment,
++        is_commissionable: form.is_commissionable,
++        invoice_no: form.invoice_no || null,
++        remark: form.remark || null,
++      }
++      await updateCaseReceipt(props.receiptId, payload)
++    } else {
++      const payload: CaseReceiptCreate = {
++        case_id: form.case_id,
++        fee_type: form.fee_type || null,
++        fee_code: form.fee_code || null,
++        fee_name: form.fee_name || null,
++        year_no: form.year_no ?? null,
++        currency: form.currency,
++        receivable_amt: form.receivable_amt ?? 0,
++        received_amt: form.received_amt ?? 0,
++        last_receipt_date: form.last_receipt_date || null,
++        due_date: form.due_date || null,
++        is_arrears: form.is_arrears,
++        is_prepayment: form.is_prepayment,
++        is_commissionable: form.is_commissionable,
++        invoice_no: form.invoice_no || null,
++        remark: form.remark || null,
++      }
++      await createCaseReceipt(payload)
++    }
++    ElMessage.success('保存成功')
++    visible.value = false
++    emit('saved')
++  } catch {
++    ElMessage.error('保存失败，请重试')
++  } finally {
++    saving.value = false
++  }
++}
++</script>
+diff --git a/frontend/src/modules/billing/pages/CaseReceiptList.vue b/frontend/src/modules/billing/pages/CaseReceiptList.vue
+new file mode 100644
+index 0000000..5f5bccb
+--- /dev/null
++++ b/frontend/src/modules/billing/pages/CaseReceiptList.vue
+@@ -0,0 +1,281 @@
++<template>
++  <div class="page-container">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">个案收款登记</h1>
++        <span class="page-count">{{ total }} 条</span>
++      </div>
++      <div class="page-header-right">
++        <el-button type="primary" @click="openCreateDialog">新增收款记录</el-button>
++      </div>
++    </div>
++
++    <!-- Filter Bar -->
++    <el-form :model="filters" inline class="filter-form" style="margin-bottom: 16px">
++      <el-form-item label="客户ID">
++        <el-input v-model="filters.client_id" placeholder="客户ID" clearable style="width: 140px" @change="onFilterChange" />
++      </el-form-item>
++      <el-form-item label="案卷号">
++        <el-input v-model="filters.case_no" placeholder="案卷号" clearable style="width: 140px" @change="onFilterChange" />
++      </el-form-item>
++      <el-form-item label="费用类型">
++        <el-select v-model="filters.fee_type" placeholder="全部" clearable style="width: 120px" @change="onFilterChange">
++          <el-option label="官费" value="GOV" />
++          <el-option label="服务费" value="SERVICE" />
++          <el-option label="其他" value="MISC" />
++        </el-select>
++      </el-form-item>
++      <el-form-item label="是否欠款">
++        <el-checkbox v-model="filters.is_arrears" @change="onFilterChange">欠款</el-checkbox>
++      </el-form-item>
++      <el-form-item label="是否可提成">
++        <el-checkbox v-model="filters.is_commissionable" @change="onFilterChange">可提成</el-checkbox>
++      </el-form-item>
++      <el-form-item label="币种">
++        <el-input v-model="filters.currency" placeholder="如 CNY" clearable style="width: 90px" @change="onFilterChange" />
++      </el-form-item>
++      <el-form-item label="收款日期">
++        <el-date-picker
++          v-model="filters.date_range"
++          type="daterange"
++          range-separator="至"
++          start-placeholder="开始日期"
++          end-placeholder="结束日期"
++          value-format="YYYY-MM-DD"
++          style="width: 260px"
++          @change="onFilterChange"
++        />
++      </el-form-item>
++      <el-form-item>
++        <el-button @click="resetFilters">重置</el-button>
++      </el-form-item>
++    </el-form>
++
++    <!-- Loading State -->
++    <div v-if="loading" class="page-loading">
++      <el-skeleton :rows="8" animated />
++    </div>
++
++    <!-- Empty State -->
++    <div v-else-if="isEmpty" class="page-empty" style="text-align: center; padding: 60px 0; color: var(--text-sub)">
++      暂无数据
++    </div>
++
++    <!-- Table -->
++    <div v-else>
++      <el-table :data="receipts" stripe size="small" class="compact-table">
++        <el-table-column prop="case_no" label="案卷号" width="140">
++          <template #default="{ row }">
++            {{ row.case_no || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="client_name" label="客户名称" min-width="150">
++          <template #default="{ row }">
++            {{ row.client_name || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="fee_code" label="费用代码" width="120">
++          <template #default="{ row }">
++            {{ row.fee_code || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="fee_name" label="费用名称" min-width="140">
++          <template #default="{ row }">
++            {{ row.fee_name || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="year_no" label="年度" width="70" align="center">
++          <template #default="{ row }">
++            {{ row.year_no ?? '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="fee_type" label="费用类型" width="90">
++          <template #default="{ row }">
++            {{ getFeeTypeLabel(row.fee_type) }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="receivable_amt" label="应收金额" width="110" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ row.receivable_amt.toFixed(2) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="received_amt" label="实收金额" width="110" align="right">
++          <template #default="{ row }">
++            <span class="mono-num">{{ row.received_amt.toFixed(2) }}</span>
++          </template>
++        </el-table-column>
++        <el-table-column prop="currency" label="币种" width="70" align="center" />
++        <el-table-column label="是否欠款" width="90" align="center">
++          <template #default="{ row }">
++            <el-tag :type="row.is_arrears ? 'danger' : 'success'" size="small">
++              {{ row.is_arrears ? '是' : '否' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="是否预收" width="90" align="center">
++          <template #default="{ row }">
++            <el-tag :type="row.is_prepayment ? 'warning' : 'info'" size="small">
++              {{ row.is_prepayment ? '是' : '否' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="收款日期" width="110">
++          <template #default="{ row }">
++            {{ row.last_receipt_date ? formatDate(row.last_receipt_date) : '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column label="到期日" width="110">
++          <template #default="{ row }">
++            {{ row.due_date ? formatDate(row.due_date) : '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="invoice_no" label="发票号" width="130">
++          <template #default="{ row }">
++            {{ row.invoice_no || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column label="操作" width="80" fixed="right">
++          <template #default="{ row }">
++            <el-button size="small" @click="openEditDialog(row)">编辑</el-button>
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <div style="margin-top: 16px; display: flex; justify-content: flex-end">
++        <el-pagination
++          v-model:current-page="page"
++          v-model:page-size="pageSize"
++          :total="total"
++          layout="total, prev, pager, next"
++          @current-change="fetchReceipts"
++        />
++      </div>
++    </div>
++
++    <!-- Dialog -->
++    <CaseReceiptDialog
++      v-model="dialogVisible"
++      :receipt-id="editReceiptId"
++      :prefill-case-id="null"
++      :initial-data="editInitialData"
++      @saved="onSaved"
++    />
++  </div>
++</template>
++
++<script setup lang="ts">
++import { computed, onMounted, reactive, ref, watch } from 'vue'
++import { listCaseReceipts } from '../../../api/billing'
++import type { CaseReceiptListItem, CaseReceiptListResponse } from '../../../api/billing.types'
++import CaseReceiptDialog from '../components/CaseReceiptDialog.vue'
++
++const receipts = ref<CaseReceiptListItem[]>([])
++const loading = ref(false)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++const isEmpty = computed(() => !loading.value && total.value === 0)
++
++const dialogVisible = ref(false)
++const editReceiptId = ref<string | null>(null)
++const editInitialData = ref<CaseReceiptListItem | null>(null)
++
++const filters = reactive({
++  client_id: '',
++  case_no: '',
++  fee_type: '',
++  is_arrears: false,
++  is_commissionable: false,
++  currency: '',
++  date_range: null as [string, string] | null,
++})
++
++function getFeeTypeLabel(feeType?: string | null): string {
++  switch (feeType) {
++    case 'GOV': return '官费'
++    case 'SERVICE': return '服务费'
++    case 'MISC': return '其他'
++    default: return feeType || '—'
++  }
++}
++
++function formatDate(dateStr: string): string {
++  try {
++    return new Date(dateStr).toLocaleDateString('zh-CN')
++  } catch {
++    return dateStr
++  }
++}
++
++function onFilterChange() {
++  page.value = 1
++  fetchReceipts()
++}
++
++function resetFilters() {
++  filters.client_id = ''
++  filters.case_no = ''
++  filters.fee_type = ''
++  filters.is_arrears = false
++  filters.is_commissionable = false
++  filters.currency = ''
++  filters.date_range = null
++  page.value = 1
++  fetchReceipts()
++}
++
++async function fetchReceipts() {
++  loading.value = true
++  try {
++    const params: Record<string, unknown> = {
++      page: page.value,
++      page_size: pageSize.value,
++    }
++    if (filters.client_id) params.client_id = filters.client_id
++    if (filters.case_no) params.case_no = filters.case_no
++    if (filters.fee_type) params.fee_type = filters.fee_type
++    if (filters.is_arrears) params.is_arrears = true
++    if (filters.is_commissionable) params.is_commissionable = true
++    if (filters.currency) params.currency = filters.currency
++    if (filters.date_range) {
++      params.date_from = filters.date_range[0]
++      params.date_to = filters.date_range[1]
++    }
++    const result: CaseReceiptListResponse = await listCaseReceipts(params)
++    receipts.value = result.items
++    total.value = result.total
++  } finally {
++    loading.value = false
++  }
++}
++
++function openCreateDialog() {
++  editReceiptId.value = null
++  editInitialData.value = null
++  dialogVisible.value = true
++}
++
++function openEditDialog(row: CaseReceiptListItem) {
++  editReceiptId.value = row.id
++  editInitialData.value = row
++  dialogVisible.value = true
++}
++
++function onSaved() {
++  fetchReceipts()
++}
++
++watch([page, pageSize], () => {
++  fetchReceipts()
++})
++
++onMounted(() => {
++  fetchReceipts()
++})
++</script>
++
++<style scoped>
++.mono-num {
++  font-family: var(--font-mono, monospace);
++}
++</style>
+diff --git a/frontend/src/modules/cases/components/CaseReceiptsSummary.vue b/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
+index 6afdb5a..aa55ddb 100644
+--- a/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
++++ b/frontend/src/modules/cases/components/CaseReceiptsSummary.vue
+@@ -13,7 +13,10 @@
+     <!-- Content -->
+     <template v-else-if="receipts">
+       <!-- Summary Cards -->
+-      <h4 class="section-title">收款摘要</h4>
++      <div class="section-header">
++        <h4 class="section-title">收款摘要</h4>
++        <el-button size="small" type="primary" @click="showDialog = true">新增收款记录</el-button>
++      </div>
+       <div class="summary-cards">
+         <div class="summary-card">
+           <div class="card-label">累计开票</div>
+@@ -121,8 +124,16 @@
+     <!-- No Data -->
+     <div v-else-if="!loading && !error" class="no-data">
+       <p>暂无账单与收款信息。</p>
++      <el-button size="small" type="primary" @click="showDialog = true">新增收款记录</el-button>
+     </div>
+   </div>
++
++  <CaseReceiptDialog
++    v-model="showDialog"
++    :receipt-id="null"
++    :prefill-case-id="String(props.caseId)"
++    @saved="fetchReceipts"
++  />
+ </template>
+ 
+ <script setup lang="ts">
+@@ -133,6 +144,7 @@ import type { CaseReceiptsSummary, BillStatus } from '../../../api/billing.types
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+ import { getBillStatusText } from '../../../constants/displayText'
++import CaseReceiptDialog from '../../billing/components/CaseReceiptDialog.vue'
+ 
+ const props = defineProps<{
+   caseId: number | string
+@@ -143,6 +155,7 @@ const router = useRouter()
+ const receipts = ref<CaseReceiptsSummary | null>(null)
+ const loading = ref(false)
+ const error = ref<ApiError | null>(null)
++const showDialog = ref(false)
+ 
+ const hasEnrichedFields = computed(() => {
+   if (!receipts.value) return false
+@@ -278,6 +291,17 @@ onMounted(() => {
+   color: var(--text-main);
+ }
+ 
++.section-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 12px;
++}
++
++.section-header .section-title {
++  margin-bottom: 0;
++}
++
+ .bill-no {
+   font-family: var(--font-mono);
+   font-weight: 500;
+diff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts
+index 68ba06c..5d29978 100644
+--- a/frontend/src/router/index.ts
++++ b/frontend/src/router/index.ts
+@@ -69,6 +69,7 @@ const routes = [
+       { path: 'billing/bills/:id', name: 'bill_detail', component: () => import('../modules/billing/pages/BillDetail.vue') },
+       { path: 'billing/payments', name: 'payments', component: () => import('../modules/billing/pages/PaymentList.vue') },
+       { path: 'billing/payments/new', name: 'payment_new', component: () => import('../modules/billing/pages/PaymentCreate.vue') },
++      { path: 'billing/case-receipts', name: 'case_receipts', component: () => import('../modules/billing/pages/CaseReceiptList.vue') },
+ 
+       // Collections
+       { path: 'collections/dunning', name: 'dunning_list', component: () => import('../modules/collections/pages/DunningList.vue') },
+diff --git a/tasks/runbook-selection/RBSEL-GATE-01.md b/tasks/runbook-selection/RBSEL-GATE-01.md
+new file mode 100644
+index 0000000..df12351
+--- /dev/null
++++ b/tasks/runbook-selection/RBSEL-GATE-01.md
+@@ -0,0 +1,27 @@
++# RBSEL-GATE-01 — Add lightweight runbook-plan validator
++
++- Source spec: `docs/superpowers/specs/2026-03-24-runbook-selection-and-story-shape-design.md`
++- Type: `validation script`
++- Status: `Executable`
++
++## Closure Slice
++
++- Exact closure slice: create a lightweight CLI script that validates required runbook-selection headings in a plan document and exits non-zero when they are missing.
++- Explicit non-closure: does not edit `AGENTS.md`, does not create the repo-local skill, and does not create or modify the reusable plan template beyond consuming it in verification.
++- Remaining follow-up task ids: `RBSEL-QA-01`
++
++## Allowlist
++
++- `scripts/validate_plan_runbook.py`
++
++## Verification
++
++- `python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md`
++- `python3 - <<'PY'\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nimport subprocess\nimport sys\nwith TemporaryDirectory() as td:\n    p = Path(td) / 'bad.md'\n    p.write_text('# Bad Plan\\n\\n## Story Shape\\n')\n    result = subprocess.run([sys.executable, 'scripts/validate_plan_runbook.py', str(p)], capture_output=True, text=True)\n    assert result.returncode != 0\n    assert 'Missing required sections' in result.stdout or 'Missing required sections' in result.stderr\nPY`
++
++## Evidence
++
++- `artifacts/RBSEL-GATE-01/results.jsonl`
++- `artifacts/RBSEL-GATE-01/summary.md`
++- `artifacts/RBSEL-GATE-01/git/diff.patch`
++
+diff --git a/tasks/runbook-selection/RBSEL-QA-01.md b/tasks/runbook-selection/RBSEL-QA-01.md
+new file mode 100644
+index 0000000..ea907a2
+--- /dev/null
++++ b/tasks/runbook-selection/RBSEL-QA-01.md
+@@ -0,0 +1,32 @@
++# RBSEL-QA-01 — Final close audit for runbook-selection mechanism
++
++- Source spec: `docs/superpowers/specs/2026-03-24-runbook-selection-and-story-shape-design.md`
++- Type: `qa close audit`
++- Status: `Executable`
++
++## Closure Slice
++
++- Exact closure slice: validate that the rule, skill, template, and gate exist together as a coherent minimum mechanism, and produce a final evidence summary for story close.
++- Explicit non-closure: does not modify product code or extend the mechanism beyond evidence-only close-audit corrections.
++- Remaining follow-up task ids: `None`
++
++## Allowlist
++
++- `artifacts/RBSEL-RULE-01/**`
++- `artifacts/RBSEL-SKILL-01/**`
++- `artifacts/RBSEL-TPL-01/**`
++- `artifacts/RBSEL-GATE-01/**`
++- `artifacts/RBSEL-QA-01/**`
++
++## Verification
++
++- `rg -n "Story Shape Classification|chosen_runbook|Replan|planning" AGENTS.md`
++- `rg -n "shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers" skills/fpms-runbook-selection/SKILL.md`
++- `rg -n "^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers" docs/templates/runbook_plan_template.md`
++- `python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md`
++
++## Evidence
++
++- `artifacts/RBSEL-QA-01/results.jsonl`
++- `artifacts/RBSEL-QA-01/summary.md`
++- `artifacts/RBSEL-QA-01/git/diff.patch`
+diff --git a/tasks/runbook-selection/RBSEL-RULE-01.md b/tasks/runbook-selection/RBSEL-RULE-01.md
+new file mode 100644
+index 0000000..1b34d94
+--- /dev/null
++++ b/tasks/runbook-selection/RBSEL-RULE-01.md
+@@ -0,0 +1,26 @@
++# RBSEL-RULE-01 — Add mandatory story-shape and runbook rule to `AGENTS.md`
++
++- Source spec: `docs/superpowers/specs/2026-03-24-runbook-selection-and-story-shape-design.md`
++- Type: `repo governance doc`
++- Status: `Executable`
++
++## Closure Slice
++
++- Exact closure slice: add a mandatory `AGENTS.md` rule section that requires story-shape classification, `chosen_runbook` recording in spec and plan, and replanning when new shared prerequisites are discovered.
++- Explicit non-closure: does not create the repo-local skill, plan template, validation script, or any product feature code.
++- Remaining follow-up task ids: `RBSEL-SKILL-01`, `RBSEL-TPL-01`, `RBSEL-GATE-01`, `RBSEL-QA-01`
++
++## Allowlist
++
++- `AGENTS.md`
++
++## Verification
++
++- `rg -n "Story Shape Classification|chosen_runbook|Replan|planning" AGENTS.md`
++
++## Evidence
++
++- `artifacts/RBSEL-RULE-01/results.jsonl`
++- `artifacts/RBSEL-RULE-01/summary.md`
++- `artifacts/RBSEL-RULE-01/git/diff.patch`
++
+diff --git a/tasks/runbook-selection/RBSEL-SKILL-01.md b/tasks/runbook-selection/RBSEL-SKILL-01.md
+new file mode 100644
+index 0000000..638c303
+--- /dev/null
++++ b/tasks/runbook-selection/RBSEL-SKILL-01.md
+@@ -0,0 +1,26 @@
++# RBSEL-SKILL-01 — Add repo-local runbook selection skill
++
++- Source spec: `docs/superpowers/specs/2026-03-24-runbook-selection-and-story-shape-design.md`
++- Type: `repo-local skill`
++- Status: `Executable`
++
++## Closure Slice
++
++- Exact closure slice: create a repo-local skill file that teaches agents how to classify story shape, select a runbook, and emit the minimum planning fields required by the new governance rule.
++- Explicit non-closure: does not modify `AGENTS.md`, does not create the plan template, and does not implement the validation gate script.
++- Remaining follow-up task ids: `RBSEL-TPL-01`, `RBSEL-GATE-01`, `RBSEL-QA-01`
++
++## Allowlist
++
++- `skills/fpms-runbook-selection/SKILL.md`
++
++## Verification
++
++- `rg -n "shared_file_density|prereq_dependency_density|be_fe_coupling|evidence_cost|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers" skills/fpms-runbook-selection/SKILL.md`
++
++## Evidence
++
++- `artifacts/RBSEL-SKILL-01/results.jsonl`
++- `artifacts/RBSEL-SKILL-01/summary.md`
++- `artifacts/RBSEL-SKILL-01/git/diff.patch`
++
+diff --git a/tasks/runbook-selection/RBSEL-TPL-01.md b/tasks/runbook-selection/RBSEL-TPL-01.md
+new file mode 100644
+index 0000000..403e1e0
+--- /dev/null
++++ b/tasks/runbook-selection/RBSEL-TPL-01.md
+@@ -0,0 +1,26 @@
++# RBSEL-TPL-01 — Add runbook-aware plan template
++
++- Source spec: `docs/superpowers/specs/2026-03-24-runbook-selection-and-story-shape-design.md`
++- Type: `template doc`
++- Status: `Executable`
++
++## Closure Slice
++
++- Exact closure slice: create a reusable plan template that forces all required runbook-selection sections to appear in future multi-step plans.
++- Explicit non-closure: does not modify `AGENTS.md`, does not create the repo-local skill, and does not implement any gate script logic.
++- Remaining follow-up task ids: `RBSEL-GATE-01`, `RBSEL-QA-01`
++
++## Allowlist
++
++- `docs/templates/runbook_plan_template.md`
++
++## Verification
++
++- `rg -n "^## Story Shape|^## Chosen Runbook|^## Runbook Rationale|^## Preflight Dependency Audit|^## Execution Mode|^## Baseline Promotion Protocol|^## Replan Triggers|^## Atomic Task Inventory|^## Wave Plan" docs/templates/runbook_plan_template.md`
++
++## Evidence
++
++- `artifacts/RBSEL-TPL-01/results.jsonl`
++- `artifacts/RBSEL-TPL-01/summary.md`
++- `artifacts/RBSEL-TPL-01/git/diff.patch`
++

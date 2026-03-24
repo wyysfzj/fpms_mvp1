@@ -1,0 +1,20 @@
+ backend/app/main.py                                |  11 +-
+ backend/app/modules/billing/api.py                 | 141 ++++++-
+ backend/app/modules/billing/schemas.py             |  72 +++-
+ backend/app/modules/billing/service.py             | 137 ++++++
+ backend/tests/test_case_receipt_crud.py            | 292 +++++++++++++
+ ...ook-selection-and-story-shape-implementation.md | 185 +++++++++
+ ...-24-runbook-selection-and-story-shape-design.md | 282 +++++++++++++
+ frontend/src/api/billing.ts                        |  18 +
+ frontend/src/api/billing.types.ts                  |  63 +++
+ frontend/src/constants/menu.ts                     |   1 +
+ .../billing/components/CaseReceiptDialog.vue       | 459 +++++++++++++++++++++
+ .../src/modules/billing/pages/CaseReceiptList.vue  | 281 +++++++++++++
+ .../cases/components/CaseReceiptsSummary.vue       |  26 +-
+ frontend/src/router/index.ts                       |   1 +
+ tasks/runbook-selection/RBSEL-GATE-01.md           |  27 ++
+ tasks/runbook-selection/RBSEL-QA-01.md             |  32 ++
+ tasks/runbook-selection/RBSEL-RULE-01.md           |  26 ++
+ tasks/runbook-selection/RBSEL-SKILL-01.md          |  26 ++
+ tasks/runbook-selection/RBSEL-TPL-01.md            |  26 ++
+ 19 files changed, 2096 insertions(+), 10 deletions(-)
