@@ -16,6 +16,13 @@ export interface AnnuityTask {
     remark?: string
     created_at?: string
     updated_at?: string
+    gov_fee_amt?: number | null
+    service_fee_amt?: number | null
+    notify_count?: number | null
+    pay_next_year?: boolean | null
+    draft_generated?: boolean | null
+    notice_sent?: boolean | null
+    is_overdue?: boolean
 }
 
 export type AnnuityPendingMode = 'pending' | 'processed'
@@ -75,4 +82,17 @@ export interface AnnuityGenerateDraftResult {
     summary: AnnuityGenerateDraftSummary
     success: AnnuityGenerateDraftSuccessItem[]
     failed: AnnuityGenerateDraftFailedItem[]
+}
+
+export interface AnnuityTaskGeneratePayload {
+    case_id: string
+}
+
+export interface AnnuityTaskGenerateResult {
+    case_id: string
+    case_no?: string | null
+    first_year: number
+    last_year: number
+    tasks_created: number
+    tasks_skipped: number
 }

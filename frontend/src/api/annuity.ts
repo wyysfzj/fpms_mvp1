@@ -8,6 +8,8 @@ import type {
     AnnuityTask,
     AnnuityTaskListParams,
     AnnuityGenerateDraftsPayload,
+    AnnuityTaskGeneratePayload,
+    AnnuityTaskGenerateResult,
 } from './annuity.types'
 
 interface BackendAnnuityTask {
@@ -193,4 +195,9 @@ export async function generateAnnuityDrafts(
         success: response.data.success.map(mapGenerateSuccessItem),
         failed: response.data.failed.map(mapGenerateFailedItem),
     }
+}
+
+export async function generateAnnuityTasks(payload: AnnuityTaskGeneratePayload): Promise<AnnuityTaskGenerateResult> {
+    const { data } = await http.post<AnnuityTaskGenerateResult>('/annuity/tasks/generate', payload)
+    return data
 }
