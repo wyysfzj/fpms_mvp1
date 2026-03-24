@@ -1,0 +1,293 @@
+diff --git a/frontend/src/api/govPayments.ts b/frontend/src/api/govPayments.ts
+index d3ee92f..0ba570a 100644
+--- a/frontend/src/api/govPayments.ts
++++ b/frontend/src/api/govPayments.ts
+@@ -391,7 +391,14 @@ export async function addManualGovPayment(
+ ): Promise<ManualGovPaymentCreateResult> {
+     const response = await http.post<BackendManualGovPaymentCreateResult>(
+         `/pay-lists/${payListId}/manual-items`,
+-        payload,
++        {
++            case_id: payload.case_id,
++            fee_item_id: payload.fee_item_id ?? undefined,
++            paid_date: payload.paid_date,
++            paid_amount: payload.paid_amount,
++            official_receipt_no: payload.official_receipt_no,
++            remark: payload.remark,
++        },
+     )
+ 
+     return {
+diff --git a/frontend/src/api/govPayments.types.ts b/frontend/src/api/govPayments.types.ts
+index 6a4d5a3..8b43005 100644
+--- a/frontend/src/api/govPayments.types.ts
++++ b/frontend/src/api/govPayments.types.ts
+@@ -143,7 +143,7 @@ export interface PayListMarkPaidResult {
+ 
+ export interface ManualGovPaymentCreatePayload {
+     case_id: string
+-    fee_item_id?: string
++    fee_item_id?: string | null
+     paid_date: string
+     paid_amount: number | string
+     official_receipt_no?: string
+diff --git a/frontend/src/modules/annuity/pages/PayListDetail.vue b/frontend/src/modules/annuity/pages/PayListDetail.vue
+index 2a6929a..da1974d 100644
+--- a/frontend/src/modules/annuity/pages/PayListDetail.vue
++++ b/frontend/src/modules/annuity/pages/PayListDetail.vue
+@@ -86,7 +86,18 @@
+             <template #header>
+               <div class="card-header">
+                 <span class="form-card-title">缴费明细</span>
+-                <span class="page-count">共 {{ detail.gov_payments.length }} 条</span>
++                <div class="card-header-actions">
++                  <span class="page-count">共 {{ detail.gov_payments.length }} 条</span>
++                  <el-button
++                    v-if="canAddManualRow"
++                    size="small"
++                    type="primary"
++                    plain
++                    @click="openManualDialog"
++                  >
++                    新增历史明细
++                  </el-button>
++                </div>
+               </div>
+             </template>
+ 
+@@ -213,6 +224,13 @@
+         </el-col>
+       </el-row>
+     </template>
++
++    <ManualGovPaymentDialog
++      v-model="manualDialogVisible"
++      :pay-list-id="payList?.id ?? null"
++      :pay-list-title="payListTitle"
++      @success="handleManualSuccess"
++    />
+   </main>
+ </template>
+ 
+@@ -232,6 +250,7 @@ import type {
+   PayListDetailResult,
+ } from '../../../api/govPayments.types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import ManualGovPaymentDialog from '../components/ManualGovPaymentDialog.vue'
+ 
+ interface MarkPaidForm {
+   paid_date: string
+@@ -243,6 +262,7 @@ const router = useRouter()
+ const loading = ref(false)
+ const exporting = ref(false)
+ const markingPaid = ref(false)
++const manualDialogVisible = ref(false)
+ const error = ref<GovPaymentsApiError | null>(null)
+ const detail = ref<PayListDetailResult | null>(null)
+ const markPaidFormRef = ref<FormInstance>()
+@@ -269,6 +289,11 @@ const payListTitle = computed(() => {
+ 
+ const canExport = computed(() => (payList.value?.status || '').toUpperCase() === 'DRAFT')
+ const canMarkPaid = computed(() => (payList.value?.status || '').toUpperCase() === 'EXPORTED')
++const canAddManualRow = computed(() => {
++  if (!payList.value) return false
++  const status = (payList.value.status || '').toUpperCase()
++  return status === 'DRAFT' && detail.value?.gov_payments.length === 0
++})
+ 
+ function goBack() {
+   router.push('/fee-management/pay-lists')
+@@ -282,6 +307,14 @@ function goToRegister() {
+   })
+ }
+ 
++function openManualDialog() {
++  if (!canAddManualRow.value) {
++    ElMessage.warning('仅空的历史清单可新增手工明细。')
++    return
++  }
++  manualDialogVisible.value = true
++}
++
+ function payListStatusText(status?: string): string {
+   switch ((status || '').toUpperCase()) {
+     case 'DRAFT':
+@@ -435,6 +468,10 @@ async function handleMarkPaid() {
+   }
+ }
+ 
++async function handleManualSuccess() {
++  await loadDetail()
++}
++
+ watch(payListId, () => {
+   void loadDetail()
+ }, { immediate: true })
+@@ -460,6 +497,12 @@ watch(payListId, () => {
+   gap: 12px;
+ }
+ 
++.card-header-actions {
++  display: inline-flex;
++  align-items: center;
++  gap: 10px;
++}
++
+ .action-stack {
+   display: flex;
+   flex-direction: column;
+components/errors/ApiErrorBanner.vue'
++
++interface ManualGovPaymentForm {
++  case_id: string
++  fee_item_id: string
++  paid_date: string
++  paid_amount: number | null
++  official_receipt_no: string
++  remark: string
++}
++
++const props = defineProps<{
++  modelValue: boolean
++  payListId: number | null
++  payListTitle: string
++}>()
++
++const emit = defineEmits<{
++  'update:modelValue': [value: boolean]
++  success: []
++}>()
++
++const visible = ref(props.modelValue)
++const formRef = ref<FormInstance>()
++const saving = ref(false)
++const error = ref<GovPaymentsApiError | null>(null)
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++
++const form = reactive<ManualGovPaymentForm>({
++  case_id: '',
++  fee_item_id: '',
++  paid_date: dayjs().format('YYYY-MM-DD'),
++  paid_amount: null,
++  official_receipt_no: '',
++  remark: '',
++})
++
++const rules: FormRules<ManualGovPaymentForm> = {
++  case_id: [{ required: true, message: '案件编号为必填项', trigger: 'blur' }],
++  paid_date: [{ required: true, message: '缴费日期为必填项', trigger: 'change' }],
++  paid_amount: [
++    {
++      validator: (_rule, value: unknown, callback) => {
++        const numeric = Number(value)
++        if (!Number.isFinite(numeric) || numeric <= 0) {
++          callback(new Error('缴费金额必须大于 0'))
++          return
++        }
++        callback()
++      },
++      trigger: 'blur',
++    },
++  ],
++}
++
++const dialogHint = computed(() => {
++  const label = props.payListTitle || '当前清单'
++  return `将把这条手工明细补录到“${label}”。如果费用项编号不填写，系统会保留为空。`
++})
++
++function resetForm() {
++  form.case_id = ''
++  form.fee_item_id = ''
++  form.paid_date = dayjs().format('YYYY-MM-DD')
++  form.paid_amount = null
++  form.official_receipt_no = ''
++  form.remark = ''
++  error.value = null
++  fieldErrors.value = new Map()
++}
++
++watch(
++  () => props.modelValue,
++  (value) => {
++    visible.value = value
++    if (value) resetForm()
++  },
++)
++
++watch(visible, (value) => {
++  emit('update:modelValue', value)
++})
++
++function handleClose() {
++  visible.value = false
++}
++
++function mapErrorMessage(apiError: ApiError): string {
++  switch (apiError.code) {
++    case 'PAY_LIST_NOT_FOUND':
++      return '官费清单不存在，请刷新后重试。'
++    case 'PAY_LIST_STATE_CONFLICT':
++      return '当前清单状态不允许补录手工明细。'
++    case 'CASE_REQUIRED':
++      return '案件编号为必填项。'
++    case 'CASE_NOT_FOUND':
++      return '案件不存在，请检查后重试。'
++    case 'PAY_LIST_SCOPE_INVALID':
++      return '案件或费用项与当前清单不匹配，请检查后重试。'
++    case 'FEE_ITEM_NOT_FOUND':
++      return '费用项不存在，请检查后重试。'
++    case 'GOV_PAYMENT_INVALID':
++      return '缴费金额必须大于 0，请检查后重试。'
++    case 'VALIDATION_ERROR':
++      return '请求参数校验失败，请检查后重试。'
++    default:
++      if (apiError.status === 401) return '登录已失效，请重新登录。'
++      if (apiError.status === 403) return '无权限执行该操作。'
++      if (apiError.status === 404) return '目标资源不存在，请确认后重试。'
++      if (apiError.status === 409) return '数据冲突，当前请求无法完成。'
++      if (apiError.status === 422) return '请求参数不符合要求，请检查后重试。'
++      return '补录失败，请稍后重试。'
++  }
++}
++
++async function handleSubmit() {
++  fieldErrors.value = new Map()
++
++  if (!props.payListId || props.payListId <= 0) {
++    ElMessage.error('清单编号无效，无法补录。')
++    return
++  }
++
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++  error.value = null
++
++  try {
++    await addManualGovPayment(props.payListId, {
++      case_id: form.case_id.trim(),
++      fee_item_id: form.fee_item_id.trim() || undefined,
++      paid_date: form.paid_date,
++      paid_amount: form.paid_amount as number,
++      official_receipt_no: form.official_receipt_no.trim() || undefined,
++      remark: form.remark.trim() || undefined,
++    })
++    ElMessage.success('历史缴费明细已补录。')
++    visible.value = false
++    emit('success')
++  } catch (err) {
++    const mapped = mapGovPaymentsError(err)
++    error.value = {
++      ...mapped,
++      message: mapErrorMessage(mapped),
++    }
++    if (mapped.category === 'validation' && mapped.details) {
++      fieldErrors.value = mapFieldErrors(mapped.details)
++    }
++  } finally {
++    saving.value = false
++  }
++}
++</script>

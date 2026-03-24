@@ -391,7 +391,14 @@ export async function addManualGovPayment(
 ): Promise<ManualGovPaymentCreateResult> {
     const response = await http.post<BackendManualGovPaymentCreateResult>(
         `/pay-lists/${payListId}/manual-items`,
-        payload,
+        {
+            case_id: payload.case_id,
+            fee_item_id: payload.fee_item_id ?? undefined,
+            paid_date: payload.paid_date,
+            paid_amount: payload.paid_amount,
+            official_receipt_no: payload.official_receipt_no,
+            remark: payload.remark,
+        },
     )
 
     return {

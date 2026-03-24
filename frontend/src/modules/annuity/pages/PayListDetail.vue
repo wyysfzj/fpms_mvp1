@@ -86,7 +86,18 @@
             <template #header>
               <div class="card-header">
                 <span class="form-card-title">缴费明细</span>
-                <span class="page-count">共 {{ detail.gov_payments.length }} 条</span>
+                <div class="card-header-actions">
+                  <span class="page-count">共 {{ detail.gov_payments.length }} 条</span>
+                  <el-button
+                    v-if="canAddManualRow"
+                    size="small"
+                    type="primary"
+                    plain
+                    @click="openManualDialog"
+                  >
+                    新增历史明细
+                  </el-button>
+                </div>
               </div>
             </template>
 
@@ -213,6 +224,13 @@
         </el-col>
       </el-row>
     </template>
+
+    <ManualGovPaymentDialog
+      v-model="manualDialogVisible"
+      :pay-list-id="payList?.id ?? null"
+      :pay-list-title="payListTitle"
+      @success="handleManualSuccess"
+    />
   </main>
 </template>
 
@@ -232,6 +250,7 @@ import type {
   PayListDetailResult,
 } from '../../../api/govPayments.types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import ManualGovPaymentDialog from '../components/ManualGovPaymentDialog.vue'
 
 interface MarkPaidForm {
   paid_date: string
@@ -243,6 +262,7 @@ const router = useRouter()
 const loading = ref(false)
 const exporting = ref(false)
 const markingPaid = ref(false)
+const manualDialogVisible = ref(false)
 const error = ref<GovPaymentsApiError | null>(null)
 const detail = ref<PayListDetailResult | null>(null)
 const markPaidFormRef = ref<FormInstance>()
@@ -269,6 +289,11 @@ const payListTitle = computed(() => {
 
 const canExport = computed(() => (payList.value?.status || '').toUpperCase() === 'DRAFT')
 const canMarkPaid = computed(() => (payList.value?.status || '').toUpperCase() === 'EXPORTED')
+const canAddManualRow = computed(() => {
+  if (!payList.value) return false
+  const status = (payList.value.status || '').toUpperCase()
+  return status === 'DRAFT' && detail.value?.gov_payments.length === 0
+})
 
 function goBack() {
   router.push('/fee-management/pay-lists')
@@ -280,6 +305,14 @@ function goToRegister() {
     path: '/fee-management/gov-payments/new',
     query: { pay_list_id: String(payList.value.id) },
   })
+}
+
+function openManualDialog() {
+  if (!canAddManualRow.value) {
+    ElMessage.warning('仅空的历史清单可新增手工明细。')
+    return
+  }
+  manualDialogVisible.value = true
 }
 
 function payListStatusText(status?: string): string {
@@ -435,6 +468,10 @@ async function handleMarkPaid() {
   }
 }
 
+async function handleManualSuccess() {
+  await loadDetail()
+}
+
 watch(payListId, () => {
   void loadDetail()
 }, { immediate: true })
@@ -458,6 +495,12 @@ watch(payListId, () => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.card-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .action-stack {

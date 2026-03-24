@@ -143,7 +143,7 @@ export interface PayListMarkPaidResult {
 
 export interface ManualGovPaymentCreatePayload {
     case_id: string
-    fee_item_id?: string
+    fee_item_id?: string | null
     paid_date: string
     paid_amount: number | string
     official_receipt_no?: string
