@@ -53,6 +53,7 @@ Agent MUST follow these rules without exception.
 - The resulting task plan MUST also record the same `Story Shape Classification`.
 - The task spec and the task plan MUST both record the selected `chosen_runbook`.
 - The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.
+- Execution MUST NOT start until both classification and runbook selection are complete and recorded in the spec and plan.
 - If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.
 - If the new prerequisite changes the closure slice, the original task MUST NOT be stretched to absorb it; the work MUST be split into a follow-up task.
 
