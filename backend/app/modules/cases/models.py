@@ -91,6 +91,7 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
     is_fee_monitor: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     fee_reduction: Mapped[str | None] = mapped_column(String(32), nullable=True)
     applicant_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    first_annuity_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class T_CaseApplicant(UUIDPrimaryKeyMixin, AuditMixin, Base):

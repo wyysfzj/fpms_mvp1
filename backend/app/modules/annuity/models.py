@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -96,3 +96,13 @@ class AnnuityTask(Base):
     )
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     updated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    gov_fee_amt: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 2), nullable=True, server_default=text("0")
+    )
+    service_fee_amt: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 2), nullable=True, server_default=text("0")
+    )
+    notify_count: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
+    pay_next_year: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+    draft_generated: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+    notice_sent: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
