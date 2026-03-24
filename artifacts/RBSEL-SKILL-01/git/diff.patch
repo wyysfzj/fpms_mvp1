@@ -1,15 +1,12 @@
 diff --git a/skills/fpms-runbook-selection/SKILL.md b/skills/fpms-runbook-selection/SKILL.md
-index 2dc1bdb..dd02197 100644
+index dd02197..ca89fcb 100644
 --- a/skills/fpms-runbook-selection/SKILL.md
 +++ b/skills/fpms-runbook-selection/SKILL.md
-@@ -7,6 +7,10 @@ description: "Use when preparing any multi-step FPMS task that needs writing-pla
+@@ -61,6 +61,7 @@ Choose one of these runbooks:
  
- Use this skill before `writing-plans` for any multi-step story. The goal is not automation; the goal is to force an explicit, auditable choice of execution shape before planning starts.
+ Apply these rules in order:
  
-+## First Pass
-+
-+Before any classification or output-format rules, read the current story background and the existing constraints first. Use the task/spec context, the task file, and any governing repo rules as the source of truth before choosing a runbook.
-+
- ## When To Use
- 
- Use this skill when a task is more than a simple single-file change and needs a plan, wave structure, or follow-up tasks.
++- If the story cannot start until shared prerequisites are frozen, or if `prereq_dependency_density = high`, you must choose `P0-prereq-heavy-story`.
+ - If `shared_file_density = high` and `be_fe_coupling = chained`, prefer `P0-single-lane-story`.
+ - If `prereq_dependency_density = high`, require a `Preflight Dependency Audit` even if another runbook is chosen.
+ - If shared files are low and the slices are independent, allow `P0-multi-lane-parallel-story`.

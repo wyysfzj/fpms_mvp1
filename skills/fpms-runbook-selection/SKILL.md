@@ -61,6 +61,7 @@ Choose one of these runbooks:
 
 Apply these rules in order:
 
+- If the story cannot start until shared prerequisites are frozen, or if `prereq_dependency_density = high`, you must choose `P0-prereq-heavy-story`.
 - If `shared_file_density = high` and `be_fe_coupling = chained`, prefer `P0-single-lane-story`.
 - If `prereq_dependency_density = high`, require a `Preflight Dependency Audit` even if another runbook is chosen.
 - If shared files are low and the slices are independent, allow `P0-multi-lane-parallel-story`.

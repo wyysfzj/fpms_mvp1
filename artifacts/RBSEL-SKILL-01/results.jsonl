@@ -1,1 +1,1 @@
-{"cmd":"rg -n \"First Pass|current story background|existing constraints|classification or output-format rules\" skills/fpms-runbook-selection/SKILL.md","rc":0}
+{"cmd":"rg -n 'First Pass|When To Use|Required Story Shape Classification|Runbook Families|Selection Rules|P0-prereq-heavy-story|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers|Recommended Execution Mode|Minimum Output Template' /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-skill-01/skills/fpms-runbook-selection/SKILL.md","rc":0}
