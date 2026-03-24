@@ -1,0 +1,377 @@
+diff --git a/backend/app/modules/annuity/api.py b/backend/app/modules/annuity/api.py
+index 42fe614..9aee48e 100644
+--- a/backend/app/modules/annuity/api.py
++++ b/backend/app/modules/annuity/api.py
+@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
+ from app.api.deps import current_user_dep, require_perm
+ from app.db.session import get_db
+ from app.modules.annuity.service import (
++    add_manual_gov_payment,
+     create_historical_pay_list,
+     create_pay_list_from_fee_items,
+     export_pay_list,
+@@ -61,6 +62,15 @@ class GovPaymentCreateIn(BaseModel):
+     remark: str | None = None
+ 
+ 
++class ManualGovPaymentCreateIn(BaseModel):
++    case_id: str = Field(..., min_length=1, max_length=36)
++    fee_item_id: str | None = Field(default=None, max_length=36)
++    paid_date: date
++    paid_amount: Decimal = Field(..., gt=0)
++    official_receipt_no: str | None = Field(default=None, max_length=64)
++    remark: str | None = None
++
++
+ class PayListMarkPaidIn(BaseModel):
+     paid_date: date
+ 
+@@ -316,3 +326,24 @@ def post_gov_payments(
+         official_receipt_no=payload.official_receipt_no,
+         remark=payload.remark,
+     )
++
++
++@router.post("/pay-lists/{pay_list_id}/manual-items", summary="Add manual gov payment item")
++def post_pay_list_manual_items(
++    pay_list_id: int,
++    payload: ManualGovPaymentCreateIn,
++    _perm: None = Depends(require_perm("GovPayment.Create")),
++    current_user: T_User = current_user_dep,
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    return add_manual_gov_payment(
++        db,
++        pay_list_id=pay_list_id,
++        case_id=payload.case_id,
++        fee_item_id=payload.fee_item_id,
++        paid_date=payload.paid_date,
++        paid_amount=payload.paid_amount,
++        official_receipt_no=payload.official_receipt_no,
++        remark=payload.remark,
++        actor_id=current_user.id,
++    )
+diff --git a/backend/app/modules/annuity/service.py b/backend/app/modules/annuity/service.py
+index 5d0e3c0..d69b654 100644
+--- a/backend/app/modules/annuity/service.py
++++ b/backend/app/modules/annuity/service.py
+@@ -1310,3 +1310,143 @@ def register_gov_payment(
+             "client_id": pay_list.client_id,
+         },
+     }
++
++
++def add_manual_gov_payment(
++    db: Session,
++    *,
++    pay_list_id: int,
++    case_id: str,
++    fee_item_id: str | None = None,
++    paid_date: date,
++    paid_amount: Decimal,
++    official_receipt_no: str | None = None,
++    remark: str | None = None,
++    actor_id: str | None = None,
++) -> dict[str, Any]:
++    """Add a manual/historical gov-payment row under an existing pay list."""
++    pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one_or_none()
++    if pay_list is None:
++        raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
++
++    if (pay_list.status or "").strip().upper() != "DRAFT":
++        raise_business_error(
++            "PAY_LIST_STATE_CONFLICT",
++            "Manual items can only be added to a DRAFT pay list",
++            details={"status": pay_list.status},
++            status_code=409,
++        )
++
++    existing_rows = (
++        db.execute(select(GovPayment.id).where(GovPayment.pay_list_id == pay_list.id).limit(1))
++        .scalars()
++        .first()
++    )
++    if existing_rows is not None:
++        raise_business_error(
++            "PAY_LIST_STATE_CONFLICT",
++            "Manual items can only be added to an empty historical pay list",
++            details={"reason": "PAY_LIST_ALREADY_HAS_ROWS"},
++            status_code=409,
++        )
++
++    normalized_case_id = (case_id or "").strip()
++    if not normalized_case_id:
++        raise_business_error("CASE_REQUIRED", "case_id is required", status_code=400)
++
++    resolved_paid_amount = Decimal(paid_amount)
++    if resolved_paid_amount <= Decimal("0"):
++        raise_business_error(
++            "GOV_PAYMENT_INVALID",
++            "paid_amount must be greater than 0",
++            status_code=400,
++        )
++
++    case = db.execute(select(Case).where(Case.id == normalized_case_id)).scalar_one_or_none()
++    if case is None:
++        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
++    if case.client_id != pay_list.client_id:
++        raise_business_error(
++            "PAY_LIST_SCOPE_INVALID",
++            "Case client does not match pay list client",
++            status_code=400,
++        )
++
++    normalized_fee_item_id = (fee_item_id or "").strip() or None
++    if normalized_fee_item_id is not None:
++        fee_item_row = db.execute(
++            select(FeeItem, FeeDraft)
++            .join(FeeDraft, FeeDraft.id == FeeItem.draft_id)
++            .where(FeeItem.id == normalized_fee_item_id)
++        ).first()
++        if fee_item_row is None:
++            raise_business_error("FEE_ITEM_NOT_FOUND", "Fee item not found", status_code=404)
++        fee_item, draft = fee_item_row
++        if draft.client_id != pay_list.client_id or draft.currency != pay_list.currency:
++            raise_business_error(
++                "PAY_LIST_SCOPE_INVALID",
++                "Fee item does not match pay list scope",
++                status_code=400,
++            )
++        if fee_item.case_id != normalized_case_id:
++            raise_business_error(
++                "PAY_LIST_SCOPE_INVALID",
++                "Fee item case does not match pay list case",
++                status_code=400,
++            )
++
++    target = GovPayment(
++        pay_list_id=pay_list.id,
++        case_id=normalized_case_id,
++        fee_item_id=normalized_fee_item_id,
++        status="PAID",
++        currency=pay_list.currency,
++        paid_date=paid_date,
++        paid_amount=resolved_paid_amount,
++        official_receipt_no=official_receipt_no,
++        remark=remark,
++        created_by=actor_id,
++        updated_by=actor_id,
++    )
++    db.add(target)
++    db.flush()
++
++    payments = (
++        db.execute(
++            select(GovPayment)
++            .where(GovPayment.pay_list_id == pay_list.id)
++            .order_by(GovPayment.id.asc())
++        )
++        .scalars()
++        .all()
++    )
++    _recompute_pay_list_status(pay_list, payments)
++    pay_list.updated_by = actor_id
++
++    db.commit()
++    db.refresh(target)
++    db.refresh(pay_list)
++
++    return {
++        "gov_payment": {
++            "id": target.id,
++            "pay_list_id": target.pay_list_id,
++            "case_id": target.case_id,
++            "fee_item_id": target.fee_item_id,
++            "status": target.status,
++            "currency": target.currency,
++            "paid_date": target.paid_date,
++            "paid_amount": str(target.paid_amount),
++            "official_receipt_no": target.official_receipt_no,
++            "remark": target.remark,
++        },
++        "pay_list": {
++            "id": pay_list.id,
++            "pay_list_no": pay_list.pay_list_no,
++            "status": pay_list.status,
++            "paid_date": pay_list.paid_date,
++            "total_amount": str(pay_list.total_amount),
++            "currency": pay_list.currency,
++            "client_id": pay_list.client_id,
++        },
++    }
+diff --git a/backend/tests/test_annuity_e2e.py b/backend/tests/test_annuity_e2e.py
+index f6cdb60..6006639 100644
+--- a/backend/tests/test_annuity_e2e.py
++++ b/backend/tests/test_annuity_e2e.py
+@@ -680,6 +680,171 @@ def test_historical_pay_list_create_requires_client_and_round_trips_supported_fi
+     assert len(gov_payments) == 0
+ 
+ 
++def test_pay_list_manual_item_accepts_null_fee_item_id_and_updates_total_amount(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++
++    historical_resp = client.post(
++        "/api/v1/pay-lists",
++        headers=auth_headers,
++        json={
++            "client_id": client_id,
++            "currency": "CNY",
++            "planned_pay_date": "2026-08-15",
++            "remark": "手工补录",
++        },
++    )
++    assert historical_resp.status_code == 201, historical_resp.text
++    pay_list_id = historical_resp.json()["id"]
++
++    manual_resp = client.post(
++        f"/api/v1/pay-lists/{pay_list_id}/manual-items",
++        headers=auth_headers,
++        json={
++            "case_id": case_id,
++            "paid_amount": "88.50",
++            "paid_date": "2026-08-20",
++            "remark": "历史补录",
++        },
++    )
++
++    assert manual_resp.status_code == 200, manual_resp.text
++    payload = manual_resp.json()
++    assert payload["gov_payment"]["fee_item_id"] is None
++    assert payload["gov_payment"]["case_id"] == case_id
++    assert payload["gov_payment"]["paid_amount"] == "88.50"
++    assert payload["pay_list"]["id"] == pay_list_id
++    assert payload["pay_list"]["total_amount"] == "88.50"
++
++    with session_factory() as db:
++        gov_payment = (
++            db.execute(
++                select(GovPayment).where(
++                    GovPayment.pay_list_id == pay_list_id,
++                    GovPayment.case_id == case_id,
++                )
++            )
++            .scalars()
++            .one()
++        )
++
++    assert gov_payment.fee_item_id is None
++    assert gov_payment.remark == "历史补录"
++
++
++def test_pay_list_manual_item_requires_authentication(client: TestClient) -> None:
++    unauth_resp = client.post(
++        "/api/v1/pay-lists/1/manual-items",
++        json={
++            "case_id": "CASE-001",
++            "paid_amount": "10.00",
++            "paid_date": "2026-08-20",
++        },
++    )
++    _assert_error(unauth_resp, 401, "AUTH_REQUIRED")
++
++
++def test_pay_list_manual_item_returns_not_found_for_missing_header(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> None:
++    missing_resp = client.post(
++        "/api/v1/pay-lists/999999/manual-items",
++        headers=auth_headers,
++        json={
++            "case_id": "CASE-001",
++            "paid_amount": "10.00",
++            "paid_date": "2026-08-20",
++        },
++    )
++    _assert_error(missing_resp, 404, "PAY_LIST_NOT_FOUND")
++
++
++def test_pay_list_manual_item_rejects_non_draft_header(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++
++    historical_resp = client.post(
++        "/api/v1/pay-lists",
++        headers=auth_headers,
++        json={
++            "client_id": client_id,
++            "currency": "CNY",
++            "planned_pay_date": "2026-08-15",
++            "remark": "手工补录",
++        },
++    )
++    assert historical_resp.status_code == 201, historical_resp.text
++    pay_list_id = historical_resp.json()["id"]
++
++    with session_factory() as db:
++        pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one()
++        pay_list.status = "EXPORTED"
++        db.commit()
++
++    conflict_resp = client.post(
++        f"/api/v1/pay-lists/{pay_list_id}/manual-items",
++        headers=auth_headers,
++        json={
++            "case_id": case_id,
++            "paid_amount": "10.00",
++            "paid_date": "2026-08-20",
++        },
++    )
++    _assert_error(conflict_resp, 409, "PAY_LIST_STATE_CONFLICT")
++
++
++def test_pay_list_manual_item_rejects_generated_draft_pay_list(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_id, case_id = _create_client_and_case(client, auth_headers)
++    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
++
++    task_id = _insert_annuity_task(
++        session_factory,
++        case_id=case_id,
++        client_id=client_id,
++        year_no=1,
++        due_date=date(2026, 8, 1),
++    )
++    draft_resp = client.post(
++        "/api/v1/annuity/tasks/generate-drafts",
++        headers=auth_headers,
++        json={"task_ids": [task_id], "pay_next_year": False, "currency": "CNY"},
++    )
++    assert draft_resp.status_code == 200, draft_resp.text
++    draft_id = draft_resp.json()["success"][0]["draft_id"]
++    gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
++
++    pay_list_resp = client.post(
++        "/api/v1/pay-lists/from-fee-items",
++        headers=auth_headers,
++        json={"fee_item_ids": [gov_fee_item_id], "planned_pay_date": "2026-08-15"},
++    )
++    assert pay_list_resp.status_code == 200, pay_list_resp.text
++    pay_list_id = pay_list_resp.json()["pay_list"]["id"]
++
++    conflict_resp = client.post(
++        f"/api/v1/pay-lists/{pay_list_id}/manual-items",
++        headers=auth_headers,
++        json={
++            "case_id": case_id,
++            "paid_amount": "10.00",
++            "paid_date": "2026-08-20",
++        },
++    )
++    payload = _assert_error(conflict_resp, 409, "PAY_LIST_STATE_CONFLICT")
++    assert payload["error"]["details"]["reason"] == "PAY_LIST_ALREADY_HAS_ROWS"
++
++
+ def test_pay_list_query_filters_supported_headers_and_case_join_semantics(
+     client: TestClient,
+     auth_headers: dict[str, str],

@@ -1310,3 +1310,143 @@ def register_gov_payment(
             "client_id": pay_list.client_id,
         },
     }
+
+
+def add_manual_gov_payment(
+    db: Session,
+    *,
+    pay_list_id: int,
+    case_id: str,
+    fee_item_id: str | None = None,
+    paid_date: date,
+    paid_amount: Decimal,
+    official_receipt_no: str | None = None,
+    remark: str | None = None,
+    actor_id: str | None = None,
+) -> dict[str, Any]:
+    """Add a manual/historical gov-payment row under an existing pay list."""
+    pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one_or_none()
+    if pay_list is None:
+        raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
+
+    if (pay_list.status or "").strip().upper() != "DRAFT":
+        raise_business_error(
+            "PAY_LIST_STATE_CONFLICT",
+            "Manual items can only be added to a DRAFT pay list",
+            details={"status": pay_list.status},
+            status_code=409,
+        )
+
+    existing_rows = (
+        db.execute(select(GovPayment.id).where(GovPayment.pay_list_id == pay_list.id).limit(1))
+        .scalars()
+        .first()
+    )
+    if existing_rows is not None:
+        raise_business_error(
+            "PAY_LIST_STATE_CONFLICT",
+            "Manual items can only be added to an empty historical pay list",
+            details={"reason": "PAY_LIST_ALREADY_HAS_ROWS"},
+            status_code=409,
+        )
+
+    normalized_case_id = (case_id or "").strip()
+    if not normalized_case_id:
+        raise_business_error("CASE_REQUIRED", "case_id is required", status_code=400)
+
+    resolved_paid_amount = Decimal(paid_amount)
+    if resolved_paid_amount <= Decimal("0"):
+        raise_business_error(
+            "GOV_PAYMENT_INVALID",
+            "paid_amount must be greater than 0",
+            status_code=400,
+        )
+
+    case = db.execute(select(Case).where(Case.id == normalized_case_id)).scalar_one_or_none()
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+    if case.client_id != pay_list.client_id:
+        raise_business_error(
+            "PAY_LIST_SCOPE_INVALID",
+            "Case client does not match pay list client",
+            status_code=400,
+        )
+
+    normalized_fee_item_id = (fee_item_id or "").strip() or None
+    if normalized_fee_item_id is not None:
+        fee_item_row = db.execute(
+            select(FeeItem, FeeDraft)
+            .join(FeeDraft, FeeDraft.id == FeeItem.draft_id)
+            .where(FeeItem.id == normalized_fee_item_id)
+        ).first()
+        if fee_item_row is None:
+            raise_business_error("FEE_ITEM_NOT_FOUND", "Fee item not found", status_code=404)
+        fee_item, draft = fee_item_row
+        if draft.client_id != pay_list.client_id or draft.currency != pay_list.currency:
+            raise_business_error(
+                "PAY_LIST_SCOPE_INVALID",
+                "Fee item does not match pay list scope",
+                status_code=400,
+            )
+        if fee_item.case_id != normalized_case_id:
+            raise_business_error(
+                "PAY_LIST_SCOPE_INVALID",
+                "Fee item case does not match pay list case",
+                status_code=400,
+            )
+
+    target = GovPayment(
+        pay_list_id=pay_list.id,
+        case_id=normalized_case_id,
+        fee_item_id=normalized_fee_item_id,
+        status="PAID",
+        currency=pay_list.currency,
+        paid_date=paid_date,
+        paid_amount=resolved_paid_amount,
+        official_receipt_no=official_receipt_no,
+        remark=remark,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(target)
+    db.flush()
+
+    payments = (
+        db.execute(
+            select(GovPayment)
+            .where(GovPayment.pay_list_id == pay_list.id)
+            .order_by(GovPayment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    _recompute_pay_list_status(pay_list, payments)
+    pay_list.updated_by = actor_id
+
+    db.commit()
+    db.refresh(target)
+    db.refresh(pay_list)
+
+    return {
+        "gov_payment": {
+            "id": target.id,
+            "pay_list_id": target.pay_list_id,
+            "case_id": target.case_id,
+            "fee_item_id": target.fee_item_id,
+            "status": target.status,
+            "currency": target.currency,
+            "paid_date": target.paid_date,
+            "paid_amount": str(target.paid_amount),
+            "official_receipt_no": target.official_receipt_no,
+            "remark": target.remark,
+        },
+        "pay_list": {
+            "id": pay_list.id,
+            "pay_list_no": pay_list.pay_list_no,
+            "status": pay_list.status,
+            "paid_date": pay_list.paid_date,
+            "total_amount": str(pay_list.total_amount),
+            "currency": pay_list.currency,
+            "client_id": pay_list.client_id,
+        },
+    }

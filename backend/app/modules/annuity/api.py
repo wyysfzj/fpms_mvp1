@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import current_user_dep, require_perm
 from app.db.session import get_db
 from app.modules.annuity.service import (
+    add_manual_gov_payment,
     create_historical_pay_list,
     create_pay_list_from_fee_items,
     export_pay_list,
@@ -57,6 +58,15 @@ class GovPaymentCreateIn(BaseModel):
     fee_item_id: str = Field(..., min_length=1, max_length=36)
     paid_date: date | None = None
     paid_amount: Decimal | None = Field(default=None, gt=0)
+    official_receipt_no: str | None = Field(default=None, max_length=64)
+    remark: str | None = None
+
+
+class ManualGovPaymentCreateIn(BaseModel):
+    case_id: str = Field(..., min_length=1, max_length=36)
+    fee_item_id: str | None = Field(default=None, max_length=36)
+    paid_date: date
+    paid_amount: Decimal = Field(..., gt=0)
     official_receipt_no: str | None = Field(default=None, max_length=64)
     remark: str | None = None
 
@@ -315,4 +325,25 @@ def post_gov_payments(
         paid_amount=payload.paid_amount,
         official_receipt_no=payload.official_receipt_no,
         remark=payload.remark,
+    )
+
+
+@router.post("/pay-lists/{pay_list_id}/manual-items", summary="Add manual gov payment item")
+def post_pay_list_manual_items(
+    pay_list_id: int,
+    payload: ManualGovPaymentCreateIn,
+    _perm: None = Depends(require_perm("GovPayment.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return add_manual_gov_payment(
+        db,
+        pay_list_id=pay_list_id,
+        case_id=payload.case_id,
+        fee_item_id=payload.fee_item_id,
+        paid_date=payload.paid_date,
+        paid_amount=payload.paid_amount,
+        official_receipt_no=payload.official_receipt_no,
+        remark=payload.remark,
+        actor_id=current_user.id,
     )
