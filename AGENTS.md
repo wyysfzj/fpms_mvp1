@@ -45,7 +45,7 @@ Agent MUST follow these rules without exception.
 ## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
 
 - This rule applies only to tasks that will enter `writing-plans` or any other multi-step execution flow; it does not apply to simple single-file fixes or doc-only tasks that never need planning.
-- Before planning starts, the task spec MUST record `Story Shape Classification` with at least:
+- Before planning starts, the task spec and the task plan MUST both record `Story Shape Classification` with at least:
   - `shared_file_density`
   - `prereq_dependency_density`
   - `be_fe_coupling`
