@@ -892,6 +892,60 @@ def list_pay_lists(
     return items, total
 
 
+def get_pay_list_detail(db: Session, *, pay_list_id: int) -> dict[str, Any]:
+    """Return one pay-list header with its associated gov payment rows."""
+    pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one_or_none()
+    if pay_list is None:
+        raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
+
+    gov_payments = (
+        db.execute(
+            select(GovPayment)
+            .where(GovPayment.pay_list_id == pay_list.id)
+            .order_by(GovPayment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+    return {
+        "pay_list": {
+            "id": pay_list.id,
+            "pay_list_no": pay_list.pay_list_no,
+            "client_id": pay_list.client_id,
+            "status": pay_list.status,
+            "currency": pay_list.currency,
+            "planned_pay_date": pay_list.planned_pay_date,
+            "paid_date": pay_list.paid_date,
+            "total_amount": str(pay_list.total_amount),
+            "remark": pay_list.remark,
+            "created_at": pay_list.created_at,
+            "updated_at": pay_list.updated_at,
+            "created_by": pay_list.created_by,
+            "updated_by": pay_list.updated_by,
+        },
+        "gov_payments": [
+            {
+                "id": gov_payment.id,
+                "pay_list_id": gov_payment.pay_list_id,
+                "case_id": gov_payment.case_id,
+                "fee_item_id": gov_payment.fee_item_id,
+                "status": gov_payment.status,
+                "currency": gov_payment.currency,
+                "paid_date": gov_payment.paid_date,
+                "paid_amount": str(gov_payment.paid_amount),
+                "official_receipt_no": gov_payment.official_receipt_no,
+                "remark": gov_payment.remark,
+                "created_at": gov_payment.created_at,
+                "updated_at": gov_payment.updated_at,
+                "created_by": gov_payment.created_by,
+                "updated_by": gov_payment.updated_by,
+            }
+            for gov_payment in gov_payments
+        ],
+    }
+
+
 def _recompute_pay_list_status(pay_list: PayList, payments: list[GovPayment]) -> None:
     if not payments:
         pay_list.status = "DRAFT"

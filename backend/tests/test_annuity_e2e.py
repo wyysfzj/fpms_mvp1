@@ -782,6 +782,109 @@ def test_pay_list_query_filters_supported_headers_and_case_join_semantics(
     assert forbidden_resp.json()["error"]["details"]["required_perm"] == "PayList.Read"
 
 
+def test_pay_list_detail_returns_header_and_associated_gov_payments(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+    monkeypatch,
+) -> None:
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+
+    task_id = _insert_annuity_task(
+        session_factory,
+        case_id=case_id,
+        client_id=client_id,
+        year_no=1,
+        due_date=date(2026, 8, 1),
+    )
+    draft_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [task_id], "pay_next_year": False, "currency": "CNY"},
+    )
+    assert draft_resp.status_code == 200, draft_resp.text
+    draft_id = draft_resp.json()["success"][0]["draft_id"]
+    gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
+
+    pay_list_resp = client.post(
+        "/api/v1/pay-lists/from-fee-items",
+        headers=auth_headers,
+        json={"fee_item_ids": [gov_fee_item_id], "planned_pay_date": "2026-08-15"},
+    )
+    assert pay_list_resp.status_code == 200, pay_list_resp.text
+    pay_list_id = pay_list_resp.json()["pay_list"]["id"]
+
+    detail_resp = client.get(f"/api/v1/pay-lists/{pay_list_id}", headers=auth_headers)
+    assert detail_resp.status_code == 200, detail_resp.text
+    payload = detail_resp.json()
+    assert set(payload) == {"pay_list", "gov_payments"}
+    pay_list_payload = payload["pay_list"]
+    gov_payment_payload = payload["gov_payments"][0]
+    assert set(pay_list_payload) == {
+        "id",
+        "pay_list_no",
+        "client_id",
+        "status",
+        "currency",
+        "planned_pay_date",
+        "paid_date",
+        "total_amount",
+        "remark",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "updated_by",
+    }
+    assert pay_list_payload["id"] == pay_list_id
+    assert pay_list_payload["pay_list_no"]
+    assert pay_list_payload["client_id"] == client_id
+    assert pay_list_payload["status"] == "DRAFT"
+    assert pay_list_payload["currency"] == "CNY"
+    assert pay_list_payload["planned_pay_date"] == "2026-08-15"
+    assert pay_list_payload["paid_date"] is None
+    assert pay_list_payload["total_amount"] == "100.00"
+    assert len(payload["gov_payments"]) == 1
+    assert set(gov_payment_payload) == {
+        "id",
+        "pay_list_id",
+        "case_id",
+        "fee_item_id",
+        "status",
+        "currency",
+        "paid_date",
+        "paid_amount",
+        "official_receipt_no",
+        "remark",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "updated_by",
+    }
+    assert gov_payment_payload["fee_item_id"] == gov_fee_item_id
+    assert gov_payment_payload["pay_list_id"] == pay_list_id
+    assert gov_payment_payload["case_id"] == case_id
+    assert gov_payment_payload["status"] == "PLANNED"
+    assert gov_payment_payload["currency"] == "CNY"
+    assert gov_payment_payload["paid_date"] is None
+    assert gov_payment_payload["paid_amount"] == "100.00"
+    assert gov_payment_payload["official_receipt_no"] is None
+
+    not_found_resp = client.get("/api/v1/pay-lists/999999", headers=auth_headers)
+    _assert_error(not_found_resp, 404, "PAY_LIST_NOT_FOUND")
+
+    unauthenticated_resp = client.get(f"/api/v1/pay-lists/{pay_list_id}")
+    assert unauthenticated_resp.status_code == 401, unauthenticated_resp.text
+
+    def _no_perms(_db, _user_id) -> set[str]:
+        return set()
+
+    monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
+    forbidden_resp = client.get(f"/api/v1/pay-lists/{pay_list_id}", headers=auth_headers)
+    _assert_error(forbidden_resp, 403, "FORBIDDEN")
+    assert forbidden_resp.json()["error"]["details"]["required_perm"] == "PayList.Read"
+
+
 def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:
     rate = FeeRate(
         fee_code=_uid("RATE"),

@@ -14,6 +14,7 @@ from app.modules.annuity.service import (
     create_historical_pay_list,
     create_pay_list_from_fee_items,
     generate_fee_drafts_from_annuity_tasks,
+    get_pay_list_detail,
     list_annuity_tasks,
     list_pay_lists,
     register_gov_payment,
@@ -218,6 +219,15 @@ def get_pay_lists(
         for pay_list in pay_lists
     ]
     return {"items": items, "page": page, "page_size": page_size, "total": total}
+
+
+@router.get("/pay-lists/{pay_list_id}", summary="Get pay list detail")
+def get_pay_list(
+    pay_list_id: int,
+    _perm: None = Depends(require_perm("PayList.Read")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return get_pay_list_detail(db, pay_list_id=pay_list_id)
 
 
 @router.post(
