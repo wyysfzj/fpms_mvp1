@@ -95,6 +95,12 @@ class CaseReceipt(UUIDPrimaryKeyMixin, AuditMixin, Base):
     is_commissionable: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, server_default=text("0")
     )
+    fee_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_prepayment: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, server_default=text("0")
+    )
+    remark: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
 
 class Offset(UUIDPrimaryKeyMixin, AuditMixin, Base):
