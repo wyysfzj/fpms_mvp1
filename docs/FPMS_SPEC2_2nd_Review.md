@@ -228,7 +228,7 @@ Overall implementation completeness: **~44%** (excluding Document Generation)
 
 | # | Feature | Module | Notes |
 |---|---------|--------|-------|
-| 1 | 官费清单与缴费 (FR-FE-04) | Fees | Model exists, need API + UI |
+| 1 | 官费清单与缴费 (FR-FE-04) | Fees | 已完成（Phase 3 兼容闭环）；5 个 blocked follow-up 已登记于 `docs/FRMS_SPEC2_2nd_POST.md` |
 | 2 | 个案收款登记端点 (FR-FE-07) | Fees | Model exists, need API + UI |
 | 3 | 年费管理 API/UI (FR-FE-06) | Fees | Model exists, need API + UI |
 | 4 | 冲销反转前端 | Billing | Backend service exists, need UI |
