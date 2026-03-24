@@ -1,5 +1,5 @@
 diff --git a/AGENTS.md b/AGENTS.md
-index f5f321e..df4929b 100644
+index f5f321e..8f51e73 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
 @@ -42,6 +42,26 @@ Agent MUST follow these rules without exception.
@@ -8,7 +8,7 @@ index f5f321e..df4929b 100644
  
 +## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
 +
-+- This rule applies whenever the task file or batch manifest requires more than one atomic task file, more than one execution wave, or an explicit planning artifact; it does not apply to a single-file fix task or a doc-only task handled outside `writing-plans`.
++- This rule applies whenever there is a written spec, implementation plan, or batch manifest prepared to drive multi-step execution, or whenever the task requires more than one atomic task file or more than one execution wave; the single-file fix and doc-only exclusions only apply when no such written spec, implementation plan, or batch manifest exists.
 +- Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:
 +  - `shared_file_density`
 +  - `prereq_dependency_density`

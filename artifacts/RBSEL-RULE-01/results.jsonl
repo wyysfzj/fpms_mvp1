@@ -1,4 +1,3 @@
-{"cmd":"rg -n \"Story Shape Classification & Runbook Selection|chosen_runbook|Replan|planning\" AGENTS.md","step":"lint","rc":0,"status":"PASS"}
+{"cmd":"rg -n \"written spec, implementation plan, or batch manifest prepared to drive multi-step execution|Before entering `writing-plans`|The resulting task plan MUST also record the same `Story Shape Classification`|The task spec and the task plan MUST both record the selected `chosen_runbook`|Valid `chosen_runbook` IDs are:|Execution MUST NOT start until both classification and runbook selection are complete|shared prerequisite|shared ownership conflict|state-machine reachability issue|follow-up task\" AGENTS.md","step":"lint","rc":0,"status":"PASS"}
 {"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0,"status":"PASS"}
-{"cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01 diff ffd335c..0a6b7975101713548e72343ce56ab0591662e950 -- AGENTS.md","step":"evidence","rc":0,"status":"PASS"}
-{"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0,"status":"PASS","note":"rerun after immutable-SHA evidence update"}
+{"cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01 diff ffd335c..39f432cebd9e84a60487465d115420db5a2f2837 -- AGENTS.md","step":"evidence","rc":0,"status":"PASS"}
