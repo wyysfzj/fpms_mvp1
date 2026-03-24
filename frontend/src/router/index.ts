@@ -45,6 +45,12 @@ const routes = [
         component: () => import('../modules/annuity/pages/PayList.vue'),
       },
       {
+        path: 'annuity/pay-lists/:id',
+        alias: '/fee-management/pay-lists/:id',
+        name: 'annuity_pay_list_detail',
+        component: () => import('../modules/annuity/pages/PayListDetail.vue'),
+      },
+      {
         path: 'annuity/gov-payments/new',
         alias: '/fee-management/gov-payments/new',
         name: 'annuity_gov_payment_new',

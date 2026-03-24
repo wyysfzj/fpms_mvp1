@@ -1,0 +1,497 @@
+<template>
+  <main class="page-container" role="main">
+    <div class="page-header">
+      <div class="page-header-left">
+        <el-button text @click="goBack">
+          <span class="back-icon">←</span> 返回清单列表
+        </el-button>
+        <div>
+          <h1 class="page-title">官费清单详情</h1>
+          <span class="page-count">{{ payListTitle }}</span>
+        </div>
+      </div>
+      <div class="page-header-right">
+        <el-button @click="handleRefresh">刷新</el-button>
+        <el-button
+          text
+          type="primary"
+          :disabled="!payList"
+          @click="goToRegister"
+        >
+          去登记缴费
+        </el-button>
+        <el-button
+          type="primary"
+          :disabled="!canExport"
+          :loading="exporting"
+          @click="handleExport"
+        >
+          导出清单
+        </el-button>
+      </div>
+    </div>
+
+    <div v-if="error" class="page-error" role="alert" aria-live="assertive">
+      <ApiErrorBanner :error="error" @dismiss="error = null" />
+    </div>
+
+    <div v-if="loading" class="loading-state">
+      <el-skeleton :rows="10" animated />
+    </div>
+
+    <template v-else-if="detail">
+      <el-row :gutter="16" class="detail-layout">
+        <el-col :xs="24" :lg="16">
+          <el-card shadow="never">
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">清单头信息</span>
+              </div>
+            </template>
+
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="清单编号">
+                {{ detail.pay_list.pay_list_no || `#${detail.pay_list.id}` }}
+              </el-descriptions-item>
+              <el-descriptions-item label="状态">
+                <el-tag :type="payListStatusTag(detail.pay_list.status)">
+                  {{ payListStatusText(detail.pay_list.status) }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="客户编号">
+                {{ detail.pay_list.client_id }}
+              </el-descriptions-item>
+              <el-descriptions-item label="币种">
+                {{ detail.pay_list.currency }}
+              </el-descriptions-item>
+              <el-descriptions-item label="计划缴费日期">
+                {{ detail.pay_list.planned_pay_date || '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="实际缴费日期">
+                {{ detail.pay_list.paid_date || '—' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="清单金额">
+                {{ formatMoney(detail.pay_list.total_amount, detail.pay_list.currency) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="更新时间">
+                {{ formatDateTime(detail.pay_list.updated_at) }}
+              </el-descriptions-item>
+              <el-descriptions-item label="备注" :span="2">
+                {{ detail.pay_list.remark || '—' }}
+              </el-descriptions-item>
+            </el-descriptions>
+          </el-card>
+
+          <el-card shadow="never" class="rows-card">
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">缴费明细</span>
+                <span class="page-count">共 {{ detail.gov_payments.length }} 条</span>
+              </div>
+            </template>
+
+            <el-empty
+              v-if="detail.gov_payments.length === 0"
+              description="当前清单暂无缴费明细"
+            />
+
+            <el-table
+              v-else
+              :data="detail.gov_payments"
+              stripe
+              size="small"
+              class="compact-table"
+            >
+              <el-table-column label="费用项编号" min-width="170">
+                <template #default="{ row }">
+                  {{ row.fee_item_id || '手工补录' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="case_id" label="案件编号" min-width="180" />
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="govPaymentStatusTag(row.status)">
+                    {{ govPaymentStatusText(row.status) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="缴费日期" width="130">
+                <template #default="{ row }">
+                  {{ row.paid_date || '—' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="缴费金额" min-width="150" align="right">
+                <template #default="{ row }">
+                  {{ formatMoney(row.paid_amount, row.currency) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="官方收据号" min-width="160">
+                <template #default="{ row }">
+                  {{ row.official_receipt_no || '—' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="备注" min-width="180">
+                <template #default="{ row }">
+                  {{ row.remark || '—' }}
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+        </el-col>
+
+        <el-col :xs="24" :lg="8">
+          <el-card shadow="never">
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">操作面板</span>
+              </div>
+            </template>
+
+            <div class="action-stack">
+              <el-alert
+                title="缴费登记入口"
+                type="info"
+                :closable="false"
+                description="进入官方缴费登记页，可带入当前官费清单编号。"
+              />
+              <el-button type="primary" plain @click="goToRegister">
+                前往官方缴费登记
+              </el-button>
+
+              <el-divider />
+
+              <el-alert
+                title="清单导出"
+                type="warning"
+                :closable="false"
+                description="只有草稿状态的官费清单允许导出，导出后状态会更新为已导出。"
+              />
+              <el-button
+                type="primary"
+                :disabled="!canExport"
+                :loading="exporting"
+                @click="handleExport"
+              >
+                导出当前清单
+              </el-button>
+
+              <el-divider />
+
+              <el-form
+                ref="markPaidFormRef"
+                :model="markPaidForm"
+                :rules="markPaidRules"
+                label-position="top"
+              >
+                <el-alert
+                  title="标记为已缴费"
+                  type="success"
+                  :closable="false"
+                  description="仅已导出且明细已登记缴费的清单可执行。"
+                />
+                <el-form-item label="实际缴费日期" prop="paid_date">
+                  <el-date-picker
+                    v-model="markPaidForm.paid_date"
+                    type="date"
+                    placeholder="请选择日期"
+                    value-format="YYYY-MM-DD"
+                    format="YYYY-MM-DD"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+                <el-button
+                  type="success"
+                  :disabled="!canMarkPaid"
+                  :loading="markingPaid"
+                  @click="handleMarkPaid"
+                >
+                  标记清单已缴费
+                </el-button>
+              </el-form>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </template>
+  </main>
+</template>
+
+<script setup lang="ts">
+import { computed, reactive, ref, watch } from 'vue'
+import dayjs from 'dayjs'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import {
+  exportPayList,
+  getPayListDetail,
+  mapGovPaymentsError,
+  markPayListPaid,
+} from '../../../api/govPayments'
+import type {
+  GovPaymentsApiError,
+  PayListDetailResult,
+} from '../../../api/govPayments.types'
+import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+
+interface MarkPaidForm {
+  paid_date: string
+}
+
+const route = useRoute()
+const router = useRouter()
+
+const loading = ref(false)
+const exporting = ref(false)
+const markingPaid = ref(false)
+const error = ref<GovPaymentsApiError | null>(null)
+const detail = ref<PayListDetailResult | null>(null)
+const markPaidFormRef = ref<FormInstance>()
+
+const markPaidForm = reactive<MarkPaidForm>({
+  paid_date: dayjs().format('YYYY-MM-DD'),
+})
+
+const markPaidRules: FormRules<MarkPaidForm> = {
+  paid_date: [{ required: true, message: '实际缴费日期为必填项', trigger: 'change' }],
+}
+
+const payListId = computed(() => {
+  const value = Number(route.params.id)
+  return Number.isFinite(value) && value > 0 ? value : 0
+})
+
+const payList = computed(() => detail.value?.pay_list ?? null)
+
+const payListTitle = computed(() => {
+  if (!payList.value) return '读取中'
+  return payList.value.pay_list_no || `#${payList.value.id}`
+})
+
+const canExport = computed(() => (payList.value?.status || '').toUpperCase() === 'DRAFT')
+const canMarkPaid = computed(() => (payList.value?.status || '').toUpperCase() === 'EXPORTED')
+
+function goBack() {
+  router.push('/fee-management/pay-lists')
+}
+
+function goToRegister() {
+  if (!payList.value) return
+  router.push({
+    path: '/fee-management/gov-payments/new',
+    query: { pay_list_id: String(payList.value.id) },
+  })
+}
+
+function payListStatusText(status?: string): string {
+  switch ((status || '').toUpperCase()) {
+    case 'DRAFT':
+      return '草稿'
+    case 'EXPORTED':
+      return '已导出'
+    case 'PAID':
+      return '已缴费'
+    case 'CANCELLED':
+      return '已取消'
+    case 'PARTIAL':
+      return '部分完成'
+    default:
+      return status || '未知'
+  }
+}
+
+function payListStatusTag(status?: string): 'info' | 'warning' | 'success' | 'danger' {
+  switch ((status || '').toUpperCase()) {
+    case 'EXPORTED':
+      return 'warning'
+    case 'PAID':
+      return 'success'
+    case 'CANCELLED':
+      return 'danger'
+    default:
+      return 'info'
+  }
+}
+
+function govPaymentStatusText(status?: string): string {
+  switch ((status || '').toUpperCase()) {
+    case 'PLANNED':
+      return '已计划'
+    case 'RECORDED':
+      return '已登记'
+    case 'PAID':
+      return '已缴费'
+    default:
+      return status || '未知'
+  }
+}
+
+function govPaymentStatusTag(status?: string): 'info' | 'warning' | 'success' {
+  switch ((status || '').toUpperCase()) {
+    case 'PAID':
+      return 'success'
+    case 'RECORDED':
+      return 'warning'
+    default:
+      return 'info'
+  }
+}
+
+function formatMoney(amount: number, currency: string): string {
+  return new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency: currency || 'CNY',
+  }).format(amount || 0)
+}
+
+function formatDateTime(dateValue?: string): string {
+  if (!dateValue) return '—'
+  const parsed = dayjs(dateValue)
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : dateValue
+}
+
+function buildExportFileName(target: NonNullable<typeof payList.value>): string {
+  const displayNo = target.pay_list_no || `清单-${target.id}`
+  return `官费清单-${displayNo}.xlsx`
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+async function loadDetail() {
+  detail.value = null
+  if (!payListId.value) {
+    error.value = {
+      status: 0,
+      code: 'INVALID_PAY_LIST_ID',
+      message: '官费清单编号无效。',
+      category: 'validation',
+    }
+    return
+  }
+
+  loading.value = true
+  error.value = null
+  try {
+    detail.value = await getPayListDetail(payListId.value)
+  } catch (err) {
+    detail.value = null
+    error.value = mapGovPaymentsError(err)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleRefresh() {
+  await loadDetail()
+}
+
+async function handleExport() {
+  if (!payList.value || !canExport.value) {
+    ElMessage.warning('只有草稿状态的官费清单可以导出。')
+    return
+  }
+
+  exporting.value = true
+  error.value = null
+  try {
+    const blob = await exportPayList(payList.value.id)
+    downloadBlob(blob, buildExportFileName(payList.value))
+    ElMessage.success('官费清单已开始导出。')
+    await loadDetail()
+  } catch (err) {
+    error.value = mapGovPaymentsError(err)
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function handleMarkPaid() {
+  if (!payList.value || !canMarkPaid.value) {
+    ElMessage.warning('当前状态不允许标记清单已缴费。')
+    return
+  }
+
+  const valid = await markPaidFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  markingPaid.value = true
+  error.value = null
+  try {
+    await markPayListPaid(payList.value.id, { paid_date: markPaidForm.paid_date })
+    ElMessage.success('官费清单已标记为已缴费。')
+    await loadDetail()
+  } catch (err) {
+    error.value = mapGovPaymentsError(err)
+  } finally {
+    markingPaid.value = false
+  }
+}
+
+watch(payListId, () => {
+  void loadDetail()
+}, { immediate: true })
+</script>
+
+<style scoped>
+.detail-layout {
+  margin-top: 8px;
+}
+
+.rows-card {
+  margin-top: 16px;
+}
+
+.loading-state {
+  padding: 16px 0 8px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+:deep(.el-button:focus-visible),
+:deep(.el-input__wrapper:focus-within),
+:deep(.el-select__wrapper.is-focused),
+:deep(.el-textarea__inner:focus-visible),
+:deep(.el-date-editor:focus-within) {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .page-header-right {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .page-header-right :deep(.el-button) {
+    flex: 1;
+    min-width: 120px;
+  }
+}
+</style>
