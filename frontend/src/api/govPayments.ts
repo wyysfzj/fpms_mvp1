@@ -3,6 +3,15 @@ import { http } from './http'
 import type {
     GovPaymentRegisterPayload,
     GovPaymentRegisterResult,
+    HistoricalPayListCreatePayload,
+    HistoricalPayListCreateResult,
+    ManualGovPaymentCreatePayload,
+    ManualGovPaymentCreateResult,
+    PayListDetailResult,
+    PayListListResult,
+    PayListMarkPaidPayload,
+    PayListMarkPaidResult,
+    PayListQuery,
     GovPaymentsApiError,
     GovPaymentsErrorCategory,
     PayListCreatePayload,
@@ -65,6 +74,110 @@ interface BackendGovPaymentRegisterResult {
     }
 }
 
+interface BackendPayListListResult {
+    items: {
+        id: number
+        pay_list_no: string | null
+        client_id: string
+        client_name: string | null
+        currency: string
+        status: string
+        planned_pay_date: string | null
+        paid_date: string | null
+        total_amount: number | string | null
+        remark: string | null
+        created_at: string
+        updated_at: string
+        created_by: string | null
+        updated_by: string | null
+    }[]
+    page: number
+    page_size: number
+    total: number
+}
+
+interface BackendPayListDetailResult {
+    pay_list: {
+        id: number
+        pay_list_no: string | null
+        client_id: string
+        currency: string
+        status: string
+        planned_pay_date: string | null
+        paid_date: string | null
+        total_amount: number | string | null
+        remark: string | null
+        created_at: string
+        updated_at: string
+        created_by: string | null
+        updated_by: string | null
+    }
+    gov_payments: {
+        id: number
+        pay_list_id: number
+        case_id: string
+        fee_item_id: string | null
+        status: string
+        currency: string
+        paid_date: string | null
+        paid_amount: number | string | null
+        official_receipt_no: string | null
+        remark: string | null
+    }[]
+}
+
+interface BackendHistoricalPayListCreateResult {
+    id: number
+    pay_list_no: string | null
+    client_id: string
+    currency: string
+    status: string
+    planned_pay_date: string | null
+    paid_date: string | null
+    total_amount: number | string | null
+    remark: string | null
+}
+
+interface BackendPayListMarkPaidResult {
+    pay_list: {
+        id: number
+        pay_list_no: string | null
+        client_id: string
+        currency: string
+        status: string
+        planned_pay_date?: string | null
+        paid_date: string | null
+        total_amount: number | string | null
+        remark: string | null
+        updated_by: string | null
+    }
+}
+
+interface BackendManualGovPaymentCreateResult {
+    gov_payment: {
+        id: number
+        pay_list_id: number
+        case_id: string
+        fee_item_id: string | null
+        status: string
+        currency: string
+        paid_date: string | null
+        paid_amount: number | string | null
+        official_receipt_no: string | null
+        remark: string | null
+    }
+    pay_list: {
+        id: number
+        pay_list_no: string | null
+        client_id: string
+        currency: string
+        status: string
+        planned_pay_date?: string | null
+        paid_date: string | null
+        total_amount: number | string | null
+    }
+}
+
 function asNumber(input: number | string | null | undefined): number {
     if (input === null || input === undefined || input === '') return 0
     const parsed = Number(input)
@@ -101,10 +214,16 @@ function mapGovPaymentsErrorMessage(status: number, code: string): string {
             return '费用项不存在，请检查后重试。'
         case 'PAY_LIST_NOT_FOUND':
             return '官费清单不存在，请检查后重试。'
+        case 'CASE_NOT_FOUND':
+            return '案件不存在，请检查后重试。'
+        case 'CASE_REQUIRED':
+            return '案件编号为必填项。'
         case 'GOV_PAYMENT_INVALID':
             return '缴费金额不合法，请输入大于 0 的金额。'
         case 'GOV_PAYMENT_DUPLICATE':
             return '该费用项已登记官方缴费，不能重复提交。'
+        case 'PAY_LIST_STATE_CONFLICT':
+            return '当前官费清单状态不允许执行此操作。'
         case 'VALIDATION_ERROR':
             return '参数校验失败，请检查输入后重试。'
         default:
@@ -195,6 +314,95 @@ export async function registerGovPayment(
             ...response.data.pay_list,
             planned_pay_date: null,
             total_amount: asNumber(response.data.pay_list.total_amount),
+        },
+    }
+}
+
+export async function listPayLists(
+    query: PayListQuery = {},
+): Promise<PayListListResult> {
+    const response = await http.get<BackendPayListListResult>('/pay-lists', {
+        params: query,
+    })
+
+    return {
+        ...response.data,
+        items: response.data.items.map((item) => ({
+            ...item,
+            total_amount: asNumber(item.total_amount),
+        })),
+    }
+}
+
+export async function getPayListDetail(payListId: number): Promise<PayListDetailResult> {
+    const response = await http.get<BackendPayListDetailResult>(`/pay-lists/${payListId}`)
+
+    return {
+        pay_list: {
+            ...response.data.pay_list,
+            total_amount: asNumber(response.data.pay_list.total_amount),
+        },
+        gov_payments: response.data.gov_payments.map((item) => ({
+            ...item,
+            paid_amount: asNumber(item.paid_amount),
+        })),
+    }
+}
+
+export async function createHistoricalPayList(
+    payload: HistoricalPayListCreatePayload,
+): Promise<HistoricalPayListCreateResult> {
+    const response = await http.post<BackendHistoricalPayListCreateResult>('/pay-lists', payload)
+
+    return {
+        ...response.data,
+        total_amount: asNumber(response.data.total_amount),
+    }
+}
+
+export async function exportPayList(payListId: number): Promise<Blob> {
+    const response = await http.post<Blob>(`/pay-lists/${payListId}/export`, undefined, {
+        responseType: 'blob',
+    })
+    return response.data
+}
+
+export async function markPayListPaid(
+    payListId: number,
+    payload: PayListMarkPaidPayload,
+): Promise<PayListMarkPaidResult> {
+    const response = await http.post<BackendPayListMarkPaidResult>(
+        `/pay-lists/${payListId}/mark-paid`,
+        payload,
+    )
+
+    return {
+        pay_list: {
+            ...response.data.pay_list,
+            planned_pay_date: response.data.pay_list.planned_pay_date ?? null,
+            total_amount: asNumber(response.data.pay_list.total_amount),
+        },
+    }
+}
+
+export async function addManualGovPayment(
+    payListId: number,
+    payload: ManualGovPaymentCreatePayload,
+): Promise<ManualGovPaymentCreateResult> {
+    const response = await http.post<BackendManualGovPaymentCreateResult>(
+        `/pay-lists/${payListId}/manual-items`,
+        payload,
+    )
+
+    return {
+        gov_payment: {
+            ...response.data.gov_payment,
+            paid_amount: asNumber(response.data.gov_payment.paid_amount),
+        },
+        pay_list: {
+            ...response.data.pay_list,
+            total_amount: asNumber(response.data.pay_list.total_amount),
+            planned_pay_date: null,
         },
     }
 }

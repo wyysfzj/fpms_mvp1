@@ -1,0 +1,7 @@
+{"ts":"20260324T153643","step":"lint","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/constants/menu.ts\ src/router/index.ts\ src/api/govPayments.ts\ src/api/govPayments.types.ts"}
+{"ts":"20260324T153643","step":"typecheck","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260324T153731","step":"test","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260324T154018","step":"lint","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/constants/menu.ts\ src/router/index.ts\ src/api/govPayments.ts\ src/api/govPayments.types.ts"}
+{"ts":"20260324T154018","step":"test","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260324T154649","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/constants/menu.ts\ src/router/index.ts\ src/api/govPayments.ts\ src/api/govPayments.types.ts"}
+{"ts":"20260324T154649","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}

@@ -38,8 +38,18 @@ const routes = [
 
       // Annuity
       { path: 'annuity/tasks', name: 'annuity_tasks', component: () => import('../modules/annuity/pages/AnnuityTaskList.vue') },
-      { path: 'annuity/pay-lists', name: 'annuity_pay_lists', component: () => import('../modules/annuity/pages/PayList.vue') },
-      { path: 'annuity/gov-payments/new', name: 'annuity_gov_payment_new', component: () => import('../modules/annuity/pages/GovPaymentCreate.vue') },
+      {
+        path: 'annuity/pay-lists',
+        alias: '/fee-management/pay-lists',
+        name: 'annuity_pay_lists',
+        component: () => import('../modules/annuity/pages/PayList.vue'),
+      },
+      {
+        path: 'annuity/gov-payments/new',
+        alias: '/fee-management/gov-payments/new',
+        name: 'annuity_gov_payment_new',
+        component: () => import('../modules/annuity/pages/GovPaymentCreate.vue'),
+      },
 
       // Fees
       { path: 'fees/drafts', name: 'fee_drafts', component: () => import('../modules/fees/pages/FeeDraftList.vue') },
