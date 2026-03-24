@@ -207,25 +207,25 @@ function resolveGovPaymentsErrorCategory(status: number): GovPaymentsErrorCatego
 function mapGovPaymentsErrorMessage(status: number, code: string): string {
     switch (code) {
         case 'FEE_ITEM_REQUIRED':
-            return '请至少提供一条费用项编号。'
+            return '系统未带入费用项编号，请从官费清单回执入口重新进入后再提交。'
         case 'PAY_LIST_SCOPE_INVALID':
-            return '费用项范围不合法，请确认客户与币种一致。'
+            return '当前清单与费用项不匹配，请返回回执页重新选择。'
         case 'FEE_ITEM_NOT_FOUND':
-            return '费用项不存在，请检查后重试。'
+            return '费用项不存在，请返回回执页后重试。'
         case 'PAY_LIST_NOT_FOUND':
-            return '官费清单不存在，请检查后重试。'
+            return '官费清单不存在，请返回回执页后重试。'
         case 'CASE_NOT_FOUND':
             return '案件不存在，请检查后重试。'
         case 'CASE_REQUIRED':
             return '案件编号为必填项。'
         case 'GOV_PAYMENT_INVALID':
-            return '缴费金额不合法，请输入大于 0 的金额。'
+            return '缴费金额必须大于 0，请检查后重试。'
         case 'GOV_PAYMENT_DUPLICATE':
-            return '该费用项已登记官方缴费，不能重复提交。'
+            return '该费用项的官方缴费已经登记过，不能重复提交。'
         case 'PAY_LIST_STATE_CONFLICT':
             return '当前官费清单状态不允许执行此操作。'
         case 'VALIDATION_ERROR':
-            return '参数校验失败，请检查输入后重试。'
+            return '请求参数校验失败，请检查自动带入信息后重试。'
         default:
             if (status === 400) return '业务校验失败，请检查输入后重试。'
             if (status === 401) return '登录已失效，请重新登录。'

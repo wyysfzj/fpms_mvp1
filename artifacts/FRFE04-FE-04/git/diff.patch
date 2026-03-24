@@ -1,0 +1,192 @@
+diff --git a/frontend/src/api/govPayments.ts b/frontend/src/api/govPayments.ts
+index 07ebae5..d3ee92f 100644
+--- a/frontend/src/api/govPayments.ts
++++ b/frontend/src/api/govPayments.ts
+@@ -207,25 +207,25 @@ function resolveGovPaymentsErrorCategory(status: number): GovPaymentsErrorCatego
+ function mapGovPaymentsErrorMessage(status: number, code: string): string {
+     switch (code) {
+         case 'FEE_ITEM_REQUIRED':
+-            return '请至少提供一条费用项编号。'
++            return '系统未带入费用项编号，请从官费清单回执入口重新进入后再提交。'
+         case 'PAY_LIST_SCOPE_INVALID':
+-            return '费用项范围不合法，请确认客户与币种一致。'
++            return '当前清单与费用项不匹配，请返回回执页重新选择。'
+         case 'FEE_ITEM_NOT_FOUND':
+-            return '费用项不存在，请检查后重试。'
++            return '费用项不存在，请返回回执页后重试。'
+         case 'PAY_LIST_NOT_FOUND':
+-            return '官费清单不存在，请检查后重试。'
++            return '官费清单不存在，请返回回执页后重试。'
+         case 'CASE_NOT_FOUND':
+             return '案件不存在，请检查后重试。'
+         case 'CASE_REQUIRED':
+             return '案件编号为必填项。'
+         case 'GOV_PAYMENT_INVALID':
+-            return '缴费金额不合法，请输入大于 0 的金额。'
++            return '缴费金额必须大于 0，请检查后重试。'
+         case 'GOV_PAYMENT_DUPLICATE':
+-            return '该费用项已登记官方缴费，不能重复提交。'
++            return '该费用项的官方缴费已经登记过，不能重复提交。'
+         case 'PAY_LIST_STATE_CONFLICT':
+             return '当前官费清单状态不允许执行此操作。'
+         case 'VALIDATION_ERROR':
+-            return '参数校验失败，请检查输入后重试。'
++            return '请求参数校验失败，请检查自动带入信息后重试。'
+         default:
+             if (status === 400) return '业务校验失败，请检查输入后重试。'
+             if (status === 401) return '登录已失效，请重新登录。'
+diff --git a/frontend/src/modules/annuity/pages/GovPaymentCreate.vue b/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+index aa20fd9..a9c513e 100644
+--- a/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
++++ b/frontend/src/modules/annuity/pages/GovPaymentCreate.vue
+@@ -8,6 +8,15 @@
+       </div>
+     </div>
+ 
++    <el-alert
++      v-if="!routeContextReady"
++      class="page-warning"
++      type="warning"
++      :closable="false"
++      show-icon
++      title="请从官费清单回执中的“登记缴费”入口进入此页，系统会自动带入清单编号和费用项编号。"
++    />
++
+     <div v-if="error" class="page-error" role="alert" aria-live="assertive">
+       <ApiErrorBanner :error="error" @dismiss="error = null" />
+     </div>
+@@ -29,7 +38,9 @@
+                 :precision="0"
+                 controls-position="right"
+                 style="width: 100%"
++                disabled
+               />
++              <div class="field-hint">由回执页自动带入，不能手工修改。</div>
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12">
+@@ -38,7 +49,8 @@
+               prop="fee_item_id"
+               :error="fieldErrors.get('fee_item_id')?.join('，')"
+             >
+-              <el-input v-model.trim="form.fee_item_id" placeholder="请输入费用项编号" />
++              <el-input v-model.trim="form.fee_item_id" placeholder="费用项编号由上一步自动带入" disabled />
++              <div class="field-hint">生成行的费用项编号已锁定，防止误登记到其他费用项。</div>
+             </el-form-item>
+           </el-col>
+           <el-col :xs="24" :sm="12">
+@@ -88,7 +100,9 @@
+ 
+         <div class="form-actions">
+           <el-button @click="goBack">取消</el-button>
+-          <el-button type="primary" :loading="saving" @click="handleSubmit">提交登记</el-button>
++          <el-button type="primary" :loading="saving" :disabled="!routeContextReady" @click="handleSubmit">
++            提交登记
++          </el-button>
+         </div>
+       </el-form>
+     </div>
+@@ -99,7 +113,11 @@
+       <el-descriptions :column="3" border>
+         <el-descriptions-item label="缴费记录编号">{{ result.gov_payment.id }}</el-descriptions-item>
+         <el-descriptions-item label="费用项编号">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
+-        <el-descriptions-item label="缴费状态">{{ govPaymentStatusText(result.gov_payment.status) }}</el-descriptions-item>
++        <el-descriptions-item label="缴费状态">
++          <el-tag :type="govPaymentStatusTag(result.gov_payment.status)">
++            {{ govPaymentStatusText(result.gov_payment.status) }}
++          </el-tag>
++        </el-descriptions-item>
+         <el-descriptions-item label="缴费日期">{{ result.gov_payment.paid_date || '—' }}</el-descriptions-item>
+         <el-descriptions-item label="缴费金额">
+           {{ formatMoney(result.gov_payment.paid_amount, result.gov_payment.currency) }}
+@@ -135,7 +153,7 @@
+ </template>
+ 
+ <script setup lang="ts">
+-import { reactive, ref } from 'vue'
++import { computed, reactive, ref } from 'vue'
+ import { useRoute, useRouter } from 'vue-router'
+ import type { FormInstance, FormRules } from 'element-plus'
+ import { ElMessage } from 'element-plus'
+@@ -161,8 +179,20 @@ const error = ref<GovPaymentsApiError | null>(null)
+ const fieldErrors = ref<Map<string, string[]>>(new Map())
+ const result = ref<GovPaymentRegisterResult | null>(null)
+ 
+-const queryPayListId = Number(route.query.pay_list_id || 0)
+-const queryFeeItemId = String(route.query.fee_item_id || '')
++function parseQueryPositiveInt(value: unknown): number {
++  if (typeof value !== 'string' && typeof value !== 'number') return 0
++  const parsed = Number(value)
++  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
++}
++
++function parseQueryText(value: unknown): string {
++  if (typeof value === 'string') return value.trim()
++  if (Array.isArray(value)) return String(value[0] || '').trim()
++  return ''
++}
++
++const queryPayListId = parseQueryPositiveInt(route.query.pay_list_id)
++const queryFeeItemId = parseQueryText(route.query.fee_item_id)
+ 
+ const form = reactive<GovPaymentForm>({
+   pay_list_id: Number.isFinite(queryPayListId) && queryPayListId > 0 ? queryPayListId : 0,
+@@ -208,6 +238,8 @@ const rules: FormRules<GovPaymentForm> = {
+   ],
+ }
+ 
++const routeContextReady = computed(() => form.pay_list_id > 0 && form.fee_item_id.length > 0)
++
+ function goBack() {
+   router.push('/annuity/pay-lists')
+ }
+@@ -225,6 +257,17 @@ function govPaymentStatusText(status: string): string {
+   }
+ }
+ 
++function govPaymentStatusTag(status: string): 'success' | 'info' | 'warning' {
++  switch (status?.toUpperCase()) {
++    case 'PAID':
++      return 'success'
++    case 'PLANNED':
++      return 'warning'
++    default:
++      return 'info'
++  }
++}
++
+ function payListStatusText(status: string): string {
+   switch (status?.toUpperCase()) {
+     case 'DRAFT':
+@@ -258,6 +301,11 @@ function formatMoney(amount: number, currency: string): string {
+ 
+ async function handleSubmit() {
+   fieldErrors.value = new Map()
++  if (!routeContextReady.value) {
++    ElMessage.warning('请从官费清单回执中的“登记缴费”入口进入后再提交。')
++    return
++  }
++
+   const valid = await formRef.value?.validate().catch(() => false)
+   if (!valid) return
+ 
+@@ -273,7 +321,7 @@ async function handleSubmit() {
+       remark: form.remark || undefined,
+     })
+     result.value = response
+-    ElMessage.success('官方缴费登记成功。')
++    ElMessage.success('官方缴费登记成功，清单状态已同步更新。')
+   } catch (err) {
+     const mapped = mapGovPaymentsError(err)
+     error.value = mapped
+@@ -315,6 +363,10 @@ async function handleSubmit() {
+   outline: none;
+ }
+ 
++.page-warning {
++  margin-bottom: 16px;
++}
++
+ :deep(.el-button:focus-visible),
+ :deep(.el-input__wrapper:focus-within),
+ :deep(.el-select__wrapper.is-focused),
