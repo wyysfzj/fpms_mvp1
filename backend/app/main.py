@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -58,10 +59,12 @@ def create_app() -> FastAPI:
     async def validation_error_handler(request: Request, exc: RequestValidationError):
         return JSONResponse(
             status_code=422,
-            content=to_error_response(
-                "VALIDATION_ERROR",
-                "Invalid request",
-                {"errors": exc.errors()},
+            content=jsonable_encoder(
+                to_error_response(
+                    "VALIDATION_ERROR",
+                    "Invalid request",
+                    {"errors": exc.errors()},
+                )
             ),
         )
 

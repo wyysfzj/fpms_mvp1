@@ -16,9 +16,9 @@ def case_id(client: TestClient, auth_headers: dict) -> str:
         json={
             "case_no": f"CR-TEST-{uuid4().hex[:8]}",
             "case_type": "NORMAL",
-            "patent_category": "INVENTION",
-            "flow_dir": "IN",
-            "title": "Test Case for Receipt",
+            "patent_category": "INV",
+            "flow_dir": "CN_DOMESTIC",
+            "title_cn": "Test Case for Receipt",
         },
         headers=auth_headers,
     )

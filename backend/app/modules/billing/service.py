@@ -754,9 +754,9 @@ def reverse_offset(db: Session, offset_id: str, actor_id: str | None = None) -> 
 
 def create_case_receipt(db: Session, payload: CaseReceiptCreate) -> CaseReceipt:
     """Create a manual case receipt."""
-    from app.modules.cases.models import T_Case
+    from app.modules.cases.models import Case
 
-    case = db.query(T_Case).filter(T_Case.id == payload.case_id).first()
+    case = db.query(Case).filter(Case.id == payload.case_id).first()
     if not case:
         raise_business_error("CASE_NOT_FOUND", "案卷不存在", status_code=404)
 
@@ -817,23 +817,23 @@ def list_case_receipts(
     """List case receipts with cross-case filters."""
     from sqlalchemy import case as sa_case
 
-    from app.modules.cases.models import T_Case
-    from app.modules.masterdata.models import T_Client
+    from app.modules.cases.models import Case
+    from app.modules.masterdata.clients.models import Client
 
     query = (
         db.query(
             CaseReceipt,
-            T_Case.case_no.label("case_no"),
-            T_Client.name.label("client_name"),
+            Case.case_no.label("case_no"),
+            Client.name_cn.label("client_name"),
         )
-        .join(T_Case, T_Case.id == CaseReceipt.case_id)
-        .outerjoin(T_Client, T_Client.id == T_Case.client_id)
+        .join(Case, Case.id == CaseReceipt.case_id)
+        .outerjoin(Client, Client.id == Case.client_id)
     )
 
     if client_id:
-        query = query.filter(T_Case.client_id == client_id)
+        query = query.filter(Case.client_id == client_id)
     if case_no:
-        query = query.filter(T_Case.case_no.contains(case_no))
+        query = query.filter(Case.case_no.contains(case_no))
     if fee_type:
         query = query.filter(CaseReceipt.fee_type == fee_type)
     if is_arrears is not None:

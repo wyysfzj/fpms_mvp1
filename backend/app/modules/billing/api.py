@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_perm
@@ -19,16 +21,21 @@ from app.modules.billing.schemas import (
     BillItemDetailResponse,
     BillManualCreateSchema,
     BillResponse,
+    CaseReceiptCreate,
     CaseReceiptResponse,
+    CaseReceiptUpdate,
     OffsetCreateSchema,
     OffsetResponse,
     PaymentResponse,
     PaymentSchema,
 )
 from app.modules.billing.service import (
+    create_case_receipt,
     create_manual_bill_record,
     generate_bill_from_drafts,
+    list_case_receipts,
     process_payment,
+    update_case_receipt,
 )
 from app.modules.billing.service import (
     create_offset as create_offset_service,
@@ -554,7 +561,12 @@ def create_manual_bill(
         )
 
     bill = create_manual_bill_record(db, payload)
-    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill.id).order_by(BillItem.created_at.asc()).all()
+    bill_items = (
+        db.query(BillItem)
+        .filter(BillItem.bill_id == bill.id)
+        .order_by(BillItem.created_at.asc())
+        .all()
+    )
 
     return {
         "id": bill.id,
@@ -618,7 +630,12 @@ def get_bill(
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    bill_items = db.query(BillItem).filter(BillItem.bill_id == bill_id).order_by(BillItem.created_at.asc()).all()
+    bill_items = (
+        db.query(BillItem)
+        .filter(BillItem.bill_id == bill_id)
+        .order_by(BillItem.created_at.asc())
+        .all()
+    )
     client = db.query(Client).filter(Client.id == bill.client_id).first()
 
     case_ids = [item.case_id for item in bill_items if item.case_id]
@@ -772,3 +789,123 @@ def get_case_receipt(
         is_commissionable=receipt.is_commissionable,
         bills=bill_overview_rows,
     )
+
+
+@router.post(
+    "/case-receipts",
+    response_model=CaseReceiptResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create case receipt",
+)
+def create_case_receipt_endpoint(
+    payload: CaseReceiptCreate,
+    _perm: None = Depends(require_perm("CaseReceipt.Create")),
+    db: Session = Depends(get_db),
+) -> CaseReceiptResponse:
+    """
+    Create a manual case receipt.
+
+    **Auth**: Bearer JWT
+    **Permission**: CaseReceipt.Create
+    """
+    receipt = create_case_receipt(db, payload)
+    db.commit()
+    return CaseReceiptResponse(
+        id=receipt.id,
+        case_id=receipt.case_id,
+        fee_type=receipt.fee_type,
+        currency=receipt.currency,
+        receivable_amt=receipt.receivable_amt,
+        received_amt=receipt.received_amt,
+        last_receipt_date=receipt.last_receipt_date,
+        fee_code=receipt.fee_code,
+        fee_name=receipt.fee_name,
+        year_no=receipt.year_no,
+        due_date=receipt.due_date,
+        is_arrears=receipt.is_arrears,
+        is_prepayment=receipt.is_prepayment,
+        is_commissionable=receipt.is_commissionable,
+        invoice_no=receipt.invoice_no,
+        remark=receipt.remark,
+        bills=[],
+    )
+
+
+@router.put(
+    "/case-receipts/{receipt_id}",
+    response_model=CaseReceiptResponse,
+    summary="Update case receipt",
+)
+def update_case_receipt_endpoint(
+    receipt_id: str,
+    payload: CaseReceiptUpdate,
+    _perm: None = Depends(require_perm("CaseReceipt.Update")),
+    db: Session = Depends(get_db),
+) -> CaseReceiptResponse:
+    """
+    Update a case receipt (partial).
+
+    **Auth**: Bearer JWT
+    **Permission**: CaseReceipt.Update
+    """
+    receipt = update_case_receipt(db, receipt_id, payload)
+    db.commit()
+    return CaseReceiptResponse(
+        id=receipt.id,
+        case_id=receipt.case_id,
+        fee_type=receipt.fee_type,
+        currency=receipt.currency,
+        receivable_amt=receipt.receivable_amt,
+        received_amt=receipt.received_amt,
+        last_receipt_date=receipt.last_receipt_date,
+        fee_code=receipt.fee_code,
+        fee_name=receipt.fee_name,
+        year_no=receipt.year_no,
+        due_date=receipt.due_date,
+        is_arrears=receipt.is_arrears,
+        is_prepayment=receipt.is_prepayment,
+        is_commissionable=receipt.is_commissionable,
+        invoice_no=receipt.invoice_no,
+        remark=receipt.remark,
+        bills=[],
+    )
+
+
+@router.get(
+    "/case-receipts",
+    summary="List case receipts",
+)
+def list_case_receipts_endpoint(
+    client_id: str | None = None,
+    case_no: str | None = None,
+    fee_type: str | None = None,
+    is_arrears: bool | None = None,
+    is_commissionable: bool | None = None,
+    currency: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    page: int = 1,
+    page_size: int = 20,
+    _perm: None = Depends(require_perm("CaseReceipt.Read")),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    List case receipts with cross-case filters.
+
+    **Auth**: Bearer JWT
+    **Permission**: CaseReceipt.Read
+    """
+    result = list_case_receipts(
+        db,
+        client_id=client_id,
+        case_no=case_no,
+        fee_type=fee_type,
+        is_arrears=is_arrears,
+        is_commissionable=is_commissionable,
+        currency=currency,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        page_size=page_size,
+    )
+    return jsonable_encoder(result)
