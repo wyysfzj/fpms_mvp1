@@ -5,7 +5,7 @@ index f5f321e..df4929b 100644
 @@ -42,6 +42,26 @@ Agent MUST follow these rules without exception.
    - one mixed backend+frontend mega task
    - one task that combines defaults + linkage + queries + dashboard
-
+ 
 +## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
 +
 +- This rule applies whenever the task file or batch manifest requires more than one atomic task file, more than one execution wave, or an explicit planning artifact; it does not apply to a single-file fix task or a doc-only task handled outside `writing-plans`.
@@ -27,12 +27,5 @@ index f5f321e..df4929b 100644
 +- If the new prerequisite changes the closure slice, the original task MUST NOT be stretched to absorb it; the work MUST be split into a follow-up task.
 +
  ---
-
+ 
  ## 2) Phase Constraints
-@@ -85,7 +105,6 @@ Agent MUST follow these rules without exception.
- 
- ```python
- _perm: None = Depends(require_perm("Title.Action"))
--```
- 
- - Permission codes MUST follow Title.Action naming.
