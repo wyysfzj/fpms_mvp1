@@ -1,13 +1,20 @@
 diff --git a/AGENTS.md b/AGENTS.md
-index e624036..276524f 100644
+index 276524f..8cb6ff7 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
-@@ -45,7 +45,7 @@ Agent MUST follow these rules without exception.
+@@ -44,12 +44,13 @@ Agent MUST follow these rules without exception.
+ 
  ## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
  
- - This rule applies only to tasks that will enter `writing-plans` or any other multi-step execution flow; it does not apply to simple single-file fixes or doc-only tasks that never need planning.
-- Before planning starts, the task spec MUST record `Story Shape Classification` with at least:
-+ Before planning starts, the task spec and the task plan MUST both record `Story Shape Classification` with at least:
+-- This rule applies only to tasks that will enter `writing-plans` or any other multi-step execution flow; it does not apply to simple single-file fixes or doc-only tasks that never need planning.
+-- Before planning starts, the task spec and the task plan MUST both record `Story Shape Classification` with at least:
++- This rule applies only to multi-step tasks that require `writing-plans`; it does not apply to simple single-file fixes or doc-only tasks that never need planning.
++- Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:
    - `shared_file_density`
    - `prereq_dependency_density`
    - `be_fe_coupling`
+   - `evidence_cost`
++- The resulting task plan MUST also record the same `Story Shape Classification`.
+ - The task spec and the task plan MUST both record the selected `chosen_runbook`.
+ - The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.
+ - If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.

@@ -1,2 +1,2 @@
-{"cmd":"rg -n \"Story Shape Classification|chosen_runbook|Replan|planning\" /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01/AGENTS.md","rc":0}
-{"cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01 status --short","rc":0}
+{"cmd":"rg -n \"Story Shape Classification|multi-step tasks that require `writing-plans`|Before entering `writing-plans`|resulting task plan MUST also record the same `Story Shape Classification`|chosen_runbook\" .worktrees/rbsel-rule-01/AGENTS.md","rc":0}
+{"cmd":"git -C .worktrees/rbsel-rule-01 diff -- AGENTS.md","rc":0}

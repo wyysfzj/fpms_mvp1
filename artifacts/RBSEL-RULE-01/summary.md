@@ -1,6 +1,10 @@
-# RBSEL-RULE-01 Evidence Summary
+# RBSEL-RULE-01 Evidence
 
-- Scope: updated the `AGENTS.md` runbook-selection rule so `Story Shape Classification` is required in both the task spec and the task plan.
-- Verification: `rg -n "Story Shape Classification|chosen_runbook|Replan|planning" AGENTS.md`
-- Result: the rule now explicitly says the task spec and the task plan both record `Story Shape Classification`, and both record `chosen_runbook`.
-- Non-closure respected: no plan template, validation script, repo-local skill, or product code was added.
+Changed only `.worktrees/rbsel-rule-01/AGENTS.md`.
+
+Verification:
+- Confirmed the applicability sentence now limits the rule to multi-step tasks that require `writing-plans`.
+- Confirmed the timing sentence now requires the spec to record `Story Shape Classification` before entering `writing-plans`.
+- Confirmed the plan is still required to record the same classification and `chosen_runbook`.
+
+No baseline-dirty artifacts were needed.
