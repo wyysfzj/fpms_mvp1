@@ -14,6 +14,8 @@ from app.modules.billing.schemas import (
     BillFromDraftsRequest,
     BillManualCreateSchema,
     BillStatusSchema,
+    CaseReceiptCreate,
+    CaseReceiptUpdate,
     OffsetCreateSchema,
     PaymentSchema,
 )
@@ -748,3 +750,138 @@ def reverse_offset(db: Session, offset_id: str, actor_id: str | None = None) -> 
         as_of_date=date.today(),
     )
     return offset
+
+
+def create_case_receipt(db: Session, payload: CaseReceiptCreate) -> CaseReceipt:
+    """Create a manual case receipt."""
+    from app.modules.cases.models import T_Case
+
+    case = db.query(T_Case).filter(T_Case.id == payload.case_id).first()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "案卷不存在", status_code=404)
+
+    data = payload.model_dump()
+
+    # V-CR-03: auto-set is_arrears if not explicitly provided
+    if data.get("is_arrears") is None and data["received_amt"] < data["receivable_amt"]:
+        data["is_arrears"] = True
+
+    # V-CR-02: auto-set is_prepayment if not explicitly provided
+    if data.get("is_prepayment") is None and data["received_amt"] > data["receivable_amt"]:
+        data["is_prepayment"] = True
+
+    receipt = CaseReceipt(**data)
+    db.add(receipt)
+    db.flush()
+    return receipt
+
+
+def update_case_receipt(db: Session, receipt_id: str, payload: CaseReceiptUpdate) -> CaseReceipt:
+    """Update a case receipt (partial)."""
+    receipt = db.query(CaseReceipt).filter(CaseReceipt.id == receipt_id).first()
+    if not receipt:
+        raise_business_error("CASE_RECEIPT_NOT_FOUND", "收款记录不存在", status_code=404)
+
+    changes = payload.model_dump(exclude_unset=True)
+    for key, value in changes.items():
+        setattr(receipt, key, value)
+
+    # Recompute flags if amounts changed but flags not explicitly provided
+    new_receivable = changes.get("receivable_amt", receipt.receivable_amt)
+    new_received = changes.get("received_amt", receipt.received_amt)
+
+    if "receivable_amt" in changes or "received_amt" in changes:
+        if "is_arrears" not in changes and new_received < new_receivable:
+            receipt.is_arrears = True
+        if "is_prepayment" not in changes and new_received > new_receivable:
+            receipt.is_prepayment = True
+
+    db.flush()
+    return receipt
+
+
+def list_case_receipts(
+    db: Session,
+    *,
+    client_id: str | None = None,
+    case_no: str | None = None,
+    fee_type: str | None = None,
+    is_arrears: bool | None = None,
+    is_commissionable: bool | None = None,
+    currency: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """List case receipts with cross-case filters."""
+    from sqlalchemy import case as sa_case
+
+    from app.modules.cases.models import T_Case
+    from app.modules.masterdata.models import T_Client
+
+    query = (
+        db.query(
+            CaseReceipt,
+            T_Case.case_no.label("case_no"),
+            T_Client.name.label("client_name"),
+        )
+        .join(T_Case, T_Case.id == CaseReceipt.case_id)
+        .outerjoin(T_Client, T_Client.id == T_Case.client_id)
+    )
+
+    if client_id:
+        query = query.filter(T_Case.client_id == client_id)
+    if case_no:
+        query = query.filter(T_Case.case_no.contains(case_no))
+    if fee_type:
+        query = query.filter(CaseReceipt.fee_type == fee_type)
+    if is_arrears is not None:
+        query = query.filter(CaseReceipt.is_arrears == is_arrears)
+    if is_commissionable is not None:
+        query = query.filter(CaseReceipt.is_commissionable == is_commissionable)
+    if currency:
+        query = query.filter(CaseReceipt.currency == currency)
+    if date_from:
+        query = query.filter(CaseReceipt.last_receipt_date >= date_from)
+    if date_to:
+        query = query.filter(CaseReceipt.last_receipt_date <= date_to)
+
+    total = query.count()
+
+    null_last = sa_case((CaseReceipt.last_receipt_date.is_(None), 1), else_=0)
+    rows = (
+        query.order_by(
+            null_last, CaseReceipt.last_receipt_date.desc(), CaseReceipt.created_at.desc()
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    items = []
+    for receipt, c_no, c_name in rows:
+        items.append(
+            {
+                "id": receipt.id,
+                "case_id": receipt.case_id,
+                "case_no": c_no,
+                "client_name": c_name,
+                "fee_type": receipt.fee_type,
+                "currency": receipt.currency,
+                "receivable_amt": receipt.receivable_amt,
+                "received_amt": receipt.received_amt,
+                "last_receipt_date": receipt.last_receipt_date,
+                "fee_code": receipt.fee_code,
+                "fee_name": receipt.fee_name,
+                "year_no": receipt.year_no,
+                "due_date": receipt.due_date,
+                "is_arrears": receipt.is_arrears,
+                "is_prepayment": receipt.is_prepayment,
+                "is_commissionable": receipt.is_commissionable,
+                "invoice_no": receipt.invoice_no,
+                "remark": receipt.remark,
+            }
+        )
+
+    return {"items": items, "page": page, "page_size": page_size, "total": total}
