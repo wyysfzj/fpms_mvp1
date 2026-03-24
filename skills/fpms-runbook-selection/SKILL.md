@@ -65,8 +65,9 @@ Apply these rules in order:
 - This prereq-heavy rule overrides every other runbook choice. Do not select `P0-single-lane-story`, `P0-multi-lane-parallel-story`, or `P0-frontend-heavy-story` when the prereq-heavy condition applies.
 - If `shared_file_density = high` and `be_fe_coupling = chained`, prefer `P0-single-lane-story`.
 - When `P0-prereq-heavy-story` is chosen, require a `Preflight Dependency Audit` before execution.
-- If shared files are low and the slices are independent, allow `P0-multi-lane-parallel-story`.
-- If backend contract is frozen and the UI is the main workload, allow `P0-frontend-heavy-story`.
+- If both `P0-multi-lane-parallel-story` and `P0-frontend-heavy-story` are eligible, choose `P0-frontend-heavy-story`.
+- If only shared files are low and the slices are independent, choose `P0-multi-lane-parallel-story`.
+- If only backend contract is frozen and the UI is the main workload, choose `P0-frontend-heavy-story`.
 
 ## Required Planning Outputs
 
