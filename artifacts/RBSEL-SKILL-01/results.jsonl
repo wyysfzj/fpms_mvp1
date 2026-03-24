@@ -1,0 +1,2 @@
+{"cmd":"rg -n \"shared_file_density|prereq_dependency_density|be_fe_coupling|evidence_cost|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers\" skills/fpms-runbook-selection/SKILL.md","rc":0,"outcome":"pass"}
+{"cmd":"git diff --no-index -- /dev/null skills/fpms-runbook-selection/SKILL.md","rc":1,"outcome":"expected diff for new file"}
