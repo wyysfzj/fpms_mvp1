@@ -1,3 +1,4 @@
 {"cmd":"rg -n \"Story Shape Classification & Runbook Selection|chosen_runbook|Replan|planning\" AGENTS.md","step":"lint","rc":0,"status":"PASS"}
 {"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0,"status":"PASS"}
-{"cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01 diff ffd335c..HEAD -- AGENTS.md","step":"evidence","rc":0,"status":"PASS"}
+{"cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01 diff ffd335c..0a6b7975101713548e72343ce56ab0591662e950 -- AGENTS.md","step":"evidence","rc":0,"status":"PASS"}
+{"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0,"status":"PASS","note":"rerun after immutable-SHA evidence update"}
