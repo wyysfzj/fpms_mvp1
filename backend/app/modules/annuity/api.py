@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from app.db.session import get_db
 from app.modules.annuity.service import (
     create_historical_pay_list,
     create_pay_list_from_fee_items,
+    export_pay_list,
     generate_fee_drafts_from_annuity_tasks,
     get_pay_list_detail,
     list_annuity_tasks,
@@ -228,6 +230,33 @@ def get_pay_list(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     return get_pay_list_detail(db, pay_list_id=pay_list_id)
+
+
+@router.post(
+    "/pay-lists/{pay_list_id}/export",
+    summary="Export pay list to Excel",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}},
+            "description": "Excel export generated",
+        }
+    },
+)
+def post_pay_list_export(
+    pay_list_id: int,
+    _perm: None = Depends(require_perm("PayList.Export")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> Response:
+    export_payload = export_pay_list(db, pay_list_id=pay_list_id, actor_id=current_user.id)
+    return Response(
+        content=export_payload["content"],
+        media_type=export_payload["content_type"],
+        headers={
+            "Content-Disposition": f'attachment; filename="{export_payload["filename"]}"',
+        },
+    )
 
 
 @router.post(

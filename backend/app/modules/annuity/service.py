@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
+from app.modules.annuity.export_excel import build_pay_list_export_xlsx
 from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.cases.models import Case
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
@@ -815,6 +816,67 @@ def create_historical_pay_list(
         "updated_at": pay_list.updated_at,
         "created_by": pay_list.created_by,
         "updated_by": pay_list.updated_by,
+    }
+
+
+def export_pay_list(
+    db: Session,
+    *,
+    pay_list_id: int,
+    actor_id: str | None = None,
+) -> dict[str, Any]:
+    """Generate a single Excel export for a pay list and advance DRAFT to EXPORTED."""
+    pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one_or_none()
+    if pay_list is None:
+        raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
+
+    current_status = (pay_list.status or "").strip().upper()
+    if current_status != "DRAFT":
+        raise_business_error(
+            "PAY_LIST_STATE_CONFLICT",
+            "Pay list can only be exported from DRAFT status",
+            details={"status": pay_list.status},
+            status_code=409,
+        )
+
+    client = db.execute(select(Client).where(Client.id == pay_list.client_id)).scalar_one_or_none()
+    payments = (
+        db.execute(
+            select(GovPayment)
+            .where(GovPayment.pay_list_id == pay_list.id)
+            .order_by(GovPayment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+    pay_list.status = "EXPORTED"
+    pay_list.updated_by = actor_id
+    export_bytes = build_pay_list_export_xlsx(
+        pay_list=pay_list,
+        client_name=client.name_cn if client is not None else None,
+        payments=payments,
+    )
+
+    db.commit()
+    db.refresh(pay_list)
+
+    filename = f"{pay_list.pay_list_no or f'PL-{pay_list.id:06d}'}-export.xlsx"
+    return {
+        "filename": filename,
+        "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "content": export_bytes,
+        "pay_list": {
+            "id": pay_list.id,
+            "pay_list_no": pay_list.pay_list_no,
+            "status": pay_list.status,
+            "currency": pay_list.currency,
+            "planned_pay_date": pay_list.planned_pay_date,
+            "paid_date": pay_list.paid_date,
+            "total_amount": str(pay_list.total_amount),
+            "remark": pay_list.remark,
+            "updated_by": pay_list.updated_by,
+        },
     }
 
 
