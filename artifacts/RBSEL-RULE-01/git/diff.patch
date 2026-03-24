@@ -1,0 +1,24 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index f5f321e..e624036 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -42,6 +42,19 @@ Agent MUST follow these rules without exception.
+   - one mixed backend+frontend mega task
+   - one task that combines defaults + linkage + queries + dashboard
+ 
++## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
++
++- This rule applies only to tasks that will enter `writing-plans` or any other multi-step execution flow; it does not apply to simple single-file fixes or doc-only tasks that never need planning.
++- Before planning starts, the task spec MUST record `Story Shape Classification` with at least:
++  - `shared_file_density`
++  - `prereq_dependency_density`
++  - `be_fe_coupling`
++  - `evidence_cost`
++- The task spec and the task plan MUST both record the selected `chosen_runbook`.
++- The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.
++- If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.
++- If the new prerequisite changes the closure slice, the original task MUST NOT be stretched to absorb it; the work MUST be split into a follow-up task.
++
+ ---
+ 
+ ## 2) Phase Constraints

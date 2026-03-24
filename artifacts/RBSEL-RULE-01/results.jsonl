@@ -1,0 +1,1 @@
+{"command":"rg -n \"Story Shape Classification|chosen_runbook|Replan|planning\" AGENTS.md","workdir":"/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01","rc":0,"status":"pass"}
