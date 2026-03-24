@@ -1071,6 +1071,177 @@ def test_pay_list_export_openapi_declares_excel_binary_response(client: TestClie
     assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in response_200
 
 
+def test_pay_list_mark_paid_can_follow_exported_gov_payment_flow(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+
+    task_id = _insert_annuity_task(
+        session_factory,
+        case_id=case_id,
+        client_id=client_id,
+        year_no=1,
+        due_date=date(2026, 12, 1),
+    )
+    draft_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [task_id], "pay_next_year": False, "currency": "CNY"},
+    )
+    assert draft_resp.status_code == 200, draft_resp.text
+    draft_id = draft_resp.json()["success"][0]["draft_id"]
+    gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
+
+    pay_list_resp = client.post(
+        "/api/v1/pay-lists/from-fee-items",
+        headers=auth_headers,
+        json={"fee_item_ids": [gov_fee_item_id], "planned_pay_date": "2026-12-15"},
+    )
+    assert pay_list_resp.status_code == 200, pay_list_resp.text
+    pay_list_id = pay_list_resp.json()["pay_list"]["id"]
+
+    export_resp = client.post(f"/api/v1/pay-lists/{pay_list_id}/export", headers=auth_headers)
+    assert export_resp.status_code == 200, export_resp.text
+
+    register_resp = client.post(
+        "/api/v1/gov-payments",
+        headers=auth_headers,
+        json={
+            "pay_list_id": pay_list_id,
+            "fee_item_id": gov_fee_item_id,
+            "paid_date": "2026-12-20",
+            "paid_amount": "100.00",
+            "official_receipt_no": _uid("OCR"),
+        },
+    )
+    assert register_resp.status_code == 200, register_resp.text
+    assert register_resp.json()["pay_list"]["status"] == "EXPORTED"
+
+    mark_paid_resp = client.post(
+        f"/api/v1/pay-lists/{pay_list_id}/mark-paid",
+        headers=auth_headers,
+        json={"paid_date": "2026-12-21"},
+    )
+
+    assert mark_paid_resp.status_code == 200, mark_paid_resp.text
+    assert mark_paid_resp.json()["pay_list"]["status"] == "PAID"
+    assert mark_paid_resp.json()["pay_list"]["paid_date"] == "2026-12-21"
+
+    with session_factory() as db:
+        pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one()
+    assert pay_list.status == "PAID"
+    assert pay_list.paid_date.isoformat() == "2026-12-21"
+
+
+def test_pay_list_mark_paid_requires_authentication(client: TestClient) -> None:
+    unauth_resp = client.post(
+        "/api/v1/pay-lists/1/mark-paid",
+        json={"paid_date": "2026-12-21"},
+    )
+    _assert_error(unauth_resp, 401, "AUTH_REQUIRED")
+
+
+def test_pay_list_mark_paid_rejects_draft_state(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+
+    task_id = _insert_annuity_task(
+        session_factory,
+        case_id=case_id,
+        client_id=client_id,
+        year_no=1,
+        due_date=date(2026, 12, 2),
+    )
+    draft_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [task_id], "pay_next_year": False, "currency": "CNY"},
+    )
+    assert draft_resp.status_code == 200, draft_resp.text
+    draft_id = draft_resp.json()["success"][0]["draft_id"]
+    gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
+
+    pay_list_resp = client.post(
+        "/api/v1/pay-lists/from-fee-items",
+        headers=auth_headers,
+        json={"fee_item_ids": [gov_fee_item_id], "planned_pay_date": "2026-12-15"},
+    )
+    assert pay_list_resp.status_code == 200, pay_list_resp.text
+    pay_list_id = pay_list_resp.json()["pay_list"]["id"]
+
+    draft_mark_paid_resp = client.post(
+        f"/api/v1/pay-lists/{pay_list_id}/mark-paid",
+        headers=auth_headers,
+        json={"paid_date": "2026-12-21"},
+    )
+    _assert_error(draft_mark_paid_resp, 409, "PAY_LIST_STATE_CONFLICT")
+
+
+def test_pay_list_mark_paid_rejects_forbidden_and_missing_header(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+    monkeypatch,
+) -> None:
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+
+    task_id = _insert_annuity_task(
+        session_factory,
+        case_id=case_id,
+        client_id=client_id,
+        year_no=1,
+        due_date=date(2026, 12, 3),
+    )
+    draft_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [task_id], "pay_next_year": False, "currency": "CNY"},
+    )
+    assert draft_resp.status_code == 200, draft_resp.text
+    draft_id = draft_resp.json()["success"][0]["draft_id"]
+    gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
+
+    pay_list_resp = client.post(
+        "/api/v1/pay-lists/from-fee-items",
+        headers=auth_headers,
+        json={"fee_item_ids": [gov_fee_item_id], "planned_pay_date": "2026-12-15"},
+    )
+    assert pay_list_resp.status_code == 200, pay_list_resp.text
+    pay_list_id = pay_list_resp.json()["pay_list"]["id"]
+
+    def _no_perms(_db, _user_id) -> set[str]:
+        return set()
+
+    monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
+    forbidden_resp = client.post(
+        f"/api/v1/pay-lists/{pay_list_id}/mark-paid",
+        headers=auth_headers,
+        json={"paid_date": "2026-12-21"},
+    )
+    _assert_error(forbidden_resp, 403, "FORBIDDEN")
+    assert forbidden_resp.json()["error"]["details"]["required_perm"] == "Billing.Edit"
+
+
+def test_pay_list_mark_paid_returns_not_found_for_missing_header(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    missing_resp = client.post(
+        "/api/v1/pay-lists/999999/mark-paid",
+        headers=auth_headers,
+        json={"paid_date": "2026-12-21"},
+    )
+    _assert_error(missing_resp, 404, "PAY_LIST_NOT_FOUND")
+
+
 def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:
     rate = FeeRate(
         fee_code=_uid("RATE"),

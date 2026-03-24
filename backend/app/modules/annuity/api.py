@@ -19,6 +19,7 @@ from app.modules.annuity.service import (
     get_pay_list_detail,
     list_annuity_tasks,
     list_pay_lists,
+    mark_pay_list_paid,
     register_gov_payment,
     update_annuity_task_instruction,
 )
@@ -58,6 +59,10 @@ class GovPaymentCreateIn(BaseModel):
     paid_amount: Decimal | None = Field(default=None, gt=0)
     official_receipt_no: str | None = Field(default=None, max_length=64)
     remark: str | None = None
+
+
+class PayListMarkPaidIn(BaseModel):
+    paid_date: date
 
 
 @router.get("/annuity/tasks", summary="List annuity tasks")
@@ -256,6 +261,22 @@ def post_pay_list_export(
         headers={
             "Content-Disposition": f'attachment; filename="{export_payload["filename"]}"',
         },
+    )
+
+
+@router.post("/pay-lists/{pay_list_id}/mark-paid", summary="Mark pay list paid")
+def post_pay_list_mark_paid(
+    pay_list_id: int,
+    payload: PayListMarkPaidIn,
+    _perm: None = Depends(require_perm("Billing.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return mark_pay_list_paid(
+        db,
+        pay_list_id=pay_list_id,
+        paid_date=payload.paid_date,
+        actor_id=current_user.id,
     )
 
 

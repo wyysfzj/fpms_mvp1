@@ -880,6 +880,78 @@ def export_pay_list(
     }
 
 
+def mark_pay_list_paid(
+    db: Session,
+    *,
+    pay_list_id: int,
+    paid_date: date,
+    actor_id: str | None = None,
+) -> dict[str, Any]:
+    """Record header paid date and advance an exported pay list to PAID."""
+    pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one_or_none()
+    if pay_list is None:
+        raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
+
+    if (pay_list.status or "").strip().upper() != "EXPORTED":
+        raise_business_error(
+            "PAY_LIST_STATE_CONFLICT",
+            "Pay list can only be marked paid from EXPORTED status",
+            details={"status": pay_list.status},
+            status_code=409,
+        )
+
+    payments = (
+        db.execute(
+            select(GovPayment)
+            .where(GovPayment.pay_list_id == pay_list.id)
+            .order_by(GovPayment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if not payments:
+        raise_business_error(
+            "PAY_LIST_STATE_CONFLICT",
+            "Pay list requires at least one paid row before marking paid",
+            details={"reason": "NO_PAYMENT_ROWS"},
+            status_code=409,
+        )
+
+    unpaid_rows = [
+        payment
+        for payment in payments
+        if ((payment.status or "").strip().upper() not in {"PAID", "RECORDED"})
+        or payment.paid_date is None
+    ]
+    if unpaid_rows:
+        raise_business_error(
+            "PAY_LIST_STATE_CONFLICT",
+            "All pay-list rows must already be paid before marking header paid",
+            details={"reason": "UNPAID_PAYMENT_ROWS", "unpaid_count": len(unpaid_rows)},
+            status_code=409,
+        )
+
+    pay_list.status = "PAID"
+    pay_list.paid_date = paid_date
+    pay_list.updated_by = actor_id
+    db.commit()
+    db.refresh(pay_list)
+
+    return {
+        "pay_list": {
+            "id": pay_list.id,
+            "pay_list_no": pay_list.pay_list_no,
+            "status": pay_list.status,
+            "paid_date": pay_list.paid_date,
+            "total_amount": str(pay_list.total_amount),
+            "currency": pay_list.currency,
+            "client_id": pay_list.client_id,
+            "remark": pay_list.remark,
+            "updated_by": pay_list.updated_by,
+        }
+    }
+
+
 def list_pay_lists(
     db: Session,
     *,
