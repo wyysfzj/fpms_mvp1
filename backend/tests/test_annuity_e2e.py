@@ -370,6 +370,63 @@ def test_annuity_generate_drafts_pay_list_gov_payment_chain(
     _assert_error(validation_resp, 422, "VALIDATION_ERROR")
 
 
+def test_gov_payment_registration_keeps_exported_pay_list_exported(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+    _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+
+    task_id = _insert_annuity_task(
+        session_factory,
+        case_id=case_id,
+        client_id=client_id,
+        year_no=1,
+        due_date=date(2026, 6, 1),
+    )
+    draft_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        headers=auth_headers,
+        json={"task_ids": [task_id], "pay_next_year": False, "currency": "CNY"},
+    )
+    assert draft_resp.status_code == 200, draft_resp.text
+    draft_id = draft_resp.json()["success"][0]["draft_id"]
+    gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
+
+    pay_list_resp = client.post(
+        "/api/v1/pay-lists/from-fee-items",
+        headers=auth_headers,
+        json={"fee_item_ids": [gov_fee_item_id], "planned_pay_date": "2026-06-15"},
+    )
+    assert pay_list_resp.status_code == 200, pay_list_resp.text
+    pay_list_id = pay_list_resp.json()["pay_list"]["id"]
+
+    export_resp = client.post(f"/api/v1/pay-lists/{pay_list_id}/export", headers=auth_headers)
+    assert export_resp.status_code == 200, export_resp.text
+
+    register_resp = client.post(
+        "/api/v1/gov-payments",
+        headers=auth_headers,
+        json={
+            "pay_list_id": pay_list_id,
+            "fee_item_id": gov_fee_item_id,
+            "paid_date": "2026-06-20",
+            "paid_amount": "100.00",
+            "official_receipt_no": _uid("OCR"),
+        },
+    )
+    assert register_resp.status_code == 200, register_resp.text
+    register_payload = register_resp.json()
+    assert register_payload["pay_list"]["status"] == "EXPORTED"
+
+    with session_factory() as db:
+        pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one()
+
+    assert pay_list.status == "EXPORTED"
+    assert pay_list.paid_date is None
+
+
 def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persistence(
     client: TestClient,
     auth_headers: dict[str, str],

@@ -1009,6 +1009,12 @@ def get_pay_list_detail(db: Session, *, pay_list_id: int) -> dict[str, Any]:
 
 
 def _recompute_pay_list_status(pay_list: PayList, payments: list[GovPayment]) -> None:
+    current_status = (pay_list.status or "").strip().upper()
+
+    if current_status == "EXPORTED":
+        pay_list.total_amount = sum((Decimal(p.paid_amount or 0) for p in payments), Decimal("0"))
+        return
+
     if not payments:
         pay_list.status = "DRAFT"
         pay_list.paid_date = None
