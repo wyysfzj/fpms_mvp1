@@ -1,6 +1,6 @@
 # Permissions Matrix (Phase 3 API Tasks) — Unified v4
 
-This matrix maps each endpoint to a unified permission code aligned with `docs/02_permissions_rbac.md` naming style.
+This matrix maps each endpoint to a unified permission code aligned with `docs/02_permissions_rbac.md` naming style. It does not define role grants; those live in `docs/02_permissions_rbac.md` and the runtime seed in `backend/app/modules/rbac/service.py`.
 
 
 ## Convention
@@ -78,6 +78,8 @@ Permission codes below are the runtime contract to keep `ROLE_PERMISSIONS` and A
 - `GET /annuity/tasks` → `AnnuityTask.Read`  (task: `PE-BE-AN-02`)
 - `PUT /annuity/tasks/{task_id}/instruction` → `AnnuityTask.Action`  (task: `PE-BE-AN-03`)
 - `POST /annuity/tasks/generate-drafts` → `AnnuityTask.Action`  (task: `PE-BE-AN-05`)
+- `GET /pay-lists` → `PayList.Read`  (task: `FRFE04-BE-02`)
+- `GET /pay-lists/{id}` → `PayList.Read`  (next planned slice: `FRFE04-BE-03`)
 - `POST /pay-lists/from-fee-items` → `PayList.Create`  (task: `PE-BE-AN-06`)
 - `POST /gov-payments` → `GovPayment.Create`  (task: `PE-BE-AN-07`)
 
