@@ -51,7 +51,7 @@ Use this template for any multi-step plan that must classify story shape and sel
 ## Atomic Task Inventory
 
 - `<TASK-ID>`:
-  - Task file path: `<relative/original task file path>`
+  - Task file path: `<exact task file path>`
   - Owner role: `<worker|monitor|explorer|lead>`
   - Exact closure slice:
   - Explicit non-closure:
