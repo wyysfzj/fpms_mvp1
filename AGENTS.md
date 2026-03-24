@@ -44,7 +44,7 @@ Agent MUST follow these rules without exception.
 
 ## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
 
-- This rule applies whenever the task file or batch manifest has an explicit planning artifact, requires more than one atomic task file, or requires more than one execution wave; the single-file fix and doc-only exclusions only apply when no explicit planning artifact exists.
+- This rule applies whenever there is a written spec, implementation plan, or batch manifest prepared to drive multi-step execution, or whenever the task requires more than one atomic task file or more than one execution wave; the single-file fix and doc-only exclusions only apply when no such written spec, implementation plan, or batch manifest exists.
 - Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:
   - `shared_file_density`
   - `prereq_dependency_density`
