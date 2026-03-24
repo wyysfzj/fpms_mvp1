@@ -1,2 +1,2 @@
-{"cmd":"rg -n \"Story Shape Classification|multi-step tasks that require `writing-plans`|Before entering `writing-plans`|resulting task plan MUST also record the same `Story Shape Classification`|chosen_runbook\" .worktrees/rbsel-rule-01/AGENTS.md","rc":0}
-{"cmd":"git -C .worktrees/rbsel-rule-01 diff -- AGENTS.md","rc":0}
+{"cmd":"rg -n \"Story Shape Classification|every multi-step task that will enter `writing-plans`|Before entering `writing-plans`|resulting task plan MUST also record the same `Story Shape Classification`|chosen_runbook\" .worktrees/rbsel-rule-01/AGENTS.md","step":"lint","rc":0}
+{"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0}
