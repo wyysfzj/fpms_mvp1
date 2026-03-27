@@ -1,0 +1,34 @@
+406d6a4 feat(annuity): update task list with new columns + generate button (FR-FE-06)
+a6c78a8 feat(annuity): add AnnuityGenerateDialog component (FR-FE-06)
+cf23675 feat(annuity): add generation API client + types (FR-FE-06)
+3e8e7ff Merge branch 'rbsel-qa-01'
+641d47b chore: snapshot local master docs before runbook merge
+c00dfcc chore: accept RBSEL-QA-01
+f8890b6 feat(annuity): add generate endpoint + update list response (FR-FE-06)
+641f8c0 RBSEL-GATE-01 pin final evidence
+3892bb0 docs: add runbook plan validator
+c4f7aab RBSEL-TPL-01 pin final evidence
+20b377d Fix RBSEL-TPL-01 template evidence
+e45ed73 Refine runbook plan template evidence
+b0d97ad docs: add runbook plan template
+675b08d feat(annuity): add generation service + rate year_no + draft_generated flag (FR-FE-06)
+97fda07 test(annuity): add generation tests RED (FR-FE-06)
+64b83d5 Fix RBSEL-SKILL-01 evidence and runbook tie-break
+c304b2a RBSEL-SKILL-01 pin final evidence
+dc35033 RBSEL-SKILL-01: resolve prereq selection rule
+6d562e9 RBSEL-SKILL-01: tighten prereq selection rule
+0826f6b RBSEL-SKILL-01: add first-pass instruction
+34a34a9 Fix runbook selection template outputs
+09a8ac4 Add runbook selection skill
+249cf6d RBSEL-RULE-01 pin final evidence
+39f432c Clarify planning artifact rule
+a3068f4 Fix RBSEL-RULE-01 rule wording and evidence refs
+0a6b797 RBSEL-RULE-01 refresh evidence baseline
+08b45e1 RBSEL-RULE-01: revert fence and refresh evidence
+9d9aaa4 Fix RBSEL-RULE-01 AGENTS governance text
+5c0b42f Tighten runbook-selection rule wording
+b8246d5 Tighten runbook-selection rule wording
+cb85a56 RBSEL-RULE-01 add execution gate
+d71fbcc Tighten runbook selection wording
+5105734 Fix RBSEL-RULE-01 story-shape rule
+90f70f8 RBSEL-RULE-01 add runbook selection rule

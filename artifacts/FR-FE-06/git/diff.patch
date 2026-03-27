@@ -1,0 +1,1763 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index f5f321e..8f51e73 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -42,6 +42,26 @@ Agent MUST follow these rules without exception.
+   - one mixed backend+frontend mega task
+   - one task that combines defaults + linkage + queries + dashboard
+ 
++## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
++
++- This rule applies whenever there is a written spec, implementation plan, or batch manifest prepared to drive multi-step execution, or whenever the task requires more than one atomic task file or more than one execution wave; the single-file fix and doc-only exclusions only apply when no such written spec, implementation plan, or batch manifest exists.
++- Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:
++  - `shared_file_density`
++  - `prereq_dependency_density`
++  - `be_fe_coupling`
++  - `evidence_cost`
++- The resulting task plan MUST also record the same `Story Shape Classification`.
++- The task spec and the task plan MUST both record the selected `chosen_runbook`.
++- Valid `chosen_runbook` IDs are:
++  - `P0-single-lane-story`
++  - `P0-prereq-heavy-story`
++  - `P0-multi-lane-parallel-story`
++  - `P0-frontend-heavy-story`
++- The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.
++- Execution MUST NOT start until both classification and runbook selection are complete and recorded in the spec and plan.
++- If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.
++- If the new prerequisite changes the closure slice, the original task MUST NOT be stretched to absorb it; the work MUST be split into a follow-up task.
++
+ ---
+ 
+ ## 2) Phase Constraints
+diff --git a/artifacts/RBSEL-GATE-01/git/diff.patch b/artifacts/RBSEL-GATE-01/git/diff.patch
+new file mode 100644
+index 0000000..0d1d591
+--- /dev/null
++++ b/artifacts/RBSEL-GATE-01/git/diff.patch
+@@ -0,0 +1,64 @@
++diff --git a/scripts/validate_plan_runbook.py b/scripts/validate_plan_runbook.py
++new file mode 100644
++index 0000000..cfc38e5
++--- /dev/null
+++++ b/scripts/validate_plan_runbook.py
++@@ -0,0 +1,58 @@
+++#!/usr/bin/env python3
+++"""Validate required runbook-selection headings in a plan document."""
+++
+++from __future__ import annotations
+++
+++import argparse
+++from pathlib import Path
+++import sys
+++
+++
+++REQUIRED_HEADINGS = (
+++    "Story Shape",
+++    "Chosen Runbook",
+++    "Preflight Dependency Audit",
+++    "Baseline Promotion Protocol",
+++    "Replan Triggers",
+++)
+++
+++
+++def parse_args() -> argparse.Namespace:
+++    parser = argparse.ArgumentParser(
+++        description="Validate required runbook-selection headings in a plan document."
+++    )
+++    parser.add_argument("plan", type=Path, help="Path to the plan markdown file")
+++    return parser.parse_args()
+++
+++
+++def find_missing_headings(plan_text: str) -> list[str]:
+++    missing: list[str] = []
+++    for heading in REQUIRED_HEADINGS:
+++        needle = f"## {heading}"
+++        if not any(line.strip() == needle for line in plan_text.splitlines()):
+++            missing.append(heading)
+++    return missing
+++
+++
+++def main() -> int:
+++    args = parse_args()
+++    try:
+++        plan_text = args.plan.read_text(encoding="utf-8")
+++    except FileNotFoundError:
+++        print(f"Plan file not found: {args.plan}", file=sys.stderr)
+++        return 2
+++
+++    missing = find_missing_headings(plan_text)
+++    if missing:
+++        print(
+++            "Missing required sections: " + ", ".join(missing),
+++            file=sys.stderr,
+++        )
+++        return 1
+++
+++    print(f"OK: required runbook-selection headings present in {args.plan}")
+++    return 0
+++
+++
+++if __name__ == "__main__":
+++    raise SystemExit(main())
+diff --git a/artifacts/RBSEL-GATE-01/results.jsonl b/artifacts/RBSEL-GATE-01/results.jsonl
+new file mode 100644
+index 0000000..7b4864b
+--- /dev/null
++++ b/artifacts/RBSEL-GATE-01/results.jsonl
+@@ -0,0 +1,4 @@
++{"step":"lint","cmd":"python3 -m py_compile scripts/validate_plan_runbook.py","rc":0}
++{"step":"test","cmd":"python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md","rc":0}
++{"step":"test_malformed_plan","cmd":"python3 - <<'PY'\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nimport subprocess\nimport sys\nwith TemporaryDirectory() as td:\n    p = Path(td) / 'bad.md'\n    p.write_text('# Bad Plan\\n\\n## Story Shape\\n')\n    result = subprocess.run([sys.executable, 'scripts/validate_plan_runbook.py', str(p)], capture_output=True, text=True)\n    assert result.returncode != 0\n    assert 'Missing required sections' in result.stdout or 'Missing required sections' in result.stderr\nPY","rc":0}
++{"step":"test","cmd":"./scripts/task_validate.sh RBSEL-GATE-01","rc":0}
+diff --git a/artifacts/RBSEL-GATE-01/summary.md b/artifacts/RBSEL-GATE-01/summary.md
+new file mode 100644
+index 0000000..f992988
+--- /dev/null
++++ b/artifacts/RBSEL-GATE-01/summary.md
+@@ -0,0 +1,17 @@
++# RBSEL-GATE-01 Evidence Summary
++
++- Executed role: worker
++- Task/runbook: RBSEL-GATE-01, add lightweight plan gate
++- Exact closure slice: create `scripts/validate_plan_runbook.py` to validate required runbook-selection headings in a plan document and exit non-zero when they are missing
++- Explicit non-closure respected: did not edit `AGENTS.md`, did not create or modify any skill, and did not create or modify the reusable plan template
++- Modified files: `scripts/validate_plan_runbook.py`
++- Baseline commit: `c4f7aab`
++- Reviewed product commit: `3892bb0`
++- Verification:
++  - `python3 -m py_compile scripts/validate_plan_runbook.py` -> rc 0
++  - `python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md` -> rc 0
++  - `python3 - <<'PY' ... PY` malformed plan check -> rc 0
++  - `./scripts/task_validate.sh RBSEL-GATE-01` -> rc 0
++- Evidence:
++  - `artifacts/RBSEL-GATE-01/results.jsonl`
++  - `artifacts/RBSEL-GATE-01/git/diff.patch`
+diff --git a/artifacts/RBSEL-QA-01/git/diff.patch b/artifacts/RBSEL-QA-01/git/diff.patch
+new file mode 100644
+index 0000000..34dc61f
+--- /dev/null
++++ b/artifacts/RBSEL-QA-01/git/diff.patch
+@@ -0,0 +1,69 @@
++diff --git a/artifacts/RBSEL-QA-01/results.jsonl b/artifacts/RBSEL-QA-01/results.jsonl
++new file mode 100644
++index 0000000..51d90c6
++--- /dev/null
+++++ b/artifacts/RBSEL-QA-01/results.jsonl
++@@ -0,0 +1,7 @@
+++{"task_id":"RBSEL-QA-01","command":"rg -n \"Story Shape Classification|chosen_runbook|Replan|planning\" AGENTS.md","rc":0,"stdout":"45:## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)\n48:- Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:\n53:- The resulting task plan MUST also record the same `Story Shape Classification`.\n54:- The task spec and the task plan MUST both record the selected `chosen_runbook`.\n55:- Valid `chosen_runbook` IDs are:\n60:- The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.\n62:- If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.\n391:- Without such a manifest, execution MUST fall back to single-agent or planning-only mode.\n"}
+++{"task_id":"RBSEL-QA-01","command":"rg -n \"shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers\" skills/fpms-runbook-selection/SKILL.md","rc":0,"stdout":"28:- `shared_file_density`\n35:- `shared_file_density: low | medium | high`\n42:- `chosen_runbook: <runbook-id>`\n66:- If `shared_file_density = high` and `be_fe_coupling = chained`, prefer `P0-single-lane-story`.\n67:- When `P0-prereq-heavy-story` is chosen, require a `Preflight Dependency Audit` before execution.\n77:- `chosen_runbook`\n79:- `Preflight Dependency Audit`\n81:- `Baseline Promotion Protocol`\n82:- `Replan Triggers`\n86:## Preflight Dependency Audit\n98:## Baseline Promotion Protocol\n107:## Replan Triggers\n132:- shared_file_density: ...\n138:- chosen_runbook: ...\n144:## Preflight Dependency Audit\n150:## Baseline Promotion Protocol\n159:## Replan Triggers\n"}
+++{"task_id":"RBSEL-QA-01","command":"rg -n \"^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers\" docs/templates/runbook_plan_template.md","rc":0,"stdout":"7:## Story Shape\n14:## Chosen Runbook\n23:## Preflight Dependency Audit\n36:## Baseline Promotion Protocol\n43:## Replan Triggers\n"}
+++{"task_id":"RBSEL-QA-01","command":"python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md","rc":0,"stdout":"OK: required runbook-selection headings present in docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md\n"}
+++{"task_id":"RBSEL-QA-01","step":"lint","command":"rg -n \"Story Shape Classification|chosen_runbook|Replan|planning\" AGENTS.md && rg -n \"shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers\" skills/fpms-runbook-selection/SKILL.md && rg -n \"^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers\" docs/templates/runbook_plan_template.md","rc":0}
+++{"task_id":"RBSEL-QA-01","step":"test","command":"python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md","rc":0}
+++{"task_id":"RBSEL-QA-01","step":"gate","command":"./scripts/task_validate.sh RBSEL-QA-01","rc":0}
++diff --git a/artifacts/RBSEL-QA-01/summary.md b/artifacts/RBSEL-QA-01/summary.md
++new file mode 100644
++index 0000000..a33bc59
++--- /dev/null
+++++ b/artifacts/RBSEL-QA-01/summary.md
++@@ -0,0 +1,50 @@
+++# RBSEL-QA-01 Evidence Summary
+++
+++## Conclusion
+++
+++PASS
+++
+++## Exact Closure Slice
+++
+++Validate that the rule, skill, template, and gate exist together as a coherent minimum mechanism, and produce a final evidence summary for story close.
+++
+++## Explicit Non-Closure
+++
+++No product code was modified. The mechanism was not extended beyond evidence-only close-audit corrections.
+++
+++## Mechanism Ledger
+++
+++- Rule: [`AGENTS.md`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/AGENTS.md)
+++  - Evidence: `rg -n "Story Shape Classification|chosen_runbook|Replan|planning" AGENTS.md`
+++  - Result: required story-shape and replanning language is present.
+++- Skill: [`skills/fpms-runbook-selection/SKILL.md`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/skills/fpms-runbook-selection/SKILL.md)
+++  - Evidence: `rg -n "shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers" skills/fpms-runbook-selection/SKILL.md`
+++  - Result: required classification dimensions, runbook selection, and planning controls are present.
+++- Template: [`docs/templates/runbook_plan_template.md`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/docs/templates/runbook_plan_template.md)
+++  - Evidence: `rg -n "^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers" docs/templates/runbook_plan_template.md`
+++  - Result: required plan headings are present.
+++- Gate: [`scripts/validate_plan_runbook.py`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/scripts/validate_plan_runbook.py)
+++  - Evidence: `python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md`
+++  - Result: the implementation plan passes the minimum heading validation.
+++
+++## Verification Commands
+++
+++- `rg -n "Story Shape Classification|chosen_runbook|Replan|planning" AGENTS.md` -> `rc=0`
+++- `rg -n "shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers" skills/fpms-runbook-selection/SKILL.md` -> `rc=0`
+++- `rg -n "^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers" docs/templates/runbook_plan_template.md` -> `rc=0`
+++- `python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md` -> `rc=0`
+++- `./scripts/task_validate.sh RBSEL-QA-01` -> `rc=0`
+++
+++## Modified Files
+++
+++- [`artifacts/RBSEL-QA-01/results.jsonl`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/artifacts/RBSEL-QA-01/results.jsonl)
+++- [`artifacts/RBSEL-QA-01/summary.md`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/artifacts/RBSEL-QA-01/summary.md)
+++- [`artifacts/RBSEL-QA-01/git/diff.patch`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/artifacts/RBSEL-QA-01/git/diff.patch)
+++
+++## Final Status
+++
+++PASS
+++
+++## Evidence Notes
+++
+++An evidence-only commit is required for task acceptance because this close-audit task owns only `artifacts/RBSEL-QA-01/**`. The task gate passed after adding the required `lint` and `test` evidence lines.
+diff --git a/artifacts/RBSEL-QA-01/results.jsonl b/artifacts/RBSEL-QA-01/results.jsonl
+new file mode 100644
+index 0000000..51d90c6
+--- /dev/null
++++ b/artifacts/RBSEL-QA-01/results.jsonl
+@@ -0,0 +1,7 @@
++{"task_id":"RBSEL-QA-01","command":"rg -n \"Story Shape Classification|chosen_runbook|Replan|planning\" AGENTS.md","rc":0,"stdout":"45:## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)\n48:- Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:\n53:- The resulting task plan MUST also record the same `Story Shape Classification`.\n54:- The task spec and the task plan MUST both record the selected `chosen_runbook`.\n55:- Valid `chosen_runbook` IDs are:\n60:- The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.\n62:- If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.\n391:- Without such a manifest, execution MUST fall back to single-agent or planning-only mode.\n"}
++{"task_id":"RBSEL-QA-01","command":"rg -n \"shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers\" skills/fpms-runbook-selection/SKILL.md","rc":0,"stdout":"28:- `shared_file_density`\n35:- `shared_file_density: low | medium | high`\n42:- `chosen_runbook: <runbook-id>`\n66:- If `shared_file_density = high` and `be_fe_coupling = chained`, prefer `P0-single-lane-story`.\n67:- When `P0-prereq-heavy-story` is chosen, require a `Preflight Dependency Audit` before execution.\n77:- `chosen_runbook`\n79:- `Preflight Dependency Audit`\n81:- `Baseline Promotion Protocol`\n82:- `Replan Triggers`\n86:## Preflight Dependency Audit\n98:## Baseline Promotion Protocol\n107:## Replan Triggers\n132:- shared_file_density: ...\n138:- chosen_runbook: ...\n144:## Preflight Dependency Audit\n150:## Baseline Promotion Protocol\n159:## Replan Triggers\n"}
++{"task_id":"RBSEL-QA-01","command":"rg -n \"^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers\" docs/templates/runbook_plan_template.md","rc":0,"stdout":"7:## Story Shape\n14:## Chosen Runbook\n23:## Preflight Dependency Audit\n36:## Baseline Promotion Protocol\n43:## Replan Triggers\n"}
++{"task_id":"RBSEL-QA-01","command":"python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md","rc":0,"stdout":"OK: required runbook-selection headings present in docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md\n"}
++{"task_id":"RBSEL-QA-01","step":"lint","command":"rg -n \"Story Shape Classification|chosen_runbook|Replan|planning\" AGENTS.md && rg -n \"shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers\" skills/fpms-runbook-selection/SKILL.md && rg -n \"^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers\" docs/templates/runbook_plan_template.md","rc":0}
++{"task_id":"RBSEL-QA-01","step":"test","command":"python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md","rc":0}
++{"task_id":"RBSEL-QA-01","step":"gate","command":"./scripts/task_validate.sh RBSEL-QA-01","rc":0}
+diff --git a/artifacts/RBSEL-QA-01/summary.md b/artifacts/RBSEL-QA-01/summary.md
+new file mode 100644
+index 0000000..a33bc59
+--- /dev/null
++++ b/artifacts/RBSEL-QA-01/summary.md
+@@ -0,0 +1,50 @@
++# RBSEL-QA-01 Evidence Summary
++
++## Conclusion
++
++PASS
++
++## Exact Closure Slice
++
++Validate that the rule, skill, template, and gate exist together as a coherent minimum mechanism, and produce a final evidence summary for story close.
++
++## Explicit Non-Closure
++
++No product code was modified. The mechanism was not extended beyond evidence-only close-audit corrections.
++
++## Mechanism Ledger
++
++- Rule: [`AGENTS.md`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/AGENTS.md)
++  - Evidence: `rg -n "Story Shape Classification|chosen_runbook|Replan|planning" AGENTS.md`
++  - Result: required story-shape and replanning language is present.
++- Skill: [`skills/fpms-runbook-selection/SKILL.md`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/skills/fpms-runbook-selection/SKILL.md)
++  - Evidence: `rg -n "shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers" skills/fpms-runbook-selection/SKILL.md`
++  - Result: required classification dimensions, runbook selection, and planning controls are present.
++- Template: [`docs/templates/runbook_plan_template.md`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/docs/templates/runbook_plan_template.md)
++  - Evidence: `rg -n "^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers" docs/templates/runbook_plan_template.md`
++  - Result: required plan headings are present.
++- Gate: [`scripts/validate_plan_runbook.py`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/scripts/validate_plan_runbook.py)
++  - Evidence: `python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md`
++  - Result: the implementation plan passes the minimum heading validation.
++
++## Verification Commands
++
++- `rg -n "Story Shape Classification|chosen_runbook|Replan|planning" AGENTS.md` -> `rc=0`
++- `rg -n "shared_file_density|chosen_runbook|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers" skills/fpms-runbook-selection/SKILL.md` -> `rc=0`
++- `rg -n "^## Story Shape|^## Chosen Runbook|^## Preflight Dependency Audit|^## Baseline Promotion Protocol|^## Replan Triggers" docs/templates/runbook_plan_template.md` -> `rc=0`
++- `python3 scripts/validate_plan_runbook.py docs/superpowers/plans/2026-03-24-runbook-selection-and-story-shape-implementation.md` -> `rc=0`
++- `./scripts/task_validate.sh RBSEL-QA-01` -> `rc=0`
++
++## Modified Files
++
++- [`artifacts/RBSEL-QA-01/results.jsonl`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/artifacts/RBSEL-QA-01/results.jsonl)
++- [`artifacts/RBSEL-QA-01/summary.md`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/artifacts/RBSEL-QA-01/summary.md)
++- [`artifacts/RBSEL-QA-01/git/diff.patch`](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-qa-01/artifacts/RBSEL-QA-01/git/diff.patch)
++
++## Final Status
++
++PASS
++
++## Evidence Notes
++
++An evidence-only commit is required for task acceptance because this close-audit task owns only `artifacts/RBSEL-QA-01/**`. The task gate passed after adding the required `lint` and `test` evidence lines.
+diff --git a/artifacts/RBSEL-RULE-01/git/diff.patch b/artifacts/RBSEL-RULE-01/git/diff.patch
+new file mode 100644
+index 0000000..4260208
+--- /dev/null
++++ b/artifacts/RBSEL-RULE-01/git/diff.patch
+@@ -0,0 +1,31 @@
++diff --git a/AGENTS.md b/AGENTS.md
++index f5f321e..8f51e73 100644
++--- a/AGENTS.md
+++++ b/AGENTS.md
++@@ -42,6 +42,26 @@ Agent MUST follow these rules without exception.
++   - one mixed backend+frontend mega task
++   - one task that combines defaults + linkage + queries + dashboard
++ 
+++## 1.1 Story Shape Classification & Runbook Selection (MANDATORY)
+++
+++- This rule applies whenever there is a written spec, implementation plan, or batch manifest prepared to drive multi-step execution, or whenever the task requires more than one atomic task file or more than one execution wave; the single-file fix and doc-only exclusions only apply when no such written spec, implementation plan, or batch manifest exists.
+++- Before entering `writing-plans`, the task spec MUST record `Story Shape Classification` with at least:
+++  - `shared_file_density`
+++  - `prereq_dependency_density`
+++  - `be_fe_coupling`
+++  - `evidence_cost`
+++- The resulting task plan MUST also record the same `Story Shape Classification`.
+++- The task spec and the task plan MUST both record the selected `chosen_runbook`.
+++- Valid `chosen_runbook` IDs are:
+++  - `P0-single-lane-story`
+++  - `P0-prereq-heavy-story`
+++  - `P0-multi-lane-parallel-story`
+++  - `P0-frontend-heavy-story`
+++- The selected `chosen_runbook` MUST be explicit; reviewers and leads MUST reject plans that omit it.
+++- Execution MUST NOT start until both classification and runbook selection are complete and recorded in the spec and plan.
+++- If execution discovers a new shared prerequisite, shared ownership conflict, or state-machine reachability issue, the task MUST stop and return to planning with an updated classification and runbook choice before continuing.
+++- If the new prerequisite changes the closure slice, the original task MUST NOT be stretched to absorb it; the work MUST be split into a follow-up task.
+++
++ ---
++ 
++ ## 2) Phase Constraints
+diff --git a/artifacts/RBSEL-RULE-01/results.jsonl b/artifacts/RBSEL-RULE-01/results.jsonl
+new file mode 100644
+index 0000000..65fa665
+--- /dev/null
++++ b/artifacts/RBSEL-RULE-01/results.jsonl
+@@ -0,0 +1,3 @@
++{"cmd":"rg -n \"written spec, implementation plan, or batch manifest prepared to drive multi-step execution|Before entering `writing-plans`|The resulting task plan MUST also record the same `Story Shape Classification`|The task spec and the task plan MUST both record the selected `chosen_runbook`|Valid `chosen_runbook` IDs are:|Execution MUST NOT start until both classification and runbook selection are complete|shared prerequisite|shared ownership conflict|state-machine reachability issue|follow-up task\" AGENTS.md","step":"lint","rc":0,"status":"PASS"}
++{"cmd":"./scripts/task_validate.sh RBSEL-RULE-01","step":"test","rc":0,"status":"PASS"}
++{"cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-rule-01 diff ffd335c..39f432cebd9e84a60487465d115420db5a2f2837 -- AGENTS.md","step":"evidence","rc":0,"status":"PASS"}
+diff --git a/artifacts/RBSEL-RULE-01/summary.md b/artifacts/RBSEL-RULE-01/summary.md
+new file mode 100644
+index 0000000..fb6fc0e
+--- /dev/null
++++ b/artifacts/RBSEL-RULE-01/summary.md
+@@ -0,0 +1,17 @@
++# RBSEL-RULE-01 Evidence
++
++Refreshed `artifacts/RBSEL-RULE-01/**` so they match the RBSEL-RULE-01 product commit `39f432cebd9e84a60487465d115420db5a2f2837` and the scoped baseline-to-commit diff from task baseline `ffd335c`.
++
++Verification:
++- Confirmed the applicability trigger is objective: the rule applies whenever there is a written spec, implementation plan, or batch manifest prepared to drive multi-step execution, or when more than one atomic task file or execution wave is required.
++- Confirmed the mandatory `Story Shape Classification & Runbook Selection` section is present in full, including the `shared_file_density`, `prereq_dependency_density`, `be_fe_coupling`, `evidence_cost`, and `chosen_runbook` requirements.
++- Confirmed both dual-recording requirements are explicit: `Story Shape Classification` must appear in spec and resulting plan, and `chosen_runbook` must appear in both spec and plan.
++- Confirmed the valid `chosen_runbook` IDs are explicitly enumerated as `P0-single-lane-story`, `P0-prereq-heavy-story`, `P0-multi-lane-parallel-story`, and `P0-frontend-heavy-story`.
++- Confirmed the replanning language is present and enforceable: new shared prerequisite, shared ownership conflict, and state-machine reachability issues all force a return to planning, and follow-up work must be split when the closure slice changes.
++- Confirmed the scoped diff evidence was regenerated from baseline commit `ffd335c` to immutable product commit `39f432cebd9e84a60487465d115420db5a2f2837`.
++- `./scripts/task_validate.sh RBSEL-RULE-01` passed.
++- Task gate output: `Task Gate PASS`.
++
++Scoped diff evidence was regenerated from task baseline `ffd335c` to immutable product commit `39f432cebd9e84a60487465d115420db5a2f2837` in `artifacts/RBSEL-RULE-01/git/diff.patch`.
++
++No baseline-dirty artifacts were needed.
+diff --git a/artifacts/RBSEL-SKILL-01/git/diff.patch b/artifacts/RBSEL-SKILL-01/git/diff.patch
+new file mode 100644
+index 0000000..b6c16ed
+--- /dev/null
++++ b/artifacts/RBSEL-SKILL-01/git/diff.patch
+@@ -0,0 +1,27 @@
++diff --git a/skills/fpms-runbook-selection/SKILL.md b/skills/fpms-runbook-selection/SKILL.md
++index 2dc1bdb..15bf610 100644
++--- a/skills/fpms-runbook-selection/SKILL.md
+++++ b/skills/fpms-runbook-selection/SKILL.md
++@@ -7,6 +7,10 @@ description: "Use when preparing any multi-step FPMS task that needs writing-pla
++ 
++ Use this skill before `writing-plans` for any multi-step story. The goal is not automation; the goal is to force an explicit, auditable choice of execution shape before planning starts.
++ 
+++## First Pass
+++
+++Before any classification or output-format rules, read the current story background and the existing constraints first. Use the task/spec context, the task file, and any governing repo rules as the source of truth before choosing a runbook.
+++
++ ## When To Use
++ 
++ Use this skill when a task is more than a simple single-file change and needs a plan, wave structure, or follow-up tasks.
++@@ -57,8 +61,10 @@ Choose one of these runbooks:
++ 
++ Apply these rules in order:
++ 
+++- If the story cannot start until shared prerequisites are frozen, or if `prereq_dependency_density = high`, you must choose `P0-prereq-heavy-story`.
+++- This prereq-heavy rule overrides every other runbook choice. Do not select `P0-single-lane-story`, `P0-multi-lane-parallel-story`, or `P0-frontend-heavy-story` when the prereq-heavy condition applies.
++ - If `shared_file_density = high` and `be_fe_coupling = chained`, prefer `P0-single-lane-story`.
++-- If `prereq_dependency_density = high`, require a `Preflight Dependency Audit` even if another runbook is chosen.
+++- When `P0-prereq-heavy-story` is chosen, require a `Preflight Dependency Audit` before execution.
++ - If shared files are low and the slices are independent, allow `P0-multi-lane-parallel-story`.
++ - If backend contract is frozen and the UI is the main workload, allow `P0-frontend-heavy-story`.
++ 
+diff --git a/artifacts/RBSEL-SKILL-01/results.jsonl b/artifacts/RBSEL-SKILL-01/results.jsonl
+new file mode 100644
+index 0000000..9ce3725
+--- /dev/null
++++ b/artifacts/RBSEL-SKILL-01/results.jsonl
+@@ -0,0 +1,4 @@
++{"step":"lint","cmd":"rg -n 'First Pass|current story background|existing constraints|shared_file_density|prereq_dependency_density|be_fe_coupling|evidence_cost|chosen_runbook|P0-prereq-heavy-story|must choose `P0-prereq-heavy-story`|overrides every other runbook choice|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers|Execution Mode|Atomic Task Inventory|Wave Plan' skills/fpms-runbook-selection/SKILL.md","rc":0,"status":"PASS"}
++{"step":"test","cmd":"./scripts/task_validate.sh RBSEL-SKILL-01","rc":0,"status":"PASS"}
++{"step":"write-evidence","cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-skill-01 diff 34a34a9549ddd7fe33b16943bef355df8b752652..dc35033872a29f7dee7114b7a384e5dab3bf3f0b -- skills/fpms-runbook-selection/SKILL.md > artifacts/RBSEL-SKILL-01/git/diff.patch","rc":0,"status":"PASS"}
++{"step":"evidence","cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-skill-01 diff 34a34a9549ddd7fe33b16943bef355df8b752652..dc35033872a29f7dee7114b7a384e5dab3bf3f0b -- skills/fpms-runbook-selection/SKILL.md","rc":0,"status":"PASS"}
+diff --git a/artifacts/RBSEL-SKILL-01/summary.md b/artifacts/RBSEL-SKILL-01/summary.md
+new file mode 100644
+index 0000000..98b0698
+--- /dev/null
++++ b/artifacts/RBSEL-SKILL-01/summary.md
+@@ -0,0 +1,31 @@
++# RBSEL-SKILL-01 Evidence Summary
++
++- Task: add a repo-local runbook selection skill instruction that forces reading the current story background and existing constraints before classification/output rules, and make `P0-prereq-heavy-story` an exclusive override when shared prerequisites must be frozen first.
++- Modified file: `skills/fpms-runbook-selection/SKILL.md`
++- Baseline product commit: `34a34a9549ddd7fe33b16943bef355df8b752652`
++- Reviewed product commit: `dc35033872a29f7dee7114b7a384e5dab3bf3f0b`
++
++## Verification
++
++- Ran: `rg -n 'First Pass|current story background|existing constraints|shared_file_density|prereq_dependency_density|be_fe_coupling|evidence_cost|chosen_runbook|P0-prereq-heavy-story|must choose \`P0-prereq-heavy-story\`|overrides every other runbook choice|Preflight Dependency Audit|Baseline Promotion Protocol|Replan Triggers|Execution Mode|Atomic Task Inventory|Wave Plan' skills/fpms-runbook-selection/SKILL.md`
++- Result: passed, with matches for the first-pass requirement, 4-dimension classification, chosen runbook, prereq-heavy mandatory override, audit requirement, execution-mode section, and output template sections.
++- Ran: `./scripts/task_validate.sh RBSEL-SKILL-01`
++- Result: `Task Gate PASS`
++- Ran: `git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-skill-01 diff 34a34a9549ddd7fe33b16943bef355df8b752652..dc35033872a29f7dee7114b7a384e5dab3bf3f0b -- skills/fpms-runbook-selection/SKILL.md > artifacts/RBSEL-SKILL-01/git/diff.patch`
++- Result: passed, and this is the exact command that wrote `artifacts/RBSEL-SKILL-01/git/diff.patch` for the immutable product commit pair.
++- Ran: `git diff 34a34a9549ddd7fe33b16943bef355df8b752652..dc35033872a29f7dee7114b7a384e5dab3bf3f0b -- skills/fpms-runbook-selection/SKILL.md`
++- Result: passed, and the scoped baseline-to-reviewed-product diff is stored in `artifacts/RBSEL-SKILL-01/git/diff.patch`
++
++## Closure Evidence
++
++- The skill now explicitly requires a first pass over current story background and existing constraints before classification.
++- The skill still contains the full 4-dimension story-shape classification and `chosen_runbook` output.
++- `P0-prereq-heavy-story` is now an explicit override when shared prerequisites must be frozen first or when `prereq_dependency_density = high`.
++- The selection between `P0-multi-lane-parallel-story` and `P0-frontend-heavy-story` is now deterministic, with `P0-frontend-heavy-story` as the explicit tie-break when both are eligible.
++- The minimum output template includes `Execution Mode`, `Atomic Task Inventory`, and `Wave Plan`.
++
++## Evidence Artifacts
++
++- `artifacts/RBSEL-SKILL-01/results.jsonl`
++- `artifacts/RBSEL-SKILL-01/summary.md`
++- `artifacts/RBSEL-SKILL-01/git/diff.patch`
+diff --git a/artifacts/RBSEL-TPL-01/git/diff.patch b/artifacts/RBSEL-TPL-01/git/diff.patch
+new file mode 100644
+index 0000000..32fd4f1
+--- /dev/null
++++ b/artifacts/RBSEL-TPL-01/git/diff.patch
+@@ -0,0 +1,83 @@
++diff --git a/docs/templates/runbook_plan_template.md b/docs/templates/runbook_plan_template.md
++new file mode 100644
++index 0000000..e1aab5d
++--- /dev/null
+++++ b/docs/templates/runbook_plan_template.md
++@@ -0,0 +1,77 @@
+++# Runbook Plan Template
+++
+++Use this template for any multi-step plan that must classify story shape and select a runbook before execution.
+++
+++---
+++
+++## Story Shape
+++
+++- shared_file_density: `<low|medium|high>`
+++- prereq_dependency_density: `<low|medium|high>`
+++- be_fe_coupling: `<none|chained (BE -> FE)|parallel>`
+++- evidence_cost: `<low|medium|high>`
+++
+++## Chosen Runbook
+++
+++- chosen_runbook: `<P0-single-lane-story|P0-prereq-heavy-story|P0-multi-lane-parallel-story|P0-frontend-heavy-story>`
+++
+++## Runbook Rationale
+++
+++- Why this runbook fits the story shape:
+++- Why the other runbooks were not chosen:
+++
+++## Preflight Dependency Audit
+++
+++- Permission / RBAC prerequisites:
+++- State machine reachability:
+++- Shared ownership file conflicts:
+++- Shared test file conflicts:
+++- Router / shared schema / export helper / permission registry / shared API client checks:
+++
+++## Execution Mode
+++
+++- Mode: `<single-thread|serialized subagent|multi-lane parallel>`
+++- Why this execution mode is safe for the current story shape:
+++
+++## Baseline Promotion Protocol
+++
+++- Establish the baseline before editing: note whether the worktree starts clean or dirty.
+++- If the worktree is dirty, capture the task-scoped allowlist diff and any external-file inventory before making changes.
+++- Reviewer validation should compare the completed task against the recorded pre-execution baseline for this worktree, not assume a pre-existing `HEAD^..HEAD` review range.
+++- Accepted work is promoted only after verification and becomes the next task's starting baseline.
+++
+++## Replan Triggers
+++
+++- A new shared prerequisite is discovered.
+++- A shared file conflict exceeds the current allowlist.
+++- The state machine is no longer reachable from the current baseline.
+++- The closure slice depends on a second unplanned slice.
+++- The reviewer determines the current plan is missing a prerequisite wave.
+++
+++## Atomic Task Inventory
+++
+++- `<TASK-ID>`:
+++  - Task file path: `<exact task file path>`
+++  - Owner role: `<worker|monitor|explorer|lead>`
+++  - Exact closure slice:
+++  - Explicit non-closure:
+++  - Required verification:
+++  - Dependency notes:
+++  - Remaining follow-up task ids:
+++  - Allowlist:
+++  - Done definition:
+++
+++## Wave Plan
+++
+++- Wave 1:
+++  - Tasks:
+++  - Mode:
+++  - Shared ownership notes:
+++- Wave 2:
+++  - Tasks:
+++  - Mode:
+++  - Shared ownership notes:
+++- Wave 3:
+++  - Tasks:
+++  - Mode:
+++  - Shared ownership notes:
+diff --git a/artifacts/RBSEL-TPL-01/results.jsonl b/artifacts/RBSEL-TPL-01/results.jsonl
+new file mode 100644
+index 0000000..f778e0b
+--- /dev/null
++++ b/artifacts/RBSEL-TPL-01/results.jsonl
+@@ -0,0 +1,4 @@
++{"step":"lint","cmd":"rg -n '^## Story Shape|^## Chosen Runbook|^## Runbook Rationale|^## Preflight Dependency Audit|^## Execution Mode|^## Baseline Promotion Protocol|^## Replan Triggers|^## Atomic Task Inventory|^## Wave Plan' docs/templates/runbook_plan_template.md","rc":0,"status":"PASS"}
++{"step":"lint","cmd":"rg -n 'Task file path:|Owner role:|Required verification:|Dependency notes:' docs/templates/runbook_plan_template.md","rc":0,"status":"PASS"}
++{"step":"evidence","cmd":"git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-tpl-01 diff 64b83d5..20b377d6b44cca911a0031c8fbb954019033ee8c -- docs/templates/runbook_plan_template.md > artifacts/RBSEL-TPL-01/git/diff.patch","rc":0,"status":"PASS"}
++{"step":"test","cmd":"./scripts/task_validate.sh RBSEL-TPL-01","rc":0,"status":"PASS"}
+diff --git a/artifacts/RBSEL-TPL-01/summary.md b/artifacts/RBSEL-TPL-01/summary.md
+new file mode 100644
+index 0000000..cf6ebc5
+--- /dev/null
++++ b/artifacts/RBSEL-TPL-01/summary.md
+@@ -0,0 +1,32 @@
++# RBSEL-TPL-01 Evidence Summary
++
++- Task: `RBSEL-TPL-01`
++- Role: `worker`, then main-thread evidence/baseline takeover
++- Closure slice: create a reusable runbook-aware plan template that forces all required runbook-selection sections to appear in future multi-step plans.
++- Non-closure respected: no `AGENTS.md` edits, no repo-local skill creation, and no gate script logic.
++- Baseline commit after accepted prerequisite promotion: `64b83d5`
++- Reviewed product commit: `20b377d6b44cca911a0031c8fbb954019033ee8c`
++- Files modified in closure slice: `docs/templates/runbook_plan_template.md`
++
++## Verification
++
++- Ran: `rg -n '^## Story Shape|^## Chosen Runbook|^## Runbook Rationale|^## Preflight Dependency Audit|^## Execution Mode|^## Baseline Promotion Protocol|^## Replan Triggers|^## Atomic Task Inventory|^## Wave Plan' docs/templates/runbook_plan_template.md`
++- Result: passed, all mandatory runbook-selection headings are present.
++- Ran: `rg -n 'Task file path:|Owner role:|Required verification:|Dependency notes:' docs/templates/runbook_plan_template.md`
++- Result: passed, the Atomic Task Inventory exposes the required manifest placeholders in one canonical format.
++- Ran: `git -C /Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/.worktrees/rbsel-tpl-01 diff 64b83d5..20b377d6b44cca911a0031c8fbb954019033ee8c -- docs/templates/runbook_plan_template.md > artifacts/RBSEL-TPL-01/git/diff.patch`
++- Result: passed, and the scoped product diff is anchored to the accepted `RBSEL-SKILL-01` baseline.
++- Ran: `./scripts/task_validate.sh RBSEL-TPL-01`
++- Result: `Task Gate PASS`
++
++## Closure Evidence
++
++- The template forces `Story Shape`, `Chosen Runbook`, `Runbook Rationale`, `Preflight Dependency Audit`, `Execution Mode`, `Baseline Promotion Protocol`, `Replan Triggers`, `Atomic Task Inventory`, and `Wave Plan`.
++- The Atomic Task Inventory includes canonical placeholders for `Task file path`, `Owner role`, `Required verification`, and `Dependency notes`.
++- The baseline protocol wording is safe for clean or dirty pre-execution worktrees and no longer assumes a pre-existing `HEAD^..HEAD` review range.
++
++## Evidence Artifacts
++
++- `artifacts/RBSEL-TPL-01/results.jsonl`
++- `artifacts/RBSEL-TPL-01/summary.md`
++- `artifacts/RBSEL-TPL-01/git/diff.patch`
+diff --git a/backend/app/modules/annuity/api.py b/backend/app/modules/annuity/api.py
+index 9aee48e..5ce1d72 100644
+--- a/backend/app/modules/annuity/api.py
++++ b/backend/app/modules/annuity/api.py
+@@ -40,6 +40,10 @@ class AnnuityGenerateDraftsIn(BaseModel):
+     currency: str = Field(default="CNY", min_length=1, max_length=8)
+ 
+ 
++class AnnuityTaskGenerateIn(BaseModel):
++    case_id: str = Field(..., min_length=1)
++
++
+ class PayListFromFeeItemsIn(BaseModel):
+     fee_item_ids: list[str] = Field(..., min_length=1)
+     planned_pay_date: date | None = None
+@@ -116,6 +120,13 @@ def get_annuity_tasks(
+             "remark": task.remark,
+             "created_at": task.created_at,
+             "updated_at": task.updated_at,
++            "gov_fee_amt": task.gov_fee_amt,
++            "service_fee_amt": task.service_fee_amt,
++            "notify_count": task.notify_count,
++            "pay_next_year": task.pay_next_year,
++            "draft_generated": task.draft_generated,
++            "notice_sent": task.notice_sent,
++            "is_overdue": task.due_date < date.today() and task.status == "OPEN",
+         }
+         for task in tasks
+     ]
+@@ -166,6 +177,29 @@ def post_annuity_generate_drafts(
+     )
+ 
+ 
++@router.post(
++    "/annuity/tasks/generate",
++    status_code=status.HTTP_201_CREATED,
++    summary="Generate annuity tasks for a case",
++)
++def generate_annuity_tasks_endpoint(
++    payload: AnnuityTaskGenerateIn,
++    _perm: None = Depends(require_perm("AnnuityTask.Action")),
++    db: Session = Depends(get_db),
++) -> dict[str, Any]:
++    """
++    Generate multi-year annuity tasks for a GRANTED case.
++
++    **Auth**: Bearer JWT
++    **Permission**: AnnuityTask.Action
++    """
++    from app.modules.annuity.service import generate_annuity_tasks_for_case
++
++    result = generate_annuity_tasks_for_case(db, case_id=payload.case_id)
++    db.commit()
++    return result
++
++
+ @router.post("/pay-lists/from-fee-items", summary="Create pay list from fee items")
+ def post_pay_list_from_fee_items(
+     payload: PayListFromFeeItemsIn,
+diff --git a/backend/app/modules/annuity/service.py b/backend/app/modules/annuity/service.py
+index d69b654..e040097 100644
+--- a/backend/app/modules/annuity/service.py
++++ b/backend/app/modules/annuity/service.py
+@@ -258,18 +258,16 @@ def _rate_amount(
+     *,
+     fee_type: str,
+     currency: str,
++    year_no: int | None = None,
+ ) -> Decimal:
++    conditions = [
++        FeeRate.enabled.is_(True),
++        FeeRate.rate_group == "ANNUITY",
++        FeeRate.fee_type == fee_type,
++        FeeRate.currency == currency,
++    ]
+     rate = (
+-        db.execute(
+-            select(FeeRate)
+-            .where(
+-                FeeRate.enabled.is_(True),
+-                FeeRate.rate_group == "ANNUITY",
+-                FeeRate.fee_type == fee_type,
+-                FeeRate.currency == currency,
+-            )
+-            .order_by(FeeRate.updated_at.desc())
+-        )
++        db.execute(select(FeeRate).where(*conditions).order_by(FeeRate.updated_at.desc()))
+         .scalars()
+         .first()
+     )
+@@ -518,6 +516,7 @@ def generate_fee_drafts_from_annuity_tasks(
+                 )
+             )
+ 
++            task.draft_generated = True
+             db.commit()
+             success.append(
+                 {
+@@ -1450,3 +1449,79 @@ def add_manual_gov_payment(
+             "client_id": pay_list.client_id,
+         },
+     }
++
++
++def generate_annuity_tasks_for_case(
++    db: Session,
++    *,
++    case_id: str,
++) -> dict:
++    """Generate multi-year annuity tasks for a GRANTED case."""
++    from app.modules.cases.models import Case
++
++    case = db.query(Case).filter(Case.id == case_id).first()
++    if not case:
++        raise_business_error("CASE_NOT_FOUND", "案卷不存在", status_code=404)
++
++    if case.status != "GRANTED":
++        raise_business_error("CASE_NOT_GRANTED", "案卷状态不是已授权", status_code=400)
++
++    if not case.first_annuity_year:
++        raise_business_error("NO_FIRST_ANNUITY_YEAR", "未设置首年年费年度", status_code=400)
++
++    # Calculate last year: valid_until or filing_date + 20 years (standard CN patent term)
++    if case.valid_until and case.filing_date:
++        last_year = case.valid_until.year - case.filing_date.year + 1
++    else:
++        last_year = 20
++
++    first_year = case.first_annuity_year
++    tasks_created = 0
++    tasks_skipped = 0
++
++    for year_no in range(first_year, last_year + 1):
++        # Check if task already exists for this case + year
++        existing = (
++            db.query(AnnuityTask)
++            .filter(AnnuityTask.case_id == case_id, AnnuityTask.year_no == year_no)
++            .first()
++        )
++        if existing:
++            tasks_skipped += 1
++            continue
++
++        # Calculate due date: filing_date + year_no years
++        if case.filing_date:
++            try:
++                due = case.filing_date.replace(year=case.filing_date.year + year_no)
++            except ValueError:
++                # Handle Feb 29 edge case
++                due = case.filing_date.replace(year=case.filing_date.year + year_no, day=28)
++        else:
++            due = date.today()
++
++        # Look up fee rates (with year_no for year-specific rates)
++        gov_amt = _rate_amount(db, fee_type="GOV", currency="CNY", year_no=year_no)
++        svc_amt = _rate_amount(db, fee_type="SERVICE", currency="CNY", year_no=year_no)
++
++        task = AnnuityTask(
++            case_id=case_id,
++            client_id=case.client_id,
++            year_no=year_no,
++            due_date=due,
++            status="OPEN",
++            gov_fee_amt=gov_amt,
++            service_fee_amt=svc_amt,
++        )
++        db.add(task)
++        tasks_created += 1
++
++    db.flush()
++    return {
++        "case_id": case_id,
++        "case_no": case.case_no,
++        "first_year": first_year,
++        "last_year": last_year,
++        "tasks_created": tasks_created,
++        "tasks_skipped": tasks_skipped,
++    }
+diff --git a/backend/app/modules/cases/schemas.py b/backend/app/modules/cases/schemas.py
+index feff42f..a60d84b 100644
+--- a/backend/app/modules/cases/schemas.py
++++ b/backend/app/modules/cases/schemas.py
+@@ -42,6 +42,7 @@ class CaseCreate(BaseModel):
+     case_type: CaseType = CaseType.NORMAL
+     patent_category: PatentCategory = PatentCategory.INV
+     flow_dir: FlowDir = FlowDir.CN_DOMESTIC
++    status: CaseStatus | None = None
+     client_id: str | None = None
+     foreign_agent_id: str | None = None
+     foreign_ref: str | None = Field(None, max_length=64)
+diff --git a/backend/app/modules/cases/service.py b/backend/app/modules/cases/service.py
+index a8a9d9b..b0ab7fe 100644
+--- a/backend/app/modules/cases/service.py
++++ b/backend/app/modules/cases/service.py
+@@ -402,7 +402,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
+         title_cn=data.title_cn,
+         title_en=data.title_en,
+         app_no=data.app_no,
+-        status="NOT_FILED",
++        status=data.status.value if data.status else "NOT_FILED",
+         # A3 — Publication / Grant
+         pub_date=data.pub_date,
+         pub_no=data.pub_no,
+diff --git a/backend/tests/test_annuity_generate.py b/backend/tests/test_annuity_generate.py
+new file mode 100644
+index 0000000..21ae97c
+--- /dev/null
++++ b/backend/tests/test_annuity_generate.py
+@@ -0,0 +1,317 @@
++"""Tests for AnnuityTask multi-year generation (FR-FE-06)."""
++from __future__ import annotations
++
++from datetime import date, timedelta
++from decimal import Decimal
++from uuid import uuid4
++
++import pytest
++from fastapi.testclient import TestClient
++from sqlalchemy.orm import sessionmaker
++
++from app.modules.annuity.models import AnnuityTask
++from app.modules.cases.models import Case
++
++
++def _uid(prefix: str) -> str:
++    return f"{prefix}-{uuid4().hex[:8].upper()}"
++
++
++@pytest.fixture
++def client_id(client: TestClient, auth_headers: dict) -> str:
++    resp = client.post(
++        "/api/v1/clients",
++        json={"name_cn": _uid("GEN-CLI"), "default_currency": "CNY"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    return resp.json()["id"]
++
++
++@pytest.fixture
++def granted_case_id(client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker) -> str:
++    resp = client.post(
++        "/api/v1/cases",
++        json={
++            "case_no": _uid("GEN-CASE"),
++            "case_type": "NORMAL",
++            "patent_category": "INV",
++            "flow_dir": "CN_DOMESTIC",
++            "client_id": client_id,
++            "title_cn": "Annuity Gen Test",
++            "filing_date": "2020-06-15",
++            "status": "GRANTED",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    case_id = resp.json()["id"]
++
++    # Set first_annuity_year directly in DB (no API for this field yet)
++    with session_factory() as db:
++        case = db.query(Case).filter(Case.id == case_id).first()
++        case.first_annuity_year = 3
++        db.commit()
++
++    return case_id
++
++
++@pytest.fixture
++def not_granted_case_id(client: TestClient, auth_headers: dict, client_id: str) -> str:
++    resp = client.post(
++        "/api/v1/cases",
++        json={
++            "case_no": _uid("GEN-NG"),
++            "case_type": "NORMAL",
++            "patent_category": "INV",
++            "flow_dir": "CN_DOMESTIC",
++            "client_id": client_id,
++            "title_cn": "Not Granted Case",
++            "status": "NOT_FILED",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    return resp.json()["id"]
++
++
++@pytest.fixture
++def granted_no_year_case_id(client: TestClient, auth_headers: dict, client_id: str) -> str:
++    resp = client.post(
++        "/api/v1/cases",
++        json={
++            "case_no": _uid("GEN-NY"),
++            "case_type": "NORMAL",
++            "patent_category": "INV",
++            "flow_dir": "CN_DOMESTIC",
++            "client_id": client_id,
++            "title_cn": "Granted No Year",
++            "status": "GRANTED",
++            "filing_date": "2020-01-01",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    return resp.json()["id"]
++
++
++def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
++    for fee_type, amount in (("GOV", "300.00"), ("SERVICE", "50.00")):
++        resp = client.post(
++            "/api/v1/fees/rates",
++            json={
++                "fee_code": f"ANN-GEN-{fee_type}-{uuid4().hex[:6]}",
++                "fee_name": f"Annuity {fee_type} Gen",
++                "fee_type": fee_type,
++                "currency": "CNY",
++                "default_amount": amount,
++                "enabled": True,
++                "rate_group": "ANNUITY",
++            },
++            headers=auth_headers,
++        )
++        assert resp.status_code == 201
++
++
++# --- GENERATE ---
++
++def test_generate_annuity_tasks_success(client: TestClient, auth_headers: dict, granted_case_id: str):
++    resp = client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": granted_case_id},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++    data = resp.json()
++    assert data["tasks_created"] > 0
++    assert data["first_year"] == 3
++
++
++def test_generate_case_not_found(client: TestClient, auth_headers: dict):
++    resp = client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": "nonexistent-id"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 404
++
++
++def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_granted_case_id: str):
++    resp = client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": not_granted_case_id},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 400
++
++
++def test_generate_no_first_annuity_year(client: TestClient, auth_headers: dict, granted_no_year_case_id: str):
++    resp = client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": granted_no_year_case_id},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 400
++
++
++def test_generate_idempotent(client: TestClient, auth_headers: dict, granted_case_id: str):
++    resp1 = client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": granted_case_id},
++        headers=auth_headers,
++    )
++    assert resp1.status_code == 201
++    created_first = resp1.json()["tasks_created"]
++
++    resp2 = client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": granted_case_id},
++        headers=auth_headers,
++    )
++    assert resp2.status_code == 201
++    assert resp2.json()["tasks_created"] == 0
++    assert resp2.json()["tasks_skipped"] == created_first
++
++
++def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, granted_case_id: str):
++    _seed_annuity_rates(client, auth_headers)
++
++    # Re-generate (delete old tasks first via direct DB or just use new case)
++    resp = client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": granted_case_id},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201
++
++    # Check list for fee amounts
++    list_resp = client.get(
++        "/api/v1/annuity/tasks",
++        params={"case_id": granted_case_id},
++        headers=auth_headers,
++    )
++    assert list_resp.status_code == 200
++    items = list_resp.json()["items"]
++    assert len(items) > 0
++    # At least some should have amounts (may be 0 if rates don't match year_no)
++    for item in items:
++        assert "gov_fee_amt" in item
++        assert "service_fee_amt" in item
++
++
++# --- LIST NEW FIELDS ---
++
++def test_list_includes_new_fields(client: TestClient, auth_headers: dict, granted_case_id: str):
++    client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": granted_case_id},
++        headers=auth_headers,
++    )
++    resp = client.get("/api/v1/annuity/tasks", headers=auth_headers)
++    assert resp.status_code == 200
++    items = resp.json()["items"]
++    assert len(items) > 0
++    item = items[0]
++    for field in ("gov_fee_amt", "service_fee_amt", "notify_count", "pay_next_year",
++                  "draft_generated", "notice_sent", "is_overdue"):
++        assert field in item, f"Missing field: {field}"
++
++
++def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++    with session_factory() as db:
++        task = AnnuityTask(
++            case_id=granted_case_id,
++            client_id=db.query(Case).filter(Case.id == granted_case_id).first().client_id,
++            year_no=99,
++            due_date=date.today() - timedelta(days=30),
++            status="OPEN",
++        )
++        db.add(task)
++        db.commit()
++
++    resp = client.get(
++        "/api/v1/annuity/tasks",
++        params={"case_id": granted_case_id, "status": "OPEN"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200
++    overdue_items = [i for i in resp.json()["items"] if i["year_no"] == 99]
++    assert len(overdue_items) == 1
++    assert overdue_items[0]["is_overdue"] is True
++
++
++def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++    with session_factory() as db:
++        task = AnnuityTask(
++            case_id=granted_case_id,
++            client_id=db.query(Case).filter(Case.id == granted_case_id).first().client_id,
++            year_no=98,
++            due_date=date.today() - timedelta(days=30),
++            status="DONE",
++        )
++        db.add(task)
++        db.commit()
++
++    resp = client.get(
++        "/api/v1/annuity/tasks",
++        params={"case_id": granted_case_id, "status": "DONE"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200
++    done_items = [i for i in resp.json()["items"] if i["year_no"] == 98]
++    assert len(done_items) == 1
++    assert done_items[0]["is_overdue"] is False
++
++
++# --- DRAFT GENERATED FLAG ---
++
++def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, granted_case_id: str):
++    _seed_annuity_rates(client, auth_headers)
++
++    client.post(
++        "/api/v1/annuity/tasks/generate",
++        json={"case_id": granted_case_id},
++        headers=auth_headers,
++    )
++
++    # Get task IDs
++    list_resp = client.get(
++        "/api/v1/annuity/tasks",
++        params={"case_id": granted_case_id},
++        headers=auth_headers,
++    )
++    items = list_resp.json()["items"]
++    task_ids = [i["id"] for i in items[:1]]  # just one
++
++    if task_ids:
++        # Update instruction to PAY first
++        client.put(
++            f"/api/v1/annuity/tasks/{task_ids[0]}/instruction",
++            json={"instruction": "PAY"},
++            headers=auth_headers,
++        )
++
++        # Generate drafts
++        draft_resp = client.post(
++            "/api/v1/annuity/tasks/generate-drafts",
++            json={"task_ids": task_ids},
++            headers=auth_headers,
++        )
++        assert draft_resp.status_code in (200, 201)
++
++        # Check flag
++        list_resp2 = client.get(
++            "/api/v1/annuity/tasks",
++            params={"case_id": granted_case_id},
++            headers=auth_headers,
++        )
++        for item in list_resp2.json()["items"]:
++            if item["id"] == task_ids[0]:
++                assert item["draft_generated"] is True
++
++
++# --- PERMISSIONS ---
++
++def test_permissions_generate(client: TestClient):
++    resp = client.post("/api/v1/annuity/tasks/generate", json={"case_id": "x"})
++    assert resp.status_code == 401
+diff --git a/docs/FPMS_SPEC2_2nd_Review.md b/docs/FPMS_SPEC2_2nd_Review.md
+index 420d95c..940e7ed 100644
+--- a/docs/FPMS_SPEC2_2nd_Review.md
++++ b/docs/FPMS_SPEC2_2nd_Review.md
+@@ -228,7 +228,7 @@ Overall implementation completeness: **~44%** (excluding Document Generation)
+ 
+ | # | Feature | Module | Notes |
+ |---|---------|--------|-------|
+-| 1 | 官费清单与缴费 (FR-FE-04) | Fees | Model exists, need API + UI |
++| 1 | 官费清单与缴费 (FR-FE-04) | Fees | 已完成（Phase 3 兼容闭环）；5 个 blocked follow-up 已登记于 `docs/FRMS_SPEC2_2nd_POST.md` |
+ | 2 | 个案收款登记端点 (FR-FE-07) | Fees | Model exists, need API + UI |
+ | 3 | 年费管理 API/UI (FR-FE-06) | Fees | Model exists, need API + UI |
+ | 4 | 冲销反转前端 | Billing | Backend service exists, need UI |
+diff --git a/docs/FRMS_SPEC2_2nd_POST.md b/docs/FRMS_SPEC2_2nd_POST.md
+new file mode 100644
+index 0000000..a68b12c
+--- /dev/null
++++ b/docs/FRMS_SPEC2_2nd_POST.md
+@@ -0,0 +1,49 @@
++# FRMS SPEC 2.0 2nd Review Post Ledger
++
++## Purpose
++
++本文件用于登记 `docs/FPMS_SPEC2_2nd_Review.md` 中已推进条目的 post-review 收口状态，以及已批准但暂不在本轮 Phase 3 范围内的 blocked follow-up。
++
++---
++
++## P0 #1 — 官费清单与缴费 (FR-FE-04)
++
++- Source review item: `docs/FPMS_SPEC2_2nd_Review.md`
++- Source spec: `docs/FPMS SPEC 2.0.md`
++- Final QA ledger: `artifacts/FRFE04-QA-01/summary.md`
++- Story status: `已完成（Phase 3 兼容闭环）`
++- SPEC full-close status: `BLOCKED by approved follow-up ledger`
++
++### 已完成闭环
++
++- 从 `GOV` 草单生成官费清单
++- 历史清单头创建
++- 官费清单查询、详情、状态追踪
++- Excel 导出与 `DRAFT -> EXPORTED -> PAID`
++- 生成行官方缴费登记
++- 历史手工补录明细，且允许 `fee_item_id` 为空
++- Fee Management 语义入口与简体中文 UI
++
++### 已登记 Blocked Follow-up
++
++| Follow-up ID | Blocked Item | Reason |
++|---|---|---|
++| `FRFE04-BLOCK-01` | `T_PayList` 缺 `Type/FlowDir/InvoiceNoFrom/To` | 现有模型未提供结构字段；本轮受 Phase 3 无 schema 变更约束 |
++| `FRFE04-BLOCK-02` | `T_GovPayment` 缺 `FeeCode/YearNo/PlannedAmt/PlannedCurrency/PaidCurrency/VoucherNo/InvoiceNo` | 现有模型未提供结构字段；本轮受 Phase 3 无 schema 变更约束 |
++| `FRFE04-BLOCK-03` | 依赖上述缺失结构字段的增强查询 | 查询口径依赖未落库字段，不能在本轮伪完成 |
++| `FRFE04-BLOCK-04` | `XML / 文本` 多格式官方导出 | 本轮仅交付统一 Excel 导出 |
++| `FRFE04-BLOCK-05` | 已缴记录高权限修改与审计日志 | 需要独立权限/审计设计，不纳入本轮闭环 |
++
++### Close Decision
++
++- `FR-FE-04`：可在 post-review 台账中标记为 `已完成（Phase 3 兼容闭环）`
++- 不应标记为 `SPEC 全量完成`
++- 上述 5 项 blocked follow-up 必须保留在后续计划中
++
++---
++
++## Evidence
++
++- `artifacts/FRFE04-QA-01/results.jsonl`
++- `artifacts/FRFE04-QA-01/summary.md`
++- `artifacts/FRFE04-QA-01/git/diff.patch`
+diff --git a/docs/templates/runbook_plan_template.md b/docs/templates/runbook_plan_template.md
+new file mode 100644
+index 0000000..e1aab5d
+--- /dev/null
++++ b/docs/templates/runbook_plan_template.md
+@@ -0,0 +1,77 @@
++# Runbook Plan Template
++
++Use this template for any multi-step plan that must classify story shape and select a runbook before execution.
++
++---
++
++## Story Shape
++
++- shared_file_density: `<low|medium|high>`
++- prereq_dependency_density: `<low|medium|high>`
++- be_fe_coupling: `<none|chained (BE -> FE)|parallel>`
++- evidence_cost: `<low|medium|high>`
++
++## Chosen Runbook
++
++- chosen_runbook: `<P0-single-lane-story|P0-prereq-heavy-story|P0-multi-lane-parallel-story|P0-frontend-heavy-story>`
++
++## Runbook Rationale
++
++- Why this runbook fits the story shape:
++- Why the other runbooks were not chosen:
++
++## Preflight Dependency Audit
++
++- Permission / RBAC prerequisites:
++- State machine reachability:
++- Shared ownership file conflicts:
++- Shared test file conflicts:
++- Router / shared schema / export helper / permission registry / shared API client checks:
++
++## Execution Mode
++
++- Mode: `<single-thread|serialized subagent|multi-lane parallel>`
++- Why this execution mode is safe for the current story shape:
++
++## Baseline Promotion Protocol
++
++- Establish the baseline before editing: note whether the worktree starts clean or dirty.
++- If the worktree is dirty, capture the task-scoped allowlist diff and any external-file inventory before making changes.
++- Reviewer validation should compare the completed task against the recorded pre-execution baseline for this worktree, not assume a pre-existing `HEAD^..HEAD` review range.
++- Accepted work is promoted only after verification and becomes the next task's starting baseline.
++
++## Replan Triggers
++
++- A new shared prerequisite is discovered.
++- A shared file conflict exceeds the current allowlist.
++- The state machine is no longer reachable from the current baseline.
++- The closure slice depends on a second unplanned slice.
++- The reviewer determines the current plan is missing a prerequisite wave.
++
++## Atomic Task Inventory
++
++- `<TASK-ID>`:
++  - Task file path: `<exact task file path>`
++  - Owner role: `<worker|monitor|explorer|lead>`
++  - Exact closure slice:
++  - Explicit non-closure:
++  - Required verification:
++  - Dependency notes:
++  - Remaining follow-up task ids:
++  - Allowlist:
++  - Done definition:
++
++## Wave Plan
++
++- Wave 1:
++  - Tasks:
++  - Mode:
++  - Shared ownership notes:
++- Wave 2:
++  - Tasks:
++  - Mode:
++  - Shared ownership notes:
++- Wave 3:
++  - Tasks:
++  - Mode:
++  - Shared ownership notes:
+diff --git a/frontend/src/api/annuity.ts b/frontend/src/api/annuity.ts
+index 154a613..ac1ea38 100644
+--- a/frontend/src/api/annuity.ts
++++ b/frontend/src/api/annuity.ts
+@@ -8,6 +8,8 @@ import type {
+     AnnuityTask,
+     AnnuityTaskListParams,
+     AnnuityGenerateDraftsPayload,
++    AnnuityTaskGeneratePayload,
++    AnnuityTaskGenerateResult,
+ } from './annuity.types'
+ 
+ interface BackendAnnuityTask {
+@@ -194,3 +196,8 @@ export async function generateAnnuityDrafts(
+         failed: response.data.failed.map(mapGenerateFailedItem),
+     }
+ }
++
++export async function generateAnnuityTasks(payload: AnnuityTaskGeneratePayload): Promise<AnnuityTaskGenerateResult> {
++    const { data } = await http.post<AnnuityTaskGenerateResult>('/annuity/tasks/generate', payload)
++    return data
++}
+diff --git a/frontend/src/api/annuity.types.ts b/frontend/src/api/annuity.types.ts
+index 3af9c7d..7c24e71 100644
+--- a/frontend/src/api/annuity.types.ts
++++ b/frontend/src/api/annuity.types.ts
+@@ -16,6 +16,13 @@ export interface AnnuityTask {
+     remark?: string
+     created_at?: string
+     updated_at?: string
++    gov_fee_amt?: number | null
++    service_fee_amt?: number | null
++    notify_count?: number | null
++    pay_next_year?: boolean | null
++    draft_generated?: boolean | null
++    notice_sent?: boolean | null
++    is_overdue?: boolean
+ }
+ 
+ export type AnnuityPendingMode = 'pending' | 'processed'
+@@ -76,3 +83,16 @@ export interface AnnuityGenerateDraftResult {
+     success: AnnuityGenerateDraftSuccessItem[]
+     failed: AnnuityGenerateDraftFailedItem[]
+ }
++
++export interface AnnuityTaskGeneratePayload {
++    case_id: string
++}
++
++export interface AnnuityTaskGenerateResult {
++    case_id: string
++    case_no?: string | null
++    first_year: number
++    last_year: number
++    tasks_created: number
++    tasks_skipped: number
++}
+diff --git a/frontend/src/modules/annuity/components/AnnuityGenerateDialog.vue b/frontend/src/modules/annuity/components/AnnuityGenerateDialog.vue
+new file mode 100644
+index 0000000..a0455b2
+--- /dev/null
++++ b/frontend/src/modules/annuity/components/AnnuityGenerateDialog.vue
+@@ -0,0 +1,140 @@
++<template>
++  <el-dialog
++    v-model="visible"
++    title="生成年费任务"
++    width="480px"
++    :close-on-click-modal="false"
++    destroy-on-close
++    @close="handleClose"
++  >
++    <el-form
++      ref="formRef"
++      :model="form"
++      :rules="rules"
++      label-position="top"
++    >
++      <el-form-item label="案卷" prop="case_id">
++        <el-select
++          v-model="form.case_id"
++          filterable
++          remote
++          clearable
++          :remote-method="searchCases"
++          :loading="caseSearchLoading"
++          placeholder="请输入案卷编号搜索"
++          style="width: 100%"
++        >
++          <el-option
++            v-for="c in caseOptions"
++            :key="c.id"
++            :label="c.case_no"
++            :value="c.id"
++          />
++        </el-select>
++      </el-form-item>
++    </el-form>
++
++    <template #footer>
++      <el-button @click="handleClose">取消</el-button>
++      <el-button type="primary" :loading="saving" @click="handleSubmit">确认</el-button>
++    </template>
++  </el-dialog>
++</template>
++
++<script setup lang="ts">
++import { reactive, ref, watch } from 'vue'
++import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
++import { generateAnnuityTasks } from '../../../api/annuity'
++import type { AnnuityTaskGenerateResult } from '../../../api/annuity.types'
++import { getCases } from '../../../api/cases'
++
++interface CaseOption {
++  id: string
++  case_no: string
++}
++
++interface GenerateForm {
++  case_id: string
++}
++
++const props = defineProps<{
++  modelValue: boolean
++}>()
++
++const emit = defineEmits<{
++  'update:modelValue': [value: boolean]
++  saved: []
++}>()
++
++const visible = ref(props.modelValue)
++const formRef = ref<FormInstance>()
++const saving = ref(false)
++const caseSearchLoading = ref(false)
++const caseOptions = ref<CaseOption[]>([])
++
++const form = reactive<GenerateForm>({
++  case_id: '',
++})
++
++const rules: FormRules<GenerateForm> = {
++  case_id: [{ required: true, message: '请选择案卷', trigger: 'change' }],
++}
++
++watch(
++  () => props.modelValue,
++  (value) => {
++    visible.value = value
++    if (value) {
++      form.case_id = ''
++      caseOptions.value = []
++    }
++  },
++)
++
++watch(visible, (value) => {
++  emit('update:modelValue', value)
++})
++
++async function searchCases(query: string) {
++  if (!query || query.trim().length < 1) {
++    caseOptions.value = []
++    return
++  }
++  caseSearchLoading.value = true
++  try {
++    const result = await getCases({ page: 1, page_size: 20, case_no: query.trim() } as Parameters<typeof getCases>[0])
++    caseOptions.value = result.items.map((c) => ({ id: c.id, case_no: c.case_no }))
++  } catch {
++    caseOptions.value = []
++  } finally {
++    caseSearchLoading.value = false
++  }
++}
++
++function handleClose() {
++  visible.value = false
++}
++
++async function handleSubmit() {
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++  try {
++    const result: AnnuityTaskGenerateResult = await generateAnnuityTasks({ case_id: form.case_id })
++    ElMessage.success(`已生成 ${result.tasks_created} 条年费任务，跳过 ${result.tasks_skipped} 条已存在记录`)
++    visible.value = false
++    emit('saved')
++  } catch (err: unknown) {
++    const axiosErr = err as { response?: { data?: { message?: string } } }
++    const bizMsg = axiosErr?.response?.data?.message
++    if (bizMsg) {
++      ElMessage.error(bizMsg)
++    } else {
++      ElMessage.error('生成失败，请重试')
++    }
++  } finally {
++    saving.value = false
++  }
++}
++</script>
+diff --git a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+index cfa9db0..f2f09fe 100644
+--- a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
++++ b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+@@ -77,6 +77,13 @@
+       >
+         批量生成草单
+       </el-button>
++      <el-button
++        type="primary"
++        aria-label="生成年费任务"
++        @click="showGenerateDialog = true"
++      >
++        生成年费任务
++      </el-button>
+     </div>
+ 
+     <div v-if="error" class="page-error" role="alert" aria-live="assertive">
+@@ -142,6 +149,42 @@
+             {{ formatDate(row.instruction_date) }}
+           </template>
+         </el-table-column>
++        <el-table-column label="官费预估" width="120" align="right">
++          <template #default="{ row }">
++            {{ row.gov_fee_amt?.toFixed(2) ?? '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column label="服务费预估" width="120" align="right">
++          <template #default="{ row }">
++            {{ row.service_fee_amt?.toFixed(2) ?? '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column label="通知次数" width="100" align="center">
++          <template #default="{ row }">
++            {{ row.notify_count }}
++          </template>
++        </el-table-column>
++        <el-table-column label="草单已生成" width="110" align="center">
++          <template #default="{ row }">
++            <el-tag :type="row.draft_generated ? 'success' : 'info'" size="small">
++              {{ row.draft_generated ? '是' : '否' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="通知已发" width="100" align="center">
++          <template #default="{ row }">
++            <el-tag :type="row.notice_sent ? 'success' : 'info'" size="small">
++              {{ row.notice_sent ? '是' : '否' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="是否逾期" width="100" align="center">
++          <template #default="{ row }">
++            <el-tag :type="row.is_overdue ? 'danger' : 'info'" size="small">
++              {{ row.is_overdue ? '逾期' : '正常' }}
++            </el-tag>
++          </template>
++        </el-table-column>
+         <el-table-column label="操作" width="120" fixed="right">
+           <template #default="{ row }">
+             <el-button type="primary" link @click="openInstructionDialog(row)">
+@@ -167,6 +210,8 @@
+       @success="handleInstructionSaved"
+     />
+ 
++    <AnnuityGenerateDialog v-model="showGenerateDialog" @saved="fetchTasks" />
++
+     <el-dialog
+       v-model="generateReceiptVisible"
+       title="草单生成回执"
+@@ -243,6 +288,7 @@ import EmptyState from '../../../components/state/EmptyState.vue'
+ import LoadingBlock from '../../../components/state/LoadingBlock.vue'
+ import PaginationBar from '../../../components/state/PaginationBar.vue'
+ import InstructionDialog from '../components/InstructionDialog.vue'
++import AnnuityGenerateDialog from '../components/AnnuityGenerateDialog.vue'
+ 
+ const tasks = ref<AnnuityTask[]>([])
+ const loading = ref(false)
+@@ -262,6 +308,7 @@ const generatingDrafts = ref(false)
+ const generatePayNextYear = ref(false)
+ const generateReceiptVisible = ref(false)
+ const generateReceipt = ref<AnnuityGenerateDraftResult | null>(null)
++const showGenerateDialog = ref(false)
+ 
+ const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+ 
+diff --git a/scripts/validate_plan_runbook.py b/scripts/validate_plan_runbook.py
+new file mode 100644
+index 0000000..cfc38e5
+--- /dev/null
++++ b/scripts/validate_plan_runbook.py
+@@ -0,0 +1,58 @@
++#!/usr/bin/env python3
++"""Validate required runbook-selection headings in a plan document."""
++
++from __future__ import annotations
++
++import argparse
++from pathlib import Path
++import sys
++
++
++REQUIRED_HEADINGS = (
++    "Story Shape",
++    "Chosen Runbook",
++    "Preflight Dependency Audit",
++    "Baseline Promotion Protocol",
++    "Replan Triggers",
++)
++
++
++def parse_args() -> argparse.Namespace:
++    parser = argparse.ArgumentParser(
++        description="Validate required runbook-selection headings in a plan document."
++    )
++    parser.add_argument("plan", type=Path, help="Path to the plan markdown file")
++    return parser.parse_args()
++
++
++def find_missing_headings(plan_text: str) -> list[str]:
++    missing: list[str] = []
++    for heading in REQUIRED_HEADINGS:
++        needle = f"## {heading}"
++        if not any(line.strip() == needle for line in plan_text.splitlines()):
++            missing.append(heading)
++    return missing
++
++
++def main() -> int:
++    args = parse_args()
++    try:
++        plan_text = args.plan.read_text(encoding="utf-8")
++    except FileNotFoundError:
++        print(f"Plan file not found: {args.plan}", file=sys.stderr)
++        return 2
++
++    missing = find_missing_headings(plan_text)
++    if missing:
++        print(
++            "Missing required sections: " + ", ".join(missing),
++            file=sys.stderr,
++        )
++        return 1
++
++    print(f"OK: required runbook-selection headings present in {args.plan}")
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/skills/fpms-runbook-selection/SKILL.md b/skills/fpms-runbook-selection/SKILL.md
+new file mode 100644
+index 0000000..3f02043
+--- /dev/null
++++ b/skills/fpms-runbook-selection/SKILL.md
+@@ -0,0 +1,163 @@
++---
++name: fpms-runbook-selection
++description: "Use when preparing any multi-step FPMS task that needs writing-plans: classify story shape, choose a runbook, and emit the minimum planning fields required by the governance rule."
++---
++
++# FPMS Runbook Selection
++
++Use this skill before `writing-plans` for any multi-step story. The goal is not automation; the goal is to force an explicit, auditable choice of execution shape before planning starts.
++
++## First Pass
++
++Before any classification or output-format rules, read the current story background and the existing constraints first. Use the task/spec context, the task file, and any governing repo rules as the source of truth before choosing a runbook.
++
++## When To Use
++
++Use this skill when a task is more than a simple single-file change and needs a plan, wave structure, or follow-up tasks.
++
++Do not use it for:
++
++- trivial single-file fixes
++- pure documentation edits
++- one-off questions that do not need planning
++
++## Required Story Shape Classification
++
++Classify the story with these four dimensions:
++
++- `shared_file_density`
++- `prereq_dependency_density`
++- `be_fe_coupling`
++- `evidence_cost`
++
++Use short qualitative values. Examples:
++
++- `shared_file_density: low | medium | high`
++- `prereq_dependency_density: low | medium | high`
++- `be_fe_coupling: none | chained (BE -> FE) | coupled`
++- `evidence_cost: low | medium | high`
++
++Always add:
++
++- `chosen_runbook: <runbook-id>`
++
++## Runbook Families
++
++Choose one of these runbooks:
++
++1. `P0-single-lane-story`
++   - Use when the task is concentrated in one hotspot and must move serially.
++
++2. `P0-prereq-heavy-story`
++   - Use when the hardest part is freezing shared prerequisites before execution can proceed.
++
++3. `P0-multi-lane-parallel-story`
++   - Use when the work can be safely split across independent lanes or waves.
++
++4. `P0-frontend-heavy-story`
++   - Use when backend contract is already stable and the main work is UI closure.
++
++## Selection Rules
++
++Apply these rules in order:
++
++- If the story cannot start until shared prerequisites are frozen, or if `prereq_dependency_density = high`, you must choose `P0-prereq-heavy-story`.
++- This prereq-heavy rule overrides every other runbook choice. Do not select `P0-single-lane-story`, `P0-multi-lane-parallel-story`, or `P0-frontend-heavy-story` when the prereq-heavy condition applies.
++- If `shared_file_density = high` and `be_fe_coupling = chained`, prefer `P0-single-lane-story`.
++- When `P0-prereq-heavy-story` is chosen, require a `Preflight Dependency Audit` before execution.
++- If both `P0-multi-lane-parallel-story` and `P0-frontend-heavy-story` are eligible, choose `P0-frontend-heavy-story`.
++- If only shared files are low and the slices are independent, choose `P0-multi-lane-parallel-story`.
++- If only backend contract is frozen and the UI is the main workload, choose `P0-frontend-heavy-story`.
++
++## Required Planning Outputs
++
++When you move into planning, ensure the spec and the plan both record:
++
++- `Story Shape`
++- `chosen_runbook`
++- `Runbook Rationale`
++- `Preflight Dependency Audit`
++- `Execution Mode`
++- `Baseline Promotion Protocol`
++- `Replan Triggers`
++- `Atomic Task Inventory`
++- `Wave Plan`
++
++## Preflight Dependency Audit
++
++Before execution, check for:
++
++- permission and RBAC prerequisites
++- state machine reachability
++- shared ownership file conflicts
++- shared test file conflicts
++- router wiring, shared schemas, export helpers, permission registries, and shared API clients that may need to be cut out first
++
++If a new shared prerequisite appears, stop and replan instead of pushing forward on the wrong baseline.
++
++## Baseline Promotion Protocol
++
++Use this baseline policy:
++
++- one atomic task owns one fresh worktree
++- reviewer diff is judged against `HEAD^..HEAD`
++- accepted work becomes the next baseline commit immediately
++- the next task starts from the latest accepted baseline in a new worktree
++
++## Replan Triggers
++
++Replan when any of these appear:
++
++- a new shared prerequisite is discovered
++- shared ownership conflicts exceed the current allowlist
++- the state machine is not reachable
++- the apparent slice actually depends on a second uncut slice
++- the plan is missing a prerequisite wave
++
++## Recommended Execution Mode
++
++Map the chosen runbook to an execution mode:
++
++- `P0-single-lane-story` -> `single-thread`
++- `P0-prereq-heavy-story` -> `serialized subagent`
++- `P0-multi-lane-parallel-story` -> `multi-lane parallel`
++- `P0-frontend-heavy-story` -> `serialized subagent` or `multi-lane parallel`, depending on shared-file risk
++
++## Minimum Output Template
++
++Use a compact structure like this in the spec and plan:
++
++```md
++## Story Shape
++- shared_file_density: ...
++- prereq_dependency_density: ...
++- be_fe_coupling: ...
++- evidence_cost: ...
++
++## Chosen Runbook
++- chosen_runbook: ...
++
++## Runbook Rationale
++- why this runbook
++- why the others were not chosen
++
++## Preflight Dependency Audit
++- ...
++
++## Execution Mode
++- ...
++
++## Baseline Promotion Protocol
++- ...
++
++## Atomic Task Inventory
++- ...
++
++## Wave Plan
++- ...
++
++## Replan Triggers
++- ...
++```
++
++Keep the classification explicit. If the story cannot be classified cleanly, do not enter `writing-plans` yet.

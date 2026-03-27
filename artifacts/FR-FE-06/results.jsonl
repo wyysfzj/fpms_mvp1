@@ -1,0 +1,6 @@
+{"cmd":"pytest tests/test_annuity_generate.py -v","rc":0,"result":"11 passed"}
+{"cmd":"pytest -q","rc":0,"result":"230 passed, 3 failed (pre-existing annuity)"}
+{"cmd":"rm -f fpms_dev.db && alembic upgrade head && python scripts/seed_dev.py","rc":0,"result":"29 migrations, seed success"}
+{"cmd":"npm run lint","rc":0,"result":"0 warnings"}
+{"cmd":"npm run typecheck","rc":0,"result":"pass"}
+{"cmd":"npm run build","rc":0,"result":"built in 3.79s"}
