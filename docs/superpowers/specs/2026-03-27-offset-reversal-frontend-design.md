@@ -43,7 +43,7 @@ The backend `POST /api/v1/offsets/{id}/reverse` service is complete and tested. 
 
 ### 3.1 `GET /api/v1/offsets` — List offsets
 
-**Permission**: `Billing.Read` via `_perm: None = Depends(require_perm("Billing.Read"))`
+**Permission**: `Bill.Read` via `_perm: None = Depends(require_perm("Bill.Read"))` (consistent with `GET /bills` and `GET /bills/{id}`)
 
 **Query Parameters**:
 
@@ -82,6 +82,7 @@ The backend `POST /api/v1/offsets/{id}/reverse` service is complete and tested. 
 - Use `created_at` from `AuditMixin` (already on Offset via mixin).
 - Use `reversed_at` from Offset model (already exists).
 - Pagination: `query.count()` for total, `.offset((page-1)*page_size).limit(page_size)`.
+- Sort order: `ORDER BY created_at DESC` (consistent with `GET /bills` and `GET /payments`).
 - SQLite compatible — no PG-only functions.
 
 ### 3.2 New Schema: `OffsetListItemResponse`
@@ -106,9 +107,44 @@ class OffsetListItemResponse(BaseModel):
 
 ## 4. Frontend Design
 
-### 4.1 API Client Update: `getOffsets()` in `billing.ts`
+### 4.1 API Client Updates in `billing.ts`
 
-Replace the stub implementation (lines 328-340) with a real API call:
+**4.1a. Update `BackendOffset` interface** (line 88) — add `bill_no` and `created_at`:
+
+```typescript
+interface BackendOffset {
+    id: string
+    payment_line_id: string
+    bill_id: string
+    bill_no?: string | null        // NEW — from enriched list response
+    offset_amt: string | number
+    offset_date?: string | null
+    is_reversed: boolean
+    reversed_at?: string | null
+    created_at?: string | null     // NEW — from AuditMixin
+}
+```
+
+**4.1b. Update `mapOffset` function** (line 187) — map `bill_no` and real `created_at`:
+
+```typescript
+function mapOffset(input: BackendOffset): OffsetListItem {
+    return {
+        id: input.id,
+        payment_line_id: input.payment_line_id,
+        bill_id: input.bill_id,
+        bill_no: input.bill_no || undefined,       // NEW
+        amount: asNumber(input.offset_amt),
+        currency: 'CNY',
+        offset_date: input.offset_date || undefined,
+        is_reversed: input.is_reversed,
+        reversed_at: input.reversed_at || undefined,
+        created_at: input.created_at || input.offset_date || '',  // UPDATED — prefer real created_at
+    }
+}
+```
+
+**4.1c. Replace `getOffsets()` stub** (lines 328-340) with real API call:
 
 ```typescript
 export async function getOffsets(
@@ -179,6 +215,8 @@ export interface OffsetListItem {
 [取消]  [确认反转]
 ```
 
+**Reversal Success Message**: `ElMessage.success('冲销已反转')` after successful API call.
+
 **UI Language**: All text in simplified Chinese.
 
 ### 4.4 BillDetail.vue Offsets Tab
@@ -234,7 +272,7 @@ Add under `finance` group, after `payments`:
 | 3 | `backend/app/modules/billing/api.py` | ADD `GET /offsets` endpoint | BE-3 |
 | 4 | `backend/tests/test_offset_list.py` | NEW — tests for list endpoint | BE-TEST |
 | 5 | `frontend/src/api/billing.types.ts` | UPDATE — add `bill_no` to `OffsetListItem` | FE-1 |
-| 6 | `frontend/src/api/billing.ts` | UPDATE — replace `getOffsets` stub | FE-2 |
+| 6 | `frontend/src/api/billing.ts` | UPDATE — `BackendOffset` + `mapOffset` + `getOffsets` | FE-2 |
 | 7 | `frontend/src/modules/billing/pages/OffsetList.vue` | NEW — offset list page | FE-3 |
 | 8 | `frontend/src/router/index.ts` | UPDATE — add `/billing/offsets` route | FE-4 |
 | 9 | `frontend/src/constants/menu.ts` | UPDATE — add 冲销管理 menu item | FE-5 |
