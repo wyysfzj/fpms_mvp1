@@ -68,6 +68,7 @@ const routes = [
       { path: 'billing/bills/new', name: 'bill_new', component: () => import('../modules/billing/pages/BillCreate.vue') },
       { path: 'billing/bills/:id', name: 'bill_detail', component: () => import('../modules/billing/pages/BillDetail.vue') },
       { path: 'billing/payments', name: 'payments', component: () => import('../modules/billing/pages/PaymentList.vue') },
+      { path: 'billing/offsets', name: 'offsets', component: () => import('../modules/billing/pages/OffsetList.vue') },
       { path: 'billing/payments/new', name: 'payment_new', component: () => import('../modules/billing/pages/PaymentCreate.vue') },
       { path: 'billing/case-receipts', name: 'case_receipts', component: () => import('../modules/billing/pages/CaseReceiptList.vue') },
 
