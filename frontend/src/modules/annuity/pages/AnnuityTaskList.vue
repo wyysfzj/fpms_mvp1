@@ -77,6 +77,13 @@
       >
         批量生成草单
       </el-button>
+      <el-button
+        type="primary"
+        aria-label="生成年费任务"
+        @click="showGenerateDialog = true"
+      >
+        生成年费任务
+      </el-button>
     </div>
 
     <div v-if="error" class="page-error" role="alert" aria-live="assertive">
@@ -142,6 +149,42 @@
             {{ formatDate(row.instruction_date) }}
           </template>
         </el-table-column>
+        <el-table-column label="官费预估" width="120" align="right">
+          <template #default="{ row }">
+            {{ row.gov_fee_amt?.toFixed(2) ?? '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="服务费预估" width="120" align="right">
+          <template #default="{ row }">
+            {{ row.service_fee_amt?.toFixed(2) ?? '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="通知次数" width="100" align="center">
+          <template #default="{ row }">
+            {{ row.notify_count }}
+          </template>
+        </el-table-column>
+        <el-table-column label="草单已生成" width="110" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.draft_generated ? 'success' : 'info'" size="small">
+              {{ row.draft_generated ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="通知已发" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.notice_sent ? 'success' : 'info'" size="small">
+              {{ row.notice_sent ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="是否逾期" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.is_overdue ? 'danger' : 'info'" size="small">
+              {{ row.is_overdue ? '逾期' : '正常' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openInstructionDialog(row)">
@@ -166,6 +209,8 @@
       :initial-instruction-date="activeTask?.instruction_date"
       @success="handleInstructionSaved"
     />
+
+    <AnnuityGenerateDialog v-model="showGenerateDialog" @saved="fetchTasks" />
 
     <el-dialog
       v-model="generateReceiptVisible"
@@ -243,6 +288,7 @@ import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
 import InstructionDialog from '../components/InstructionDialog.vue'
+import AnnuityGenerateDialog from '../components/AnnuityGenerateDialog.vue'
 
 const tasks = ref<AnnuityTask[]>([])
 const loading = ref(false)
@@ -262,6 +308,7 @@ const generatingDrafts = ref(false)
 const generatePayNextYear = ref(false)
 const generateReceiptVisible = ref(false)
 const generateReceipt = ref<AnnuityGenerateDraftResult | null>(null)
+const showGenerateDialog = ref(false)
 
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 
