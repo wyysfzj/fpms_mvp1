@@ -140,6 +140,20 @@ class OffsetResponse(BaseModel):
     is_reversed: bool
 
 
+class OffsetListItemResponse(BaseModel):
+    """Enriched response schema for offset list items."""
+
+    id: str
+    payment_line_id: str
+    bill_id: str
+    bill_no: str | None = None
+    offset_amt: Decimal
+    offset_date: date | None = None
+    is_reversed: bool
+    reversed_at: str | None = None
+    created_at: str | None = None
+
+
 class CaseReceiptResponse(BaseModel):
     """Response schema for case receipts."""
 
