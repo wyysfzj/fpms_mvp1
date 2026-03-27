@@ -146,6 +146,7 @@ export interface OffsetListItem {
     id: string
     payment_line_id: string
     bill_id: string
+    bill_no?: string
     amount: number
     currency: string
     offset_date?: string
