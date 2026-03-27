@@ -752,6 +752,35 @@ def reverse_offset(db: Session, offset_id: str, actor_id: str | None = None) -> 
     return offset
 
 
+def list_offsets(
+    db: Session,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    bill_id: str | None = None,
+    is_reversed: bool | None = None,
+) -> tuple[list[Offset], int]:
+    """Return paginated offset list with optional filters.
+
+    Returns (items, total) tuple.
+    """
+    query = db.query(Offset)
+
+    if bill_id is not None:
+        query = query.filter(Offset.bill_id == bill_id)
+    if is_reversed is not None:
+        query = query.filter(Offset.is_reversed == is_reversed)
+
+    total = query.count()
+    items = (
+        query.order_by(Offset.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return items, total
+
+
 def create_case_receipt(db: Session, payload: CaseReceiptCreate) -> CaseReceipt:
     """Create a manual case receipt."""
     from app.modules.cases.models import Case
