@@ -25,6 +25,7 @@ from app.modules.billing.schemas import (
     CaseReceiptResponse,
     CaseReceiptUpdate,
     OffsetCreateSchema,
+    OffsetListItemResponse,
     OffsetResponse,
     PaymentResponse,
     PaymentSchema,
@@ -39,6 +40,9 @@ from app.modules.billing.service import (
 )
 from app.modules.billing.service import (
     create_offset as create_offset_service,
+)
+from app.modules.billing.service import (
+    list_offsets as list_offsets_service,
 )
 from app.modules.billing.service import (
     reverse_offset as reverse_offset_service,
@@ -433,6 +437,60 @@ def get_payment(
             }
             for line in payment_lines
         ],
+    }
+
+
+@router.get(
+    "/offsets",
+    summary="List offsets with optional filters",
+)
+def list_offsets(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    bill_id: str | None = Query(None),
+    is_reversed: bool | None = Query(None),
+    _perm: None = Depends(require_perm("Bill.Read")),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    List offsets with pagination and optional filters.
+
+    **Auth**: Bearer JWT
+    **Permission**: Bill.Read
+    **Query params**: page, page_size, bill_id, is_reversed
+    """
+    items, total = list_offsets_service(
+        db,
+        page=page,
+        page_size=page_size,
+        bill_id=bill_id,
+        is_reversed=is_reversed,
+    )
+
+    bill_ids = {o.bill_id for o in items}
+    bill_no_map: dict[str, str | None] = {}
+    if bill_ids:
+        bills = db.query(Bill.id, Bill.bill_no).filter(Bill.id.in_(bill_ids)).all()
+        bill_no_map = {b.id: b.bill_no for b in bills}
+
+    return {
+        "items": [
+            OffsetListItemResponse(
+                id=o.id,
+                payment_line_id=o.payment_line_id,
+                bill_id=o.bill_id,
+                bill_no=bill_no_map.get(o.bill_id),
+                offset_amt=o.offset_amt,
+                offset_date=o.offset_date,
+                is_reversed=o.is_reversed,
+                reversed_at=o.reversed_at.isoformat() if o.reversed_at else None,
+                created_at=o.created_at.isoformat() if o.created_at else None,
+            ).model_dump()
+            for o in items
+        ],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
     }
 
 
