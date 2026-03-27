@@ -326,7 +326,7 @@ export async function getPaymentLines(paymentId: string): Promise<PaymentLineIte
 // ============ Offsets ============
 
 /**
- * Offsets list endpoint is not exposed by current backend contract.
+ * List offsets with pagination and optional filters.
  */
 export async function getOffsets(
     params: { page?: number; page_size?: number; bill_id?: string; is_reversed?: boolean } = {}
