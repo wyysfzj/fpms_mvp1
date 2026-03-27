@@ -89,10 +89,12 @@ interface BackendOffset {
     id: string
     payment_line_id: string
     bill_id: string
+    bill_no?: string | null
     offset_amt: string | number
     offset_date?: string | null
     is_reversed: boolean
     reversed_at?: string | null
+    created_at?: string | null
 }
 
 function asNumber(input: number | string | null | undefined): number {
@@ -189,12 +191,13 @@ function mapOffset(input: BackendOffset): OffsetListItem {
         id: input.id,
         payment_line_id: input.payment_line_id,
         bill_id: input.bill_id,
+        bill_no: input.bill_no || undefined,
         amount: asNumber(input.offset_amt),
         currency: 'CNY',
         offset_date: input.offset_date || undefined,
         is_reversed: input.is_reversed,
         reversed_at: input.reversed_at || undefined,
-        created_at: input.offset_date || '',
+        created_at: input.created_at || input.offset_date || '',
     }
 }
 
@@ -326,16 +329,19 @@ export async function getPaymentLines(paymentId: string): Promise<PaymentLineIte
  * Offsets list endpoint is not exposed by current backend contract.
  */
 export async function getOffsets(
-    params: { page?: number; page_size?: number; bill_id?: string } = {}
+    params: { page?: number; page_size?: number; bill_id?: string; is_reversed?: boolean } = {}
 ): Promise<Pagination<OffsetListItem>> {
-    const page = params.page || 1
-    const pageSize = params.page_size || 20
-
+    const response = await http.get<{
+        items: BackendOffset[]
+        page: number
+        page_size: number
+        total: number
+    }>('/offsets', { params })
     return {
-        items: [],
-        page,
-        page_size: pageSize,
-        total: 0,
+        items: response.data.items.map(mapOffset),
+        page: response.data.page,
+        page_size: response.data.page_size,
+        total: response.data.total,
     }
 }
 
