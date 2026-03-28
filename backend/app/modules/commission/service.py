@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.billing.models import Bill, BillItem, CaseReceipt
-from app.modules.cases.models import Case
+from app.modules.cases.models import Case, T_CaseAgentSplit
 from app.modules.commission.models import (
     Commission,
     CommissionRule,
@@ -503,6 +503,42 @@ def _calculate_stage_amounts(
     return s1_amount, s2_amount
 
 
+def _load_case_agent_splits(db: Session, *, case_id: str) -> list[tuple[str, Decimal]]:
+    rows = (
+        db.execute(
+            select(T_CaseAgentSplit.agent_id, T_CaseAgentSplit.share_ratio)
+            .where(T_CaseAgentSplit.case_id == case_id)
+            .order_by(T_CaseAgentSplit.created_at.asc(), T_CaseAgentSplit.id.asc())
+        )
+        .all()
+    )
+    return [(agent_id, _to_decimal(share_ratio, field_name="case_agent_split.share_ratio")) for agent_id, share_ratio in rows]
+
+
+def _split_money_by_ratios(base_amount: Decimal, ratios: list[Decimal]) -> list[Decimal]:
+    if not ratios:
+        return []
+    allocations: list[Decimal] = []
+    allocated_total = Decimal("0")
+    for ratio in ratios[:-1]:
+        share = _quantize_money((base_amount * ratio) / Decimal("100"))
+        allocations.append(share)
+        allocated_total += share
+    allocations.append(_quantize_money(base_amount - allocated_total))
+    return allocations
+
+
+def _commission_is_rewritable(db: Session, commission: Commission) -> bool:
+    if _normalized_status(commission.status) in _TERMINAL_COMMISSION_STATUSES:
+        return False
+    line_exists = db.execute(
+        select(CommissionSettleLine.id)
+        .where(CommissionSettleLine.commission_id == commission.id)
+        .limit(1)
+    ).scalar_one_or_none()
+    return line_exists is None
+
+
 def apply_commission_for_bill(
     db: Session,
     bill_id: str,
@@ -514,6 +550,7 @@ def apply_commission_for_bill(
         "processed_cases": 0,
         "created_count": 0,
         "updated_count": 0,
+        "deleted_count": 0,
         "skipped_count": 0,
         "items": [],
         "status": "NOOP",
@@ -538,8 +575,28 @@ def apply_commission_for_bill(
                 _to_decimal(case_totals[case_id], field_name="commission.base_fee")
             )
             case = case_map[case_id]
-            agent_id = case.primary_agent_id
             fee_type = _SERVICE_FEE_TYPE
+            case_splits = _load_case_agent_splits(db, case_id=case_id)
+            if case_splits:
+                target_allocations = [
+                    {
+                        "agent_id": agent_id,
+                        "share_ratio": share_ratio,
+                    }
+                    for agent_id, share_ratio in case_splits
+                ]
+                split_amounts = _split_money_by_ratios(
+                    base_fee, [row["share_ratio"] for row in target_allocations]
+                )
+            else:
+                target_allocations = [
+                    {
+                        "agent_id": case.primary_agent_id,
+                        "share_ratio": Decimal("100"),
+                    }
+                ]
+                split_amounts = [base_fee]
+            target_agent_ids = {allocation["agent_id"] for allocation in target_allocations}
 
             rule = _select_best_commission_rule(
                 db,
@@ -564,75 +621,134 @@ def apply_commission_for_bill(
             s2_rate = _validate_rate(rule.s2_rate, "s2_rate")
             s1_fixed_amount = _validate_non_negative(rule.s1_fixed_amount, "s1_fixed_amount")
             s2_fixed_amount = _validate_non_negative(rule.s2_fixed_amount, "s2_fixed_amount")
-            s1_amount, s2_amount = _calculate_stage_amounts(
-                base_fee=base_fee,
-                s1_rate=s1_rate,
-                s2_rate=s2_rate,
-                s1_fixed_amount=s1_fixed_amount,
-                s2_fixed_amount=s2_fixed_amount,
-            )
+            for allocation, split_base_fee in zip(target_allocations, split_amounts, strict=True):
+                agent_id = allocation["agent_id"]
+                s1_amount, s2_amount = _calculate_stage_amounts(
+                    base_fee=split_base_fee,
+                    s1_rate=s1_rate,
+                    s2_rate=s2_rate,
+                    s1_fixed_amount=s1_fixed_amount,
+                    s2_fixed_amount=s2_fixed_amount,
+                )
 
-            existing = _find_existing_commission(
-                db,
-                case_id=case_id,
-                agent_id=agent_id,
-                fee_type=fee_type,
-                rule_id=rule.id,
-            )
-            if existing is None:
-                commission = Commission(
+                existing = _find_existing_commission(
+                    db,
                     case_id=case_id,
                     agent_id=agent_id,
-                    rule_id=rule.id,
                     fee_type=fee_type,
-                    base_fee=base_fee,
-                    s1_rate=s1_rate,
-                    s1_amount=s1_amount,
-                    s2_rate=s2_rate,
-                    s2_amount=s2_amount,
-                    wait_pay=rule.wait_pay,
-                    force_settle=rule.force_settle,
-                    status="OPEN",
-                    created_by=actor_id,
-                    updated_by=actor_id,
+                    rule_id=rule.id,
                 )
-                db.add(commission)
-                summary["created_count"] += 1
+                if existing is None:
+                    commission = Commission(
+                        case_id=case_id,
+                        agent_id=agent_id,
+                        rule_id=rule.id,
+                        fee_type=fee_type,
+                        base_fee=split_base_fee,
+                        s1_rate=s1_rate,
+                        s1_amount=s1_amount,
+                        s2_rate=s2_rate,
+                        s2_amount=s2_amount,
+                        wait_pay=rule.wait_pay,
+                        force_settle=rule.force_settle,
+                        status="OPEN",
+                        created_by=actor_id,
+                        updated_by=actor_id,
+                    )
+                    db.add(commission)
+                    summary["created_count"] += 1
+                    summary["items"].append(
+                        {
+                            "case_id": case_id,
+                            "agent_id": agent_id,
+                            "action": "CREATED",
+                            "rule_id": rule.id,
+                        }
+                    )
+                    continue
+
+                if not _commission_is_rewritable(db, existing):
+                    summary["skipped_count"] += 1
+                    summary["items"].append(
+                        {
+                            "case_id": case_id,
+                            "agent_id": agent_id,
+                            "action": "SKIPPED",
+                            "reason": "COMMISSION_LOCKED",
+                            "rule_id": rule.id,
+                            "commission_id": existing.id,
+                        }
+                    )
+                    continue
+
+                existing.agent_id = agent_id
+                existing.rule_id = rule.id
+                existing.fee_type = fee_type
+                existing.base_fee = split_base_fee
+                existing.s1_rate = s1_rate
+                existing.s1_amount = s1_amount
+                existing.s2_rate = s2_rate
+                existing.s2_amount = s2_amount
+                existing.wait_pay = rule.wait_pay
+                existing.force_settle = rule.force_settle
+                if not existing.status:
+                    existing.status = "OPEN"
+                existing.updated_by = actor_id
+
+                summary["updated_count"] += 1
                 summary["items"].append(
                     {
                         "case_id": case_id,
-                        "action": "CREATED",
+                        "agent_id": agent_id,
+                        "action": "UPDATED",
                         "rule_id": rule.id,
+                        "commission_id": existing.id,
                     }
                 )
-                continue
 
-            existing.agent_id = agent_id
-            existing.rule_id = rule.id
-            existing.fee_type = fee_type
-            existing.base_fee = base_fee
-            existing.s1_rate = s1_rate
-            existing.s1_amount = s1_amount
-            existing.s2_rate = s2_rate
-            existing.s2_amount = s2_amount
-            existing.wait_pay = rule.wait_pay
-            existing.force_settle = rule.force_settle
-            if not existing.status:
-                existing.status = "OPEN"
-            existing.updated_by = actor_id
-
-            summary["updated_count"] += 1
-            summary["items"].append(
-                {
-                    "case_id": case_id,
-                    "action": "UPDATED",
-                    "rule_id": rule.id,
-                    "commission_id": existing.id,
-                }
+            current_commissions = (
+                db.execute(
+                    select(Commission).where(
+                        Commission.case_id == case_id,
+                        Commission.rule_id == rule.id,
+                        Commission.fee_type == fee_type,
+                    )
+                )
+                .scalars()
+                .all()
             )
+            for existing in current_commissions:
+                if existing.agent_id in target_agent_ids:
+                    continue
+                if not _commission_is_rewritable(db, existing):
+                    summary["skipped_count"] += 1
+                    summary["items"].append(
+                        {
+                            "case_id": case_id,
+                            "agent_id": existing.agent_id,
+                            "action": "SKIPPED",
+                            "reason": "COMMISSION_LOCKED",
+                            "rule_id": rule.id,
+                            "commission_id": existing.id,
+                        }
+                    )
+                    continue
+                db.delete(existing)
+                summary["deleted_count"] += 1
+                summary["items"].append(
+                    {
+                        "case_id": case_id,
+                        "agent_id": existing.agent_id,
+                        "action": "DELETED",
+                        "rule_id": rule.id,
+                        "commission_id": existing.id,
+                    }
+                )
 
         summary["status"] = (
-            "APPLIED" if (summary["created_count"] + summary["updated_count"]) > 0 else "NOOP"
+            "APPLIED"
+            if (summary["created_count"] + summary["updated_count"] + summary["deleted_count"]) > 0
+            else "NOOP"
         )
         db.commit()
         return summary

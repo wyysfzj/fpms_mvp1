@@ -33,6 +33,12 @@ export interface CaseBioDeposit {
     name?: string
 }
 
+export interface CaseAgentSplit {
+    agent_id: string
+    role?: string
+    share_ratio: number | null
+}
+
 export interface Case {
     id: string
     case_no: string
@@ -91,6 +97,7 @@ export interface Case {
     is_fee_monitor?: boolean
     fee_reduction?: string
     applicant_kind?: string
+    agent_splits?: CaseAgentSplit[]
     created_at: string
     updated_at: string
 }
@@ -177,6 +184,7 @@ export interface CaseUpdatePayload {
     invalid_patentee?: string | null
     invalid_requester?: string | null
     invalid_role?: string | null
+    agent_splits?: CaseAgentSplit[] | null
     // A3 fields (all optional on update, | null for explicit clearing)
     pub_date?: string | null
     pub_no?: string | null

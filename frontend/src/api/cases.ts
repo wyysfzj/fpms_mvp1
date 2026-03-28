@@ -36,6 +36,7 @@ interface BackendCase {
     inventors?: Array<{ seq: number; name_cn?: string; name_en?: string }>
     priorities?: Array<{ seq: number; country_code?: string | null; prio_no?: string | null; prio_date?: string | null }>
     bio_deposits?: Array<{ seq: number; deposit_no?: string | null; deposit_unit_name?: string | null; deposit_date?: string | null; name?: string | null }>
+    agent_splits?: Array<{ agent_id: string; role?: string | null; share_ratio?: string | number | null }>
     ro?: string | null
     isa?: string | null
     ipea?: string | null
@@ -108,6 +109,13 @@ function mapCase(input: BackendCase): Case {
             deposit_unit_name: bioDeposit.deposit_unit_name || undefined,
             deposit_date: bioDeposit.deposit_date || undefined,
             name: bioDeposit.name || undefined,
+        })),
+        agent_splits: (input.agent_splits || []).map((agentSplit) => ({
+            agent_id: agentSplit.agent_id,
+            role: agentSplit.role || undefined,
+            share_ratio: agentSplit.share_ratio !== undefined && agentSplit.share_ratio !== null
+                ? Number(agentSplit.share_ratio)
+                : null,
         })),
         ro: input.ro || undefined,
         isa: input.isa || undefined,
@@ -204,6 +212,17 @@ function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
         }))
         .filter((bioDeposit) =>
             [bioDeposit.deposit_no, bioDeposit.deposit_unit_name, bioDeposit.deposit_date, bioDeposit.name].some((value) => value !== null)
+        )
+    if (data.agent_splits !== undefined) payload.agent_splits = data.agent_splits
+        ?.map((agentSplit) => ({
+            agent_id: trimToNull(agentSplit.agent_id),
+            role: trimToNull(agentSplit.role),
+            share_ratio: agentSplit.share_ratio === null || agentSplit.share_ratio === undefined
+                ? null
+                : agentSplit.share_ratio,
+        }))
+        .filter((agentSplit) =>
+            [agentSplit.agent_id, agentSplit.role, agentSplit.share_ratio].some((value) => value !== null)
         )
     if (data.ro !== undefined) payload.ro = trimToNull(data.ro)
     if (data.isa !== undefined) payload.isa = trimToNull(data.isa)

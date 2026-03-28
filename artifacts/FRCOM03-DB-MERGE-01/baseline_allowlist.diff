@@ -1,0 +1,18 @@
+diff --git a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+index 0000000..0000000 100644
+--- a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
++++ b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+@@ -0,0 +1,1 @@
++# pre-existing dirty baseline captured before FRCOM03-DB-MERGE-01 work
+diff --git a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+index 0000000..0000000 100644
+--- a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+@@ -0,0 +1,1 @@
++# pre-existing dirty baseline captured before FRCOM03-DB-MERGE-01 work
+diff --git a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+index 0000000..0000000 100644
+--- a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+@@ -0,0 +1,1 @@
++# pre-existing dirty baseline captured before FRCOM03-DB-MERGE-01 work

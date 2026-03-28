@@ -1,0 +1,57 @@
+"""frcom03_db_01_create_t_case_agent_split
+
+Revision ID: frcom03_db_01_case_agent_split_01
+Revises: pe_be_db_cm_02_case_ext_01
+Create Date: 2026-03-28
+
+Create t_case_agent_split for the current effective case-level agent split.
+"""
+
+from __future__ import annotations
+
+import sqlalchemy as sa
+from alembic import op
+
+revision = "frcom03_db_01_case_agent_split_01"
+down_revision = "pe_be_db_cm_02_case_ext_01"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "t_case_agent_split",
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column(
+            "case_id",
+            sa.String(36),
+            sa.ForeignKey("t_case.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("agent_id", sa.String(36), nullable=False),
+        sa.Column("role", sa.String(32), nullable=True),
+        sa.Column("share_ratio", sa.Numeric(8, 4), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.Column("created_by", sa.String(36), nullable=True),
+        sa.Column("updated_by", sa.String(36), nullable=True),
+        sa.UniqueConstraint("case_id", "agent_id", name="uq_case_agent_split_agent"),
+    )
+    op.create_index("ix_t_case_agent_split_case_id", "t_case_agent_split", ["case_id"])
+    op.create_index("ix_t_case_agent_split_agent_id", "t_case_agent_split", ["agent_id"])
+
+
+def downgrade() -> None:
+    op.drop_index("ix_t_case_agent_split_agent_id", table_name="t_case_agent_split")
+    op.drop_index("ix_t_case_agent_split_case_id", table_name="t_case_agent_split")
+    op.drop_table("t_case_agent_split")

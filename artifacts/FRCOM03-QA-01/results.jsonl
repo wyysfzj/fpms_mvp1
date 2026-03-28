@@ -1,0 +1,7 @@
+{"step":"lint","cmd":"./scripts/task_validate.sh FRCOM03-DB-01","rc":0,"task":"FRCOM03-DB-01","status":"PASS"}
+{"step":"lint","cmd":"./scripts/task_validate.sh FRCOM03-BE-CASE-01","rc":0,"task":"FRCOM03-BE-CASE-01","status":"PASS"}
+{"step":"lint","cmd":"./scripts/task_validate.sh FRCOM03-BE-COM-01","rc":0,"task":"FRCOM03-BE-COM-01","status":"PASS"}
+{"step":"test","cmd":"./scripts/task_validate.sh FRCOM03-FE-CASE-01","rc":0,"task":"FRCOM03-FE-CASE-01","status":"PASS"}
+{"step":"test","cmd":"test -f artifacts/FRCOM03-DB-01/results.jsonl && test -f artifacts/FRCOM03-BE-CASE-01/results.jsonl && test -f artifacts/FRCOM03-BE-COM-01/results.jsonl && test -f artifacts/FRCOM03-FE-CASE-01/results.jsonl","rc":0,"task":"ledger-evidence","status":"PASS"}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_commission_e2e.py -k 'manual_bill or multi_agent_split'","rc":0,"task":"FRCOM03-BE-COM-01","status":"PASS","note":"2 passed, 2 deselected"}
+{"step":"gate","cmd":"./scripts/task_validate.sh FRCOM03-QA-01","rc":0,"task":"FRCOM03-QA-01","status":"PASS"}

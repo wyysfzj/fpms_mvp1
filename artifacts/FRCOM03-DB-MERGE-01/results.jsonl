@@ -1,0 +1,4 @@
+{"step":"lint","cmd":"cd backend && ruff check alembic/versions/*.py","rc":0}
+{"step":"heads","cmd":"cd backend && alembic heads","rc":0,"stdout":"frcom03_db_merge_01_merge_heads (head)"}
+{"step":"test","cmd":"cd backend && alembic upgrade head","rc":0}
+{"step":"gate","cmd":"./scripts/task_validate.sh FRCOM03-DB-MERGE-01","rc":0,"stdout":"Task Gate PASS"}

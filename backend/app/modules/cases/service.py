@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import or_
@@ -8,9 +9,18 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
 from app.core.pagination import PageResult, offset_limit
+from app.modules.auth.models import T_Role, T_User, T_UserRole
 from app.modules.cases.enums import CaseStatus, CaseType, FlowDir
-from app.modules.cases.models import Case, T_BioDeposit, T_CaseApplicant, T_CaseInventor, T_Priority
+from app.modules.cases.models import (
+    Case,
+    T_BioDeposit,
+    T_CaseAgentSplit,
+    T_CaseApplicant,
+    T_CaseInventor,
+    T_Priority,
+)
 from app.modules.cases.schemas import (
+    CaseAgentSplitIn,
     CaseCreate,
     CaseListItem,
     CaseUpdateFull,
@@ -21,6 +31,7 @@ from app.modules.masterdata.clients.models import Client
 _CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
 _FOREIGN_FLOW_DIRS = {FlowDir.CN_OUTBOUND.value, FlowDir.FOREIGN_INBOUND.value}
 _FOREIGN_AGENT_TYPES = {"AGENT", "代理所"}
+_AGENT_ROLE_CODE = "Agent"
 _INVALIDATION_ROLES = {"PATENTEE", "REQUESTER", "BOTH"}
 _TERMINAL_STATUS_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     CaseStatus.GRANTED.value: {
@@ -198,6 +209,58 @@ def validate_bio_deposits(bio_deposits: list[dict]) -> None:
                 "Bio deposit rows must include deposit_no, deposit_unit_name, deposit_date and name",
                 status_code=400,
             )
+
+
+def validate_case_agent_splits(db: Session, agent_splits: list[CaseAgentSplitIn]) -> None:
+    if not agent_splits:
+        return
+
+    agent_ids = [split.agent_id for split in agent_splits]
+    if len(agent_ids) != len(set(agent_ids)):
+        raise_business_error(
+            "CASE_AGENT_SPLIT_DUPLICATE_MEMBER",
+            "agent_id values must be unique",
+            status_code=400,
+        )
+
+    if any((split.role or "").strip() not in {_AGENT_ROLE_CODE} for split in agent_splits):
+        raise_business_error(
+            "CASE_AGENT_SPLIT_INVALID_ROLE",
+            "split role must be Agent",
+            status_code=400,
+        )
+
+    if any(split.share_ratio <= 0 or split.share_ratio > Decimal("100") for split in agent_splits):
+        raise_business_error(
+            "CASE_AGENT_SPLIT_RATIO_INVALID",
+            "share_ratio must be greater than 0 and at most 100",
+            status_code=400,
+        )
+
+    total_ratio = sum((split.share_ratio for split in agent_splits), Decimal("0"))
+    if total_ratio != Decimal("100"):
+        raise_business_error(
+            "CASE_AGENT_SPLIT_RATIO_INVALID",
+            "share_ratio values must sum to 100",
+            status_code=400,
+        )
+
+    eligible_agent_ids = {
+        row[0]
+        for row in (
+            db.query(T_User.id)
+            .join(T_UserRole, T_UserRole.user_id == T_User.id)
+            .join(T_Role, T_Role.id == T_UserRole.role_id)
+            .filter(T_User.id.in_(agent_ids), T_Role.code == _AGENT_ROLE_CODE)
+            .all()
+        )
+    }
+    if eligible_agent_ids != set(agent_ids):
+        raise_business_error(
+            "CASE_AGENT_SPLIT_INVALID_MEMBER",
+            "split members must be internal users with Agent role",
+            status_code=400,
+        )
 
 
 def validate_case_type_specific_fields(
@@ -775,6 +838,20 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
                     deposit_unit_name=bio_deposit.deposit_unit_name,
                     deposit_date=bio_deposit.deposit_date,
                     name=bio_deposit.name,
+                )
+            )
+
+    if data.agent_splits is not None:
+        validate_case_agent_splits(db, data.agent_splits)
+        db.query(T_CaseAgentSplit).filter(T_CaseAgentSplit.case_id == case_id).delete()
+        for split in data.agent_splits:
+            db.add(
+                T_CaseAgentSplit(
+                    id=str(uuid4()),
+                    case_id=case.id,
+                    agent_id=split.agent_id,
+                    role=(split.role or "").strip() or None,
+                    share_ratio=split.share_ratio,
                 )
             )
 

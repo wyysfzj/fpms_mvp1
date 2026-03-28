@@ -1,0 +1,3 @@
+{"step":"lint","cmd":"cd frontend && npm run lint -- src/api/cases.ts src/api/cases.types.ts src/modules/cases/pages/CaseEdit.vue src/modules/cases/components/CaseAgentSplitEditor.vue","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}
+{"step":"task_validate","cmd":"./scripts/task_validate.sh FRCOM03-FE-CASE-01","rc":0}

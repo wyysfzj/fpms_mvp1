@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
@@ -35,6 +36,12 @@ class BioDepositIn(BaseModel):
     deposit_unit_name: str | None = Field(None, max_length=255)
     deposit_date: date | None = None
     name: str | None = Field(None, max_length=255)
+
+
+class CaseAgentSplitIn(BaseModel):
+    agent_id: str = Field(..., min_length=1, max_length=36)
+    role: str | None = Field(default=None, max_length=32)
+    share_ratio: Decimal
 
 
 class CaseCreate(BaseModel):
@@ -145,6 +152,7 @@ class CaseUpdateFull(BaseModel):
     inventors: list[CaseInventorIn] | None = None
     priorities: list[PriorityIn] | None = None
     bio_deposits: list[BioDepositIn] | None = None
+    agent_splits: list[CaseAgentSplitIn] | None = None
 
     @field_validator(
         "filing_date",
@@ -228,6 +236,7 @@ class CaseDetail(BaseModel):
     is_fee_monitor: bool | None = None
     fee_reduction: str | None = None
     applicant_kind: str | None = None
+    agent_splits: list[dict] | None = None
     # Sub-tables & timestamps
     applicants: list[dict]  # CaseApplicantOut
     inventors: list[dict]  # CaseInventorOut

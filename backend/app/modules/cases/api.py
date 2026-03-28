@@ -11,7 +11,14 @@ from app.api.deps import current_user_dep, require_perm
 from app.core.errors import raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
-from app.modules.cases.models import Case, T_BioDeposit, T_CaseApplicant, T_CaseInventor, T_Priority
+from app.modules.cases.models import (
+    Case,
+    T_BioDeposit,
+    T_CaseAgentSplit,
+    T_CaseApplicant,
+    T_CaseInventor,
+    T_Priority,
+)
 from app.modules.cases.schemas import CaseCreateIn, CaseUpdateFull
 from app.modules.cases.service import (
     create_case as create_case_service,
@@ -80,6 +87,16 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
         .order_by(T_BioDeposit.seq)
         .all()
     )
+    agent_splits = (
+        db.query(
+            T_CaseAgentSplit.agent_id,
+            T_CaseAgentSplit.role,
+            T_CaseAgentSplit.share_ratio,
+        )
+        .filter(T_CaseAgentSplit.case_id == case.id)
+        .order_by(T_CaseAgentSplit.created_at, T_CaseAgentSplit.id)
+        .all()
+    )
 
     return {
         "id": case.id,
@@ -136,6 +153,14 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
         "is_fee_monitor": case.is_fee_monitor,
         "fee_reduction": case.fee_reduction,
         "applicant_kind": case.applicant_kind,
+        "agent_splits": [
+            {
+                "agent_id": agent_split.agent_id,
+                "role": agent_split.role,
+                "share_ratio": str(agent_split.share_ratio),
+            }
+            for agent_split in agent_splits
+        ],
         "applicants": [
             {
                 "seq": applicant.seq,

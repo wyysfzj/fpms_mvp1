@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from app.core.security import get_password_hash
+from app.modules.auth.models import T_Role, T_User, T_UserRole
+from app.modules.cases.models import T_CaseAgentSplit
 from app.modules.commission.models import Commission, CommissionSettlement
+from app.modules.commission.service import apply_commission_for_bill
 
 
 def _uid(prefix: str) -> str:
@@ -52,6 +56,25 @@ def _create_client_case_with_agent(
     )
     assert case_resp.status_code == 201, case_resp.text
     return client_id, case_resp.json()["id"], agent_id
+
+
+def _create_agent_user(session_factory: sessionmaker, username_prefix: str) -> str:
+    with session_factory() as db:
+        role = db.query(T_Role).filter(T_Role.code == "Agent").first()
+        assert role is not None, "Agent role should exist"
+
+        user = T_User(
+            id=str(uuid4()),
+            username=f"{username_prefix}-{uuid4().hex[:8]}",
+            display_name="Agent User",
+            password_hash=get_password_hash("password123"),
+            is_active=True,
+        )
+        db.add(user)
+        db.flush()
+        db.add(T_UserRole(user_id=user.id, role_id=role.id))
+        db.commit()
+        return user.id
 
 
 def _insert_commission(
@@ -156,8 +179,8 @@ def test_commission_rule_lifecycle_and_error_matrix(
             **payload,
             "rule_name": _uid("RULE-BAD"),
             "s1_rate": "-0.01",
-            "effective_from": "2027-01-01",
-            "effective_to": "2027-12-31",
+            "effective_from": "2028-01-01",
+            "effective_to": "2028-12-31",
         },
     )
     _assert_error(invalid_resp, 400, "COMMISSION_RULE_INVALID")
@@ -399,3 +422,151 @@ def test_manual_bill_creation_triggers_commission_auto_generation(
     assert items[0]["case_id"] == case_id
     assert items[0]["agent_id"] == agent_id
     assert Decimal(str(items[0]["base_fee"])) == Decimal("1000.00")
+
+
+def test_manual_bill_split_commission_rewrite_removes_stale_rows(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_resp = client.post(
+        "/api/v1/clients",
+        json={"name_cn": _uid("COM-SPLIT-CLI"), "default_currency": "CNY"},
+        headers=auth_headers,
+    )
+    assert client_resp.status_code == 201, client_resp.text
+    client_id = client_resp.json()["id"]
+
+    agent_one_id = _create_agent_user(session_factory, "commission-split-a")
+    agent_two_id = _create_agent_user(session_factory, "commission-split-b")
+
+    case_resp = client.post(
+        "/api/v1/cases",
+        json={
+            "case_no": _uid("COM-SPLIT-CASE"),
+            "case_type": "NORMAL",
+            "patent_category": "INV",
+            "flow_dir": "CN_DOMESTIC",
+            "client_id": client_id,
+            "title_cn": "分摊提成案件",
+            "primary_agent_id": agent_one_id,
+        },
+        headers=auth_headers,
+    )
+    assert case_resp.status_code == 201, case_resp.text
+    case_id = case_resp.json()["id"]
+
+    update_case_resp = client.put(
+        f"/api/v1/cases/{case_id}",
+        json={
+            "agent_splits": [
+                {"agent_id": agent_one_id, "role": "Agent", "share_ratio": "33.3333"},
+                {"agent_id": agent_two_id, "role": "Agent", "share_ratio": "66.6667"},
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert update_case_resp.status_code == 200, update_case_resp.text
+
+    rule_resp = client.post(
+        "/api/v1/commission/rules",
+        headers=auth_headers,
+        json={
+            "rule_name": _uid("RULE-SPLIT"),
+            "case_type": "NORMAL",
+            "fee_type": "SERVICE",
+            "flow_dir": "CN_DOMESTIC",
+            "patent_category": "INV",
+            "s1_rate": "0.10",
+            "s2_rate": "0.05",
+            "s1_fixed_amount": "0",
+            "s2_fixed_amount": "0",
+            "wait_pay": False,
+            "force_settle": False,
+            "enabled": True,
+            "effective_from": "2028-01-01",
+            "effective_to": "2028-12-31",
+        },
+    )
+    assert rule_resp.status_code == 201, rule_resp.text
+    rule_id = rule_resp.json()["id"]
+
+    bill_resp = client.post(
+        "/api/v1/bills/manual",
+        headers=auth_headers,
+        json={
+            "client_id": client_id,
+            "case_id": case_id,
+            "currency": "CNY",
+            "direction": "AR",
+            "status": "UNSETTLED",
+            "bill_date": "2028-03-12",
+            "items": [
+                {
+                    "description": "Split service bill",
+                    "quantity": 1,
+                    "unit_price": "1000.00",
+                    "fee_type": "SERVICE",
+                }
+            ],
+        },
+    )
+    assert bill_resp.status_code == 201, bill_resp.text
+    bill_id = bill_resp.json()["id"]
+
+    with session_factory() as db:
+        commissions = (
+            db.execute(
+                select(Commission)
+                .where(
+                    Commission.case_id == case_id,
+                    Commission.rule_id == rule_id,
+                    Commission.fee_type == "SERVICE",
+                )
+                .order_by(Commission.agent_id.asc())
+            )
+            .scalars()
+            .all()
+        )
+        assert len(commissions) == 2, commissions
+        by_agent = {row.agent_id: row for row in commissions}
+        assert Decimal(str(by_agent[agent_one_id].base_fee)) == Decimal("333.33")
+        assert Decimal(str(by_agent[agent_two_id].base_fee)) == Decimal("666.67")
+        assert Decimal(str(by_agent[agent_one_id].s1_amount)) == Decimal("33.33")
+        assert Decimal(str(by_agent[agent_one_id].s2_amount)) == Decimal("16.67")
+        assert Decimal(str(by_agent[agent_two_id].s1_amount)) == Decimal("66.67")
+        assert Decimal(str(by_agent[agent_two_id].s2_amount)) == Decimal("33.33")
+
+    with session_factory() as db:
+        db.query(T_CaseAgentSplit).filter(T_CaseAgentSplit.case_id == case_id).delete()
+        db.add(
+            T_CaseAgentSplit(
+                id=str(uuid4()),
+                case_id=case_id,
+                agent_id=agent_one_id,
+                role="Agent",
+                share_ratio=Decimal("100"),
+            )
+        )
+        db.commit()
+
+    with session_factory() as db:
+        apply_commission_for_bill(db, bill_id=bill_id, strict=True)
+
+    with session_factory() as db:
+        commissions = (
+            db.execute(
+                select(Commission)
+                .where(
+                    Commission.case_id == case_id,
+                    Commission.rule_id == rule_id,
+                    Commission.fee_type == "SERVICE",
+                )
+                .order_by(Commission.agent_id.asc())
+            )
+            .scalars()
+            .all()
+        )
+        assert len(commissions) == 1, commissions
+        by_agent = {row.agent_id: row for row in commissions}
+        assert by_agent[agent_one_id].agent_id == agent_one_id

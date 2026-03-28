@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     Date,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -92,6 +94,24 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
     fee_reduction: Mapped[str | None] = mapped_column(String(32), nullable=True)
     applicant_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     first_annuity_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class T_CaseAgentSplit(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    """Current effective case-level agent split line."""
+
+    __tablename__ = "t_case_agent_split"
+
+    case_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("t_case.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    share_ratio: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)
+
+    __table_args__ = (UniqueConstraint("case_id", "agent_id", name="uq_case_agent_split_agent"),)
 
 
 class T_CaseApplicant(UUIDPrimaryKeyMixin, AuditMixin, Base):

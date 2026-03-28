@@ -78,7 +78,13 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="法律状态" prop="status" :error="fieldErrors.get('status')?.join('，')">
-                <el-select v-model="form.status" placeholder="请选择法律状态" clearable class="full-width">
+                <el-select
+                  v-model="form.status"
+                  placeholder="请选择法律状态"
+                  clearable
+                  class="full-width"
+                  :disabled="isReadonlyWorkflowStatus"
+                >
                   <el-option
                     v-for="option in statusOptions"
                     :key="option.value"
@@ -542,6 +548,19 @@
             </el-row>
           </el-collapse-item>
 
+          <el-collapse-item title="代理人分摊" name="agent_split">
+            <div class="section-toolbar">
+              <div class="field-hint">当前仅支持“代理人”角色。每行填写代理人、角色和分摊比例，比例总和必须等于 100。</div>
+            </div>
+            <div v-if="agentSplitErrorItems.length" class="section-error">
+              <div>代理人分摊校验未通过：</div>
+              <ul class="validation-summary-list">
+                <li v-for="item in agentSplitErrorItems" :key="item.key + item.message">{{ item.message }}</li>
+              </ul>
+            </div>
+            <CaseAgentSplitEditor v-model="form.agent_splits" :row-errors="agentSplitRowErrors" />
+          </el-collapse-item>
+
           <el-collapse-item v-if="showSpecificationSection" title="控制标记" name="flags">
             <el-row :gutter="20">
               <el-col :span="8">
@@ -621,10 +640,11 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getCase, updateCase } from '../../../api/cases'
 import { createClient, getClients } from '../../../api/clients'
-import type { Case, CaseApplicant, CasePriority, CaseUpdatePayload } from '../../../api/cases.types'
+import type { Case, CaseAgentSplit, CaseApplicant, CasePriority, CaseUpdatePayload } from '../../../api/cases.types'
 import type { Client, ClientCreatePayload } from '../../../api/clients.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import CaseAgentSplitEditor from '../components/CaseAgentSplitEditor.vue'
 import { CASE_STATUS_TEXT } from '../../../constants/displayText'
 import { mapValidationDetailsToFieldErrors } from '../../../utils/validation'
 
@@ -692,6 +712,7 @@ const caseData = ref<Case | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 const expandedSections = ref<string[]>([])
 const validationSummary = ref<ValidationItem[]>([])
+const agentSplitRowErrors = ref<string[][]>([])
 const clients = ref<Client[]>([])
 const creatingClient = ref(false)
 const showQuickClientDialog = ref(false)
@@ -706,6 +727,7 @@ const form = reactive<CaseUpdatePayload>({
   applicants: [],
   priorities: [],
   bio_deposits: [],
+  agent_splits: [],
   foreign_agent_id: '',
   foreign_ref: '',
   ro: '',
@@ -757,6 +779,64 @@ const isForeignFlow = computed(() => (caseData.value?.flow_dir || 'CN_DOMESTIC')
 const isPctIntlCase = computed(() => caseData.value?.case_type === 'PCT_INTL')
 const isPctNatlCase = computed(() => caseData.value?.case_type === 'PCT_NATL')
 const isInvalidationCase = computed(() => caseData.value?.case_type === 'INVALIDATION')
+const agentSplitErrorItems = computed(() => {
+  const items: ValidationItem[] = []
+  const seen = new Set<string>()
+  const addMessages = (key: string, label: string) => {
+    const messages = fieldErrors.value.get(key) || []
+    for (const message of messages) {
+      const token = `${key}:${message}`
+      if (seen.has(token)) continue
+      seen.add(token)
+      items.push({ key, message: `${label}${message}` })
+    }
+  }
+
+  addMessages('agent_splits', '代理人分摊：')
+  addMessages('agent_id', '代理人：')
+  addMessages('role', '角色：')
+  addMessages('share_ratio', '分摊比例：')
+
+  return items
+})
+
+function resetAgentSplitErrors() {
+  agentSplitRowErrors.value = []
+}
+
+function splitFieldLabel(field: string) {
+  if (field === 'agent_id') return '代理人'
+  if (field === 'role') return '角色'
+  if (field === 'share_ratio') return '分摊比例'
+  return field
+}
+
+function extractAgentSplitRowErrors(details?: Record<string, unknown>): string[][] {
+  const rows: string[][] = []
+  const errors = details?.errors
+  if (!Array.isArray(errors)) return rows
+
+  for (const err of errors) {
+    if (typeof err !== 'object' || err === null) continue
+    const loc = (err as { loc?: unknown[] }).loc
+    const msg = (err as { msg?: string }).msg
+    if (!Array.isArray(loc) || typeof msg !== 'string') continue
+
+    const path = loc.map((item) => String(item))
+    const splitIndex = path.indexOf('agent_splits')
+    if (splitIndex < 0) continue
+
+    const rowIndex = Number(path[splitIndex + 1])
+    if (!Number.isInteger(rowIndex) || rowIndex < 0) continue
+
+    const field = path[splitIndex + 2]
+    const prefix = field ? `${splitFieldLabel(field)}：` : ''
+    rows[rowIndex] ??= []
+    rows[rowIndex].push(`${prefix}${msg}`)
+  }
+
+  return rows
+}
 const quickClientDialogTitle = computed(() =>
   quickClientMode.value === 'foreign_agent' ? '快速新建外方代理' : '快速新建申请人主数据'
 )
@@ -785,6 +865,10 @@ const statusOptions = computed(() => {
 
 const showReadonlyStatusHint = computed(() =>
   READONLY_STATUS_VALUES.includes((form.status || '').trim() as typeof READONLY_STATUS_VALUES[number])
+)
+
+const isReadonlyWorkflowStatus = computed(() =>
+  READONLY_STATUS_VALUES.includes((caseData.value?.status || form.status || '').trim() as typeof READONLY_STATUS_VALUES[number])
 )
 
 function createEmptyPriority(seq: number): CasePriority {
@@ -816,6 +900,18 @@ function createEmptyBioDeposit(seq: number) {
     deposit_date: '',
     name: '',
   }
+}
+
+function normalizeAgentSplitRows(agentSplits: CaseAgentSplit[] | null | undefined): CaseAgentSplit[] {
+  return (agentSplits || [])
+    .map((split) => ({
+      agent_id: String(split.agent_id || '').trim(),
+      role: String(split.role || '').trim(),
+      share_ratio: split.share_ratio === null || split.share_ratio === undefined ? null : Number(split.share_ratio),
+    }))
+    .filter((split) =>
+      [split.agent_id, split.role, split.share_ratio !== null && split.share_ratio !== undefined].some(Boolean)
+    )
 }
 
 async function fetchClients() {
@@ -862,6 +958,11 @@ async function fetchCase() {
       deposit_date: bioDeposit.deposit_date || '',
       name: bioDeposit.name || '',
     }))
+    form.agent_splits = (caseData.value.agent_splits || []).map((split) => ({
+      agent_id: split.agent_id || '',
+      role: split.role || '',
+      share_ratio: split.share_ratio ?? null,
+    }))
     form.foreign_agent_id = caseData.value.foreign_agent_id || ''
     form.foreign_ref = caseData.value.foreign_ref || ''
     form.ro = caseData.value.ro || ''
@@ -895,6 +996,9 @@ async function fetchCase() {
     form.is_fee_monitor = caseData.value.is_fee_monitor ?? undefined
     form.fee_reduction = caseData.value.fee_reduction || ''
     form.applicant_kind = caseData.value.applicant_kind || ''
+    if ((caseData.value.agent_splits || []).length > 0) {
+      expandedSections.value = Array.from(new Set([...expandedSections.value, 'agent_split']))
+    }
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -1049,6 +1153,40 @@ function runCustomValidation(): ValidationItem[] {
     add('bio_deposits', '菌种保藏序号不能重复。', 'bio')
   }
 
+  const normalizedAgentSplits = normalizeAgentSplitRows(form.agent_splits)
+  if (normalizedAgentSplits.length) {
+    const seenAgentIds = new Set<string>()
+    let ratioTenThousandths = 0
+    let hasRatioError = false
+
+    normalizedAgentSplits.forEach((split, index) => {
+      if (!split.agent_id) {
+        add('agent_splits', `代理人分摊 ${index + 1} 需要填写代理人。`, 'agent_split')
+      } else if (seenAgentIds.has(split.agent_id)) {
+        add('agent_splits', `代理人分摊 ${index + 1} 的代理人不能重复。`, 'agent_split')
+      } else {
+        seenAgentIds.add(split.agent_id)
+      }
+
+      if (!split.role) {
+        add('agent_splits', `代理人分摊 ${index + 1} 需要选择角色。`, 'agent_split')
+      } else if (split.role !== 'Agent') {
+        add('agent_splits', `代理人分摊 ${index + 1} 的角色必须为代理人。`, 'agent_split')
+      }
+
+      if (split.share_ratio === null || !Number.isFinite(split.share_ratio) || split.share_ratio <= 0) {
+        add('agent_splits', `代理人分摊 ${index + 1} 的分摊比例必须大于 0。`, 'agent_split')
+        hasRatioError = true
+      } else {
+        ratioTenThousandths += Math.round(split.share_ratio * 10000)
+      }
+    })
+
+    if (!hasRatioError && ratioTenThousandths !== 1000000) {
+      add('agent_splits', '代理人分摊比例总和必须等于 100。', 'agent_split')
+    }
+  }
+
   if (isPctIntlCase.value) {
     if (!String(form.intl_app_no || '').trim() || !String(form.intl_app_date || '').trim()) {
       add('pct', 'PCT 国际阶段案件必须填写国际申请号和国际申请日。', 'pct')
@@ -1087,6 +1225,7 @@ async function handleSave() {
 
   fieldErrors.value = new Map()
   validationSummary.value = []
+  resetAgentSplitErrors()
 
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) {
@@ -1124,9 +1263,10 @@ async function handleSave() {
       bio_deposits: form.bio_deposits?.filter((bioDeposit) =>
         [bioDeposit.deposit_no, bioDeposit.deposit_unit_name, bioDeposit.deposit_date, bioDeposit.name].some((value) => String(value || '').trim())
       ),
+      agent_splits: normalizeAgentSplitRows(form.agent_splits),
     }
 
-    if (READONLY_STATUS_VALUES.includes((payload.status || '').trim() as typeof READONLY_STATUS_VALUES[number])) {
+    if (isReadonlyWorkflowStatus.value) {
       delete payload.status
     }
 
@@ -1137,9 +1277,20 @@ async function handleSave() {
     const apiError = err as ApiError
     error.value = apiError
 
-    if (apiError.status === 422 && apiError.details) {
+    if ((apiError.status === 422 || apiError.status === 400) && apiError.details) {
       fieldErrors.value = mapValidationDetailsToFieldErrors(apiError.details)
-      validationSummary.value = [{ key: 'api', message: '后端校验未通过，请检查表单字段。' }]
+      validationSummary.value = [{
+        key: 'api',
+        message: apiError.status === 400
+          ? '后端业务校验未通过，请检查代理人分摊。'
+          : '后端校验未通过，请检查表单字段。',
+      }]
+      const splitRowErrors = extractAgentSplitRowErrors(apiError.details)
+      if (splitRowErrors.some((row) => row.length > 0)) {
+        agentSplitRowErrors.value = splitRowErrors
+        expandedSections.value = Array.from(new Set([...expandedSections.value, 'agent_split']))
+        validationSummary.value = validationSummary.value.filter((item) => item.key !== 'api')
+      }
     }
   } finally {
     saving.value = false

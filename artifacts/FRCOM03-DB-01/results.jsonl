@@ -1,0 +1,4 @@
+{"step":"lint","cmd":"ruff check backend/alembic/versions/frcom03_db_01_create_t_case_agent_split.py backend/app/modules/cases/models.py","rc":0}
+{"step":"test","cmd":"cd backend && python3 -c \"import sys; sys.path.insert(0, '.'); from sqlalchemy import inspect; from app.db.session import get_engine; from app.db.base import Base; import app.models  # noqa: F401; engine = get_engine(); tables = set(inspect(engine).get_table_names()); assert 't_case_agent_split' in tables; assert 't_case_agent_split' in Base.metadata.tables\"","rc":0}
+{"step":"alembic_upgrade_heads","cmd":"cd backend && alembic upgrade heads","rc":0}
+{"step":"task_validate","cmd":"./scripts/task_validate.sh FRCOM03-DB-01","rc":0}

@@ -1,0 +1,457 @@
+diff --git a/backend/app/modules/cases/api.py b/backend/app/modules/cases/api.py
+index 4d0e35e..a322420 100644
+--- a/backend/app/modules/cases/api.py
++++ b/backend/app/modules/cases/api.py
+@@ -11,7 +11,14 @@ from app.api.deps import current_user_dep, require_perm
+ from app.core.errors import raise_business_error
+ from app.db.session import get_db
+ from app.modules.auth.models import T_User
+-from app.modules.cases.models import Case, T_BioDeposit, T_CaseApplicant, T_CaseInventor, T_Priority
++from app.modules.cases.models import (
++    Case,
++    T_BioDeposit,
++    T_CaseAgentSplit,
++    T_CaseApplicant,
++    T_CaseInventor,
++    T_Priority,
++)
+ from app.modules.cases.schemas import CaseCreateIn, CaseUpdateFull
+ from app.modules.cases.service import (
+     create_case as create_case_service,
+@@ -80,6 +87,16 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
+         .order_by(T_BioDeposit.seq)
+         .all()
+     )
++    agent_splits = (
++        db.query(
++            T_CaseAgentSplit.agent_id,
++            T_CaseAgentSplit.role,
++            T_CaseAgentSplit.share_ratio,
++        )
++        .filter(T_CaseAgentSplit.case_id == case.id)
++        .order_by(T_CaseAgentSplit.created_at, T_CaseAgentSplit.id)
++        .all()
++    )
+ 
+     return {
+         "id": case.id,
+@@ -136,6 +153,14 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
+         "is_fee_monitor": case.is_fee_monitor,
+         "fee_reduction": case.fee_reduction,
+         "applicant_kind": case.applicant_kind,
++        "agent_splits": [
++            {
++                "agent_id": agent_split.agent_id,
++                "role": agent_split.role,
++                "share_ratio": str(agent_split.share_ratio),
++            }
++            for agent_split in agent_splits
++        ],
+         "applicants": [
+             {
+                 "seq": applicant.seq,
+diff --git a/backend/app/modules/cases/schemas.py b/backend/app/modules/cases/schemas.py
+index a60d84b..a2be792 100644
+--- a/backend/app/modules/cases/schemas.py
++++ b/backend/app/modules/cases/schemas.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from datetime import date
++from decimal import Decimal
+ 
+ from pydantic import AliasChoices, BaseModel, Field, field_validator
+ 
+@@ -37,6 +38,12 @@ class BioDepositIn(BaseModel):
+     name: str | None = Field(None, max_length=255)
+ 
+ 
++class CaseAgentSplitIn(BaseModel):
++    agent_id: str = Field(..., min_length=1, max_length=36)
++    role: str | None = Field(default=None, max_length=32)
++    share_ratio: Decimal
++
++
+ class CaseCreate(BaseModel):
+     case_no: str = Field(..., min_length=1, max_length=64, strip_whitespace=True)
+     case_type: CaseType = CaseType.NORMAL
+@@ -145,6 +152,7 @@ class CaseUpdateFull(BaseModel):
+     inventors: list[CaseInventorIn] | None = None
+     priorities: list[PriorityIn] | None = None
+     bio_deposits: list[BioDepositIn] | None = None
++    agent_splits: list[CaseAgentSplitIn] | None = None
+ 
+     @field_validator(
+         "filing_date",
+@@ -228,6 +236,7 @@ class CaseDetail(BaseModel):
+     is_fee_monitor: bool | None = None
+     fee_reduction: str | None = None
+     applicant_kind: str | None = None
++    agent_splits: list[dict] | None = None
+     # Sub-tables & timestamps
+     applicants: list[dict]  # CaseApplicantOut
+     inventors: list[dict]  # CaseInventorOut
+diff --git a/backend/app/modules/cases/service.py b/backend/app/modules/cases/service.py
+index b0ab7fe..d5b15f6 100644
+--- a/backend/app/modules/cases/service.py
++++ b/backend/app/modules/cases/service.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from datetime import date
++from decimal import Decimal
+ from uuid import uuid4
+ 
+ from sqlalchemy import or_
+@@ -8,9 +9,18 @@ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+ from app.core.pagination import PageResult, offset_limit
++from app.modules.auth.models import T_Role, T_User, T_UserRole
+ from app.modules.cases.enums import CaseStatus, CaseType, FlowDir
+-from app.modules.cases.models import Case, T_BioDeposit, T_CaseApplicant, T_CaseInventor, T_Priority
++from app.modules.cases.models import (
++    Case,
++    T_BioDeposit,
++    T_CaseAgentSplit,
++    T_CaseApplicant,
++    T_CaseInventor,
++    T_Priority,
++)
+ from app.modules.cases.schemas import (
++    CaseAgentSplitIn,
+     CaseCreate,
+     CaseListItem,
+     CaseUpdateFull,
+@@ -21,6 +31,7 @@ from app.modules.masterdata.clients.models import Client
+ _CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
+ _FOREIGN_FLOW_DIRS = {FlowDir.CN_OUTBOUND.value, FlowDir.FOREIGN_INBOUND.value}
+ _FOREIGN_AGENT_TYPES = {"AGENT", "代理所"}
++_AGENT_ROLE_CODE = "Agent"
+ _INVALIDATION_ROLES = {"PATENTEE", "REQUESTER", "BOTH"}
+ _TERMINAL_STATUS_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+     CaseStatus.GRANTED.value: {
+@@ -200,6 +211,51 @@ def validate_bio_deposits(bio_deposits: list[dict]) -> None:
+             )
+ 
+ 
++def validate_case_agent_splits(db: Session, agent_splits: list[CaseAgentSplitIn]) -> None:
++    if not agent_splits:
++        return
++
++    agent_ids = [split.agent_id for split in agent_splits]
++    if len(agent_ids) != len(set(agent_ids)):
++        raise_business_error(
++            "CASE_AGENT_SPLIT_DUPLICATE_MEMBER",
++            "agent_id values must be unique",
++            status_code=400,
++        )
++
++    if any((split.role or "").strip() not in {_AGENT_ROLE_CODE} for split in agent_splits):
++        raise_business_error(
++            "CASE_AGENT_SPLIT_INVALID_ROLE",
++            "split role must be Agent",
++            status_code=400,
++        )
++
++    total_ratio = sum((split.share_ratio for split in agent_splits), Decimal("0"))
++    if total_ratio != Decimal("100"):
++        raise_business_error(
++            "CASE_AGENT_SPLIT_RATIO_INVALID",
++            "share_ratio values must sum to 100",
++            status_code=400,
++        )
++
++    eligible_agent_ids = {
++        row[0]
++        for row in (
++            db.query(T_User.id)
++            .join(T_UserRole, T_UserRole.user_id == T_User.id)
++            .join(T_Role, T_Role.id == T_UserRole.role_id)
++            .filter(T_User.id.in_(agent_ids), T_Role.code == _AGENT_ROLE_CODE)
++            .all()
++        )
++    }
++    if eligible_agent_ids != set(agent_ids):
++        raise_business_error(
++            "CASE_AGENT_SPLIT_INVALID_MEMBER",
++            "split members must be internal users with Agent role",
++            status_code=400,
++        )
++
++
+ def validate_case_type_specific_fields(
+     db: Session,
+     *,
+@@ -778,6 +834,20 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
+                 )
+             )
+ 
++    if data.agent_splits is not None:
++        validate_case_agent_splits(db, data.agent_splits)
++        db.query(T_CaseAgentSplit).filter(T_CaseAgentSplit.case_id == case_id).delete()
++        for split in data.agent_splits:
++            db.add(
++                T_CaseAgentSplit(
++                    id=str(uuid4()),
++                    case_id=case.id,
++                    agent_id=split.agent_id,
++                    role=(split.role or "").strip() or None,
++                    share_ratio=split.share_ratio,
++                )
++            )
++
+     db.commit()
+     db.refresh(case)
+     return case
+diff --git a/backend/tests/test_case_agent_split_api.py b/backend/tests/test_case_agent_split_api.py
+new file mode 100644
+index 0000000..90eb8fe
+--- /dev/null
++++ b/backend/tests/test_case_agent_split_api.py
+@@ -0,0 +1,245 @@
++"""Tests for case agent split contract (FRCOM03-BE-CASE-01)."""
++
++from __future__ import annotations
++
++from decimal import Decimal
++from uuid import uuid4
++
++import pytest
++from fastapi.testclient import TestClient
++from sqlalchemy import create_engine, event
++from sqlalchemy.orm import Session, sessionmaker
++
++from app.api.deps import get_db
++from app.core.security import get_password_hash
++from app.db.base import Base
++from app.main import create_app
++from app.models import *  # noqa: F401, F403 - register ORM models for create_all
++from app.modules.auth.models import T_Role, T_User, T_UserRole
++from app.modules.rbac.service import seed_default_roles_perms
++
++
++@pytest.fixture
++def session_factory(tmp_path) -> sessionmaker:
++    db_path = tmp_path / "case_agent_split.db"
++    engine = create_engine(
++        f"sqlite:///{db_path}",
++        connect_args={"check_same_thread": False},
++        future=True,
++    )
++
++    @event.listens_for(engine, "connect")
++    def set_sqlite_pragma(dbapi_connection, _connection_record):
++        cursor = dbapi_connection.cursor()
++        cursor.execute("PRAGMA foreign_keys=ON")
++        cursor.close()
++
++    Base.metadata.create_all(engine)
++
++    session_maker = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
++    with session_maker() as db:
++        seed_default_roles_perms(db)
++        admin_role = db.query(T_Role).filter(T_Role.code == "Admin").first()
++        assert admin_role is not None, "Admin role should exist after seeding"
++        admin_user = T_User(
++            id=str(uuid4()),
++            username="admin",
++            display_name="Administrator",
++            password_hash=get_password_hash("admin123"),
++            is_active=True,
++        )
++        db.add(admin_user)
++        db.flush()
++        db.add(T_UserRole(user_id=admin_user.id, role_id=admin_role.id))
++        db.commit()
++
++    try:
++        yield session_maker
++    finally:
++        engine.dispose()
++
++
++@pytest.fixture
++def client(session_factory: sessionmaker) -> TestClient:
++    app = create_app()
++
++    def override_get_db() -> Session:
++        db = session_factory()
++        try:
++            yield db
++        finally:
++            db.close()
++
++    app.dependency_overrides[get_db] = override_get_db
++    with TestClient(app) as test_client:
++        yield test_client
++    app.dependency_overrides.pop(get_db, None)
++
++
++@pytest.fixture
++def auth_headers(client: TestClient) -> dict[str, str]:
++    response = client.post(
++        "/api/v1/auth/login",
++        json={"username": "admin", "password": "admin123"},
++    )
++    assert response.status_code == 200, response.text
++    token = response.json()["access_token"]
++    return {"Authorization": f"Bearer {token}"}
++
++
++def _create_case(client: TestClient, auth_headers: dict[str, str]) -> str:
++    resp = client.post(
++        "/api/v1/cases",
++        json={
++            "case_no": f"CASE-SPLIT-{uuid4().hex[:8]}",
++            "case_type": "NORMAL",
++            "patent_category": "INV",
++            "flow_dir": "CN_DOMESTIC",
++            "title_cn": "案件分摊测试",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201, resp.text
++    return resp.json()["id"]
++
++
++def _create_agent_user(session_factory: sessionmaker, username: str) -> str:
++    with session_factory() as db:
++        role = db.query(T_Role).filter(T_Role.code == "Agent").first()
++        assert role is not None, "Agent role should exist in seeded data"
++
++        user = T_User(
++            id=str(uuid4()),
++            username=username,
++            display_name=username,
++            password_hash=get_password_hash("password123"),
++            is_active=True,
++        )
++        db.add(user)
++        db.flush()
++        db.add(T_UserRole(user_id=user.id, role_id=role.id))
++        db.commit()
++        return user.id
++
++
++def test_get_case_returns_empty_agent_splits_when_unconfigured(
++    client: TestClient, auth_headers: dict[str, str]
++) -> None:
++    case_id = _create_case(client, auth_headers)
++
++    resp = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
++    assert resp.status_code == 200, resp.text
++    assert resp.json()["agent_splits"] == []
++
++
++def test_put_case_persists_agent_splits_and_roundtrips(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    case_id = _create_case(client, auth_headers)
++    agent_one_id = _create_agent_user(session_factory, f"agent-one-{uuid4().hex[:8]}")
++    agent_two_id = _create_agent_user(session_factory, f"agent-two-{uuid4().hex[:8]}")
++
++    update_resp = client.put(
++        f"/api/v1/cases/{case_id}",
++        json={
++            "agent_splits": [
++                {"agent_id": agent_one_id, "role": "Agent", "share_ratio": "60.0000"},
++                {"agent_id": agent_two_id, "role": "Agent", "share_ratio": "40.0000"},
++            ],
++        },
++        headers=auth_headers,
++    )
++    assert update_resp.status_code == 200, update_resp.text
++    update_data = update_resp.json()
++    assert len(update_data["agent_splits"]) == 2
++    assert {row["agent_id"] for row in update_data["agent_splits"]} == {
++        agent_one_id,
++        agent_two_id,
++    }
++    assert Decimal(str(update_data["agent_splits"][0]["share_ratio"])) + Decimal(
++        str(update_data["agent_splits"][1]["share_ratio"])
++    ) == Decimal("100")
++
++    detail_resp = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
++    assert detail_resp.status_code == 200, detail_resp.text
++    detail_data = detail_resp.json()
++    assert len(detail_data["agent_splits"]) == 2
++    assert {row["agent_id"] for row in detail_data["agent_splits"]} == {
++        agent_one_id,
++        agent_two_id,
++    }
++
++
++def test_put_case_rejects_duplicate_agent_split_members(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    case_id = _create_case(client, auth_headers)
++    agent_id = _create_agent_user(session_factory, f"agent-dup-{uuid4().hex[:8]}")
++
++    resp = client.put(
++        f"/api/v1/cases/{case_id}",
++        json={
++            "agent_splits": [
++                {"agent_id": agent_id, "role": "Agent", "share_ratio": "50.0000"},
++                {"agent_id": agent_id, "role": "Agent", "share_ratio": "50.0000"},
++            ],
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 400, resp.text
++
++
++def test_put_case_rejects_non_agent_split_member(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    case_id = _create_case(client, auth_headers)
++    with session_factory() as db:
++        user = T_User(
++            id=str(uuid4()),
++            username=f"user-{uuid4().hex[:8]}",
++            display_name="普通用户",
++            password_hash=get_password_hash("password123"),
++            is_active=True,
++        )
++        db.add(user)
++        db.commit()
++        user_id = user.id
++
++    resp = client.put(
++        f"/api/v1/cases/{case_id}",
++        json={
++            "agent_splits": [
++                {"agent_id": user_id, "role": "Agent", "share_ratio": "100.0000"},
++            ],
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 400, resp.text
++
++
++def test_put_case_rejects_split_ratio_not_100(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    case_id = _create_case(client, auth_headers)
++    agent_one_id = _create_agent_user(session_factory, f"agent-a-{uuid4().hex[:8]}")
++    agent_two_id = _create_agent_user(session_factory, f"agent-b-{uuid4().hex[:8]}")
++
++    resp = client.put(
++        f"/api/v1/cases/{case_id}",
++        json={
++            "agent_splits": [
++                {"agent_id": agent_one_id, "role": "Agent", "share_ratio": "55.0000"},
++                {"agent_id": agent_two_id, "role": "Agent", "share_ratio": "40.0000"},
++            ],
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 400, resp.text
