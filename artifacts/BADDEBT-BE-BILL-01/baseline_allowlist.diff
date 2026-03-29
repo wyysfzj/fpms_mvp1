@@ -1,0 +1,175 @@
+diff --git a/backend/app/modules/billing/api.py b/backend/app/modules/billing/api.py
+index 7cc8a8e..0592b00 100644
+--- a/backend/app/modules/billing/api.py
++++ b/backend/app/modules/billing/api.py
+@@ -16,6 +16,8 @@ from app.models.system_param import SystemParam
+ from app.modules.billing.doc_render_bill_context import BillContextBuilder
+ from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
+ from app.modules.billing.schemas import (
++    BillBadDebtRecoveryResponse,
++    BillBadDebtVoucherResponse,
+     BillDetailResponse,
+     BillFromDraftsRequest,
+     BillItemDetailResponse,
+@@ -35,6 +37,7 @@ from app.modules.billing.service import (
+     create_manual_bill_record,
+     generate_bill_from_drafts,
+     list_case_receipts,
++    load_bill_bad_debt_chain,
+     process_payment,
+     update_case_receipt,
+ )
+@@ -739,6 +742,10 @@ def get_bill(
+         for item in bill_items
+     ]
+ 
++    bad_debt_voucher, bad_debt_recoveries, bad_debt_total_recovered, bad_debt_remaining_amount = (
++        load_bill_bad_debt_chain(db, bill.id)
++    )
++
+     return BillDetailResponse(
+         id=bill.id,
+         bill_no=bill.bill_no,
+@@ -749,6 +756,8 @@ def get_bill(
+         currency=bill.currency,
+         direction=bill.direction,
+         status=bill.status,
++        bad_debt_status=bill.bad_debt_status,
++        bad_debt_substatus=bill.bad_debt_substatus,
+         total_gov=bill.total_gov,
+         total_service=bill.total_service,
+         total_misc=bill.total_misc,
+@@ -761,6 +770,31 @@ def get_bill(
+         source_draft_labels=source_draft_labels,
+         primary_draft_id=primary_draft.id if primary_draft else None,
+         primary_draft_label=_build_draft_display_label(primary_draft) if primary_draft else None,
++        bad_debt_voucher=(
++            BillBadDebtVoucherResponse(
++                id=bad_debt_voucher.id,
++                bill_id=bad_debt_voucher.bill_id,
++                status=bad_debt_voucher.status,
++                bad_debt_amount=bad_debt_voucher.bad_debt_amount,
++                recovered_amount=bad_debt_voucher.recovered_amount,
++                bad_debt_date=bad_debt_voucher.bad_debt_date,
++                remark=bad_debt_voucher.remark,
++            )
++            if bad_debt_voucher
++            else None
++        ),
++        bad_debt_recoveries=[
++            BillBadDebtRecoveryResponse(
++                id=recovery.id,
++                voucher_id=recovery.voucher_id,
++                recovery_amount=recovery.recovery_amount,
++                recovery_date=recovery.recovery_date,
++                remark=recovery.remark,
++            )
++            for recovery in bad_debt_recoveries
++        ],
++        bad_debt_total_recovered=bad_debt_total_recovered,
++        bad_debt_remaining_amount=bad_debt_remaining_amount,
+     )
+ 
+ 
+diff --git a/backend/app/modules/billing/schemas.py b/backend/app/modules/billing/schemas.py
+index f937753..8a6f1d4 100644
+--- a/backend/app/modules/billing/schemas.py
++++ b/backend/app/modules/billing/schemas.py
+@@ -72,6 +72,28 @@ class BillItemDetailResponse(BaseModel):
+     amount: Decimal = Field(Decimal("0"), ge=0)
+ 
+ 
++class BillBadDebtRecoveryResponse(BaseModel):
++    """Response schema for bad-debt recovery rows."""
++
++    id: str
++    voucher_id: str
++    recovery_amount: Decimal = Field(Decimal("0"), ge=0)
++    recovery_date: date | None = None
++    remark: str | None = None
++
++
++class BillBadDebtVoucherResponse(BaseModel):
++    """Response schema for the bill-level bad-debt master voucher."""
++
++    id: str
++    bill_id: str
++    status: str
++    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
++    recovered_amount: Decimal = Field(Decimal("0"), ge=0)
++    bad_debt_date: date | None = None
++    remark: str | None = None
++
++
+ class BillDetailResponse(BaseModel):
+     """Enriched bill detail response schema."""
+ 
+@@ -84,6 +106,8 @@ class BillDetailResponse(BaseModel):
+     currency: str
+     direction: str
+     status: str
++    bad_debt_status: str = "NONE"
++    bad_debt_substatus: str | None = None
+     total_gov: Decimal = Field(Decimal("0"), ge=0)
+     total_service: Decimal = Field(Decimal("0"), ge=0)
+     total_misc: Decimal = Field(Decimal("0"), ge=0)
+@@ -96,6 +120,10 @@ class BillDetailResponse(BaseModel):
+     source_draft_labels: list[str] = []
+     primary_draft_id: str | None = None
+     primary_draft_label: str | None = None
++    bad_debt_voucher: BillBadDebtVoucherResponse | None = None
++    bad_debt_recoveries: list[BillBadDebtRecoveryResponse] = []
++    bad_debt_total_recovered: Decimal = Field(Decimal("0"), ge=0)
++    bad_debt_remaining_amount: Decimal = Field(Decimal("0"), ge=0)
+ 
+ 
+ class PaymentSchema(BaseModel):
+diff --git a/backend/app/modules/billing/service.py b/backend/app/modules/billing/service.py
+index 4ea1409..2b3b436 100644
+--- a/backend/app/modules/billing/service.py
++++ b/backend/app/modules/billing/service.py
+@@ -8,7 +8,16 @@ from uuid import uuid4
+ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+-from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Payment, PaymentLine
++from app.modules.billing.models import (
++    BadDebtRecovery,
++    BadDebtVoucher,
++    Bill,
++    BillItem,
++    CaseReceipt,
++    Offset,
++    Payment,
++    PaymentLine,
++)
+ from app.modules.billing.schemas import (
+     BillCreateSchema,
+     BillFromDraftsRequest,
+@@ -92,6 +101,26 @@ def _collect_service_case_ids_for_bill(db: Session, bill_id: str) -> list[str]:
+     return service_case_ids
+ 
+ 
++def load_bill_bad_debt_chain(
++    db: Session, bill_id: str
++) -> tuple[BadDebtVoucher | None, list[BadDebtRecovery], Decimal, Decimal]:
++    voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill_id).first()
++    if not voucher:
++        return None, [], Decimal("0"), Decimal("0")
++
++    recoveries = (
++        db.query(BadDebtRecovery)
++        .filter(BadDebtRecovery.voucher_id == voucher.id)
++        .order_by(BadDebtRecovery.created_at.asc(), BadDebtRecovery.id.asc())
++        .all()
++    )
++    recovered_total = sum((recovery.recovery_amount for recovery in recoveries), Decimal("0"))
++    remaining_amount = voucher.bad_debt_amount - recovered_total
++    if remaining_amount < Decimal("0"):
++        remaining_amount = Decimal("0")
++    return voucher, recoveries, recovered_total, remaining_amount
++
++
+ def _run_commission_settleable_recompute_non_blocking(
+     db: Session, *, bill_id: str, as_of_date: date | None
+ ) -> None:

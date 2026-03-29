@@ -1,0 +1,1039 @@
+diff --git a/frontend/src/api/billing.ts b/frontend/src/api/billing.ts
+index 86132ef..9404e76 100644
+--- a/frontend/src/api/billing.ts
++++ b/frontend/src/api/billing.ts
+@@ -1,7 +1,12 @@
+ import { http } from './http'
+ import type { Pagination } from './types'
+ import type {
++    BadDebtStatus,
+     BillDetail,
++    BillBadDebtActionPayload,
++    BillBadDebtRecovery,
++    BillBadDebtRecoveryPayload,
++    BillBadDebtVoucher,
+     BillFromDraftsPayload,
+     BillListItem,
+     BillListParams,
+@@ -27,6 +32,8 @@ interface BackendBill {
+     case_no?: string | null
+     direction?: string | null
+     status?: string | null
++    bad_debt_status?: string | null
++    bad_debt_substatus?: string | null
+     total_gov?: number | string | null
+     total_service?: number | string | null
+     total_misc?: number | string | null
+@@ -57,6 +64,28 @@ interface BackendBill {
+     source_draft_labels?: string[] | null
+     primary_draft_id?: string | null
+     primary_draft_label?: string | null
++    bad_debt_voucher?: BackendBadDebtVoucher | null
++    bad_debt_recoveries?: BackendBadDebtRecovery[] | null
++    bad_debt_total_recovered?: number | string | null
++    bad_debt_remaining_amount?: number | string | null
++}
++
++interface BackendBadDebtVoucher {
++    id: string
++    bill_id: string
++    status: string
++    bad_debt_amount: number | string | null
++    recovered_amount: number | string | null
++    bad_debt_date?: string | null
++    remark?: string | null
++}
++
++interface BackendBadDebtRecovery {
++    id: string
++    voucher_id: string
++    recovery_amount: number | string | null
++    recovery_date?: string | null
++    remark?: string | null
+ }
+ 
+ interface BackendPayment {
+@@ -125,6 +154,8 @@ function mapBillDetail(input: BackendBill): BillDetail {
+         case_no: input.case_no || undefined,
+         direction: input.direction || undefined,
+         bill_date: input.bill_date || undefined,
++        bad_debt_status: (input.bad_debt_status || 'NONE') as BadDebtStatus,
++        bad_debt_substatus: input.bad_debt_substatus || undefined,
+         total_gov: input.total_gov != null ? asNumber(input.total_gov) : undefined,
+         total_service: input.total_service != null ? asNumber(input.total_service) : undefined,
+         total_misc: input.total_misc != null ? asNumber(input.total_misc) : undefined,
+@@ -147,11 +178,39 @@ function mapBillDetail(input: BackendBill): BillDetail {
+         primary_draft_id: input.primary_draft_id || undefined,
+         primary_draft_label: input.primary_draft_label || undefined,
+         notes: input.notes || undefined,
++        bad_debt_voucher: input.bad_debt_voucher ? mapBadDebtVoucher(input.bad_debt_voucher) : null,
++        bad_debt_recoveries: (input.bad_debt_recoveries || []).map(mapBadDebtRecovery),
++        bad_debt_total_recovered:
++            input.bad_debt_total_recovered != null ? asNumber(input.bad_debt_total_recovered) : 0,
++        bad_debt_remaining_amount:
++            input.bad_debt_remaining_amount != null ? asNumber(input.bad_debt_remaining_amount) : 0,
+         created_at: input.created_at,
+         updated_at: input.updated_at,
+     }
+ }
+ 
++function mapBadDebtVoucher(input: BackendBadDebtVoucher): BillBadDebtVoucher {
++    return {
++        id: input.id,
++        bill_id: input.bill_id,
++        status: (input.status || 'OPEN') as BadDebtStatus,
++        bad_debt_amount: asNumber(input.bad_debt_amount),
++        recovered_amount: asNumber(input.recovered_amount),
++        bad_debt_date: input.bad_debt_date || undefined,
++        remark: input.remark || undefined,
++    }
++}
++
++function mapBadDebtRecovery(input: BackendBadDebtRecovery): BillBadDebtRecovery {
++    return {
++        id: input.id,
++        voucher_id: input.voucher_id,
++        recovery_amount: asNumber(input.recovery_amount),
++        recovery_date: input.recovery_date || undefined,
++        remark: input.remark || undefined,
++    }
++}
++
+ function mapPayment(
+     input: BackendPayment,
+     extras: Partial<PaymentListItem> = {}
+@@ -251,6 +310,22 @@ export async function printBill(id: string): Promise<Blob> {
+     return response.data
+ }
+ 
++export async function markBillBadDebt(
++    billId: string,
++    payload: BillBadDebtActionPayload
++): Promise<BillDetail> {
++    const response = await http.post<BackendBill>(`/bills/${billId}/bad-debt`, payload)
++    return mapBillDetail(response.data)
++}
++
++export async function recoverBillBadDebt(
++    billId: string,
++    payload: BillBadDebtRecoveryPayload
++): Promise<BillDetail> {
++    const response = await http.post<BackendBill>(`/bills/${billId}/bad-debt/recover`, payload)
++    return mapBillDetail(response.data)
++}
++
+ // ============ Payments ============
+ 
+ /**
+diff --git a/frontend/src/api/billing.types.ts b/frontend/src/api/billing.types.ts
+index 12ac042..1793494 100644
+--- a/frontend/src/api/billing.types.ts
++++ b/frontend/src/api/billing.types.ts
+@@ -4,6 +4,13 @@
+ 
+ export type BillStatus = string
+ export type BillDirection = 'AR' | 'AP'
++export type BadDebtStatus = 'NONE' | 'OPEN' | 'CLOSED' | string
++export type BadDebtSubstatus =
++    | 'MANUAL_MARK'
++    | 'PARTIAL_TRANSFER'
++    | 'PARTIAL_RECOVERY'
++    | 'FULLY_RECOVERED'
++    | string
+ 
+ export interface BillListItem {
+     id: string
+@@ -48,6 +55,8 @@ export interface BillDetail {
+     issue_date?: string
+     bill_date?: string
+     due_date?: string
++    bad_debt_status?: BadDebtStatus
++    bad_debt_substatus?: BadDebtSubstatus | null
+     total_gov?: number
+     total_service?: number
+     total_misc?: number
+@@ -57,10 +66,32 @@ export interface BillDetail {
+     primary_draft_id?: string
+     primary_draft_label?: string
+     notes?: string
++    bad_debt_voucher?: BillBadDebtVoucher | null
++    bad_debt_recoveries?: BillBadDebtRecovery[]
++    bad_debt_total_recovered?: number
++    bad_debt_remaining_amount?: number
+     created_at?: string
+     updated_at?: string
+ }
+ 
++export interface BillBadDebtVoucher {
++    id: string
++    bill_id: string
++    status: BadDebtStatus
++    bad_debt_amount: number
++    recovered_amount: number
++    bad_debt_date?: string
++    remark?: string
++}
++
++export interface BillBadDebtRecovery {
++    id: string
++    voucher_id: string
++    recovery_amount: number
++    recovery_date?: string
++    remark?: string
++}
++
+ export interface BillListParams {
+     page?: number
+     page_size?: number
+@@ -94,6 +125,18 @@ export interface BillManualItem {
+     year_no?: number
+ }
+ 
++export interface BillBadDebtActionPayload {
++    mode: 'MARK' | 'TRANSFER'
++    bad_debt_date?: string
++    remark?: string
++}
++
++export interface BillBadDebtRecoveryPayload {
++    recovery_amount: number
++    recovery_date?: string
++    remark?: string
++}
++
+ // Payment Types
+ export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'CHECK' | 'OTHER'
+ 
+diff --git a/frontend/src/modules/billing/pages/BillDetail.vue b/frontend/src/modules/billing/pages/BillDetail.vue
+index a892439..72429f5 100644
+--- a/frontend/src/modules/billing/pages/BillDetail.vue
++++ b/frontend/src/modules/billing/pages/BillDetail.vue
+@@ -158,6 +158,13 @@
+                 <h3 class="panel-heading">{{ ZH.billDetail.notes }}</h3>
+                 <p class="notes-content">{{ bill.notes }}</p>
+               </div>
++
++              <BadDebtPanel
++                :bill="bill"
++                :can-mark="canMarkBadDebt"
++                :can-recover="canRecoverBadDebt"
++                @changed="fetchBill"
++              />
+             </div>
+ 
+             <div class="case-side-panel">
+@@ -189,32 +196,6 @@
+                   <router-link v-if="feeDraftRelation" :to="`/fees/drafts/${feeDraftRelation.id}`">
+                     <el-button size="small">查看费用草稿</el-button>
+                   </router-link>
+-                  <el-popconfirm
+-                    v-if="canOperateBadDebt && !isBadDebt"
+-                    title="确定将该账单标记为坏账？"
+-                    confirm-button-text="确定"
+-                    cancel-button-text="取消"
+-                    @confirm="handleMarkBadDebt"
+-                  >
+-                    <template #reference>
+-                      <el-button size="small" type="danger" :loading="badDebtActionLoading">
+-                        标记坏账
+-                      </el-button>
+-                    </template>
+-                  </el-popconfirm>
+-                  <el-popconfirm
+-                    v-else-if="canOperateBadDebt && isBadDebt"
+-                    title="确定将该账单恢复为未结清状态？"
+-                    confirm-button-text="确定"
+-                    cancel-button-text="取消"
+-                    @confirm="handleRestoreBadDebt"
+-                  >
+-                    <template #reference>
+-                      <el-button size="small" :loading="badDebtActionLoading">
+-                        恢复账单
+-                      </el-button>
+-                    </template>
+-                  </el-popconfirm>
+                 </div>
+               </div>
+             </div>
+@@ -296,17 +277,17 @@ import { useRoute, useRouter } from 'vue-router'
+ import { ElMessage } from 'element-plus'
+ import { getBill, printBill, getOffsets, reverseOffset } from '../../../api/billing'
+ import type { BillDetail, OffsetListItem } from '../../../api/billing.types'
+-import { markBillBadDebt, restoreBillBadDebt } from '../../../api/collections'
+-import type { BadDebtBillResult } from '../../../api/collections.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import BadDebtPanel from '../components/BadDebtPanel.vue'
+ import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
+ import { usePageContext } from '../../../stores/pageContext'
+ import { useAuthStore } from '../../../stores/auth'
+ import { ZH } from '../../../constants/labels.zh'
+ import { getBillStatusText } from '../../../constants/displayText'
+ 
+-const BAD_DEBT_ACTION_PERMISSION = 'BadDebt.Action'
++const BAD_DEBT_MARK_PERMISSION = 'Billing.BadDebtMark'
++const BAD_DEBT_RECOVER_PERMISSION = 'Billing.BadDebtRecover'
+ 
+ const route = useRoute()
+ const router = useRouter()
+@@ -318,14 +299,13 @@ const loading = ref(false)
+ const printing = ref(false)
+ const error = ref<ApiError | null>(null)
+ const activeTab = ref('items')
+-const badDebtActionLoading = ref(false)
+ 
+ const offsets = ref<OffsetListItem[]>([])
+ const offsetsLoading = ref(false)
+ 
+ const billId = computed(() => String(route.params.id || ''))
+-const isBadDebt = computed(() => bill.value?.status === 'BAD_DEBT')
+-const canOperateBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_ACTION_PERMISSION))
++const canMarkBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_MARK_PERMISSION))
++const canRecoverBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_RECOVER_PERMISSION))
+ const billDisplayNo = computed(() => {
+   if (!bill.value?.id) return '—'
+   return bill.value.bill_no || `账单-${bill.value.id.slice(0, 8).toUpperCase()}`
+@@ -471,106 +451,6 @@ async function handleReverseOffset(offsetId: string) {
+   }
+ }
+ 
+-function applyBadDebtResult(result: BadDebtBillResult) {
+-  if (!bill.value) return
+-  bill.value = {
+-    ...bill.value,
+-    status: result.status,
+-    currency: result.currency || bill.value.currency,
+-    amount: result.amount,
+-    balance: result.balance,
+-    issue_date: result.bill_date || bill.value.issue_date,
+-    due_date: result.due_date || bill.value.due_date,
+-    updated_at: result.updated_at || bill.value.updated_at,
+-  }
+-}
+-
+-function isApiError(error: unknown): error is ApiError {
+-  if (!error || typeof error !== 'object') return false
+-  const candidate = error as Partial<ApiError>
+-  return (
+-    typeof candidate.status === 'number'
+-    && typeof candidate.code === 'string'
+-    && typeof candidate.message === 'string'
+-  )
+-}
+-
+-function normalizeBadDebtApiError(error: unknown): ApiError {
+-  if (isApiError(error)) return error
+-  return {
+-    status: 0,
+-    code: 'UNKNOWN_ERROR',
+-    message: 'UNKNOWN_ERROR',
+-  }
+-}
+-
+-function mapBadDebtErrorMessage(apiError: ApiError): string {
+-  const { status, code } = apiError
+-
+-  if (status === 400 && code === 'BAD_DEBT_NOT_ALLOWED') {
+-    return '当前账单不满足坏账操作条件'
+-  }
+-
+-  if (status === 401) {
+-    return '登录已失效，请重新登录'
+-  }
+-
+-  if (status === 403) {
+-    return '无权限执行坏账操作'
+-  }
+-
+-  if (status === 404 && code === 'BILL_NOT_FOUND') {
+-    return '未找到目标账单'
+-  }
+-
+-  if (
+-    status === 409
+-    && (code === 'BAD_DEBT_ALREADY_MARKED' || code === 'BAD_DEBT_RESTORE_INVALID')
+-  ) {
+-    return '账单状态冲突，请刷新后重试'
+-  }
+-
+-  if (status === 422) {
+-    return '参数校验失败，请检查后重试'
+-  }
+-
+-  return '坏账操作失败，请稍后重试'
+-}
+-
+-async function handleMarkBadDebt() {
+-  if (!billId.value || badDebtActionLoading.value) return
+-  badDebtActionLoading.value = true
+-  error.value = null
+-  try {
+-    const result = await markBillBadDebt(billId.value)
+-    applyBadDebtResult(result)
+-    ElMessage.success('账单已标记为坏账')
+-  } catch (err) {
+-    const apiError = normalizeBadDebtApiError(err)
+-    error.value = apiError
+-    ElMessage.error(mapBadDebtErrorMessage(apiError))
+-  } finally {
+-    badDebtActionLoading.value = false
+-  }
+-}
+-
+-async function handleRestoreBadDebt() {
+-  if (!billId.value || badDebtActionLoading.value) return
+-  badDebtActionLoading.value = true
+-  error.value = null
+-  try {
+-    const result = await restoreBillBadDebt(billId.value)
+-    applyBadDebtResult(result)
+-    ElMessage.success('账单状态已恢复')
+-  } catch (err) {
+-    const apiError = normalizeBadDebtApiError(err)
+-    error.value = apiError
+-    ElMessage.error(mapBadDebtErrorMessage(apiError))
+-  } finally {
+-    badDebtActionLoading.value = false
+-  }
+-}
+-
+ onMounted(() => {
+   fetchBill()
+   fetchOffsets()
+diff --git a/frontend/src/modules/billing/components/BadDebtPanel.vue b/frontend/src/modules/billing/components/BadDebtPanel.vue
+new file mode 100644
+index 0000000..7a61457
+--- /dev/null
++++ b/frontend/src/modules/billing/components/BadDebtPanel.vue
+@@ -0,0 +1,571 @@
++<template>
++  <div class="bad-debt-panel">
++    <div class="panel-header">
++      <div>
++        <h3 class="panel-heading">坏账信息</h3>
++        <p class="panel-description">查看坏账状态、主凭证和回收记录。</p>
++      </div>
++      <div class="panel-actions">
++        <el-button
++          v-if="canMark && bill.status !== 'BAD_DEBT'"
++          size="small"
++          type="danger"
++          :loading="marking"
++          @click="openMarkDialog('MARK')"
++        >
++          标记坏账
++        </el-button>
++        <el-button
++          v-if="canMark && bill.status !== 'BAD_DEBT'"
++          size="small"
++          type="warning"
++          :loading="marking"
++          @click="openMarkDialog('TRANSFER')"
++        >
++          剩余转坏账
++        </el-button>
++        <el-button
++          v-if="canRecover && hasBadDebtVoucher && remainingAmount > 0"
++          size="small"
++          type="success"
++          :loading="recovering"
++          @click="openRecoverDialog"
++        >
++          回收坏账
++        </el-button>
++      </div>
++    </div>
++
++    <el-alert
++      v-if="!canMark && !canRecover"
++      title="当前账号没有坏账操作权限。"
++      type="info"
++      :closable="false"
++      show-icon
++      style="margin-bottom: 16px"
++    />
++
++    <div class="summary-grid">
++      <div class="summary-card">
++        <span class="summary-label">坏账状态</span>
++        <el-tag :type="badDebtStatusTagType" size="small">{{ badDebtStatusText }}</el-tag>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">坏账子状态</span>
++        <el-tag v-if="badDebtSubstatusText !== '—'" type="info" size="small">
++          {{ badDebtSubstatusText }}
++        </el-tag>
++        <span v-else class="summary-value">—</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">累计回收</span>
++        <span class="summary-value mono-num">{{ formatAmount(totalRecovered) }}</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">剩余坏账金额</span>
++        <span class="summary-value mono-num" :class="{ 'summary-value-danger': remainingAmount > 0 }">
++          {{ formatAmount(remainingAmount) }}
++        </span>
++      </div>
++    </div>
++
++    <div class="content-grid">
++      <section class="content-card">
++        <div class="content-title">坏账主凭证</div>
++        <template v-if="badDebtVoucher">
++          <div class="info-grid">
++            <div class="info-item">
++              <span class="info-label">凭证编号</span>
++              <span class="info-value mono-num">{{ badDebtVoucher.id }}</span>
++            </div>
++            <div class="info-item">
++              <span class="info-label">凭证状态</span>
++              <el-tag :type="badDebtVoucherTagType" size="small">
++                {{ badDebtVoucherStatusText }}
++              </el-tag>
++            </div>
++            <div class="info-item">
++              <span class="info-label">坏账金额</span>
++              <span class="info-value mono-num">{{ formatAmount(badDebtVoucher.bad_debt_amount) }}</span>
++            </div>
++            <div class="info-item">
++              <span class="info-label">已回收金额</span>
++              <span class="info-value mono-num">{{ formatAmount(badDebtVoucher.recovered_amount) }}</span>
++            </div>
++            <div class="info-item">
++              <span class="info-label">坏账日期</span>
++              <span class="info-value">{{ formatDate(badDebtVoucher.bad_debt_date) }}</span>
++            </div>
++            <div class="info-item">
++              <span class="info-label">备注</span>
++              <span class="info-value">{{ badDebtVoucher.remark || '—' }}</span>
++            </div>
++          </div>
++        </template>
++        <div v-else class="empty-state">暂无坏账主凭证。</div>
++      </section>
++
++      <section class="content-card">
++        <div class="content-title">回收记录</div>
++        <template v-if="recoveries.length">
++          <el-table :data="recoveries" stripe size="small" class="compact-table">
++            <el-table-column label="回收日期" width="130">
++              <template #default="{ row }">
++                {{ formatDate(row.recovery_date) }}
++              </template>
++            </el-table-column>
++            <el-table-column label="回收金额" width="140" align="right">
++              <template #default="{ row }">
++                <span class="mono-num">{{ formatAmount(row.recovery_amount) }}</span>
++              </template>
++            </el-table-column>
++            <el-table-column label="备注" min-width="180">
++              <template #default="{ row }">
++                {{ row.remark || '—' }}
++              </template>
++            </el-table-column>
++          </el-table>
++        </template>
++        <div v-else class="empty-state">暂无回收记录。</div>
++      </section>
++    </div>
++
++    <el-dialog
++      v-model="markDialogVisible"
++      :title="markDialogTitle"
++      width="520px"
++      :close-on-click-modal="false"
++      destroy-on-close
++    >
++      <el-form :model="markForm" label-position="top">
++        <el-form-item label="坏账日期">
++          <el-date-picker
++            v-model="markForm.bad_debt_date"
++            type="date"
++            value-format="YYYY-MM-DD"
++            format="YYYY-MM-DD"
++            placeholder="请选择坏账日期"
++            style="width: 100%"
++          />
++        </el-form-item>
++        <el-form-item label="备注">
++          <el-input
++            v-model.trim="markForm.remark"
++            type="textarea"
++            :rows="3"
++            placeholder="请输入备注"
++          />
++        </el-form-item>
++      </el-form>
++      <template #footer>
++        <el-button @click="markDialogVisible = false">取消</el-button>
++        <el-button type="primary" :loading="marking" @click="submitMarkBadDebt">
++          确认
++        </el-button>
++      </template>
++    </el-dialog>
++
++    <el-dialog
++      v-model="recoverDialogVisible"
++      title="回收坏账"
++      width="520px"
++      :close-on-click-modal="false"
++      destroy-on-close
++    >
++      <el-form ref="recoverFormRef" :model="recoverForm" :rules="recoverRules" label-position="top">
++        <el-form-item label="回收金额" prop="recovery_amount">
++          <el-input-number
++            v-model="recoverForm.recovery_amount"
++            :min="0"
++            :precision="2"
++            controls-position="right"
++            placeholder="请输入回收金额"
++            style="width: 100%"
++          />
++        </el-form-item>
++        <el-form-item label="回收日期">
++          <el-date-picker
++            v-model="recoverForm.recovery_date"
++            type="date"
++            value-format="YYYY-MM-DD"
++            format="YYYY-MM-DD"
++            placeholder="请选择回收日期"
++            style="width: 100%"
++          />
++        </el-form-item>
++        <el-form-item label="备注">
++          <el-input
++            v-model.trim="recoverForm.remark"
++            type="textarea"
++            :rows="3"
++            placeholder="请输入备注"
++          />
++        </el-form-item>
++      </el-form>
++      <template #footer>
++        <el-button @click="recoverDialogVisible = false">取消</el-button>
++        <el-button type="primary" :loading="recovering" @click="submitRecoverBadDebt">
++          确认
++        </el-button>
++      </template>
++    </el-dialog>
++  </div>
++</template>
++
++<script setup lang="ts">
++import { computed, reactive, ref } from 'vue'
++import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
++import { markBillBadDebt, recoverBillBadDebt } from '../../../api/billing'
++import type {
++  BillBadDebtActionPayload,
++  BillBadDebtRecoveryPayload,
++  BillDetail,
++} from '../../../api/billing.types'
++
++type MarkMode = BillBadDebtActionPayload['mode']
++
++const props = defineProps<{
++  bill: BillDetail
++  canMark: boolean
++  canRecover: boolean
++}>()
++
++const emit = defineEmits<{
++  changed: []
++}>()
++
++const markDialogVisible = ref(false)
++const recoverDialogVisible = ref(false)
++const marking = ref(false)
++const recovering = ref(false)
++const markMode = ref<MarkMode>('MARK')
++const recoverFormRef = ref<FormInstance>()
++
++const markForm = reactive<BillBadDebtActionPayload>({
++  mode: 'MARK',
++  bad_debt_date: '',
++  remark: '',
++})
++
++const recoverForm = reactive<BillBadDebtRecoveryPayload & { recovery_date: string | '' }>({
++  recovery_amount: 0,
++  recovery_date: '',
++  remark: '',
++})
++
++const recoverRules: FormRules = {
++  recovery_amount: [
++    { required: true, message: '请输入回收金额', trigger: 'blur' },
++    {
++      validator: (_, value, callback) => {
++        if (typeof value !== 'number' || value <= 0) {
++          callback(new Error('回收金额必须大于 0'))
++          return
++        }
++        callback()
++      },
++      trigger: 'blur',
++    },
++  ],
++}
++
++const badDebtVoucher = computed(() => props.bill.bad_debt_voucher || null)
++const recoveries = computed(() => props.bill.bad_debt_recoveries || [])
++const totalRecovered = computed(() => props.bill.bad_debt_total_recovered || 0)
++const remainingAmount = computed(() => props.bill.bad_debt_remaining_amount || 0)
++const badDebtStatus = computed(() => (props.bill.bad_debt_status || 'NONE').toUpperCase())
++const badDebtSubstatus = computed(() => (props.bill.bad_debt_substatus || '').toUpperCase())
++const hasBadDebtVoucher = computed(() => !!badDebtVoucher.value)
++
++const badDebtStatusText = computed(() => {
++  switch (badDebtStatus.value) {
++    case 'OPEN':
++      return '坏账处理中'
++    case 'CLOSED':
++      return '已结清'
++    case 'NONE':
++    default:
++      return '未坏账'
++  }
++})
++
++const badDebtSubstatusText = computed(() => {
++  switch (badDebtSubstatus.value) {
++    case 'MANUAL_MARK':
++      return '手工标记'
++    case 'PARTIAL_TRANSFER':
++      return '剩余转坏账'
++    case 'PARTIAL_RECOVERY':
++      return '部分回收'
++    case 'FULLY_RECOVERED':
++      return '全部回收'
++    default:
++      return '—'
++  }
++})
++
++const badDebtStatusTagType = computed<'info' | 'warning' | 'success'>(() => {
++  switch (badDebtStatus.value) {
++    case 'OPEN':
++      return 'warning'
++    case 'CLOSED':
++      return 'success'
++    default:
++      return 'info'
++  }
++})
++
++const badDebtVoucherStatusText = computed(() => {
++  const status = (badDebtVoucher.value?.status || 'OPEN').toUpperCase()
++  if (status === 'CLOSED') return '已结清'
++  if (status === 'OPEN') return '处理中'
++  return status
++})
++
++const badDebtVoucherTagType = computed<'info' | 'warning' | 'success'>(() => {
++  const status = (badDebtVoucher.value?.status || 'OPEN').toUpperCase()
++  if (status === 'CLOSED') return 'success'
++  if (status === 'OPEN') return 'warning'
++  return 'info'
++})
++
++const markDialogTitle = computed(() => (markMode.value === 'TRANSFER' ? '剩余转坏账' : '标记坏账'))
++
++function todayValue(): string {
++  const date = new Date()
++  const year = date.getFullYear()
++  const month = String(date.getMonth() + 1).padStart(2, '0')
++  const day = String(date.getDate()).padStart(2, '0')
++  return `${year}-${month}-${day}`
++}
++
++function formatAmount(value: number): string {
++  return new Intl.NumberFormat('zh-CN', {
++    style: 'currency',
++    currency: props.bill.currency || 'CNY',
++  }).format(value || 0)
++}
++
++function formatDate(value?: string | null): string {
++  if (!value) return '—'
++  try {
++    return new Date(value).toLocaleDateString('zh-CN')
++  } catch {
++    return value
++  }
++}
++
++function openMarkDialog(mode: MarkMode) {
++  markMode.value = mode
++  markForm.mode = mode
++  markForm.bad_debt_date = todayValue()
++  markForm.remark = ''
++  markDialogVisible.value = true
++}
++
++function openRecoverDialog() {
++  recoverForm.recovery_amount = remainingAmount.value
++  recoverForm.recovery_date = todayValue()
++  recoverForm.remark = ''
++  recoverDialogVisible.value = true
++}
++
++async function submitMarkBadDebt() {
++  if (marking.value) return
++  marking.value = true
++  try {
++    await markBillBadDebt(props.bill.id, {
++      mode: markForm.mode,
++      bad_debt_date: markForm.bad_debt_date || undefined,
++      remark: markForm.remark || undefined,
++    })
++    ElMessage.success(markForm.mode === 'TRANSFER' ? '剩余部分已转坏账' : '账单已标记为坏账')
++    markDialogVisible.value = false
++    emit('changed')
++  } catch (err) {
++    ElMessage.error(resolveActionErrorMessage(err))
++  } finally {
++    marking.value = false
++  }
++}
++
++async function submitRecoverBadDebt() {
++  if (recovering.value) return
++  const form = recoverFormRef.value
++  if (form) {
++    const valid = await form.validate().catch(() => false)
++    if (!valid) return
++  }
++
++  recovering.value = true
++  try {
++    await recoverBillBadDebt(props.bill.id, {
++      recovery_amount: Number(recoverForm.recovery_amount),
++      recovery_date: recoverForm.recovery_date || undefined,
++      remark: recoverForm.remark || undefined,
++    })
++    ElMessage.success('坏账已回收')
++    recoverDialogVisible.value = false
++    emit('changed')
++  } catch (err) {
++    ElMessage.error(resolveActionErrorMessage(err))
++  } finally {
++    recovering.value = false
++  }
++}
++
++function resolveActionErrorMessage(error: unknown): string {
++  const candidate = error as { status?: number; code?: string }
++  if (candidate?.status === 401) return '登录已失效，请重新登录'
++  if (candidate?.status === 403) return '无权限执行该操作'
++  if (candidate?.status === 404) return '未找到目标账单'
++  if (candidate?.status === 400) {
++    switch (candidate.code) {
++      case 'BAD_DEBT_NOT_ALLOWED':
++        return '当前账单不满足坏账操作条件'
++      case 'BAD_DEBT_VOUCHER_NOT_FOUND':
++        return '未找到坏账凭证，请先标记坏账'
++      case 'BAD_DEBT_RECOVERY_NOT_ALLOWED':
++        return '当前账单不支持回收坏账'
++      case 'BAD_DEBT_RECOVERY_EXCEEDS_REMAINING':
++        return '回收金额不能超过剩余坏账金额'
++      default:
++        return '坏账操作失败，请稍后重试'
++    }
++  }
++  if (candidate?.status === 409) return '账单状态冲突，请刷新后重试'
++  if (candidate?.status === 422) return '参数校验失败，请检查后重试'
++  return '坏账操作失败，请稍后重试'
++}
++</script>
++
++<style scoped>
++.bad-debt-panel {
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.panel-header {
++  display: flex;
++  justify-content: space-between;
++  gap: 16px;
++  align-items: flex-start;
++}
++
++.panel-actions {
++  display: flex;
++  gap: 8px;
++  flex-wrap: wrap;
++  justify-content: flex-end;
++}
++
++.panel-description {
++  margin: 6px 0 0;
++  color: var(--text-sub);
++  font-size: 13px;
++}
++
++.summary-grid {
++  display: grid;
++  grid-template-columns: repeat(4, minmax(0, 1fr));
++  gap: 12px;
++}
++
++.summary-card,
++.content-card {
++  border: 1px solid var(--border-light);
++  border-radius: 12px;
++  background: var(--bg-card);
++}
++
++.summary-card {
++  padding: 14px 16px;
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++}
++
++.summary-label {
++  font-size: 13px;
++  color: var(--text-sub);
++}
++
++.summary-value {
++  font-size: 16px;
++  font-weight: 600;
++}
++
++.summary-value-danger {
++  color: var(--color-danger);
++}
++
++.content-grid {
++  display: grid;
++  grid-template-columns: 1fr;
++  gap: 12px;
++}
++
++.content-card {
++  padding: 16px;
++}
++
++.content-title {
++  margin-bottom: 12px;
++  font-size: 15px;
++  font-weight: 600;
++  color: var(--text-main);
++}
++
++.info-grid {
++  display: grid;
++  grid-template-columns: repeat(2, minmax(0, 1fr));
++  gap: 12px;
++}
++
++.info-item {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.info-label {
++  font-size: 13px;
++  color: var(--text-sub);
++}
++
++.info-value {
++  color: var(--text-main);
++}
++
++.empty-state {
++  padding: 12px 0 4px;
++  color: var(--text-sub);
++}
++
++.mono-num {
++  font-family: var(--font-mono);
++}
++
++@media (max-width: 960px) {
++  .summary-grid,
++  .info-grid {
++    grid-template-columns: 1fr 1fr;
++  }
++}
++
++@media (max-width: 640px) {
++  .panel-header {
++    flex-direction: column;
++  }
++
++  .panel-actions {
++    justify-content: flex-start;
++  }
++
++  .summary-grid,
++  .info-grid {
++    grid-template-columns: 1fr;
++  }
++}
++</style>
+diff --git a/artifacts/BADDEBT-FE-BILL-01/baseline_allowlist.diff b/artifacts/BADDEBT-FE-BILL-01/baseline_allowlist.diff
+new file mode 100644
+index 0000000..8b13789
+--- /dev/null
++++ b/artifacts/BADDEBT-FE-BILL-01/baseline_allowlist.diff
+@@ -0,0 +1 @@
++
+diff --git a/artifacts/BADDEBT-FE-BILL-01/baseline_external_files.txt b/artifacts/BADDEBT-FE-BILL-01/baseline_external_files.txt
+new file mode 100644
+index 0000000..e201a64
+--- /dev/null
++++ b/artifacts/BADDEBT-FE-BILL-01/baseline_external_files.txt
+@@ -0,0 +1,26 @@
++backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
++backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
++backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
++backend/app/modules/annuity/models.py
++backend/app/modules/billing/api.py
++backend/app/modules/billing/models.py
++backend/app/modules/billing/schemas.py
++backend/app/modules/billing/service.py
++backend/app/modules/commission/models.py
++backend/app/modules/documents/api.py
++backend/app/modules/expenses/models.py
++backend/tests/test_annuity_generate.py
++backend/tests/test_b2_reply_chain.py
++backend/tests/test_case_receipt_crud.py
++.superpowers/
++backend/alembic/versions/baddebt_db_01_create_bad_debt_tables.py
++backend/tests/test_billing_bad_debt_actions.py
++backend/tests/test_billing_bad_debt_detail_api.py
++backend/tests/test_billing_bad_debt_recovery.py
++docs/superpowers/plans/2026-03-28-billing-bad-debt-workflow.md
++docs/superpowers/specs/2026-03-28-billing-bad-debt-workflow-design.md
++tasks/postenhancement/backend/BADDEBT-BE-ACT-01.md
++tasks/postenhancement/backend/BADDEBT-BE-BILL-01.md
++tasks/postenhancement/backend/BADDEBT-BE-REC-01.md
++tasks/postenhancement/backend/BADDEBT-DB-01.md
++tasks/postenhancement/frontend/BADDEBT-FE-BILL-01.md
+diff --git a/artifacts/BADDEBT-FE-BILL-01/results.jsonl b/artifacts/BADDEBT-FE-BILL-01/results.jsonl
+new file mode 100644
+index 0000000..1ff4f94
+--- /dev/null
++++ b/artifacts/BADDEBT-FE-BILL-01/results.jsonl
+@@ -0,0 +1,3 @@
++{"step":"lint","cmd":"cd frontend && npm run lint -- src/api/billing.ts src/api/billing.types.ts src/modules/billing/pages/BillDetail.vue src/modules/billing/components/BadDebtPanel.vue","rc":0}
++{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}
++{"step":"gate","cmd":"./scripts/task_validate.sh BADDEBT-FE-BILL-01","rc":0}
+diff --git a/artifacts/BADDEBT-FE-BILL-01/summary.md b/artifacts/BADDEBT-FE-BILL-01/summary.md
+new file mode 100644
+index 0000000..8dadfe3
+--- /dev/null
++++ b/artifacts/BADDEBT-FE-BILL-01/summary.md
+@@ -0,0 +1,6 @@
++# BADDEBT-FE-BILL-01 Evidence Summary
++
++- Scope: bill detail bad-debt read/write contract, Chinese bad-debt summary panel, mark/transfer/recover actions, restore UI removal.
++- Modified files: `frontend/src/api/billing.ts`, `frontend/src/api/billing.types.ts`, `frontend/src/modules/billing/pages/BillDetail.vue`, `frontend/src/modules/billing/components/BadDebtPanel.vue`
++- Verification: lint, typecheck, and task gate passed.
++- Baseline artifacts: `artifacts/BADDEBT-FE-BILL-01/baseline_allowlist.diff`, `artifacts/BADDEBT-FE-BILL-01/baseline_external_files.txt`

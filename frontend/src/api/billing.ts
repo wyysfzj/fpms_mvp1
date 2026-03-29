@@ -1,10 +1,16 @@
 import { http } from './http'
 import type { Pagination } from './types'
 import type {
+    BadDebtStatus,
     BillDetail,
+    BillBadDebtActionPayload,
+    BillBadDebtRecovery,
+    BillBadDebtRecoveryPayload,
+    BillBadDebtVoucher,
     BillFromDraftsPayload,
     BillListItem,
     BillListParams,
+    BillListResponse,
     BillManualPayload,
     CaseReceiptCreate,
     CaseReceiptListResponse,
@@ -27,6 +33,8 @@ interface BackendBill {
     case_no?: string | null
     direction?: string | null
     status?: string | null
+    bad_debt_status?: string | null
+    bad_debt_substatus?: string | null
     total_gov?: number | string | null
     total_service?: number | string | null
     total_misc?: number | string | null
@@ -57,6 +65,35 @@ interface BackendBill {
     source_draft_labels?: string[] | null
     primary_draft_id?: string | null
     primary_draft_label?: string | null
+    bad_debt_voucher?: BackendBadDebtVoucher | null
+    bad_debt_recoveries?: BackendBadDebtRecovery[] | null
+    bad_debt_total_recovered?: number | string | null
+    bad_debt_remaining_amount?: number | string | null
+}
+
+interface BackendBillListResponse extends Pagination<BackendBill> {
+    bad_debt_bill_count: number
+    bad_debt_amount: number | string
+    total_recovered_amount: number | string
+    remaining_bad_debt_balance: number | string
+}
+
+interface BackendBadDebtVoucher {
+    id: string
+    bill_id: string
+    status: string
+    bad_debt_amount: number | string | null
+    recovered_amount: number | string | null
+    bad_debt_date?: string | null
+    remark?: string | null
+}
+
+interface BackendBadDebtRecovery {
+    id: string
+    voucher_id: string
+    recovery_amount: number | string | null
+    recovery_date?: string | null
+    remark?: string | null
 }
 
 interface BackendPayment {
@@ -125,6 +162,8 @@ function mapBillDetail(input: BackendBill): BillDetail {
         case_no: input.case_no || undefined,
         direction: input.direction || undefined,
         bill_date: input.bill_date || undefined,
+        bad_debt_status: (input.bad_debt_status || 'NONE') as BadDebtStatus,
+        bad_debt_substatus: input.bad_debt_substatus || undefined,
         total_gov: input.total_gov != null ? asNumber(input.total_gov) : undefined,
         total_service: input.total_service != null ? asNumber(input.total_service) : undefined,
         total_misc: input.total_misc != null ? asNumber(input.total_misc) : undefined,
@@ -147,8 +186,36 @@ function mapBillDetail(input: BackendBill): BillDetail {
         primary_draft_id: input.primary_draft_id || undefined,
         primary_draft_label: input.primary_draft_label || undefined,
         notes: input.notes || undefined,
+        bad_debt_voucher: input.bad_debt_voucher ? mapBadDebtVoucher(input.bad_debt_voucher) : null,
+        bad_debt_recoveries: (input.bad_debt_recoveries || []).map(mapBadDebtRecovery),
+        bad_debt_total_recovered:
+            input.bad_debt_total_recovered != null ? asNumber(input.bad_debt_total_recovered) : 0,
+        bad_debt_remaining_amount:
+            input.bad_debt_remaining_amount != null ? asNumber(input.bad_debt_remaining_amount) : 0,
         created_at: input.created_at,
         updated_at: input.updated_at,
+    }
+}
+
+function mapBadDebtVoucher(input: BackendBadDebtVoucher): BillBadDebtVoucher {
+    return {
+        id: input.id,
+        bill_id: input.bill_id,
+        status: (input.status || 'OPEN') as BadDebtStatus,
+        bad_debt_amount: asNumber(input.bad_debt_amount),
+        recovered_amount: asNumber(input.recovered_amount),
+        bad_debt_date: input.bad_debt_date || undefined,
+        remark: input.remark || undefined,
+    }
+}
+
+function mapBadDebtRecovery(input: BackendBadDebtRecovery): BillBadDebtRecovery {
+    return {
+        id: input.id,
+        voucher_id: input.voucher_id,
+        recovery_amount: asNumber(input.recovery_amount),
+        recovery_date: input.recovery_date || undefined,
+        remark: input.remark || undefined,
     }
 }
 
@@ -204,14 +271,18 @@ function mapOffset(input: BackendOffset): OffsetListItem {
 /**
  * Get paginated list of bills
  */
-export async function getBills(params: BillListParams = {}): Promise<Pagination<BillListItem>> {
-    const { page = 1, page_size = 20, status, client_id } = params
-    const response = await http.get<Pagination<BackendBill>>('/bills', {
-        params: { page, page_size, status, client_id }
+export async function getBills(params: BillListParams = {}): Promise<BillListResponse> {
+    const { page = 1, page_size = 20, status, client_id, bad_debt_status } = params
+    const response = await http.get<BackendBillListResponse>('/bills', {
+        params: { page, page_size, status, client_id, bad_debt_status },
     })
 
     return {
         ...response.data,
+        bad_debt_bill_count: response.data.bad_debt_bill_count,
+        bad_debt_amount: asNumber(response.data.bad_debt_amount),
+        total_recovered_amount: asNumber(response.data.total_recovered_amount),
+        remaining_bad_debt_balance: asNumber(response.data.remaining_bad_debt_balance),
         items: response.data.items.map(mapBillListItem),
     }
 }
@@ -249,6 +320,22 @@ export async function createManualBill(payload: BillManualPayload): Promise<Bill
 export async function printBill(id: string): Promise<Blob> {
     const response = await http.get(`/bills/${id}/print`, { responseType: 'blob' })
     return response.data
+}
+
+export async function markBillBadDebt(
+    billId: string,
+    payload: BillBadDebtActionPayload
+): Promise<BillDetail> {
+    const response = await http.post<BackendBill>(`/bills/${billId}/bad-debt`, payload)
+    return mapBillDetail(response.data)
+}
+
+export async function recoverBillBadDebt(
+    billId: string,
+    payload: BillBadDebtRecoveryPayload
+): Promise<BillDetail> {
+    const response = await http.post<BackendBill>(`/bills/${billId}/bad-debt/recover`, payload)
+    return mapBillDetail(response.data)
 }
 
 // ============ Payments ============

@@ -1,0 +1,54 @@
+diff --git a/backend/app/modules/billing/models.py b/backend/app/modules/billing/models.py
+index 4534615..a84cd42 100644
+--- a/backend/app/modules/billing/models.py
++++ b/backend/app/modules/billing/models.py
+@@ -47,6 +47,10 @@ class Bill(UUIDPrimaryKeyMixin, AuditMixin, Base):
+     balance: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
++    bad_debt_status: Mapped[str] = mapped_column(
++        String(24), nullable=False, server_default=text("'NONE'")
++    )
++    bad_debt_substatus: Mapped[str | None] = mapped_column(String(24), nullable=True)
+ 
+ 
+ class BillItem(UUIDPrimaryKeyMixin, AuditMixin, Base):
+@@ -71,6 +75,38 @@ class BillItem(UUIDPrimaryKeyMixin, AuditMixin, Base):
+     )
+ 
+ 
++class BadDebtVoucher(UUIDPrimaryKeyMixin, AuditMixin, Base):
++    __tablename__ = "t_bad_debt_voucher"
++
++    bill_id: Mapped[str] = mapped_column(
++        String(36), ForeignKey("t_bill.id", ondelete="CASCADE"), nullable=False, unique=True
++    )
++    status: Mapped[str] = mapped_column(
++        String(24), nullable=False, server_default=text("'OPEN'")
++    )
++    bad_debt_amount: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    recovered_amount: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    bad_debt_date: Mapped[date | None] = mapped_column(Date, nullable=True)
++    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
++
++
++class BadDebtRecovery(UUIDPrimaryKeyMixin, AuditMixin, Base):
++    __tablename__ = "t_bad_debt_recovery"
++
++    voucher_id: Mapped[str] = mapped_column(
++        String(36), ForeignKey("t_bad_debt_voucher.id", ondelete="CASCADE"), nullable=False
++    )
++    recovery_amount: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    recovery_date: Mapped[date | None] = mapped_column(Date, nullable=True)
++    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
++
++
+ class CaseReceipt(UUIDPrimaryKeyMixin, AuditMixin, Base):
+     __tablename__ = "t_case_receipt"
+ 

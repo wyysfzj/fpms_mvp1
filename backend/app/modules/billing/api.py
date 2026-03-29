@@ -16,9 +16,14 @@ from app.models.system_param import SystemParam
 from app.modules.billing.doc_render_bill_context import BillContextBuilder
 from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
 from app.modules.billing.schemas import (
+    BillBadDebtActionSchema,
+    BillBadDebtRecoveryActionSchema,
+    BillBadDebtRecoveryResponse,
+    BillBadDebtVoucherResponse,
     BillDetailResponse,
     BillFromDraftsRequest,
     BillItemDetailResponse,
+    BillListBadDebtSummaryResponse,
     BillManualCreateSchema,
     BillResponse,
     CaseReceiptCreate,
@@ -31,10 +36,14 @@ from app.modules.billing.schemas import (
     PaymentSchema,
 )
 from app.modules.billing.service import (
+    apply_bill_bad_debt_action,
+    apply_bill_bad_debt_recovery,
     create_case_receipt,
     create_manual_bill_record,
     generate_bill_from_drafts,
+    list_bills,
     list_case_receipts,
+    load_bill_bad_debt_chain,
     process_payment,
     update_case_receipt,
 )
@@ -64,10 +73,127 @@ def _build_draft_display_label(draft: FeeDraft) -> str:
     return f"{draft.draft_type}-{draft.id[:8].upper()}"
 
 
+def _build_bill_detail_response(db: Session, bill_id: str) -> BillDetailResponse:
+    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+    if not bill:
+        raise_business_error(
+            "BILL_NOT_FOUND",
+            "Bill not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    bill_items = (
+        db.query(BillItem)
+        .filter(BillItem.bill_id == bill_id)
+        .order_by(BillItem.created_at.asc())
+        .all()
+    )
+    client = db.query(Client).filter(Client.id == bill.client_id).first()
+
+    case_ids = [item.case_id for item in bill_items if item.case_id]
+    unique_case_ids = list(dict.fromkeys(case_ids))
+    case_map: dict[str, Case] = {}
+    if unique_case_ids:
+        cases = db.query(Case).filter(Case.id.in_(unique_case_ids)).all()
+        case_map = {case.id: case for case in cases}
+
+    draft_ids = [item.draft_id for item in bill_items if item.draft_id]
+    unique_draft_ids = list(dict.fromkeys(draft_ids))
+    draft_map: dict[str, FeeDraft] = {}
+    if unique_draft_ids:
+        drafts = db.query(FeeDraft).filter(FeeDraft.id.in_(unique_draft_ids)).all()
+        draft_map = {draft.id: draft for draft in drafts}
+
+    primary_case_id = unique_case_ids[0] if len(unique_case_ids) == 1 else None
+    primary_case = case_map.get(primary_case_id) if primary_case_id else None
+
+    source_draft_labels = [
+        _build_draft_display_label(draft_map[draft_id])
+        for draft_id in unique_draft_ids
+        if draft_id in draft_map
+    ]
+    primary_draft_id = unique_draft_ids[0] if unique_draft_ids else None
+    primary_draft = draft_map.get(primary_draft_id) if primary_draft_id else None
+
+    items = [
+        BillItemDetailResponse(
+            id=item.id,
+            bill_id=item.bill_id,
+            case_id=item.case_id,
+            draft_id=item.draft_id,
+            fee_code=item.fee_code,
+            fee_name=item.fee_name,
+            fee_type=item.fee_type,
+            year_no=item.year_no,
+            description=item.fee_name or item.fee_code or "账单明细",
+            quantity=1,
+            unit_price=item.amount,
+            amount=item.amount,
+        )
+        for item in bill_items
+    ]
+
+    bad_debt_voucher, bad_debt_recoveries, bad_debt_total_recovered, bad_debt_remaining_amount = (
+        load_bill_bad_debt_chain(db, bill.id)
+    )
+
+    return BillDetailResponse(
+        id=bill.id,
+        bill_no=bill.bill_no,
+        client_id=bill.client_id,
+        client_name=_get_client_display_name(client),
+        case_id=primary_case.id if primary_case else None,
+        case_no=primary_case.case_no if primary_case else None,
+        currency=bill.currency,
+        direction=bill.direction,
+        status=bill.status,
+        bad_debt_status=bill.bad_debt_status,
+        bad_debt_substatus=bill.bad_debt_substatus,
+        total_gov=bill.total_gov,
+        total_service=bill.total_service,
+        total_misc=bill.total_misc,
+        amount=bill.amount,
+        balance=bill.balance,
+        bill_date=bill.bill_date,
+        due_date=bill.due_date,
+        items=items,
+        source_draft_ids=unique_draft_ids,
+        source_draft_labels=source_draft_labels,
+        primary_draft_id=primary_draft.id if primary_draft else None,
+        primary_draft_label=_build_draft_display_label(primary_draft) if primary_draft else None,
+        bad_debt_voucher=(
+            BillBadDebtVoucherResponse(
+                id=bad_debt_voucher.id,
+                bill_id=bad_debt_voucher.bill_id,
+                status=bad_debt_voucher.status,
+                bad_debt_amount=bad_debt_voucher.bad_debt_amount,
+                recovered_amount=bad_debt_voucher.recovered_amount,
+                bad_debt_date=bad_debt_voucher.bad_debt_date,
+                remark=bad_debt_voucher.remark,
+            )
+            if bad_debt_voucher
+            else None
+        ),
+        bad_debt_recoveries=[
+            BillBadDebtRecoveryResponse(
+                id=recovery.id,
+                voucher_id=recovery.voucher_id,
+                recovery_amount=recovery.recovery_amount,
+                recovery_date=recovery.recovery_date,
+                remark=recovery.remark,
+            )
+            for recovery in bad_debt_recoveries
+        ],
+        bad_debt_total_recovered=bad_debt_total_recovered,
+        bad_debt_remaining_amount=bad_debt_remaining_amount,
+    )
+
+
 @router.get("/bills", summary="List bills")
 def get_bills(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    bad_debt_status: str | None = Query(default=None),
     _perm: None = Depends(require_perm("Bill.Read")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
@@ -89,10 +215,11 @@ def get_bills(
     - 403: FORBIDDEN
     - 422: VALIDATION_ERROR
     """
-    query = db.query(Bill)
-    total = query.count()
-    bills = (
-        query.order_by(Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    bills, total, bad_debt_summary = list_bills(
+        db,
+        page=page,
+        page_size=page_size,
+        bad_debt_status=bad_debt_status,
     )
 
     # Batch-resolve client names for all bills in this page
@@ -117,7 +244,14 @@ def get_bills(
         }
         for bill in bills
     ]
-    return {"items": items, "page": page, "page_size": page_size, "total": total}
+    summary = BillListBadDebtSummaryResponse.model_validate(bad_debt_summary).model_dump()
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        **summary,
+    }
 
 
 @router.post(
@@ -252,6 +386,70 @@ def print_bill(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers=headers,
     )
+
+
+@router.post(
+    "/bills/{bill_id}/bad-debt",
+    response_model=BillDetailResponse,
+    summary="Mark bill as bad debt",
+)
+def mark_bill_bad_debt_action(
+    bill_id: str,
+    payload: BillBadDebtActionSchema | None = None,
+    _perm: None = Depends(require_perm("Billing.BadDebtMark")),
+    db: Session = Depends(get_db),
+) -> BillDetailResponse:
+    """
+    Mark an AR bill as bad debt or transfer a partial-payment remainder into bad debt.
+
+    **Auth**: Bearer JWT
+    **Permission**: Billing.BadDebtMark
+    **Request example**:
+    ```json
+    {"mode": "TRANSFER", "remark": "剩余部分转坏账"}
+    ```
+    **Responses**:
+    - 200: Bill detail with bad-debt chain
+    - 400: Bill not eligible for bad debt
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Bill not found
+    - 422: VALIDATION_ERROR
+    """
+    bill = apply_bill_bad_debt_action(db, bill_id=bill_id, data=payload)
+    return _build_bill_detail_response(db, bill.id)
+
+
+@router.post(
+    "/bills/{bill_id}/bad-debt/recover",
+    response_model=BillDetailResponse,
+    summary="Recover bad debt",
+)
+def recover_bill_bad_debt_action(
+    bill_id: str,
+    payload: BillBadDebtRecoveryActionSchema,
+    _perm: None = Depends(require_perm("Billing.BadDebtRecover")),
+    db: Session = Depends(get_db),
+) -> BillDetailResponse:
+    """
+    Record a bad-debt recovery against an effective bad-debt voucher.
+
+    **Auth**: Bearer JWT
+    **Permission**: Billing.BadDebtRecover
+    **Request example**:
+    ```json
+    {"recovery_amount": "50.00", "remark": "回收坏账"}
+    ```
+    **Responses**:
+    - 200: Bill detail with updated bad-debt chain
+    - 400: Recovery is invalid or exceeds remaining bad debt
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    - 404: Bill not found
+    - 422: VALIDATION_ERROR
+    """
+    bill = apply_bill_bad_debt_recovery(db, bill_id=bill_id, data=payload)
+    return _build_bill_detail_response(db, bill.id)
 
 
 @router.get("/payments", summary="List payments")
@@ -680,88 +878,7 @@ def get_bill(
     - 404: Bill not found
     - 422: VALIDATION_ERROR
     """
-    bill = db.query(Bill).filter(Bill.id == bill_id).first()
-    if not bill:
-        raise_business_error(
-            "BILL_NOT_FOUND",
-            "Bill not found",
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-
-    bill_items = (
-        db.query(BillItem)
-        .filter(BillItem.bill_id == bill_id)
-        .order_by(BillItem.created_at.asc())
-        .all()
-    )
-    client = db.query(Client).filter(Client.id == bill.client_id).first()
-
-    case_ids = [item.case_id for item in bill_items if item.case_id]
-    unique_case_ids = list(dict.fromkeys(case_ids))
-    case_map: dict[str, Case] = {}
-    if unique_case_ids:
-        cases = db.query(Case).filter(Case.id.in_(unique_case_ids)).all()
-        case_map = {case.id: case for case in cases}
-
-    draft_ids = [item.draft_id for item in bill_items if item.draft_id]
-    unique_draft_ids = list(dict.fromkeys(draft_ids))
-    draft_map: dict[str, FeeDraft] = {}
-    if unique_draft_ids:
-        drafts = db.query(FeeDraft).filter(FeeDraft.id.in_(unique_draft_ids)).all()
-        draft_map = {draft.id: draft for draft in drafts}
-
-    primary_case_id = unique_case_ids[0] if len(unique_case_ids) == 1 else None
-    primary_case = case_map.get(primary_case_id) if primary_case_id else None
-
-    source_draft_labels = [
-        _build_draft_display_label(draft_map[draft_id])
-        for draft_id in unique_draft_ids
-        if draft_id in draft_map
-    ]
-    primary_draft_id = unique_draft_ids[0] if unique_draft_ids else None
-    primary_draft = draft_map.get(primary_draft_id) if primary_draft_id else None
-
-    items = [
-        BillItemDetailResponse(
-            id=item.id,
-            bill_id=item.bill_id,
-            case_id=item.case_id,
-            draft_id=item.draft_id,
-            fee_code=item.fee_code,
-            fee_name=item.fee_name,
-            fee_type=item.fee_type,
-            year_no=item.year_no,
-            description=item.fee_name or item.fee_code or "账单明细",
-            quantity=1,
-            unit_price=item.amount,
-            amount=item.amount,
-        )
-        for item in bill_items
-    ]
-
-    return BillDetailResponse(
-        id=bill.id,
-        bill_no=bill.bill_no,
-        client_id=bill.client_id,
-        client_name=_get_client_display_name(client),
-        case_id=primary_case.id if primary_case else None,
-        case_no=primary_case.case_no if primary_case else None,
-        currency=bill.currency,
-        direction=bill.direction,
-        status=bill.status,
-        total_gov=bill.total_gov,
-        total_service=bill.total_service,
-        total_misc=bill.total_misc,
-        amount=bill.amount,
-        balance=bill.balance,
-        bill_date=bill.bill_date,
-        due_date=bill.due_date,
-        items=items,
-        source_draft_ids=unique_draft_ids,
-        source_draft_labels=source_draft_labels,
-        primary_draft_id=primary_draft.id if primary_draft else None,
-        primary_draft_label=_build_draft_display_label(primary_draft) if primary_draft else None,
-    )
+    return _build_bill_detail_response(db, bill_id)
 
 
 @router.get(

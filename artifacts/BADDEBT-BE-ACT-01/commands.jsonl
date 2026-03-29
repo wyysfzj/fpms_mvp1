@@ -1,0 +1,2 @@
+{"ts":"20260329T005426","step":"lint","cmd":"/bin/zsh -lc ruff\ check\ backend/app/modules/billing/api.py\ backend/app/modules/billing/schemas.py\ backend/app/modules/billing/service.py\ backend/tests/test_billing_bad_debt_actions.py"}
+{"ts":"20260329T005428","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_billing_bad_debt_actions.py\ -k\ \'mark\ or\ transfer\'"}

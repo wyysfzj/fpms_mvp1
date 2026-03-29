@@ -1,0 +1,3 @@
+{"step":"lint","cmd":"ruff check backend/app/modules/billing/api.py backend/app/modules/billing/schemas.py backend/app/modules/billing/service.py backend/tests/test_billing_bad_debt_recovery.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_billing_bad_debt_recovery.py","rc":0,"note":"2 passed"}
+{"step":"gate","cmd":"./scripts/task_validate.sh BADDEBT-BE-REC-01","rc":0}

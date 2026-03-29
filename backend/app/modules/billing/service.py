@@ -5,11 +5,23 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
-from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Payment, PaymentLine
+from app.modules.billing.models import (
+    BadDebtRecovery,
+    BadDebtVoucher,
+    Bill,
+    BillItem,
+    CaseReceipt,
+    Offset,
+    Payment,
+    PaymentLine,
+)
 from app.modules.billing.schemas import (
+    BillBadDebtActionSchema,
+    BillBadDebtRecoveryActionSchema,
     BillCreateSchema,
     BillFromDraftsRequest,
     BillManualCreateSchema,
@@ -90,6 +102,281 @@ def _collect_service_case_ids_for_bill(db: Session, bill_id: str) -> list[str]:
         seen.add(case_id)
         service_case_ids.append(case_id)
     return service_case_ids
+
+
+def load_bill_bad_debt_chain(
+    db: Session, bill_id: str
+) -> tuple[BadDebtVoucher | None, list[BadDebtRecovery], Decimal, Decimal]:
+    voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill_id).first()
+    if not voucher:
+        return None, [], Decimal("0"), Decimal("0")
+
+    recoveries = (
+        db.query(BadDebtRecovery)
+        .filter(BadDebtRecovery.voucher_id == voucher.id)
+        .order_by(BadDebtRecovery.created_at.asc(), BadDebtRecovery.id.asc())
+        .all()
+    )
+    recovered_total = sum((recovery.recovery_amount for recovery in recoveries), Decimal("0"))
+    remaining_amount = voucher.bad_debt_amount - recovered_total
+    if remaining_amount < Decimal("0"):
+        remaining_amount = Decimal("0")
+    return voucher, recoveries, recovered_total, remaining_amount
+
+
+def _normalize_bad_debt_status_filter(bad_debt_status: str | None) -> str | None:
+    if bad_debt_status is None:
+        return None
+    normalized = bad_debt_status.strip().upper()
+    return normalized or None
+
+
+def _summarize_bad_debt_bills(
+    db: Session, bill_rows: list[tuple[str, str | None]]
+) -> dict[str, Decimal | int]:
+    summary = {
+        "bad_debt_bill_count": 0,
+        "bad_debt_amount": Decimal("0"),
+        "total_recovered_amount": Decimal("0"),
+        "remaining_bad_debt_balance": Decimal("0"),
+    }
+    if not bill_rows:
+        return summary
+
+    bad_debt_rows = [
+        (bill_id, (bad_debt_status or "NONE").strip().upper())
+        for bill_id, bad_debt_status in bill_rows
+        if (bad_debt_status or "NONE").strip().upper() != "NONE"
+    ]
+    if not bad_debt_rows:
+        return summary
+
+    bill_ids = [bill_id for bill_id, _ in bad_debt_rows]
+    voucher_rows = (
+        db.query(
+            BadDebtVoucher.bill_id,
+            BadDebtVoucher.id,
+            BadDebtVoucher.bad_debt_amount,
+        )
+        .filter(BadDebtVoucher.bill_id.in_(bill_ids))
+        .all()
+    )
+    voucher_map = {voucher.bill_id: voucher for voucher in voucher_rows}
+    voucher_ids = [voucher.id for voucher in voucher_rows]
+
+    recovered_map: dict[str, Decimal] = {}
+    if voucher_ids:
+        recovery_rows = (
+            db.query(
+                BadDebtRecovery.voucher_id,
+                func.coalesce(func.sum(BadDebtRecovery.recovery_amount), Decimal("0")),
+            )
+            .filter(BadDebtRecovery.voucher_id.in_(voucher_ids))
+            .group_by(BadDebtRecovery.voucher_id)
+            .all()
+        )
+        recovered_map = {
+            voucher_id: Decimal(recovered_amount or 0)
+            for voucher_id, recovered_amount in recovery_rows
+        }
+
+    for bill_id, _bad_debt_status in bad_debt_rows:
+        summary["bad_debt_bill_count"] += 1
+        voucher = voucher_map.get(bill_id)
+        if not voucher:
+            continue
+        bad_debt_amount = Decimal(voucher.bad_debt_amount or 0)
+        recovered_amount = recovered_map.get(voucher.id, Decimal("0"))
+        remaining_amount = bad_debt_amount - recovered_amount
+        if remaining_amount < Decimal("0"):
+            remaining_amount = Decimal("0")
+
+        summary["bad_debt_amount"] += bad_debt_amount
+        summary["total_recovered_amount"] += recovered_amount
+        summary["remaining_bad_debt_balance"] += remaining_amount
+
+    return summary
+
+
+def list_bills(
+    db: Session,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    bad_debt_status: str | None = None,
+) -> tuple[list[Bill], int, dict[str, Decimal | int]]:
+    query = db.query(Bill)
+    normalized_bad_debt_status = _normalize_bad_debt_status_filter(bad_debt_status)
+    if normalized_bad_debt_status is not None:
+        query = query.filter(func.upper(Bill.bad_debt_status) == normalized_bad_debt_status)
+
+    total = query.count()
+    bills = (
+        query.order_by(Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    )
+    bill_rows = query.order_by(None).with_entities(Bill.id, Bill.bad_debt_status).all()
+    summary = _summarize_bad_debt_bills(db, bill_rows)
+    return bills, total, summary
+
+
+def _get_bill_for_bad_debt_action(db: Session, bill_id: str) -> Bill:
+    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+    if not bill:
+        raise_business_error("BILL_NOT_FOUND", "Bill not found", status_code=404)
+    return bill
+
+
+def _validate_bad_debt_action_eligibility(
+    bill: Bill, *, mode: str, bad_debt_voucher: BadDebtVoucher | None
+) -> None:
+    if (bill.direction or "").strip().upper() != "AR":
+        raise_business_error(
+            "BAD_DEBT_NOT_ALLOWED",
+            "Only AR bills can be marked as bad debt",
+            status_code=400,
+        )
+
+    balance = Decimal(bill.balance or 0)
+    amount = Decimal(bill.amount or 0)
+    if balance <= Decimal("0"):
+        raise_business_error(
+            "BAD_DEBT_NOT_ALLOWED",
+            "Only bills with outstanding balance can be marked bad debt",
+            status_code=400,
+        )
+
+    if mode == "TRANSFER" and balance >= amount:
+        raise_business_error(
+            "BAD_DEBT_NOT_ALLOWED",
+            "Partial-payment transfer requires a partially settled bill",
+            status_code=400,
+        )
+
+    if bad_debt_voucher and (bill.bad_debt_status or "NONE").upper() == "OPEN":
+        return
+
+    if (bill.status or "").strip().upper() == "SETTLED":
+        raise_business_error(
+            "BAD_DEBT_NOT_ALLOWED",
+            "Settled bills cannot be marked as bad debt",
+            status_code=400,
+        )
+
+
+def _ensure_bad_debt_voucher(
+    db: Session,
+    *,
+    bill: Bill,
+    bad_debt_date: date | None,
+    remark: str | None,
+) -> tuple[BadDebtVoucher, bool]:
+    voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill.id).first()
+    if voucher:
+        return voucher, False
+
+    voucher = BadDebtVoucher(
+        id=str(uuid4()),
+        bill_id=bill.id,
+        status="OPEN",
+        bad_debt_amount=Decimal(bill.balance or 0),
+        recovered_amount=Decimal("0"),
+        bad_debt_date=bad_debt_date or bill.bill_date or date.today(),
+        remark=remark,
+    )
+    db.add(voucher)
+    db.flush()
+    return voucher, True
+
+
+def apply_bill_bad_debt_action(
+    db: Session, bill_id: str, data: BillBadDebtActionSchema | None = None
+) -> Bill:
+    bill = _get_bill_for_bad_debt_action(db, bill_id)
+    mode = (data.mode if data else "MARK").strip().upper()
+    bad_debt_voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill.id).first()
+
+    _validate_bad_debt_action_eligibility(bill, mode=mode, bad_debt_voucher=bad_debt_voucher)
+
+    if bad_debt_voucher:
+        bill.status = "BAD_DEBT"
+        if (bill.bad_debt_status or "NONE").upper() == "NONE":
+            bill.bad_debt_status = "OPEN"
+        if not bill.bad_debt_substatus:
+            bill.bad_debt_substatus = "PARTIAL_TRANSFER" if mode == "TRANSFER" else "MANUAL_MARK"
+        db.commit()
+        db.refresh(bill)
+        return bill
+
+    voucher, _ = _ensure_bad_debt_voucher(
+        db,
+        bill=bill,
+        bad_debt_date=data.bad_debt_date if data else None,
+        remark=data.remark if data else None,
+    )
+
+    bill.status = "BAD_DEBT"
+    bill.bad_debt_status = "OPEN"
+    bill.bad_debt_substatus = "PARTIAL_TRANSFER" if mode == "TRANSFER" else "MANUAL_MARK"
+
+    # Keep the master voucher aligned with the bill-level state.
+    voucher.status = "OPEN"
+    db.commit()
+    db.refresh(bill)
+    return bill
+
+
+def apply_bill_bad_debt_recovery(
+    db: Session, bill_id: str, data: BillBadDebtRecoveryActionSchema
+) -> Bill:
+    bill = _get_bill_for_bad_debt_action(db, bill_id)
+    if (bill.direction or "").strip().upper() != "AR":
+        raise_business_error(
+            "BAD_DEBT_RECOVERY_NOT_ALLOWED",
+            "Only AR bills can recover bad debt",
+            status_code=400,
+        )
+
+    voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill.id).first()
+    if not voucher:
+        raise_business_error(
+            "BAD_DEBT_VOUCHER_NOT_FOUND",
+            "Bad debt voucher not found",
+            status_code=400,
+        )
+
+    _, _, recovered_total, remaining_amount = load_bill_bad_debt_chain(db, bill.id)
+    recovery_amount = Decimal(data.recovery_amount or 0)
+    if recovery_amount > remaining_amount:
+        raise_business_error(
+            "BAD_DEBT_RECOVERY_EXCEEDS_REMAINING",
+            "Recovery amount exceeds remaining bad debt amount",
+            status_code=400,
+        )
+
+    recovery = BadDebtRecovery(
+        id=str(uuid4()),
+        voucher_id=voucher.id,
+        recovery_amount=recovery_amount,
+        recovery_date=data.recovery_date or date.today(),
+        remark=data.remark,
+    )
+    db.add(recovery)
+
+    updated_recovered_total = recovered_total + recovery_amount
+    voucher.recovered_amount = updated_recovered_total
+    if updated_recovered_total >= Decimal(voucher.bad_debt_amount or 0):
+        voucher.status = "CLOSED"
+        bill.bad_debt_status = "CLOSED"
+        bill.bad_debt_substatus = "FULLY_RECOVERED"
+        voucher.recovered_amount = Decimal(voucher.bad_debt_amount or 0)
+    else:
+        voucher.status = "OPEN"
+        bill.bad_debt_status = "OPEN"
+        bill.bad_debt_substatus = "PARTIAL_RECOVERY"
+
+    db.commit()
+    db.refresh(bill)
+    return bill
 
 
 def _run_commission_settleable_recompute_non_blocking(

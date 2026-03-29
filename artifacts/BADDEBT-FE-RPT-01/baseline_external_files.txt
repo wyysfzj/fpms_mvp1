@@ -1,0 +1,32 @@
+# baseline external files
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/billing/api.py
+ M backend/app/modules/billing/models.py
+ M backend/app/modules/billing/schemas.py
+ M backend/app/modules/billing/service.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/documents/api.py
+ M backend/app/modules/expenses/models.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+ M frontend/src/modules/billing/pages/BillDetail.vue
+?? .superpowers/
+?? backend/alembic/versions/baddebt_db_01_create_bad_debt_tables.py
+?? backend/tests/test_billing_bad_debt_actions.py
+?? backend/tests/test_billing_bad_debt_detail_api.py
+?? backend/tests/test_billing_bad_debt_recovery.py
+?? backend/tests/test_billing_bad_debt_reporting.py
+?? docs/superpowers/plans/2026-03-28-billing-bad-debt-workflow.md
+?? docs/superpowers/specs/2026-03-28-billing-bad-debt-workflow-design.md
+?? frontend/src/modules/billing/components/BadDebtPanel.vue
+?? tasks/postenhancement/backend/BADDEBT-BE-ACT-01.md
+?? tasks/postenhancement/backend/BADDEBT-BE-BILL-01.md
+?? tasks/postenhancement/backend/BADDEBT-BE-REC-01.md
+?? tasks/postenhancement/backend/BADDEBT-BE-RPT-01.md
+?? tasks/postenhancement/backend/BADDEBT-DB-01.md
+?? tasks/postenhancement/frontend/BADDEBT-FE-BILL-01.md
+?? tasks/postenhancement/frontend/BADDEBT-FE-RPT-01.md

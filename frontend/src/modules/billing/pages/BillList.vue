@@ -15,14 +15,52 @@
     <!-- Filter Bar -->
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6">
-        <el-select v-model="filterStatus" placeholder="全部" clearable @change="onFilterChange">
+        <el-select v-model="filterStatus" placeholder="全部账单状态" clearable @change="onFilterChange">
           <el-option label="全部" value="" />
           <el-option label="已开具" value="ISSUED" />
           <el-option label="已付款" value="PAID" />
           <el-option label="已作废" value="VOID" />
         </el-select>
       </el-col>
+      <el-col :span="6">
+        <el-select
+          v-model="filterBadDebtStatus"
+          placeholder="全部坏账状态"
+          clearable
+          @change="onFilterChange"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="无坏账" value="NONE" />
+          <el-option label="未结清" value="OPEN" />
+          <el-option label="已结清" value="CLOSED" />
+        </el-select>
+      </el-col>
     </el-row>
+
+    <div class="bad-debt-summary">
+      <div class="bad-debt-summary-card">
+        <span class="bad-debt-summary-label">坏账账单数</span>
+        <span class="bad-debt-summary-value">{{ summary.bad_debt_bill_count }} 条</span>
+      </div>
+      <div class="bad-debt-summary-card">
+        <span class="bad-debt-summary-label">坏账金额</span>
+        <span class="bad-debt-summary-value mono-num">
+          {{ formatAmount(summary.bad_debt_amount, summaryCurrency) }}
+        </span>
+      </div>
+      <div class="bad-debt-summary-card">
+        <span class="bad-debt-summary-label">累计回收金额</span>
+        <span class="bad-debt-summary-value mono-num">
+          {{ formatAmount(summary.total_recovered_amount, summaryCurrency) }}
+        </span>
+      </div>
+      <div class="bad-debt-summary-card">
+        <span class="bad-debt-summary-label">剩余坏账余额</span>
+        <span class="bad-debt-summary-value mono-num">
+          {{ formatAmount(summary.remaining_bad_debt_balance, summaryCurrency) }}
+        </span>
+      </div>
+    </div>
 
     <!-- Error State -->
     <div v-if="error" class="page-error">
@@ -92,10 +130,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getBills } from '../../../api/billing'
-import type { BillListItem, BillStatus } from '../../../api/billing.types'
+import type { BillListItem, BillStatus, BillListResponse } from '../../../api/billing.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
@@ -113,20 +151,44 @@ const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const filterStatus = ref('')
+const filterBadDebtStatus = ref('')
+const summary = ref<Pick<
+  BillListResponse,
+  | 'bad_debt_bill_count'
+  | 'bad_debt_amount'
+  | 'total_recovered_amount'
+  | 'remaining_bad_debt_balance'
+>>({
+  bad_debt_bill_count: 0,
+  bad_debt_amount: 0,
+  total_recovered_amount: 0,
+  remaining_bad_debt_balance: 0,
+})
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+const summaryCurrency = computed(() => bills.value[0]?.currency || 'CNY')
 
 function onFilterChange() {
   page.value = 1
-  fetchBills()
 }
 
 async function fetchBills() {
   loading.value = true
   error.value = null
   try {
-    const result = await getBills({ page: page.value, page_size: pageSize.value, status: filterStatus.value || undefined })
+    const result = await getBills({
+      page: page.value,
+      page_size: pageSize.value,
+      status: filterStatus.value || undefined,
+      bad_debt_status: filterBadDebtStatus.value || undefined,
+    })
     bills.value = result.items
     total.value = result.total
+    summary.value = {
+      bad_debt_bill_count: result.bad_debt_bill_count,
+      bad_debt_amount: result.bad_debt_amount,
+      total_recovered_amount: result.total_recovered_amount,
+      remaining_bad_debt_balance: result.remaining_bad_debt_balance,
+    }
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -163,13 +225,9 @@ function handleRowClick(row: BillListItem) {
   router.push(`/billing/bills/${row.id}`)
 }
 
-watch([page, pageSize], () => {
+watch([page, pageSize, filterStatus, filterBadDebtStatus], () => {
   fetchBills()
-})
-
-onMounted(() => {
-  fetchBills()
-})
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -184,5 +242,45 @@ onMounted(() => {
 
 .balance-zero {
   color: var(--color-success);
+}
+
+.bad-debt-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.bad-debt-summary-card {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bad-debt-summary-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.bad-debt-summary-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+@media (max-width: 1200px) {
+  .bad-debt-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .bad-debt-summary {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -2,8 +2,17 @@
  * Billing API Types
  */
 
+import type { Pagination } from './types'
+
 export type BillStatus = string
 export type BillDirection = 'AR' | 'AP'
+export type BadDebtStatus = 'NONE' | 'OPEN' | 'CLOSED' | string
+export type BadDebtSubstatus =
+    | 'MANUAL_MARK'
+    | 'PARTIAL_TRANSFER'
+    | 'PARTIAL_RECOVERY'
+    | 'FULLY_RECOVERED'
+    | string
 
 export interface BillListItem {
     id: string
@@ -17,6 +26,15 @@ export interface BillListItem {
     issue_date?: string
     due_date?: string
 }
+
+export interface BillListBadDebtSummary {
+    bad_debt_bill_count: number
+    bad_debt_amount: number
+    total_recovered_amount: number
+    remaining_bad_debt_balance: number
+}
+
+export interface BillListResponse extends Pagination<BillListItem>, BillListBadDebtSummary {}
 
 export interface BillItem {
     id: string
@@ -48,6 +66,8 @@ export interface BillDetail {
     issue_date?: string
     bill_date?: string
     due_date?: string
+    bad_debt_status?: BadDebtStatus
+    bad_debt_substatus?: BadDebtSubstatus | null
     total_gov?: number
     total_service?: number
     total_misc?: number
@@ -57,8 +77,30 @@ export interface BillDetail {
     primary_draft_id?: string
     primary_draft_label?: string
     notes?: string
+    bad_debt_voucher?: BillBadDebtVoucher | null
+    bad_debt_recoveries?: BillBadDebtRecovery[]
+    bad_debt_total_recovered?: number
+    bad_debt_remaining_amount?: number
     created_at?: string
     updated_at?: string
+}
+
+export interface BillBadDebtVoucher {
+    id: string
+    bill_id: string
+    status: BadDebtStatus
+    bad_debt_amount: number
+    recovered_amount: number
+    bad_debt_date?: string
+    remark?: string
+}
+
+export interface BillBadDebtRecovery {
+    id: string
+    voucher_id: string
+    recovery_amount: number
+    recovery_date?: string
+    remark?: string
 }
 
 export interface BillListParams {
@@ -66,6 +108,7 @@ export interface BillListParams {
     page_size?: number
     status?: BillStatus
     client_id?: string
+    bad_debt_status?: BadDebtStatus
 }
 
 // Bill Creation Types
@@ -92,6 +135,18 @@ export interface BillManualItem {
     unit_price: number
     fee_type?: string
     year_no?: number
+}
+
+export interface BillBadDebtActionPayload {
+    mode: 'MARK' | 'TRANSFER'
+    bad_debt_date?: string
+    remark?: string
+}
+
+export interface BillBadDebtRecoveryPayload {
+    recovery_amount: number
+    recovery_date?: string
+    remark?: string
 }
 
 // Payment Types

@@ -158,6 +158,13 @@
                 <h3 class="panel-heading">{{ ZH.billDetail.notes }}</h3>
                 <p class="notes-content">{{ bill.notes }}</p>
               </div>
+
+              <BadDebtPanel
+                :bill="bill"
+                :can-mark="canMarkBadDebt"
+                :can-recover="canRecoverBadDebt"
+                @changed="fetchBill"
+              />
             </div>
 
             <div class="case-side-panel">
@@ -189,32 +196,6 @@
                   <router-link v-if="feeDraftRelation" :to="`/fees/drafts/${feeDraftRelation.id}`">
                     <el-button size="small">查看费用草稿</el-button>
                   </router-link>
-                  <el-popconfirm
-                    v-if="canOperateBadDebt && !isBadDebt"
-                    title="确定将该账单标记为坏账？"
-                    confirm-button-text="确定"
-                    cancel-button-text="取消"
-                    @confirm="handleMarkBadDebt"
-                  >
-                    <template #reference>
-                      <el-button size="small" type="danger" :loading="badDebtActionLoading">
-                        标记坏账
-                      </el-button>
-                    </template>
-                  </el-popconfirm>
-                  <el-popconfirm
-                    v-else-if="canOperateBadDebt && isBadDebt"
-                    title="确定将该账单恢复为未结清状态？"
-                    confirm-button-text="确定"
-                    cancel-button-text="取消"
-                    @confirm="handleRestoreBadDebt"
-                  >
-                    <template #reference>
-                      <el-button size="small" :loading="badDebtActionLoading">
-                        恢复账单
-                      </el-button>
-                    </template>
-                  </el-popconfirm>
                 </div>
               </div>
             </div>
@@ -296,17 +277,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getBill, printBill, getOffsets, reverseOffset } from '../../../api/billing'
 import type { BillDetail, OffsetListItem } from '../../../api/billing.types'
-import { markBillBadDebt, restoreBillBadDebt } from '../../../api/collections'
-import type { BadDebtBillResult } from '../../../api/collections.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import BadDebtPanel from '../components/BadDebtPanel.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
 import { usePageContext } from '../../../stores/pageContext'
 import { useAuthStore } from '../../../stores/auth'
 import { ZH } from '../../../constants/labels.zh'
 import { getBillStatusText } from '../../../constants/displayText'
 
-const BAD_DEBT_ACTION_PERMISSION = 'BadDebt.Action'
+const BAD_DEBT_MARK_PERMISSION = 'Billing.BadDebtMark'
+const BAD_DEBT_RECOVER_PERMISSION = 'Billing.BadDebtRecover'
 
 const route = useRoute()
 const router = useRouter()
@@ -318,14 +299,13 @@ const loading = ref(false)
 const printing = ref(false)
 const error = ref<ApiError | null>(null)
 const activeTab = ref('items')
-const badDebtActionLoading = ref(false)
 
 const offsets = ref<OffsetListItem[]>([])
 const offsetsLoading = ref(false)
 
 const billId = computed(() => String(route.params.id || ''))
-const isBadDebt = computed(() => bill.value?.status === 'BAD_DEBT')
-const canOperateBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_ACTION_PERMISSION))
+const canMarkBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_MARK_PERMISSION))
+const canRecoverBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_RECOVER_PERMISSION))
 const billDisplayNo = computed(() => {
   if (!bill.value?.id) return '—'
   return bill.value.bill_no || `账单-${bill.value.id.slice(0, 8).toUpperCase()}`
@@ -468,106 +448,6 @@ async function handleReverseOffset(offsetId: string) {
     await Promise.all([fetchBill(), fetchOffsets()])
   } catch (err) {
     error.value = err as ApiError
-  }
-}
-
-function applyBadDebtResult(result: BadDebtBillResult) {
-  if (!bill.value) return
-  bill.value = {
-    ...bill.value,
-    status: result.status,
-    currency: result.currency || bill.value.currency,
-    amount: result.amount,
-    balance: result.balance,
-    issue_date: result.bill_date || bill.value.issue_date,
-    due_date: result.due_date || bill.value.due_date,
-    updated_at: result.updated_at || bill.value.updated_at,
-  }
-}
-
-function isApiError(error: unknown): error is ApiError {
-  if (!error || typeof error !== 'object') return false
-  const candidate = error as Partial<ApiError>
-  return (
-    typeof candidate.status === 'number'
-    && typeof candidate.code === 'string'
-    && typeof candidate.message === 'string'
-  )
-}
-
-function normalizeBadDebtApiError(error: unknown): ApiError {
-  if (isApiError(error)) return error
-  return {
-    status: 0,
-    code: 'UNKNOWN_ERROR',
-    message: 'UNKNOWN_ERROR',
-  }
-}
-
-function mapBadDebtErrorMessage(apiError: ApiError): string {
-  const { status, code } = apiError
-
-  if (status === 400 && code === 'BAD_DEBT_NOT_ALLOWED') {
-    return '当前账单不满足坏账操作条件'
-  }
-
-  if (status === 401) {
-    return '登录已失效，请重新登录'
-  }
-
-  if (status === 403) {
-    return '无权限执行坏账操作'
-  }
-
-  if (status === 404 && code === 'BILL_NOT_FOUND') {
-    return '未找到目标账单'
-  }
-
-  if (
-    status === 409
-    && (code === 'BAD_DEBT_ALREADY_MARKED' || code === 'BAD_DEBT_RESTORE_INVALID')
-  ) {
-    return '账单状态冲突，请刷新后重试'
-  }
-
-  if (status === 422) {
-    return '参数校验失败，请检查后重试'
-  }
-
-  return '坏账操作失败，请稍后重试'
-}
-
-async function handleMarkBadDebt() {
-  if (!billId.value || badDebtActionLoading.value) return
-  badDebtActionLoading.value = true
-  error.value = null
-  try {
-    const result = await markBillBadDebt(billId.value)
-    applyBadDebtResult(result)
-    ElMessage.success('账单已标记为坏账')
-  } catch (err) {
-    const apiError = normalizeBadDebtApiError(err)
-    error.value = apiError
-    ElMessage.error(mapBadDebtErrorMessage(apiError))
-  } finally {
-    badDebtActionLoading.value = false
-  }
-}
-
-async function handleRestoreBadDebt() {
-  if (!billId.value || badDebtActionLoading.value) return
-  badDebtActionLoading.value = true
-  error.value = null
-  try {
-    const result = await restoreBillBadDebt(billId.value)
-    applyBadDebtResult(result)
-    ElMessage.success('账单状态已恢复')
-  } catch (err) {
-    const apiError = normalizeBadDebtApiError(err)
-    error.value = apiError
-    ElMessage.error(mapBadDebtErrorMessage(apiError))
-  } finally {
-    badDebtActionLoading.value = false
   }
 }
 

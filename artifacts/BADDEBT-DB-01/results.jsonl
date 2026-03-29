@@ -1,0 +1,6 @@
+{"cmd":"ruff check backend/alembic/versions/baddebt_db_01_create_bad_debt_tables.py backend/app/modules/billing/models.py","rc":0}
+{"cmd":"cd backend && alembic upgrade head","rc":0}
+{"cmd":"./scripts/task_validate.sh BADDEBT-DB-01","rc":1,"note":"missing summary.md before evidence completion"}
+{"step":"lint","cmd":"ruff check backend/alembic/versions/baddebt_db_01_create_bad_debt_tables.py backend/app/modules/billing/models.py","rc":0}
+{"step":"test","cmd":"cd backend && alembic upgrade head","rc":0}
+{"step":"gate","cmd":"./scripts/task_validate.sh BADDEBT-DB-01","rc":0}

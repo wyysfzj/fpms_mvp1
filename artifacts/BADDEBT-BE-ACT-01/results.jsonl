@@ -1,0 +1,5 @@
+{"ts":"20260329T005426","step":"lint","rc":0,"log":"artifacts/BADDEBT-BE-ACT-01/outputs/20260329T005426_lint.log"}
+{"ts":"20260329T005428","step":"test","rc":0,"log":"artifacts/BADDEBT-BE-ACT-01/outputs/20260329T005428_test.log"}
+{"step":"lint","cmd":"cd backend && ruff check app/modules/billing/api.py app/modules/billing/schemas.py app/modules/billing/service.py tests/test_billing_bad_debt_actions.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_billing_bad_debt_actions.py -k 'mark or transfer'","rc":0,"note":"2 passed"}
+{"step":"gate","cmd":"./scripts/task_validate.sh BADDEBT-BE-ACT-01","rc":0}

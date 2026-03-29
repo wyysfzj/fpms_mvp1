@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -55,6 +56,15 @@ class BillResponse(BaseModel):
     status: str
 
 
+class BillListBadDebtSummaryResponse(BaseModel):
+    """Summary fields for the bill list bad-debt report slice."""
+
+    bad_debt_bill_count: int = 0
+    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
+    total_recovered_amount: Decimal = Field(Decimal("0"), ge=0)
+    remaining_bad_debt_balance: Decimal = Field(Decimal("0"), ge=0)
+
+
 class BillItemDetailResponse(BaseModel):
     """Response schema for bill detail items."""
 
@@ -72,6 +82,28 @@ class BillItemDetailResponse(BaseModel):
     amount: Decimal = Field(Decimal("0"), ge=0)
 
 
+class BillBadDebtRecoveryResponse(BaseModel):
+    """Response schema for bad-debt recovery rows."""
+
+    id: str
+    voucher_id: str
+    recovery_amount: Decimal = Field(Decimal("0"), ge=0)
+    recovery_date: date | None = None
+    remark: str | None = None
+
+
+class BillBadDebtVoucherResponse(BaseModel):
+    """Response schema for the bill-level bad-debt master voucher."""
+
+    id: str
+    bill_id: str
+    status: str
+    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
+    recovered_amount: Decimal = Field(Decimal("0"), ge=0)
+    bad_debt_date: date | None = None
+    remark: str | None = None
+
+
 class BillDetailResponse(BaseModel):
     """Enriched bill detail response schema."""
 
@@ -84,6 +116,8 @@ class BillDetailResponse(BaseModel):
     currency: str
     direction: str
     status: str
+    bad_debt_status: str = "NONE"
+    bad_debt_substatus: str | None = None
     total_gov: Decimal = Field(Decimal("0"), ge=0)
     total_service: Decimal = Field(Decimal("0"), ge=0)
     total_misc: Decimal = Field(Decimal("0"), ge=0)
@@ -96,6 +130,10 @@ class BillDetailResponse(BaseModel):
     source_draft_labels: list[str] = []
     primary_draft_id: str | None = None
     primary_draft_label: str | None = None
+    bad_debt_voucher: BillBadDebtVoucherResponse | None = None
+    bad_debt_recoveries: list[BillBadDebtRecoveryResponse] = []
+    bad_debt_total_recovered: Decimal = Field(Decimal("0"), ge=0)
+    bad_debt_remaining_amount: Decimal = Field(Decimal("0"), ge=0)
 
 
 class PaymentSchema(BaseModel):
@@ -273,3 +311,19 @@ class BillStatusSchema(BaseModel):
     """Schema for bill status transitions."""
 
     status: str = Field(..., max_length=24)
+
+
+class BillBadDebtActionSchema(BaseModel):
+    """Schema for bill bad-debt write actions."""
+
+    mode: Literal["MARK", "TRANSFER"] = "MARK"
+    bad_debt_date: date | None = None
+    remark: str | None = Field(None, max_length=512)
+
+
+class BillBadDebtRecoveryActionSchema(BaseModel):
+    """Schema for bill bad-debt recovery writes."""
+
+    recovery_amount: Decimal = Field(..., gt=0)
+    recovery_date: date | None = None
+    remark: str | None = Field(None, max_length=512)

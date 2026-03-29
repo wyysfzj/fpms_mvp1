@@ -1,0 +1,80 @@
+# BADDEBT-QA-01 — 坏账流程任务级审计与 item-to-slice ledger。
+
+- Source: `docs/superpowers/plans/2026-03-28-billing-bad-debt-workflow.md`
+- Type: `qa gate`
+- Execution mode: Atomic (single-task, single-owner)
+
+## Task Definition
+
+- Goal:
+  - 审计 `P1 #6 坏账完整流程` 的实现切片、证据与 gate 状态，生成 item-to-slice ledger，并给出故事级 `PASS / FAIL / BLOCKED` 结论。
+- Covered items:
+  - `Priority P1 #6`
+  - `Billing Bad-Debt Workflow`
+- Allowlist:
+  - `artifacts/BADDEBT-QA-01/**`
+  - `docs/superpowers/specs/2026-03-28-billing-bad-debt-workflow-design.md`
+  - `docs/superpowers/plans/2026-03-28-billing-bad-debt-workflow.md`
+  - `tasks/postenhancement/backend/BADDEBT-DB-01.md`
+  - `tasks/postenhancement/backend/BADDEBT-BE-BILL-01.md`
+  - `tasks/postenhancement/backend/BADDEBT-BE-ACT-01.md`
+  - `tasks/postenhancement/backend/BADDEBT-BE-REC-01.md`
+  - `tasks/postenhancement/frontend/BADDEBT-FE-BILL-01.md`
+  - `tasks/postenhancement/backend/BADDEBT-BE-RPT-01.md`
+  - `tasks/postenhancement/frontend/BADDEBT-FE-RPT-01.md`
+- Out of scope:
+  - 任何产品代码修改
+  - 重新定义坏账设计或 runbook
+  - 绕过已有 task gate 强行改判任务状态
+- Shared ownership:
+  - `No`
+- Verification:
+  - `./scripts/task_validate.sh BADDEBT-DB-01`
+  - `./scripts/task_validate.sh BADDEBT-BE-BILL-01`
+  - `./scripts/task_validate.sh BADDEBT-BE-ACT-01`
+  - `./scripts/task_validate.sh BADDEBT-BE-REC-01`
+  - `./scripts/task_validate.sh BADDEBT-FE-BILL-01`
+  - `./scripts/task_validate.sh BADDEBT-BE-RPT-01`
+  - `./scripts/task_validate.sh BADDEBT-FE-RPT-01`
+  - `test -f artifacts/BADDEBT-DB-01/results.jsonl`
+  - `test -f artifacts/BADDEBT-BE-BILL-01/results.jsonl`
+  - `test -f artifacts/BADDEBT-BE-ACT-01/results.jsonl`
+  - `test -f artifacts/BADDEBT-BE-REC-01/results.jsonl`
+  - `test -f artifacts/BADDEBT-FE-BILL-01/results.jsonl`
+  - `test -f artifacts/BADDEBT-BE-RPT-01/results.jsonl`
+  - `test -f artifacts/BADDEBT-FE-RPT-01/results.jsonl`
+
+## Exact Closure Slice
+
+- This task closes exactly:
+  - 对坏账流程已批准的 7 个实现切片执行证据审计，生成 item-to-slice ledger，明确每个切片的 gate 与 evidence 状态，并给出故事级收口结论。
+
+## Explicit Non-Closure Statement
+
+- This task does NOT close:
+  - 新的 backend/frontend 功能实现
+  - release gate 或全仓发布结论
+  - 未来独立坏账页面或坏账冲回功能
+
+## Remaining Follow-up Task IDs
+
+- `None`
+
+## Done Definition
+
+- [ ] item-to-slice ledger written
+- [ ] every implementation task mapped to closure slice and evidence
+- [ ] task gate status of all implementation slices recorded
+- [ ] story-level residual gap explicitly stated
+- [ ] final story status emitted as `PASS / FAIL / BLOCKED`
+- [ ] verification passed
+- [ ] artifacts generated
+
+## Execution Checklist
+
+- [ ] Confirm audit-only allowlist
+- [ ] Re-run referenced task gates
+- [ ] Check required evidence files exist
+- [ ] Write item-to-slice ledger and summary
+- [ ] Capture scoped audit diff
+- [ ] Stop without editing product code

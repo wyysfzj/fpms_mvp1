@@ -1,0 +1,5 @@
+{"cmd":"cd backend && ruff check app/modules/billing/api.py app/modules/billing/schemas.py app/modules/billing/service.py tests/test_billing_bad_debt_detail_api.py","rc":0}
+{"cmd":"cd backend && pytest -q tests/test_billing_bad_debt_detail_api.py","rc":0}
+{"step":"lint","cmd":"cd backend && ruff check app/modules/billing/api.py app/modules/billing/schemas.py app/modules/billing/service.py tests/test_billing_bad_debt_detail_api.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_billing_bad_debt_detail_api.py","rc":0}
+{"step":"gate","cmd":"./scripts/task_validate.sh BADDEBT-BE-BILL-01","rc":0}

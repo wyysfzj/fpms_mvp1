@@ -1,0 +1,763 @@
+diff --git a/backend/app/modules/billing/api.py b/backend/app/modules/billing/api.py
+index 7cc8a8e..c1a75ff 100644
+--- a/backend/app/modules/billing/api.py
++++ b/backend/app/modules/billing/api.py
+@@ -16,9 +16,14 @@ from app.models.system_param import SystemParam
+ from app.modules.billing.doc_render_bill_context import BillContextBuilder
+ from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
+ from app.modules.billing.schemas import (
++    BillBadDebtActionSchema,
++    BillBadDebtRecoveryActionSchema,
++    BillBadDebtRecoveryResponse,
++    BillBadDebtVoucherResponse,
+     BillDetailResponse,
+     BillFromDraftsRequest,
+     BillItemDetailResponse,
++    BillListBadDebtSummaryResponse,
+     BillManualCreateSchema,
+     BillResponse,
+     CaseReceiptCreate,
+@@ -31,10 +36,14 @@ from app.modules.billing.schemas import (
+     PaymentSchema,
+ )
+ from app.modules.billing.service import (
++    apply_bill_bad_debt_action,
++    apply_bill_bad_debt_recovery,
+     create_case_receipt,
+     create_manual_bill_record,
+     generate_bill_from_drafts,
++    list_bills,
+     list_case_receipts,
++    load_bill_bad_debt_chain,
+     process_payment,
+     update_case_receipt,
+ )
+@@ -64,10 +73,127 @@ def _build_draft_display_label(draft: FeeDraft) -> str:
+     return f"{draft.draft_type}-{draft.id[:8].upper()}"
+ 
+ 
++def _build_bill_detail_response(db: Session, bill_id: str) -> BillDetailResponse:
++    bill = db.query(Bill).filter(Bill.id == bill_id).first()
++    if not bill:
++        raise_business_error(
++            "BILL_NOT_FOUND",
++            "Bill not found",
++            status_code=status.HTTP_404_NOT_FOUND,
++        )
++
++    bill_items = (
++        db.query(BillItem)
++        .filter(BillItem.bill_id == bill_id)
++        .order_by(BillItem.created_at.asc())
++        .all()
++    )
++    client = db.query(Client).filter(Client.id == bill.client_id).first()
++
++    case_ids = [item.case_id for item in bill_items if item.case_id]
++    unique_case_ids = list(dict.fromkeys(case_ids))
++    case_map: dict[str, Case] = {}
++    if unique_case_ids:
++        cases = db.query(Case).filter(Case.id.in_(unique_case_ids)).all()
++        case_map = {case.id: case for case in cases}
++
++    draft_ids = [item.draft_id for item in bill_items if item.draft_id]
++    unique_draft_ids = list(dict.fromkeys(draft_ids))
++    draft_map: dict[str, FeeDraft] = {}
++    if unique_draft_ids:
++        drafts = db.query(FeeDraft).filter(FeeDraft.id.in_(unique_draft_ids)).all()
++        draft_map = {draft.id: draft for draft in drafts}
++
++    primary_case_id = unique_case_ids[0] if len(unique_case_ids) == 1 else None
++    primary_case = case_map.get(primary_case_id) if primary_case_id else None
++
++    source_draft_labels = [
++        _build_draft_display_label(draft_map[draft_id])
++        for draft_id in unique_draft_ids
++        if draft_id in draft_map
++    ]
++    primary_draft_id = unique_draft_ids[0] if unique_draft_ids else None
++    primary_draft = draft_map.get(primary_draft_id) if primary_draft_id else None
++
++    items = [
++        BillItemDetailResponse(
++            id=item.id,
++            bill_id=item.bill_id,
++            case_id=item.case_id,
++            draft_id=item.draft_id,
++            fee_code=item.fee_code,
++            fee_name=item.fee_name,
++            fee_type=item.fee_type,
++            year_no=item.year_no,
++            description=item.fee_name or item.fee_code or "账单明细",
++            quantity=1,
++            unit_price=item.amount,
++            amount=item.amount,
++        )
++        for item in bill_items
++    ]
++
++    bad_debt_voucher, bad_debt_recoveries, bad_debt_total_recovered, bad_debt_remaining_amount = (
++        load_bill_bad_debt_chain(db, bill.id)
++    )
++
++    return BillDetailResponse(
++        id=bill.id,
++        bill_no=bill.bill_no,
++        client_id=bill.client_id,
++        client_name=_get_client_display_name(client),
++        case_id=primary_case.id if primary_case else None,
++        case_no=primary_case.case_no if primary_case else None,
++        currency=bill.currency,
++        direction=bill.direction,
++        status=bill.status,
++        bad_debt_status=bill.bad_debt_status,
++        bad_debt_substatus=bill.bad_debt_substatus,
++        total_gov=bill.total_gov,
++        total_service=bill.total_service,
++        total_misc=bill.total_misc,
++        amount=bill.amount,
++        balance=bill.balance,
++        bill_date=bill.bill_date,
++        due_date=bill.due_date,
++        items=items,
++        source_draft_ids=unique_draft_ids,
++        source_draft_labels=source_draft_labels,
++        primary_draft_id=primary_draft.id if primary_draft else None,
++        primary_draft_label=_build_draft_display_label(primary_draft) if primary_draft else None,
++        bad_debt_voucher=(
++            BillBadDebtVoucherResponse(
++                id=bad_debt_voucher.id,
++                bill_id=bad_debt_voucher.bill_id,
++                status=bad_debt_voucher.status,
++                bad_debt_amount=bad_debt_voucher.bad_debt_amount,
++                recovered_amount=bad_debt_voucher.recovered_amount,
++                bad_debt_date=bad_debt_voucher.bad_debt_date,
++                remark=bad_debt_voucher.remark,
++            )
++            if bad_debt_voucher
++            else None
++        ),
++        bad_debt_recoveries=[
++            BillBadDebtRecoveryResponse(
++                id=recovery.id,
++                voucher_id=recovery.voucher_id,
++                recovery_amount=recovery.recovery_amount,
++                recovery_date=recovery.recovery_date,
++                remark=recovery.remark,
++            )
++            for recovery in bad_debt_recoveries
++        ],
++        bad_debt_total_recovered=bad_debt_total_recovered,
++        bad_debt_remaining_amount=bad_debt_remaining_amount,
++    )
++
++
+ @router.get("/bills", summary="List bills")
+ def get_bills(
+     page: int = Query(default=1, ge=1),
+     page_size: int = Query(default=20, ge=1, le=100),
++    bad_debt_status: str | None = Query(default=None),
+     _perm: None = Depends(require_perm("Bill.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+@@ -89,10 +215,11 @@ def get_bills(
+     - 403: FORBIDDEN
+     - 422: VALIDATION_ERROR
+     """
+-    query = db.query(Bill)
+-    total = query.count()
+-    bills = (
+-        query.order_by(Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
++    bills, total, bad_debt_summary = list_bills(
++        db,
++        page=page,
++        page_size=page_size,
++        bad_debt_status=bad_debt_status,
+     )
+ 
+     # Batch-resolve client names for all bills in this page
+@@ -117,7 +244,14 @@ def get_bills(
+         }
+         for bill in bills
+     ]
+-    return {"items": items, "page": page, "page_size": page_size, "total": total}
++    summary = BillListBadDebtSummaryResponse.model_validate(bad_debt_summary).model_dump()
++    return {
++        "items": items,
++        "page": page,
++        "page_size": page_size,
++        "total": total,
++        **summary,
++    }
+ 
+ 
+ @router.post(
+@@ -254,6 +388,70 @@ def print_bill(
+     )
+ 
+ 
++@router.post(
++    "/bills/{bill_id}/bad-debt",
++    response_model=BillDetailResponse,
++    summary="Mark bill as bad debt",
++)
++def mark_bill_bad_debt_action(
++    bill_id: str,
++    payload: BillBadDebtActionSchema | None = None,
++    _perm: None = Depends(require_perm("Billing.BadDebtMark")),
++    db: Session = Depends(get_db),
++) -> BillDetailResponse:
++    """
++    Mark an AR bill as bad debt or transfer a partial-payment remainder into bad debt.
++
++    **Auth**: Bearer JWT
++    **Permission**: Billing.BadDebtMark
++    **Request example**:
++    ```json
++    {"mode": "TRANSFER", "remark": "剩余部分转坏账"}
++    ```
++    **Responses**:
++    - 200: Bill detail with bad-debt chain
++    - 400: Bill not eligible for bad debt
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Bill not found
++    - 422: VALIDATION_ERROR
++    """
++    bill = apply_bill_bad_debt_action(db, bill_id=bill_id, data=payload)
++    return _build_bill_detail_response(db, bill.id)
++
++
++@router.post(
++    "/bills/{bill_id}/bad-debt/recover",
++    response_model=BillDetailResponse,
++    summary="Recover bad debt",
++)
++def recover_bill_bad_debt_action(
++    bill_id: str,
++    payload: BillBadDebtRecoveryActionSchema,
++    _perm: None = Depends(require_perm("Billing.BadDebtRecover")),
++    db: Session = Depends(get_db),
++) -> BillDetailResponse:
++    """
++    Record a bad-debt recovery against an effective bad-debt voucher.
++
++    **Auth**: Bearer JWT
++    **Permission**: Billing.BadDebtRecover
++    **Request example**:
++    ```json
++    {"recovery_amount": "50.00", "remark": "回收坏账"}
++    ```
++    **Responses**:
++    - 200: Bill detail with updated bad-debt chain
++    - 400: Recovery is invalid or exceeds remaining bad debt
++    - 401: AUTH_REQUIRED
++    - 403: FORBIDDEN
++    - 404: Bill not found
++    - 422: VALIDATION_ERROR
++    """
++    bill = apply_bill_bad_debt_recovery(db, bill_id=bill_id, data=payload)
++    return _build_bill_detail_response(db, bill.id)
++
++
+ @router.get("/payments", summary="List payments")
+ def get_payments(
+     page: int = Query(default=1, ge=1),
+@@ -680,88 +878,7 @@ def get_bill(
+     - 404: Bill not found
+     - 422: VALIDATION_ERROR
+     """
+-    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+-    if not bill:
+-        raise_business_error(
+-            "BILL_NOT_FOUND",
+-            "Bill not found",
+-            status_code=status.HTTP_404_NOT_FOUND,
+-        )
+-
+-    bill_items = (
+-        db.query(BillItem)
+-        .filter(BillItem.bill_id == bill_id)
+-        .order_by(BillItem.created_at.asc())
+-        .all()
+-    )
+-    client = db.query(Client).filter(Client.id == bill.client_id).first()
+-
+-    case_ids = [item.case_id for item in bill_items if item.case_id]
+-    unique_case_ids = list(dict.fromkeys(case_ids))
+-    case_map: dict[str, Case] = {}
+-    if unique_case_ids:
+-        cases = db.query(Case).filter(Case.id.in_(unique_case_ids)).all()
+-        case_map = {case.id: case for case in cases}
+-
+-    draft_ids = [item.draft_id for item in bill_items if item.draft_id]
+-    unique_draft_ids = list(dict.fromkeys(draft_ids))
+-    draft_map: dict[str, FeeDraft] = {}
+-    if unique_draft_ids:
+-        drafts = db.query(FeeDraft).filter(FeeDraft.id.in_(unique_draft_ids)).all()
+-        draft_map = {draft.id: draft for draft in drafts}
+-
+-    primary_case_id = unique_case_ids[0] if len(unique_case_ids) == 1 else None
+-    primary_case = case_map.get(primary_case_id) if primary_case_id else None
+-
+-    source_draft_labels = [
+-        _build_draft_display_label(draft_map[draft_id])
+-        for draft_id in unique_draft_ids
+-        if draft_id in draft_map
+-    ]
+-    primary_draft_id = unique_draft_ids[0] if unique_draft_ids else None
+-    primary_draft = draft_map.get(primary_draft_id) if primary_draft_id else None
+-
+-    items = [
+-        BillItemDetailResponse(
+-            id=item.id,
+-            bill_id=item.bill_id,
+-            case_id=item.case_id,
+-            draft_id=item.draft_id,
+-            fee_code=item.fee_code,
+-            fee_name=item.fee_name,
+-            fee_type=item.fee_type,
+-            year_no=item.year_no,
+-            description=item.fee_name or item.fee_code or "账单明细",
+-            quantity=1,
+-            unit_price=item.amount,
+-            amount=item.amount,
+-        )
+-        for item in bill_items
+-    ]
+-
+-    return BillDetailResponse(
+-        id=bill.id,
+-        bill_no=bill.bill_no,
+-        client_id=bill.client_id,
+-        client_name=_get_client_display_name(client),
+-        case_id=primary_case.id if primary_case else None,
+-        case_no=primary_case.case_no if primary_case else None,
+-        currency=bill.currency,
+-        direction=bill.direction,
+-        status=bill.status,
+-        total_gov=bill.total_gov,
+-        total_service=bill.total_service,
+-        total_misc=bill.total_misc,
+-        amount=bill.amount,
+-        balance=bill.balance,
+-        bill_date=bill.bill_date,
+-        due_date=bill.due_date,
+-        items=items,
+-        source_draft_ids=unique_draft_ids,
+-        source_draft_labels=source_draft_labels,
+-        primary_draft_id=primary_draft.id if primary_draft else None,
+-        primary_draft_label=_build_draft_display_label(primary_draft) if primary_draft else None,
+-    )
++    return _build_bill_detail_response(db, bill_id)
+ 
+ 
+ @router.get(
+diff --git a/backend/app/modules/billing/schemas.py b/backend/app/modules/billing/schemas.py
+index f937753..ec250b1 100644
+--- a/backend/app/modules/billing/schemas.py
++++ b/backend/app/modules/billing/schemas.py
+@@ -2,6 +2,7 @@ from __future__ import annotations
+ 
+ from datetime import date
+ from decimal import Decimal
++from typing import Literal
+ 
+ from pydantic import BaseModel, Field
+ 
+@@ -55,6 +56,15 @@ class BillResponse(BaseModel):
+     status: str
+ 
+ 
++class BillListBadDebtSummaryResponse(BaseModel):
++    """Summary fields for the bill list bad-debt report slice."""
++
++    bad_debt_bill_count: int = 0
++    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
++    total_recovered_amount: Decimal = Field(Decimal("0"), ge=0)
++    remaining_bad_debt_balance: Decimal = Field(Decimal("0"), ge=0)
++
++
+ class BillItemDetailResponse(BaseModel):
+     """Response schema for bill detail items."""
+ 
+@@ -72,6 +82,28 @@ class BillItemDetailResponse(BaseModel):
+     amount: Decimal = Field(Decimal("0"), ge=0)
+ 
+ 
++class BillBadDebtRecoveryResponse(BaseModel):
++    """Response schema for bad-debt recovery rows."""
++
++    id: str
++    voucher_id: str
++    recovery_amount: Decimal = Field(Decimal("0"), ge=0)
++    recovery_date: date | None = None
++    remark: str | None = None
++
++
++class BillBadDebtVoucherResponse(BaseModel):
++    """Response schema for the bill-level bad-debt master voucher."""
++
++    id: str
++    bill_id: str
++    status: str
++    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
++    recovered_amount: Decimal = Field(Decimal("0"), ge=0)
++    bad_debt_date: date | None = None
++    remark: str | None = None
++
++
+ class BillDetailResponse(BaseModel):
+     """Enriched bill detail response schema."""
+ 
+@@ -84,6 +116,8 @@ class BillDetailResponse(BaseModel):
+     currency: str
+     direction: str
+     status: str
++    bad_debt_status: str = "NONE"
++    bad_debt_substatus: str | None = None
+     total_gov: Decimal = Field(Decimal("0"), ge=0)
+     total_service: Decimal = Field(Decimal("0"), ge=0)
+     total_misc: Decimal = Field(Decimal("0"), ge=0)
+@@ -96,6 +130,10 @@ class BillDetailResponse(BaseModel):
+     source_draft_labels: list[str] = []
+     primary_draft_id: str | None = None
+     primary_draft_label: str | None = None
++    bad_debt_voucher: BillBadDebtVoucherResponse | None = None
++    bad_debt_recoveries: list[BillBadDebtRecoveryResponse] = []
++    bad_debt_total_recovered: Decimal = Field(Decimal("0"), ge=0)
++    bad_debt_remaining_amount: Decimal = Field(Decimal("0"), ge=0)
+ 
+ 
+ class PaymentSchema(BaseModel):
+@@ -273,3 +311,19 @@ class BillStatusSchema(BaseModel):
+     """Schema for bill status transitions."""
+ 
+     status: str = Field(..., max_length=24)
++
++
++class BillBadDebtActionSchema(BaseModel):
++    """Schema for bill bad-debt write actions."""
++
++    mode: Literal["MARK", "TRANSFER"] = "MARK"
++    bad_debt_date: date | None = None
++    remark: str | None = Field(None, max_length=512)
++
++
++class BillBadDebtRecoveryActionSchema(BaseModel):
++    """Schema for bill bad-debt recovery writes."""
++
++    recovery_amount: Decimal = Field(..., gt=0)
++    recovery_date: date | None = None
++    remark: str | None = Field(None, max_length=512)
+diff --git a/backend/app/modules/billing/service.py b/backend/app/modules/billing/service.py
+index 4ea1409..4b9b5e9 100644
+--- a/backend/app/modules/billing/service.py
++++ b/backend/app/modules/billing/service.py
+@@ -5,11 +5,23 @@ from datetime import date, datetime, timezone
+ from decimal import Decimal
+ from uuid import uuid4
+ 
++from sqlalchemy import func
+ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+-from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Payment, PaymentLine
++from app.modules.billing.models import (
++    BadDebtRecovery,
++    BadDebtVoucher,
++    Bill,
++    BillItem,
++    CaseReceipt,
++    Offset,
++    Payment,
++    PaymentLine,
++)
+ from app.modules.billing.schemas import (
++    BillBadDebtActionSchema,
++    BillBadDebtRecoveryActionSchema,
+     BillCreateSchema,
+     BillFromDraftsRequest,
+     BillManualCreateSchema,
+@@ -92,6 +104,281 @@ def _collect_service_case_ids_for_bill(db: Session, bill_id: str) -> list[str]:
+     return service_case_ids
+ 
+ 
++def load_bill_bad_debt_chain(
++    db: Session, bill_id: str
++) -> tuple[BadDebtVoucher | None, list[BadDebtRecovery], Decimal, Decimal]:
++    voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill_id).first()
++    if not voucher:
++        return None, [], Decimal("0"), Decimal("0")
++
++    recoveries = (
++        db.query(BadDebtRecovery)
++        .filter(BadDebtRecovery.voucher_id == voucher.id)
++        .order_by(BadDebtRecovery.created_at.asc(), BadDebtRecovery.id.asc())
++        .all()
++    )
++    recovered_total = sum((recovery.recovery_amount for recovery in recoveries), Decimal("0"))
++    remaining_amount = voucher.bad_debt_amount - recovered_total
++    if remaining_amount < Decimal("0"):
++        remaining_amount = Decimal("0")
++    return voucher, recoveries, recovered_total, remaining_amount
++
++
++def _normalize_bad_debt_status_filter(bad_debt_status: str | None) -> str | None:
++    if bad_debt_status is None:
++        return None
++    normalized = bad_debt_status.strip().upper()
++    return normalized or None
++
++
++def _summarize_bad_debt_bills(
++    db: Session, bill_rows: list[tuple[str, str | None]]
++) -> dict[str, Decimal | int]:
++    summary = {
++        "bad_debt_bill_count": 0,
++        "bad_debt_amount": Decimal("0"),
++        "total_recovered_amount": Decimal("0"),
++        "remaining_bad_debt_balance": Decimal("0"),
++    }
++    if not bill_rows:
++        return summary
++
++    bad_debt_rows = [
++        (bill_id, (bad_debt_status or "NONE").strip().upper())
++        for bill_id, bad_debt_status in bill_rows
++        if (bad_debt_status or "NONE").strip().upper() != "NONE"
++    ]
++    if not bad_debt_rows:
++        return summary
++
++    bill_ids = [bill_id for bill_id, _ in bad_debt_rows]
++    voucher_rows = (
++        db.query(
++            BadDebtVoucher.bill_id,
++            BadDebtVoucher.id,
++            BadDebtVoucher.bad_debt_amount,
++        )
++        .filter(BadDebtVoucher.bill_id.in_(bill_ids))
++        .all()
++    )
++    voucher_map = {voucher.bill_id: voucher for voucher in voucher_rows}
++    voucher_ids = [voucher.id for voucher in voucher_rows]
++
++    recovered_map: dict[str, Decimal] = {}
++    if voucher_ids:
++        recovery_rows = (
++            db.query(
++                BadDebtRecovery.voucher_id,
++                func.coalesce(func.sum(BadDebtRecovery.recovery_amount), Decimal("0")),
++            )
++            .filter(BadDebtRecovery.voucher_id.in_(voucher_ids))
++            .group_by(BadDebtRecovery.voucher_id)
++            .all()
++        )
++        recovered_map = {
++            voucher_id: Decimal(recovered_amount or 0)
++            for voucher_id, recovered_amount in recovery_rows
++        }
++
++    for bill_id, _bad_debt_status in bad_debt_rows:
++        summary["bad_debt_bill_count"] += 1
++        voucher = voucher_map.get(bill_id)
++        if not voucher:
++            continue
++        bad_debt_amount = Decimal(voucher.bad_debt_amount or 0)
++        recovered_amount = recovered_map.get(voucher.id, Decimal("0"))
++        remaining_amount = bad_debt_amount - recovered_amount
++        if remaining_amount < Decimal("0"):
++            remaining_amount = Decimal("0")
++
++        summary["bad_debt_amount"] += bad_debt_amount
++        summary["total_recovered_amount"] += recovered_amount
++        summary["remaining_bad_debt_balance"] += remaining_amount
++
++    return summary
++
++
++def list_bills(
++    db: Session,
++    *,
++    page: int = 1,
++    page_size: int = 20,
++    bad_debt_status: str | None = None,
++) -> tuple[list[Bill], int, dict[str, Decimal | int]]:
++    query = db.query(Bill)
++    normalized_bad_debt_status = _normalize_bad_debt_status_filter(bad_debt_status)
++    if normalized_bad_debt_status is not None:
++        query = query.filter(func.upper(Bill.bad_debt_status) == normalized_bad_debt_status)
++
++    total = query.count()
++    bills = (
++        query.order_by(Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
++    )
++    bill_rows = query.order_by(None).with_entities(Bill.id, Bill.bad_debt_status).all()
++    summary = _summarize_bad_debt_bills(db, bill_rows)
++    return bills, total, summary
++
++
++def _get_bill_for_bad_debt_action(db: Session, bill_id: str) -> Bill:
++    bill = db.query(Bill).filter(Bill.id == bill_id).first()
++    if not bill:
++        raise_business_error("BILL_NOT_FOUND", "Bill not found", status_code=404)
++    return bill
++
++
++def _validate_bad_debt_action_eligibility(
++    bill: Bill, *, mode: str, bad_debt_voucher: BadDebtVoucher | None
++) -> None:
++    if (bill.direction or "").strip().upper() != "AR":
++        raise_business_error(
++            "BAD_DEBT_NOT_ALLOWED",
++            "Only AR bills can be marked as bad debt",
++            status_code=400,
++        )
++
++    balance = Decimal(bill.balance or 0)
++    amount = Decimal(bill.amount or 0)
++    if balance <= Decimal("0"):
++        raise_business_error(
++            "BAD_DEBT_NOT_ALLOWED",
++            "Only bills with outstanding balance can be marked bad debt",
++            status_code=400,
++        )
++
++    if mode == "TRANSFER" and balance >= amount:
++        raise_business_error(
++            "BAD_DEBT_NOT_ALLOWED",
++            "Partial-payment transfer requires a partially settled bill",
++            status_code=400,
++        )
++
++    if bad_debt_voucher and (bill.bad_debt_status or "NONE").upper() == "OPEN":
++        return
++
++    if (bill.status or "").strip().upper() == "SETTLED":
++        raise_business_error(
++            "BAD_DEBT_NOT_ALLOWED",
++            "Settled bills cannot be marked as bad debt",
++            status_code=400,
++        )
++
++
++def _ensure_bad_debt_voucher(
++    db: Session,
++    *,
++    bill: Bill,
++    bad_debt_date: date | None,
++    remark: str | None,
++) -> tuple[BadDebtVoucher, bool]:
++    voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill.id).first()
++    if voucher:
++        return voucher, False
++
++    voucher = BadDebtVoucher(
++        id=str(uuid4()),
++        bill_id=bill.id,
++        status="OPEN",
++        bad_debt_amount=Decimal(bill.balance or 0),
++        recovered_amount=Decimal("0"),
++        bad_debt_date=bad_debt_date or bill.bill_date or date.today(),
++        remark=remark,
++    )
++    db.add(voucher)
++    db.flush()
++    return voucher, True
++
++
++def apply_bill_bad_debt_action(
++    db: Session, bill_id: str, data: BillBadDebtActionSchema | None = None
++) -> Bill:
++    bill = _get_bill_for_bad_debt_action(db, bill_id)
++    mode = (data.mode if data else "MARK").strip().upper()
++    bad_debt_voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill.id).first()
++
++    _validate_bad_debt_action_eligibility(bill, mode=mode, bad_debt_voucher=bad_debt_voucher)
++
++    if bad_debt_voucher:
++        bill.status = "BAD_DEBT"
++        if (bill.bad_debt_status or "NONE").upper() == "NONE":
++            bill.bad_debt_status = "OPEN"
++        if not bill.bad_debt_substatus:
++            bill.bad_debt_substatus = "PARTIAL_TRANSFER" if mode == "TRANSFER" else "MANUAL_MARK"
++        db.commit()
++        db.refresh(bill)
++        return bill
++
++    voucher, _ = _ensure_bad_debt_voucher(
++        db,
++        bill=bill,
++        bad_debt_date=data.bad_debt_date if data else None,
++        remark=data.remark if data else None,
++    )
++
++    bill.status = "BAD_DEBT"
++    bill.bad_debt_status = "OPEN"
++    bill.bad_debt_substatus = "PARTIAL_TRANSFER" if mode == "TRANSFER" else "MANUAL_MARK"
++
++    # Keep the master voucher aligned with the bill-level state.
++    voucher.status = "OPEN"
++    db.commit()
++    db.refresh(bill)
++    return bill
++
++
++def apply_bill_bad_debt_recovery(
++    db: Session, bill_id: str, data: BillBadDebtRecoveryActionSchema
++) -> Bill:
++    bill = _get_bill_for_bad_debt_action(db, bill_id)
++    if (bill.direction or "").strip().upper() != "AR":
++        raise_business_error(
++            "BAD_DEBT_RECOVERY_NOT_ALLOWED",
++            "Only AR bills can recover bad debt",
++            status_code=400,
++        )
++
++    voucher = db.query(BadDebtVoucher).filter(BadDebtVoucher.bill_id == bill.id).first()
++    if not voucher:
++        raise_business_error(
++            "BAD_DEBT_VOUCHER_NOT_FOUND",
++            "Bad debt voucher not found",
++            status_code=400,
++        )
++
++    _, _, recovered_total, remaining_amount = load_bill_bad_debt_chain(db, bill.id)
++    recovery_amount = Decimal(data.recovery_amount or 0)
++    if recovery_amount > remaining_amount:
++        raise_business_error(
++            "BAD_DEBT_RECOVERY_EXCEEDS_REMAINING",
++            "Recovery amount exceeds remaining bad debt amount",
++            status_code=400,
++        )
++
++    recovery = BadDebtRecovery(
++        id=str(uuid4()),
++        voucher_id=voucher.id,
++        recovery_amount=recovery_amount,
++        recovery_date=data.recovery_date or date.today(),
++        remark=data.remark,
++    )
++    db.add(recovery)
++
++    updated_recovered_total = recovered_total + recovery_amount
++    voucher.recovered_amount = updated_recovered_total
++    if updated_recovered_total >= Decimal(voucher.bad_debt_amount or 0):
++        voucher.status = "CLOSED"
++        bill.bad_debt_status = "CLOSED"
++        bill.bad_debt_substatus = "FULLY_RECOVERED"
++        voucher.recovered_amount = Decimal(voucher.bad_debt_amount or 0)
++    else:
++        voucher.status = "OPEN"
++        bill.bad_debt_status = "OPEN"
++        bill.bad_debt_substatus = "PARTIAL_RECOVERY"
++
++    db.commit()
++    db.refresh(bill)
++    return bill
++
++
+ def _run_commission_settleable_recompute_non_blocking(
+     db: Session, *, bill_id: str, as_of_date: date | None
+ ) -> None:
