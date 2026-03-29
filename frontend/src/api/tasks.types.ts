@@ -2,6 +2,17 @@
  * Task API Types
  */
 
+export type TaskDeadlineBase =
+    | 'FILING_DATE'
+    | 'RECEIVE_DATE'
+    | 'DISPATCH_DATE'
+    | 'PUB_DATE'
+    | 'GRANT_DATE'
+    | 'CASE_EVENT'
+    | 'CUSTOM'
+
+export type TaskRemindBase = 'INNER' | 'DEADLINE'
+
 export interface Task {
     id: string
     title: string
@@ -57,9 +68,16 @@ export interface TaskTemplate {
     id: string
     code: string
     name: string
+    deadline_base?: TaskDeadlineBase | null
     add_days: number | null
     add_months: number | null
     inner_offset_days: number | null
+    remind_base?: TaskRemindBase | null
+    remind_1_offset_days?: number | null
+    remind_2_offset_days?: number | null
+    remind_3_offset_days?: number | null
+    daily_remind: boolean
+    default_supervisor_id?: string | null
     default_worker_role: string | null
     enabled: boolean
     description: string | null
@@ -70,18 +88,32 @@ export interface TaskTemplate {
 export interface TaskTemplateCreatePayload {
     code: string
     name: string
+    deadline_base?: TaskDeadlineBase | null
     add_days?: number | null
     add_months?: number | null
     inner_offset_days?: number | null
+    remind_base?: TaskRemindBase | null
+    remind_1_offset_days?: number | null
+    remind_2_offset_days?: number | null
+    remind_3_offset_days?: number | null
+    daily_remind?: boolean
+    default_supervisor_id?: string | null
     default_worker_role?: string | null
     description?: string | null
 }
 
 export interface TaskTemplateUpdatePayload {
     name?: string | null
+    deadline_base?: TaskDeadlineBase | null
     add_days?: number | null
     add_months?: number | null
     inner_offset_days?: number | null
+    remind_base?: TaskRemindBase | null
+    remind_1_offset_days?: number | null
+    remind_2_offset_days?: number | null
+    remind_3_offset_days?: number | null
+    daily_remind?: boolean
+    default_supervisor_id?: string | null
     default_worker_role?: string | null
     enabled?: boolean | null
     description?: string | null

@@ -391,6 +391,14 @@ def list_task_templates(db: Session, *, enabled_only: bool = False) -> list[Task
     return list(db.execute(stmt).scalars().all())
 
 
+def _validate_default_supervisor(db: Session, supervisor_id: str | None) -> None:
+    if supervisor_id is None:
+        return
+    supervisor = db.execute(select(T_User).where(T_User.id == supervisor_id)).scalar_one_or_none()
+    if not supervisor:
+        raise_business_error("USER_NOT_FOUND", "User not found", status_code=404)
+
+
 def get_task_template(db: Session, *, template_id: str) -> TaskTemplate:
     tmpl = db.execute(
         select(TaskTemplate).where(TaskTemplate.id == template_id)
@@ -410,16 +418,17 @@ def create_task_template(db: Session, *, data: TaskTemplateCreateIn) -> TaskTemp
             f"Task template with code '{data.code}' already exists",
             status_code=409,
         )
+    updates = data.model_dump(exclude_unset=True)
+    _validate_default_supervisor(db, updates.get("default_supervisor_id"))
     tmpl = TaskTemplate(
         id=str(uuid4()),
         code=data.code,
         name=data.name,
-        add_days=data.add_days,
-        add_months=data.add_months,
-        inner_offset_days=data.inner_offset_days,
-        default_worker_role=data.default_worker_role,
-        description=data.description,
     )
+    for field, value in updates.items():
+        if field in {"code", "name"}:
+            continue
+        setattr(tmpl, field, value)
     db.add(tmpl)
     db.commit()
     db.refresh(tmpl)
@@ -431,6 +440,7 @@ def update_task_template(
 ) -> TaskTemplate:
     tmpl = get_task_template(db, template_id=template_id)
     updates = data.model_dump(exclude_unset=True)
+    _validate_default_supervisor(db, updates.get("default_supervisor_id"))
     for field, value in updates.items():
         setattr(tmpl, field, value)
     db.commit()

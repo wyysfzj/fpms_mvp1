@@ -1,0 +1,7 @@
+{"ts":"20260329T202033","step":"gate_db","rc":0,"log":"artifacts/DLTPL-QA-01/outputs/20260329T202033_gate_db.log"}
+{"ts":"20260329T202033","step":"gate_be_gen","rc":0,"log":"artifacts/DLTPL-QA-01/outputs/20260329T202033_gate_be_gen.log"}
+{"ts":"20260329T202033","step":"gate_be_tpl","rc":0,"log":"artifacts/DLTPL-QA-01/outputs/20260329T202033_gate_be_tpl.log"}
+{"ts":"20260329T202054","step":"gate_fe_tpl","rc":0,"log":"artifacts/DLTPL-QA-01/outputs/20260329T202054_gate_fe_tpl.log"}
+{"ts":"20260329T202112","step":"gate_qa","rc":1,"log":"artifacts/DLTPL-QA-01/outputs/20260329T202112_gate_qa.log"}
+{"ts":"20260329T202137","step":"test","rc":0,"log":"artifacts/DLTPL-QA-01/outputs/20260329T202137_test.log"}
+{"ts":"20260329T202137","step":"lint","rc":0,"log":"artifacts/DLTPL-QA-01/outputs/20260329T202137_lint.log"}

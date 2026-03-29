@@ -1,0 +1,11 @@
+{"ts":"20260329T200706","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/tasks.ts\ src/api/tasks.types.ts\ src/modules/system/pages/TaskTemplateList.vue"}
+{"ts":"20260329T200706","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260329T200925","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/tasks.ts\ src/api/tasks.types.ts\ src/modules/system/pages/TaskTemplateList.vue"}
+{"ts":"20260329T200925","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260329T201223","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260329T201223","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/tasks.ts\ src/api/tasks.types.ts\ src/modules/system/pages/TaskTemplateList.vue"}
+{"ts":"20260329T201429","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260329T201429","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/tasks.ts\ src/api/tasks.types.ts\ src/modules/system/pages/TaskTemplateList.vue"}
+{"ts":"20260329T201605","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260329T201605","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/tasks.ts\ src/api/tasks.types.ts\ src/modules/system/pages/TaskTemplateList.vue"}
+{"ts":"20260329T202033","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}

@@ -1,0 +1,351 @@
+diff --git a/frontend/src/api/tasks.ts b/frontend/src/api/tasks.ts
+index 55dc33a..6bb2002 100644
+--- a/frontend/src/api/tasks.ts
++++ b/frontend/src/api/tasks.ts
+@@ -1,6 +1,14 @@
+ import { http } from './http'
+ import type { Pagination } from './types'
+-import type { Task, TaskCreatePayload, TaskListParams, TaskLog, TaskTemplate, TaskTemplateCreatePayload, TaskTemplateUpdatePayload } from './tasks.types'
++import type {
++    Task,
++    TaskCreatePayload,
++    TaskListParams,
++    TaskLog,
++    TaskTemplate,
++    TaskTemplateCreatePayload,
++    TaskTemplateUpdatePayload,
++} from './tasks.types'
+ 
+ interface BackendTask {
+     id: string
+@@ -62,6 +70,28 @@ function toCreatePayload(data: TaskCreatePayload): Record<string, unknown> {
+     }
+ }
+ 
++function toTaskTemplatePayload(
++    data: TaskTemplateCreatePayload | TaskTemplateUpdatePayload,
++): Record<string, unknown> {
++    return {
++        ...('code' in data ? { code: data.code } : {}),
++        ...('name' in data ? { name: data.name } : {}),
++        ...(data.deadline_base !== undefined ? { deadline_base: data.deadline_base } : {}),
++        ...(data.add_days !== undefined ? { add_days: data.add_days } : {}),
++        ...(data.add_months !== undefined ? { add_months: data.add_months } : {}),
++        ...(data.inner_offset_days !== undefined ? { inner_offset_days: data.inner_offset_days } : {}),
++        ...(data.remind_base !== undefined ? { remind_base: data.remind_base } : {}),
++        ...(data.remind_1_offset_days !== undefined ? { remind_1_offset_days: data.remind_1_offset_days } : {}),
++        ...(data.remind_2_offset_days !== undefined ? { remind_2_offset_days: data.remind_2_offset_days } : {}),
++        ...(data.remind_3_offset_days !== undefined ? { remind_3_offset_days: data.remind_3_offset_days } : {}),
++        ...(data.daily_remind !== undefined ? { daily_remind: data.daily_remind } : {}),
++        ...(data.default_supervisor_id !== undefined ? { default_supervisor_id: data.default_supervisor_id || null } : {}),
++        ...(data.default_worker_role !== undefined ? { default_worker_role: data.default_worker_role || null } : {}),
++        ...(data.description !== undefined ? { description: data.description || null } : {}),
++        ...('enabled' in data ? (data.enabled !== undefined ? { enabled: data.enabled } : {}) : {}),
++    }
++}
++
+ /**
+  * Get a single task by ID
+  */
+@@ -160,11 +190,11 @@ export async function getTaskTemplates(enabledOnly?: boolean): Promise<TaskTempl
+ }
+ 
+ export async function createTaskTemplate(data: TaskTemplateCreatePayload): Promise<TaskTemplate> {
+-    const response = await http.post<TaskTemplate>('/task-templates', data)
++    const response = await http.post<TaskTemplate>('/task-templates', toTaskTemplatePayload(data))
+     return response.data
+ }
+ 
+ export async function updateTaskTemplate(id: string, data: TaskTemplateUpdatePayload): Promise<TaskTemplate> {
+-    const response = await http.put<TaskTemplate>(`/task-templates/${id}`, data)
++    const response = await http.put<TaskTemplate>(`/task-templates/${id}`, toTaskTemplatePayload(data))
+     return response.data
+ }
+diff --git a/frontend/src/api/tasks.types.ts b/frontend/src/api/tasks.types.ts
+index 76419f3..81e2170 100644
+--- a/frontend/src/api/tasks.types.ts
++++ b/frontend/src/api/tasks.types.ts
+@@ -2,6 +2,17 @@
+  * Task API Types
+  */
+ 
++export type TaskDeadlineBase =
++    | 'FILING_DATE'
++    | 'RECEIVE_DATE'
++    | 'DISPATCH_DATE'
++    | 'PUB_DATE'
++    | 'GRANT_DATE'
++    | 'CASE_EVENT'
++    | 'CUSTOM'
++
++export type TaskRemindBase = 'INNER' | 'DEADLINE'
++
+ export interface Task {
+     id: string
+     title: string
+@@ -57,9 +68,16 @@ export interface TaskTemplate {
+     id: string
+     code: string
+     name: string
++    deadline_base?: TaskDeadlineBase | null
+     add_days: number | null
+     add_months: number | null
+     inner_offset_days: number | null
++    remind_base?: TaskRemindBase | null
++    remind_1_offset_days?: number | null
++    remind_2_offset_days?: number | null
++    remind_3_offset_days?: number | null
++    daily_remind: boolean
++    default_supervisor_id?: string | null
+     default_worker_role: string | null
+     enabled: boolean
+     description: string | null
+@@ -70,18 +88,32 @@ export interface TaskTemplate {
+ export interface TaskTemplateCreatePayload {
+     code: string
+     name: string
++    deadline_base?: TaskDeadlineBase | null
+     add_days?: number | null
+     add_months?: number | null
+     inner_offset_days?: number | null
++    remind_base?: TaskRemindBase | null
++    remind_1_offset_days?: number | null
++    remind_2_offset_days?: number | null
++    remind_3_offset_days?: number | null
++    daily_remind?: boolean | null
++    default_supervisor_id?: string | null
+     default_worker_role?: string | null
+     description?: string | null
+ }
+ 
+ export interface TaskTemplateUpdatePayload {
+     name?: string | null
++    deadline_base?: TaskDeadlineBase | null
+     add_days?: number | null
+     add_months?: number | null
+     inner_offset_days?: number | null
++    remind_base?: TaskRemindBase | null
++    remind_1_offset_days?: number | null
++    remind_2_offset_days?: number | null
++    remind_3_offset_days?: number | null
++    daily_remind?: boolean | null
++    default_supervisor_id?: string | null
+     default_worker_role?: string | null
+     enabled?: boolean | null
+     description?: string | null
+diff --git a/frontend/src/modules/system/pages/TaskTemplateList.vue b/frontend/src/modules/system/pages/TaskTemplateList.vue
+index 43d70be..7d15091 100644
+--- a/frontend/src/modules/system/pages/TaskTemplateList.vue
++++ b/frontend/src/modules/system/pages/TaskTemplateList.vue
+@@ -33,6 +33,25 @@
+       <el-table-column label="内部偏移天数" width="120">
+         <template #default="{ row }">{{ row.inner_offset_days ?? '—' }}</template>
+       </el-table-column>
++      <el-table-column label="期限基准" width="120">
++        <template #default="{ row }">{{ getDeadlineBaseLabel(row.deadline_base) }}</template>
++      </el-table-column>
++      <el-table-column label="提醒基准" width="120">
++        <template #default="{ row }">{{ getRemindBaseLabel(row.remind_base) }}</template>
++      </el-table-column>
++      <el-table-column label="提醒偏移" width="180">
++        <template #default="{ row }">{{ formatRemindOffsets(row) }}</template>
++      </el-table-column>
++      <el-table-column label="每日提醒" width="100">
++        <template #default="{ row }">
++          <el-tag :type="row.daily_remind ? 'warning' : 'info'">
++            {{ row.daily_remind ? '是' : '否' }}
++          </el-tag>
++        </template>
++      </el-table-column>
++      <el-table-column label="默认监督人ID" width="140">
++        <template #default="{ row }">{{ row.default_supervisor_id || '—' }}</template>
++      </el-table-column>
+       <el-table-column label="默认角色" width="120">
+         <template #default="{ row }">{{ row.default_worker_role || '—' }}</template>
+       </el-table-column>
+@@ -88,6 +107,34 @@
+         <el-form-item label="内部偏移天数" prop="inner_offset_days">
+           <el-input-number v-model="form.inner_offset_days" :min="0" placeholder="天数" />
+         </el-form-item>
++        <el-form-item label="期限基准" prop="deadline_base">
++          <el-select v-model="form.deadline_base" clearable style="width: 100%" placeholder="请选择期限基准">
++            <el-option v-for="option in deadlineBaseOptions" :key="option.value || 'none'" :label="option.label" :value="option.value" />
++          </el-select>
++        </el-form-item>
++        <el-form-item label="提醒基准" prop="remind_base">
++          <el-select v-model="form.remind_base" clearable style="width: 100%" placeholder="请选择提醒基准">
++            <el-option v-for="option in remindBaseOptions" :key="option.value || 'none'" :label="option.label" :value="option.value" />
++          </el-select>
++        </el-form-item>
++        <el-form-item label="提醒1偏移天数" prop="remind_1_offset_days">
++          <el-input-number v-model="form.remind_1_offset_days" placeholder="可留空" />
++        </el-form-item>
++        <el-form-item label="提醒2偏移天数" prop="remind_2_offset_days">
++          <el-input-number v-model="form.remind_2_offset_days" placeholder="可留空" />
++        </el-form-item>
++        <el-form-item label="提醒3偏移天数" prop="remind_3_offset_days">
++          <el-input-number v-model="form.remind_3_offset_days" placeholder="可留空" />
++        </el-form-item>
++        <el-form-item label="每日提醒" prop="daily_remind">
++          <el-switch v-model="form.daily_remind" />
++        </el-form-item>
++        <el-form-item label="默认监督人ID" prop="default_supervisor_id">
++          <el-input
++            v-model.trim="form.default_supervisor_id"
++            placeholder="可留空，直接填写用户ID"
++          />
++        </el-form-item>
+         <el-form-item label="默认角色" prop="default_worker_role">
+           <el-input v-model.trim="form.default_worker_role" placeholder="例如：审查员" />
+         </el-form-item>
+@@ -112,10 +159,27 @@ import { onMounted, reactive, ref } from 'vue'
+ import type { FormInstance, FormRules } from 'element-plus'
+ import { ElMessage } from 'element-plus'
+ import { getTaskTemplates, createTaskTemplate, updateTaskTemplate } from '../../../api/tasks'
+-import type { TaskTemplate } from '../../../api/tasks.types'
++import type { TaskDeadlineBase, TaskRemindBase, TaskTemplate } from '../../../api/tasks.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+ 
++const deadlineBaseOptions: Array<{ label: string; value: TaskDeadlineBase | '' }> = [
++  { label: '未设置', value: '' },
++  { label: '递交日', value: 'FILING_DATE' },
++  { label: '接收日', value: 'RECEIVE_DATE' },
++  { label: '送达日', value: 'DISPATCH_DATE' },
++  { label: '公布日', value: 'PUB_DATE' },
++  { label: '授权日', value: 'GRANT_DATE' },
++  { label: '案件事件', value: 'CASE_EVENT' },
++  { label: '自定义', value: 'CUSTOM' },
++]
++
++const remindBaseOptions: Array<{ label: string; value: TaskRemindBase | '' }> = [
++  { label: '未设置', value: '' },
++  { label: '内部期限', value: 'INNER' },
++  { label: '到期日', value: 'DEADLINE' },
++]
++
+ const templates = ref<TaskTemplate[]>([])
+ const loading = ref(false)
+ const error = ref<ApiError | null>(null)
+@@ -132,6 +196,13 @@ const form = reactive({
+   add_days: undefined as number | undefined,
+   add_months: undefined as number | undefined,
+   inner_offset_days: undefined as number | undefined,
++  deadline_base: '' as TaskDeadlineBase | '',
++  remind_base: '' as TaskRemindBase | '',
++  remind_1_offset_days: undefined as number | undefined,
++  remind_2_offset_days: undefined as number | undefined,
++  remind_3_offset_days: undefined as number | undefined,
++  daily_remind: false,
++  default_supervisor_id: '',
+   default_worker_role: '',
+   description: '',
+   enabled: true,
+@@ -160,6 +231,13 @@ function resetForm() {
+   form.add_days = undefined
+   form.add_months = undefined
+   form.inner_offset_days = undefined
++  form.deadline_base = ''
++  form.remind_base = ''
++  form.remind_1_offset_days = undefined
++  form.remind_2_offset_days = undefined
++  form.remind_3_offset_days = undefined
++  form.daily_remind = false
++  form.default_supervisor_id = ''
+   form.default_worker_role = ''
+   form.description = ''
+   form.enabled = true
+@@ -178,6 +256,13 @@ function openEdit(row: TaskTemplate) {
+   form.add_days = row.add_days ?? undefined
+   form.add_months = row.add_months ?? undefined
+   form.inner_offset_days = row.inner_offset_days ?? undefined
++  form.deadline_base = row.deadline_base ?? ''
++  form.remind_base = row.remind_base ?? ''
++  form.remind_1_offset_days = row.remind_1_offset_days ?? undefined
++  form.remind_2_offset_days = row.remind_2_offset_days ?? undefined
++  form.remind_3_offset_days = row.remind_3_offset_days ?? undefined
++  form.daily_remind = row.daily_remind
++  form.default_supervisor_id = row.default_supervisor_id ?? ''
+   form.default_worker_role = row.default_worker_role ?? ''
+   form.description = row.description ?? ''
+   form.enabled = row.enabled
+@@ -195,9 +280,16 @@ async function handleSave() {
+     if (isEdit.value) {
+       await updateTaskTemplate(editingId.value, {
+         name: form.name,
++        deadline_base: form.deadline_base || null,
+         add_days: form.add_days ?? null,
+         add_months: form.add_months ?? null,
+         inner_offset_days: form.inner_offset_days ?? null,
++        remind_base: form.remind_base || null,
++        remind_1_offset_days: form.remind_1_offset_days ?? null,
++        remind_2_offset_days: form.remind_2_offset_days ?? null,
++        remind_3_offset_days: form.remind_3_offset_days ?? null,
++        daily_remind: form.daily_remind,
++        default_supervisor_id: form.default_supervisor_id || null,
+         default_worker_role: form.default_worker_role || null,
+         description: form.description || null,
+         enabled: form.enabled,
+@@ -207,9 +299,16 @@ async function handleSave() {
+       await createTaskTemplate({
+         code: form.code,
+         name: form.name,
++        deadline_base: form.deadline_base || null,
+         add_days: form.add_days ?? null,
+         add_months: form.add_months ?? null,
+         inner_offset_days: form.inner_offset_days ?? null,
++        remind_base: form.remind_base || null,
++        remind_1_offset_days: form.remind_1_offset_days ?? null,
++        remind_2_offset_days: form.remind_2_offset_days ?? null,
++        remind_3_offset_days: form.remind_3_offset_days ?? null,
++        daily_remind: form.daily_remind,
++        default_supervisor_id: form.default_supervisor_id || null,
+         default_worker_role: form.default_worker_role || null,
+         description: form.description || null,
+       })
+@@ -240,6 +339,45 @@ async function handleToggleEnabled(row: TaskTemplate) {
+ onMounted(() => {
+   fetchTemplates()
+ })
++
++function getDeadlineBaseLabel(value?: TaskDeadlineBase | null): string {
++  switch (value) {
++    case 'FILING_DATE':
++      return '递交日'
++    case 'RECEIVE_DATE':
++      return '接收日'
++    case 'DISPATCH_DATE':
++      return '送达日'
++    case 'PUB_DATE':
++      return '公布日'
++    case 'GRANT_DATE':
++      return '授权日'
++    case 'CASE_EVENT':
++      return '案件事件'
++    case 'CUSTOM':
++      return '自定义'
++    default:
++      return '—'
++  }
++}
++
++function getRemindBaseLabel(value?: TaskRemindBase | null): string {
++  switch (value) {
++    case 'INNER':
++      return '内部期限'
++    case 'DEADLINE':
++      return '到期日'
++    default:
++      return '—'
++  }
++}
++
++function formatRemindOffsets(row: TaskTemplate): string {
++  const remind1 = row.remind_1_offset_days ?? '—'
++  const remind2 = row.remind_2_offset_days ?? '—'
++  const remind3 = row.remind_3_offset_days ?? '—'
++  return `1: ${remind1} / 2: ${remind2} / 3: ${remind3}`
++}
+ </script>
+ 
+ <style scoped>

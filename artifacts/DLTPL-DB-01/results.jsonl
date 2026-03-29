@@ -1,0 +1,10 @@
+{"step":"lint","cmd":"ruff check backend/alembic/versions/dltpl_db_01_task_template_reminder_fields.py backend/app/modules/tasks/models.py backend/app/modules/tasks/enums.py","rc":0}
+{"step":"test","cmd":"cd backend && alembic upgrade head","rc":0}
+{"step":"gate","cmd":"./scripts/task_validate.sh DLTPL-DB-01","rc":0}
+{"ts":"20260329T193002","step":"lint","rc":0,"log":"artifacts/DLTPL-DB-01/outputs/20260329T193002_lint.log"}
+{"ts":"20260329T193002","step":"test","rc":0,"log":"artifacts/DLTPL-DB-01/outputs/20260329T193002_test.log"}
+{"ts":"20260329T193451","step":"lint","cmd":"ruff check backend/alembic/versions/dltpl_db_01_task_template_reminder_fields.py backend/app/modules/tasks/models.py backend/app/modules/tasks/enums.py","rc":0}
+{"ts":"20260329T193451","step":"test","cmd":"cd backend && alembic upgrade head","rc":0}
+{"ts":"20260329T193451","step":"gate","cmd":"./scripts/task_validate.sh DLTPL-DB-01","rc":0}
+{"ts":"20260329T193615","step":"lint","rc":0,"log":"artifacts/DLTPL-DB-01/outputs/20260329T193615_lint.log"}
+{"ts":"20260329T193615","step":"test","rc":0,"log":"artifacts/DLTPL-DB-01/outputs/20260329T193615_test.log"}

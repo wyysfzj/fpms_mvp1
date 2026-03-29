@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.modules.tasks.enums import TaskAction, TaskStatus
+from app.modules.tasks.enums import TaskAction, TaskDeadlineBase, TaskRemindBase, TaskStatus
 
 
 class TaskCreateIn(BaseModel):
@@ -108,21 +108,47 @@ class TaskLogOut(BaseModel):
 class TaskTemplateCreateIn(BaseModel):
     code: str = Field(..., min_length=1, max_length=64)
     name: str = Field(..., min_length=1, max_length=256)
+    deadline_base: TaskDeadlineBase | None = None
     add_days: int | None = None
     add_months: int | None = None
     inner_offset_days: int | None = None
+    remind_base: TaskRemindBase | None = None
+    remind_1_offset_days: int | None = None
+    remind_2_offset_days: int | None = None
+    remind_3_offset_days: int | None = None
+    daily_remind: bool | None = None
+    default_supervisor_id: str | None = None
     default_worker_role: str | None = None
     description: str | None = None
+
+    @model_validator(mode="after")
+    def validate_daily_remind_not_null(self) -> "TaskTemplateCreateIn":
+        if "daily_remind" in self.model_fields_set and self.daily_remind is None:
+            raise ValueError("daily_remind must be a boolean")
+        return self
 
 
 class TaskTemplateUpdateIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=256)
+    deadline_base: TaskDeadlineBase | None = None
     add_days: int | None = None
     add_months: int | None = None
     inner_offset_days: int | None = None
+    remind_base: TaskRemindBase | None = None
+    remind_1_offset_days: int | None = None
+    remind_2_offset_days: int | None = None
+    remind_3_offset_days: int | None = None
+    daily_remind: bool | None = None
+    default_supervisor_id: str | None = None
     default_worker_role: str | None = None
     enabled: bool | None = None
     description: str | None = None
+
+    @model_validator(mode="after")
+    def validate_daily_remind_not_null(self) -> "TaskTemplateUpdateIn":
+        if "daily_remind" in self.model_fields_set and self.daily_remind is None:
+            raise ValueError("daily_remind must be a boolean")
+        return self
 
 
 class TaskTemplateOut(BaseModel):
@@ -131,9 +157,16 @@ class TaskTemplateOut(BaseModel):
     id: str
     code: str
     name: str
+    deadline_base: TaskDeadlineBase | None = None
     add_days: int | None = None
     add_months: int | None = None
     inner_offset_days: int | None = None
+    remind_base: TaskRemindBase | None = None
+    remind_1_offset_days: int | None = None
+    remind_2_offset_days: int | None = None
+    remind_3_offset_days: int | None = None
+    daily_remind: bool
+    default_supervisor_id: str | None = None
     default_worker_role: str | None = None
     enabled: bool
     description: str | None = None

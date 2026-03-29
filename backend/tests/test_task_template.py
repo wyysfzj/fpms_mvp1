@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.security import get_password_hash
 from app.modules.auth.models import T_User
+from app.modules.tasks.enums import TaskDeadlineBase, TaskRemindBase
+from app.modules.tasks.schemas import TaskTemplateCreateIn, TaskTemplateOut, TaskTemplateUpdateIn
 
 # ---------- helpers ----------
 
@@ -60,6 +63,76 @@ def _create_user(session_factory: sessionmaker, username_prefix: str) -> str:
 # ---------- TaskTemplate CRUD ----------
 
 
+def test_task_template_schemas_include_reminder_fields() -> None:
+    create_payload = TaskTemplateCreateIn(
+        code="TPL-SCHEMA",
+        name="模板 schema 测试",
+        deadline_base=TaskDeadlineBase.RECEIVE_DATE,
+        remind_base=TaskRemindBase.DEADLINE,
+        remind_1_offset_days=1,
+        remind_2_offset_days=2,
+        remind_3_offset_days=3,
+        daily_remind=True,
+        default_supervisor_id="supervisor-id",
+        add_days=90,
+        inner_offset_days=10,
+    )
+    assert create_payload.deadline_base == TaskDeadlineBase.RECEIVE_DATE
+    assert create_payload.remind_base == TaskRemindBase.DEADLINE
+    assert create_payload.remind_1_offset_days == 1
+    assert create_payload.remind_2_offset_days == 2
+    assert create_payload.remind_3_offset_days == 3
+    assert create_payload.daily_remind is True
+    assert create_payload.default_supervisor_id == "supervisor-id"
+
+    update_payload = TaskTemplateUpdateIn(
+        deadline_base=TaskDeadlineBase.FILING_DATE,
+        remind_base=TaskRemindBase.INNER,
+        remind_1_offset_days=4,
+        remind_2_offset_days=5,
+        remind_3_offset_days=6,
+        daily_remind=False,
+        default_supervisor_id=None,
+    )
+    assert update_payload.deadline_base == TaskDeadlineBase.FILING_DATE
+    assert update_payload.remind_base == TaskRemindBase.INNER
+    assert update_payload.remind_1_offset_days == 4
+    assert update_payload.remind_2_offset_days == 5
+    assert update_payload.remind_3_offset_days == 6
+    assert update_payload.daily_remind is False
+    assert update_payload.default_supervisor_id is None
+
+    out = TaskTemplateOut.model_validate(
+        SimpleNamespace(
+            id=str(uuid4()),
+            code="TPL-OUT",
+            name="模板 out 测试",
+            add_days=30,
+            add_months=0,
+            inner_offset_days=7,
+            deadline_base=TaskDeadlineBase.RECEIVE_DATE,
+            remind_base=TaskRemindBase.DEADLINE,
+            remind_1_offset_days=1,
+            remind_2_offset_days=2,
+            remind_3_offset_days=3,
+            daily_remind=True,
+            default_supervisor_id="supervisor-id",
+            default_worker_role="worker",
+            enabled=True,
+            description="desc",
+            created_at=date(2025, 1, 1),
+            updated_at=date(2025, 1, 2),
+        )
+    )
+    assert out.deadline_base == TaskDeadlineBase.RECEIVE_DATE
+    assert out.remind_base == TaskRemindBase.DEADLINE
+    assert out.remind_1_offset_days == 1
+    assert out.remind_2_offset_days == 2
+    assert out.remind_3_offset_days == 3
+    assert out.daily_remind is True
+    assert out.default_supervisor_id == "supervisor-id"
+
+
 def test_list_task_templates_returns_seeded(client: TestClient, auth_headers: dict) -> None:
     """Verify seeded OA_REPLY and GRANT_FEE appear in listing."""
     resp = client.get("/api/v1/task-templates", headers=auth_headers)
@@ -78,8 +151,11 @@ def test_list_task_templates_returns_seeded(client: TestClient, auth_headers: di
     assert gf["inner_offset_days"] == 7
 
 
-def test_create_task_template(client: TestClient, auth_headers: dict) -> None:
+def test_create_task_template(
+    client: TestClient, auth_headers: dict, session_factory: sessionmaker
+) -> None:
     code = f"T-{uuid4().hex[:6]}"
+    supervisor_id = _create_user(session_factory, "task_template_supervisor")
     resp = client.post(
         "/api/v1/task-templates",
         headers=auth_headers,
@@ -88,6 +164,13 @@ def test_create_task_template(client: TestClient, auth_headers: dict) -> None:
             "name": "Test Template",
             "add_days": 90,
             "inner_offset_days": 10,
+            "deadline_base": "RECEIVE_DATE",
+            "remind_base": "DEADLINE",
+            "remind_1_offset_days": 1,
+            "remind_2_offset_days": 2,
+            "remind_3_offset_days": 3,
+            "daily_remind": True,
+            "default_supervisor_id": supervisor_id,
         },
     )
     assert resp.status_code == 201, resp.text
@@ -95,11 +178,74 @@ def test_create_task_template(client: TestClient, auth_headers: dict) -> None:
     assert body["code"] == code
     assert body["add_days"] == 90
     assert body["inner_offset_days"] == 10
+    assert body["deadline_base"] == "RECEIVE_DATE"
+    assert body["remind_base"] == "DEADLINE"
+    assert body["remind_1_offset_days"] == 1
+    assert body["remind_2_offset_days"] == 2
+    assert body["remind_3_offset_days"] == 3
+    assert body["daily_remind"] is True
+    assert body["default_supervisor_id"]
     assert body["enabled"] is True
 
 
-def test_update_task_template(client: TestClient, auth_headers: dict) -> None:
+def test_create_task_template_commits_once(
+    client: TestClient, auth_headers: dict, monkeypatch, session_factory: sessionmaker
+) -> None:
+    commit_count = 0
+    original_commit = Session.commit
+
+    def wrapped_commit(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        nonlocal commit_count
+        commit_count += 1
+        return original_commit(self, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "commit", wrapped_commit)
+
+    code = f"C-{uuid4().hex[:6]}"
+    resp = client.post(
+        "/api/v1/task-templates",
+        headers=auth_headers,
+        json={"code": code, "name": "Atomic Template", "add_days": 15},
+    )
+    assert resp.status_code == 201, resp.text
+    assert commit_count == 1
+
+
+def test_create_task_template_rejects_missing_default_supervisor(
+    client: TestClient, auth_headers: dict
+) -> None:
+    resp = client.post(
+        "/api/v1/task-templates",
+        headers=auth_headers,
+        json={
+            "code": f"S-{uuid4().hex[:6]}",
+            "name": "Supervisor Guard Template",
+            "default_supervisor_id": str(uuid4()),
+        },
+    )
+    assert resp.status_code == 404, resp.text
+
+
+def test_create_task_template_rejects_null_daily_remind(
+    client: TestClient, auth_headers: dict
+) -> None:
+    resp = client.post(
+        "/api/v1/task-templates",
+        headers=auth_headers,
+        json={
+            "code": f"N-{uuid4().hex[:6]}",
+            "name": "Null Daily Remind",
+            "daily_remind": None,
+        },
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_update_task_template(
+    client: TestClient, auth_headers: dict, session_factory: sessionmaker
+) -> None:
     code = f"U-{uuid4().hex[:6]}"
+    supervisor_id = _create_user(session_factory, "task_template_supervisor")
     create = client.post(
         "/api/v1/task-templates",
         headers=auth_headers,
@@ -111,12 +257,67 @@ def test_update_task_template(client: TestClient, auth_headers: dict) -> None:
     update = client.put(
         f"/api/v1/task-templates/{tid}",
         headers=auth_headers,
-        json={"name": "After", "add_days": 60},
+        json={
+            "name": "After",
+            "add_days": 60,
+            "deadline_base": "FILING_DATE",
+            "remind_base": "INNER",
+            "remind_1_offset_days": 4,
+            "remind_2_offset_days": 5,
+            "remind_3_offset_days": 6,
+            "daily_remind": True,
+            "default_supervisor_id": supervisor_id,
+        },
     )
     assert update.status_code == 200, update.text
     body = update.json()
     assert body["name"] == "After"
     assert body["add_days"] == 60
+    assert body["deadline_base"] == "FILING_DATE"
+    assert body["remind_base"] == "INNER"
+    assert body["remind_1_offset_days"] == 4
+    assert body["remind_2_offset_days"] == 5
+    assert body["remind_3_offset_days"] == 6
+    assert body["daily_remind"] is True
+    assert body["default_supervisor_id"]
+
+
+def test_update_task_template_rejects_missing_default_supervisor(
+    client: TestClient, auth_headers: dict
+) -> None:
+    create = client.post(
+        "/api/v1/task-templates",
+        headers=auth_headers,
+        json={"code": f"U-{uuid4().hex[:6]}", "name": "Before"},
+    )
+    assert create.status_code == 201, create.text
+    tid = create.json()["id"]
+
+    update = client.put(
+        f"/api/v1/task-templates/{tid}",
+        headers=auth_headers,
+        json={"default_supervisor_id": str(uuid4())},
+    )
+    assert update.status_code == 404, update.text
+
+
+def test_update_task_template_rejects_null_daily_remind(
+    client: TestClient, auth_headers: dict
+) -> None:
+    create = client.post(
+        "/api/v1/task-templates",
+        headers=auth_headers,
+        json={"code": f"N-{uuid4().hex[:6]}", "name": "Before"},
+    )
+    assert create.status_code == 201, create.text
+    tid = create.json()["id"]
+
+    update = client.put(
+        f"/api/v1/task-templates/{tid}",
+        headers=auth_headers,
+        json={"daily_remind": None},
+    )
+    assert update.status_code == 422, update.text
 
 
 def test_duplicate_code_rejected(client: TestClient, auth_headers: dict) -> None:

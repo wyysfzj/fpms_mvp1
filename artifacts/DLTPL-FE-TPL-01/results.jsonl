@@ -1,0 +1,14 @@
+{"step":"lint","rc":0,"cmd":"cd frontend && npm run lint -- src/api/tasks.ts src/api/tasks.types.ts src/modules/system/pages/TaskTemplateList.vue"}
+{"step":"typecheck","rc":0,"cmd":"cd frontend && npm run typecheck"}
+{"step":"test","rc":0,"cmd":"./scripts/task_validate.sh DLTPL-FE-TPL-01"}
+{"ts":"20260329T200706","step":"lint","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T200706_lint.log"}
+{"ts":"20260329T200706","step":"test","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T200706_test.log"}
+{"ts":"20260329T200925","step":"lint","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T200925_lint.log"}
+{"ts":"20260329T200925","step":"test","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T200925_test.log"}
+{"ts":"20260329T201223","step":"lint","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T201223_lint.log"}
+{"ts":"20260329T201223","step":"test","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T201223_test.log"}
+{"ts":"20260329T201429","step":"lint","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T201429_lint.log"}
+{"ts":"20260329T201429","step":"test","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T201429_test.log"}
+{"ts":"20260329T201605","step":"lint","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T201605_lint.log"}
+{"ts":"20260329T201605","step":"test","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T201605_test.log"}
+{"ts":"20260329T202033","step":"test","rc":0,"log":"artifacts/DLTPL-FE-TPL-01/outputs/20260329T202033_test.log"}

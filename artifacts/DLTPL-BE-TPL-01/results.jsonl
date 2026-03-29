@@ -1,0 +1,8 @@
+{"step":"red-test","cmd":"cd backend && pytest -q tests/test_task_template.py -k 'template'","rc":1}
+{"step":"lint","cmd":"ruff check backend/app/modules/tasks/api.py backend/app/modules/tasks/schemas.py backend/app/modules/tasks/service.py backend/tests/test_task_template.py","rc":0}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_task_template.py -k 'template'","rc":0}
+{"step":"task_validate","cmd":"./scripts/task_validate.sh DLTPL-BE-TPL-01","rc":0}
+{"ts":"20260329T194618","step":"lint","rc":0,"log":"artifacts/DLTPL-BE-TPL-01/outputs/20260329T194618_lint.log"}
+{"ts":"20260329T194618","step":"test","rc":0,"log":"artifacts/DLTPL-BE-TPL-01/outputs/20260329T194618_test.log"}
+{"ts":"20260329T194712","step":"lint","rc":0,"log":"artifacts/DLTPL-BE-TPL-01/outputs/20260329T194712_lint.log"}
+{"ts":"20260329T194712","step":"test","rc":0,"log":"artifacts/DLTPL-BE-TPL-01/outputs/20260329T194712_test.log"}

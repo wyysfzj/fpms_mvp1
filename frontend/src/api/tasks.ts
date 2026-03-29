@@ -1,6 +1,14 @@
 import { http } from './http'
 import type { Pagination } from './types'
-import type { Task, TaskCreatePayload, TaskListParams, TaskLog, TaskTemplate, TaskTemplateCreatePayload, TaskTemplateUpdatePayload } from './tasks.types'
+import type {
+    Task,
+    TaskCreatePayload,
+    TaskListParams,
+    TaskLog,
+    TaskTemplate,
+    TaskTemplateCreatePayload,
+    TaskTemplateUpdatePayload,
+} from './tasks.types'
 
 interface BackendTask {
     id: string
@@ -59,6 +67,28 @@ function toCreatePayload(data: TaskCreatePayload): Record<string, unknown> {
         due_date: data.due_date,
         worker_id: data.assigned_to || undefined,
         remark: remark || undefined,
+    }
+}
+
+function toTaskTemplatePayload(
+    data: TaskTemplateCreatePayload | TaskTemplateUpdatePayload,
+): Record<string, unknown> {
+    return {
+        ...('code' in data ? { code: data.code } : {}),
+        ...('name' in data ? { name: data.name } : {}),
+        ...(data.deadline_base !== undefined ? { deadline_base: data.deadline_base } : {}),
+        ...(data.add_days !== undefined ? { add_days: data.add_days } : {}),
+        ...(data.add_months !== undefined ? { add_months: data.add_months } : {}),
+        ...(data.inner_offset_days !== undefined ? { inner_offset_days: data.inner_offset_days } : {}),
+        ...(data.remind_base !== undefined ? { remind_base: data.remind_base } : {}),
+        ...(data.remind_1_offset_days !== undefined ? { remind_1_offset_days: data.remind_1_offset_days } : {}),
+        ...(data.remind_2_offset_days !== undefined ? { remind_2_offset_days: data.remind_2_offset_days } : {}),
+        ...(data.remind_3_offset_days !== undefined ? { remind_3_offset_days: data.remind_3_offset_days } : {}),
+        ...(data.daily_remind !== undefined ? { daily_remind: data.daily_remind } : {}),
+        ...(data.default_supervisor_id !== undefined ? { default_supervisor_id: data.default_supervisor_id || null } : {}),
+        ...(data.default_worker_role !== undefined ? { default_worker_role: data.default_worker_role || null } : {}),
+        ...(data.description !== undefined ? { description: data.description || null } : {}),
+        ...('enabled' in data ? (data.enabled !== undefined ? { enabled: data.enabled } : {}) : {}),
     }
 }
 
@@ -160,11 +190,11 @@ export async function getTaskTemplates(enabledOnly?: boolean): Promise<TaskTempl
 }
 
 export async function createTaskTemplate(data: TaskTemplateCreatePayload): Promise<TaskTemplate> {
-    const response = await http.post<TaskTemplate>('/task-templates', data)
+    const response = await http.post<TaskTemplate>('/task-templates', toTaskTemplatePayload(data))
     return response.data
 }
 
 export async function updateTaskTemplate(id: string, data: TaskTemplateUpdatePayload): Promise<TaskTemplate> {
-    const response = await http.put<TaskTemplate>(`/task-templates/${id}`, data)
+    const response = await http.put<TaskTemplate>(`/task-templates/${id}`, toTaskTemplatePayload(data))
     return response.data
 }

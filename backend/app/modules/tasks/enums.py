@@ -25,3 +25,18 @@ class TaskAction(str, Enum):
 class TaskTodayAs(str, Enum):
     WORKER = "worker"
     SUPERVISOR = "supervisor"
+
+
+class TaskDeadlineBase(str, Enum):
+    FILING_DATE = "FILING_DATE"
+    RECEIVE_DATE = "RECEIVE_DATE"
+    DISPATCH_DATE = "DISPATCH_DATE"
+    PUB_DATE = "PUB_DATE"
+    GRANT_DATE = "GRANT_DATE"
+    CASE_EVENT = "CASE_EVENT"
+    CUSTOM = "CUSTOM"
+
+
+class TaskRemindBase(str, Enum):
+    INNER = "INNER"
+    DEADLINE = "DEADLINE"

@@ -1,0 +1,228 @@
+diff --git a/backend/app/modules/tasks/enums.py b/backend/app/modules/tasks/enums.py
+index 00540e0..d8d7493 100644
+--- a/backend/app/modules/tasks/enums.py
++++ b/backend/app/modules/tasks/enums.py
+@@ -25,3 +25,18 @@ class TaskAction(str, Enum):
+ class TaskTodayAs(str, Enum):
+     WORKER = "worker"
+     SUPERVISOR = "supervisor"
++
++
++class TaskDeadlineBase(str, Enum):
++    FILING_DATE = "FILING_DATE"
++    RECEIVE_DATE = "RECEIVE_DATE"
++    DISPATCH_DATE = "DISPATCH_DATE"
++    PUB_DATE = "PUB_DATE"
++    GRANT_DATE = "GRANT_DATE"
++    CASE_EVENT = "CASE_EVENT"
++    CUSTOM = "CUSTOM"
++
++
++class TaskRemindBase(str, Enum):
++    INNER = "INNER"
++    DEADLINE = "DEADLINE"
+diff --git a/backend/app/modules/tasks/models.py b/backend/app/modules/tasks/models.py
+index 9b9a244..52b9b36 100644
+--- a/backend/app/modules/tasks/models.py
++++ b/backend/app/modules/tasks/models.py
+@@ -3,10 +3,12 @@ from __future__ import annotations
+ from datetime import date, datetime
+ 
+ from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, text
++from sqlalchemy import Enum as SAEnum
+ from sqlalchemy.orm import Mapped, mapped_column
+ 
+ from app.db.base import Base
+ from app.db.mixins import AuditMixin, UUIDPrimaryKeyMixin
++from app.modules.tasks.enums import TaskDeadlineBase, TaskRemindBase
+ 
+ 
+ class TaskTemplate(UUIDPrimaryKeyMixin, AuditMixin, Base):
+@@ -15,9 +17,34 @@ class TaskTemplate(UUIDPrimaryKeyMixin, AuditMixin, Base):
+     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+     name: Mapped[str] = mapped_column(String(256), nullable=False)
+     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
++    deadline_base: Mapped[TaskDeadlineBase | None] = mapped_column(
++        SAEnum(
++            TaskDeadlineBase,
++            name="task_deadline_base",
++            native_enum=False,
++            validate_strings=True,
++        ),
++        nullable=True,
++    )
+     add_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+     add_months: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
+     inner_offset_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    remind_base: Mapped[TaskRemindBase | None] = mapped_column(
++        SAEnum(
++            TaskRemindBase,
++            name="task_remind_base",
++            native_enum=False,
++            validate_strings=True,
++        ),
++        nullable=True,
++    )
++    remind_1_offset_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    remind_2_offset_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    remind_3_offset_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    daily_remind: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    default_supervisor_id: Mapped[str | None] = mapped_column(
++        String(36), ForeignKey("t_user.id"), nullable=True
++    )
+     default_worker_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+ 
+@@ -38,6 +65,11 @@ class Task(UUIDPrimaryKeyMixin, AuditMixin, Base):
+     base_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+     internal_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
++    remind1: Mapped[date | None] = mapped_column(Date, nullable=True)
++    remind2: Mapped[date | None] = mapped_column(Date, nullable=True)
++    remind3: Mapped[date | None] = mapped_column(Date, nullable=True)
++    daily_remind_from: Mapped[date | None] = mapped_column(Date, nullable=True)
++    daily_remind: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+     worker_id: Mapped[str | None] = mapped_column(
+         String(36), ForeignKey("t_user.id"), nullable=True
+     )
+diff --git a/backend/alembic/versions/dltpl_db_01_task_template_reminder_fields.py b/backend/alembic/versions/dltpl_db_01_task_template_reminder_fields.py
+new file mode 100644
+index 0000000..8dd1d8e
+--- /dev/null
++++ b/backend/alembic/versions/dltpl_db_01_task_template_reminder_fields.py
+@@ -0,0 +1,135 @@
++"""dltpl_db_01_task_template_reminder_fields
++
++Revision ID: dltpl_db_01_task_template_reminder_fields_01
++Revises: baddebt_db_01_create_bad_debt_tables_01
++Create Date: 2026-03-29
++
++Add reminder configuration fields to t_task_template and runtime reminder
++fields to t_task, keeping the change SQLite-safe and idempotent.
++"""
++
++from __future__ import annotations
++
++import sqlalchemy as sa
++from alembic import op
++
++from app.modules.tasks.enums import TaskDeadlineBase, TaskRemindBase
++
++revision = "dltpl_db_01_task_template_reminder_fields_01"
++down_revision = "baddebt_db_01_create_bad_debt_tables_01"
++branch_labels = None
++depends_on = None
++
++
++def _table_exists(table: str) -> bool:
++    bind = op.get_bind()
++    result = bind.execute(
++        sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name=:table"),
++        {"table": table},
++    )
++    return result.first() is not None
++
++
++def _col_exists(table: str, column: str) -> bool:
++    bind = op.get_bind()
++    result = bind.execute(sa.text(f"PRAGMA table_info('{table}')"))
++    return any(row[1] == column for row in result)
++
++
++def _fk_key(fk: dict) -> tuple[tuple[str, ...], str | None, tuple[str, ...]]:
++    return (
++        tuple(fk.get("constrained_columns") or []),
++        fk.get("referred_table"),
++        tuple(fk.get("referred_columns") or []),
++    )
++
++
++def _spec_key(columns: list[str], referred_table: str, referred_columns: list[str]) -> tuple[
++    tuple[str, ...],
++    str,
++    tuple[str, ...],
++]:
++    return (tuple(columns), referred_table, tuple(referred_columns))
++
++
++def upgrade() -> None:
++    bind = op.get_bind()
++    insp = sa.inspect(bind)
++
++    if _table_exists("t_task_template"):
++        existing_columns = {col["name"] for col in insp.get_columns("t_task_template")}
++        existing_fks = {_fk_key(fk) for fk in insp.get_foreign_keys("t_task_template")}
++        template_columns = [
++            (
++                "deadline_base",
++                sa.Enum(
++                    TaskDeadlineBase,
++                    name="task_deadline_base",
++                    native_enum=False,
++                    validate_strings=True,
++                ),
++            ),
++            (
++                "remind_base",
++                sa.Enum(
++                    TaskRemindBase,
++                    name="task_remind_base",
++                    native_enum=False,
++                    validate_strings=True,
++                ),
++            ),
++            ("remind_1_offset_days", sa.Integer()),
++            ("remind_2_offset_days", sa.Integer()),
++            ("remind_3_offset_days", sa.Integer()),
++            ("daily_remind", sa.Boolean()),
++            ("default_supervisor_id", sa.String(36)),
++        ]
++        default_supervisor_fk = _spec_key(
++            ["default_supervisor_id"],
++            "t_user",
++            ["id"],
++        )
++        add_default_supervisor_fk = default_supervisor_fk not in existing_fks
++        with op.batch_alter_table("t_task_template") as batch_op:
++            for name, column_type in template_columns:
++                if name in existing_columns:
++                    continue
++                if name == "daily_remind":
++                    batch_op.add_column(
++                        sa.Column(name, column_type, nullable=False, server_default=sa.text("0"))
++                    )
++                    continue
++                if name == "default_supervisor_id":
++                    batch_op.add_column(sa.Column(name, column_type, nullable=True))
++                    continue
++                batch_op.add_column(sa.Column(name, column_type, nullable=True))
++            if add_default_supervisor_fk:
++                batch_op.create_foreign_key(
++                    "fk_task_template_default_supervisor_id_user",
++                    "t_user",
++                    ["default_supervisor_id"],
++                    ["id"],
++                )
++
++    if _table_exists("t_task"):
++        task_columns = [
++            ("remind1", sa.Date()),
++            ("remind2", sa.Date()),
++            ("remind3", sa.Date()),
++            ("daily_remind_from", sa.Date()),
++            ("daily_remind", sa.Boolean()),
++        ]
++        with op.batch_alter_table("t_task") as batch_op:
++            for name, column_type in task_columns:
++                if _col_exists("t_task", name):
++                    continue
++                if name == "daily_remind":
++                    batch_op.add_column(
++                        sa.Column(name, column_type, nullable=False, server_default=sa.text("0"))
++                    )
++                    continue
++                batch_op.add_column(sa.Column(name, column_type, nullable=True))
++
++
++def downgrade() -> None:
++    pass

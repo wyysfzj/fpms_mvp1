@@ -1,0 +1,7 @@
+{"ts":"20260329T202033","step":"gate_db","cmd":"./scripts/task_validate.sh DLTPL-DB-01"}
+{"ts":"20260329T202033","step":"gate_be_gen","cmd":"./scripts/task_validate.sh DLTPL-BE-GEN-01"}
+{"ts":"20260329T202033","step":"gate_be_tpl","cmd":"./scripts/task_validate.sh DLTPL-BE-TPL-01"}
+{"ts":"20260329T202054","step":"gate_fe_tpl","cmd":"./scripts/task_validate.sh DLTPL-FE-TPL-01"}
+{"ts":"20260329T202112","step":"gate_qa","cmd":"./scripts/task_validate.sh DLTPL-QA-01"}
+{"ts":"20260329T202137","step":"lint","cmd":"/bin/zsh -lc ./scripts/task_validate.sh\ DLTPL-DB-01\ \&\&\ ./scripts/task_validate.sh\ DLTPL-BE-TPL-01"}
+{"ts":"20260329T202137","step":"test","cmd":"/bin/zsh -lc ./scripts/task_validate.sh\ DLTPL-BE-GEN-01\ \&\&\ ./scripts/task_validate.sh\ DLTPL-FE-TPL-01"}

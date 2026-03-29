@@ -1,0 +1,8 @@
+{"step":"red-test","cmd":"cd backend && pytest -q tests/test_task_template.py -k 'template'"}
+{"step":"lint","cmd":"ruff check backend/app/modules/tasks/api.py backend/app/modules/tasks/schemas.py backend/app/modules/tasks/service.py backend/tests/test_task_template.py"}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_task_template.py -k 'template'"}
+{"step":"task_validate","cmd":"./scripts/task_validate.sh DLTPL-BE-TPL-01"}
+{"ts":"20260329T194618","step":"lint","cmd":"ruff check backend/app/modules/tasks/api.py backend/app/modules/tasks/schemas.py backend/app/modules/tasks/service.py backend/tests/test_task_template.py"}
+{"ts":"20260329T194618","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_task_template.py\ -k\ \'template\'"}
+{"ts":"20260329T194712","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_task_template.py\ -k\ \'template\'"}
+{"ts":"20260329T194712","step":"lint","cmd":"ruff check backend/app/modules/tasks/api.py backend/app/modules/tasks/schemas.py backend/app/modules/tasks/service.py backend/tests/test_task_template.py"}

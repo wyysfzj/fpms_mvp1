@@ -1,0 +1,4 @@
+{"ts":"20260329T193002","step":"lint","cmd":"ruff check backend/alembic/versions/dltpl_db_01_task_template_reminder_fields.py backend/app/modules/tasks/models.py backend/app/modules/tasks/enums.py"}
+{"ts":"20260329T193002","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}
+{"ts":"20260329T193615","step":"lint","cmd":"ruff check backend/alembic/versions/dltpl_db_01_task_template_reminder_fields.py backend/app/modules/tasks/models.py backend/app/modules/tasks/enums.py"}
+{"ts":"20260329T193615","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}
