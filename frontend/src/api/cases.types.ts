@@ -251,3 +251,42 @@ export interface CaseUpdatePayload {
 export interface CaseLimitedEditPayload {
     notes?: string
 }
+
+export interface CaseBatchFilingCandidate {
+    id: string
+    case_no: string
+    title_cn?: string
+    client_name?: string
+    case_type: string
+    patent_category: string
+    flow_dir: string
+    recv_date?: string
+    status: string
+    has_exam_request?: boolean
+}
+
+export interface CaseBatchFilingQueryParams {
+    case_type?: string
+    flow_dir?: string
+    status?: string
+    recv_date_from?: string
+    recv_date_to?: string
+    client_id?: string
+    primary_agent_id?: string
+    patent_category?: string
+    page?: number
+    page_size?: number
+}
+
+export interface CaseBatchFilingActionPayload {
+    selected_case_ids: string[]
+    submitted_date: string
+    apply_exam_now: boolean
+    generate_list: boolean
+}
+
+export interface CaseBatchFilingActionResult {
+    success_count: number
+    failure_count: number
+    updated_case_ids: string[]
+}

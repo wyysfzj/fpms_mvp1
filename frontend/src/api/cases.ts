@@ -1,6 +1,16 @@
 import { http } from './http'
 import type { Pagination } from './types'
-import type { Case, CaseListParams, CaseCreatePayload, CaseUpdatePayload, CaseLimitedEditPayload } from './cases.types'
+import type {
+    Case,
+    CaseBatchFilingActionPayload,
+    CaseBatchFilingActionResult,
+    CaseBatchFilingCandidate,
+    CaseBatchFilingQueryParams,
+    CaseCreatePayload,
+    CaseLimitedEditPayload,
+    CaseListParams,
+    CaseUpdatePayload,
+} from './cases.types'
 
 /** FB5: Server-side filter parameters for case list */
 interface CaseFilterParams extends CaseListParams {
@@ -89,6 +99,19 @@ interface BackendCase {
     applicant_kind?: string | null
     created_at?: string
     updated_at?: string
+}
+
+interface BackendCaseBatchFilingCandidate {
+    id: string
+    case_no: string
+    title_cn?: string | null
+    client_name?: string | null
+    case_type: string
+    patent_category: string
+    flow_dir: string
+    recv_date?: string | null
+    status: string
+    has_exam_request?: boolean | null
 }
 
 function mapCase(input: BackendCase): Case {
@@ -197,6 +220,21 @@ function trimToNull(value: string | null | undefined): string | null | undefined
     if (value === null) return null
     const normalized = value.trim()
     return normalized ? normalized : null
+}
+
+function mapBatchFilingCandidate(input: BackendCaseBatchFilingCandidate): CaseBatchFilingCandidate {
+    return {
+        id: input.id,
+        case_no: input.case_no,
+        title_cn: input.title_cn || undefined,
+        client_name: input.client_name || undefined,
+        case_type: input.case_type,
+        patent_category: input.patent_category,
+        flow_dir: input.flow_dir,
+        recv_date: input.recv_date || undefined,
+        status: input.status,
+        has_exam_request: input.has_exam_request ?? undefined,
+    }
 }
 
 function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
@@ -448,4 +486,37 @@ export async function updateCase(id: string | number, data: CaseUpdatePayload): 
 export async function limitedEditCase(id: string | number, data: CaseLimitedEditPayload): Promise<Case> {
     const response = await http.post<BackendCase>(`/cases/${id}/limited-edit`, data)
     return mapCase(response.data)
+}
+
+export async function getBatchFilingCandidates(
+    params: CaseBatchFilingQueryParams = {}
+): Promise<Pagination<CaseBatchFilingCandidate>> {
+    const queryParams: Record<string, string | number> = {
+        page: params.page ?? 1,
+        page_size: params.page_size ?? 20,
+        status: params.status ?? 'NOT_FILED',
+    }
+    for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null && value !== '') {
+            queryParams[key] = value
+        }
+    }
+    const response = await http.get<Pagination<BackendCaseBatchFilingCandidate>>(
+        '/cases/batch-filing/candidates',
+        { params: queryParams }
+    )
+    return {
+        ...response.data,
+        items: response.data.items.map(mapBatchFilingCandidate),
+    }
+}
+
+export async function submitBatchFiling(
+    payload: CaseBatchFilingActionPayload
+): Promise<CaseBatchFilingActionResult> {
+    const response = await http.post<CaseBatchFilingActionResult>(
+        '/cases/batch-filing/submit',
+        payload
+    )
+    return response.data
 }

@@ -1,0 +1,6 @@
+{"ts":"20260330T005622","step":"test","cmd":"python3 -m pytest -q backend/tests/test_case_batch_filing_query.py"}
+{"ts":"20260330T005639","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_case_batch_filing_query.py"}
+{"ts":"20260330T005727","step":"lint","cmd":"python3 -m ruff check backend/app/modules/cases/api.py backend/app/modules/cases/schemas.py backend/app/modules/cases/service.py backend/tests/test_case_batch_filing_query.py"}
+{"ts":"20260330T005743","step":"lint","cmd":"python3 -m ruff check backend/app/modules/cases/api.py backend/app/modules/cases/schemas.py backend/app/modules/cases/service.py backend/tests/test_case_batch_filing_query.py"}
+{"ts":"20260330T005750","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_case_batch_filing_query.py"}
+{"ts":"20260330T005810","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_case_batch_filing_query.py"}

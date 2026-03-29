@@ -1,0 +1,6 @@
+{"ts":"20260330T005315","step":"test","cmd":"python -m pytest -q backend/tests/test_case_batch_filing_schema.py"}
+{"ts":"20260330T005322","step":"test","cmd":"python3 -m pytest -q backend/tests/test_case_batch_filing_schema.py"}
+{"ts":"20260330T005352","step":"lint","cmd":"python3 -m ruff check backend/alembic/versions/casebf_db_01_case_submitted_date.py backend/app/modules/cases/models.py backend/tests/test_case_batch_filing_schema.py"}
+{"ts":"20260330T005358","step":"test","cmd":"python3 -m pytest -q backend/tests/test_case_batch_filing_schema.py"}
+{"ts":"20260330T005402","step":"verify","cmd":"/bin/zsh -lc PYTHONPATH=backend\ alembic\ -c\ backend/alembic.ini\ upgrade\ head"}
+{"ts":"20260330T005413","step":"verify","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ PYTHONPATH=.\ alembic\ upgrade\ head"}

@@ -1,0 +1,6 @@
+{"ts":"20260330T005315","step":"test","rc":127,"log":"artifacts/CASEBF-DB-01/outputs/20260330T005315_test.log"}
+{"ts":"20260330T005322","step":"test","rc":1,"log":"artifacts/CASEBF-DB-01/outputs/20260330T005322_test.log"}
+{"ts":"20260330T005352","step":"lint","rc":0,"log":"artifacts/CASEBF-DB-01/outputs/20260330T005352_lint.log"}
+{"ts":"20260330T005358","step":"test","rc":0,"log":"artifacts/CASEBF-DB-01/outputs/20260330T005358_test.log"}
+{"ts":"20260330T005402","step":"verify","rc":255,"log":"artifacts/CASEBF-DB-01/outputs/20260330T005402_verify.log"}
+{"ts":"20260330T005413","step":"verify","rc":0,"log":"artifacts/CASEBF-DB-01/outputs/20260330T005413_verify.log"}

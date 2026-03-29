@@ -1,0 +1,6 @@
+{"ts":"20260330T005622","step":"test","rc":1,"log":"artifacts/CASEBF-BE-QUERY-01/outputs/20260330T005622_test.log"}
+{"ts":"20260330T005639","step":"test","rc":1,"log":"artifacts/CASEBF-BE-QUERY-01/outputs/20260330T005639_test.log"}
+{"ts":"20260330T005727","step":"lint","rc":1,"log":"artifacts/CASEBF-BE-QUERY-01/outputs/20260330T005727_lint.log"}
+{"ts":"20260330T005743","step":"lint","rc":0,"log":"artifacts/CASEBF-BE-QUERY-01/outputs/20260330T005743_lint.log"}
+{"ts":"20260330T005750","step":"test","rc":1,"log":"artifacts/CASEBF-BE-QUERY-01/outputs/20260330T005750_test.log"}
+{"ts":"20260330T005810","step":"test","rc":0,"log":"artifacts/CASEBF-BE-QUERY-01/outputs/20260330T005810_test.log"}

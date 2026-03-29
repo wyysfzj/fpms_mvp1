@@ -12,6 +12,7 @@ const routes = [
 
       // Cases
       { path: 'cases', name: 'cases', component: () => import('../modules/cases/pages/CaseList.vue') },
+      { path: 'cases/batch-filing', name: 'case_batch_filing', component: () => import('../modules/cases/pages/CaseBatchFiling.vue') },
       { path: 'cases/new', name: 'case_new', component: () => import('../modules/cases/pages/CaseCreate.vue') },
       { path: 'cases/:id/edit', name: 'case_edit', component: () => import('../modules/cases/pages/CaseEdit.vue') },
       { path: 'cases/:id', name: 'case_detail', component: () => import('../modules/cases/pages/CaseDetail.vue') },

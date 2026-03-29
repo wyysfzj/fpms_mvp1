@@ -308,3 +308,29 @@ class CaseListItem(BaseModel):
     # A3 — key list fields
     patent_no: str | None = None
     primary_agent_id: str | None = None
+
+
+class CaseBatchFilingCandidateItem(BaseModel):
+    id: str
+    case_no: str
+    title_cn: str | None = None
+    client_name: str | None = None
+    case_type: str
+    patent_category: str
+    flow_dir: str
+    recv_date: str | None = None
+    status: str
+    has_exam_request: bool | None = None
+
+
+class CaseBatchFilingActionIn(BaseModel):
+    selected_case_ids: list[str] = Field(default_factory=list)
+    submitted_date: date
+    apply_exam_now: bool = False
+    generate_list: bool = False
+
+
+class CaseBatchFilingActionOut(BaseModel):
+    success_count: int
+    failure_count: int
+    updated_case_ids: list[str]

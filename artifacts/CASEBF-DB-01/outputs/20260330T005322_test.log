@@ -1,0 +1,38 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_case_model_exposes_submitted_date_and_sqlite_column ___________
+
+tmp_path = PosixPath('/private/var/folders/sk/ztjhws892vb_t2v7fplsqk7h0000gn/T/pytest-of-cfcc/pytest-271/test_case_model_exposes_submit0')
+
+    def test_case_model_exposes_submitted_date_and_sqlite_column(tmp_path) -> None:
+        db_path = tmp_path / "case_batch_filing.db"
+        engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False},
+            future=True,
+        )
+    
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+    
+        Base.metadata.create_all(engine)
+    
+        case_columns = Case.__table__.columns
+>       assert "submitted_date" in case_columns.keys()
+E       AssertionError: assert 'submitted_date' in ['case_no', 'case_type', 'patent_category', 'flow_dir', 'client_id', 'foreign_agent_id', ...]
+E        +  where ['case_no', 'case_type', 'patent_category', 'flow_dir', 'client_id', 'foreign_agent_id', ...] = keys()
+E        +    where keys = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x1118f9c10>.keys
+
+backend/tests/test_case_batch_filing_schema.py:27: AssertionError
+=============================== warnings summary ===============================
+../../../../../Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED backend/tests/test_case_batch_filing_schema.py::test_case_model_exposes_submitted_date_and_sqlite_column
+1 failed, 1 warning in 0.06s

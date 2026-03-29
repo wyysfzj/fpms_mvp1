@@ -55,6 +55,7 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
         String(32), nullable=False, server_default=text("'NOT_FILED'")
     )
     recv_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    submitted_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     filing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # -- A3: Publication / Grant --

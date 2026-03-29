@@ -19,9 +19,15 @@ from app.modules.cases.models import (
     T_CaseInventor,
     T_Priority,
 )
-from app.modules.cases.schemas import CaseCreateIn, CaseUpdateFull
+from app.modules.cases.schemas import CaseBatchFilingActionIn, CaseCreateIn, CaseUpdateFull
 from app.modules.cases.service import (
     create_case as create_case_service,
+)
+from app.modules.cases.service import (
+    execute_batch_filing as execute_batch_filing_service,
+)
+from app.modules.cases.service import (
+    list_batch_filing_candidates as list_batch_filing_candidates_service,
 )
 from app.modules.cases.service import (
     update_case_full as update_case_full_service,
@@ -342,6 +348,54 @@ def get_cases(
     ]
 
     return {"items": items, "page": page, "page_size": page_size, "total": total}
+
+
+@router.get("/cases/batch-filing/candidates", summary="List batch filing candidates")
+def get_batch_filing_candidates(
+    case_type: str | None = Query(default=None),
+    flow_dir: str | None = Query(default=None),
+    status: str = Query(default="NOT_FILED"),
+    recv_date_from: date | None = Query(default=None),
+    recv_date_to: date | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    primary_agent_id: str | None = Query(default=None),
+    patent_category: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _perm: None = Depends(require_perm("Case.Read")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    result = list_batch_filing_candidates_service(
+        db,
+        case_type=case_type,
+        flow_dir=flow_dir,
+        status=status,
+        recv_date_from=recv_date_from,
+        recv_date_to=recv_date_to,
+        client_id=client_id,
+        primary_agent_id=primary_agent_id,
+        patent_category=patent_category,
+        page=page,
+        page_size=page_size,
+    )
+    return result.model_dump()
+
+
+@router.post("/cases/batch-filing/submit", summary="Execute batch filing action")
+def submit_batch_filing(
+    payload: CaseBatchFilingActionIn,
+    _perm: None = Depends(require_perm("Case.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    result = execute_batch_filing_service(
+        db,
+        selected_case_ids=payload.selected_case_ids,
+        submitted_date=payload.submitted_date,
+        apply_exam_now=payload.apply_exam_now,
+        user_id=current_user.id,
+    )
+    return result.model_dump()
 
 
 @router.post("/cases", status_code=status.HTTP_201_CREATED, summary="Create a case")

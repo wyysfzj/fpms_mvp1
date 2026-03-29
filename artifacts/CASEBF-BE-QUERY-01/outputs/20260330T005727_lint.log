@@ -1,0 +1,46 @@
+warning: The top-level linter settings are deprecated in favour of their counterparts in the `lint` section. Please update the following options in `backend/pyproject.toml`:
+  - 'ignore' -> 'lint.ignore'
+  - 'select' -> 'lint.select'
+  - 'isort' -> 'lint.isort'
+  - 'per-file-ignores' -> 'lint.per-file-ignores'
+I001 [*] Import block is un-sorted or un-formatted
+  --> backend/app/modules/cases/service.py:1:1
+   |
+ 1 | / from __future__ import annotations
+ 2 | |
+ 3 | | from datetime import date
+ 4 | | from decimal import Decimal
+ 5 | | from uuid import uuid4
+ 6 | |
+ 7 | | from sqlalchemy import or_
+ 8 | | from sqlalchemy.orm import Session
+ 9 | |
+10 | | from app.core.errors import raise_business_error
+11 | | from app.core.pagination import PageResult, offset_limit
+12 | | from app.modules.auth.models import T_Role, T_User, T_UserRole
+13 | | from app.modules.cases.enums import CaseStatus, CaseType, FlowDir
+14 | | from app.modules.cases.models import (
+15 | |     Case,
+16 | |     T_BioDeposit,
+17 | |     T_CaseAgentSplit,
+18 | |     T_CaseApplicant,
+19 | |     T_CaseInventor,
+20 | |     T_Priority,
+21 | | )
+22 | | from app.modules.cases.schemas import (
+23 | |     CaseBatchFilingCandidateItem,
+24 | |     CaseAgentSplitIn,
+25 | |     CaseCreate,
+26 | |     CaseListItem,
+27 | |     CaseUpdateFull,
+28 | |     CaseUpdateLimited,
+29 | | )
+30 | | from app.modules.masterdata.clients.models import Client, ClientAddress
+   | |_______________________________________________________________________^
+31 |
+32 |   _CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
+   |
+help: Organize imports
+
+Found 1 error.
+[*] 1 fixable with the `--fix` option.

@@ -21,6 +21,8 @@ from app.modules.cases.models import (
 )
 from app.modules.cases.schemas import (
     CaseAgentSplitIn,
+    CaseBatchFilingActionOut,
+    CaseBatchFilingCandidateItem,
     CaseCreate,
     CaseListItem,
     CaseUpdateFull,
@@ -475,6 +477,134 @@ def list_cases(
     ]
 
     return PageResult(items=list_items, page=page, page_size=page_size, total=total)
+
+
+def list_batch_filing_candidates(
+    db: Session,
+    *,
+    case_type: str | None = None,
+    flow_dir: str | None = None,
+    status: str = CaseStatus.NOT_FILED.value,
+    recv_date_from: date | None = None,
+    recv_date_to: date | None = None,
+    client_id: str | None = None,
+    primary_agent_id: str | None = None,
+    patent_category: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> PageResult[CaseBatchFilingCandidateItem]:
+    query = db.query(Case)
+
+    if case_type:
+        query = query.filter(Case.case_type == case_type)
+    if flow_dir:
+        query = query.filter(Case.flow_dir == flow_dir)
+    if status:
+        query = query.filter(Case.status == status)
+    if recv_date_from:
+        query = query.filter(Case.recv_date >= recv_date_from)
+    if recv_date_to:
+        query = query.filter(Case.recv_date <= recv_date_to)
+    if client_id:
+        query = query.filter(Case.client_id == client_id)
+    if primary_agent_id:
+        query = query.filter(Case.primary_agent_id == primary_agent_id)
+    if patent_category:
+        query = query.filter(Case.patent_category == patent_category)
+
+    total = query.count()
+    off, lim = offset_limit(page, page_size)
+    items = query.order_by(Case.recv_date.asc(), Case.case_no.asc()).offset(off).limit(lim).all()
+
+    client_ids = {case.client_id for case in items if case.client_id}
+    client_name_map: dict[str, str] = {}
+    if client_ids:
+        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
+        client_name_map = {client.id: client.name_cn for client in clients}
+
+    candidate_items = [
+        CaseBatchFilingCandidateItem(
+            id=case.id,
+            case_no=case.case_no,
+            title_cn=case.title_cn,
+            client_name=client_name_map.get(case.client_id) if case.client_id else None,
+            case_type=case.case_type,
+            patent_category=case.patent_category,
+            flow_dir=case.flow_dir,
+            recv_date=str(case.recv_date) if case.recv_date else None,
+            status=case.status,
+            has_exam_request=case.has_exam_request,
+        )
+        for case in items
+    ]
+
+    return PageResult(items=candidate_items, page=page, page_size=page_size, total=total)
+
+
+def execute_batch_filing(
+    db: Session,
+    *,
+    selected_case_ids: list[str],
+    submitted_date: date,
+    apply_exam_now: bool,
+    user_id: str,
+) -> CaseBatchFilingActionOut:
+    if not selected_case_ids:
+        raise_business_error(
+            "CASE_BATCH_FILING_SELECTION_REQUIRED",
+            "selected_case_ids must not be empty",
+            status_code=400,
+        )
+
+    unique_case_ids = list(dict.fromkeys(selected_case_ids))
+    cases = db.query(Case).filter(Case.id.in_(unique_case_ids)).all()
+    case_by_id = {case.id: case for case in cases}
+    missing_case_ids = [case_id for case_id in unique_case_ids if case_id not in case_by_id]
+    if missing_case_ids:
+        raise_business_error(
+            "CASE_BATCH_FILING_CASE_NOT_FOUND",
+            "One or more selected cases do not exist",
+            status_code=404,
+        )
+
+    invalid_status_case_nos = [
+        case.case_no for case in cases if case.status != CaseStatus.NOT_FILED.value
+    ]
+    if invalid_status_case_nos:
+        raise_business_error(
+            "CASE_BATCH_FILING_STATUS_INVALID",
+            "Only NOT_FILED cases can be batch filed",
+            status_code=400,
+        )
+
+    invalid_recv_date_case_nos = [
+        case.case_no
+        for case in cases
+        if case.recv_date is not None and submitted_date < case.recv_date
+    ]
+    if invalid_recv_date_case_nos:
+        raise_business_error(
+            "CASE_BATCH_FILING_SUBMITTED_DATE_INVALID",
+            "submitted_date must be greater than or equal to recv_date",
+            status_code=400,
+        )
+
+    updated_case_ids: list[str] = []
+    for case_id in unique_case_ids:
+        case = case_by_id[case_id]
+        case.submitted_date = submitted_date
+        case.status = CaseStatus.WAITING_RECEIPT.value
+        if apply_exam_now:
+            case.has_exam_request = True
+        case.updated_by = user_id
+        updated_case_ids.append(case.id)
+
+    db.commit()
+    return CaseBatchFilingActionOut(
+        success_count=len(updated_case_ids),
+        failure_count=0,
+        updated_case_ids=updated_case_ids,
+    )
 
 
 def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:

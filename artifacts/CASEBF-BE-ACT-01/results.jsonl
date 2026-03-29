@@ -1,0 +1,3 @@
+{"ts":"20260330T005913","step":"test","rc":1,"log":"artifacts/CASEBF-BE-ACT-01/outputs/20260330T005913_test.log"}
+{"ts":"20260330T010012","step":"lint","rc":0,"log":"artifacts/CASEBF-BE-ACT-01/outputs/20260330T010012_lint.log"}
+{"ts":"20260330T010022","step":"test","rc":0,"log":"artifacts/CASEBF-BE-ACT-01/outputs/20260330T010022_test.log"}
