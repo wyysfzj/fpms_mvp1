@@ -1,0 +1,7 @@
+{"ts":"20260329T224945","step":"test","rc":1,"log":"artifacts/CASEFLD-DB-01/outputs/20260329T224945_test.log"}
+{"ts":"20260329T225052","step":"lint","rc":0,"log":"artifacts/CASEFLD-DB-01/outputs/20260329T225052_lint.log"}
+{"ts":"20260329T225052","step":"test","rc":0,"log":"artifacts/CASEFLD-DB-01/outputs/20260329T225052_test.log"}
+{"ts":"20260329T225059","step":"test","rc":0,"log":"artifacts/CASEFLD-DB-01/outputs/20260329T225059_test.log"}
+{"ts":"20260329T225832","step":"lint","rc":0,"log":"artifacts/CASEFLD-DB-01/outputs/20260329T225832_lint.log"}
+{"ts":"20260329T225842","step":"test","rc":0,"log":"artifacts/CASEFLD-DB-01/outputs/20260329T225842_test.log"}
+{"ts":"20260329T225850","step":"test","rc":0,"log":"artifacts/CASEFLD-DB-01/outputs/20260329T225850_test.log"}

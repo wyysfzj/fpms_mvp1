@@ -1,0 +1,3 @@
+{"ts":"20260329T225247","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_case_missing_fields_crud.py"}
+{"ts":"20260329T225832","step":"lint","cmd":"ruff check backend/app/modules/cases/api.py backend/app/modules/cases/schemas.py backend/app/modules/cases/service.py backend/tests/test_case_missing_fields_crud.py"}
+{"ts":"20260329T225842","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_case_missing_fields_crud.py"}

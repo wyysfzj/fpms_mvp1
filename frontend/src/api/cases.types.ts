@@ -54,8 +54,22 @@ export interface Case {
     status?: string
     filing_date?: string
     recv_date?: string
+    issue_date?: string
     app_date?: string
     app_no?: string
+    from_country?: string
+    to_country?: string
+    doc_address_id?: string
+    bill_address_id?: string
+    cert_no?: string
+    draw_pages?: number
+    claim_pages?: number
+    manuscript_words?: number
+    discount_rate?: string
+    no_power?: boolean
+    no_prio_text?: boolean
+    require_hk?: boolean
+    first_annuity_year?: number
     applicants?: CaseApplicant[]
     inventors?: CaseInventor[]
     priorities?: CasePriority[]
@@ -116,7 +130,22 @@ export interface CaseCreatePayload {
     flow_dir?: string
     foreign_agent_id?: string
     foreign_ref?: string
+    from_country?: string
+    to_country?: string
+    doc_address_id?: string
+    bill_address_id?: string
     app_no?: string
+    recv_date?: string
+    issue_date?: string
+    cert_no?: string
+    draw_pages?: number
+    claim_pages?: number
+    manuscript_words?: number
+    discount_rate?: string
+    no_power?: boolean
+    no_prio_text?: boolean
+    require_hk?: boolean
+    first_annuity_year?: number
     filing_date?: string
     status?: string
     bio_deposits?: CaseBioDeposit[]
@@ -160,9 +189,24 @@ export interface CaseUpdatePayload {
     title?: string
     status?: string
     filing_date?: string
+    recv_date?: string | null
     foreign_agent_id?: string | null
     foreign_ref?: string | null
+    from_country?: string | null
+    to_country?: string | null
+    doc_address_id?: string | null
+    bill_address_id?: string | null
     app_no?: string | null
+    issue_date?: string | null
+    cert_no?: string | null
+    draw_pages?: number | null
+    claim_pages?: number | null
+    manuscript_words?: number | null
+    discount_rate?: string | null
+    no_power?: boolean | null
+    no_prio_text?: boolean | null
+    require_hk?: boolean | null
+    first_annuity_year?: number | null
     case_type?: string | null
     patent_category?: string | null
     flow_dir?: string | null

@@ -40,6 +40,14 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
         String(36), ForeignKey("t_client.id"), nullable=True
     )
     foreign_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    from_country: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    to_country: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    doc_address_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_client_address.id"), nullable=True
+    )
+    bill_address_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_client_address.id"), nullable=True
+    )
     title_cn: Mapped[str | None] = mapped_column(Text, nullable=True)
     title_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     app_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -52,14 +60,19 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
     # -- A3: Publication / Grant --
     pub_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     pub_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    issue_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     grant_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     grant_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cert_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
     patent_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # -- A3: Spec details --
     spec_pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    draw_pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     claim_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    claim_pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manuscript_words: Mapped[int | None] = mapped_column(Integer, nullable=True)
     has_exam_request: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # -- Deferred Batch 1: PCT / invalidation --
@@ -92,7 +105,11 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
     # -- A3: Control flags --
     is_fee_monitor: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     fee_reduction: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    discount_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
     applicant_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    no_power: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    no_prio_text: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    require_hk: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     first_annuity_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 

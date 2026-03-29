@@ -53,19 +53,29 @@ class CaseCreate(BaseModel):
     client_id: str | None = None
     foreign_agent_id: str | None = None
     foreign_ref: str | None = Field(None, max_length=64)
+    from_country: str | None = Field(None, max_length=10)
+    to_country: str | None = Field(None, max_length=10)
+    doc_address_id: str | None = Field(None, max_length=36)
+    bill_address_id: str | None = Field(None, max_length=36)
     title_cn: str | None = None
     title_en: str | None = None
     app_no: str | None = Field(None, max_length=64)
+    recv_date: date | None = None
     # A3 — Publication / Grant
     pub_date: date | None = None
     pub_no: str | None = Field(None, max_length=64)
+    issue_date: date | None = None
     grant_date: date | None = None
     grant_no: str | None = Field(None, max_length=64)
+    cert_no: str | None = Field(None, max_length=64)
     patent_no: str | None = Field(None, max_length=64)
     valid_until: date | None = None
     # A3 — Spec details
     spec_pages: int | None = Field(None, ge=0)
+    draw_pages: int | None = Field(None, ge=0)
     claim_count: int | None = Field(None, ge=0)
+    claim_pages: int | None = Field(None, ge=0)
+    manuscript_words: int | None = Field(None, ge=0)
     has_exam_request: bool | None = None
     # Deferred Batch 1 — PCT / invalidation
     ro: str | None = Field(None, max_length=64)
@@ -92,6 +102,11 @@ class CaseCreate(BaseModel):
     is_fee_monitor: bool | None = None
     fee_reduction: str | None = Field(None, max_length=32)
     applicant_kind: str | None = Field(None, max_length=32)
+    discount_rate: Decimal | None = Field(None, ge=Decimal("0"), le=Decimal("1"))
+    no_power: bool | None = None
+    no_prio_text: bool | None = None
+    require_hk: bool | None = None
+    first_annuity_year: int | None = Field(None, ge=1)
     # Sub-tables
     applicants: list[CaseApplicantIn] = []
     inventors: list[CaseInventorIn] = []
@@ -109,18 +124,28 @@ class CaseUpdateFull(BaseModel):
     app_no: str | None = Field(None, max_length=64)
     status: CaseStatus | None = None
     filing_date: date | None = None
+    recv_date: date | None = None
     foreign_agent_id: str | None = None
     foreign_ref: str | None = Field(None, max_length=64)
+    from_country: str | None = Field(None, max_length=10)
+    to_country: str | None = Field(None, max_length=10)
+    doc_address_id: str | None = Field(None, max_length=36)
+    bill_address_id: str | None = Field(None, max_length=36)
     # A3 — Publication / Grant
     pub_date: date | None = None
     pub_no: str | None = Field(None, max_length=64)
+    issue_date: date | None = None
     grant_date: date | None = None
     grant_no: str | None = Field(None, max_length=64)
+    cert_no: str | None = Field(None, max_length=64)
     patent_no: str | None = Field(None, max_length=64)
     valid_until: date | None = None
     # A3 — Spec details
     spec_pages: int | None = Field(None, ge=0)
+    draw_pages: int | None = Field(None, ge=0)
     claim_count: int | None = Field(None, ge=0)
+    claim_pages: int | None = Field(None, ge=0)
+    manuscript_words: int | None = Field(None, ge=0)
     has_exam_request: bool | None = None
     # Deferred Batch 1 — PCT / invalidation
     ro: str | None = Field(None, max_length=64)
@@ -147,6 +172,11 @@ class CaseUpdateFull(BaseModel):
     is_fee_monitor: bool | None = None
     fee_reduction: str | None = Field(None, max_length=32)
     applicant_kind: str | None = Field(None, max_length=32)
+    discount_rate: Decimal | None = Field(None, ge=Decimal("0"), le=Decimal("1"))
+    no_power: bool | None = None
+    no_prio_text: bool | None = None
+    require_hk: bool | None = None
+    first_annuity_year: int | None = Field(None, ge=1)
     # Sub-tables
     applicants: list[CaseApplicantIn] | None = None
     inventors: list[CaseInventorIn] | None = None
@@ -156,7 +186,9 @@ class CaseUpdateFull(BaseModel):
 
     @field_validator(
         "filing_date",
+        "recv_date",
         "pub_date",
+        "issue_date",
         "grant_date",
         "valid_until",
         "intl_app_date",
@@ -194,6 +226,10 @@ class CaseDetail(BaseModel):
     foreign_agent_id: str | None = None
     foreign_agent_name: str | None = None
     foreign_ref: str | None = None
+    from_country: str | None = None
+    to_country: str | None = None
+    doc_address_id: str | None = None
+    bill_address_id: str | None = None
     title_cn: str | None
     title_en: str | None
     app_no: str | None
@@ -203,13 +239,18 @@ class CaseDetail(BaseModel):
     # A3 — Publication / Grant
     pub_date: str | None = None
     pub_no: str | None = None
+    issue_date: str | None = None
     grant_date: str | None = None
     grant_no: str | None = None
+    cert_no: str | None = None
     patent_no: str | None = None
     valid_until: str | None = None
     # A3 — Spec details
     spec_pages: int | None = None
+    draw_pages: int | None = None
     claim_count: int | None = None
+    claim_pages: int | None = None
+    manuscript_words: int | None = None
     has_exam_request: bool | None = None
     # Deferred Batch 1 — PCT / invalidation
     ro: str | None = None
@@ -236,6 +277,11 @@ class CaseDetail(BaseModel):
     is_fee_monitor: bool | None = None
     fee_reduction: str | None = None
     applicant_kind: str | None = None
+    discount_rate: str | None = None
+    no_power: bool | None = None
+    no_prio_text: bool | None = None
+    require_hk: bool | None = None
+    first_annuity_year: int | None = None
     agent_splits: list[dict] | None = None
     # Sub-tables & timestamps
     applicants: list[dict]  # CaseApplicantOut

@@ -26,7 +26,7 @@ from app.modules.cases.schemas import (
     CaseUpdateFull,
     CaseUpdateLimited,
 )
-from app.modules.masterdata.clients.models import Client
+from app.modules.masterdata.clients.models import Client, ClientAddress
 
 _CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
 _FOREIGN_FLOW_DIRS = {FlowDir.CN_OUTBOUND.value, FlowDir.FOREIGN_INBOUND.value}
@@ -140,6 +140,62 @@ def validate_foreign_agent(
             "foreign_agent_id must reference an agent client",
             status_code=400,
         )
+
+
+def validate_country_fields(*, flow_dir: str | None, to_country: str | None) -> None:
+    normalized_flow_dir = (flow_dir or "").strip()
+    normalized_to_country = (to_country or "").strip()
+    if normalized_flow_dir in _FOREIGN_FLOW_DIRS and not normalized_to_country:
+        raise_business_error(
+            "CASE_TO_COUNTRY_REQUIRED",
+            "to_country is required for foreign-facing cases",
+            status_code=400,
+        )
+
+
+def _validate_case_address(
+    db: Session,
+    *,
+    client_id: str | None,
+    address_id: str | None,
+    field_name: str,
+) -> None:
+    if not address_id:
+        return
+    address = (
+        db.query(ClientAddress.id, ClientAddress.client_id)
+        .filter(ClientAddress.id == address_id)
+        .first()
+    )
+    if not address:
+        raise_business_error("ADDRESS_NOT_FOUND", f"{field_name} not found", status_code=404)
+    if client_id and address.client_id != client_id:
+        raise_business_error(
+            "CASE_ADDRESS_CLIENT_MISMATCH",
+            f"{field_name} must belong to the selected client",
+            status_code=400,
+        )
+
+
+def validate_case_addresses(
+    db: Session,
+    *,
+    client_id: str | None,
+    doc_address_id: str | None,
+    bill_address_id: str | None,
+) -> None:
+    _validate_case_address(
+        db,
+        client_id=client_id,
+        address_id=doc_address_id,
+        field_name="doc_address_id",
+    )
+    _validate_case_address(
+        db,
+        client_id=client_id,
+        address_id=bill_address_id,
+        field_name="bill_address_id",
+    )
 
 
 def validate_priorities(priorities: list[dict]) -> None:
@@ -438,6 +494,13 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         validate_applicants(applicants_dict)
     validate_client_exists(db, data.client_id)
     validate_foreign_agent(db, flow_dir=data.flow_dir.value, foreign_agent_id=data.foreign_agent_id)
+    validate_country_fields(flow_dir=data.flow_dir.value, to_country=data.to_country)
+    validate_case_addresses(
+        db,
+        client_id=data.client_id,
+        doc_address_id=data.doc_address_id,
+        bill_address_id=data.bill_address_id,
+    )
     validate_priorities(priorities_dict)
     validate_bio_deposits(bio_deposits_dict)
     validate_case_type_specific_fields(
@@ -462,20 +525,30 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         client_id=data.client_id,
         foreign_agent_id=data.foreign_agent_id,
         foreign_ref=data.foreign_ref,
+        from_country=data.from_country,
+        to_country=data.to_country,
+        doc_address_id=data.doc_address_id,
+        bill_address_id=data.bill_address_id,
         title_cn=data.title_cn,
         title_en=data.title_en,
         app_no=data.app_no,
         status=data.status.value if data.status else "NOT_FILED",
+        recv_date=data.recv_date,
         # A3 — Publication / Grant
         pub_date=data.pub_date,
         pub_no=data.pub_no,
+        issue_date=data.issue_date,
         grant_date=data.grant_date,
         grant_no=data.grant_no,
+        cert_no=data.cert_no,
         patent_no=data.patent_no,
         valid_until=data.valid_until,
         # A3 — Spec details
         spec_pages=data.spec_pages,
+        draw_pages=data.draw_pages,
         claim_count=data.claim_count,
+        claim_pages=data.claim_pages,
+        manuscript_words=data.manuscript_words,
         has_exam_request=data.has_exam_request,
         ro=data.ro,
         isa=data.isa,
@@ -501,6 +574,11 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         is_fee_monitor=data.is_fee_monitor,
         fee_reduction=data.fee_reduction,
         applicant_kind=data.applicant_kind,
+        discount_rate=data.discount_rate,
+        no_power=data.no_power,
+        no_prio_text=data.no_prio_text,
+        require_hk=data.require_hk,
+        first_annuity_year=data.first_annuity_year,
         created_by=user_id,
         updated_by=user_id,
     )
@@ -637,8 +715,15 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     target_flow_dir = (
         data.flow_dir.value if "flow_dir" in provided_fields and data.flow_dir else case.flow_dir
     )
+    target_to_country = data.to_country if "to_country" in provided_fields else case.to_country
     target_foreign_agent_id = (
         data.foreign_agent_id if "foreign_agent_id" in provided_fields else case.foreign_agent_id
+    )
+    target_doc_address_id = (
+        data.doc_address_id if "doc_address_id" in provided_fields else case.doc_address_id
+    )
+    target_bill_address_id = (
+        data.bill_address_id if "bill_address_id" in provided_fields else case.bill_address_id
     )
 
     validate_case_status_transition(case.status, target_status)
@@ -651,6 +736,13 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         db,
         flow_dir=target_flow_dir,
         foreign_agent_id=target_foreign_agent_id,
+    )
+    validate_country_fields(flow_dir=target_flow_dir, to_country=target_to_country)
+    validate_case_addresses(
+        db,
+        client_id=case.client_id,
+        doc_address_id=target_doc_address_id,
+        bill_address_id=target_bill_address_id,
     )
     validate_case_type_specific_fields(
         db,
@@ -699,10 +791,20 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         case.app_no = data.app_no
     if "filing_date" in provided_fields:
         case.filing_date = data.filing_date
+    if "recv_date" in provided_fields:
+        case.recv_date = data.recv_date
     if "foreign_agent_id" in provided_fields:
         case.foreign_agent_id = data.foreign_agent_id
     if "foreign_ref" in provided_fields:
         case.foreign_ref = data.foreign_ref
+    if "from_country" in provided_fields:
+        case.from_country = data.from_country
+    if "to_country" in provided_fields:
+        case.to_country = data.to_country
+    if "doc_address_id" in provided_fields:
+        case.doc_address_id = data.doc_address_id
+    if "bill_address_id" in provided_fields:
+        case.bill_address_id = data.bill_address_id
     if data.status is not None:
         case.status = data.status
     # A3 — Publication / Grant
@@ -710,10 +812,14 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         case.pub_date = data.pub_date
     if "pub_no" in provided_fields:
         case.pub_no = data.pub_no
+    if "issue_date" in provided_fields:
+        case.issue_date = data.issue_date
     if "grant_date" in provided_fields:
         case.grant_date = data.grant_date
     if "grant_no" in provided_fields:
         case.grant_no = data.grant_no
+    if "cert_no" in provided_fields:
+        case.cert_no = data.cert_no
     if "patent_no" in provided_fields:
         case.patent_no = data.patent_no
     if "valid_until" in provided_fields:
@@ -721,8 +827,14 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     # A3 — Spec details
     if "spec_pages" in provided_fields:
         case.spec_pages = data.spec_pages
+    if "draw_pages" in provided_fields:
+        case.draw_pages = data.draw_pages
     if "claim_count" in provided_fields:
         case.claim_count = data.claim_count
+    if "claim_pages" in provided_fields:
+        case.claim_pages = data.claim_pages
+    if "manuscript_words" in provided_fields:
+        case.manuscript_words = data.manuscript_words
     if "has_exam_request" in provided_fields:
         case.has_exam_request = data.has_exam_request
     if "ro" in provided_fields:
@@ -771,6 +883,16 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         case.fee_reduction = data.fee_reduction
     if "applicant_kind" in provided_fields:
         case.applicant_kind = data.applicant_kind
+    if "discount_rate" in provided_fields:
+        case.discount_rate = data.discount_rate
+    if "no_power" in provided_fields:
+        case.no_power = data.no_power
+    if "no_prio_text" in provided_fields:
+        case.no_prio_text = data.no_prio_text
+    if "require_hk" in provided_fields:
+        case.require_hk = data.require_hk
+    if "first_annuity_year" in provided_fields:
+        case.first_annuity_year = data.first_annuity_year
 
     case.updated_by = user_id
 

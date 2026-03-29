@@ -1,0 +1,3 @@
+{"ts":"20260329T225247","step":"test","rc":1,"log":"artifacts/CASEFLD-BE-CRUD-01/outputs/20260329T225247_test.log"}
+{"ts":"20260329T225832","step":"lint","rc":0,"log":"artifacts/CASEFLD-BE-CRUD-01/outputs/20260329T225832_lint.log"}
+{"ts":"20260329T225842","step":"test","rc":0,"log":"artifacts/CASEFLD-BE-CRUD-01/outputs/20260329T225842_test.log"}

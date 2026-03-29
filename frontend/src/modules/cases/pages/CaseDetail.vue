@@ -94,6 +94,10 @@
                     <span class="info-value">{{ caseData.filing_date || '-' }}</span>
                   </div>
                   <div class="info-item">
+                    <span class="info-label">收文日</span>
+                    <span class="info-value">{{ caseData.recv_date || '-' }}</span>
+                  </div>
+                  <div class="info-item">
                     <span class="info-label">{{ ZH.caseDetail.appDate }}</span>
                     <span class="info-value">{{ caseData.app_date || '-' }}</span>
                   </div>
@@ -124,7 +128,7 @@
                   </div>
                 </div>
 
-                <div v-if="caseData.foreign_agent_name || caseData.foreign_ref" class="info-section">
+                <div v-if="caseData.foreign_agent_name || caseData.foreign_ref || caseData.from_country || caseData.to_country || caseData.doc_address_id || caseData.bill_address_id" class="info-section">
                   <h4 class="info-section-title">涉外代理信息</h4>
                   <div class="info-grid">
                     <div class="info-item">
@@ -134,6 +138,22 @@
                     <div class="info-item">
                       <span class="info-label">外方案号</span>
                       <span class="info-value">{{ caseData.foreign_ref || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">来源国家/地区</span>
+                      <span class="info-value">{{ caseData.from_country || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">目标国家/地区</span>
+                      <span class="info-value">{{ caseData.to_country || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">公文地址 ID</span>
+                      <span class="info-value">{{ caseData.doc_address_id || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">账单地址 ID</span>
+                      <span class="info-value">{{ caseData.bill_address_id || '-' }}</span>
                     </div>
                   </div>
                 </div>
@@ -234,9 +254,17 @@
                 </div>
 
                 <!-- A3: Publication & Grant -->
-                <div v-if="caseData.pub_date || caseData.pub_no || caseData.grant_date || caseData.grant_no || caseData.patent_no || caseData.valid_until" class="info-section">
+                <div v-if="caseData.issue_date || caseData.cert_no || caseData.pub_date || caseData.pub_no || caseData.grant_date || caseData.grant_no || caseData.patent_no || caseData.valid_until" class="info-section">
                   <h4 class="info-section-title">公告与授权</h4>
                   <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">发证日</span>
+                      <span class="info-value">{{ caseData.issue_date || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">证书号</span>
+                      <span class="info-value">{{ caseData.cert_no || '-' }}</span>
+                    </div>
                     <div class="info-item">
                       <span class="info-label">公告日</span>
                       <span class="info-value">{{ caseData.pub_date || '-' }}</span>
@@ -265,7 +293,7 @@
                 </div>
 
                 <!-- A3: Specification -->
-                <div v-if="caseData.spec_pages != null || caseData.claim_count != null || caseData.has_exam_request != null" class="info-section">
+                <div v-if="caseData.spec_pages != null || caseData.draw_pages != null || caseData.claim_count != null || caseData.claim_pages != null || caseData.manuscript_words != null || caseData.has_exam_request != null" class="info-section">
                   <h4 class="info-section-title">说明书信息</h4>
                   <div class="info-grid">
                     <div class="info-item">
@@ -275,6 +303,18 @@
                     <div class="info-item">
                       <span class="info-label">权利要求项数</span>
                       <span class="info-value">{{ caseData.claim_count ?? '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">附图页数</span>
+                      <span class="info-value">{{ caseData.draw_pages ?? '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">权利要求页数</span>
+                      <span class="info-value">{{ caseData.claim_pages ?? '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">说明书字数</span>
+                      <span class="info-value">{{ caseData.manuscript_words ?? '-' }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">已提实审请求</span>
@@ -303,7 +343,7 @@
                 </div>
 
                 <!-- A3: Control Flags -->
-                <div v-if="caseData.is_fee_monitor != null || caseData.fee_reduction || caseData.applicant_kind" class="info-section">
+                <div v-if="caseData.is_fee_monitor != null || caseData.fee_reduction || caseData.applicant_kind || caseData.discount_rate || caseData.no_power != null || caseData.no_prio_text != null || caseData.require_hk != null || caseData.first_annuity_year != null" class="info-section">
                   <h4 class="info-section-title">控制标记</h4>
                   <div class="info-grid">
                     <div class="info-item">
@@ -317,6 +357,26 @@
                     <div class="info-item">
                       <span class="info-label">申请人类型</span>
                       <span class="info-value">{{ applicantKindText }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">减免比例</span>
+                      <span class="info-value">{{ caseData.discount_rate || '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">无委托书</span>
+                      <span class="info-value">{{ caseData.no_power === true ? '是' : caseData.no_power === false ? '否' : '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">无优先权文本</span>
+                      <span class="info-value">{{ caseData.no_prio_text === true ? '是' : caseData.no_prio_text === false ? '否' : '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">要求港澳台</span>
+                      <span class="info-value">{{ caseData.require_hk === true ? '是' : caseData.require_hk === false ? '否' : '-' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">首年年费年度</span>
+                      <span class="info-value">{{ caseData.first_annuity_year ?? '-' }}</span>
                     </div>
                   </div>
                 </div>

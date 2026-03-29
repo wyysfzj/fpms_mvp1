@@ -1,0 +1,58 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________ test_case_model_exposes_missing_fields_and_sqlite_columns ___________
+
+tmp_path = PosixPath('/private/var/folders/sk/ztjhws892vb_t2v7fplsqk7h0000gn/T/pytest-of-cfcc/pytest-265/test_case_model_exposes_missin0')
+
+    def test_case_model_exposes_missing_fields_and_sqlite_columns(tmp_path) -> None:
+        db_path = tmp_path / "case_missing_fields.db"
+        engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False},
+            future=True,
+        )
+    
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+    
+        Base.metadata.create_all(engine)
+    
+        case_columns = Case.__table__.columns
+        expected_columns = {
+            "recv_date",
+            "draw_pages",
+            "claim_pages",
+            "manuscript_words",
+            "discount_rate",
+            "no_power",
+            "no_prio_text",
+            "require_hk",
+            "from_country",
+            "to_country",
+            "doc_address_id",
+            "bill_address_id",
+            "issue_date",
+            "cert_no",
+            "first_annuity_year",
+        }
+>       assert expected_columns.issubset(set(case_columns.keys()))
+E       AssertionError: assert False
+E        +  where False = <built-in method issubset of set object at 0x106a726c0>({'app_no', 'applicant_kind', 'case_no', 'case_type', 'claim_count', 'client_id', ...})
+E        +    where <built-in method issubset of set object at 0x106a726c0> = {'bill_address_id', 'cert_no', 'claim_pages', 'discount_rate', 'doc_address_id', 'draw_pages', ...}.issubset
+E        +    and   {'app_no', 'applicant_kind', 'case_no', 'case_type', 'claim_count', 'client_id', ...} = set(['case_no', 'case_type', 'patent_category', 'flow_dir', 'client_id', 'foreign_agent_id', ...])
+E        +      where ['case_no', 'case_type', 'patent_category', 'flow_dir', 'client_id', 'foreign_agent_id', ...] = keys()
+E        +        where keys = <sqlalchemy.sql.base.ReadOnlyColumnCollection object at 0x1064f5170>.keys
+
+tests/test_case_missing_fields_schema.py:44: AssertionError
+=============================== warnings summary ===============================
+../../../../../../Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_case_missing_fields_schema.py::test_case_model_exposes_missing_fields_and_sqlite_columns
+1 failed, 1 warning in 0.06s

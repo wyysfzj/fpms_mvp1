@@ -1,0 +1,7 @@
+{"ts":"20260329T224945","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_case_missing_fields_schema.py"}
+{"ts":"20260329T225052","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_case_missing_fields_schema.py"}
+{"ts":"20260329T225052","step":"lint","cmd":"ruff check backend/alembic/versions/casefld_db_01_case_missing_fields.py backend/app/modules/cases/models.py backend/tests/test_case_missing_fields_schema.py"}
+{"ts":"20260329T225059","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}
+{"ts":"20260329T225832","step":"lint","cmd":"ruff check backend/alembic/versions/casefld_db_01_case_missing_fields.py backend/app/modules/cases/models.py backend/tests/test_case_missing_fields_schema.py"}
+{"ts":"20260329T225842","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_case_missing_fields_schema.py"}
+{"ts":"20260329T225850","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ alembic\ upgrade\ head"}

@@ -1,0 +1,5 @@
+{"ts":"20260329T230434","step":"test","cmd":"./scripts/task_validate.sh CASEFLD-DB-01"}
+{"ts":"20260329T230434","step":"test","cmd":"./scripts/task_validate.sh CASEFLD-BE-CRUD-01"}
+{"ts":"20260329T230434","step":"test","cmd":"./scripts/task_validate.sh CASEFLD-FE-FORM-01"}
+{"ts":"20260329T230434","step":"test","cmd":"./scripts/task_validate.sh CASEFLD-FE-DETAIL-01"}
+{"ts":"20260329T230522","step":"lint","cmd":"/bin/zsh -lc test\ -f\ artifacts/CASEFLD-DB-01/summary.md\ \&\&\ test\ -f\ artifacts/CASEFLD-BE-CRUD-01/summary.md\ \&\&\ test\ -f\ artifacts/CASEFLD-FE-FORM-01/summary.md\ \&\&\ test\ -f\ artifacts/CASEFLD-FE-DETAIL-01/summary.md"}

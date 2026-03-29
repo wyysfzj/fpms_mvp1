@@ -127,6 +127,28 @@
           </el-form-item>
         </div>
 
+        <div class="form-section" v-if="!isConsultingCase">
+          <h3 class="form-section-title">补充字段</h3>
+
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="收文日" :error="fieldErrors.get('recv_date')?.join('，')">
+                <el-date-picker v-model="form.recv_date" type="date" placeholder="请选择收文日" format="YYYY-MM-DD" value-format="YYYY-MM-DD" class="full-width" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="发证日" :error="fieldErrors.get('issue_date')?.join('，')">
+                <el-date-picker v-model="form.issue_date" type="date" placeholder="请选择发证日" format="YYYY-MM-DD" value-format="YYYY-MM-DD" class="full-width" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="首年年费年度" :error="fieldErrors.get('first_annuity_year')?.join('，')">
+                <el-input-number v-model="form.first_annuity_year" :min="1" controls-position="right" placeholder="请输入首年年费年度" class="full-width" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
         <el-collapse v-model="expandedSections" class="case-extra-sections">
           <el-collapse-item title="申请人信息" name="applicant">
             <div class="section-toolbar">
@@ -222,6 +244,30 @@
               <el-col :span="12">
                 <el-form-item label="外方案号">
                   <el-input v-model="form.foreign_ref" placeholder="请输入外方案号" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="来源国家/地区" :error="fieldErrors.get('from_country')?.join('，')">
+                  <el-input v-model="form.from_country" placeholder="请输入来源国家/地区代码，例如 CN" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="目标国家/地区" :error="fieldErrors.get('to_country')?.join('，')">
+                  <el-input v-model="form.to_country" placeholder="请输入目标国家/地区代码，例如 US" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="公文地址 ID" :error="fieldErrors.get('doc_address_id')?.join('，')">
+                  <el-input v-model="form.doc_address_id" placeholder="请输入客户地址主数据 ID" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="账单地址 ID" :error="fieldErrors.get('bill_address_id')?.join('，')">
+                  <el-input v-model="form.bill_address_id" placeholder="请输入客户地址主数据 ID" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -480,6 +526,18 @@
             </el-row>
             <el-row :gutter="20">
               <el-col :span="12">
+                <el-form-item label="发证日" :error="fieldErrors.get('issue_date')?.join('，')">
+                  <el-date-picker v-model="form.issue_date" type="date" placeholder="请选择发证日" format="YYYY-MM-DD" value-format="YYYY-MM-DD" class="full-width" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="证书号" :error="fieldErrors.get('cert_no')?.join('，')">
+                  <el-input v-model="form.cert_no" placeholder="请输入证书号" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="12">
                 <el-form-item label="公告日">
                   <el-date-picker
                     v-model="form.pub_date"
@@ -567,6 +625,23 @@
                 </el-form-item>
               </el-col>
             </el-row>
+            <el-row :gutter="20">
+              <el-col :span="8">
+                <el-form-item label="附图页数" :error="fieldErrors.get('draw_pages')?.join('，')">
+                  <el-input-number v-model="form.draw_pages" :min="0" controls-position="right" placeholder="页数" class="full-width" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="权利要求页数" :error="fieldErrors.get('claim_pages')?.join('，')">
+                  <el-input-number v-model="form.claim_pages" :min="0" controls-position="right" placeholder="页数" class="full-width" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="说明书字数" :error="fieldErrors.get('manuscript_words')?.join('，')">
+                  <el-input-number v-model="form.manuscript_words" :min="0" controls-position="right" placeholder="字数" class="full-width" />
+                </el-form-item>
+              </el-col>
+            </el-row>
           </el-collapse-item>
 
           <el-collapse-item title="代理人分配" name="agent">
@@ -613,6 +688,28 @@
                     <el-option label="高校" value="UNIV" />
                     <el-option label="政府" value="GOV" />
                   </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="6">
+                <el-form-item label="减免比例" :error="fieldErrors.get('discount_rate')?.join('，')">
+                  <el-input v-model="form.discount_rate" placeholder="请输入 0 到 1 之间的小数" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="无委托书">
+                  <el-switch v-model="form.no_power" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="无优先权文本">
+                  <el-switch v-model="form.no_prio_text" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="6">
+                <el-form-item label="要求港澳台">
+                  <el-switch v-model="form.require_hk" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -740,6 +837,21 @@ const form = reactive<CaseCreatePayload>({
   bio_deposits: [],
   foreign_agent_id: '',
   foreign_ref: '',
+  from_country: '',
+  to_country: '',
+  doc_address_id: '',
+  bill_address_id: '',
+  recv_date: '',
+  issue_date: '',
+  cert_no: '',
+  draw_pages: undefined,
+  claim_pages: undefined,
+  manuscript_words: undefined,
+  discount_rate: '',
+  no_power: false,
+  no_prio_text: false,
+  require_hk: false,
+  first_annuity_year: undefined,
   ro: '',
   isa: '',
   ipea: '',
@@ -822,6 +934,21 @@ watch(
       form.applicant_kind = ''
       form.foreign_agent_id = ''
       form.foreign_ref = ''
+      form.from_country = ''
+      form.to_country = ''
+      form.doc_address_id = ''
+      form.bill_address_id = ''
+      form.recv_date = ''
+      form.issue_date = ''
+      form.cert_no = ''
+      form.draw_pages = undefined
+      form.claim_pages = undefined
+      form.manuscript_words = undefined
+      form.discount_rate = ''
+      form.no_power = false
+      form.no_prio_text = false
+      form.require_hk = false
+      form.first_annuity_year = undefined
       form.bio_deposits = []
       form.ro = ''
       form.isa = ''

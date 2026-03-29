@@ -25,12 +25,26 @@ interface BackendCase {
     foreign_agent_id?: string | null
     foreign_agent_name?: string | null
     foreign_ref?: string | null
+    from_country?: string | null
+    to_country?: string | null
+    doc_address_id?: string | null
+    bill_address_id?: string | null
     title_cn?: string | null
     title_en?: string | null
     status?: string | null
     filing_date?: string | null
     recv_date?: string | null
+    issue_date?: string | null
     app_no?: string | null
+    cert_no?: string | null
+    draw_pages?: number | null
+    claim_pages?: number | null
+    manuscript_words?: number | null
+    discount_rate?: string | null
+    no_power?: boolean | null
+    no_prio_text?: boolean | null
+    require_hk?: boolean | null
+    first_annuity_year?: number | null
     app_date?: string | null
     applicants?: Array<{ seq: number; is_first?: boolean; name_cn?: string; name_en?: string; address_cn?: string; address_en?: string }>
     inventors?: Array<{ seq: number; name_cn?: string; name_en?: string }>
@@ -90,10 +104,24 @@ function mapCase(input: BackendCase): Case {
         foreign_agent_id: input.foreign_agent_id || undefined,
         foreign_agent_name: input.foreign_agent_name || undefined,
         foreign_ref: input.foreign_ref || undefined,
+        from_country: input.from_country || undefined,
+        to_country: input.to_country || undefined,
+        doc_address_id: input.doc_address_id || undefined,
+        bill_address_id: input.bill_address_id || undefined,
         status: input.status || undefined,
         filing_date: input.filing_date || undefined,
         recv_date: input.recv_date || undefined,
+        issue_date: input.issue_date || undefined,
         app_no: input.app_no || undefined,
+        cert_no: input.cert_no || undefined,
+        draw_pages: input.draw_pages ?? undefined,
+        claim_pages: input.claim_pages ?? undefined,
+        manuscript_words: input.manuscript_words ?? undefined,
+        discount_rate: input.discount_rate || undefined,
+        no_power: input.no_power ?? undefined,
+        no_prio_text: input.no_prio_text ?? undefined,
+        require_hk: input.require_hk ?? undefined,
+        first_annuity_year: input.first_annuity_year ?? undefined,
         app_date: input.app_date || undefined,
         applicants: input.applicants || [],
         inventors: input.inventors || [],
@@ -177,9 +205,24 @@ function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
     if (data.title !== undefined) payload.title = trimToNull(data.title)
     if (data.status !== undefined) payload.status = trimToNull(data.status)
     if (data.filing_date !== undefined) payload.filing_date = trimToNull(data.filing_date)
+    if (data.recv_date !== undefined) payload.recv_date = trimToNull(data.recv_date)
     if (data.foreign_agent_id !== undefined) payload.foreign_agent_id = trimToNull(data.foreign_agent_id)
     if (data.foreign_ref !== undefined) payload.foreign_ref = trimToNull(data.foreign_ref)
+    if (data.from_country !== undefined) payload.from_country = trimToNull(data.from_country)
+    if (data.to_country !== undefined) payload.to_country = trimToNull(data.to_country)
+    if (data.doc_address_id !== undefined) payload.doc_address_id = trimToNull(data.doc_address_id)
+    if (data.bill_address_id !== undefined) payload.bill_address_id = trimToNull(data.bill_address_id)
     if (data.app_no !== undefined) payload.app_no = trimToNull(data.app_no)
+    if (data.issue_date !== undefined) payload.issue_date = trimToNull(data.issue_date)
+    if (data.cert_no !== undefined) payload.cert_no = trimToNull(data.cert_no)
+    if (data.draw_pages !== undefined) payload.draw_pages = data.draw_pages
+    if (data.claim_pages !== undefined) payload.claim_pages = data.claim_pages
+    if (data.manuscript_words !== undefined) payload.manuscript_words = data.manuscript_words
+    if (data.discount_rate !== undefined) payload.discount_rate = trimToNull(data.discount_rate)
+    if (data.no_power !== undefined) payload.no_power = data.no_power
+    if (data.no_prio_text !== undefined) payload.no_prio_text = data.no_prio_text
+    if (data.require_hk !== undefined) payload.require_hk = data.require_hk
+    if (data.first_annuity_year !== undefined) payload.first_annuity_year = data.first_annuity_year
     if (data.case_type !== undefined) payload.case_type = trimToNull(data.case_type)
     if (data.patent_category !== undefined) payload.patent_category = trimToNull(data.patent_category)
     if (data.flow_dir !== undefined) payload.flow_dir = trimToNull(data.flow_dir)
@@ -309,7 +352,22 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
         flow_dir: trimToUndefined(data.flow_dir) || 'CN_DOMESTIC',
         foreign_agent_id: trimToUndefined(data.foreign_agent_id),
         foreign_ref: trimToUndefined(data.foreign_ref),
+        from_country: trimToUndefined(data.from_country),
+        to_country: trimToUndefined(data.to_country),
+        doc_address_id: trimToUndefined(data.doc_address_id),
+        bill_address_id: trimToUndefined(data.bill_address_id),
         app_no: trimToUndefined(data.app_no),
+        recv_date: trimToUndefined(data.recv_date),
+        issue_date: trimToUndefined(data.issue_date),
+        cert_no: trimToUndefined(data.cert_no),
+        draw_pages: data.draw_pages ?? undefined,
+        claim_pages: data.claim_pages ?? undefined,
+        manuscript_words: data.manuscript_words ?? undefined,
+        discount_rate: trimToUndefined(data.discount_rate),
+        no_power: data.no_power ?? undefined,
+        no_prio_text: data.no_prio_text ?? undefined,
+        require_hk: data.require_hk ?? undefined,
+        first_annuity_year: data.first_annuity_year ?? undefined,
         applicants: data.applicants
             ?.map((applicant) => ({
                 seq: applicant.seq,
