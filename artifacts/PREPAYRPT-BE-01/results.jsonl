@@ -1,0 +1,2 @@
+{"step":"lint","rc":0,"cmd":"ruff check backend/app/modules/billing/api.py backend/app/modules/billing/schemas.py backend/app/modules/billing/service.py backend/tests/test_prepayment_reporting_api.py"}
+{"step":"test","rc":0,"cmd":"cd backend && pytest -q tests/test_prepayment_reporting_api.py"}

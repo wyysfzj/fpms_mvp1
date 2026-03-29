@@ -22,6 +22,7 @@ import type {
     PaymentLineItem,
     PaymentListItem,
     PaymentListParams,
+    PaymentListResponse,
 } from './billing.types'
 
 interface BackendBill {
@@ -100,6 +101,7 @@ interface BackendPayment {
     id: string
     pay_no?: string | null
     client_id: string
+    client_name?: string | null
     pay_date?: string | null
     currency?: string | null
     amount?: string | number | null
@@ -107,6 +109,13 @@ interface BackendPayment {
     unapplied_amt?: string | number | null
     line_count?: number | null
     prepayment_status?: string | null
+}
+
+interface BackendPaymentListResponse extends Pagination<BackendPayment> {
+    prepayment_count: number | string
+    prepayment_total_amount: number | string
+    allocated_total_amount: number | string
+    remaining_prepayment_balance: number | string
 }
 
 interface BackendPaymentLine {
@@ -228,6 +237,7 @@ function mapPayment(
         bill_id: extras.bill_id,
         bill_no: extras.bill_no,
         client_id: input.client_id,
+        client_name: input.client_name || undefined,
         amount: asNumber(input.amount),
         currency: input.currency || extras.currency || 'CNY',
         allocated_amt: input.allocated_amt != null ? asNumber(input.allocated_amt) : undefined,
@@ -343,14 +353,36 @@ export async function recoverBillBadDebt(
 /**
  * Get paginated list of payments
  */
-export async function getPayments(params: PaymentListParams = {}): Promise<Pagination<PaymentListItem>> {
-    const { page = 1, page_size = 20, bill_id } = params
-    const response = await http.get<Pagination<BackendPayment>>('/payments', {
-        params: { page, page_size, bill_id }
+export async function getPayments(params: PaymentListParams = {}): Promise<PaymentListResponse> {
+    const {
+        page = 1,
+        page_size = 20,
+        bill_id,
+        client_id,
+        prepayment_status,
+        pay_date_from,
+        pay_date_to,
+        has_unapplied_only,
+    } = params
+    const response = await http.get<BackendPaymentListResponse>('/payments', {
+        params: {
+            page,
+            page_size,
+            bill_id,
+            client_id,
+            prepayment_status,
+            pay_date_from,
+            pay_date_to,
+            has_unapplied_only,
+        },
     })
 
     return {
         ...response.data,
+        prepayment_count: asNumber(response.data.prepayment_count),
+        prepayment_total_amount: asNumber(response.data.prepayment_total_amount),
+        allocated_total_amount: asNumber(response.data.allocated_total_amount),
+        remaining_prepayment_balance: asNumber(response.data.remaining_prepayment_balance),
         items: response.data.items.map((item) =>
             mapPayment(item, {
                 bill_id,

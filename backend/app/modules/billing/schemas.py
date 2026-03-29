@@ -158,6 +158,35 @@ class PaymentResponse(BaseModel):
     amount: Decimal
 
 
+class PaymentListItemResponse(BaseModel):
+    """Response schema for payment list items."""
+
+    id: str
+    pay_no: str | None
+    client_id: str
+    client_name: str | None = None
+    pay_date: date | None
+    currency: str
+    amount: Decimal = Field(Decimal("0"), ge=0)
+    line_count: int = 0
+    allocated_amt: Decimal = Field(Decimal("0"), ge=0)
+    unapplied_amt: Decimal = Field(Decimal("0"), ge=0)
+    prepayment_status: str
+
+
+class PaymentListResponse(BaseModel):
+    """Response schema for payment list/report results."""
+
+    items: list[PaymentListItemResponse]
+    page: int
+    page_size: int
+    total: int
+    prepayment_count: int = 0
+    prepayment_total_amount: Decimal = Field(Decimal("0"), ge=0)
+    allocated_total_amount: Decimal = Field(Decimal("0"), ge=0)
+    remaining_prepayment_balance: Decimal = Field(Decimal("0"), ge=0)
+
+
 class OffsetCreateSchema(BaseModel):
     """Schema for creating offsets."""
 

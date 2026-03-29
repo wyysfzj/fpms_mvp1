@@ -1,0 +1,271 @@
+diff --git a/backend/app/modules/billing/api.py b/backend/app/modules/billing/api.py
+index c1a75ff..34e07d6 100644
+--- a/backend/app/modules/billing/api.py
++++ b/backend/app/modules/billing/api.py
+@@ -32,6 +32,7 @@ from app.modules.billing.schemas import (
+     OffsetCreateSchema,
+     OffsetListItemResponse,
+     OffsetResponse,
++    PaymentListResponse,
+     PaymentResponse,
+     PaymentSchema,
+ )
+@@ -43,6 +44,7 @@ from app.modules.billing.service import (
+     generate_bill_from_drafts,
+     list_bills,
+     list_case_receipts,
++    list_payments,
+     load_bill_bad_debt_chain,
+     process_payment,
+     update_case_receipt,
+@@ -456,9 +458,14 @@ def recover_bill_bad_debt_action(
+ def get_payments(
+     page: int = Query(default=1, ge=1),
+     page_size: int = Query(default=20, ge=1, le=100),
++    client_id: str | None = Query(default=None),
++    prepayment_status: str | None = Query(default=None),
++    pay_date_from: date | None = Query(default=None),
++    pay_date_to: date | None = Query(default=None),
++    has_unapplied_only: bool = Query(default=False),
+     _perm: None = Depends(require_perm("Payment.Read")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
++) -> PaymentListResponse:
+     """
+     List payments with pagination.
+ 
+@@ -477,59 +484,18 @@ def get_payments(
+     - 403: FORBIDDEN
+     - 422: VALIDATION_ERROR
+     """
+-    query = db.query(Payment)
+-    total = query.count()
+-    payments = (
+-        query.order_by(Payment.created_at.desc())
+-        .offset((page - 1) * page_size)
+-        .limit(page_size)
+-        .all()
+-    )
+-    payment_ids = [payment.id for payment in payments]
+-    payment_line_map: dict[str, list[PaymentLine]] = {}
+-    if payment_ids:
+-        payment_lines = (
+-            db.query(PaymentLine)
+-            .filter(PaymentLine.payment_id.in_(payment_ids))
+-            .order_by(PaymentLine.created_at.asc())
+-            .all()
++    return PaymentListResponse(
++        **list_payments(
++            db,
++            client_id=client_id,
++            prepayment_status=prepayment_status,
++            pay_date_from=pay_date_from,
++            pay_date_to=pay_date_to,
++            has_unapplied_only=has_unapplied_only,
++            page=page,
++            page_size=page_size,
+         )
+-        for line in payment_lines:
+-            payment_line_map.setdefault(line.payment_id, []).append(line)
+-
+-    def _resolve_prepayment_status(lines: list[PaymentLine]) -> str:
+-        if not lines:
+-            return "UNALLOCATED"
+-        allocated_total = sum((line.allocated_amt for line in lines), start=0)
+-        unapplied_total = sum((line.balance_amt for line in lines), start=0)
+-        if allocated_total <= 0:
+-            return "UNALLOCATED"
+-        if unapplied_total <= 0:
+-            return "FULLY_ALLOCATED"
+-        return "PARTIALLY_ALLOCATED"
+-
+-    items = [
+-        {
+-            "id": payment.id,
+-            "pay_no": payment.pay_no,
+-            "client_id": payment.client_id,
+-            "pay_date": payment.pay_date,
+-            "currency": payment.currency,
+-            "amount": payment.amount,
+-            "line_count": len(payment_line_map.get(payment.id, [])),
+-            "allocated_amt": sum(
+-                (line.allocated_amt for line in payment_line_map.get(payment.id, [])),
+-                start=0,
+-            ),
+-            "unapplied_amt": sum(
+-                (line.balance_amt for line in payment_line_map.get(payment.id, [])),
+-                start=0,
+-            ),
+-            "prepayment_status": _resolve_prepayment_status(payment_line_map.get(payment.id, [])),
+-        }
+-        for payment in payments
+-    ]
+-    return {"items": items, "page": page, "page_size": page_size, "total": total}
++    )
+ 
+ 
+ @router.post(
+diff --git a/backend/app/modules/billing/schemas.py b/backend/app/modules/billing/schemas.py
+index ec250b1..06e56ab 100644
+--- a/backend/app/modules/billing/schemas.py
++++ b/backend/app/modules/billing/schemas.py
+@@ -158,6 +158,35 @@ class PaymentResponse(BaseModel):
+     amount: Decimal
+ 
+ 
++class PaymentListItemResponse(BaseModel):
++    """Response schema for payment list items."""
++
++    id: str
++    pay_no: str | None
++    client_id: str
++    client_name: str | None = None
++    pay_date: date | None
++    currency: str
++    amount: Decimal = Field(Decimal("0"), ge=0)
++    line_count: int = 0
++    allocated_amt: Decimal = Field(Decimal("0"), ge=0)
++    unapplied_amt: Decimal = Field(Decimal("0"), ge=0)
++    prepayment_status: str
++
++
++class PaymentListResponse(BaseModel):
++    """Response schema for payment list/report results."""
++
++    items: list[PaymentListItemResponse]
++    page: int
++    page_size: int
++    total: int
++    prepayment_count: int = 0
++    prepayment_total_amount: Decimal = Field(Decimal("0"), ge=0)
++    allocated_total_amount: Decimal = Field(Decimal("0"), ge=0)
++    remaining_prepayment_balance: Decimal = Field(Decimal("0"), ge=0)
++
++
+ class OffsetCreateSchema(BaseModel):
+     """Schema for creating offsets."""
+ 
+diff --git a/backend/app/modules/billing/service.py b/backend/app/modules/billing/service.py
+index 4b9b5e9..a53a9bc 100644
+--- a/backend/app/modules/billing/service.py
++++ b/backend/app/modules/billing/service.py
+@@ -198,6 +198,119 @@ def _summarize_bad_debt_bills(
+     return summary
+ 
+ 
++def _resolve_payment_prepayment_status(lines: list[PaymentLine]) -> str:
++    if not lines:
++        return "UNALLOCATED"
++    allocated_total = sum((line.allocated_amt for line in lines), Decimal("0"))
++    unapplied_total = sum((line.balance_amt for line in lines), Decimal("0"))
++    if allocated_total <= Decimal("0"):
++        return "UNALLOCATED"
++    if unapplied_total <= Decimal("0"):
++        return "FULLY_ALLOCATED"
++    return "PARTIALLY_ALLOCATED"
++
++
++def list_payments(
++    db: Session,
++    *,
++    client_id: str | None = None,
++    prepayment_status: str | None = None,
++    pay_date_from: date | None = None,
++    pay_date_to: date | None = None,
++    has_unapplied_only: bool = False,
++    page: int = 1,
++    page_size: int = 20,
++) -> dict[str, object]:
++    from app.modules.masterdata.clients.models import Client
++
++    query = db.query(
++        Payment,
++        func.coalesce(Client.name_cn, Client.name_en).label("client_name"),
++    ).outerjoin(Client, Client.id == Payment.client_id)
++
++    if client_id:
++        query = query.filter(Payment.client_id == client_id)
++    if pay_date_from:
++        query = query.filter(Payment.pay_date >= pay_date_from)
++    if pay_date_to:
++        query = query.filter(Payment.pay_date <= pay_date_to)
++
++    rows = query.order_by(Payment.created_at.desc(), Payment.id.desc()).all()
++    if not rows:
++        return {
++            "items": [],
++            "page": page,
++            "page_size": page_size,
++            "total": 0,
++            "prepayment_count": 0,
++            "prepayment_total_amount": Decimal("0"),
++            "allocated_total_amount": Decimal("0"),
++            "remaining_prepayment_balance": Decimal("0"),
++        }
++
++    payment_ids = [payment.id for payment, _client_name in rows]
++    payment_line_map: dict[str, list[PaymentLine]] = {}
++    payment_lines = (
++        db.query(PaymentLine)
++        .filter(PaymentLine.payment_id.in_(payment_ids))
++        .order_by(PaymentLine.created_at.asc(), PaymentLine.id.asc())
++        .all()
++    )
++    for line in payment_lines:
++        payment_line_map.setdefault(line.payment_id, []).append(line)
++
++    normalized_status = prepayment_status.strip().upper() if prepayment_status else None
++    report_rows: list[dict[str, object]] = []
++    for payment, client_name in rows:
++        lines = payment_line_map.get(payment.id, [])
++        allocated_amt = sum((line.allocated_amt for line in lines), Decimal("0"))
++        unapplied_amt = sum((line.balance_amt for line in lines), Decimal("0"))
++        row_status = _resolve_payment_prepayment_status(lines)
++        if normalized_status and row_status != normalized_status:
++            continue
++        if has_unapplied_only and unapplied_amt <= Decimal("0"):
++            continue
++        report_rows.append(
++            {
++                "id": payment.id,
++                "pay_no": payment.pay_no,
++                "client_id": payment.client_id,
++                "client_name": client_name,
++                "pay_date": payment.pay_date,
++                "currency": payment.currency,
++                "amount": payment.amount,
++                "line_count": len(lines),
++                "allocated_amt": allocated_amt,
++                "unapplied_amt": unapplied_amt,
++                "prepayment_status": row_status,
++            }
++        )
++
++    total = len(report_rows)
++    summary = {
++        "prepayment_count": total,
++        "prepayment_total_amount": sum(
++            (Decimal(row["amount"] or 0) for row in report_rows), Decimal("0")
++        ),
++        "allocated_total_amount": sum(
++            (Decimal(row["allocated_amt"] or 0) for row in report_rows), Decimal("0")
++        ),
++        "remaining_prepayment_balance": sum(
++            (Decimal(row["unapplied_amt"] or 0) for row in report_rows), Decimal("0")
++        ),
++    }
++
++    start = (page - 1) * page_size
++    items = report_rows[start : start + page_size]
++    return {
++        "items": items,
++        "page": page,
++        "page_size": page_size,
++        "total": total,
++        **summary,
++    }
++
++
+ def list_bills(
+     db: Session,
+     *,

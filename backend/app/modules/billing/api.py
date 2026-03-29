@@ -32,6 +32,7 @@ from app.modules.billing.schemas import (
     OffsetCreateSchema,
     OffsetListItemResponse,
     OffsetResponse,
+    PaymentListResponse,
     PaymentResponse,
     PaymentSchema,
 )
@@ -43,6 +44,7 @@ from app.modules.billing.service import (
     generate_bill_from_drafts,
     list_bills,
     list_case_receipts,
+    list_payments,
     load_bill_bad_debt_chain,
     process_payment,
     update_case_receipt,
@@ -456,9 +458,14 @@ def recover_bill_bad_debt_action(
 def get_payments(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    client_id: str | None = Query(default=None),
+    prepayment_status: str | None = Query(default=None),
+    pay_date_from: date | None = Query(default=None),
+    pay_date_to: date | None = Query(default=None),
+    has_unapplied_only: bool = Query(default=False),
     _perm: None = Depends(require_perm("Payment.Read")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> PaymentListResponse:
     """
     List payments with pagination.
 
@@ -477,59 +484,18 @@ def get_payments(
     - 403: FORBIDDEN
     - 422: VALIDATION_ERROR
     """
-    query = db.query(Payment)
-    total = query.count()
-    payments = (
-        query.order_by(Payment.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
-    payment_ids = [payment.id for payment in payments]
-    payment_line_map: dict[str, list[PaymentLine]] = {}
-    if payment_ids:
-        payment_lines = (
-            db.query(PaymentLine)
-            .filter(PaymentLine.payment_id.in_(payment_ids))
-            .order_by(PaymentLine.created_at.asc())
-            .all()
+    return PaymentListResponse(
+        **list_payments(
+            db,
+            client_id=client_id,
+            prepayment_status=prepayment_status,
+            pay_date_from=pay_date_from,
+            pay_date_to=pay_date_to,
+            has_unapplied_only=has_unapplied_only,
+            page=page,
+            page_size=page_size,
         )
-        for line in payment_lines:
-            payment_line_map.setdefault(line.payment_id, []).append(line)
-
-    def _resolve_prepayment_status(lines: list[PaymentLine]) -> str:
-        if not lines:
-            return "UNALLOCATED"
-        allocated_total = sum((line.allocated_amt for line in lines), start=0)
-        unapplied_total = sum((line.balance_amt for line in lines), start=0)
-        if allocated_total <= 0:
-            return "UNALLOCATED"
-        if unapplied_total <= 0:
-            return "FULLY_ALLOCATED"
-        return "PARTIALLY_ALLOCATED"
-
-    items = [
-        {
-            "id": payment.id,
-            "pay_no": payment.pay_no,
-            "client_id": payment.client_id,
-            "pay_date": payment.pay_date,
-            "currency": payment.currency,
-            "amount": payment.amount,
-            "line_count": len(payment_line_map.get(payment.id, [])),
-            "allocated_amt": sum(
-                (line.allocated_amt for line in payment_line_map.get(payment.id, [])),
-                start=0,
-            ),
-            "unapplied_amt": sum(
-                (line.balance_amt for line in payment_line_map.get(payment.id, [])),
-                start=0,
-            ),
-            "prepayment_status": _resolve_prepayment_status(payment_line_map.get(payment.id, [])),
-        }
-        for payment in payments
-    ]
-    return {"items": items, "page": page, "page_size": page_size, "total": total}
+    )
 
 
 @router.post(

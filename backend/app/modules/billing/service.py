@@ -198,6 +198,119 @@ def _summarize_bad_debt_bills(
     return summary
 
 
+def _resolve_payment_prepayment_status(lines: list[PaymentLine]) -> str:
+    if not lines:
+        return "UNALLOCATED"
+    allocated_total = sum((line.allocated_amt for line in lines), Decimal("0"))
+    unapplied_total = sum((line.balance_amt for line in lines), Decimal("0"))
+    if allocated_total <= Decimal("0"):
+        return "UNALLOCATED"
+    if unapplied_total <= Decimal("0"):
+        return "FULLY_ALLOCATED"
+    return "PARTIALLY_ALLOCATED"
+
+
+def list_payments(
+    db: Session,
+    *,
+    client_id: str | None = None,
+    prepayment_status: str | None = None,
+    pay_date_from: date | None = None,
+    pay_date_to: date | None = None,
+    has_unapplied_only: bool = False,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, object]:
+    from app.modules.masterdata.clients.models import Client
+
+    query = db.query(
+        Payment,
+        func.coalesce(Client.name_cn, Client.name_en).label("client_name"),
+    ).outerjoin(Client, Client.id == Payment.client_id)
+
+    if client_id:
+        query = query.filter(Payment.client_id == client_id)
+    if pay_date_from:
+        query = query.filter(Payment.pay_date >= pay_date_from)
+    if pay_date_to:
+        query = query.filter(Payment.pay_date <= pay_date_to)
+
+    rows = query.order_by(Payment.created_at.desc(), Payment.id.desc()).all()
+    if not rows:
+        return {
+            "items": [],
+            "page": page,
+            "page_size": page_size,
+            "total": 0,
+            "prepayment_count": 0,
+            "prepayment_total_amount": Decimal("0"),
+            "allocated_total_amount": Decimal("0"),
+            "remaining_prepayment_balance": Decimal("0"),
+        }
+
+    payment_ids = [payment.id for payment, _client_name in rows]
+    payment_line_map: dict[str, list[PaymentLine]] = {}
+    payment_lines = (
+        db.query(PaymentLine)
+        .filter(PaymentLine.payment_id.in_(payment_ids))
+        .order_by(PaymentLine.created_at.asc(), PaymentLine.id.asc())
+        .all()
+    )
+    for line in payment_lines:
+        payment_line_map.setdefault(line.payment_id, []).append(line)
+
+    normalized_status = prepayment_status.strip().upper() if prepayment_status else None
+    report_rows: list[dict[str, object]] = []
+    for payment, client_name in rows:
+        lines = payment_line_map.get(payment.id, [])
+        allocated_amt = sum((line.allocated_amt for line in lines), Decimal("0"))
+        unapplied_amt = sum((line.balance_amt for line in lines), Decimal("0"))
+        row_status = _resolve_payment_prepayment_status(lines)
+        if normalized_status and row_status != normalized_status:
+            continue
+        if has_unapplied_only and unapplied_amt <= Decimal("0"):
+            continue
+        report_rows.append(
+            {
+                "id": payment.id,
+                "pay_no": payment.pay_no,
+                "client_id": payment.client_id,
+                "client_name": client_name,
+                "pay_date": payment.pay_date,
+                "currency": payment.currency,
+                "amount": payment.amount,
+                "line_count": len(lines),
+                "allocated_amt": allocated_amt,
+                "unapplied_amt": unapplied_amt,
+                "prepayment_status": row_status,
+            }
+        )
+
+    total = len(report_rows)
+    summary = {
+        "prepayment_count": total,
+        "prepayment_total_amount": sum(
+            (Decimal(row["amount"] or 0) for row in report_rows), Decimal("0")
+        ),
+        "allocated_total_amount": sum(
+            (Decimal(row["allocated_amt"] or 0) for row in report_rows), Decimal("0")
+        ),
+        "remaining_prepayment_balance": sum(
+            (Decimal(row["unapplied_amt"] or 0) for row in report_rows), Decimal("0")
+        ),
+    }
+
+    start = (page - 1) * page_size
+    items = report_rows[start : start + page_size]
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        **summary,
+    }
+
+
 def list_bills(
     db: Session,
     *,

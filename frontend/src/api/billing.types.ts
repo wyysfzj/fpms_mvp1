@@ -157,6 +157,7 @@ export interface PaymentListItem {
     bill_id?: string
     bill_no?: string
     client_id: string
+    client_name?: string
     amount: number
     currency: string
     allocated_amt?: number
@@ -170,10 +171,24 @@ export interface PaymentListItem {
     created_at: string
 }
 
+export interface PaymentListSummary {
+    prepayment_count: number
+    prepayment_total_amount: number
+    allocated_total_amount: number
+    remaining_prepayment_balance: number
+}
+
+export interface PaymentListResponse extends Pagination<PaymentListItem>, PaymentListSummary {}
+
 export interface PaymentListParams {
     page?: number
     page_size?: number
     bill_id?: string
+    client_id?: string
+    prepayment_status?: string
+    pay_date_from?: string
+    pay_date_to?: string
+    has_unapplied_only?: boolean
 }
 
 export interface PaymentCreatePayload {

@@ -2,15 +2,75 @@
   <div class="page-container">
     <div class="page-header">
       <div class="page-header-left">
-        <h1 class="page-title">回款列表</h1>
+        <h1 class="page-title">预收款管理报表</h1>
         <span class="page-count">{{ total }} 条</span>
       </div>
-      <div class="page-header-right">
-        <el-button type="primary" @click="goToCreate">
-          登记回款
-        </el-button>
+    </div>
+
+    <div class="report-summary">
+      <div class="summary-card">
+        <div class="card-label">预收款笔数</div>
+        <div class="card-value">{{ summary.prepayment_count }} 笔</div>
+      </div>
+      <div class="summary-card">
+        <div class="card-label">预收总额</div>
+        <div class="card-value mono-num">{{ formatAmount(summary.prepayment_total_amount, summaryCurrency) }}</div>
+      </div>
+      <div class="summary-card">
+        <div class="card-label">已核销金额</div>
+        <div class="card-value mono-num">{{ formatAmount(summary.allocated_total_amount, summaryCurrency) }}</div>
+      </div>
+      <div class="summary-card">
+        <div class="card-label">剩余预收余额</div>
+        <div class="card-value mono-num">{{ formatAmount(summary.remaining_prepayment_balance, summaryCurrency) }}</div>
       </div>
     </div>
+
+    <el-form :model="filters" inline class="filter-form">
+      <el-form-item label="客户ID">
+        <el-input
+          v-model="filters.client_id"
+          clearable
+          class="filter-input"
+          placeholder="请输入客户ID"
+          @change="onFilterChange"
+        />
+      </el-form-item>
+      <el-form-item label="预收状态">
+        <el-select
+          v-model="filters.prepayment_status"
+          clearable
+          class="filter-select"
+          placeholder="全部"
+          @change="onFilterChange"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="未核销" value="UNALLOCATED" />
+          <el-option label="部分核销" value="PARTIALLY_ALLOCATED" />
+          <el-option label="已核销" value="FULLY_ALLOCATED" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="收款日期">
+        <el-date-picker
+          v-model="filters.pay_date_range"
+          class="filter-range"
+          type="daterange"
+          range-separator="至"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          value-format="YYYY-MM-DD"
+          @change="onFilterChange"
+        />
+      </el-form-item>
+      <el-form-item label="剩余预收">
+        <el-checkbox v-model="filters.has_unapplied_only" @change="onFilterChange">
+          仅显示有剩余预收余额
+        </el-checkbox>
+      </el-form-item>
+      <el-form-item>
+        <el-button @click="resetFilters">重置</el-button>
+      </el-form-item>
+    </el-form>
 
     <!-- Error State -->
     <div v-if="error" class="page-error">
@@ -23,11 +83,9 @@
     <!-- Empty State -->
     <div v-else-if="isEmpty" class="page-empty">
       <EmptyState
-        title="暂无回款"
-        message="回款登记后会显示在这里。"
-        icon="💳"
-        cta-label="登记回款"
-        @cta="goToCreate"
+        title="暂无预收款记录"
+        message="当前筛选条件下没有符合条件的预收款。"
+        icon="📭"
       />
     </div>
 
@@ -39,60 +97,45 @@
         size="small"
         class="compact-table"
       >
-        <el-table-column prop="bill_no" label="账单号" width="140">
+        <el-table-column prop="pay_no" label="收款编号" width="160">
           <template #default="{ row }">
-            <router-link
-              v-if="row.bill_id"
-              class="bill-link"
-              :to="`/billing/bills/${row.bill_id}`"
-            >
-              {{ row.bill_no || row.bill_id }}
-            </router-link>
-            <span v-else>—</span>
+            <span class="mono-num">{{ formatPaymentNo(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="140" align="right">
+        <el-table-column prop="client_name" label="客户" min-width="180">
           <template #default="{ row }">
-            <span class="mono-num">{{ formatAmount(row.amount, row.currency) }}</span>
+            {{ row.client_name || row.client_id || '—' }}
           </template>
         </el-table-column>
-        <el-table-column label="预收状态" width="140" align="center">
-          <template #default="{ row }">
-            <el-tag :type="getPrepaymentTagType(row.prepayment_status)" size="small">
-              {{ getPrepaymentStatusText(row.prepayment_status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="未分配金额" width="160" align="right">
-          <template #default="{ row }">
-            <span class="mono-num">
-              {{ formatAmount(row.unapplied_amt ?? row.amount, row.currency) }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="payment_method" label="付款方式" width="140">
-          <template #default="{ row }">
-            <el-tag size="small" type="info">{{ formatMethod(row.payment_method) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="payment_date" label="付款日期" width="120">
+        <el-table-column prop="payment_date" label="收款日期" width="120">
           <template #default="{ row }">
             {{ formatDate(row.payment_date) }}
           </template>
         </el-table-column>
-        <el-table-column prop="reference" label="交易参考号" min-width="150">
+        <el-table-column label="预收总额" width="140" align="right">
           <template #default="{ row }">
-            {{ row.reference || '—' }}
+            <span class="mono-num">{{ formatAmount(row.amount, row.currency) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="notes" label="备注" min-width="150">
+        <el-table-column label="已核销金额" width="140" align="right">
           <template #default="{ row }">
-            {{ row.notes || '—' }}
+            <span class="mono-num">
+              {{ formatAmount(row.allocated_amt ?? 0, row.currency) }}
+            </span>
           </template>
         </el-table-column>
-        <el-table-column label="创建时间" width="120">
+        <el-table-column label="剩余预收余额" width="150" align="right">
           <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
+            <span class="mono-num">
+              {{ formatAmount(row.unapplied_amt ?? 0, row.currency) }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="预收状态" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag :type="getPrepaymentTagType(row.prepayment_status)" size="small">
+              {{ getPrepaymentStatusText(row.prepayment_status) }}
+            </el-tag>
           </template>
         </el-table-column>
       </el-table>
@@ -265,7 +308,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -281,7 +323,7 @@ import type {
   OffsetListItem,
   PaymentLineItem,
   PaymentListItem,
-  PaymentMethod,
+  PaymentListResponse,
 } from '../../../api/billing.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
@@ -289,17 +331,32 @@ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
-import { getPaymentMethodText } from '../../../constants/displayText'
 
-const router = useRouter()
-
-// Payments state
 const payments = ref<PaymentListItem[]>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const summary = ref<Pick<
+  PaymentListResponse,
+  | 'prepayment_count'
+  | 'prepayment_total_amount'
+  | 'allocated_total_amount'
+  | 'remaining_prepayment_balance'
+>>({
+  prepayment_count: 0,
+  prepayment_total_amount: 0,
+  allocated_total_amount: 0,
+  remaining_prepayment_balance: 0,
+})
+const filters = reactive({
+  client_id: '',
+  prepayment_status: '',
+  pay_date_range: null as [string, string] | null,
+  has_unapplied_only: false,
+})
+const summaryCurrency = computed(() => payments.value[0]?.currency || 'CNY')
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 
 // Offsets state
@@ -358,9 +415,24 @@ async function fetchPayments() {
   loading.value = true
   error.value = null
   try {
-    const result = await getPayments({ page: page.value, page_size: pageSize.value })
+    const [payDateFrom, payDateTo] = filters.pay_date_range || []
+    const result = await getPayments({
+      page: page.value,
+      page_size: pageSize.value,
+      client_id: filters.client_id.trim() || undefined,
+      prepayment_status: filters.prepayment_status || undefined,
+      pay_date_from: payDateFrom,
+      pay_date_to: payDateTo,
+      has_unapplied_only: filters.has_unapplied_only ? true : undefined,
+    })
     payments.value = result.items
     total.value = result.total
+    summary.value = {
+      prepayment_count: result.prepayment_count,
+      prepayment_total_amount: result.prepayment_total_amount,
+      allocated_total_amount: result.allocated_total_amount,
+      remaining_prepayment_balance: result.remaining_prepayment_balance,
+    }
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -381,6 +453,26 @@ async function fetchOffsets() {
   }
 }
 
+function onFilterChange() {
+  const alreadyOnFirstPage = page.value === 1
+  page.value = 1
+  if (alreadyOnFirstPage) {
+    fetchPayments()
+  }
+}
+
+function resetFilters() {
+  filters.client_id = ''
+  filters.prepayment_status = ''
+  filters.pay_date_range = null
+  filters.has_unapplied_only = false
+  const alreadyOnFirstPage = page.value === 1
+  page.value = 1
+  if (alreadyOnFirstPage) {
+    fetchPayments()
+  }
+}
+
 function formatAmount(amount: number, currency?: string): string {
   const curr = currency || 'CNY'
   return new Intl.NumberFormat('zh-CN', {
@@ -389,18 +481,14 @@ function formatAmount(amount: number, currency?: string): string {
   }).format(amount)
 }
 
-function formatMethod(method: PaymentMethod): string {
-  return getPaymentMethodText(method)
-}
-
 function getPrepaymentStatusText(status?: string): string {
   switch (status) {
     case 'FULLY_ALLOCATED':
-      return '已分配完'
+      return '已核销'
     case 'PARTIALLY_ALLOCATED':
-      return '部分分配'
+      return '部分核销'
     case 'UNALLOCATED':
-      return '预收中'
+      return '未核销'
     default:
       return '待确认'
   }
@@ -412,14 +500,21 @@ function getPrepaymentTagType(status?: string): 'success' | 'warning' | 'info' {
       return 'success'
     case 'PARTIALLY_ALLOCATED':
       return 'warning'
+    case 'UNALLOCATED':
+      return 'info'
     default:
       return 'info'
   }
 }
 
+function formatPaymentNo(payment: PaymentListItem): string {
+  return payment.reference || payment.id
+}
+
 function formatPaymentOption(payment: PaymentListItem): string {
-  const refText = payment.reference || payment.id
-  return `${refText} | ${formatAmount(payment.amount, payment.currency)} | ${payment.client_id}`
+  const refText = formatPaymentNo(payment)
+  const clientText = payment.client_name || payment.client_id
+  return `${refText} | ${clientText} | ${formatAmount(payment.amount, payment.currency)}`
 }
 
 function formatPaymentLineOption(line: PaymentLineItem): string {
@@ -432,14 +527,10 @@ function formatBillOption(bill: BillListItem): string {
 
 function formatDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString()
+    return new Date(dateStr).toLocaleDateString('zh-CN')
   } catch {
     return dateStr
   }
-}
-
-function goToCreate() {
-  router.push('/billing/payments/new')
 }
 
 function resetOffsetForm() {
@@ -597,6 +688,49 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-card {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.card-label {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.card-value {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.filter-form {
+  margin-bottom: 16px;
+}
+
+.filter-input {
+  width: 180px;
+}
+
+.filter-select {
+  width: 150px;
+}
+
+.filter-range {
+  width: 280px;
+}
+
 .bill-link {
   color: var(--color-primary);
   font-family: var(--font-mono);
@@ -655,5 +789,23 @@ onMounted(() => {
   margin-top: 6px;
   font-size: 12px;
   color: var(--text-sub);
+}
+
+@media (max-width: 1200px) {
+  .report-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .report-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-input,
+  .filter-select,
+  .filter-range {
+    width: 100%;
+  }
 }
 </style>

@@ -1,0 +1,2 @@
+{"ts":"20260329T151646","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_prepayment_reporting_api.py"}
+{"ts":"20260329T151646","step":"lint","cmd":"ruff check backend/app/modules/billing/api.py backend/app/modules/billing/schemas.py backend/app/modules/billing/service.py backend/tests/test_prepayment_reporting_api.py"}

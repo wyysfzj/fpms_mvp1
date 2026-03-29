@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"test -f artifacts/PREPAYRPT-BE-01/results.jsonl && test -f artifacts/PREPAYRPT-FE-01/results.jsonl","rc":0,"status":"PASS"}
+{"step":"test","cmd":"./scripts/task_validate.sh PREPAYRPT-BE-01 && ./scripts/task_validate.sh PREPAYRPT-FE-01","rc":0,"status":"PASS"}
