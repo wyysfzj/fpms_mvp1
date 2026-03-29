@@ -1,0 +1,24 @@
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/documents/api.py
+ M backend/app/modules/documents/schemas.py
+ M backend/app/modules/documents/service.py
+ M backend/app/modules/expenses/models.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+ M frontend/src/router/index.ts
+?? .superpowers/
+?? backend/tests/test_document_wizard_batch_create.py
+?? docs/superpowers/plans/2026-03-29-documents-step12-wizard-prereq.md
+?? docs/superpowers/plans/2026-03-29-documents-step12-wizard.md
+?? docs/superpowers/specs/2026-03-29-documents-step12-wizard-design.md
+?? docs/superpowers/specs/2026-03-29-documents-step12-wizard-prereq-design.md
+?? tasks/postenhancement/backend/DOCWIZ-BE-01.md
+?? tasks/postenhancement/backend/DOCWIZ-QA-01.md
+?? tasks/postenhancement/frontend/DOCWIZ-FE-SHELL-01.md
+?? tasks/postenhancement/frontend/DOCWIZ-FE-STEP1-01.md
+?? tasks/postenhancement/frontend/DOCWIZ-FE-STEP2-01.md

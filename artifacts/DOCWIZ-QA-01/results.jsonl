@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"test -f artifacts/DOCWIZ-BE-01/results.jsonl && test -f artifacts/DOCWIZ-FE-SHELL-01/results.jsonl && test -f artifacts/DOCWIZ-FE-STEP1-01/results.jsonl && test -f artifacts/DOCWIZ-FE-STEP2-01/results.jsonl","rc":0,"status":"PASS"}
+{"step":"test","cmd":"./scripts/task_validate.sh DOCWIZ-BE-01 && ./scripts/task_validate.sh DOCWIZ-FE-SHELL-01 && ./scripts/task_validate.sh DOCWIZ-FE-STEP1-01 && ./scripts/task_validate.sh DOCWIZ-FE-STEP2-01","rc":0,"status":"PASS"}

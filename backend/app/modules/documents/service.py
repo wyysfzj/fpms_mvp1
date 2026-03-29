@@ -12,16 +12,20 @@ from app.core.storage import ensure_dir, safe_join
 from app.modules.cases.models import Case
 from app.modules.cases.service import validate_case_status_transition
 from app.modules.documents.enums import DocumentDirection
+from app.modules.documents.fee_linking_service import maybe_create_fee_draft
 from app.modules.documents.models import DocAttachment, DocTemplate, Document
 from app.modules.documents.schemas import (
     DocTemplateCreateIn,
     DocTemplateUpdateIn,
     DocumentCreateIn,
     DocumentUpdateIn,
+    DocumentWizardBatchCreateIn,
+    DocumentWizardBatchRowIn,
 )
 from app.modules.tasks.enums import TaskAction, TaskStatus
 from app.modules.tasks.models import Task
 from app.modules.tasks.service import _create_task_log
+from app.modules.tasks.task_generation_service import TaskGenerationService
 
 
 def _apply_template_defaults(
@@ -86,6 +90,56 @@ def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None
         )
 
     original_doc.reply_date = doc_date
+
+
+def _normalize_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _create_document_record(
+    db: Session,
+    data: DocumentCreateIn,
+    *,
+    commit: bool,
+) -> Document:
+    case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    template = None
+    if data.doc_template_id:
+        template = db.execute(
+            select(DocTemplate).where(DocTemplate.id == data.doc_template_id)
+        ).scalar_one_or_none()
+        if not template:
+            raise_business_error(
+                "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
+            )
+
+    document = Document(
+        id=str(uuid4()),
+        case_id=data.case_id,
+        doc_template_id=data.doc_template_id,
+        direction=data.direction,
+        doc_date=data.doc_date,
+        title=data.title,
+        ref_no=data.ref_no,
+        extra_data=data.extra_data,
+        reply_to_id=data.reply_to_id,
+    )
+    db.add(document)
+    db.flush()
+
+    _apply_template_defaults(case=case, document=document, template=template)
+    _apply_reply_chain(db, document=document, doc_date=data.doc_date)
+
+    if commit:
+        db.commit()
+        db.refresh(document)
+    return document
 
 
 def list_documents(
@@ -153,39 +207,111 @@ def list_documents(
 
 
 def create_document(db: Session, data: DocumentCreateIn) -> Document:
-    case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
-    if not case:
-        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+    return _create_document_record(db, data, commit=True)
 
-    template = None
-    if data.doc_template_id:
-        template = db.execute(
-            select(DocTemplate).where(DocTemplate.id == data.doc_template_id)
-        ).scalar_one_or_none()
-        if not template:
-            raise_business_error(
-                "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
+
+def create_document_wizard_batch(
+    db: Session, data: DocumentWizardBatchCreateIn
+) -> list[tuple[int, Document]]:
+    template = db.execute(
+        select(DocTemplate).where(DocTemplate.id == data.defaults.doc_template_id)
+    ).scalar_one_or_none()
+    if not template:
+        raise_business_error("DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404)
+
+    rows = data.rows
+    row_errors: list[dict[str, object]] = []
+    seen_case_ids: set[str] = set()
+    case_ids: list[str] = []
+
+    for idx, row in enumerate(rows, start=1):
+        case_id = _normalize_text(row.case_id)
+        if not case_id:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "case_id",
+                    "code": "CASE_ID_REQUIRED",
+                    "message": "Case ID is required",
+                }
+            )
+            continue
+        if case_id in seen_case_ids:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "case_id",
+                    "code": "CASE_ID_DUPLICATE",
+                    "message": "Case ID must be unique within the batch",
+                }
+            )
+            continue
+        seen_case_ids.add(case_id)
+        case_ids.append(case_id)
+
+    existing_case_ids = set(
+        db.execute(select(Case.id).where(Case.id.in_(case_ids))).scalars().all()
+    )
+    for idx, row in enumerate(rows, start=1):
+        case_id = _normalize_text(row.case_id)
+        if case_id and case_id not in existing_case_ids:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "case_id",
+                    "code": "CASE_NOT_FOUND",
+                    "message": "Case not found",
+                    "case_id": case_id,
+                }
             )
 
-    document = Document(
-        id=str(uuid4()),
-        case_id=data.case_id,
-        doc_template_id=data.doc_template_id,
-        direction=data.direction,
-        doc_date=data.doc_date,
-        title=data.title,
-        ref_no=data.ref_no,
-        extra_data=data.extra_data,
-        reply_to_id=data.reply_to_id,
-    )
-    db.add(document)
+    if row_errors:
+        raise_business_error(
+            "DOCUMENT_WIZARD_BATCH_INVALID",
+            "Document wizard batch contains invalid rows",
+            details={"row_errors": row_errors},
+            status_code=400,
+        )
 
-    _apply_template_defaults(case=case, document=document, template=template)
-    _apply_reply_chain(db, document=document, doc_date=data.doc_date)
+    created_rows: list[tuple[int, Document]] = []
+    try:
+        for idx, row in enumerate(rows, start=1):
+            payload = _build_document_wizard_payload(data.defaults, row, template)
+            document = _create_document_record(db, payload, commit=False)
+            maybe_create_fee_draft(db, document, template)
+            TaskGenerationService().generate_from_document(db, document)
+            created_rows.append((idx, document))
 
-    db.commit()
-    db.refresh(document)
-    return document
+        db.commit()
+        for _, document in created_rows:
+            db.refresh(document)
+        return created_rows
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _build_document_wizard_payload(
+    defaults,
+    row: DocumentWizardBatchRowIn,
+    template: DocTemplate,
+) -> DocumentCreateIn:
+    data = defaults.model_dump()
+    row_data = row.model_dump(exclude_unset=True)
+    data.update(row_data)
+    data["case_id"] = _normalize_text(row.case_id)
+    data["doc_template_id"] = defaults.doc_template_id
+    data["direction"] = defaults.direction
+
+    if data.get("doc_date") is None:
+        data["doc_date"] = defaults.doc_date
+
+    data["title"] = _normalize_text(data.get("title")) or template.name
+    data["ref_no"] = _normalize_text(data.get("ref_no"))
+    data["extra_data"] = _normalize_text(data.get("extra_data"))
+    data["reply_to_id"] = _normalize_text(data.get("reply_to_id"))
+
+    return DocumentCreateIn(**data)
 
 
 def get_document(db: Session, document_id: str) -> Document:

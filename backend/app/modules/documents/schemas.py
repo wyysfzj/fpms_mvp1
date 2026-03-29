@@ -28,6 +28,30 @@ class DocumentCreateIn(BaseModel):
     reply_to_id: str | None = None
 
 
+class DocumentWizardBatchDefaultsIn(BaseModel):
+    doc_template_id: str = Field(..., min_length=1)
+    direction: DocumentDirection
+    doc_date: date
+    title: str | None = None
+    ref_no: str | None = None
+    extra_data: str | None = None
+    reply_to_id: str | None = None
+
+
+class DocumentWizardBatchRowIn(BaseModel):
+    case_id: str = Field(..., min_length=1)
+    title: str | None = None
+    doc_date: date | None = None
+    ref_no: str | None = None
+    extra_data: str | None = None
+    reply_to_id: str | None = None
+
+
+class DocumentWizardBatchCreateIn(BaseModel):
+    defaults: DocumentWizardBatchDefaultsIn
+    rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
+
+
 class DocumentUpdateIn(BaseModel):
     case_id: str | None = None
     doc_template_id: str | None = None
@@ -61,6 +85,17 @@ class DocumentOut(BaseModel):
 
 class DocumentListOut(PageResult[DocumentOut]):
     pass
+
+
+class DocumentWizardBatchRowOut(BaseModel):
+    row_index: int
+    document: DocumentOut
+
+
+class DocumentWizardBatchCreateOut(BaseModel):
+    created: int
+    total: int
+    items: list[DocumentWizardBatchRowOut]
 
 
 # --- B1: DocTemplate schemas ---

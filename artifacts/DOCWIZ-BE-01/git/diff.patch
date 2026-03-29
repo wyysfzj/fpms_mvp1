@@ -1,0 +1,341 @@
+diff --git a/backend/app/modules/documents/api.py b/backend/app/modules/documents/api.py
+index fee87f1..3046f1a 100644
+--- a/backend/app/modules/documents/api.py
++++ b/backend/app/modules/documents/api.py
+@@ -25,10 +25,13 @@ from app.modules.documents.schemas import (
+     DocumentListOut,
+     DocumentOut,
+     DocumentUpdateIn,
++    DocumentWizardBatchCreateIn,
++    DocumentWizardBatchCreateOut,
+ )
+ from app.modules.documents.service import add_attachment as add_attachment_service
+ from app.modules.documents.service import (
+     create_doc_template,
++    create_document_wizard_batch,
+     get_attachment_download,
+     get_doc_template,
+     list_doc_templates,
+@@ -43,7 +46,9 @@ from app.modules.tasks.task_generation_service import TaskGenerationService
+ router = APIRouter()
+ 
+ 
+-def _build_document_out(document, *, case_no: str | None = None, attachments: list | None = None) -> DocumentOut:
++def _build_document_out(
++    document, *, case_no: str | None = None, attachments: list | None = None
++) -> DocumentOut:
+     return DocumentOut(
+         id=document.id,
+         case_id=document.case_id,
+@@ -292,6 +297,37 @@ def create_document(
+     return _build_document_out(document, case_no=case.case_no if case else None)
+ 
+ 
++@router.post(
++    "/documents/wizard/batch-create",
++    status_code=status.HTTP_201_CREATED,
++    response_model=DocumentWizardBatchCreateOut,
++    summary="Create documents from wizard batch",
++)
++def create_document_wizard_batch_endpoint(
++    payload: DocumentWizardBatchCreateIn,
++    _perm: None = Depends(require_perm("Doc.Create")),
++    db: Session = Depends(get_db),
++) -> DocumentWizardBatchCreateOut:
++    created_rows = create_document_wizard_batch(db, payload)
++    case_ids = {document.case_id for _, document in created_rows}
++    case_no_map: dict[str, str] = {}
++    if case_ids:
++        cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
++        case_no_map = {c.id: c.case_no for c in cases}
++
++    items = [
++        {
++            "row_index": row_index,
++            "document": _build_document_out(
++                document,
++                case_no=case_no_map.get(document.case_id),
++            ),
++        }
++        for row_index, document in created_rows
++    ]
++    return DocumentWizardBatchCreateOut(created=len(items), total=len(created_rows), items=items)
++
++
+ @router.get(
+     "/documents/{document_id}/attachments/{attachment_id}/download",
+     summary="Download a document attachment",
+diff --git a/backend/app/modules/documents/schemas.py b/backend/app/modules/documents/schemas.py
+index 982af25..2192774 100644
+--- a/backend/app/modules/documents/schemas.py
++++ b/backend/app/modules/documents/schemas.py
+@@ -28,6 +28,30 @@ class DocumentCreateIn(BaseModel):
+     reply_to_id: str | None = None
+ 
+ 
++class DocumentWizardBatchDefaultsIn(BaseModel):
++    doc_template_id: str = Field(..., min_length=1)
++    direction: DocumentDirection
++    doc_date: date
++    title: str | None = None
++    ref_no: str | None = None
++    extra_data: str | None = None
++    reply_to_id: str | None = None
++
++
++class DocumentWizardBatchRowIn(BaseModel):
++    case_id: str = Field(..., min_length=1)
++    title: str | None = None
++    doc_date: date | None = None
++    ref_no: str | None = None
++    extra_data: str | None = None
++    reply_to_id: str | None = None
++
++
++class DocumentWizardBatchCreateIn(BaseModel):
++    defaults: DocumentWizardBatchDefaultsIn
++    rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
++
++
+ class DocumentUpdateIn(BaseModel):
+     case_id: str | None = None
+     doc_template_id: str | None = None
+@@ -63,6 +87,17 @@ class DocumentListOut(PageResult[DocumentOut]):
+     pass
+ 
+ 
++class DocumentWizardBatchRowOut(BaseModel):
++    row_index: int
++    document: DocumentOut
++
++
++class DocumentWizardBatchCreateOut(BaseModel):
++    created: int
++    total: int
++    items: list[DocumentWizardBatchRowOut]
++
++
+ # --- B1: DocTemplate schemas ---
+ 
+ 
+diff --git a/backend/app/modules/documents/service.py b/backend/app/modules/documents/service.py
+index 3039d60..bcbcb19 100644
+--- a/backend/app/modules/documents/service.py
++++ b/backend/app/modules/documents/service.py
+@@ -12,16 +12,20 @@ from app.core.storage import ensure_dir, safe_join
+ from app.modules.cases.models import Case
+ from app.modules.cases.service import validate_case_status_transition
+ from app.modules.documents.enums import DocumentDirection
++from app.modules.documents.fee_linking_service import maybe_create_fee_draft
+ from app.modules.documents.models import DocAttachment, DocTemplate, Document
+ from app.modules.documents.schemas import (
+     DocTemplateCreateIn,
+     DocTemplateUpdateIn,
+     DocumentCreateIn,
+     DocumentUpdateIn,
++    DocumentWizardBatchCreateIn,
++    DocumentWizardBatchRowIn,
+ )
+ from app.modules.tasks.enums import TaskAction, TaskStatus
+ from app.modules.tasks.models import Task
+ from app.modules.tasks.service import _create_task_log
++from app.modules.tasks.task_generation_service import TaskGenerationService
+ 
+ 
+ def _apply_template_defaults(
+@@ -88,6 +92,56 @@ def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None
+     original_doc.reply_date = doc_date
+ 
+ 
++def _normalize_text(value: str | None) -> str | None:
++    if value is None:
++        return None
++    text = value.strip()
++    return text or None
++
++
++def _create_document_record(
++    db: Session,
++    data: DocumentCreateIn,
++    *,
++    commit: bool,
++) -> Document:
++    case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
++    if not case:
++        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
++
++    template = None
++    if data.doc_template_id:
++        template = db.execute(
++            select(DocTemplate).where(DocTemplate.id == data.doc_template_id)
++        ).scalar_one_or_none()
++        if not template:
++            raise_business_error(
++                "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
++            )
++
++    document = Document(
++        id=str(uuid4()),
++        case_id=data.case_id,
++        doc_template_id=data.doc_template_id,
++        direction=data.direction,
++        doc_date=data.doc_date,
++        title=data.title,
++        ref_no=data.ref_no,
++        extra_data=data.extra_data,
++        reply_to_id=data.reply_to_id,
++    )
++    db.add(document)
++    db.flush()
++
++    _apply_template_defaults(case=case, document=document, template=template)
++    _apply_reply_chain(db, document=document, doc_date=data.doc_date)
++
++    if commit:
++        db.commit()
++        db.refresh(document)
++    return document
++
++
+ def list_documents(
+     db: Session,
+     *,
+@@ -153,39 +207,111 @@ def list_documents(
+ 
+ 
+ def create_document(db: Session, data: DocumentCreateIn) -> Document:
+-    case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
+-    if not case:
+-        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
++    return _create_document_record(db, data, commit=True)
+ 
+-    template = None
+-    if data.doc_template_id:
+-        template = db.execute(
+-            select(DocTemplate).where(DocTemplate.id == data.doc_template_id)
+-        ).scalar_one_or_none()
+-        if not template:
+-            raise_business_error(
+-                "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
++
++def create_document_wizard_batch(
++    db: Session, data: DocumentWizardBatchCreateIn
++) -> list[tuple[int, Document]]:
++    template = db.execute(
++        select(DocTemplate).where(DocTemplate.id == data.defaults.doc_template_id)
++    ).scalar_one_or_none()
++    if not template:
++        raise_business_error("DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404)
++
++    rows = data.rows
++    row_errors: list[dict[str, object]] = []
++    seen_case_ids: set[str] = set()
++    case_ids: list[str] = []
++
++    for idx, row in enumerate(rows, start=1):
++        case_id = _normalize_text(row.case_id)
++        if not case_id:
++            row_errors.append(
++                {
++                    "row_index": idx,
++                    "field": "case_id",
++                    "code": "CASE_ID_REQUIRED",
++                    "message": "Case ID is required",
++                }
++            )
++            continue
++        if case_id in seen_case_ids:
++            row_errors.append(
++                {
++                    "row_index": idx,
++                    "field": "case_id",
++                    "code": "CASE_ID_DUPLICATE",
++                    "message": "Case ID must be unique within the batch",
++                }
+             )
++            continue
++        seen_case_ids.add(case_id)
++        case_ids.append(case_id)
+ 
+-    document = Document(
+-        id=str(uuid4()),
+-        case_id=data.case_id,
+-        doc_template_id=data.doc_template_id,
+-        direction=data.direction,
+-        doc_date=data.doc_date,
+-        title=data.title,
+-        ref_no=data.ref_no,
+-        extra_data=data.extra_data,
+-        reply_to_id=data.reply_to_id,
++    existing_case_ids = set(
++        db.execute(select(Case.id).where(Case.id.in_(case_ids))).scalars().all()
+     )
+-    db.add(document)
++    for idx, row in enumerate(rows, start=1):
++        case_id = _normalize_text(row.case_id)
++        if case_id and case_id not in existing_case_ids:
++            row_errors.append(
++                {
++                    "row_index": idx,
++                    "field": "case_id",
++                    "code": "CASE_NOT_FOUND",
++                    "message": "Case not found",
++                    "case_id": case_id,
++                }
++            )
+ 
+-    _apply_template_defaults(case=case, document=document, template=template)
+-    _apply_reply_chain(db, document=document, doc_date=data.doc_date)
++    if row_errors:
++        raise_business_error(
++            "DOCUMENT_WIZARD_BATCH_INVALID",
++            "Document wizard batch contains invalid rows",
++            details={"row_errors": row_errors},
++            status_code=400,
++        )
+ 
+-    db.commit()
+-    db.refresh(document)
+-    return document
++    created_rows: list[tuple[int, Document]] = []
++    try:
++        for idx, row in enumerate(rows, start=1):
++            payload = _build_document_wizard_payload(data.defaults, row, template)
++            document = _create_document_record(db, payload, commit=False)
++            maybe_create_fee_draft(db, document, template)
++            TaskGenerationService().generate_from_document(db, document)
++            created_rows.append((idx, document))
++
++        db.commit()
++        for _, document in created_rows:
++            db.refresh(document)
++        return created_rows
++    except Exception:
++        db.rollback()
++        raise
++
++
++def _build_document_wizard_payload(
++    defaults,
++    row: DocumentWizardBatchRowIn,
++    template: DocTemplate,
++) -> DocumentCreateIn:
++    data = defaults.model_dump()
++    row_data = row.model_dump(exclude_unset=True)
++    data.update(row_data)
++    data["case_id"] = _normalize_text(row.case_id)
++    data["doc_template_id"] = defaults.doc_template_id
++    data["direction"] = defaults.direction
++
++    if data.get("doc_date") is None:
++        data["doc_date"] = defaults.doc_date
++
++    data["title"] = _normalize_text(data.get("title")) or template.name
++    data["ref_no"] = _normalize_text(data.get("ref_no"))
++    data["extra_data"] = _normalize_text(data.get("extra_data"))
++    data["reply_to_id"] = _normalize_text(data.get("reply_to_id"))
++
++    return DocumentCreateIn(**data)
+ 
+ 
+ def get_document(db: Session, document_id: str) -> Document:

@@ -1,0 +1,17 @@
+backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+backend/app/modules/annuity/models.py
+backend/app/modules/commission/models.py
+backend/app/modules/expenses/models.py
+backend/tests/test_annuity_generate.py
+backend/tests/test_b2_reply_chain.py
+backend/tests/test_case_receipt_crud.py
+.superpowers/
+docs/superpowers/plans/2026-03-29-documents-step12-wizard.md
+docs/superpowers/specs/2026-03-29-documents-step12-wizard-design.md
+tasks/postenhancement/backend/DOCWIZ-BE-01.md
+tasks/postenhancement/backend/DOCWIZ-QA-01.md
+tasks/postenhancement/frontend/DOCWIZ-FE-SHELL-01.md
+tasks/postenhancement/frontend/DOCWIZ-FE-STEP1-01.md
+tasks/postenhancement/frontend/DOCWIZ-FE-STEP2-01.md

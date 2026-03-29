@@ -66,6 +66,73 @@ export interface Attachment {
     created_at: string
 }
 
+export interface DocumentWizardBatchDefaults {
+    direction: 'IN' | 'OUT'
+    doc_date: string
+    doc_template_id: string | null
+}
+
+export interface DocumentWizardBatchRowDraft {
+    case_id: string
+    title?: string
+    doc_date?: string
+    ref_no?: string
+    need_reply?: boolean
+    reply_to_id?: string
+    extra_data?: string
+}
+
+export interface DocumentWizardBatchCreatePayload {
+    defaults: DocumentWizardBatchDefaults
+    rows: DocumentWizardBatchRowDraft[]
+}
+
+export interface DocumentWizardBatchCreatedRow {
+    row_index: number
+    document: Document
+}
+
+export interface DocumentWizardBatchCreateResult {
+    created: number
+    total: number
+    items: DocumentWizardBatchCreatedRow[]
+}
+
+export interface DocumentWizardBatchRowError {
+    row_index: number
+    field: string
+    code: string
+    message: string
+    case_id?: string
+}
+
+export interface DocumentWizardParsedCase {
+    id: string
+    case_no: string
+    app_no?: string
+    title?: string
+}
+
+export type DocumentWizardCaseRowStatus = 'idle' | 'loading' | 'success' | 'error'
+
+export interface DocumentWizardCaseRow {
+    id: string
+    input: string
+    status: DocumentWizardCaseRowStatus
+    matched_case?: DocumentWizardParsedCase
+    error_message?: string
+}
+
+export interface DocumentWizardStep1State {
+    rows: DocumentWizardCaseRow[]
+}
+
+export interface DocumentWizardState {
+    activeStep: 1 | 2
+    defaults: DocumentWizardBatchDefaults
+    step1: DocumentWizardStep1State
+}
+
 // DocTemplate types (FC1)
 
 export interface DocTemplate {

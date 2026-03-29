@@ -1,0 +1,4 @@
+{"step":"lint","cmd":"cd frontend && npm run lint -- src/api/documents.ts src/api/documents.types.ts src/modules/documents/pages/DocumentWizard.vue","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}
+{"step":"gate","cmd":"./scripts/task_validate.sh DOCWIZ-FE-STEP2-01","rc":1,"note":"missing summary before evidence files were written"}
+{"step":"gate","cmd":"./scripts/task_validate.sh DOCWIZ-FE-STEP2-01","rc":0}

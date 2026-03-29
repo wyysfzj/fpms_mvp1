@@ -1,3 +1,4 @@
+import { reactive } from 'vue'
 import { http } from './http'
 import type { Pagination } from './types'
 import type {
@@ -10,6 +11,11 @@ import type {
     DocumentCreatePayload,
     DocumentListParams,
     DocumentUpdatePayload,
+    DocumentWizardBatchCreatePayload,
+    DocumentWizardBatchCreateResult,
+    DocumentWizardBatchDefaults,
+    DocumentWizardStep1State,
+    DocumentWizardState,
 } from './documents.types'
 
 interface BackendAttachment {
@@ -96,6 +102,31 @@ function toUpdatePayload(data: DocumentUpdatePayload): Record<string, unknown> {
     if (data.reply_date !== undefined) payload.reply_date = data.reply_date || null
 
     return payload
+}
+
+function trimToUndefined(value: string | undefined): string | undefined {
+    if (value === undefined) return undefined
+    const normalized = value.trim()
+    return normalized ? normalized : undefined
+}
+
+function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<string, unknown> {
+    return {
+        defaults: {
+            doc_template_id: data.defaults.doc_template_id,
+            direction: data.defaults.direction,
+            doc_date: data.defaults.doc_date,
+        },
+        rows: data.rows.map((row) => ({
+            case_id: row.case_id,
+            ...(trimToUndefined(row.title) ? { title: trimToUndefined(row.title) } : {}),
+            ...(trimToUndefined(row.doc_date) ? { doc_date: trimToUndefined(row.doc_date) } : {}),
+            ...(trimToUndefined(row.ref_no) ? { ref_no: trimToUndefined(row.ref_no) } : {}),
+            ...(row.need_reply !== undefined ? { need_reply: row.need_reply } : {}),
+            ...(trimToUndefined(row.reply_to_id) ? { reply_to_id: trimToUndefined(row.reply_to_id) } : {}),
+            ...(trimToUndefined(row.extra_data) ? { extra_data: trimToUndefined(row.extra_data) } : {}),
+        })),
+    }
 }
 
 /**
@@ -230,4 +261,46 @@ export async function updateDocTemplate(
 ): Promise<DocTemplate> {
     const response = await http.put<DocTemplate>(`/doc-templates/${id}`, data)
     return response.data
+}
+
+export async function createDocumentWizardBatch(
+    data: DocumentWizardBatchCreatePayload
+): Promise<DocumentWizardBatchCreateResult> {
+    const response = await http.post<DocumentWizardBatchCreateResult>(
+        '/documents/wizard/batch-create',
+        toWizardBatchPayload(data)
+    )
+    return {
+        ...response.data,
+        items: response.data.items.map((item) => ({
+            ...item,
+            document: mapDocument(item.document as BackendDocument),
+        })),
+    }
+}
+
+function createDocumentWizardDefaults(): DocumentWizardBatchDefaults {
+    return {
+        direction: 'IN',
+        doc_date: new Date().toISOString().slice(0, 10),
+        doc_template_id: null,
+    }
+}
+
+function createDocumentWizardStep1State(): DocumentWizardStep1State {
+    return {
+        rows: [],
+    }
+}
+
+export const documentWizardState = reactive<DocumentWizardState>({
+    activeStep: 1,
+    defaults: createDocumentWizardDefaults(),
+    step1: createDocumentWizardStep1State(),
+})
+
+export function resetDocumentWizardState(): void {
+    documentWizardState.activeStep = 1
+    Object.assign(documentWizardState.defaults, createDocumentWizardDefaults())
+    Object.assign(documentWizardState.step1, createDocumentWizardStep1State())
 }

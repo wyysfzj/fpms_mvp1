@@ -1,0 +1,67 @@
+diff --git a/backend/app/modules/documents/api.py b/backend/app/modules/documents/api.py
+index fee87f1..3046f1a 100644
+--- a/backend/app/modules/documents/api.py
++++ b/backend/app/modules/documents/api.py
+@@ -25,10 +25,13 @@ from app.modules.documents.schemas import (
+     DocumentListOut,
+     DocumentOut,
+     DocumentUpdateIn,
++    DocumentWizardBatchCreateIn,
++    DocumentWizardBatchCreateOut,
+ )
+ from app.modules.documents.service import add_attachment as add_attachment_service
+ from app.modules.documents.service import (
+     create_doc_template,
++    create_document_wizard_batch,
+     get_attachment_download,
+     get_doc_template,
+     list_doc_templates,
+@@ -43,7 +46,9 @@ from app.modules.tasks.task_generation_service import TaskGenerationService
+ router = APIRouter()
+ 
+ 
+-def _build_document_out(document, *, case_no: str | None = None, attachments: list | None = None) -> DocumentOut:
++def _build_document_out(
++    document, *, case_no: str | None = None, attachments: list | None = None
++) -> DocumentOut:
+     return DocumentOut(
+         id=document.id,
+         case_id=document.case_id,
+@@ -292,6 +297,37 @@ def create_document(
+     return _build_document_out(document, case_no=case.case_no if case else None)
+ 
+ 
++@router.post(
++    "/documents/wizard/batch-create",
++    status_code=status.HTTP_201_CREATED,
++    response_model=DocumentWizardBatchCreateOut,
++    summary="Create documents from wizard batch",
++)
++def create_document_wizard_batch_endpoint(
++    payload: DocumentWizardBatchCreateIn,
++    _perm: None = Depends(require_perm("Doc.Create")),
++    db: Session = Depends(get_db),
++) -> DocumentWizardBatchCreateOut:
++    created_rows = create_document_wizard_batch(db, payload)
++    case_ids = {document.case_id for _, document in created_rows}
++    case_no_map: dict[str, str] = {}
++    if case_ids:
++        cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
++        case_no_map = {c.id: c.case_no for c in cases}
++
++    items = [
++        {
++            "row_index": row_index,
++            "document": _build_document_out(
++                document,
++                case_no=case_no_map.get(document.case_id),
++            ),
++        }
++        for row_index, document in created_rows
++    ]
++    return DocumentWizardBatchCreateOut(created=len(items), total=len(created_rows), items=items)
++
++
+ @router.get(
+     "/documents/{document_id}/attachments/{attachment_id}/download",
+     summary="Download a document attachment",

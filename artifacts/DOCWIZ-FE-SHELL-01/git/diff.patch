@@ -1,0 +1,74 @@
+diff --git a/frontend/src/api/documents.ts b/frontend/src/api/documents.ts
+index 485c70e..d822bfe 100644
+--- a/frontend/src/api/documents.ts
++++ b/frontend/src/api/documents.ts
+@@ -1,3 +1,4 @@
++import { reactive } from 'vue'
+ import { http } from './http'
+ import type { Pagination } from './types'
+ import type {
+@@ -10,6 +11,8 @@ import type {
+     DocumentCreatePayload,
+     DocumentListParams,
+     DocumentUpdatePayload,
++    DocumentWizardBatchDefaults,
++    DocumentWizardState,
+ } from './documents.types'
+ 
+ interface BackendAttachment {
+@@ -231,3 +234,21 @@ export async function updateDocTemplate(
+     const response = await http.put<DocTemplate>(`/doc-templates/${id}`, data)
+     return response.data
+ }
++
++function createDocumentWizardDefaults(): DocumentWizardBatchDefaults {
++    return {
++        direction: 'IN',
++        doc_date: new Date().toISOString().slice(0, 10),
++        doc_template_id: null,
++    }
++}
++
++export const documentWizardState = reactive<DocumentWizardState>({
++    activeStep: 1,
++    defaults: createDocumentWizardDefaults(),
++})
++
++export function resetDocumentWizardState(): void {
++    documentWizardState.activeStep = 1
++    Object.assign(documentWizardState.defaults, createDocumentWizardDefaults())
++}
+diff --git a/frontend/src/api/documents.types.ts b/frontend/src/api/documents.types.ts
+index 8cced86..42427d2 100644
+--- a/frontend/src/api/documents.types.ts
++++ b/frontend/src/api/documents.types.ts
+@@ -66,6 +66,17 @@ export interface Attachment {
+     created_at: string
+ }
+ 
++export interface DocumentWizardBatchDefaults {
++    direction: 'IN' | 'OUT'
++    doc_date: string
++    doc_template_id: string | null
++}
++
++export interface DocumentWizardState {
++    activeStep: 1 | 2
++    defaults: DocumentWizardBatchDefaults
++}
++
+ // DocTemplate types (FC1)
+ 
+ export interface DocTemplate {
+diff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts
+index 28cdf9a..d0093b1 100644
+--- a/frontend/src/router/index.ts
++++ b/frontend/src/router/index.ts
+@@ -27,6 +27,7 @@ const routes = [
+       // Documents
+       { path: 'documents', name: 'documents', component: () => import('../modules/documents/pages/DocumentList.vue') },
+       { path: 'documents/new', name: 'document_new', component: () => import('../modules/documents/pages/DocumentCreate.vue') },
++      { path: 'documents/wizard', name: 'document_wizard', component: () => import('../modules/documents/pages/DocumentWizard.vue') },
+       { path: 'documents/:id/edit', name: 'document_edit', component: () => import('../modules/documents/pages/DocumentEdit.vue') },
+       { path: 'documents/:id', name: 'document_detail', component: () => import('../modules/documents/pages/DocumentDetail.vue') },
+ 
