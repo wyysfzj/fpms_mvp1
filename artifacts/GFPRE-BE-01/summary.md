@@ -1,0 +1,24 @@
+# GFPRE-BE-01 Evidence Summary
+
+- Task/runbook executed: `GFPRE-BE-01` / `P0-prereq-heavy-story`
+- Role executed: backend worker
+- Exact closure slice completed: add grant-fee backend module skeleton and freeze `GrantFeeTask.Read/Write` permission namespace without implementing workflow actions
+- Explicit non-closure respected: no worklist, no state-machine actions, no fee draft/bill/document linkage, no frontend
+- Modified files:
+  - `backend/app/modules/grant_fees/__init__.py`
+  - `backend/app/modules/grant_fees/api.py`
+  - `backend/app/modules/grant_fees/schemas.py`
+  - `backend/app/modules/grant_fees/service.py`
+  - `backend/app/api/router.py`
+  - `backend/app/modules/rbac/service.py`
+  - `backend/tests/test_grant_fee_prereq_contract.py`
+- Verification run:
+  - `python3 -m ruff check backend/app/modules/grant_fees/api.py backend/app/modules/grant_fees/schemas.py backend/app/modules/grant_fees/service.py backend/app/modules/rbac/service.py backend/app/api/router.py backend/tests/test_grant_fee_prereq_contract.py`
+  - `cd backend && PYTHONPATH=. pytest -q tests/test_grant_fee_prereq_contract.py`
+  - `./scripts/task_validate.sh GFPRE-BE-01`
+- Expected status codes verified:
+  - `200` for grant-fee contract GET/POST with auth
+  - `403` when `GrantFeeTask.Read` or `GrantFeeTask.Write` is missing
+- Evidence path: `artifacts/GFPRE-BE-01/**`
+- Final per-task status: PASS
+- Dirty baseline note: repository had pre-existing unrelated dirty files outside the task allowlist; see `artifacts/GFPRE-BE-01/baseline_external_files.txt`

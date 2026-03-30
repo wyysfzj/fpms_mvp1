@@ -1,0 +1,258 @@
+diff --git a/backend/alembic/versions/gfpre_db_01_create_t_grant_fee_task.py b/backend/alembic/versions/gfpre_db_01_create_t_grant_fee_task.py
+new file mode 100644
+index 0000000..764a415
+--- /dev/null
++++ b/backend/alembic/versions/gfpre_db_01_create_t_grant_fee_task.py
+@@ -0,0 +1,75 @@
++"""gfpre_db_01_create_t_grant_fee_task
++
++Revision ID: gfpre_db_01_create_t_grant_fee_task_01
++Revises: mdpre_db_01_masterdata_carriers_01
++Create Date: 2026-03-30
++
++Create the minimal SQLite-safe grant fee task carrier.
++"""
++
++from __future__ import annotations
++
++import sqlalchemy as sa
++from alembic import op
++
++revision = "gfpre_db_01_create_t_grant_fee_task_01"
++down_revision = "mdpre_db_01_masterdata_carriers_01"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.create_table(
++        "t_grant_fee_task",
++        sa.Column("id", sa.String(36), primary_key=True),
++        sa.Column(
++            "case_id",
++            sa.String(36),
++            sa.ForeignKey("t_case.id", ondelete="CASCADE"),
++            nullable=False,
++        ),
++        sa.Column("type", sa.String(16), nullable=False, server_default=sa.text("'GRANT'")),
++        sa.Column("due_date", sa.Date(), nullable=False),
++        sa.Column("gov_fee_amt", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
++        sa.Column(
++            "service_fee_amt",
++            sa.Numeric(18, 2),
++            nullable=False,
++            server_default=sa.text("0"),
++        ),
++        sa.Column("currency", sa.String(8), nullable=False),
++        sa.Column(
++            "client_instruction",
++            sa.String(24),
++            nullable=False,
++            server_default=sa.text("'NONE'"),
++        ),
++        sa.Column("notify_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
++        sa.Column(
++            "draft_generated",
++            sa.Boolean(),
++            nullable=False,
++            server_default=sa.text("0"),
++        ),
++        sa.Column("notice_sent", sa.Boolean(), nullable=False, server_default=sa.text("0")),
++        sa.Column("is_overdue", sa.Boolean(), nullable=False, server_default=sa.text("0")),
++        sa.Column("remark", sa.Text(), nullable=True),
++        sa.Column(
++            "created_at",
++            sa.DateTime(),
++            nullable=False,
++            server_default=sa.text("CURRENT_TIMESTAMP"),
++        ),
++        sa.Column(
++            "updated_at",
++            sa.DateTime(),
++            nullable=False,
++            server_default=sa.text("CURRENT_TIMESTAMP"),
++        ),
++        sa.Column("created_by", sa.String(36), nullable=True),
++        sa.Column("updated_by", sa.String(36), nullable=True),
++    )
++
++
++def downgrade() -> None:
++    raise NotImplementedError("Downgrade not implemented for MVP migrations (intentional).")
+diff --git a/backend/app/modules/fees/models.py b/backend/app/modules/fees/models.py
+index 525ea43..31fc39d 100644
+--- a/backend/app/modules/fees/models.py
++++ b/backend/app/modules/fees/models.py
+@@ -1,9 +1,10 @@
+ from __future__ import annotations
+ 
+-from datetime import date
++from datetime import date, datetime
+ from decimal import Decimal
++from uuid import uuid4
+ 
+-from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text, text
++from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
+ from sqlalchemy.orm import Mapped, mapped_column
+ 
+ from app.db.base import Base
+@@ -87,3 +88,41 @@ class FeeRate(UUIDPrimaryKeyMixin, AuditMixin, Base):
+     )
+     effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+     effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
++
++
++class T_GrantFeeTask(Base):
++    __tablename__ = "t_grant_fee_task"
++
++    id: Mapped[str] = mapped_column(
++        String(36),
++        primary_key=True,
++        default=lambda: str(uuid4()),
++    )
++    case_id: Mapped[str] = mapped_column(
++        String(36), ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False
++    )
++    type: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'GRANT'"))
++    due_date: Mapped[date] = mapped_column(Date, nullable=False)
++    gov_fee_amt: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    service_fee_amt: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    currency: Mapped[str] = mapped_column(String(8), nullable=False)
++    client_instruction: Mapped[str] = mapped_column(
++        String(24), nullable=False, server_default=text("'NONE'")
++    )
++    notify_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
++    draft_generated: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    notice_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    is_overdue: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
++    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
++    )
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
++    )
++    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
++    updated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+diff --git a/backend/tests/test_grant_fee_prereq_schema.py b/backend/tests/test_grant_fee_prereq_schema.py
+new file mode 100644
+index 0000000..b4d223d
+--- /dev/null
++++ b/backend/tests/test_grant_fee_prereq_schema.py
+@@ -0,0 +1,112 @@
++from __future__ import annotations
++
++from pathlib import Path
++
++from alembic import command
++from alembic.config import Config
++from sqlalchemy import create_engine, event, inspect
++
++from app.core.config import get_settings
++from app.db.base import Base
++from app.models import *  # noqa: F401,F403
++from app.modules.fees.models import T_GrantFeeTask
++
++
++def _sqlite_engine(db_path: Path):
++    engine = create_engine(
++        f"sqlite:///{db_path}",
++        connect_args={"check_same_thread": False},
++        future=True,
++    )
++
++    @event.listens_for(engine, "connect")
++    def set_sqlite_pragma(dbapi_connection, _connection_record) -> None:
++        cursor = dbapi_connection.cursor()
++        cursor.execute("PRAGMA foreign_keys=ON")
++        cursor.close()
++
++    return engine
++
++
++def _expected_columns() -> set[str]:
++    return {
++        "id",
++        "case_id",
++        "type",
++        "due_date",
++        "gov_fee_amt",
++        "service_fee_amt",
++        "currency",
++        "client_instruction",
++        "notify_count",
++        "draft_generated",
++        "notice_sent",
++        "is_overdue",
++        "remark",
++        "created_at",
++        "updated_at",
++        "created_by",
++        "updated_by",
++    }
++
++
++def test_grant_fee_task_model_exposes_frozen_minimal_columns(tmp_path) -> None:
++    db_path = tmp_path / "grant_fee_prereq_model.db"
++    engine = _sqlite_engine(db_path)
++
++    Base.metadata.create_all(engine)
++
++    assert T_GrantFeeTask.__tablename__ == "t_grant_fee_task"
++    assert set(T_GrantFeeTask.__table__.columns.keys()) == _expected_columns()
++
++    columns = T_GrantFeeTask.__table__.columns
++    assert getattr(columns["type"].server_default.arg, "text", None) == "'GRANT'"
++    assert getattr(columns["client_instruction"].server_default.arg, "text", None) == "'NONE'"
++    assert getattr(columns["gov_fee_amt"].server_default.arg, "text", None) == "0"
++    assert getattr(columns["service_fee_amt"].server_default.arg, "text", None) == "0"
++    assert getattr(columns["notify_count"].server_default.arg, "text", None) == "0"
++    assert getattr(columns["draft_generated"].server_default.arg, "text", None) == "0"
++    assert getattr(columns["notice_sent"].server_default.arg, "text", None) == "0"
++    assert getattr(columns["is_overdue"].server_default.arg, "text", None) == "0"
++    assert getattr(columns["created_at"].server_default.arg, "text", None) == "CURRENT_TIMESTAMP"
++    assert getattr(columns["updated_at"].server_default.arg, "text", None) == "CURRENT_TIMESTAMP"
++
++    inspector = inspect(engine)
++    assert "t_grant_fee_task" in inspector.get_table_names()
++
++    db_columns = {column["name"] for column in inspector.get_columns("t_grant_fee_task")}
++    assert db_columns == _expected_columns()
++
++    fk_specs = {
++        (
++            tuple(fk.get("constrained_columns") or []),
++            fk.get("referred_table"),
++            tuple(fk.get("referred_columns") or []),
++        )
++        for fk in inspector.get_foreign_keys("t_grant_fee_task")
++    }
++    assert (("case_id",), "t_case", ("id",)) in fk_specs
++
++    engine.dispose()
++
++
++def test_grant_fee_task_migration_creates_expected_schema(tmp_path, monkeypatch) -> None:
++    db_path = tmp_path / "grant_fee_prereq_migration.db"
++    db_url = f"sqlite:///{db_path}"
++    monkeypatch.setenv("DATABASE_URL", db_url)
++    get_settings.cache_clear()
++
++    alembic_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
++    config = Config(str(alembic_ini))
++    config.set_main_option("sqlalchemy.url", db_url)
++
++    command.upgrade(config, "head")
++
++    engine = _sqlite_engine(db_path)
++    inspector = inspect(engine)
++
++    assert "t_grant_fee_task" in inspector.get_table_names()
++    db_columns = {column["name"] for column in inspector.get_columns("t_grant_fee_task")}
++    assert db_columns == _expected_columns()
++
++    engine.dispose()

@@ -1,0 +1,195 @@
+diff --git a/backend/app/api/router.py b/backend/app/api/router.py
+index 5bf01c5..a578dac 100644
+--- a/backend/app/api/router.py
++++ b/backend/app/api/router.py
+@@ -13,6 +13,7 @@ from app.modules.consulting.api import router as consulting_router
+ from app.modules.documents.api import router as documents_router
+ from app.modules.expenses.api import router as expenses_router
+ from app.modules.fees.api import router as fees_router
++from app.modules.grant_fees.api import router as grant_fees_router
+ from app.modules.masterdata.applicants.api import router as applicants_router
+ from app.modules.masterdata.clients.api import router as clients_router
+ from app.modules.masterdata.countries.api import router as countries_router
+@@ -31,6 +32,7 @@ api_router.include_router(countries_router, tags=["Countries"])
+ api_router.include_router(case_router, tags=["Cases"])
+ api_router.include_router(documents_router, tags=["Documents"])
+ api_router.include_router(tasks_router, tags=["Tasks"])
++api_router.include_router(grant_fees_router, tags=["Grant Fees"])
+ api_router.include_router(fees_router, tags=["Fees"])
+ api_router.include_router(billing_router, tags=["Billing"])
+ api_router.include_router(annuity_router, tags=["Annuity"])
+diff --git a/backend/app/modules/rbac/service.py b/backend/app/modules/rbac/service.py
+index 612d9cc..8436f58 100644
+--- a/backend/app/modules/rbac/service.py
++++ b/backend/app/modules/rbac/service.py
+@@ -87,6 +87,8 @@ ROLE_PERMISSIONS = {
+         "FeeRate.Create",
+         "FeeRate.Edit",
+         "FeeRate.Read",
++        "GrantFeeTask.Read",
++        "GrantFeeTask.Write",
+         "GovPayment.Create",
+         "LetterHead.Edit",
+         "Country.Read",
+diff --git a/backend/app/modules/grant_fees/__init__.py b/backend/app/modules/grant_fees/__init__.py
+new file mode 100644
+index 0000000..a9737c6
+--- /dev/null
++++ b/backend/app/modules/grant_fees/__init__.py
+@@ -0,0 +1,3 @@
++from app.modules.grant_fees.api import router
++
++__all__ = ["router"]
+diff --git a/backend/app/modules/grant_fees/api.py b/backend/app/modules/grant_fees/api.py
+new file mode 100644
+index 0000000..9878e85
+--- /dev/null
++++ b/backend/app/modules/grant_fees/api.py
+@@ -0,0 +1,29 @@
++from __future__ import annotations
++
++from fastapi import APIRouter, Depends
++from sqlalchemy.orm import Session
++
++from app.api.deps import require_perm
++from app.db.session import get_db
++from app.modules.grant_fees.schemas import GrantFeeTaskModuleOut
++from app.modules.grant_fees.service import get_grant_fee_module_contract
++
++router = APIRouter()
++
++
++@router.get("/grant-fee-tasks", summary="Grant fee module contract")
++def get_grant_fee_tasks(
++    _perm: None = Depends(require_perm("GrantFeeTask.Read")),
++    db: Session = Depends(get_db),
++) -> GrantFeeTaskModuleOut:
++    _ = db
++    return GrantFeeTaskModuleOut.model_validate(get_grant_fee_module_contract())
++
++
++@router.post("/grant-fee-tasks", summary="Grant fee module write contract")
++def post_grant_fee_tasks(
++    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
++    db: Session = Depends(get_db),
++) -> GrantFeeTaskModuleOut:
++    _ = db
++    return GrantFeeTaskModuleOut.model_validate(get_grant_fee_module_contract())
+diff --git a/backend/app/modules/grant_fees/schemas.py b/backend/app/modules/grant_fees/schemas.py
+new file mode 100644
+index 0000000..e1ac610
+--- /dev/null
++++ b/backend/app/modules/grant_fees/schemas.py
+@@ -0,0 +1,12 @@
++from __future__ import annotations
++
++from pydantic import BaseModel, ConfigDict, Field
++
++
++class GrantFeeTaskModuleOut(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    module: str = Field(default="grant_fees")
++    permission_namespace: str = Field(default="GrantFeeTask")
++    permission_codes: list[str]
++    status: str = Field(default="ok")
+diff --git a/backend/app/modules/grant_fees/service.py b/backend/app/modules/grant_fees/service.py
+new file mode 100644
+index 0000000..24713d0
+--- /dev/null
++++ b/backend/app/modules/grant_fees/service.py
+@@ -0,0 +1,12 @@
++from __future__ import annotations
++
++GRANT_FEE_TASK_PERMISSION_CODES = ("GrantFeeTask.Read", "GrantFeeTask.Write")
++
++
++def get_grant_fee_module_contract() -> dict[str, object]:
++    return {
++        "module": "grant_fees",
++        "permission_namespace": "GrantFeeTask",
++        "permission_codes": list(GRANT_FEE_TASK_PERMISSION_CODES),
++        "status": "ok",
++    }
+diff --git a/backend/tests/test_grant_fee_prereq_contract.py b/backend/tests/test_grant_fee_prereq_contract.py
+new file mode 100644
+index 0000000..bee2c43
+--- /dev/null
++++ b/backend/tests/test_grant_fee_prereq_contract.py
+@@ -0,0 +1,76 @@
++from __future__ import annotations
++
++from typing import Any
++
++import pytest
++from sqlalchemy import select
++
++import app.api.deps as deps
++from app.modules.auth.models import T_Role, T_RolePerm
++from app.modules.rbac.service import ROLE_PERMISSIONS
++
++GRANT_FEE_PATH = "/api/v1/grant-fee-tasks"
++
++
++@pytest.mark.parametrize(
++    ("method", "required_perm"),
++    [
++        ("get", "GrantFeeTask.Read"),
++        ("post", "GrantFeeTask.Write"),
++    ],
++)
++def test_grant_fee_module_requires_frozen_permissions(
++    client,
++    auth_headers,
++    monkeypatch,
++    method: str,
++    required_perm: str,
++) -> None:
++    def _no_perms(_db, _user_id) -> set[str]:
++        return set()
++
++    monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
++
++    response = getattr(client, method)(GRANT_FEE_PATH, headers=auth_headers)
++
++    assert response.status_code == 403
++    body: dict[str, Any] = response.json()
++    assert body["error"]["details"]["required_perm"] == required_perm
++
++
++def test_grant_fee_module_contract_shape_and_rbac_freeze(
++    client,
++    auth_headers,
++    session_factory,
++) -> None:
++    response = client.get(GRANT_FEE_PATH, headers=auth_headers)
++    assert response.status_code == 200
++    body = response.json()
++    assert body == {
++        "module": "grant_fees",
++        "permission_namespace": "GrantFeeTask",
++        "permission_codes": ["GrantFeeTask.Read", "GrantFeeTask.Write"],
++        "status": "ok",
++    }
++
++    write_response = client.post(GRANT_FEE_PATH, headers=auth_headers)
++    assert write_response.status_code == 200
++    assert write_response.json() == body
++
++    with session_factory() as db:
++        admin_role = db.execute(select(T_Role).where(T_Role.code == "Admin")).scalar_one()
++        perm_codes = {
++            row[0]
++            for row in db.execute(
++                select(T_RolePerm.perm_code).where(T_RolePerm.role_id == admin_role.id)
++            ).all()
++        }
++
++    grant_fee_perm_codes = {
++        code for perm_list in ROLE_PERMISSIONS.values() for code in perm_list if code.startswith("GrantFeeTask.")
++    }
++    assert grant_fee_perm_codes == {"GrantFeeTask.Read", "GrantFeeTask.Write"}
++    assert {code for code in perm_codes if code.startswith("GrantFeeTask.")} == {
++        "GrantFeeTask.Read",
++        "GrantFeeTask.Write",
++    }

@@ -13,6 +13,7 @@ from app.modules.consulting.api import router as consulting_router
 from app.modules.documents.api import router as documents_router
 from app.modules.expenses.api import router as expenses_router
 from app.modules.fees.api import router as fees_router
+from app.modules.grant_fees.api import router as grant_fees_router
 from app.modules.masterdata.applicants.api import router as applicants_router
 from app.modules.masterdata.clients.api import router as clients_router
 from app.modules.masterdata.countries.api import router as countries_router
@@ -31,6 +32,7 @@ api_router.include_router(countries_router, tags=["Countries"])
 api_router.include_router(case_router, tags=["Cases"])
 api_router.include_router(documents_router, tags=["Documents"])
 api_router.include_router(tasks_router, tags=["Tasks"])
+api_router.include_router(grant_fees_router, tags=["Grant Fees"])
 api_router.include_router(fees_router, tags=["Fees"])
 api_router.include_router(billing_router, tags=["Billing"])
 api_router.include_router(annuity_router, tags=["Annuity"])

@@ -87,6 +87,8 @@ ROLE_PERMISSIONS = {
         "FeeRate.Create",
         "FeeRate.Edit",
         "FeeRate.Read",
+        "GrantFeeTask.Read",
+        "GrantFeeTask.Write",
         "GovPayment.Create",
         "LetterHead.Edit",
         "Country.Read",

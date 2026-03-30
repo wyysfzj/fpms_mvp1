@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -87,3 +88,41 @@ class FeeRate(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
     effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class T_GrantFeeTask(Base):
+    __tablename__ = "t_grant_fee_task"
+
+    id: Mapped[str] = mapped_column(
+        String(36),
+        primary_key=True,
+        default=lambda: str(uuid4()),
+    )
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False
+    )
+    type: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'GRANT'"))
+    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    gov_fee_amt: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, server_default=text("0")
+    )
+    service_fee_amt: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, server_default=text("0")
+    )
+    currency: Mapped[str] = mapped_column(String(8), nullable=False)
+    client_instruction: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default=text("'NONE'")
+    )
+    notify_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    draft_generated: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    notice_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    is_overdue: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    updated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)

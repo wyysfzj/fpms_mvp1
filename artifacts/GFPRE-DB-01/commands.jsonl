@@ -1,0 +1,5 @@
+{"ts":"20260330T205734","step":"format","cmd":"python3 -m ruff format backend/alembic/versions/gfpre_db_01_create_t_grant_fee_task.py backend/app/modules/fees/models.py backend/tests/test_grant_fee_prereq_schema.py"}
+{"ts":"20260330T205736","step":"lint","cmd":"python3 -m ruff check backend/alembic/versions/gfpre_db_01_create_t_grant_fee_task.py backend/app/modules/fees/models.py backend/tests/test_grant_fee_prereq_schema.py"}
+{"ts":"20260330T205738","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_grant_fee_prereq_schema.py"}
+{"ts":"20260330T205741","step":"alembic","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ alembic\ upgrade\ head"}
+{"ts":"20260330T205820","step":"validate","cmd":"./scripts/task_validate.sh GFPRE-DB-01"}
