@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -41,6 +41,66 @@ def get_grant_fee_module_contract() -> dict[str, object]:
         "permission_namespace": "GrantFeeTask",
         "permission_codes": list(GRANT_FEE_TASK_PERMISSION_CODES),
         "status": "ok",
+    }
+
+
+def list_grant_fee_tasks(
+    db: Session,
+    *,
+    filters: dict[str, Any],
+    page: int,
+    page_size: int,
+) -> dict[str, Any]:
+    stmt = select(T_GrantFeeTask)
+    predicates = []
+
+    case_id = str(filters.get("case_id") or "").strip()
+    if case_id:
+        predicates.append(T_GrantFeeTask.case_id == case_id)
+
+    client_instruction = str(filters.get("client_instruction") or "").strip().upper()
+    if client_instruction:
+        predicates.append(T_GrantFeeTask.client_instruction == client_instruction)
+
+    if filters.get("draft_generated") is not None:
+        predicates.append(T_GrantFeeTask.draft_generated.is_(bool(filters["draft_generated"])))
+
+    if filters.get("is_overdue") is not None:
+        predicates.append(T_GrantFeeTask.is_overdue.is_(bool(filters["is_overdue"])))
+
+    date_from = filters.get("date_from")
+    if date_from is not None:
+        predicates.append(T_GrantFeeTask.due_date >= date_from)
+
+    date_to = filters.get("date_to")
+    if date_to is not None:
+        predicates.append(T_GrantFeeTask.due_date <= date_to)
+
+    if predicates:
+        stmt = stmt.where(and_(*predicates))
+
+    stmt = stmt.order_by(T_GrantFeeTask.due_date.asc(), T_GrantFeeTask.id.asc())
+
+    tasks = list(db.execute(stmt).scalars().all())
+    projected_items = []
+    status_filter = str(filters.get("status") or "").strip().upper()
+
+    for task in tasks:
+        status = derive_grant_fee_task_state(task)
+        if status_filter and status != status_filter:
+            continue
+        projected_items.append(_serialize_grant_fee_task_list_item(task, state=status))
+
+    total = len(projected_items)
+    safe_page = max(int(page or 1), 1)
+    safe_page_size = max(int(page_size or 20), 1)
+    start = (safe_page - 1) * safe_page_size
+    end = start + safe_page_size
+    return {
+        "items": projected_items[start:end],
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total": total,
     }
 
 
@@ -135,4 +195,20 @@ def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict
         "notice_sent": bool(task.notice_sent),
         "is_overdue": bool(task.is_overdue),
         "allowed_actions": list(_STATE_ALLOWED_ACTIONS[state]),
+    }
+
+
+def _serialize_grant_fee_task_list_item(task: T_GrantFeeTask, *, state: str) -> dict[str, Any]:
+    return {
+        "task_id": task.id,
+        "case_id": task.case_id,
+        "status": state,
+        "due_date": task.due_date,
+        "client_instruction": (task.client_instruction or "NONE").strip().upper() or "NONE",
+        "gov_fee_amt": task.gov_fee_amt,
+        "service_fee_amt": task.service_fee_amt,
+        "currency": task.currency,
+        "draft_generated": bool(task.draft_generated),
+        "notice_sent": bool(task.notice_sent),
+        "is_overdue": bool(task.is_overdue),
     }

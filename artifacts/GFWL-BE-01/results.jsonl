@@ -1,0 +1,4 @@
+{"ts":"20260330T224215","step":"lint","rc":0,"log":"artifacts/GFWL-BE-01/outputs/20260330T224215_lint.log"}
+{"ts":"20260330T224219","step":"test","rc":0,"log":"artifacts/GFWL-BE-01/outputs/20260330T224219_test.log"}
+{"ts":"20260330T224224","step":"gate","rc":1,"log":"artifacts/GFWL-BE-01/outputs/20260330T224224_gate.log"}
+{"ts":"20260330T224242","step":"gate","rc":0,"log":"artifacts/GFWL-BE-01/outputs/20260330T224242_gate.log"}

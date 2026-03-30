@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -28,3 +31,26 @@ class GrantFeeTaskStateOut(BaseModel):
     notice_sent: bool
     is_overdue: bool
     allowed_actions: list[str] = Field(default_factory=list)
+
+
+class GrantFeeTaskListItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    task_id: str
+    case_id: str
+    status: str
+    due_date: date
+    client_instruction: str
+    gov_fee_amt: Decimal
+    service_fee_amt: Decimal
+    currency: str
+    draft_generated: bool
+    notice_sent: bool
+    is_overdue: bool
+
+
+class GrantFeeTaskListResponse(BaseModel):
+    items: list[GrantFeeTaskListItemResponse]
+    page: int
+    page_size: int
+    total: int

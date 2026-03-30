@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_perm
 from app.db.session import get_db
 from app.modules.grant_fees.schemas import (
+    GrantFeeTaskListResponse,
     GrantFeeTaskModuleOut,
     GrantFeeTaskStateActionIn,
     GrantFeeTaskStateOut,
@@ -14,6 +17,7 @@ from app.modules.grant_fees.service import (
     apply_grant_fee_task_action,
     get_grant_fee_module_contract,
     get_grant_fee_task_state,
+    list_grant_fee_tasks,
 )
 
 router = APIRouter()
@@ -35,6 +39,38 @@ def post_grant_fee_tasks(
 ) -> GrantFeeTaskModuleOut:
     _ = db
     return GrantFeeTaskModuleOut.model_validate(get_grant_fee_module_contract())
+
+
+@router.get("/grant-fee-tasks/list", summary="List grant fee tasks")
+def list_grant_fee_tasks_endpoint(
+    status: str | None = Query(default=None),
+    client_instruction: str | None = Query(default=None),
+    draft_generated: bool | None = Query(default=None),
+    is_overdue: bool | None = Query(default=None),
+    case_id: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _perm: None = Depends(require_perm("GrantFeeTask.Read")),
+    db: Session = Depends(get_db),
+) -> GrantFeeTaskListResponse:
+    return GrantFeeTaskListResponse.model_validate(
+        list_grant_fee_tasks(
+            db,
+            filters={
+                "status": status,
+                "client_instruction": client_instruction,
+                "draft_generated": draft_generated,
+                "is_overdue": is_overdue,
+                "case_id": case_id,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
 @router.get("/grant-fee-tasks/{task_id}/state", summary="Get grant fee task state")

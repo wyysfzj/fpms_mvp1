@@ -51,6 +51,7 @@ export const MENU_GROUPS: MenuGroup[] = [
         label: '财务',
         children: [
             { key: 'fees', label: '费用草稿', icon: '💰', route: '/fees/drafts', requiredPerms: [Perms.FEES_READ] },
+            { key: 'grant_fee_tasks', label: '授权费任务', icon: '🧾', route: '/grant-fee/tasks', requiredPerms: ['GrantFeeTask.Read'] },
             { key: 'fee_management_pay_lists', label: '官费清单', icon: '📑', route: '/fee-management/pay-lists', requiredPerms: [Perms.BILLING_WRITE] },
             { key: 'bills', label: '账单管理', icon: '🧾', route: '/billing/bills', requiredPerms: [Perms.BILLING_READ] },
             { key: 'payments', label: '回款与核销', icon: '💳', route: '/billing/payments', requiredPerms: [Perms.BILLING_READ] },

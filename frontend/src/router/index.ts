@@ -72,6 +72,13 @@ const routes = [
         component: () => import('../modules/annuity/pages/GovPaymentCreate.vue'),
       },
 
+      // Grant Fee
+      {
+        path: 'grant-fee/tasks',
+        name: 'grant_fee_tasks',
+        component: () => import('../modules/grantFees/pages/GrantFeeTaskList.vue'),
+      },
+
       // Fees
       { path: 'fees/drafts', name: 'fee_drafts', component: () => import('../modules/fees/pages/FeeDraftList.vue') },
       { path: 'fees/drafts/new', name: 'fee_draft_new', component: () => import('../modules/fees/pages/FeeDraftCreate.vue') },

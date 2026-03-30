@@ -1,0 +1,4 @@
+{"ts":"20260330T224215","step":"lint","cmd":"python3 -m ruff check backend/app/modules/grant_fees/api.py backend/app/modules/grant_fees/schemas.py backend/app/modules/grant_fees/service.py backend/tests/test_grant_fee_worklist_api.py"}
+{"ts":"20260330T224219","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_grant_fee_worklist_api.py"}
+{"ts":"20260330T224224","step":"gate","cmd":"./scripts/task_validate.sh GFWL-BE-01"}
+{"ts":"20260330T224242","step":"gate","cmd":"./scripts/task_validate.sh GFWL-BE-01"}

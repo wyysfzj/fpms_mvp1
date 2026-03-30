@@ -1,0 +1,565 @@
+diff --git a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+index a475de8..b3afbdb 100644
+--- a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
++++ b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+@@ -47,9 +47,7 @@ def upgrade() -> None:
+         sa.Column("created_by", sa.String(36), nullable=True),
+         sa.Column("updated_by", sa.String(36), nullable=True),
+     )
+-    op.create_index(
+-        "ix_t_commission_settlement_status", "t_commission_settlement", ["status"]
+-    )
++    op.create_index("ix_t_commission_settlement_status", "t_commission_settlement", ["status"])
+     op.create_index(
+         "ix_t_commission_settlement_settle_date", "t_commission_settlement", ["settle_date"]
+     )
+@@ -71,9 +69,7 @@ def upgrade() -> None:
+         ),
+         sa.Column("line_no", sa.Integer(), nullable=False, server_default=sa.text("1")),
+         sa.Column("amount", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
+-        sa.Column(
+-            "status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")
+-        ),
++        sa.Column("status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")),
+         sa.Column("remark", sa.Text(), nullable=True),
+         sa.Column(
+             "created_at",
+diff --git a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+index 813d25a..290f4e9 100644
+--- a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+@@ -6,6 +6,7 @@ Create Date: 2026-03-25
+ 
+ Add 6 columns to t_annuity_task and 1 column to t_case (first_annuity_year).
+ """
++
+ from __future__ import annotations
+ 
+ import sqlalchemy as sa
+@@ -44,9 +45,7 @@ def upgrade() -> None:
+         existing_case = {col["name"] for col in insp.get_columns("t_case")}
+         if "first_annuity_year" not in existing_case:
+             with op.batch_alter_table("t_case") as batch_op:
+-                batch_op.add_column(
+-                    sa.Column("first_annuity_year", sa.Integer(), nullable=True)
+-                )
++                batch_op.add_column(sa.Column("first_annuity_year", sa.Integer(), nullable=True))
+ 
+ 
+ def downgrade() -> None:
+diff --git a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+index 685c45a..c90eb2e 100644
+--- a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+@@ -6,6 +6,7 @@ Create Date: 2026-03-24
+ 
+ Add 4 columns to t_case_receipt: fee_name, due_date, is_prepayment, remark.
+ """
++
+ from __future__ import annotations
+ 
+ import sqlalchemy as sa
+diff --git a/backend/app/modules/annuity/models.py b/backend/app/modules/annuity/models.py
+index 5d1f089..aabe939 100644
+--- a/backend/app/modules/annuity/models.py
++++ b/backend/app/modules/annuity/models.py
+@@ -102,7 +102,15 @@ class AnnuityTask(Base):
+     service_fee_amt: Mapped[Decimal | None] = mapped_column(
+         Numeric(18, 2), nullable=True, server_default=text("0")
+     )
+-    notify_count: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
+-    pay_next_year: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+-    draft_generated: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+-    notice_sent: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
++    notify_count: Mapped[int | None] = mapped_column(
++        Integer, nullable=True, server_default=text("0")
++    )
++    pay_next_year: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
++    draft_generated: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
++    notice_sent: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
+diff --git a/backend/app/modules/commission/models.py b/backend/app/modules/commission/models.py
+index 4a22cf8..dac84e9 100644
+--- a/backend/app/modules/commission/models.py
++++ b/backend/app/modules/commission/models.py
+@@ -29,8 +29,12 @@ class CommissionRule(Base):
+     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     flow_dir: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     patent_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
+-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s1_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
++    s2_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s1_fixed_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+@@ -65,13 +69,19 @@ class Commission(Base):
+         Integer, ForeignKey("t_commission_rule.id", ondelete="SET NULL"), nullable=True
+     )
+     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+-    base_fee: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
+-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    base_fee: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    s1_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s1_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+     s1_done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s2_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s2_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+@@ -122,9 +132,7 @@ class CommissionSettleLine(Base):
+     __tablename__ = "t_commission_settle_line"
+     __table_args__ = (
+         UniqueConstraint("settlement_id", "line_no", name="uq_t_comm_settle_line_no"),
+-        UniqueConstraint(
+-            "settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"
+-        ),
++        UniqueConstraint("settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"),
+     )
+ 
+     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+diff --git a/backend/app/modules/expenses/models.py b/backend/app/modules/expenses/models.py
+index 09d291b..f2e4001 100644
+--- a/backend/app/modules/expenses/models.py
++++ b/backend/app/modules/expenses/models.py
+@@ -26,11 +26,11 @@ class Expense(Base):
+     vendor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+     expense_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+     currency: Mapped[str] = mapped_column(String(8), nullable=False, server_default=text("'CNY'"))
+-    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
+-    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+-    status: Mapped[str] = mapped_column(
+-        String(24), nullable=False, server_default=text("'DRAFT'")
++    amount: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
+     )
++    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
++    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'DRAFT'"))
+     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+diff --git a/backend/app/modules/grant_fees/api.py b/backend/app/modules/grant_fees/api.py
+index a13d5d5..4090949 100644
+--- a/backend/app/modules/grant_fees/api.py
++++ b/backend/app/modules/grant_fees/api.py
+@@ -1,11 +1,14 @@
+ from __future__ import annotations
+ 
+-from fastapi import APIRouter, Depends
++from datetime import date
++
++from fastapi import APIRouter, Depends, Query
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import require_perm
+ from app.db.session import get_db
+ from app.modules.grant_fees.schemas import (
++    GrantFeeTaskListResponse,
+     GrantFeeTaskModuleOut,
+     GrantFeeTaskStateActionIn,
+     GrantFeeTaskStateOut,
+@@ -14,6 +17,7 @@ from app.modules.grant_fees.service import (
+     apply_grant_fee_task_action,
+     get_grant_fee_module_contract,
+     get_grant_fee_task_state,
++    list_grant_fee_tasks,
+ )
+ 
+ router = APIRouter()
+@@ -37,6 +41,38 @@ def post_grant_fee_tasks(
+     return GrantFeeTaskModuleOut.model_validate(get_grant_fee_module_contract())
+ 
+ 
++@router.get("/grant-fee-tasks/list", summary="List grant fee tasks")
++def list_grant_fee_tasks_endpoint(
++    status: str | None = Query(default=None),
++    client_instruction: str | None = Query(default=None),
++    draft_generated: bool | None = Query(default=None),
++    is_overdue: bool | None = Query(default=None),
++    case_id: str | None = Query(default=None),
++    date_from: date | None = Query(default=None),
++    date_to: date | None = Query(default=None),
++    page: int = Query(default=1, ge=1),
++    page_size: int = Query(default=20, ge=1, le=100),
++    _perm: None = Depends(require_perm("GrantFeeTask.Read")),
++    db: Session = Depends(get_db),
++) -> GrantFeeTaskListResponse:
++    return GrantFeeTaskListResponse.model_validate(
++        list_grant_fee_tasks(
++            db,
++            filters={
++                "status": status,
++                "client_instruction": client_instruction,
++                "draft_generated": draft_generated,
++                "is_overdue": is_overdue,
++                "case_id": case_id,
++                "date_from": date_from,
++                "date_to": date_to,
++            },
++            page=page,
++            page_size=page_size,
++        )
++    )
++
++
+ @router.get("/grant-fee-tasks/{task_id}/state", summary="Get grant fee task state")
+ def get_grant_fee_task_state_endpoint(
+     task_id: str,
+diff --git a/backend/app/modules/grant_fees/schemas.py b/backend/app/modules/grant_fees/schemas.py
+index 5fda5c8..4ca421e 100644
+--- a/backend/app/modules/grant_fees/schemas.py
++++ b/backend/app/modules/grant_fees/schemas.py
+@@ -1,5 +1,8 @@
+ from __future__ import annotations
+ 
++from datetime import date
++from decimal import Decimal
++
+ from pydantic import BaseModel, ConfigDict, Field
+ 
+ 
+@@ -28,3 +31,26 @@ class GrantFeeTaskStateOut(BaseModel):
+     notice_sent: bool
+     is_overdue: bool
+     allowed_actions: list[str] = Field(default_factory=list)
++
++
++class GrantFeeTaskListItemResponse(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    task_id: str
++    case_id: str
++    status: str
++    due_date: date
++    client_instruction: str
++    gov_fee_amt: Decimal
++    service_fee_amt: Decimal
++    currency: str
++    draft_generated: bool
++    notice_sent: bool
++    is_overdue: bool
++
++
++class GrantFeeTaskListResponse(BaseModel):
++    items: list[GrantFeeTaskListItemResponse]
++    page: int
++    page_size: int
++    total: int
+diff --git a/backend/app/modules/grant_fees/service.py b/backend/app/modules/grant_fees/service.py
+index c64ea96..2517fb8 100644
+--- a/backend/app/modules/grant_fees/service.py
++++ b/backend/app/modules/grant_fees/service.py
+@@ -2,7 +2,7 @@ from __future__ import annotations
+ 
+ from typing import Any
+ 
+-from sqlalchemy import select
++from sqlalchemy import and_, select
+ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+@@ -44,6 +44,66 @@ def get_grant_fee_module_contract() -> dict[str, object]:
+     }
+ 
+ 
++def list_grant_fee_tasks(
++    db: Session,
++    *,
++    filters: dict[str, Any],
++    page: int,
++    page_size: int,
++) -> dict[str, Any]:
++    stmt = select(T_GrantFeeTask)
++    predicates = []
++
++    case_id = str(filters.get("case_id") or "").strip()
++    if case_id:
++        predicates.append(T_GrantFeeTask.case_id == case_id)
++
++    client_instruction = str(filters.get("client_instruction") or "").strip().upper()
++    if client_instruction:
++        predicates.append(T_GrantFeeTask.client_instruction == client_instruction)
++
++    if filters.get("draft_generated") is not None:
++        predicates.append(T_GrantFeeTask.draft_generated.is_(bool(filters["draft_generated"])))
++
++    if filters.get("is_overdue") is not None:
++        predicates.append(T_GrantFeeTask.is_overdue.is_(bool(filters["is_overdue"])))
++
++    date_from = filters.get("date_from")
++    if date_from is not None:
++        predicates.append(T_GrantFeeTask.due_date >= date_from)
++
++    date_to = filters.get("date_to")
++    if date_to is not None:
++        predicates.append(T_GrantFeeTask.due_date <= date_to)
++
++    if predicates:
++        stmt = stmt.where(and_(*predicates))
++
++    stmt = stmt.order_by(T_GrantFeeTask.due_date.asc(), T_GrantFeeTask.id.asc())
++
++    tasks = list(db.execute(stmt).scalars().all())
++    projected_items = []
++    status_filter = str(filters.get("status") or "").strip().upper()
++
++    for task in tasks:
++        status = derive_grant_fee_task_state(task)
++        if status_filter and status != status_filter:
++            continue
++        projected_items.append(_serialize_grant_fee_task_list_item(task, state=status))
++
++    total = len(projected_items)
++    safe_page = max(int(page or 1), 1)
++    safe_page_size = max(int(page_size or 20), 1)
++    start = (safe_page - 1) * safe_page_size
++    end = start + safe_page_size
++    return {
++        "items": projected_items[start:end],
++        "page": safe_page,
++        "page_size": safe_page_size,
++        "total": total,
++    }
++
++
+ def _load_grant_fee_task(db: Session, *, task_id: str) -> T_GrantFeeTask:
+     task = db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.id == task_id)).scalar_one_or_none()
+     if task is None:
+@@ -136,3 +196,19 @@ def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict
+         "is_overdue": bool(task.is_overdue),
+         "allowed_actions": list(_STATE_ALLOWED_ACTIONS[state]),
+     }
++
++
++def _serialize_grant_fee_task_list_item(task: T_GrantFeeTask, *, state: str) -> dict[str, Any]:
++    return {
++        "task_id": task.id,
++        "case_id": task.case_id,
++        "status": state,
++        "due_date": task.due_date,
++        "client_instruction": (task.client_instruction or "NONE").strip().upper() or "NONE",
++        "gov_fee_amt": task.gov_fee_amt,
++        "service_fee_amt": task.service_fee_amt,
++        "currency": task.currency,
++        "draft_generated": bool(task.draft_generated),
++        "notice_sent": bool(task.notice_sent),
++        "is_overdue": bool(task.is_overdue),
++    }
+diff --git a/backend/tests/test_annuity_generate.py b/backend/tests/test_annuity_generate.py
+index 21ae97c..577fd45 100644
+--- a/backend/tests/test_annuity_generate.py
++++ b/backend/tests/test_annuity_generate.py
+@@ -1,8 +1,8 @@
+ """Tests for AnnuityTask multi-year generation (FR-FE-06)."""
++
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
+-from decimal import Decimal
+ from uuid import uuid4
+ 
+ import pytest
+@@ -29,7 +29,9 @@ def client_id(client: TestClient, auth_headers: dict) -> str:
+ 
+ 
+ @pytest.fixture
+-def granted_case_id(client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker) -> str:
++def granted_case_id(
++    client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker
++) -> str:
+     resp = client.post(
+         "/api/v1/cases",
+         json={
+@@ -115,7 +117,10 @@ def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
+ 
+ # --- GENERATE ---
+ 
+-def test_generate_annuity_tasks_success(client: TestClient, auth_headers: dict, granted_case_id: str):
++
++def test_generate_annuity_tasks_success(
++    client: TestClient, auth_headers: dict, granted_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": granted_case_id},
+@@ -136,7 +141,9 @@ def test_generate_case_not_found(client: TestClient, auth_headers: dict):
+     assert resp.status_code == 404
+ 
+ 
+-def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_granted_case_id: str):
++def test_generate_case_not_granted(
++    client: TestClient, auth_headers: dict, not_granted_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": not_granted_case_id},
+@@ -145,7 +152,9 @@ def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_g
+     assert resp.status_code == 400
+ 
+ 
+-def test_generate_no_first_annuity_year(client: TestClient, auth_headers: dict, granted_no_year_case_id: str):
++def test_generate_no_first_annuity_year(
++    client: TestClient, auth_headers: dict, granted_no_year_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": granted_no_year_case_id},
+@@ -173,7 +182,9 @@ def test_generate_idempotent(client: TestClient, auth_headers: dict, granted_cas
+     assert resp2.json()["tasks_skipped"] == created_first
+ 
+ 
+-def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, granted_case_id: str):
++def test_generate_prefills_fee_amounts(
++    client: TestClient, auth_headers: dict, granted_case_id: str
++):
+     _seed_annuity_rates(client, auth_headers)
+ 
+     # Re-generate (delete old tasks first via direct DB or just use new case)
+@@ -201,6 +212,7 @@ def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, g
+ 
+ # --- LIST NEW FIELDS ---
+ 
++
+ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, granted_case_id: str):
+     client.post(
+         "/api/v1/annuity/tasks/generate",
+@@ -212,12 +224,21 @@ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, grante
+     items = resp.json()["items"]
+     assert len(items) > 0
+     item = items[0]
+-    for field in ("gov_fee_amt", "service_fee_amt", "notify_count", "pay_next_year",
+-                  "draft_generated", "notice_sent", "is_overdue"):
++    for field in (
++        "gov_fee_amt",
++        "service_fee_amt",
++        "notify_count",
++        "pay_next_year",
++        "draft_generated",
++        "notice_sent",
++        "is_overdue",
++    ):
+         assert field in item, f"Missing field: {field}"
+ 
+ 
+-def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++def test_list_is_overdue_computed(
++    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
++):
+     with session_factory() as db:
+         task = AnnuityTask(
+             case_id=granted_case_id,
+@@ -240,7 +261,9 @@ def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, grante
+     assert overdue_items[0]["is_overdue"] is True
+ 
+ 
+-def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++def test_list_is_overdue_false_when_done(
++    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
++):
+     with session_factory() as db:
+         task = AnnuityTask(
+             case_id=granted_case_id,
+@@ -265,6 +288,7 @@ def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict,
+ 
+ # --- DRAFT GENERATED FLAG ---
+ 
++
+ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, granted_case_id: str):
+     _seed_annuity_rates(client, auth_headers)
+ 
+@@ -312,6 +336,7 @@ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, grante
+ 
+ # --- PERMISSIONS ---
+ 
++
+ def test_permissions_generate(client: TestClient):
+     resp = client.post("/api/v1/annuity/tasks/generate", json={"case_id": "x"})
+     assert resp.status_code == 401
+diff --git a/backend/tests/test_b2_reply_chain.py b/backend/tests/test_b2_reply_chain.py
+index 8e4549b..b2f5ab6 100644
+--- a/backend/tests/test_b2_reply_chain.py
++++ b/backend/tests/test_b2_reply_chain.py
+@@ -575,9 +575,7 @@ def test_document_list_includes_reply_fields(client: TestClient, auth_headers: d
+         assert "reply_date" in item, "List item must include reply_date"
+ 
+ 
+-def test_document_list_can_filter_by_reply_state(
+-    client: TestClient, auth_headers: dict
+-) -> None:
++def test_document_list_can_filter_by_reply_state(client: TestClient, auth_headers: dict) -> None:
+     """GET /documents supports need_reply/replied filters for Batch 2 query scope."""
+     case = _create_case(client, auth_headers)
+     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
+diff --git a/backend/tests/test_case_receipt_crud.py b/backend/tests/test_case_receipt_crud.py
+index 025bbc8..f322e0d 100644
+--- a/backend/tests/test_case_receipt_crud.py
++++ b/backend/tests/test_case_receipt_crud.py
+@@ -1,4 +1,5 @@
+ """Tests for CaseReceipt manual CRUD (FR-FE-07)."""
++
+ from __future__ import annotations
+ 
+ from decimal import Decimal
+@@ -28,6 +29,7 @@ def case_id(client: TestClient, auth_headers: dict) -> str:
+ 
+ # --- CREATE ---
+ 
++
+ def test_create_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
+     resp = client.post(
+         "/api/v1/case-receipts",
+@@ -137,6 +139,7 @@ def test_create_user_override_prepayment(client: TestClient, auth_headers: dict,
+ 
+ # --- UPDATE ---
+ 
++
+ def test_update_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
+     create_resp = client.post(
+         "/api/v1/case-receipts",
+@@ -183,6 +186,7 @@ def test_update_not_found(client: TestClient, auth_headers: dict):
+ 
+ # --- LIST ---
+ 
++
+ def test_list_case_receipts_no_filter(client: TestClient, auth_headers: dict, case_id: str):
+     client.post(
+         "/api/v1/case-receipts",
+@@ -263,8 +267,11 @@ def test_list_pagination(client: TestClient, auth_headers: dict):
+ 
+ # --- PERMISSIONS ---
+ 
++
+ def test_permissions_create(client: TestClient):
+-    resp = client.post("/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"})
++    resp = client.post(
++        "/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"}
++    )
+     assert resp.status_code == 401
+ 
+ 
+@@ -275,6 +282,7 @@ def test_permissions_update(client: TestClient):
+ 
+ # --- INTEGRATION ---
+ 
++
+ def test_manual_receipt_no_conflict_with_auto(client: TestClient, auth_headers: dict, case_id: str):
+     resp = client.post(
+         "/api/v1/case-receipts",
