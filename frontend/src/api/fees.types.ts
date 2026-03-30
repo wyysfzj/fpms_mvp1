@@ -83,6 +83,21 @@ export interface FeeDraftListItem {
     amount: FeeMoney
 }
 
+export interface FeeDraftReportSummary {
+    total_draft_count: number
+    service_fee_amount: FeeMoney
+    government_fee_amount: FeeMoney
+    income_amount: FeeMoney
+}
+
+export interface FeeDraftListResponse {
+    items: FeeDraftListItem[]
+    page: number
+    page_size: number
+    total: number
+    summary: FeeDraftReportSummary
+}
+
 export interface FeeDraftDetail {
     id: string
     case_id: string
@@ -106,6 +121,12 @@ export interface FeeDraftListParams {
     case_id?: string
     client_id?: string
     status?: FeeDraftStatus
+    draft_status?: FeeDraftStatus
+    fee_type?: string
+    currency?: string
+    date_from?: string
+    date_to?: string
+    bill_status?: string
 }
 
 export interface FeeDraftCreatePayload {

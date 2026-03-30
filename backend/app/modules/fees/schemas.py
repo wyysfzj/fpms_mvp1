@@ -53,6 +53,21 @@ class FeeDraftListItemOut(BaseModel):
     amount: Decimal
 
 
+class FeeDraftReportSummaryResponse(BaseModel):
+    total_draft_count: int = 0
+    service_fee_amount: Decimal = Decimal("0")
+    government_fee_amount: Decimal = Decimal("0")
+    income_amount: Decimal = Decimal("0")
+
+
+class FeeDraftReportListResponse(BaseModel):
+    items: list[FeeDraftListItemOut]
+    page: int
+    page_size: int
+    total: int
+    summary: FeeDraftReportSummaryResponse
+
+
 class FeeItemCreateIn(BaseModel):
     rate_id: str
     year_no: int | None = None

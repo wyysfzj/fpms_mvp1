@@ -12,16 +12,108 @@
       </div>
     </div>
 
-    <!-- Filter Bar -->
-    <el-row :gutter="16" style="margin-bottom: 16px">
-      <el-col :span="6">
-        <el-select v-model="filterStatus" placeholder="全部" clearable @change="onFilterChange">
+    <el-form class="filter-form" :inline="true">
+      <el-form-item label="客户编号">
+        <el-input
+          v-model="filters.client_id"
+          class="filter-input"
+          clearable
+          placeholder="请输入客户编号"
+          @keyup.enter="applyFilters"
+        />
+      </el-form-item>
+      <el-form-item label="案件编号">
+        <el-input
+          v-model="filters.case_id"
+          class="filter-input"
+          clearable
+          placeholder="请输入案件编号"
+          @keyup.enter="applyFilters"
+        />
+      </el-form-item>
+      <el-form-item label="费用类型">
+        <el-select
+          v-model="filters.fee_type"
+          class="filter-select"
+          clearable
+          placeholder="全部费用类型"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="服务费" value="SERVICE" />
+          <el-option label="官费" value="GOV" />
+          <el-option label="杂费" value="MISC" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="币种">
+        <el-input
+          v-model="filters.currency"
+          class="filter-input"
+          clearable
+          placeholder="例如 CNY"
+          @keyup.enter="applyFilters"
+        />
+      </el-form-item>
+      <el-form-item label="草稿日期">
+        <el-date-picker
+          v-model="filters.date_range"
+          class="filter-range"
+          clearable
+          end-placeholder="结束日期"
+          range-separator="至"
+          start-placeholder="开始日期"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+        />
+      </el-form-item>
+      <el-form-item label="草稿状态">
+        <el-select
+          v-model="filters.draft_status"
+          class="filter-select"
+          clearable
+          placeholder="全部草稿状态"
+        >
           <el-option label="全部" value="" />
           <el-option label="开放" value="OPEN" />
           <el-option label="已锁定" value="LOCKED" />
         </el-select>
-      </el-col>
-    </el-row>
+      </el-form-item>
+      <el-form-item label="账单状态">
+        <el-select
+          v-model="filters.bill_status"
+          class="filter-select"
+          clearable
+          placeholder="全部账单状态"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="未结清" value="UNSETTLED" />
+          <el-option label="部分结清" value="PARTIALLY_SETTLED" />
+          <el-option label="已结清" value="SETTLED" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="applyFilters">查询</el-button>
+        <el-button @click="resetFilters">重置</el-button>
+      </el-form-item>
+    </el-form>
+
+    <div class="report-summary">
+      <div class="summary-card">
+        <span class="summary-label">草稿数量</span>
+        <span class="summary-value">{{ summary.total_draft_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">服务费总额</span>
+        <span class="summary-value amount">{{ formatAmount(summary.service_fee_amount, summaryCurrency) }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">官费总额</span>
+        <span class="summary-value amount">{{ formatAmount(summary.government_fee_amount, summaryCurrency) }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">草稿总收入</span>
+        <span class="summary-value amount">{{ formatAmount(summary.income_amount, summaryCurrency) }}</span>
+      </div>
+    </div>
 
     <div v-if="error" class="page-error">
       <ApiErrorBanner :error="error" @dismiss="error = null" />
@@ -105,10 +197,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getFeeDrafts } from '../../../api/fees'
-import type { FeeDraftListItem, FeeDraftStatus, FeeMoney } from '../../../api/fees.types'
+import type { FeeDraftListItem, FeeDraftReportSummary, FeeDraftStatus, FeeMoney } from '../../../api/fees.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
@@ -125,23 +217,79 @@ const error = ref<ApiError | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const filterStatus = ref<'' | FeeDraftStatus>('')
+const filters = reactive<{
+  client_id: string
+  case_id: string
+  fee_type: string
+  currency: string
+  draft_status: '' | FeeDraftStatus
+  bill_status: string
+  date_range: [string, string] | []
+}>({
+  client_id: '',
+  case_id: '',
+  fee_type: '',
+  currency: '',
+  draft_status: '',
+  bill_status: '',
+  date_range: [],
+})
+const summary = ref<FeeDraftReportSummary>({
+  total_draft_count: 0,
+  service_fee_amount: 0,
+  government_fee_amount: 0,
+  income_amount: 0,
+})
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+const summaryCurrency = computed(() => filters.currency || drafts.value[0]?.currency || 'CNY')
 
-function onFilterChange() {
+function applyFilters() {
   page.value = 1
   fetchDrafts()
+}
+
+function resetFilters() {
+  filters.client_id = ''
+  filters.case_id = ''
+  filters.fee_type = ''
+  filters.currency = ''
+  filters.draft_status = ''
+  filters.bill_status = ''
+  filters.date_range = []
+  applyFilters()
 }
 
 async function fetchDrafts() {
   loading.value = true
   error.value = null
   try {
-    const result = await getFeeDrafts({ page: page.value, page_size: pageSize.value, status: filterStatus.value || undefined })
+    const [date_from, date_to] = filters.date_range
+    const result = await getFeeDrafts({
+      page: page.value,
+      page_size: pageSize.value,
+      client_id: filters.client_id || undefined,
+      case_id: filters.case_id || undefined,
+      fee_type: filters.fee_type || undefined,
+      currency: filters.currency || undefined,
+      draft_status: filters.draft_status || undefined,
+      status: filters.draft_status || undefined,
+      bill_status: filters.bill_status || undefined,
+      date_from,
+      date_to,
+    })
     drafts.value = result.items
     total.value = result.total
+    summary.value = result.summary
   } catch (err) {
     error.value = err as ApiError
+    drafts.value = []
+    total.value = 0
+    summary.value = {
+      total_draft_count: 0,
+      service_fee_amount: 0,
+      government_fee_amount: 0,
+      income_amount: 0,
+    }
   } finally {
     loading.value = false
   }
@@ -203,6 +351,46 @@ onMounted(() => {
 <style scoped>
 .text-muted {
   color: var(--text-sub);
+}
+
+.filter-form {
+  margin-bottom: 16px;
+}
+
+.filter-input,
+.filter-select {
+  width: 180px;
+}
+
+.filter-range {
+  width: 260px;
+}
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.summary-label {
+  color: var(--text-sub);
+  font-size: 13px;
+}
+
+.summary-value {
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .id-value {

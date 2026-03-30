@@ -5,7 +5,9 @@ import type {
     FeeDraftCreatePayload,
     FeeDraftDetail,
     FeeDraftListItem,
+    FeeDraftListResponse,
     FeeDraftListParams,
+    FeeDraftReportSummary,
     FeeDraftUpdatePayload,
     FeeItem,
     FeeItemCreatePayload,
@@ -55,6 +57,17 @@ interface BackendFeeDraftListItem {
     currency: string
     status: 'OPEN' | 'LOCKED'
     amount: string | number
+}
+
+interface BackendFeeDraftReportSummary {
+    total_draft_count: number
+    service_fee_amount: string | number
+    government_fee_amount: string | number
+    income_amount: string | number
+}
+
+interface BackendFeeDraftListResponse extends Pagination<BackendFeeDraftListItem> {
+    summary: BackendFeeDraftReportSummary
 }
 
 interface BackendFeeDraftDetail {
@@ -136,6 +149,15 @@ function mapFeeDraftDetail(input: BackendFeeDraftDetail): FeeDraftDetail {
         amount: input.amount != null ? Number(input.amount) : undefined,
         created_at: input.created_at,
         updated_at: input.updated_at,
+    }
+}
+
+function mapFeeDraftReportSummary(input: BackendFeeDraftReportSummary): FeeDraftReportSummary {
+    return {
+        total_draft_count: Number(input.total_draft_count || 0),
+        service_fee_amount: Number(input.service_fee_amount || 0),
+        government_fee_amount: Number(input.government_fee_amount || 0),
+        income_amount: Number(input.income_amount || 0),
     }
 }
 
@@ -230,14 +252,39 @@ export async function updateFeeRate(id: string, data: FeeRateUpdatePayload): Pro
  */
 export async function getFeeDrafts(
     params: FeeDraftListParams = {},
-): Promise<Pagination<FeeDraftListItem>> {
-    const { page = 1, page_size = 20, case_id, client_id, status } = params
-    const response = await http.get<Pagination<BackendFeeDraftListItem>>('/fees/drafts', {
-        params: { page, page_size, case_id, client_id, status }
+): Promise<FeeDraftListResponse> {
+    const {
+        page = 1,
+        page_size = 20,
+        case_id,
+        client_id,
+        status,
+        draft_status,
+        fee_type,
+        currency,
+        date_from,
+        date_to,
+        bill_status,
+    } = params
+    const response = await http.get<BackendFeeDraftListResponse>('/fees/drafts', {
+        params: {
+            page,
+            page_size,
+            case_id,
+            client_id,
+            status,
+            draft_status,
+            fee_type,
+            currency,
+            date_from,
+            date_to,
+            bill_status,
+        }
     })
     return {
         ...response.data,
         items: response.data.items.map(mapFeeDraftListItem),
+        summary: mapFeeDraftReportSummary(response.data.summary),
     }
 }
 

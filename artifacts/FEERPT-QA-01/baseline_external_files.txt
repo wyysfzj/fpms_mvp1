@@ -1,0 +1,24 @@
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/expenses/models.py
+M  backend/app/modules/fees/api.py
+M  backend/app/modules/fees/schemas.py
+M  backend/app/modules/fees/service.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+A  backend/tests/test_fee_report.py
+ M frontend/src/api/fees.ts
+ M frontend/src/api/fees.types.ts
+ M frontend/src/modules/fees/pages/FeeDraftList.vue
+?? .superpowers/
+?? docs/superpowers/plans/2026-03-30-fee-statistics-report.md
+?? docs/superpowers/plans/2026-03-30-reports-program-decomposition.md
+?? docs/superpowers/specs/2026-03-30-fee-statistics-report-design.md
+?? docs/superpowers/specs/2026-03-30-reports-program-decomposition-design.md
+?? tasks/postenhancement/backend/FEERPT-BE-01.md
+?? tasks/postenhancement/backend/FEERPT-QA-01.md
+?? tasks/postenhancement/frontend/FEERPT-FE-01.md

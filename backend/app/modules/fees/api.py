@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -16,6 +17,8 @@ from app.modules.fees.schemas import (
     FeeDraftCreateIn,
     FeeDraftListItemOut,
     FeeDraftOut,
+    FeeDraftReportListResponse,
+    FeeDraftReportSummaryResponse,
     FeeItemCreateIn,
     FeeItemOut,
     FeeItemUpdateIn,
@@ -64,10 +67,16 @@ def get_fee_drafts(
     page_size: int = Query(default=20, ge=1, le=100),
     case_id: str | None = Query(default=None),
     client_id: str | None = Query(default=None),
+    fee_type: str | None = Query(default=None),
+    currency: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    draft_status: str | None = Query(default=None),
+    bill_status: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
     _perm: None = Depends(require_perm("Fee.Read")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> FeeDraftReportListResponse:
     """
     List fee drafts with filters and pagination.
 
@@ -89,9 +98,15 @@ def get_fee_drafts(
     filters = {
         "case_id": case_id,
         "client_id": client_id,
+        "fee_type": fee_type,
+        "currency": currency,
+        "date_from": date_from,
+        "date_to": date_to,
+        "draft_status": draft_status,
+        "bill_status": bill_status,
         "status": status_filter,
     }
-    drafts, total = list_fee_drafts(db, filters=filters, page=page, page_size=page_size)
+    drafts, total, summary = list_fee_drafts(db, filters=filters, page=page, page_size=page_size)
     case_no_map = _build_case_no_map(db, {draft.case_id for draft in drafts if draft.case_id})
     client_name_map = _build_client_name_map(
         db, {draft.client_id for draft in drafts if draft.client_id}
@@ -109,7 +124,13 @@ def get_fee_drafts(
         )
         for draft in drafts
     ]
-    return {"items": items, "page": page, "page_size": page_size, "total": total}
+    return FeeDraftReportListResponse(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        summary=FeeDraftReportSummaryResponse.model_validate(summary),
+    )
 
 
 @router.post(

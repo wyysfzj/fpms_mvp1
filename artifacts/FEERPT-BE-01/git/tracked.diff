@@ -1,0 +1,283 @@
+diff --git a/backend/app/modules/fees/api.py b/backend/app/modules/fees/api.py
+index 146071a..f7717e6 100644
+--- a/backend/app/modules/fees/api.py
++++ b/backend/app/modules/fees/api.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++from datetime import date
+ from typing import Any
+ 
+ from fastapi import APIRouter, Depends, Query, Response, status
+@@ -16,6 +17,8 @@ from app.modules.fees.schemas import (
+     FeeDraftCreateIn,
+     FeeDraftListItemOut,
+     FeeDraftOut,
++    FeeDraftReportListResponse,
++    FeeDraftReportSummaryResponse,
+     FeeItemCreateIn,
+     FeeItemOut,
+     FeeItemUpdateIn,
+@@ -64,10 +67,16 @@ def get_fee_drafts(
+     page_size: int = Query(default=20, ge=1, le=100),
+     case_id: str | None = Query(default=None),
+     client_id: str | None = Query(default=None),
++    fee_type: str | None = Query(default=None),
++    currency: str | None = Query(default=None),
++    date_from: date | None = Query(default=None),
++    date_to: date | None = Query(default=None),
++    draft_status: str | None = Query(default=None),
++    bill_status: str | None = Query(default=None),
+     status_filter: str | None = Query(default=None, alias="status"),
+     _perm: None = Depends(require_perm("Fee.Read")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
++) -> FeeDraftReportListResponse:
+     """
+     List fee drafts with filters and pagination.
+ 
+@@ -89,9 +98,15 @@ def get_fee_drafts(
+     filters = {
+         "case_id": case_id,
+         "client_id": client_id,
++        "fee_type": fee_type,
++        "currency": currency,
++        "date_from": date_from,
++        "date_to": date_to,
++        "draft_status": draft_status,
++        "bill_status": bill_status,
+         "status": status_filter,
+     }
+-    drafts, total = list_fee_drafts(db, filters=filters, page=page, page_size=page_size)
++    drafts, total, summary = list_fee_drafts(db, filters=filters, page=page, page_size=page_size)
+     case_no_map = _build_case_no_map(db, {draft.case_id for draft in drafts if draft.case_id})
+     client_name_map = _build_client_name_map(
+         db, {draft.client_id for draft in drafts if draft.client_id}
+@@ -109,7 +124,13 @@ def get_fee_drafts(
+         )
+         for draft in drafts
+     ]
+-    return {"items": items, "page": page, "page_size": page_size, "total": total}
++    return FeeDraftReportListResponse(
++        items=items,
++        page=page,
++        page_size=page_size,
++        total=total,
++        summary=FeeDraftReportSummaryResponse.model_validate(summary),
++    )
+ 
+ 
+ @router.post(
+diff --git a/backend/app/modules/fees/schemas.py b/backend/app/modules/fees/schemas.py
+index b5b1a8c..9d9cde3 100644
+--- a/backend/app/modules/fees/schemas.py
++++ b/backend/app/modules/fees/schemas.py
+@@ -53,6 +53,21 @@ class FeeDraftListItemOut(BaseModel):
+     amount: Decimal
+ 
+ 
++class FeeDraftReportSummaryResponse(BaseModel):
++    total_draft_count: int = 0
++    service_fee_amount: Decimal = Decimal("0")
++    government_fee_amount: Decimal = Decimal("0")
++    income_amount: Decimal = Decimal("0")
++
++
++class FeeDraftReportListResponse(BaseModel):
++    items: list[FeeDraftListItemOut]
++    page: int
++    page_size: int
++    total: int
++    summary: FeeDraftReportSummaryResponse
++
++
+ class FeeItemCreateIn(BaseModel):
+     rate_id: str
+     year_no: int | None = None
+diff --git a/backend/app/modules/fees/service.py b/backend/app/modules/fees/service.py
+index 4fce441..87feb5f 100644
+--- a/backend/app/modules/fees/service.py
++++ b/backend/app/modules/fees/service.py
+@@ -2,6 +2,8 @@ from __future__ import annotations
+ 
+ import json
+ import logging
++from datetime import date as date_type
++from datetime import datetime, timedelta
+ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+ from typing import Any, Literal
+ from uuid import uuid4
+@@ -10,6 +12,7 @@ from sqlalchemy import func, select
+ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
++from app.modules.billing.models import Bill, BillItem
+ from app.modules.cases.models import Case
+ from app.modules.fees.enums import FeeDraftStatus, FeeType
+ from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+@@ -51,6 +54,13 @@ def _normalize_required_text(value: str | None, field_name: str) -> str:
+     return normalized
+ 
+ 
++def _normalize_report_text_filter(value: str | None) -> str | None:
++    if value is None:
++        return None
++    normalized = value.strip().upper()
++    return normalized or None
++
++
+ def _to_decimal(
+     value: Decimal | int | float | str | None,
+     *,
+@@ -83,33 +93,142 @@ def _quantize_quantity(value: Decimal) -> Decimal:
+     return value.quantize(_QTY_QUANT, rounding=ROUND_HALF_UP)
+ 
+ 
++def _draft_report_date_bounds(
++    date_from: date_type | None,
++    date_to: date_type | None,
++) -> tuple[datetime | None, datetime | None]:
++    lower_bound = (
++        datetime.combine(date_from, datetime.min.time()) if date_from is not None else None
++    )
++    upper_bound = (
++        datetime.combine(date_to + timedelta(days=1), datetime.min.time())
++        if date_to is not None
++        else None
++    )
++    return lower_bound, upper_bound
++
++
++def _draft_report_amount_summary(drafts: list[FeeDraft]) -> dict[str, Decimal | int]:
++    return {
++        "total_draft_count": len(drafts),
++        "service_fee_amount": _quantize_money(
++            sum((Decimal(draft.total_service or 0) for draft in drafts), Decimal("0"))
++        ),
++        "government_fee_amount": _quantize_money(
++            sum((Decimal(draft.total_gov or 0) for draft in drafts), Decimal("0"))
++        ),
++        "income_amount": _quantize_money(
++            sum((Decimal(draft.amount or 0) for draft in drafts), Decimal("0"))
++        ),
++    }
++
++
++def _draft_report_matching_ids_by_fee_type(
++    db: Session,
++    *,
++    draft_ids: list[str],
++    fee_type: str,
++) -> set[str]:
++    if not draft_ids:
++        return set()
++    rows = (
++        db.execute(
++            select(FeeItem.draft_id)
++            .where(FeeItem.draft_id.in_(draft_ids))
++            .where(func.upper(FeeItem.fee_type) == fee_type)
++            .distinct()
++        )
++        .scalars()
++        .all()
++    )
++    return set(rows)
++
++
++def _draft_report_matching_ids_by_bill_status(
++    db: Session,
++    *,
++    draft_ids: list[str],
++    bill_status: str,
++) -> set[str]:
++    if not draft_ids:
++        return set()
++    rows = (
++        db.execute(
++            select(BillItem.draft_id)
++            .join(Bill, Bill.id == BillItem.bill_id)
++            .where(BillItem.draft_id.isnot(None))
++            .where(BillItem.draft_id.in_(draft_ids))
++            .where(func.upper(Bill.status) == bill_status)
++            .distinct()
++        )
++        .scalars()
++        .all()
++    )
++    return set(rows)
++
++
+ def list_fee_drafts(
+     db: Session,
+     *,
+     filters: dict[str, Any],
+     page: int,
+     page_size: int,
+-) -> tuple[list[FeeDraft], int]:
++) -> tuple[list[FeeDraft], int, dict[str, Decimal | int]]:
+     stmt = select(FeeDraft)
+ 
+     case_id = filters.get("case_id")
+     client_id = filters.get("client_id")
+-    status = filters.get("status")
++    currency = _normalize_report_text_filter(filters.get("currency"))
++    fee_type = _normalize_report_text_filter(filters.get("fee_type"))
++    bill_status = _normalize_report_text_filter(filters.get("bill_status"))
++    draft_status = _normalize_report_text_filter(filters.get("draft_status"))
++    if draft_status is None:
++        draft_status = _normalize_report_text_filter(filters.get("status"))
++    date_from = filters.get("date_from")
++    date_to = filters.get("date_to")
+ 
+     if case_id:
+         stmt = stmt.where(FeeDraft.case_id == case_id)
+     if client_id:
+         stmt = stmt.where(FeeDraft.client_id == client_id)
+-    if status:
+-        stmt = stmt.where(FeeDraft.status == status)
++    if currency:
++        stmt = stmt.where(func.upper(FeeDraft.currency) == currency)
++    if draft_status:
++        stmt = stmt.where(func.upper(FeeDraft.status) == draft_status)
++
++    if isinstance(date_from, date_type):
++        lower_bound, _ = _draft_report_date_bounds(date_from, None)
++        if lower_bound is not None:
++            stmt = stmt.where(FeeDraft.created_at >= lower_bound)
++    if isinstance(date_to, date_type):
++        _, upper_bound = _draft_report_date_bounds(None, date_to)
++        if upper_bound is not None:
++            stmt = stmt.where(FeeDraft.created_at < upper_bound)
++
++    stmt = stmt.order_by(FeeDraft.updated_at.desc(), FeeDraft.id.desc())
++    drafts = db.execute(stmt).scalars().all()
+ 
+-    count_stmt = select(func.count()).select_from(stmt.subquery())
+-    total = db.execute(count_stmt).scalar_one()
++    if fee_type:
++        matching_ids = _draft_report_matching_ids_by_fee_type(
++            db,
++            draft_ids=[draft.id for draft in drafts],
++            fee_type=fee_type,
++        )
++        drafts = [draft for draft in drafts if draft.id in matching_ids]
+ 
++    if bill_status:
++        matching_ids = _draft_report_matching_ids_by_bill_status(
++            db,
++            draft_ids=[draft.id for draft in drafts],
++            bill_status=bill_status,
++        )
++        drafts = [draft for draft in drafts if draft.id in matching_ids]
++
++    total = len(drafts)
+     offset = (page - 1) * page_size
+-    stmt = stmt.order_by(FeeDraft.updated_at.desc()).offset(offset).limit(page_size)
+-    items = db.execute(stmt).scalars().all()
+-    return items, total
++    items = drafts[offset : offset + page_size]
++    summary = _draft_report_amount_summary(drafts)
++    return items, total, summary
+ 
+ 
+ def get_fee_draft(db: Session, *, draft_id: str) -> FeeDraft:
