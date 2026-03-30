@@ -1,0 +1,2 @@
+{"ts":"20260330T104938","step":"test","cmd":"sh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260330T104938","step":"lint","cmd":"sh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/documents.ts\ src/api/documents.types.ts\ src/modules/documents/pages/DocumentEnvelopePrint.vue\ src/router/index.ts"}

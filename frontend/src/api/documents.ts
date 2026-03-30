@@ -8,6 +8,12 @@ import type {
     DocTemplateListParams,
     DocTemplateUpdatePayload,
     Document,
+    DocumentDispatchCreateIn,
+    DocumentDispatchOut,
+    DocumentDispatchMailingListParams,
+    DocumentEnvelopePreviewOut,
+    DocumentMailingBatchIn,
+    DocumentMailingBatchOut,
     DocumentCreatePayload,
     DocumentListParams,
     DocumentUpdatePayload,
@@ -29,6 +35,8 @@ interface BackendAttachment {
 interface BackendDocument {
     id: string
     case_id?: string | null
+    client_id?: string | null
+    client_name?: string | null
     doc_template_id?: string | null
     direction: 'IN' | 'OUT'
     doc_date?: string | null
@@ -42,6 +50,8 @@ interface BackendDocument {
     need_reply?: boolean | null
     reply_date?: string | null
     case_no?: string | null
+    outgoing_reg_no?: string | null
+    forward_date?: string | null
 }
 
 function mapAttachment(input: BackendAttachment): Attachment {
@@ -58,6 +68,8 @@ function mapDocument(input: BackendDocument): Document {
     return {
         id: input.id,
         case_id: input.case_id || undefined,
+        client_id: input.client_id || undefined,
+        client_name: input.client_name || undefined,
         doc_template_id: input.doc_template_id,
         direction: input.direction,
         doc_date: input.doc_date || undefined,
@@ -70,6 +82,8 @@ function mapDocument(input: BackendDocument): Document {
         need_reply: input.need_reply ?? undefined,
         reply_date: input.reply_date || undefined,
         case_no: input.case_no || undefined,
+        outgoing_reg_no: input.outgoing_reg_no || undefined,
+        forward_date: input.forward_date || undefined,
         attachments: (input.attachments || []).map(mapAttachment),
     }
 }
@@ -166,6 +180,52 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
         ...response.data,
         items: response.data.items.map(mapDocument),
     }
+}
+
+/**
+ * Get candidate outgoing documents for mailing registration workflow
+ */
+export async function getDocumentDispatchMailingCandidates(
+    params: DocumentDispatchMailingListParams = {}
+): Promise<Pagination<Document>> {
+    const { page = 1, page_size = 20, q, client_id, doc_template_id, date_from, date_to } = params
+    return getDocuments({
+        page,
+        page_size,
+        q: q?.trim() || undefined,
+        direction: 'OUT',
+        client_id,
+        doc_template_id,
+        date_from,
+        date_to,
+    })
+}
+
+/**
+ * Batch register outgoing mailing info for selected documents
+ */
+export async function batchRegisterDocumentMailing(
+    data: DocumentMailingBatchIn
+): Promise<DocumentMailingBatchOut> {
+    const response = await http.post<DocumentMailingBatchOut>('/documents/dispatch/mailing/batch-register', data)
+    return response.data
+}
+
+export async function createDocumentDispatch(
+    data: DocumentDispatchCreateIn
+): Promise<DocumentDispatchOut> {
+    const response = await http.post<DocumentDispatchOut>('/documents/dispatches', data)
+    return response.data
+}
+
+export async function getDocumentDispatch(dispatchId: string): Promise<DocumentDispatchOut> {
+    const response = await http.get<DocumentDispatchOut>(`/documents/dispatches/${dispatchId}`)
+    return response.data
+}
+
+export async function getDocumentEnvelopePreview(documentId: string): Promise<DocumentEnvelopePreviewOut> {
+    const response = await http.get<DocumentEnvelopePreviewOut>(`/documents/${documentId}/envelope-preview`)
+    return response.data
 }
 
 /**

@@ -1,0 +1,8 @@
+{"ts":"20260330T103727","step":"lint","cmd":"python3 -m ruff check backend/app/modules/documents/api.py backend/app/modules/documents/schemas.py backend/app/modules/documents/service.py backend/tests/test_doc_dispatch_envelope.py"}
+{"ts":"20260330T103727","step":"format","cmd":"python3 -m ruff format backend/app/modules/documents/api.py backend/app/modules/documents/schemas.py backend/app/modules/documents/service.py backend/tests/test_doc_dispatch_envelope.py"}
+{"ts":"20260330T103727","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_doc_dispatch_envelope.py"}
+{"ts":"20260330T103754","step":"lint","cmd":"python3 -m ruff check backend/app/modules/documents/api.py backend/app/modules/documents/schemas.py backend/app/modules/documents/service.py backend/tests/test_doc_dispatch_envelope.py"}
+{"ts":"20260330T103754","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_doc_dispatch_envelope.py"}
+{"ts":"20260330T103830","step":"lint","cmd":"python3 -m ruff check backend/app/modules/documents/api.py backend/app/modules/documents/schemas.py backend/app/modules/documents/service.py backend/tests/test_doc_dispatch_envelope.py"}
+{"ts":"20260330T103830","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_doc_dispatch_envelope.py"}
+{"ts":"20260330T103833","step":"validate","cmd":"./scripts/task_validate.sh DOCDSP-BE-ENV-01"}

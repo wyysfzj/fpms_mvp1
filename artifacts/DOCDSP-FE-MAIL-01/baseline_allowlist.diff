@@ -1,0 +1,150 @@
+diff --git a/frontend/src/api/documents.ts b/frontend/src/api/documents.ts
+index caa6537..04fb77f 100644
+--- a/frontend/src/api/documents.ts
++++ b/frontend/src/api/documents.ts
+@@ -8,6 +8,9 @@ import type {
+     DocTemplateListParams,
+     DocTemplateUpdatePayload,
+     Document,
++    DocumentDispatchMailingListParams,
++    DocumentMailingBatchIn,
++    DocumentMailingBatchOut,
+     DocumentCreatePayload,
+     DocumentListParams,
+     DocumentUpdatePayload,
+@@ -42,6 +45,8 @@ interface BackendDocument {
+     need_reply?: boolean | null
+     reply_date?: string | null
+     case_no?: string | null
++    outgoing_reg_no?: string | null
++    forward_date?: string | null
+ }
+ 
+ function mapAttachment(input: BackendAttachment): Attachment {
+@@ -70,6 +75,8 @@ function mapDocument(input: BackendDocument): Document {
+         need_reply: input.need_reply ?? undefined,
+         reply_date: input.reply_date || undefined,
+         case_no: input.case_no || undefined,
++        outgoing_reg_no: input.outgoing_reg_no || undefined,
++        forward_date: input.forward_date || undefined,
+         attachments: (input.attachments || []).map(mapAttachment),
+     }
+ }
+@@ -168,6 +175,35 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
+     }
+ }
+ 
++/**
++ * Get candidate outgoing documents for mailing registration workflow
++ */
++export async function getDocumentDispatchMailingCandidates(
++    params: DocumentDispatchMailingListParams = {}
++): Promise<Pagination<Document>> {
++    const { page = 1, page_size = 20, q, client_id, doc_template_id, date_from, date_to } = params
++    return getDocuments({
++        page,
++        page_size,
++        q: q?.trim() || undefined,
++        direction: 'OUT',
++        client_id,
++        doc_template_id,
++        date_from,
++        date_to,
++    })
++}
++
++/**
++ * Batch register outgoing mailing info for selected documents
++ */
++export async function batchRegisterDocumentMailing(
++    data: DocumentMailingBatchIn
++): Promise<DocumentMailingBatchOut> {
++    const response = await http.post<DocumentMailingBatchOut>('/documents/dispatch/mailing/batch-register', data)
++    return response.data
++}
++
+ /**
+  * Get a single document by ID
+  */
+diff --git a/frontend/src/api/documents.types.ts b/frontend/src/api/documents.types.ts
+index b5d9656..a5e184c 100644
+--- a/frontend/src/api/documents.types.ts
++++ b/frontend/src/api/documents.types.ts
+@@ -12,6 +12,8 @@ export interface Document {
+     doc_date?: string
+     doc_type?: string
+     description?: string
++    outgoing_reg_no?: string | null
++    forward_date?: string | null
+     created_at?: string
+     updated_at?: string
+     attachments?: Attachment[]
+@@ -34,6 +36,56 @@ export interface DocumentListParams {
+     date_to?: string
+ }
+ 
++export interface DocumentDispatchMailingListParams {
++    page?: number
++    page_size?: number
++    q?: string
++    client_id?: string
++    doc_template_id?: string
++    date_from?: string
++    date_to?: string
++}
++
++export interface DocumentMailingBatchIn {
++    selected_document_ids: string[]
++    outgoing_reg_no: string
++    forward_date?: string | null
++}
++
++export interface DocumentMailingBatchItemOut {
++    document_id: string
++    case_id: string
++    case_no?: string
++    outgoing_reg_no?: string | null
++    forward_date?: string | null
++}
++
++export interface DocumentMailingBatchOut {
++    success_count: number
++    failure_count: number
++    items: DocumentMailingBatchItemOut[]
++}
++
++export interface DocumentMailingBatchIn {
++    selected_document_ids: string[]
++    outgoing_reg_no: string
++    forward_date?: string | null
++}
++
++export interface DocumentMailingBatchItemOut {
++    document_id: string
++    case_id: string
++    case_no?: string
++    outgoing_reg_no?: string | null
++    forward_date?: string | null
++}
++
++export interface DocumentMailingBatchOut {
++    success_count: number
++    failure_count: number
++    items: DocumentMailingBatchItemOut[]
++}
++
+ export interface DocumentCreatePayload {
+     title: string
+     direction: 'IN' | 'OUT'
+diff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts
+index 4506a46..3fcbe29 100644
+--- a/frontend/src/router/index.ts
++++ b/frontend/src/router/index.ts
+@@ -29,6 +29,7 @@ const routes = [
+       { path: 'documents', name: 'documents', component: () => import('../modules/documents/pages/DocumentList.vue') },
+       { path: 'documents/new', name: 'document_new', component: () => import('../modules/documents/pages/DocumentCreate.vue') },
+       { path: 'documents/wizard', name: 'document_wizard', component: () => import('../modules/documents/pages/DocumentWizard.vue') },
++      { path: 'documents/dispatch', name: 'document_dispatch', component: () => import('../modules/documents/pages/DocumentDispatch.vue') },
+       { path: 'documents/:id/edit', name: 'document_edit', component: () => import('../modules/documents/pages/DocumentEdit.vue') },
+       { path: 'documents/:id', name: 'document_detail', component: () => import('../modules/documents/pages/DocumentDetail.vue') },
+ 

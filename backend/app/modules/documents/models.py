@@ -62,6 +62,8 @@ class Document(UUIDPrimaryKeyMixin, AuditMixin, Base):
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     ref_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
     extra_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outgoing_reg_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    forward_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # --- B2: Reply chain fields ---
     reply_to_id: Mapped[str | None] = mapped_column(
@@ -82,3 +84,34 @@ class Document(UUIDPrimaryKeyMixin, AuditMixin, Base):
     reply_to_doc: Mapped["Document | None"] = relationship(
         "Document", back_populates="replies", remote_side="Document.id", foreign_keys=[reply_to_id]
     )
+
+
+class DocDispatch(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_doc_dispatch"
+
+    client_id: Mapped[str] = mapped_column(String(36), ForeignKey("t_client.id"), nullable=False)
+    dispatch_date: Mapped[date] = mapped_column(Date, nullable=False)
+    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    lines: Mapped[list["DocDispatchLine"]] = relationship(
+        "DocDispatchLine", back_populates="dispatch"
+    )
+
+
+class DocDispatchLine(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_doc_dispatch_line"
+
+    dispatch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_doc_dispatch.id", ondelete="CASCADE"), nullable=False
+    )
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_document.id", ondelete="CASCADE"), nullable=False
+    )
+    case_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False
+    )
+    doc_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    outgoing_reg_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    dispatch: Mapped["DocDispatch"] = relationship("DocDispatch", back_populates="lines")
+    document: Mapped["Document"] = relationship("Document")

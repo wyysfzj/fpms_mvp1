@@ -1,0 +1,4 @@
+{"ts":"20260330T102341","step":"lint","cmd":"python3 -m ruff check backend/app/modules/documents/api.py backend/app/modules/documents/schemas.py backend/app/modules/documents/service.py backend/tests/test_doc_dispatch_mailing_action.py"}
+{"ts":"20260330T102341","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_doc_dispatch_mailing_action.py"}
+{"ts":"20260330T102354","step":"validate","cmd":"./scripts/task_validate.sh DOCDSP-BE-MAIL-01"}
+{"ts":"20260330T102414","step":"validate","cmd":"./scripts/task_validate.sh DOCDSP-BE-MAIL-01"}

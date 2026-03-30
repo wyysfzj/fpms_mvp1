@@ -1,0 +1,867 @@
+diff --git a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+index a475de8..b3afbdb 100644
+--- a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
++++ b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+@@ -47,9 +47,7 @@ def upgrade() -> None:
+         sa.Column("created_by", sa.String(36), nullable=True),
+         sa.Column("updated_by", sa.String(36), nullable=True),
+     )
+-    op.create_index(
+-        "ix_t_commission_settlement_status", "t_commission_settlement", ["status"]
+-    )
++    op.create_index("ix_t_commission_settlement_status", "t_commission_settlement", ["status"])
+     op.create_index(
+         "ix_t_commission_settlement_settle_date", "t_commission_settlement", ["settle_date"]
+     )
+@@ -71,9 +69,7 @@ def upgrade() -> None:
+         ),
+         sa.Column("line_no", sa.Integer(), nullable=False, server_default=sa.text("1")),
+         sa.Column("amount", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
+-        sa.Column(
+-            "status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")
+-        ),
++        sa.Column("status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")),
+         sa.Column("remark", sa.Text(), nullable=True),
+         sa.Column(
+             "created_at",
+diff --git a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+index 813d25a..290f4e9 100644
+--- a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+@@ -6,6 +6,7 @@ Create Date: 2026-03-25
+ 
+ Add 6 columns to t_annuity_task and 1 column to t_case (first_annuity_year).
+ """
++
+ from __future__ import annotations
+ 
+ import sqlalchemy as sa
+@@ -44,9 +45,7 @@ def upgrade() -> None:
+         existing_case = {col["name"] for col in insp.get_columns("t_case")}
+         if "first_annuity_year" not in existing_case:
+             with op.batch_alter_table("t_case") as batch_op:
+-                batch_op.add_column(
+-                    sa.Column("first_annuity_year", sa.Integer(), nullable=True)
+-                )
++                batch_op.add_column(sa.Column("first_annuity_year", sa.Integer(), nullable=True))
+ 
+ 
+ def downgrade() -> None:
+diff --git a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+index 685c45a..c90eb2e 100644
+--- a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+@@ -6,6 +6,7 @@ Create Date: 2026-03-24
+ 
+ Add 4 columns to t_case_receipt: fee_name, due_date, is_prepayment, remark.
+ """
++
+ from __future__ import annotations
+ 
+ import sqlalchemy as sa
+diff --git a/backend/app/modules/annuity/models.py b/backend/app/modules/annuity/models.py
+index 5d1f089..aabe939 100644
+--- a/backend/app/modules/annuity/models.py
++++ b/backend/app/modules/annuity/models.py
+@@ -102,7 +102,15 @@ class AnnuityTask(Base):
+     service_fee_amt: Mapped[Decimal | None] = mapped_column(
+         Numeric(18, 2), nullable=True, server_default=text("0")
+     )
+-    notify_count: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
+-    pay_next_year: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+-    draft_generated: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+-    notice_sent: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
++    notify_count: Mapped[int | None] = mapped_column(
++        Integer, nullable=True, server_default=text("0")
++    )
++    pay_next_year: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
++    draft_generated: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
++    notice_sent: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
+diff --git a/backend/app/modules/commission/models.py b/backend/app/modules/commission/models.py
+index 4a22cf8..dac84e9 100644
+--- a/backend/app/modules/commission/models.py
++++ b/backend/app/modules/commission/models.py
+@@ -29,8 +29,12 @@ class CommissionRule(Base):
+     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     flow_dir: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     patent_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
+-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s1_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
++    s2_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s1_fixed_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+@@ -65,13 +69,19 @@ class Commission(Base):
+         Integer, ForeignKey("t_commission_rule.id", ondelete="SET NULL"), nullable=True
+     )
+     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+-    base_fee: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
+-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    base_fee: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    s1_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s1_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+     s1_done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s2_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s2_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+@@ -122,9 +132,7 @@ class CommissionSettleLine(Base):
+     __tablename__ = "t_commission_settle_line"
+     __table_args__ = (
+         UniqueConstraint("settlement_id", "line_no", name="uq_t_comm_settle_line_no"),
+-        UniqueConstraint(
+-            "settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"
+-        ),
++        UniqueConstraint("settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"),
+     )
+ 
+     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+diff --git a/backend/app/modules/documents/api.py b/backend/app/modules/documents/api.py
+index 3046f1a..9a0d0ee 100644
+--- a/backend/app/modules/documents/api.py
++++ b/backend/app/modules/documents/api.py
+@@ -22,25 +22,43 @@ from app.modules.documents.schemas import (
+     DocTemplateOut,
+     DocTemplateUpdateIn,
+     DocumentCreateIn,
++    DocumentDispatchCreateIn,
++    DocumentDispatchLineOut,
++    DocumentDispatchOut,
+     DocumentListOut,
++    DocumentMailingBatchIn,
++    DocumentMailingBatchItemOut,
++    DocumentMailingBatchOut,
+     DocumentOut,
+     DocumentUpdateIn,
+     DocumentWizardBatchCreateIn,
+     DocumentWizardBatchCreateOut,
+ )
+-from app.modules.documents.service import add_attachment as add_attachment_service
+ from app.modules.documents.service import (
++    add_attachment as add_attachment_service,
++)
++from app.modules.documents.service import (
++    batch_register_document_mailing,
+     create_doc_template,
++    create_document_dispatch,
+     create_document_wizard_batch,
+     get_attachment_download,
+     get_doc_template,
++    get_document_dispatch,
+     list_doc_templates,
+     list_documents,
+     update_doc_template,
+ )
+-from app.modules.documents.service import create_document as create_document_service
+-from app.modules.documents.service import get_document as get_document_service
+-from app.modules.documents.service import update_document as update_document_service
++from app.modules.documents.service import (
++    create_document as create_document_service,
++)
++from app.modules.documents.service import (
++    get_document as get_document_service,
++)
++from app.modules.documents.service import (
++    update_document as update_document_service,
++)
++from app.modules.masterdata.clients.models import Client
+ from app.modules.tasks.task_generation_service import TaskGenerationService
+ 
+ router = APIRouter()
+@@ -68,6 +86,44 @@ def _build_document_out(
+     )
+ 
+ 
++def _build_document_mailing_batch_item_out(
++    document,
++    *,
++    case_no: str | None = None,
++) -> DocumentMailingBatchItemOut:
++    return DocumentMailingBatchItemOut(
++        document_id=document.id,
++        case_id=document.case_id,
++        case_no=case_no,
++        outgoing_reg_no=document.outgoing_reg_no,
++        forward_date=document.forward_date,
++    )
++
++
++def _build_document_dispatch_out(dispatch, *, client_name: str | None = None) -> DocumentDispatchOut:
++    return DocumentDispatchOut(
++        id=dispatch.id,
++        client_id=dispatch.client_id,
++        client_name=client_name,
++        dispatch_date=dispatch.dispatch_date,
++        remark=dispatch.remark,
++        created_at=dispatch.created_at,
++        updated_at=dispatch.updated_at,
++        lines=[
++            DocumentDispatchLineOut(
++                id=line.id,
++                dispatch_id=line.dispatch_id,
++                document_id=line.document_id,
++                case_id=line.case_id,
++                case_no=line.document.case.case_no if line.document and line.document.case else None,
++                doc_name=line.doc_name,
++                outgoing_reg_no=line.outgoing_reg_no,
++            )
++            for line in dispatch.lines
++        ],
++    )
++
++
+ # ---------------------------------------------------------------------------
+ # B1: DocTemplate CRUD endpoints (registered BEFORE /documents/{id} routes)
+ # ---------------------------------------------------------------------------
+@@ -328,6 +384,68 @@ def create_document_wizard_batch_endpoint(
+     return DocumentWizardBatchCreateOut(created=len(items), total=len(created_rows), items=items)
+ 
+ 
++@router.post(
++    "/documents/dispatch/mailing/batch-register",
++    response_model=DocumentMailingBatchOut,
++    summary="Batch register outgoing mailing info",
++)
++def batch_register_document_mailing_endpoint(
++    payload: DocumentMailingBatchIn,
++    _perm: None = Depends(require_perm("Doc.Edit")),
++    db: Session = Depends(get_db),
++) -> DocumentMailingBatchOut:
++    documents = batch_register_document_mailing(db, payload, user_id="system")
++    case_ids = {document.case_id for document in documents if document.case_id}
++    case_no_map: dict[str, str] = {}
++    if case_ids:
++        cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
++        case_no_map = {c.id: c.case_no for c in cases}
++
++    items = [
++        _build_document_mailing_batch_item_out(
++            document,
++            case_no=case_no_map.get(document.case_id) if document.case_id else None,
++        )
++        for document in documents
++    ]
++    return DocumentMailingBatchOut(
++        success_count=len(items),
++        failure_count=0,
++        items=items,
++    )
++
++
++@router.post(
++    "/documents/dispatches",
++    response_model=DocumentDispatchOut,
++    status_code=status.HTTP_201_CREATED,
++    summary="Create a document dispatch sheet",
++)
++def create_document_dispatch_endpoint(
++    payload: DocumentDispatchCreateIn,
++    _perm: None = Depends(require_perm("Doc.Edit")),
++    db: Session = Depends(get_db),
++) -> DocumentDispatchOut:
++    dispatch = create_document_dispatch(db, payload, user_id="system")
++    client = db.execute(select(Client).where(Client.id == dispatch.client_id)).scalar_one_or_none()
++    return _build_document_dispatch_out(dispatch, client_name=client.name_cn if client else None)
++
++
++@router.get(
++    "/documents/dispatches/{dispatch_id}",
++    response_model=DocumentDispatchOut,
++    summary="Get a document dispatch sheet",
++)
++def get_document_dispatch_endpoint(
++    dispatch_id: str,
++    _perm: None = Depends(require_perm("Doc.Read")),
++    db: Session = Depends(get_db),
++) -> DocumentDispatchOut:
++    dispatch = get_document_dispatch(db, dispatch_id)
++    client = db.execute(select(Client).where(Client.id == dispatch.client_id)).scalar_one_or_none()
++    return _build_document_dispatch_out(dispatch, client_name=client.name_cn if client else None)
++
++
+ @router.get(
+     "/documents/{document_id}/attachments/{attachment_id}/download",
+     summary="Download a document attachment",
+diff --git a/backend/app/modules/documents/models.py b/backend/app/modules/documents/models.py
+index 76fc92e..4647ca8 100644
+--- a/backend/app/modules/documents/models.py
++++ b/backend/app/modules/documents/models.py
+@@ -62,6 +62,8 @@ class Document(UUIDPrimaryKeyMixin, AuditMixin, Base):
+     title: Mapped[str | None] = mapped_column(Text, nullable=True)
+     ref_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+     extra_data: Mapped[str | None] = mapped_column(Text, nullable=True)
++    outgoing_reg_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
++    forward_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+ 
+     # --- B2: Reply chain fields ---
+     reply_to_id: Mapped[str | None] = mapped_column(
+@@ -82,3 +84,34 @@ class Document(UUIDPrimaryKeyMixin, AuditMixin, Base):
+     reply_to_doc: Mapped["Document | None"] = relationship(
+         "Document", back_populates="replies", remote_side="Document.id", foreign_keys=[reply_to_id]
+     )
++
++
++class DocDispatch(UUIDPrimaryKeyMixin, AuditMixin, Base):
++    __tablename__ = "t_doc_dispatch"
++
++    client_id: Mapped[str] = mapped_column(String(36), ForeignKey("t_client.id"), nullable=False)
++    dispatch_date: Mapped[date] = mapped_column(Date, nullable=False)
++    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
++
++    lines: Mapped[list["DocDispatchLine"]] = relationship(
++        "DocDispatchLine", back_populates="dispatch"
++    )
++
++
++class DocDispatchLine(UUIDPrimaryKeyMixin, AuditMixin, Base):
++    __tablename__ = "t_doc_dispatch_line"
++
++    dispatch_id: Mapped[str] = mapped_column(
++        String(36), ForeignKey("t_doc_dispatch.id", ondelete="CASCADE"), nullable=False
++    )
++    document_id: Mapped[str] = mapped_column(
++        String(36), ForeignKey("t_document.id", ondelete="CASCADE"), nullable=False
++    )
++    case_id: Mapped[str] = mapped_column(
++        String(36), ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False
++    )
++    doc_name: Mapped[str] = mapped_column(String(256), nullable=False)
++    outgoing_reg_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
++
++    dispatch: Mapped["DocDispatch"] = relationship("DocDispatch", back_populates="lines")
++    document: Mapped["Document"] = relationship("Document")
+diff --git a/backend/app/modules/documents/schemas.py b/backend/app/modules/documents/schemas.py
+index 2192774..d6917a1 100644
+--- a/backend/app/modules/documents/schemas.py
++++ b/backend/app/modules/documents/schemas.py
+@@ -98,6 +98,56 @@ class DocumentWizardBatchCreateOut(BaseModel):
+     items: list[DocumentWizardBatchRowOut]
+ 
+ 
++class DocumentMailingBatchIn(BaseModel):
++    selected_document_ids: list[str] = Field(default_factory=list)
++    outgoing_reg_no: str = Field(..., min_length=1, max_length=128)
++    forward_date: date | None = None
++
++
++class DocumentMailingBatchItemOut(BaseModel):
++    document_id: str
++    case_id: str
++    case_no: str | None = None
++    outgoing_reg_no: str | None = None
++    forward_date: date | None = None
++
++
++class DocumentMailingBatchOut(BaseModel):
++    success_count: int
++    failure_count: int
++    items: list[DocumentMailingBatchItemOut]
++
++
++class DocumentDispatchCreateIn(BaseModel):
++    client_id: str = Field(..., min_length=1)
++    dispatch_date: date
++    selected_document_ids: list[str] = Field(..., min_length=1)
++    remark: str | None = None
++
++
++class DocumentDispatchLineOut(BaseModel):
++    id: str
++    dispatch_id: str
++    document_id: str
++    case_id: str
++    case_no: str | None = None
++    doc_name: str
++    outgoing_reg_no: str | None = None
++
++
++class DocumentDispatchOut(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    id: str
++    client_id: str
++    client_name: str | None = None
++    dispatch_date: date
++    remark: str | None = None
++    created_at: datetime
++    updated_at: datetime
++    lines: list[DocumentDispatchLineOut] = Field(default_factory=list)
++
++
+ # --- B1: DocTemplate schemas ---
+ 
+ 
+diff --git a/backend/app/modules/documents/service.py b/backend/app/modules/documents/service.py
+index bcbcb19..95d8b18 100644
+--- a/backend/app/modules/documents/service.py
++++ b/backend/app/modules/documents/service.py
+@@ -13,11 +13,19 @@ from app.modules.cases.models import Case
+ from app.modules.cases.service import validate_case_status_transition
+ from app.modules.documents.enums import DocumentDirection
+ from app.modules.documents.fee_linking_service import maybe_create_fee_draft
+-from app.modules.documents.models import DocAttachment, DocTemplate, Document
++from app.modules.documents.models import (
++    DocAttachment,
++    DocDispatch,
++    DocDispatchLine,
++    DocTemplate,
++    Document,
++)
+ from app.modules.documents.schemas import (
+     DocTemplateCreateIn,
+     DocTemplateUpdateIn,
+     DocumentCreateIn,
++    DocumentDispatchCreateIn,
++    DocumentMailingBatchIn,
+     DocumentUpdateIn,
+     DocumentWizardBatchCreateIn,
+     DocumentWizardBatchRowIn,
+@@ -291,6 +299,208 @@ def create_document_wizard_batch(
+         raise
+ 
+ 
++def batch_register_document_mailing(
++    db: Session,
++    data: DocumentMailingBatchIn,
++    *,
++    user_id: str,
++) -> list[Document]:
++    if not data.selected_document_ids:
++        raise_business_error(
++            "DOCUMENT_MAILING_SELECTION_REQUIRED",
++            "selected_document_ids must not be empty",
++            status_code=400,
++        )
++
++    outgoing_reg_no = _normalize_text(data.outgoing_reg_no)
++    if not outgoing_reg_no:
++        raise_business_error(
++            "DOCUMENT_MAILING_OUTGOING_REG_NO_REQUIRED",
++            "outgoing_reg_no is required",
++            status_code=400,
++        )
++
++    unique_document_ids = list(dict.fromkeys(data.selected_document_ids))
++    documents = db.query(Document).filter(Document.id.in_(unique_document_ids)).all()
++    document_by_id = {document.id: document for document in documents}
++    missing_document_ids = [
++        document_id for document_id in unique_document_ids if document_id not in document_by_id
++    ]
++    if missing_document_ids:
++        raise_business_error(
++            "DOCUMENT_MAILING_DOCUMENT_NOT_FOUND",
++            "One or more selected documents do not exist",
++            details={"document_ids": missing_document_ids},
++            status_code=404,
++        )
++
++    invalid_direction_document_ids = [
++        document.id for document in documents if document.direction != DocumentDirection.OUT.value
++    ]
++    if invalid_direction_document_ids:
++        raise_business_error(
++            "DOCUMENT_MAILING_DIRECTION_INVALID",
++            "Only OUT documents can be batch registered for mailing",
++            details={"document_ids": invalid_direction_document_ids},
++            status_code=400,
++        )
++
++    update_forward_date = "forward_date" in data.model_fields_set
++    for document in documents:
++        document.outgoing_reg_no = outgoing_reg_no
++        if update_forward_date:
++            document.forward_date = data.forward_date
++        document.updated_by = user_id
++
++    db.commit()
++    for document in documents:
++        db.refresh(document)
++    return documents
++
++
++def create_document_dispatch(
++    db: Session,
++    data: DocumentDispatchCreateIn,
++    *,
++    user_id: str,
++) -> DocDispatch:
++    selected_document_ids = list(dict.fromkeys(data.selected_document_ids))
++    if not selected_document_ids:
++        raise_business_error(
++            "DOCUMENT_DISPATCH_SELECTION_REQUIRED",
++            "selected_document_ids must not be empty",
++            status_code=400,
++        )
++
++    client_id = _normalize_text(data.client_id)
++    if not client_id:
++        raise_business_error(
++            "DOCUMENT_DISPATCH_CLIENT_REQUIRED",
++            "client_id is required",
++            status_code=400,
++        )
++
++    documents = (
++        db.execute(
++            select(Document).where(Document.id.in_(selected_document_ids)).order_by(Document.created_at)
++        )
++        .scalars()
++        .all()
++    )
++    document_by_id = {document.id: document for document in documents}
++    missing_document_ids = [
++        document_id for document_id in selected_document_ids if document_id not in document_by_id
++    ]
++    if missing_document_ids:
++        raise_business_error(
++            "DOCUMENT_DISPATCH_DOCUMENT_NOT_FOUND",
++            "One or more selected documents do not exist",
++            details={"document_ids": missing_document_ids},
++            status_code=404,
++        )
++
++    invalid_direction_document_ids = [
++        document.id for document in documents if document.direction != DocumentDirection.OUT.value
++    ]
++    if invalid_direction_document_ids:
++        raise_business_error(
++            "DOCUMENT_DISPATCH_DIRECTION_INVALID",
++            "Only OUT documents can be included in a dispatch sheet",
++            details={"document_ids": invalid_direction_document_ids},
++            status_code=400,
++        )
++
++    case_ids = {document.case_id for document in documents if document.case_id}
++    cases = (
++        db.execute(select(Case).where(Case.id.in_(case_ids)))
++        .scalars()
++        .all()
++        if case_ids
++        else []
++    )
++    case_by_id = {case.id: case for case in cases}
++    invalid_case_ids = [
++        document.case_id
++        for document in documents
++        if not document.case_id or case_by_id.get(document.case_id) is None
++    ]
++    if invalid_case_ids:
++        raise_business_error(
++            "DOCUMENT_DISPATCH_CASE_NOT_FOUND",
++            "One or more selected documents do not have a valid case",
++            details={"case_ids": invalid_case_ids},
++            status_code=404,
++        )
++
++    case_client_ids = {
++        case.client_id for case in cases if case.client_id and case.client_id == client_id
++    }
++    if len(case_client_ids) != 1 or any(case.client_id != client_id for case in cases):
++        raise_business_error(
++            "DOCUMENT_DISPATCH_CLIENT_MISMATCH",
++            "Selected documents must belong to the specified client",
++            details={"client_id": client_id},
++            status_code=400,
++        )
++
++    dispatch = DocDispatch(
++        id=str(uuid4()),
++        client_id=client_id,
++        dispatch_date=data.dispatch_date,
++        remark=_normalize_text(data.remark),
++        created_by=user_id,
++        updated_by=user_id,
++    )
++    db.add(dispatch)
++    db.flush()
++
++    for document in documents:
++        line = DocDispatchLine(
++            id=str(uuid4()),
++            dispatch_id=dispatch.id,
++            document_id=document.id,
++            case_id=document.case_id,
++            doc_name=_normalize_text(document.title) or document.ref_no or "Untitled Document",
++            outgoing_reg_no=document.outgoing_reg_no,
++            created_by=user_id,
++            updated_by=user_id,
++        )
++        db.add(line)
++
++    db.commit()
++    dispatch = (
++        db.execute(
++            select(DocDispatch)
++            .where(DocDispatch.id == dispatch.id)
++            .options(
++                selectinload(DocDispatch.lines)
++                .selectinload(DocDispatchLine.document)
++                .selectinload(Document.case)
++            )
++        )
++        .scalar_one()
++    )
++    return dispatch
++
++
++def get_document_dispatch(db: Session, dispatch_id: str) -> DocDispatch:
++    dispatch = (
++        db.execute(
++            select(DocDispatch)
++            .where(DocDispatch.id == dispatch_id)
++            .options(
++                selectinload(DocDispatch.lines)
++                .selectinload(DocDispatchLine.document)
++                .selectinload(Document.case)
++            )
++        )
++        .scalar_one_or_none()
++    )
++    if not dispatch:
++        raise_business_error("DOCUMENT_DISPATCH_NOT_FOUND", "Document dispatch not found", status_code=404)
++    return dispatch
++
++
+ def _build_document_wizard_payload(
+     defaults,
+     row: DocumentWizardBatchRowIn,
+diff --git a/backend/app/modules/expenses/models.py b/backend/app/modules/expenses/models.py
+index 09d291b..f2e4001 100644
+--- a/backend/app/modules/expenses/models.py
++++ b/backend/app/modules/expenses/models.py
+@@ -26,11 +26,11 @@ class Expense(Base):
+     vendor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+     expense_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+     currency: Mapped[str] = mapped_column(String(8), nullable=False, server_default=text("'CNY'"))
+-    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
+-    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+-    status: Mapped[str] = mapped_column(
+-        String(24), nullable=False, server_default=text("'DRAFT'")
++    amount: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
+     )
++    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
++    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'DRAFT'"))
+     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+diff --git a/backend/tests/test_annuity_generate.py b/backend/tests/test_annuity_generate.py
+index 21ae97c..577fd45 100644
+--- a/backend/tests/test_annuity_generate.py
++++ b/backend/tests/test_annuity_generate.py
+@@ -1,8 +1,8 @@
+ """Tests for AnnuityTask multi-year generation (FR-FE-06)."""
++
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
+-from decimal import Decimal
+ from uuid import uuid4
+ 
+ import pytest
+@@ -29,7 +29,9 @@ def client_id(client: TestClient, auth_headers: dict) -> str:
+ 
+ 
+ @pytest.fixture
+-def granted_case_id(client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker) -> str:
++def granted_case_id(
++    client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker
++) -> str:
+     resp = client.post(
+         "/api/v1/cases",
+         json={
+@@ -115,7 +117,10 @@ def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
+ 
+ # --- GENERATE ---
+ 
+-def test_generate_annuity_tasks_success(client: TestClient, auth_headers: dict, granted_case_id: str):
++
++def test_generate_annuity_tasks_success(
++    client: TestClient, auth_headers: dict, granted_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": granted_case_id},
+@@ -136,7 +141,9 @@ def test_generate_case_not_found(client: TestClient, auth_headers: dict):
+     assert resp.status_code == 404
+ 
+ 
+-def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_granted_case_id: str):
++def test_generate_case_not_granted(
++    client: TestClient, auth_headers: dict, not_granted_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": not_granted_case_id},
+@@ -145,7 +152,9 @@ def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_g
+     assert resp.status_code == 400
+ 
+ 
+-def test_generate_no_first_annuity_year(client: TestClient, auth_headers: dict, granted_no_year_case_id: str):
++def test_generate_no_first_annuity_year(
++    client: TestClient, auth_headers: dict, granted_no_year_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": granted_no_year_case_id},
+@@ -173,7 +182,9 @@ def test_generate_idempotent(client: TestClient, auth_headers: dict, granted_cas
+     assert resp2.json()["tasks_skipped"] == created_first
+ 
+ 
+-def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, granted_case_id: str):
++def test_generate_prefills_fee_amounts(
++    client: TestClient, auth_headers: dict, granted_case_id: str
++):
+     _seed_annuity_rates(client, auth_headers)
+ 
+     # Re-generate (delete old tasks first via direct DB or just use new case)
+@@ -201,6 +212,7 @@ def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, g
+ 
+ # --- LIST NEW FIELDS ---
+ 
++
+ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, granted_case_id: str):
+     client.post(
+         "/api/v1/annuity/tasks/generate",
+@@ -212,12 +224,21 @@ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, grante
+     items = resp.json()["items"]
+     assert len(items) > 0
+     item = items[0]
+-    for field in ("gov_fee_amt", "service_fee_amt", "notify_count", "pay_next_year",
+-                  "draft_generated", "notice_sent", "is_overdue"):
++    for field in (
++        "gov_fee_amt",
++        "service_fee_amt",
++        "notify_count",
++        "pay_next_year",
++        "draft_generated",
++        "notice_sent",
++        "is_overdue",
++    ):
+         assert field in item, f"Missing field: {field}"
+ 
+ 
+-def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++def test_list_is_overdue_computed(
++    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
++):
+     with session_factory() as db:
+         task = AnnuityTask(
+             case_id=granted_case_id,
+@@ -240,7 +261,9 @@ def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, grante
+     assert overdue_items[0]["is_overdue"] is True
+ 
+ 
+-def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++def test_list_is_overdue_false_when_done(
++    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
++):
+     with session_factory() as db:
+         task = AnnuityTask(
+             case_id=granted_case_id,
+@@ -265,6 +288,7 @@ def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict,
+ 
+ # --- DRAFT GENERATED FLAG ---
+ 
++
+ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, granted_case_id: str):
+     _seed_annuity_rates(client, auth_headers)
+ 
+@@ -312,6 +336,7 @@ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, grante
+ 
+ # --- PERMISSIONS ---
+ 
++
+ def test_permissions_generate(client: TestClient):
+     resp = client.post("/api/v1/annuity/tasks/generate", json={"case_id": "x"})
+     assert resp.status_code == 401
+diff --git a/backend/tests/test_b2_reply_chain.py b/backend/tests/test_b2_reply_chain.py
+index 8e4549b..b2f5ab6 100644
+--- a/backend/tests/test_b2_reply_chain.py
++++ b/backend/tests/test_b2_reply_chain.py
+@@ -575,9 +575,7 @@ def test_document_list_includes_reply_fields(client: TestClient, auth_headers: d
+         assert "reply_date" in item, "List item must include reply_date"
+ 
+ 
+-def test_document_list_can_filter_by_reply_state(
+-    client: TestClient, auth_headers: dict
+-) -> None:
++def test_document_list_can_filter_by_reply_state(client: TestClient, auth_headers: dict) -> None:
+     """GET /documents supports need_reply/replied filters for Batch 2 query scope."""
+     case = _create_case(client, auth_headers)
+     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
+diff --git a/backend/tests/test_case_receipt_crud.py b/backend/tests/test_case_receipt_crud.py
+index 025bbc8..f322e0d 100644
+--- a/backend/tests/test_case_receipt_crud.py
++++ b/backend/tests/test_case_receipt_crud.py
+@@ -1,4 +1,5 @@
+ """Tests for CaseReceipt manual CRUD (FR-FE-07)."""
++
+ from __future__ import annotations
+ 
+ from decimal import Decimal
+@@ -28,6 +29,7 @@ def case_id(client: TestClient, auth_headers: dict) -> str:
+ 
+ # --- CREATE ---
+ 
++
+ def test_create_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
+     resp = client.post(
+         "/api/v1/case-receipts",
+@@ -137,6 +139,7 @@ def test_create_user_override_prepayment(client: TestClient, auth_headers: dict,
+ 
+ # --- UPDATE ---
+ 
++
+ def test_update_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
+     create_resp = client.post(
+         "/api/v1/case-receipts",
+@@ -183,6 +186,7 @@ def test_update_not_found(client: TestClient, auth_headers: dict):
+ 
+ # --- LIST ---
+ 
++
+ def test_list_case_receipts_no_filter(client: TestClient, auth_headers: dict, case_id: str):
+     client.post(
+         "/api/v1/case-receipts",
+@@ -263,8 +267,11 @@ def test_list_pagination(client: TestClient, auth_headers: dict):
+ 
+ # --- PERMISSIONS ---
+ 
++
+ def test_permissions_create(client: TestClient):
+-    resp = client.post("/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"})
++    resp = client.post(
++        "/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"}
++    )
+     assert resp.status_code == 401
+ 
+ 
+@@ -275,6 +282,7 @@ def test_permissions_update(client: TestClient):
+ 
+ # --- INTEGRATION ---
+ 
++
+ def test_manual_receipt_no_conflict_with_auto(client: TestClient, auth_headers: dict, case_id: str):
+     resp = client.post(
+         "/api/v1/case-receipts",

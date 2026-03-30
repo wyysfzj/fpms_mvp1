@@ -98,6 +98,67 @@ class DocumentWizardBatchCreateOut(BaseModel):
     items: list[DocumentWizardBatchRowOut]
 
 
+class DocumentMailingBatchIn(BaseModel):
+    selected_document_ids: list[str] = Field(default_factory=list)
+    outgoing_reg_no: str = Field(..., min_length=1, max_length=128)
+    forward_date: date | None = None
+
+
+class DocumentMailingBatchItemOut(BaseModel):
+    document_id: str
+    case_id: str
+    case_no: str | None = None
+    outgoing_reg_no: str | None = None
+    forward_date: date | None = None
+
+
+class DocumentMailingBatchOut(BaseModel):
+    success_count: int
+    failure_count: int
+    items: list[DocumentMailingBatchItemOut]
+
+
+class DocumentDispatchCreateIn(BaseModel):
+    client_id: str = Field(..., min_length=1)
+    dispatch_date: date
+    selected_document_ids: list[str] = Field(..., min_length=1)
+    remark: str | None = None
+
+
+class DocumentDispatchLineOut(BaseModel):
+    id: str
+    dispatch_id: str
+    document_id: str
+    case_id: str
+    case_no: str | None = None
+    doc_name: str
+    outgoing_reg_no: str | None = None
+
+
+class DocumentDispatchOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    client_id: str
+    client_name: str | None = None
+    dispatch_date: date
+    remark: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    lines: list[DocumentDispatchLineOut] = Field(default_factory=list)
+
+
+class DocumentEnvelopePreviewOut(BaseModel):
+    document_id: str
+    case_id: str
+    case_no: str | None = None
+    client_id: str | None = None
+    client_name: str | None = None
+    recipient_name: str | None = None
+    recipient_address: str | None = None
+    address_source: str
+
+
 # --- B1: DocTemplate schemas ---
 
 

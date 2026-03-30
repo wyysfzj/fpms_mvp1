@@ -1,0 +1,7 @@
+{"step":"red","cmd":"cd backend && pytest -q tests/test_doc_dispatch_schema.py","rc":2,"status":"PASS"}
+{"step":"lint","cmd":"python3 -m ruff check backend/alembic/versions/docdsp_db_01_doc_dispatch_tables.py backend/app/modules/documents/models.py backend/tests/test_doc_dispatch_schema.py","rc":0,"status":"PASS"}
+{"step":"format","cmd":"python3 -m ruff format backend/alembic/versions/docdsp_db_01_doc_dispatch_tables.py backend/app/modules/documents/models.py backend/tests/test_doc_dispatch_schema.py","rc":0,"status":"PASS"}
+{"step":"test","cmd":"cd backend && pytest -q tests/test_doc_dispatch_schema.py","rc":0,"status":"PASS"}
+{"step":"green","cmd":"cd backend && pytest -q tests/test_doc_dispatch_schema.py","rc":0,"status":"PASS"}
+{"step":"migrate","cmd":"cd backend && PYTHONPATH=. alembic upgrade head","rc":0,"status":"PASS"}
+{"step":"gate","cmd":"./scripts/task_validate.sh DOCDSP-DB-01","rc":0,"status":"PASS"}

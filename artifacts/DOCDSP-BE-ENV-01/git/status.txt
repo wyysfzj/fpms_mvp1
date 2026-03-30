@@ -1,0 +1,30 @@
+## master
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/documents/api.py
+ M backend/app/modules/documents/models.py
+ M backend/app/modules/documents/schemas.py
+ M backend/app/modules/documents/service.py
+ M backend/app/modules/expenses/models.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+?? .superpowers/
+?? backend/alembic/versions/docdsp_db_01_doc_dispatch_tables.py
+?? backend/tests/test_doc_dispatch_envelope.py
+?? backend/tests/test_doc_dispatch_handoff.py
+?? backend/tests/test_doc_dispatch_mailing_action.py
+?? backend/tests/test_doc_dispatch_schema.py
+?? docs/superpowers/plans/2026-03-30-documents-dispatch-prereq.md
+?? docs/superpowers/specs/2026-03-30-documents-dispatch-prereq-design.md
+?? tasks/postenhancement/backend/DOCDSP-BE-DISP-01.md
+?? tasks/postenhancement/backend/DOCDSP-BE-ENV-01.md
+?? tasks/postenhancement/backend/DOCDSP-BE-MAIL-01.md
+?? tasks/postenhancement/backend/DOCDSP-DB-01.md
+?? tasks/postenhancement/backend/DOCDSP-QA-01.md
+?? tasks/postenhancement/frontend/DOCDSP-FE-DISP-01.md
+?? tasks/postenhancement/frontend/DOCDSP-FE-ENV-01.md
+?? tasks/postenhancement/frontend/DOCDSP-FE-MAIL-01.md

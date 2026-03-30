@@ -1,0 +1,5 @@
+
+> fpms-spa@0.1.0 typecheck
+> vue-tsc --noEmit
+
+src/api/documents.types.ts(78,5): error TS2717: Subsequent property declarations must have the same type.  Property 'case_no' must be of type 'string | undefined', but here has type 'string | null | undefined'.

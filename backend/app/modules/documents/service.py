@@ -9,19 +9,29 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import raise_business_error
 from app.core.storage import ensure_dir, safe_join
-from app.modules.cases.models import Case
+from app.modules.cases.models import Case, T_CaseApplicant
 from app.modules.cases.service import validate_case_status_transition
 from app.modules.documents.enums import DocumentDirection
 from app.modules.documents.fee_linking_service import maybe_create_fee_draft
-from app.modules.documents.models import DocAttachment, DocTemplate, Document
+from app.modules.documents.models import (
+    DocAttachment,
+    DocDispatch,
+    DocDispatchLine,
+    DocTemplate,
+    Document,
+)
 from app.modules.documents.schemas import (
     DocTemplateCreateIn,
     DocTemplateUpdateIn,
     DocumentCreateIn,
+    DocumentDispatchCreateIn,
+    DocumentEnvelopePreviewOut,
+    DocumentMailingBatchIn,
     DocumentUpdateIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchRowIn,
 )
+from app.modules.masterdata.clients.models import Client, ClientAddress
 from app.modules.tasks.enums import TaskAction, TaskStatus
 from app.modules.tasks.models import Task
 from app.modules.tasks.service import _create_task_log
@@ -97,6 +107,124 @@ def _normalize_text(value: str | None) -> str | None:
         return None
     text = value.strip()
     return text or None
+
+
+def _format_mailing_address(address: ClientAddress) -> str | None:
+    parts: list[str] = []
+    for value in (
+        address.address_line1,
+        address.address_line2,
+        address.city,
+        address.province,
+        address.postal_code,
+        address.country_code,
+    ):
+        normalized = _normalize_text(value)
+        if normalized:
+            parts.append(normalized)
+    if not parts:
+        return None
+    return ", ".join(parts)
+
+
+def _format_applicant_address(applicant: T_CaseApplicant) -> str | None:
+    parts: list[str] = []
+    for value in (applicant.address_cn, applicant.address_en):
+        normalized = _normalize_text(value)
+        if normalized:
+            parts.append(normalized)
+    if not parts:
+        return None
+    return " / ".join(parts)
+
+
+def _resolve_envelope_preview(
+    db: Session,
+    *,
+    document: Document,
+    case: Case,
+) -> DocumentEnvelopePreviewOut:
+    client = None
+    if case.client_id:
+        client = db.execute(select(Client).where(Client.id == case.client_id)).scalar_one_or_none()
+
+    client_name = None
+    if client:
+        client_name = _normalize_text(client.name_cn) or _normalize_text(client.name_en)
+
+    if case.doc_address_id:
+        address = db.execute(
+            select(ClientAddress).where(ClientAddress.id == case.doc_address_id)
+        ).scalar_one_or_none()
+        if address:
+            recipient_address = _format_mailing_address(address)
+            if recipient_address:
+                return DocumentEnvelopePreviewOut(
+                    document_id=document.id,
+                    case_id=case.id,
+                    case_no=case.case_no,
+                    client_id=case.client_id,
+                    client_name=client_name,
+                    recipient_name=client_name,
+                    recipient_address=recipient_address,
+                    address_source="CASE_DOC_ADDRESS",
+                )
+
+    if case.client_id:
+        default_address = db.execute(
+            select(ClientAddress)
+            .where(
+                ClientAddress.client_id == case.client_id,
+                ClientAddress.is_default.is_(True),
+            )
+            .order_by(ClientAddress.updated_at.desc(), ClientAddress.created_at.desc())
+        ).scalar_one_or_none()
+        if default_address:
+            recipient_address = _format_mailing_address(default_address)
+            if recipient_address:
+                return DocumentEnvelopePreviewOut(
+                    document_id=document.id,
+                    case_id=case.id,
+                    case_no=case.case_no,
+                    client_id=case.client_id,
+                    client_name=client_name,
+                    recipient_name=client_name,
+                    recipient_address=recipient_address,
+                    address_source="CLIENT_DEFAULT_ADDRESS",
+                )
+
+    first_applicant = db.execute(
+        select(T_CaseApplicant)
+        .where(T_CaseApplicant.case_id == case.id)
+        .order_by(T_CaseApplicant.is_first.desc(), T_CaseApplicant.seq.asc())
+    ).scalar_one_or_none()
+    if first_applicant:
+        recipient_address = _format_applicant_address(first_applicant)
+        if recipient_address:
+            recipient_name = _normalize_text(first_applicant.name_cn) or _normalize_text(
+                first_applicant.name_en
+            )
+            return DocumentEnvelopePreviewOut(
+                document_id=document.id,
+                case_id=case.id,
+                case_no=case.case_no,
+                client_id=case.client_id,
+                client_name=client_name,
+                recipient_name=recipient_name,
+                recipient_address=recipient_address,
+                address_source="FIRST_APPLICANT_ADDRESS",
+            )
+
+    return DocumentEnvelopePreviewOut(
+        document_id=document.id,
+        case_id=case.id,
+        case_no=case.case_no,
+        client_id=case.client_id,
+        client_name=client_name,
+        recipient_name=None,
+        recipient_address=None,
+        address_source="MANUAL_REQUIRED",
+    )
 
 
 def _create_document_record(
@@ -289,6 +417,218 @@ def create_document_wizard_batch(
     except Exception:
         db.rollback()
         raise
+
+
+def batch_register_document_mailing(
+    db: Session,
+    data: DocumentMailingBatchIn,
+    *,
+    user_id: str,
+) -> list[Document]:
+    if not data.selected_document_ids:
+        raise_business_error(
+            "DOCUMENT_MAILING_SELECTION_REQUIRED",
+            "selected_document_ids must not be empty",
+            status_code=400,
+        )
+
+    outgoing_reg_no = _normalize_text(data.outgoing_reg_no)
+    if not outgoing_reg_no:
+        raise_business_error(
+            "DOCUMENT_MAILING_OUTGOING_REG_NO_REQUIRED",
+            "outgoing_reg_no is required",
+            status_code=400,
+        )
+
+    unique_document_ids = list(dict.fromkeys(data.selected_document_ids))
+    documents = db.query(Document).filter(Document.id.in_(unique_document_ids)).all()
+    document_by_id = {document.id: document for document in documents}
+    missing_document_ids = [
+        document_id for document_id in unique_document_ids if document_id not in document_by_id
+    ]
+    if missing_document_ids:
+        raise_business_error(
+            "DOCUMENT_MAILING_DOCUMENT_NOT_FOUND",
+            "One or more selected documents do not exist",
+            details={"document_ids": missing_document_ids},
+            status_code=404,
+        )
+
+    invalid_direction_document_ids = [
+        document.id for document in documents if document.direction != DocumentDirection.OUT.value
+    ]
+    if invalid_direction_document_ids:
+        raise_business_error(
+            "DOCUMENT_MAILING_DIRECTION_INVALID",
+            "Only OUT documents can be batch registered for mailing",
+            details={"document_ids": invalid_direction_document_ids},
+            status_code=400,
+        )
+
+    update_forward_date = "forward_date" in data.model_fields_set
+    for document in documents:
+        document.outgoing_reg_no = outgoing_reg_no
+        if update_forward_date:
+            document.forward_date = data.forward_date
+        document.updated_by = user_id
+
+    db.commit()
+    for document in documents:
+        db.refresh(document)
+    return documents
+
+
+def create_document_dispatch(
+    db: Session,
+    data: DocumentDispatchCreateIn,
+    *,
+    user_id: str,
+) -> DocDispatch:
+    selected_document_ids = list(dict.fromkeys(data.selected_document_ids))
+    if not selected_document_ids:
+        raise_business_error(
+            "DOCUMENT_DISPATCH_SELECTION_REQUIRED",
+            "selected_document_ids must not be empty",
+            status_code=400,
+        )
+
+    client_id = _normalize_text(data.client_id)
+    if not client_id:
+        raise_business_error(
+            "DOCUMENT_DISPATCH_CLIENT_REQUIRED",
+            "client_id is required",
+            status_code=400,
+        )
+
+    documents = (
+        db.execute(
+            select(Document)
+            .where(Document.id.in_(selected_document_ids))
+            .order_by(Document.created_at)
+        )
+        .scalars()
+        .all()
+    )
+    document_by_id = {document.id: document for document in documents}
+    missing_document_ids = [
+        document_id for document_id in selected_document_ids if document_id not in document_by_id
+    ]
+    if missing_document_ids:
+        raise_business_error(
+            "DOCUMENT_DISPATCH_DOCUMENT_NOT_FOUND",
+            "One or more selected documents do not exist",
+            details={"document_ids": missing_document_ids},
+            status_code=404,
+        )
+
+    invalid_direction_document_ids = [
+        document.id for document in documents if document.direction != DocumentDirection.OUT.value
+    ]
+    if invalid_direction_document_ids:
+        raise_business_error(
+            "DOCUMENT_DISPATCH_DIRECTION_INVALID",
+            "Only OUT documents can be included in a dispatch sheet",
+            details={"document_ids": invalid_direction_document_ids},
+            status_code=400,
+        )
+
+    case_ids = {document.case_id for document in documents if document.case_id}
+    cases = (
+        db.execute(select(Case).where(Case.id.in_(case_ids))).scalars().all() if case_ids else []
+    )
+    case_by_id = {case.id: case for case in cases}
+    invalid_case_ids = [
+        document.case_id
+        for document in documents
+        if not document.case_id or case_by_id.get(document.case_id) is None
+    ]
+    if invalid_case_ids:
+        raise_business_error(
+            "DOCUMENT_DISPATCH_CASE_NOT_FOUND",
+            "One or more selected documents do not have a valid case",
+            details={"case_ids": invalid_case_ids},
+            status_code=404,
+        )
+
+    case_client_ids = {
+        case.client_id for case in cases if case.client_id and case.client_id == client_id
+    }
+    if len(case_client_ids) != 1 or any(case.client_id != client_id for case in cases):
+        raise_business_error(
+            "DOCUMENT_DISPATCH_CLIENT_MISMATCH",
+            "Selected documents must belong to the specified client",
+            details={"client_id": client_id},
+            status_code=400,
+        )
+
+    dispatch = DocDispatch(
+        id=str(uuid4()),
+        client_id=client_id,
+        dispatch_date=data.dispatch_date,
+        remark=_normalize_text(data.remark),
+        created_by=user_id,
+        updated_by=user_id,
+    )
+    db.add(dispatch)
+    db.flush()
+
+    for document in documents:
+        line = DocDispatchLine(
+            id=str(uuid4()),
+            dispatch_id=dispatch.id,
+            document_id=document.id,
+            case_id=document.case_id,
+            doc_name=_normalize_text(document.title) or document.ref_no or "Untitled Document",
+            outgoing_reg_no=document.outgoing_reg_no,
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        db.add(line)
+
+    db.commit()
+    dispatch = db.execute(
+        select(DocDispatch)
+        .where(DocDispatch.id == dispatch.id)
+        .options(
+            selectinload(DocDispatch.lines)
+            .selectinload(DocDispatchLine.document)
+            .selectinload(Document.case)
+        )
+    ).scalar_one()
+    return dispatch
+
+
+def get_document_dispatch(db: Session, dispatch_id: str) -> DocDispatch:
+    dispatch = db.execute(
+        select(DocDispatch)
+        .where(DocDispatch.id == dispatch_id)
+        .options(
+            selectinload(DocDispatch.lines)
+            .selectinload(DocDispatchLine.document)
+            .selectinload(Document.case)
+        )
+    ).scalar_one_or_none()
+    if not dispatch:
+        raise_business_error(
+            "DOCUMENT_DISPATCH_NOT_FOUND", "Document dispatch not found", status_code=404
+        )
+    return dispatch
+
+
+def get_document_envelope_preview(
+    db: Session,
+    *,
+    document_id: str,
+) -> DocumentEnvelopePreviewOut:
+    document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
+    if not document:
+        raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
+
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("DOCUMENT_CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    return _resolve_envelope_preview(db, document=document, case=case)
 
 
 def _build_document_wizard_payload(

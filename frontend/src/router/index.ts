@@ -29,6 +29,8 @@ const routes = [
       { path: 'documents', name: 'documents', component: () => import('../modules/documents/pages/DocumentList.vue') },
       { path: 'documents/new', name: 'document_new', component: () => import('../modules/documents/pages/DocumentCreate.vue') },
       { path: 'documents/wizard', name: 'document_wizard', component: () => import('../modules/documents/pages/DocumentWizard.vue') },
+      { path: 'documents/dispatch', name: 'document_dispatch', component: () => import('../modules/documents/pages/DocumentDispatch.vue') },
+      { path: 'documents/:id/envelope', name: 'document_envelope_print', component: () => import('../modules/documents/pages/DocumentEnvelopePrint.vue') },
       { path: 'documents/:id/edit', name: 'document_edit', component: () => import('../modules/documents/pages/DocumentEdit.vue') },
       { path: 'documents/:id', name: 'document_detail', component: () => import('../modules/documents/pages/DocumentDetail.vue') },
 

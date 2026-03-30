@@ -22,25 +22,45 @@ from app.modules.documents.schemas import (
     DocTemplateOut,
     DocTemplateUpdateIn,
     DocumentCreateIn,
+    DocumentDispatchCreateIn,
+    DocumentDispatchLineOut,
+    DocumentDispatchOut,
+    DocumentEnvelopePreviewOut,
     DocumentListOut,
+    DocumentMailingBatchIn,
+    DocumentMailingBatchItemOut,
+    DocumentMailingBatchOut,
     DocumentOut,
     DocumentUpdateIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchCreateOut,
 )
-from app.modules.documents.service import add_attachment as add_attachment_service
 from app.modules.documents.service import (
+    add_attachment as add_attachment_service,
+)
+from app.modules.documents.service import (
+    batch_register_document_mailing,
     create_doc_template,
+    create_document_dispatch,
     create_document_wizard_batch,
     get_attachment_download,
     get_doc_template,
+    get_document_dispatch,
+    get_document_envelope_preview,
     list_doc_templates,
     list_documents,
     update_doc_template,
 )
-from app.modules.documents.service import create_document as create_document_service
-from app.modules.documents.service import get_document as get_document_service
-from app.modules.documents.service import update_document as update_document_service
+from app.modules.documents.service import (
+    create_document as create_document_service,
+)
+from app.modules.documents.service import (
+    get_document as get_document_service,
+)
+from app.modules.documents.service import (
+    update_document as update_document_service,
+)
+from app.modules.masterdata.clients.models import Client
 from app.modules.tasks.task_generation_service import TaskGenerationService
 
 router = APIRouter()
@@ -65,6 +85,48 @@ def _build_document_out(
         created_at=document.created_at,
         updated_at=document.updated_at,
         attachments=attachments or [],
+    )
+
+
+def _build_document_mailing_batch_item_out(
+    document,
+    *,
+    case_no: str | None = None,
+) -> DocumentMailingBatchItemOut:
+    return DocumentMailingBatchItemOut(
+        document_id=document.id,
+        case_id=document.case_id,
+        case_no=case_no,
+        outgoing_reg_no=document.outgoing_reg_no,
+        forward_date=document.forward_date,
+    )
+
+
+def _build_document_dispatch_out(
+    dispatch, *, client_name: str | None = None
+) -> DocumentDispatchOut:
+    return DocumentDispatchOut(
+        id=dispatch.id,
+        client_id=dispatch.client_id,
+        client_name=client_name,
+        dispatch_date=dispatch.dispatch_date,
+        remark=dispatch.remark,
+        created_at=dispatch.created_at,
+        updated_at=dispatch.updated_at,
+        lines=[
+            DocumentDispatchLineOut(
+                id=line.id,
+                dispatch_id=line.dispatch_id,
+                document_id=line.document_id,
+                case_id=line.case_id,
+                case_no=line.document.case.case_no
+                if line.document and line.document.case
+                else None,
+                doc_name=line.doc_name,
+                outgoing_reg_no=line.outgoing_reg_no,
+            )
+            for line in dispatch.lines
+        ],
     )
 
 
@@ -326,6 +388,81 @@ def create_document_wizard_batch_endpoint(
         for row_index, document in created_rows
     ]
     return DocumentWizardBatchCreateOut(created=len(items), total=len(created_rows), items=items)
+
+
+@router.post(
+    "/documents/dispatch/mailing/batch-register",
+    response_model=DocumentMailingBatchOut,
+    summary="Batch register outgoing mailing info",
+)
+def batch_register_document_mailing_endpoint(
+    payload: DocumentMailingBatchIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    db: Session = Depends(get_db),
+) -> DocumentMailingBatchOut:
+    documents = batch_register_document_mailing(db, payload, user_id="system")
+    case_ids = {document.case_id for document in documents if document.case_id}
+    case_no_map: dict[str, str] = {}
+    if case_ids:
+        cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
+        case_no_map = {c.id: c.case_no for c in cases}
+
+    items = [
+        _build_document_mailing_batch_item_out(
+            document,
+            case_no=case_no_map.get(document.case_id) if document.case_id else None,
+        )
+        for document in documents
+    ]
+    return DocumentMailingBatchOut(
+        success_count=len(items),
+        failure_count=0,
+        items=items,
+    )
+
+
+@router.post(
+    "/documents/dispatches",
+    response_model=DocumentDispatchOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a document dispatch sheet",
+)
+def create_document_dispatch_endpoint(
+    payload: DocumentDispatchCreateIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    db: Session = Depends(get_db),
+) -> DocumentDispatchOut:
+    dispatch = create_document_dispatch(db, payload, user_id="system")
+    client = db.execute(select(Client).where(Client.id == dispatch.client_id)).scalar_one_or_none()
+    return _build_document_dispatch_out(dispatch, client_name=client.name_cn if client else None)
+
+
+@router.get(
+    "/documents/dispatches/{dispatch_id}",
+    response_model=DocumentDispatchOut,
+    summary="Get a document dispatch sheet",
+)
+def get_document_dispatch_endpoint(
+    dispatch_id: str,
+    _perm: None = Depends(require_perm("Doc.Read")),
+    db: Session = Depends(get_db),
+) -> DocumentDispatchOut:
+    dispatch = get_document_dispatch(db, dispatch_id)
+    client = db.execute(select(Client).where(Client.id == dispatch.client_id)).scalar_one_or_none()
+    return _build_document_dispatch_out(dispatch, client_name=client.name_cn if client else None)
+
+
+@router.get(
+    "/documents/{document_id}/envelope-preview",
+    response_model=DocumentEnvelopePreviewOut,
+    summary="Preview envelope data for a document",
+)
+def get_document_envelope_preview_endpoint(
+    document_id: str,
+    _perm: None = Depends(require_perm("Doc.Read")),
+    db: Session = Depends(get_db),
+) -> DocumentEnvelopePreviewOut:
+    return get_document_envelope_preview(db, document_id=document_id)
 
 
 @router.get(

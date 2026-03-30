@@ -8,10 +8,14 @@ export interface Document {
     direction: 'IN' | 'OUT'
     case_id?: string
     case_no?: string
+    client_id?: string
+    client_name?: string
     doc_template_id?: string | null
     doc_date?: string
     doc_type?: string
     description?: string
+    outgoing_reg_no?: string | null
+    forward_date?: string | null
     created_at?: string
     updated_at?: string
     attachments?: Attachment[]
@@ -32,6 +36,75 @@ export interface DocumentListParams {
     replied?: boolean
     date_from?: string
     date_to?: string
+}
+
+export interface DocumentDispatchMailingListParams {
+    page?: number
+    page_size?: number
+    q?: string
+    client_id?: string
+    doc_template_id?: string
+    date_from?: string
+    date_to?: string
+}
+
+export interface DocumentMailingBatchIn {
+    selected_document_ids: string[]
+    outgoing_reg_no: string
+    forward_date?: string | null
+}
+
+export interface DocumentMailingBatchItemOut {
+    document_id: string
+    case_id: string
+    case_no?: string
+    outgoing_reg_no?: string | null
+    forward_date?: string | null
+}
+
+export interface DocumentMailingBatchOut {
+    success_count: number
+    failure_count: number
+    items: DocumentMailingBatchItemOut[]
+}
+
+export interface DocumentDispatchCreateIn {
+    client_id: string
+    dispatch_date: string
+    selected_document_ids: string[]
+    remark?: string | null
+}
+
+export interface DocumentDispatchLineOut {
+    id: string
+    dispatch_id: string
+    document_id: string
+    case_id: string
+    case_no?: string
+    doc_name: string
+    outgoing_reg_no?: string | null
+}
+
+export interface DocumentDispatchOut {
+    id: string
+    client_id: string
+    client_name?: string | null
+    dispatch_date: string
+    remark?: string | null
+    created_at: string
+    updated_at: string
+    lines: DocumentDispatchLineOut[]
+}
+
+export interface DocumentEnvelopePreviewOut {
+    document_id: string
+    case_id: string
+    case_no?: string
+    client_id?: string | null
+    client_name?: string | null
+    recipient_name?: string | null
+    recipient_address?: string | null
+    address_source: string
 }
 
 export interface DocumentCreatePayload {

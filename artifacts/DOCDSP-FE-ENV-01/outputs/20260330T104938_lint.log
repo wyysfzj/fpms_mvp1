@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/api/documents.ts src/api/documents.types.ts src/modules/documents/pages/DocumentEnvelopePrint.vue src/router/index.ts
+
