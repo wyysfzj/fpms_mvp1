@@ -1,0 +1,4 @@
+{"ts":"20260330T222051","step":"lint","cmd":"python3 -m ruff check backend/app/modules/grant_fees/api.py backend/app/modules/grant_fees/schemas.py backend/app/modules/grant_fees/service.py backend/tests/test_grant_fee_state_machine_api.py"}
+{"ts":"20260330T222055","step":"test","cmd":"bash -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_grant_fee_state_machine_api.py"}
+{"ts":"20260330T222102","step":"validate","cmd":"./scripts/task_validate.sh GFSM-BE-01"}
+{"ts":"20260330T222138","step":"validate","cmd":"./scripts/task_validate.sh GFSM-BE-01"}
