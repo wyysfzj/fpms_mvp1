@@ -12,30 +12,143 @@
       </div>
     </div>
 
-    <!-- Filter Bar -->
-    <el-row :gutter="16" style="margin-bottom: 16px">
-      <el-col :span="6">
-        <el-select v-model="filterStatus" placeholder="全部账单状态" clearable @change="onFilterChange">
+    <el-form class="filter-form" :inline="true">
+      <el-form-item label="客户编号">
+        <el-input
+          v-model="filters.client_id"
+          class="filter-input"
+          clearable
+          placeholder="请输入客户编号"
+          @keyup.enter="applyFilters"
+        />
+      </el-form-item>
+      <el-form-item label="账单状态">
+        <el-select
+          v-model="filters.bill_status"
+          class="filter-select"
+          clearable
+          placeholder="全部账单状态"
+        >
           <el-option label="全部" value="" />
+          <el-option label="草稿" value="DRAFT" />
           <el-option label="已开具" value="ISSUED" />
           <el-option label="已付款" value="PAID" />
           <el-option label="已作废" value="VOID" />
         </el-select>
-      </el-col>
-      <el-col :span="6">
-        <el-select
-          v-model="filterBadDebtStatus"
-          placeholder="全部坏账状态"
+      </el-form-item>
+      <el-form-item label="币种">
+        <el-input
+          v-model="filters.currency"
+          class="filter-input"
           clearable
-          @change="onFilterChange"
+          placeholder="例如 CNY"
+          @keyup.enter="applyFilters"
+        />
+      </el-form-item>
+      <el-form-item label="账单日期">
+        <el-date-picker
+          v-model="filters.bill_date_range"
+          class="filter-range"
+          clearable
+          end-placeholder="结束日期"
+          range-separator="至"
+          start-placeholder="开始日期"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+        />
+      </el-form-item>
+      <el-form-item label="账龄区间">
+        <el-select
+          v-model="filters.aging_bucket"
+          class="filter-select"
+          clearable
+          placeholder="全部账龄"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="未到期" value="CURRENT" />
+          <el-option label="0-30 天" value="0-30" />
+          <el-option label="31-60 天" value="31-60" />
+          <el-option label="61-90 天" value="61-90" />
+          <el-option label="90 天以上" value="90+" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="逾期">
+        <el-select
+          v-model="filters.is_overdue"
+          class="filter-select"
+          placeholder="全部"
+        >
+          <el-option label="全部" :value="''" />
+          <el-option label="仅逾期" :value="'true'" />
+          <el-option label="仅未逾期" :value="'false'" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="坏账">
+        <el-select
+          v-model="filters.is_bad_debt"
+          class="filter-select"
+          placeholder="全部"
+        >
+          <el-option label="全部" :value="''" />
+          <el-option label="仅坏账" :value="'true'" />
+          <el-option label="仅非坏账" :value="'false'" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="坏账状态">
+        <el-select
+          v-model="filters.bad_debt_status"
+          class="filter-select"
+          clearable
+          placeholder="全部坏账状态"
         >
           <el-option label="全部" value="" />
           <el-option label="无坏账" value="NONE" />
           <el-option label="未结清" value="OPEN" />
           <el-option label="已结清" value="CLOSED" />
         </el-select>
-      </el-col>
-    </el-row>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="applyFilters">查询</el-button>
+        <el-button @click="resetFilters">重置</el-button>
+      </el-form-item>
+    </el-form>
+
+    <div class="report-summary">
+      <div class="summary-card">
+        <span class="summary-label">应收账单数</span>
+        <span class="summary-value">{{ summary.receivable_bill_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">应收余额</span>
+        <span class="summary-value mono-num">
+          {{ formatAmount(summary.receivable_amount, summaryCurrency) }}
+        </span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">逾期账单数</span>
+        <span class="summary-value">{{ summary.overdue_bill_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">逾期余额</span>
+        <span class="summary-value mono-num">
+          {{ formatAmount(summary.overdue_amount, summaryCurrency) }}
+        </span>
+      </div>
+    </div>
+
+    <div class="aging-summary">
+      <div
+        v-for="bucket in summary.aging_buckets"
+        :key="bucket.bucket"
+        class="aging-summary-card"
+      >
+        <span class="aging-summary-label">{{ agingBucketLabel(bucket.bucket) }}</span>
+        <span class="aging-summary-count">{{ bucket.bill_count }} 条</span>
+        <span class="aging-summary-amount mono-num">
+          {{ formatAmount(bucket.amount, summaryCurrency) }}
+        </span>
+      </div>
+    </div>
 
     <div class="bad-debt-summary">
       <div class="bad-debt-summary-card">
@@ -117,6 +230,32 @@
             </span>
           </template>
         </el-table-column>
+        <el-table-column label="到期日期" width="120">
+          <template #default="{ row }">
+            {{ row.due_date ? formatDate(row.due_date) : '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="账龄" width="120">
+          <template #default="{ row }">
+            <el-tag :type="agingBucketTagType(row.aging_bucket)" size="small">
+              {{ agingBucketLabel(row.aging_bucket) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="逾期" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.is_overdue ? 'danger' : 'info'" size="small">
+              {{ row.is_overdue ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="坏账" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.is_bad_debt ? 'warning' : 'info'" size="small">
+              {{ row.is_bad_debt ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column :label="ZH.billList.issueDate" width="120">
           <template #default="{ row }">
             {{ row.issue_date ? formatDate(row.issue_date) : '—' }}
@@ -150,25 +289,48 @@ const error = ref<ApiError | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const filterStatus = ref('')
-const filterBadDebtStatus = ref('')
-const summary = ref<Pick<
-  BillListResponse,
-  | 'bad_debt_bill_count'
-  | 'bad_debt_amount'
-  | 'total_recovered_amount'
-  | 'remaining_bad_debt_balance'
->>({
+const filters = ref({
+  client_id: '',
+  bill_status: '',
+  currency: '',
+  bill_date_range: [] as string[],
+  aging_bucket: '',
+  is_overdue: '' as '' | 'true' | 'false',
+  is_bad_debt: '' as '' | 'true' | 'false',
+  bad_debt_status: '',
+})
+const summary = ref<BillListResponse['summary']>({
+  receivable_bill_count: 0,
+  receivable_amount: 0,
+  overdue_bill_count: 0,
+  overdue_amount: 0,
   bad_debt_bill_count: 0,
   bad_debt_amount: 0,
   total_recovered_amount: 0,
   remaining_bad_debt_balance: 0,
+  aging_buckets: [],
 })
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 const summaryCurrency = computed(() => bills.value[0]?.currency || 'CNY')
 
-function onFilterChange() {
+function applyFilters() {
   page.value = 1
+  fetchBills()
+}
+
+function resetFilters() {
+  filters.value = {
+    client_id: '',
+    bill_status: '',
+    currency: '',
+    bill_date_range: [],
+    aging_bucket: '',
+    is_overdue: '',
+    is_bad_debt: '',
+    bad_debt_status: '',
+  }
+  page.value = 1
+  fetchBills()
 }
 
 async function fetchBills() {
@@ -178,17 +340,21 @@ async function fetchBills() {
     const result = await getBills({
       page: page.value,
       page_size: pageSize.value,
-      status: filterStatus.value || undefined,
-      bad_debt_status: filterBadDebtStatus.value || undefined,
+      bill_status: filters.value.bill_status || undefined,
+      client_id: filters.value.client_id || undefined,
+      currency: filters.value.currency || undefined,
+      bill_date_from: filters.value.bill_date_range[0] || undefined,
+      bill_date_to: filters.value.bill_date_range[1] || undefined,
+      aging_bucket: filters.value.aging_bucket || undefined,
+      is_overdue:
+        filters.value.is_overdue === '' ? undefined : filters.value.is_overdue === 'true',
+      is_bad_debt:
+        filters.value.is_bad_debt === '' ? undefined : filters.value.is_bad_debt === 'true',
+      bad_debt_status: filters.value.bad_debt_status || undefined,
     })
     bills.value = result.items
     total.value = result.total
-    summary.value = {
-      bad_debt_bill_count: result.bad_debt_bill_count,
-      bad_debt_amount: result.bad_debt_amount,
-      total_recovered_amount: result.total_recovered_amount,
-      remaining_bad_debt_balance: result.remaining_bad_debt_balance,
-    }
+    summary.value = result.summary
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -202,6 +368,30 @@ function statusTagType(status: BillStatus): 'info' | 'warning' | 'success' | 'da
     case 'ISSUED': return 'warning'
     case 'VOID': return 'danger'
     default: return 'info'
+  }
+}
+
+function agingBucketLabel(bucket?: string): string {
+  switch (bucket) {
+    case 'CURRENT': return '未到期'
+    case '0-30': return '0-30 天'
+    case '31-60': return '31-60 天'
+    case '61-90': return '61-90 天'
+    case '90+': return '90 天以上'
+    default: return '未分类'
+  }
+}
+
+function agingBucketTagType(bucket?: string): 'success' | 'warning' | 'danger' | 'info' {
+  switch (bucket) {
+    case 'CURRENT': return 'success'
+    case '0-30': return 'info'
+    case '31-60': return 'warning'
+    case '61-90':
+    case '90+':
+      return 'danger'
+    default:
+      return 'info'
   }
 }
 
@@ -225,12 +415,25 @@ function handleRowClick(row: BillListItem) {
   router.push(`/billing/bills/${row.id}`)
 }
 
-watch([page, pageSize, filterStatus, filterBadDebtStatus], () => {
+watch([page, pageSize], () => {
   fetchBills()
 }, { immediate: true })
 </script>
 
 <style scoped>
+.filter-form {
+  margin-bottom: 16px;
+}
+
+.filter-input,
+.filter-select {
+  width: 180px;
+}
+
+.filter-range {
+  width: 260px;
+}
+
 .bill-no {
   font-family: var(--font-mono);
   font-weight: 500;
@@ -244,6 +447,8 @@ watch([page, pageSize, filterStatus, filterBadDebtStatus], () => {
   color: var(--color-success);
 }
 
+.report-summary,
+.aging-summary,
 .bad-debt-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -251,6 +456,8 @@ watch([page, pageSize, filterStatus, filterBadDebtStatus], () => {
   margin-bottom: 16px;
 }
 
+.summary-card,
+.aging-summary-card,
 .bad-debt-summary-card {
   border: 1px solid var(--el-border-color-light);
   border-radius: 10px;
@@ -261,11 +468,16 @@ watch([page, pageSize, filterStatus, filterBadDebtStatus], () => {
   gap: 6px;
 }
 
+.summary-label,
+.aging-summary-label,
 .bad-debt-summary-label {
   font-size: 12px;
   color: var(--el-text-color-secondary);
 }
 
+.summary-value,
+.aging-summary-count,
+.aging-summary-amount,
 .bad-debt-summary-value {
   font-size: 16px;
   font-weight: 600;
@@ -273,12 +485,16 @@ watch([page, pageSize, filterStatus, filterBadDebtStatus], () => {
 }
 
 @media (max-width: 1200px) {
+  .report-summary,
+  .aging-summary,
   .bad-debt-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 640px) {
+  .report-summary,
+  .aging-summary,
   .bad-debt-summary {
     grid-template-columns: 1fr;
   }

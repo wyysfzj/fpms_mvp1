@@ -65,6 +65,61 @@ class BillListBadDebtSummaryResponse(BaseModel):
     remaining_bad_debt_balance: Decimal = Field(Decimal("0"), ge=0)
 
 
+class BillListAgingBucketResponse(BaseModel):
+    """Aggregated aging bucket row for the billing report."""
+
+    bucket: str
+    bill_count: int = 0
+    amount: Decimal = Field(Decimal("0"), ge=0)
+
+
+class BillListItemResponse(BaseModel):
+    """Response schema for the billing report list rows."""
+
+    id: str
+    bill_no: str | None = None
+    client_id: str
+    client_name: str | None = None
+    currency: str
+    status: str
+    amount: Decimal = Field(Decimal("0"), ge=0)
+    balance: Decimal = Field(Decimal("0"), ge=0)
+    bill_date: date | None = None
+    due_date: date | None = None
+    days_past_due: int | None = None
+    aging_bucket: str = "CURRENT"
+    is_overdue: bool = False
+    is_bad_debt: bool = False
+
+
+class BillListReportSummaryResponse(BaseModel):
+    """Summary block for the first-round billing statistics report."""
+
+    receivable_bill_count: int = 0
+    receivable_amount: Decimal = Field(Decimal("0"), ge=0)
+    overdue_bill_count: int = 0
+    overdue_amount: Decimal = Field(Decimal("0"), ge=0)
+    bad_debt_bill_count: int = 0
+    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
+    total_recovered_amount: Decimal = Field(Decimal("0"), ge=0)
+    remaining_bad_debt_balance: Decimal = Field(Decimal("0"), ge=0)
+    aging_buckets: list[BillListAgingBucketResponse] = Field(default_factory=list)
+
+
+class BillListResponse(BaseModel):
+    """Response schema for the billing statistics list/report contract."""
+
+    items: list[BillListItemResponse]
+    page: int
+    page_size: int
+    total: int
+    summary: BillListReportSummaryResponse
+    bad_debt_bill_count: int = 0
+    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
+    total_recovered_amount: Decimal = Field(Decimal("0"), ge=0)
+    remaining_bad_debt_balance: Decimal = Field(Decimal("0"), ge=0)
+
+
 class BillItemDetailResponse(BaseModel):
     """Response schema for bill detail items."""
 

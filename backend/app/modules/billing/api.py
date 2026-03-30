@@ -23,7 +23,9 @@ from app.modules.billing.schemas import (
     BillDetailResponse,
     BillFromDraftsRequest,
     BillItemDetailResponse,
-    BillListBadDebtSummaryResponse,
+    BillListItemResponse,
+    BillListReportSummaryResponse,
+    BillListResponse,
     BillManualCreateSchema,
     BillResponse,
     CaseReceiptCreate,
@@ -39,6 +41,7 @@ from app.modules.billing.schemas import (
 from app.modules.billing.service import (
     apply_bill_bad_debt_action,
     apply_bill_bad_debt_recovery,
+    build_bill_report_item,
     create_case_receipt,
     create_manual_bill_record,
     generate_bill_from_drafts,
@@ -191,14 +194,23 @@ def _build_bill_detail_response(db: Session, bill_id: str) -> BillDetailResponse
     )
 
 
-@router.get("/bills", summary="List bills")
+@router.get("/bills", summary="List bills", response_model=BillListResponse)
 def get_bills(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    client_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    bill_status: str | None = Query(default=None),
+    currency: str | None = Query(default=None),
+    bill_date_from: date | None = Query(default=None),
+    bill_date_to: date | None = Query(default=None),
+    aging_bucket: str | None = Query(default=None),
+    is_overdue: bool | None = Query(default=None),
+    is_bad_debt: bool | None = Query(default=None),
     bad_debt_status: str | None = Query(default=None),
     _perm: None = Depends(require_perm("Bill.Read")),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
+) -> BillListResponse:
     """
     List bills with pagination.
 
@@ -221,6 +233,15 @@ def get_bills(
         db,
         page=page,
         page_size=page_size,
+        client_id=client_id,
+        status=status,
+        bill_status=bill_status,
+        currency=currency,
+        bill_date_from=bill_date_from,
+        bill_date_to=bill_date_to,
+        aging_bucket=aging_bucket,
+        is_overdue=is_overdue,
+        is_bad_debt=is_bad_debt,
         bad_debt_status=bad_debt_status,
     )
 
@@ -232,28 +253,24 @@ def get_bills(
         client_name_map = {c.id: c.name_cn for c in clients}
 
     items = [
-        {
-            "id": bill.id,
-            "bill_no": bill.bill_no,
-            "client_id": bill.client_id,
-            "client_name": client_name_map.get(bill.client_id),
-            "currency": bill.currency,
-            "status": bill.status,
-            "amount": bill.amount,
-            "balance": bill.balance,
-            "bill_date": bill.bill_date,
-            "due_date": bill.due_date,
-        }
+        BillListItemResponse(
+            **build_bill_report_item(bill),
+            client_name=client_name_map.get(bill.client_id),
+        )
         for bill in bills
     ]
-    summary = BillListBadDebtSummaryResponse.model_validate(bad_debt_summary).model_dump()
-    return {
-        "items": items,
-        "page": page,
-        "page_size": page_size,
-        "total": total,
-        **summary,
-    }
+    summary = BillListReportSummaryResponse.model_validate(bad_debt_summary)
+    return BillListResponse(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        summary=summary,
+        bad_debt_bill_count=summary.bad_debt_bill_count,
+        bad_debt_amount=summary.bad_debt_amount,
+        total_recovered_amount=summary.total_recovered_amount,
+        remaining_bad_debt_balance=summary.remaining_bad_debt_balance,
+    )
 
 
 @router.post(

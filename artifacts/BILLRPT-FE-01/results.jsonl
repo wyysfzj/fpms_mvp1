@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"cd frontend && npm run lint -- src/api/billing.ts src/api/billing.types.ts src/modules/billing/pages/BillList.vue","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}

@@ -45,6 +45,10 @@ interface BackendBill {
     issue_date?: string | null
     bill_date?: string | null
     due_date?: string | null
+    days_past_due?: number | null
+    aging_bucket?: string | null
+    is_overdue?: boolean | null
+    is_bad_debt?: boolean | null
     notes?: string | null
     created_at?: string
     updated_at?: string
@@ -73,6 +77,21 @@ interface BackendBill {
 }
 
 interface BackendBillListResponse extends Pagination<BackendBill> {
+    summary: {
+        receivable_bill_count?: number | string
+        receivable_amount?: number | string
+        overdue_bill_count?: number | string
+        overdue_amount?: number | string
+        bad_debt_bill_count?: number | string
+        bad_debt_amount?: number | string
+        total_recovered_amount?: number | string
+        remaining_bad_debt_balance?: number | string
+        aging_buckets?: {
+            bucket: string
+            bill_count?: number | string
+            amount?: number | string
+        }[]
+    }
     bad_debt_bill_count: number
     bad_debt_amount: number | string
     total_recovered_amount: number | string
@@ -160,7 +179,12 @@ function mapBillListItem(input: BackendBill): BillListItem {
         balance: asNumber(input.balance),
         currency: input.currency || 'CNY',
         issue_date: input.bill_date || input.issue_date || undefined,
+        bill_date: input.bill_date || undefined,
         due_date: input.due_date || undefined,
+        days_past_due: input.days_past_due ?? undefined,
+        aging_bucket: input.aging_bucket || undefined,
+        is_overdue: input.is_overdue ?? false,
+        is_bad_debt: input.is_bad_debt ?? false,
     }
 }
 
@@ -282,13 +306,54 @@ function mapOffset(input: BackendOffset): OffsetListItem {
  * Get paginated list of bills
  */
 export async function getBills(params: BillListParams = {}): Promise<BillListResponse> {
-    const { page = 1, page_size = 20, status, client_id, bad_debt_status } = params
+    const {
+        page = 1,
+        page_size = 20,
+        status,
+        bill_status,
+        client_id,
+        currency,
+        bill_date_from,
+        bill_date_to,
+        aging_bucket,
+        is_overdue,
+        is_bad_debt,
+        bad_debt_status,
+    } = params
     const response = await http.get<BackendBillListResponse>('/bills', {
-        params: { page, page_size, status, client_id, bad_debt_status },
+        params: {
+            page,
+            page_size,
+            status,
+            bill_status,
+            client_id,
+            currency,
+            bill_date_from,
+            bill_date_to,
+            aging_bucket,
+            is_overdue,
+            is_bad_debt,
+            bad_debt_status,
+        },
     })
 
     return {
         ...response.data,
+        summary: {
+            receivable_bill_count: asNumber(response.data.summary?.receivable_bill_count),
+            receivable_amount: asNumber(response.data.summary?.receivable_amount),
+            overdue_bill_count: asNumber(response.data.summary?.overdue_bill_count),
+            overdue_amount: asNumber(response.data.summary?.overdue_amount),
+            bad_debt_bill_count: asNumber(response.data.summary?.bad_debt_bill_count),
+            bad_debt_amount: asNumber(response.data.summary?.bad_debt_amount),
+            total_recovered_amount: asNumber(response.data.summary?.total_recovered_amount),
+            remaining_bad_debt_balance: asNumber(response.data.summary?.remaining_bad_debt_balance),
+            aging_buckets: (response.data.summary?.aging_buckets || []).map((bucket) => ({
+                bucket: bucket.bucket,
+                bill_count: asNumber(bucket.bill_count),
+                amount: asNumber(bucket.amount),
+            })),
+        },
         bad_debt_bill_count: response.data.bad_debt_bill_count,
         bad_debt_amount: asNumber(response.data.bad_debt_amount),
         total_recovered_amount: asNumber(response.data.total_recovered_amount),

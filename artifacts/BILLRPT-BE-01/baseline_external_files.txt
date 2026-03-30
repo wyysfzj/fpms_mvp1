@@ -1,0 +1,21 @@
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/expenses/models.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+?? .superpowers/brainstorm/56204-1774594331/.server-stopped
+?? .superpowers/brainstorm/56204-1774594331/.server.log
+?? .superpowers/brainstorm/56204-1774594331/.server.pid
+?? .superpowers/brainstorm/56204-1774594331/offset-reversal-ui.html
+?? .superpowers/brainstorm/56204-1774594331/waiting.html
+?? docs/superpowers/plans/2026-03-30-billing-statistics-report.md
+?? docs/superpowers/plans/2026-03-30-reports-program-decomposition.md
+?? docs/superpowers/specs/2026-03-30-billing-statistics-report-design.md
+?? docs/superpowers/specs/2026-03-30-reports-program-decomposition-design.md
+?? tasks/postenhancement/backend/BILLRPT-BE-01.md
+?? tasks/postenhancement/backend/BILLRPT-QA-01.md
+?? tasks/postenhancement/frontend/BILLRPT-FE-01.md

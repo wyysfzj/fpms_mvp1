@@ -131,6 +131,166 @@ def _normalize_bad_debt_status_filter(bad_debt_status: str | None) -> str | None
     return normalized or None
 
 
+_AGING_BUCKETS = ("CURRENT", "0-30", "31-60", "61-90", "90+")
+
+
+def _normalize_text_filter(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().upper()
+    return normalized or None
+
+
+def _normalize_aging_bucket_filter(aging_bucket: str | None) -> str | None:
+    normalized = _normalize_text_filter(aging_bucket)
+    if normalized is None:
+        return None
+    if normalized not in _AGING_BUCKETS:
+        raise_business_error(
+            "INVALID_AGING_BUCKET",
+            "Unsupported aging bucket",
+            status_code=400,
+        )
+    return normalized
+
+
+def _is_bad_debt_bill(bill: Bill) -> bool:
+    return _normalize_bad_debt_status_filter(bill.bad_debt_status) != "NONE"
+
+
+def _is_receivable_bill(bill: Bill) -> bool:
+    return not _is_bad_debt_bill(bill) and Decimal(bill.balance or 0) > Decimal("0")
+
+
+def _get_bill_days_past_due(bill: Bill, *, today: date) -> int | None:
+    if not bill.due_date:
+        return None
+    return (today - bill.due_date).days
+
+
+def _get_bill_aging_bucket(days_past_due: int | None) -> str:
+    if days_past_due is None or days_past_due <= 0:
+        return "CURRENT"
+    if days_past_due <= 30:
+        return "0-30"
+    if days_past_due <= 60:
+        return "31-60"
+    if days_past_due <= 90:
+        return "61-90"
+    return "90+"
+
+
+def _is_bill_overdue(bill: Bill, *, today: date) -> bool:
+    return _is_receivable_bill(bill) and bill.due_date is not None and bill.due_date < today
+
+
+def build_bill_report_item(bill: Bill, *, today: date | None = None) -> dict[str, object]:
+    report_today = today or date.today()
+    days_past_due = _get_bill_days_past_due(bill, today=report_today)
+    balance = Decimal(bill.balance or 0)
+    return {
+        "id": bill.id,
+        "bill_no": bill.bill_no,
+        "client_id": bill.client_id,
+        "currency": bill.currency,
+        "status": bill.status,
+        "amount": bill.amount,
+        "balance": balance,
+        "bill_date": bill.bill_date,
+        "due_date": bill.due_date,
+        "days_past_due": days_past_due,
+        "aging_bucket": _get_bill_aging_bucket(days_past_due),
+        "is_overdue": _is_bill_overdue(bill, today=report_today),
+        "is_bad_debt": _is_bad_debt_bill(bill),
+    }
+
+
+def _bill_matches_report_filters(
+    bill: Bill,
+    *,
+    today: date,
+    status: str | None,
+    bill_status: str | None,
+    client_id: str | None,
+    currency: str | None,
+    bill_date_from: date | None,
+    bill_date_to: date | None,
+    aging_bucket: str | None,
+    is_overdue: bool | None,
+    is_bad_debt: bool | None,
+    bad_debt_status: str | None,
+) -> bool:
+    normalized_bill_status = _normalize_text_filter(bill_status) or _normalize_text_filter(status)
+    normalized_currency = _normalize_text_filter(currency)
+    normalized_bad_debt_status = _normalize_bad_debt_status_filter(bad_debt_status)
+    normalized_aging_bucket = _normalize_aging_bucket_filter(aging_bucket)
+
+    if client_id and bill.client_id != client_id:
+        return False
+    if normalized_bill_status is not None and _normalize_text_filter(bill.status) != normalized_bill_status:
+        return False
+    if normalized_currency is not None and _normalize_text_filter(bill.currency) != normalized_currency:
+        return False
+    if bill_date_from and bill.bill_date and bill.bill_date < bill_date_from:
+        return False
+    if bill_date_to and bill.bill_date and bill.bill_date > bill_date_to:
+        return False
+    if bill_date_from and bill.bill_date is None:
+        return False
+    if bill_date_to and bill.bill_date is None:
+        return False
+    if normalized_bad_debt_status is not None and _normalize_bad_debt_status_filter(
+        bill.bad_debt_status
+    ) != normalized_bad_debt_status:
+        return False
+
+    bill_is_bad_debt = _is_bad_debt_bill(bill)
+    bill_is_overdue = _is_bill_overdue(bill, today=today)
+    bill_aging_bucket = _get_bill_aging_bucket(_get_bill_days_past_due(bill, today=today))
+
+    if is_bad_debt is True and not bill_is_bad_debt:
+        return False
+    if is_bad_debt is False and bill_is_bad_debt:
+        return False
+    if is_overdue is True and not bill_is_overdue:
+        return False
+    if is_overdue is False and bill_is_overdue:
+        return False
+    if normalized_aging_bucket is not None:
+        if bill_is_bad_debt or not _is_receivable_bill(bill):
+            return False
+        if bill_aging_bucket != normalized_aging_bucket:
+            return False
+    return True
+
+
+def _summarize_bill_report_rows(db: Session, bills: list[Bill], *, today: date) -> dict[str, object]:
+    receivable_rows = [bill for bill in bills if _is_receivable_bill(bill)]
+    overdue_rows = [bill for bill in receivable_rows if _is_bill_overdue(bill, today=today)]
+
+    aging_buckets = {
+        bucket: {"bucket": bucket, "bill_count": 0, "amount": Decimal("0")}
+        for bucket in _AGING_BUCKETS
+    }
+    for bill in receivable_rows:
+        bucket = _get_bill_aging_bucket(_get_bill_days_past_due(bill, today=today))
+        aging_buckets[bucket]["bill_count"] += 1
+        aging_buckets[bucket]["amount"] += Decimal(bill.balance or 0)
+
+    bad_debt_summary = _summarize_bad_debt_bills(
+        db,
+        [(bill.id, bill.bad_debt_status) for bill in bills if _is_bad_debt_bill(bill)],
+    )
+    return {
+        "receivable_bill_count": len(receivable_rows),
+        "receivable_amount": sum((Decimal(bill.balance or 0) for bill in receivable_rows), Decimal("0")),
+        "overdue_bill_count": len(overdue_rows),
+        "overdue_amount": sum((Decimal(bill.balance or 0) for bill in overdue_rows), Decimal("0")),
+        "aging_buckets": [aging_buckets[bucket] for bucket in _AGING_BUCKETS],
+        **bad_debt_summary,
+    }
+
+
 def _summarize_bad_debt_bills(
     db: Session, bill_rows: list[tuple[str, str | None]]
 ) -> dict[str, Decimal | int]:
@@ -316,19 +476,59 @@ def list_bills(
     *,
     page: int = 1,
     page_size: int = 20,
+    client_id: str | None = None,
+    status: str | None = None,
+    bill_status: str | None = None,
+    currency: str | None = None,
+    bill_date_from: date | None = None,
+    bill_date_to: date | None = None,
+    aging_bucket: str | None = None,
+    is_overdue: bool | None = None,
+    is_bad_debt: bool | None = None,
     bad_debt_status: str | None = None,
-) -> tuple[list[Bill], int, dict[str, Decimal | int]]:
+) -> tuple[list[Bill], int, dict[str, object]]:
     query = db.query(Bill)
     normalized_bad_debt_status = _normalize_bad_debt_status_filter(bad_debt_status)
+    normalized_bill_status = _normalize_text_filter(bill_status) or _normalize_text_filter(status)
+    normalized_currency = _normalize_text_filter(currency)
+
+    if client_id:
+        query = query.filter(Bill.client_id == client_id)
+    if normalized_bill_status is not None:
+        query = query.filter(func.upper(Bill.status) == normalized_bill_status)
+    if normalized_currency is not None:
+        query = query.filter(func.upper(Bill.currency) == normalized_currency)
+    if bill_date_from is not None:
+        query = query.filter(Bill.bill_date >= bill_date_from)
+    if bill_date_to is not None:
+        query = query.filter(Bill.bill_date <= bill_date_to)
     if normalized_bad_debt_status is not None:
         query = query.filter(func.upper(Bill.bad_debt_status) == normalized_bad_debt_status)
 
-    total = query.count()
-    bills = (
-        query.order_by(Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    )
-    bill_rows = query.order_by(None).with_entities(Bill.id, Bill.bad_debt_status).all()
-    summary = _summarize_bad_debt_bills(db, bill_rows)
+    rows = query.order_by(Bill.created_at.desc(), Bill.id.desc()).all()
+    today = date.today()
+    report_rows = [
+        bill
+        for bill in rows
+        if _bill_matches_report_filters(
+            bill,
+            today=today,
+            status=status,
+            bill_status=bill_status,
+            client_id=client_id,
+            currency=currency,
+            bill_date_from=bill_date_from,
+            bill_date_to=bill_date_to,
+            aging_bucket=aging_bucket,
+            is_overdue=is_overdue,
+            is_bad_debt=is_bad_debt,
+            bad_debt_status=bad_debt_status,
+        )
+    ]
+
+    total = len(report_rows)
+    bills = report_rows[(page - 1) * page_size : (page - 1) * page_size + page_size]
+    summary = _summarize_bill_report_rows(db, report_rows, today=today)
     return bills, total, summary
 
 

@@ -1,0 +1,737 @@
+diff --git a/backend/app/modules/billing/api.py b/backend/app/modules/billing/api.py
+index 34e07d6..0bfee4b 100644
+--- a/backend/app/modules/billing/api.py
++++ b/backend/app/modules/billing/api.py
+@@ -23,7 +23,9 @@ from app.modules.billing.schemas import (
+     BillDetailResponse,
+     BillFromDraftsRequest,
+     BillItemDetailResponse,
+-    BillListBadDebtSummaryResponse,
++    BillListItemResponse,
++    BillListReportSummaryResponse,
++    BillListResponse,
+     BillManualCreateSchema,
+     BillResponse,
+     CaseReceiptCreate,
+@@ -39,6 +41,7 @@ from app.modules.billing.schemas import (
+ from app.modules.billing.service import (
+     apply_bill_bad_debt_action,
+     apply_bill_bad_debt_recovery,
++    build_bill_report_item,
+     create_case_receipt,
+     create_manual_bill_record,
+     generate_bill_from_drafts,
+@@ -191,14 +194,23 @@ def _build_bill_detail_response(db: Session, bill_id: str) -> BillDetailResponse
+     )
+ 
+ 
+-@router.get("/bills", summary="List bills")
++@router.get("/bills", summary="List bills", response_model=BillListResponse)
+ def get_bills(
+     page: int = Query(default=1, ge=1),
+     page_size: int = Query(default=20, ge=1, le=100),
++    client_id: str | None = Query(default=None),
++    status: str | None = Query(default=None),
++    bill_status: str | None = Query(default=None),
++    currency: str | None = Query(default=None),
++    bill_date_from: date | None = Query(default=None),
++    bill_date_to: date | None = Query(default=None),
++    aging_bucket: str | None = Query(default=None),
++    is_overdue: bool | None = Query(default=None),
++    is_bad_debt: bool | None = Query(default=None),
+     bad_debt_status: str | None = Query(default=None),
+     _perm: None = Depends(require_perm("Bill.Read")),
+     db: Session = Depends(get_db),
+-) -> dict[str, Any]:
++) -> BillListResponse:
+     """
+     List bills with pagination.
+ 
+@@ -221,6 +233,15 @@ def get_bills(
+         db,
+         page=page,
+         page_size=page_size,
++        client_id=client_id,
++        status=status,
++        bill_status=bill_status,
++        currency=currency,
++        bill_date_from=bill_date_from,
++        bill_date_to=bill_date_to,
++        aging_bucket=aging_bucket,
++        is_overdue=is_overdue,
++        is_bad_debt=is_bad_debt,
+         bad_debt_status=bad_debt_status,
+     )
+ 
+@@ -232,28 +253,24 @@ def get_bills(
+         client_name_map = {c.id: c.name_cn for c in clients}
+ 
+     items = [
+-        {
+-            "id": bill.id,
+-            "bill_no": bill.bill_no,
+-            "client_id": bill.client_id,
+-            "client_name": client_name_map.get(bill.client_id),
+-            "currency": bill.currency,
+-            "status": bill.status,
+-            "amount": bill.amount,
+-            "balance": bill.balance,
+-            "bill_date": bill.bill_date,
+-            "due_date": bill.due_date,
+-        }
++        BillListItemResponse(
++            **build_bill_report_item(bill),
++            client_name=client_name_map.get(bill.client_id),
++        )
+         for bill in bills
+     ]
+-    summary = BillListBadDebtSummaryResponse.model_validate(bad_debt_summary).model_dump()
+-    return {
+-        "items": items,
+-        "page": page,
+-        "page_size": page_size,
+-        "total": total,
+-        **summary,
+-    }
++    summary = BillListReportSummaryResponse.model_validate(bad_debt_summary)
++    return BillListResponse(
++        items=items,
++        page=page,
++        page_size=page_size,
++        total=total,
++        summary=summary,
++        bad_debt_bill_count=summary.bad_debt_bill_count,
++        bad_debt_amount=summary.bad_debt_amount,
++        total_recovered_amount=summary.total_recovered_amount,
++        remaining_bad_debt_balance=summary.remaining_bad_debt_balance,
++    )
+ 
+ 
+ @router.post(
+diff --git a/backend/app/modules/billing/schemas.py b/backend/app/modules/billing/schemas.py
+index 06e56ab..a5a11bd 100644
+--- a/backend/app/modules/billing/schemas.py
++++ b/backend/app/modules/billing/schemas.py
+@@ -65,6 +65,61 @@ class BillListBadDebtSummaryResponse(BaseModel):
+     remaining_bad_debt_balance: Decimal = Field(Decimal("0"), ge=0)
+ 
+ 
++class BillListAgingBucketResponse(BaseModel):
++    """Aggregated aging bucket row for the billing report."""
++
++    bucket: str
++    bill_count: int = 0
++    amount: Decimal = Field(Decimal("0"), ge=0)
++
++
++class BillListItemResponse(BaseModel):
++    """Response schema for the billing report list rows."""
++
++    id: str
++    bill_no: str | None = None
++    client_id: str
++    client_name: str | None = None
++    currency: str
++    status: str
++    amount: Decimal = Field(Decimal("0"), ge=0)
++    balance: Decimal = Field(Decimal("0"), ge=0)
++    bill_date: date | None = None
++    due_date: date | None = None
++    days_past_due: int | None = None
++    aging_bucket: str = "CURRENT"
++    is_overdue: bool = False
++    is_bad_debt: bool = False
++
++
++class BillListReportSummaryResponse(BaseModel):
++    """Summary block for the first-round billing statistics report."""
++
++    receivable_bill_count: int = 0
++    receivable_amount: Decimal = Field(Decimal("0"), ge=0)
++    overdue_bill_count: int = 0
++    overdue_amount: Decimal = Field(Decimal("0"), ge=0)
++    bad_debt_bill_count: int = 0
++    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
++    total_recovered_amount: Decimal = Field(Decimal("0"), ge=0)
++    remaining_bad_debt_balance: Decimal = Field(Decimal("0"), ge=0)
++    aging_buckets: list[BillListAgingBucketResponse] = Field(default_factory=list)
++
++
++class BillListResponse(BaseModel):
++    """Response schema for the billing statistics list/report contract."""
++
++    items: list[BillListItemResponse]
++    page: int
++    page_size: int
++    total: int
++    summary: BillListReportSummaryResponse
++    bad_debt_bill_count: int = 0
++    bad_debt_amount: Decimal = Field(Decimal("0"), ge=0)
++    total_recovered_amount: Decimal = Field(Decimal("0"), ge=0)
++    remaining_bad_debt_balance: Decimal = Field(Decimal("0"), ge=0)
++
++
+ class BillItemDetailResponse(BaseModel):
+     """Response schema for bill detail items."""
+ 
+diff --git a/backend/app/modules/billing/service.py b/backend/app/modules/billing/service.py
+index a53a9bc..92f16f1 100644
+--- a/backend/app/modules/billing/service.py
++++ b/backend/app/modules/billing/service.py
+@@ -131,6 +131,166 @@ def _normalize_bad_debt_status_filter(bad_debt_status: str | None) -> str | None
+     return normalized or None
+ 
+ 
++_AGING_BUCKETS = ("CURRENT", "0-30", "31-60", "61-90", "90+")
++
++
++def _normalize_text_filter(value: str | None) -> str | None:
++    if value is None:
++        return None
++    normalized = value.strip().upper()
++    return normalized or None
++
++
++def _normalize_aging_bucket_filter(aging_bucket: str | None) -> str | None:
++    normalized = _normalize_text_filter(aging_bucket)
++    if normalized is None:
++        return None
++    if normalized not in _AGING_BUCKETS:
++        raise_business_error(
++            "INVALID_AGING_BUCKET",
++            "Unsupported aging bucket",
++            status_code=400,
++        )
++    return normalized
++
++
++def _is_bad_debt_bill(bill: Bill) -> bool:
++    return _normalize_bad_debt_status_filter(bill.bad_debt_status) != "NONE"
++
++
++def _is_receivable_bill(bill: Bill) -> bool:
++    return not _is_bad_debt_bill(bill) and Decimal(bill.balance or 0) > Decimal("0")
++
++
++def _get_bill_days_past_due(bill: Bill, *, today: date) -> int | None:
++    if not bill.due_date:
++        return None
++    return (today - bill.due_date).days
++
++
++def _get_bill_aging_bucket(days_past_due: int | None) -> str:
++    if days_past_due is None or days_past_due <= 0:
++        return "CURRENT"
++    if days_past_due <= 30:
++        return "0-30"
++    if days_past_due <= 60:
++        return "31-60"
++    if days_past_due <= 90:
++        return "61-90"
++    return "90+"
++
++
++def _is_bill_overdue(bill: Bill, *, today: date) -> bool:
++    return _is_receivable_bill(bill) and bill.due_date is not None and bill.due_date < today
++
++
++def build_bill_report_item(bill: Bill, *, today: date | None = None) -> dict[str, object]:
++    report_today = today or date.today()
++    days_past_due = _get_bill_days_past_due(bill, today=report_today)
++    balance = Decimal(bill.balance or 0)
++    return {
++        "id": bill.id,
++        "bill_no": bill.bill_no,
++        "client_id": bill.client_id,
++        "currency": bill.currency,
++        "status": bill.status,
++        "amount": bill.amount,
++        "balance": balance,
++        "bill_date": bill.bill_date,
++        "due_date": bill.due_date,
++        "days_past_due": days_past_due,
++        "aging_bucket": _get_bill_aging_bucket(days_past_due),
++        "is_overdue": _is_bill_overdue(bill, today=report_today),
++        "is_bad_debt": _is_bad_debt_bill(bill),
++    }
++
++
++def _bill_matches_report_filters(
++    bill: Bill,
++    *,
++    today: date,
++    status: str | None,
++    bill_status: str | None,
++    client_id: str | None,
++    currency: str | None,
++    bill_date_from: date | None,
++    bill_date_to: date | None,
++    aging_bucket: str | None,
++    is_overdue: bool | None,
++    is_bad_debt: bool | None,
++    bad_debt_status: str | None,
++) -> bool:
++    normalized_bill_status = _normalize_text_filter(bill_status) or _normalize_text_filter(status)
++    normalized_currency = _normalize_text_filter(currency)
++    normalized_bad_debt_status = _normalize_bad_debt_status_filter(bad_debt_status)
++    normalized_aging_bucket = _normalize_aging_bucket_filter(aging_bucket)
++
++    if client_id and bill.client_id != client_id:
++        return False
++    if normalized_bill_status is not None and _normalize_text_filter(bill.status) != normalized_bill_status:
++        return False
++    if normalized_currency is not None and _normalize_text_filter(bill.currency) != normalized_currency:
++        return False
++    if bill_date_from and bill.bill_date and bill.bill_date < bill_date_from:
++        return False
++    if bill_date_to and bill.bill_date and bill.bill_date > bill_date_to:
++        return False
++    if bill_date_from and bill.bill_date is None:
++        return False
++    if bill_date_to and bill.bill_date is None:
++        return False
++    if normalized_bad_debt_status is not None and _normalize_bad_debt_status_filter(
++        bill.bad_debt_status
++    ) != normalized_bad_debt_status:
++        return False
++
++    bill_is_bad_debt = _is_bad_debt_bill(bill)
++    bill_is_overdue = _is_bill_overdue(bill, today=today)
++    bill_aging_bucket = _get_bill_aging_bucket(_get_bill_days_past_due(bill, today=today))
++
++    if is_bad_debt is True and not bill_is_bad_debt:
++        return False
++    if is_bad_debt is False and bill_is_bad_debt:
++        return False
++    if is_overdue is True and not bill_is_overdue:
++        return False
++    if is_overdue is False and bill_is_overdue:
++        return False
++    if normalized_aging_bucket is not None:
++        if bill_is_bad_debt or not _is_receivable_bill(bill):
++            return False
++        if bill_aging_bucket != normalized_aging_bucket:
++            return False
++    return True
++
++
++def _summarize_bill_report_rows(db: Session, bills: list[Bill], *, today: date) -> dict[str, object]:
++    receivable_rows = [bill for bill in bills if _is_receivable_bill(bill)]
++    overdue_rows = [bill for bill in receivable_rows if _is_bill_overdue(bill, today=today)]
++
++    aging_buckets = {
++        bucket: {"bucket": bucket, "bill_count": 0, "amount": Decimal("0")}
++        for bucket in _AGING_BUCKETS
++    }
++    for bill in receivable_rows:
++        bucket = _get_bill_aging_bucket(_get_bill_days_past_due(bill, today=today))
++        aging_buckets[bucket]["bill_count"] += 1
++        aging_buckets[bucket]["amount"] += Decimal(bill.balance or 0)
++
++    bad_debt_summary = _summarize_bad_debt_bills(
++        db,
++        [(bill.id, bill.bad_debt_status) for bill in bills if _is_bad_debt_bill(bill)],
++    )
++    return {
++        "receivable_bill_count": len(receivable_rows),
++        "receivable_amount": sum((Decimal(bill.balance or 0) for bill in receivable_rows), Decimal("0")),
++        "overdue_bill_count": len(overdue_rows),
++        "overdue_amount": sum((Decimal(bill.balance or 0) for bill in overdue_rows), Decimal("0")),
++        "aging_buckets": [aging_buckets[bucket] for bucket in _AGING_BUCKETS],
++        **bad_debt_summary,
++    }
++
++
+ def _summarize_bad_debt_bills(
+     db: Session, bill_rows: list[tuple[str, str | None]]
+ ) -> dict[str, Decimal | int]:
+@@ -316,19 +476,59 @@ def list_bills(
+     *,
+     page: int = 1,
+     page_size: int = 20,
++    client_id: str | None = None,
++    status: str | None = None,
++    bill_status: str | None = None,
++    currency: str | None = None,
++    bill_date_from: date | None = None,
++    bill_date_to: date | None = None,
++    aging_bucket: str | None = None,
++    is_overdue: bool | None = None,
++    is_bad_debt: bool | None = None,
+     bad_debt_status: str | None = None,
+-) -> tuple[list[Bill], int, dict[str, Decimal | int]]:
++) -> tuple[list[Bill], int, dict[str, object]]:
+     query = db.query(Bill)
+     normalized_bad_debt_status = _normalize_bad_debt_status_filter(bad_debt_status)
++    normalized_bill_status = _normalize_text_filter(bill_status) or _normalize_text_filter(status)
++    normalized_currency = _normalize_text_filter(currency)
++
++    if client_id:
++        query = query.filter(Bill.client_id == client_id)
++    if normalized_bill_status is not None:
++        query = query.filter(func.upper(Bill.status) == normalized_bill_status)
++    if normalized_currency is not None:
++        query = query.filter(func.upper(Bill.currency) == normalized_currency)
++    if bill_date_from is not None:
++        query = query.filter(Bill.bill_date >= bill_date_from)
++    if bill_date_to is not None:
++        query = query.filter(Bill.bill_date <= bill_date_to)
+     if normalized_bad_debt_status is not None:
+         query = query.filter(func.upper(Bill.bad_debt_status) == normalized_bad_debt_status)
+ 
+-    total = query.count()
+-    bills = (
+-        query.order_by(Bill.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+-    )
+-    bill_rows = query.order_by(None).with_entities(Bill.id, Bill.bad_debt_status).all()
+-    summary = _summarize_bad_debt_bills(db, bill_rows)
++    rows = query.order_by(Bill.created_at.desc(), Bill.id.desc()).all()
++    today = date.today()
++    report_rows = [
++        bill
++        for bill in rows
++        if _bill_matches_report_filters(
++            bill,
++            today=today,
++            status=status,
++            bill_status=bill_status,
++            client_id=client_id,
++            currency=currency,
++            bill_date_from=bill_date_from,
++            bill_date_to=bill_date_to,
++            aging_bucket=aging_bucket,
++            is_overdue=is_overdue,
++            is_bad_debt=is_bad_debt,
++            bad_debt_status=bad_debt_status,
++        )
++    ]
++
++    total = len(report_rows)
++    bills = report_rows[(page - 1) * page_size : (page - 1) * page_size + page_size]
++    summary = _summarize_bill_report_rows(db, report_rows, today=today)
+     return bills, total, summary
+ 
+ 
+diff --git a/backend/tests/test_billing_report.py b/backend/tests/test_billing_report.py
+new file mode 100644
+index 0000000..77da06d
+--- /dev/null
++++ b/backend/tests/test_billing_report.py
+@@ -0,0 +1,317 @@
++from __future__ import annotations
++
++from datetime import date, timedelta
++from decimal import Decimal
++from uuid import uuid4
++
++from fastapi.testclient import TestClient
++from sqlalchemy.orm import sessionmaker
++
++from app.modules.billing.models import BadDebtRecovery, BadDebtVoucher, Bill
++
++
++def _uid(prefix: str) -> str:
++    return f"{prefix}-{uuid4().hex[:8].upper()}"
++
++
++def _create_client(client: TestClient, auth_headers: dict[str, str], *, name_prefix: str) -> str:
++    resp = client.post(
++        "/api/v1/clients",
++        json={"name_cn": _uid(name_prefix), "default_currency": "CNY"},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201, resp.text
++    return resp.json()["id"]
++
++
++def _insert_bill(
++    session_factory: sessionmaker,
++    *,
++    client_id: str,
++    amount: Decimal,
++    balance: Decimal,
++    status: str,
++    bill_date: date,
++    due_date: date | None,
++    currency: str = "CNY",
++    bad_debt_status: str = "NONE",
++    bad_debt_amount: Decimal | None = None,
++    recoveries: list[tuple[Decimal, date, str | None]] | None = None,
++) -> str:
++    with session_factory() as db:
++        bill = Bill(
++            id=str(uuid4()),
++            bill_no=_uid("BILL"),
++            client_id=client_id,
++            currency=currency,
++            direction="AR",
++            status=status,
++            bill_date=bill_date,
++            due_date=due_date,
++            total_gov=Decimal("0"),
++            total_service=amount,
++            total_misc=Decimal("0"),
++            amount=amount,
++            balance=balance,
++            bad_debt_status=bad_debt_status,
++            bad_debt_substatus="MANUAL_MARK" if bad_debt_status != "NONE" else None,
++        )
++        db.add(bill)
++        db.flush()
++
++        if bad_debt_status != "NONE":
++            voucher_amount = bad_debt_amount if bad_debt_amount is not None else balance
++            recoveries = recoveries or []
++            recovered_amount = sum((item_amount for item_amount, _, _ in recoveries), Decimal("0"))
++            voucher = BadDebtVoucher(
++                id=str(uuid4()),
++                bill_id=bill.id,
++                status=bad_debt_status,
++                bad_debt_amount=voucher_amount,
++                recovered_amount=recovered_amount,
++                bad_debt_date=bill_date + timedelta(days=2),
++                remark="billing report fixture",
++            )
++            db.add(voucher)
++            db.flush()
++            for recovery_amount, recovery_date, remark in recoveries:
++                db.add(
++                    BadDebtRecovery(
++                        id=str(uuid4()),
++                        voucher_id=voucher.id,
++                        recovery_amount=recovery_amount,
++                        recovery_date=recovery_date,
++                        remark=remark,
++                    )
++                )
++
++        db.commit()
++        return bill.id
++
++
++def test_get_bills_returns_billing_report_summary_and_keeps_bad_debt_compatibility(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    today = date.today()
++    client_a = _create_client(client, auth_headers, name_prefix="BILL-RPT-CLI-A")
++
++    current_bill_id = _insert_bill(
++        session_factory,
++        client_id=client_a,
++        amount=Decimal("300.00"),
++        balance=Decimal("300.00"),
++        status="UNSETTLED",
++        bill_date=today - timedelta(days=5),
++        due_date=today + timedelta(days=15),
++    )
++    overdue_bill_id = _insert_bill(
++        session_factory,
++        client_id=client_a,
++        amount=Decimal("120.00"),
++        balance=Decimal("120.00"),
++        status="UNSETTLED",
++        bill_date=today - timedelta(days=25),
++        due_date=today - timedelta(days=10),
++    )
++    bad_debt_bill_id = _insert_bill(
++        session_factory,
++        client_id=client_a,
++        amount=Decimal("50.00"),
++        balance=Decimal("50.00"),
++        status="BAD_DEBT",
++        bill_date=today - timedelta(days=80),
++        due_date=today - timedelta(days=75),
++        bad_debt_status="OPEN",
++        bad_debt_amount=Decimal("50.00"),
++        recoveries=[(Decimal("20.00"), today - timedelta(days=1), "partial recovery")],
++    )
++
++    resp = client.get(
++        f"/api/v1/bills?client_id={client_a}&page=1&page_size=20",
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200, resp.text
++    payload = resp.json()
++
++    assert payload["page"] == 1
++    assert payload["page_size"] == 20
++    assert payload["total"] == 3
++
++    summary = payload["summary"]
++    assert summary["receivable_bill_count"] == 2
++    assert Decimal(str(summary["receivable_amount"])) == Decimal("420.00")
++    assert summary["overdue_bill_count"] == 1
++    assert Decimal(str(summary["overdue_amount"])) == Decimal("120.00")
++    assert summary["bad_debt_bill_count"] == 1
++    assert Decimal(str(summary["bad_debt_amount"])) == Decimal("50.00")
++    assert Decimal(str(summary["total_recovered_amount"])) == Decimal("20.00")
++    assert Decimal(str(summary["remaining_bad_debt_balance"])) == Decimal("30.00")
++    assert [bucket["bucket"] for bucket in summary["aging_buckets"]] == [
++        "CURRENT",
++        "0-30",
++        "31-60",
++        "61-90",
++        "90+",
++    ]
++    assert summary["aging_buckets"][0]["bill_count"] == 1
++    assert Decimal(str(summary["aging_buckets"][0]["amount"])) == Decimal("300.00")
++    assert summary["aging_buckets"][1]["bill_count"] == 1
++    assert Decimal(str(summary["aging_buckets"][1]["amount"])) == Decimal("120.00")
++    assert summary["aging_buckets"][2]["bill_count"] == 0
++    assert Decimal(str(summary["aging_buckets"][2]["amount"])) == Decimal("0.00")
++
++    # Keep the previous flat bad-debt fields for compatibility.
++    assert payload["bad_debt_bill_count"] == summary["bad_debt_bill_count"]
++    assert Decimal(str(payload["bad_debt_amount"])) == Decimal("50.00")
++    assert Decimal(str(payload["total_recovered_amount"])) == Decimal("20.00")
++    assert Decimal(str(payload["remaining_bad_debt_balance"])) == Decimal("30.00")
++
++    expected_item_keys = {
++        "id",
++        "bill_no",
++        "client_id",
++        "client_name",
++        "currency",
++        "status",
++        "amount",
++        "balance",
++        "bill_date",
++        "due_date",
++        "days_past_due",
++        "aging_bucket",
++        "is_overdue",
++        "is_bad_debt",
++    }
++    assert all(set(item) == expected_item_keys for item in payload["items"])
++    item_map = {item["id"]: item for item in payload["items"]}
++    assert item_map[current_bill_id]["aging_bucket"] == "CURRENT"
++    assert item_map[current_bill_id]["is_overdue"] is False
++    assert item_map[overdue_bill_id]["aging_bucket"] == "0-30"
++    assert item_map[overdue_bill_id]["is_overdue"] is True
++    assert item_map[bad_debt_bill_id]["is_bad_debt"] is True
++
++
++def test_get_bills_supports_billing_report_filters(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    today = date.today()
++    client_a = _create_client(client, auth_headers, name_prefix="BILL-RPT-FLT-A")
++
++    current_bill_id = _insert_bill(
++        session_factory,
++        client_id=client_a,
++        amount=Decimal("300.00"),
++        balance=Decimal("300.00"),
++        status="UNSETTLED",
++        bill_date=today - timedelta(days=5),
++        due_date=today + timedelta(days=15),
++    )
++    overdue_bill_id = _insert_bill(
++        session_factory,
++        client_id=client_a,
++        amount=Decimal("120.00"),
++        balance=Decimal("120.00"),
++        status="UNSETTLED",
++        bill_date=today - timedelta(days=25),
++        due_date=today - timedelta(days=10),
++    )
++    usd_bill_id = _insert_bill(
++        session_factory,
++        client_id=client_a,
++        amount=Decimal("80.00"),
++        balance=Decimal("80.00"),
++        status="PARTIALLY_SETTLED",
++        bill_date=today - timedelta(days=60),
++        due_date=today - timedelta(days=40),
++        currency="USD",
++    )
++    bad_debt_bill_id = _insert_bill(
++        session_factory,
++        client_id=client_a,
++        amount=Decimal("50.00"),
++        balance=Decimal("50.00"),
++        status="BAD_DEBT",
++        bill_date=today - timedelta(days=80),
++        due_date=today - timedelta(days=75),
++        bad_debt_status="OPEN",
++        bad_debt_amount=Decimal("50.00"),
++    )
++
++    client_filtered = client.get(
++        f"/api/v1/bills?client_id={client_a}&page=1&page_size=20",
++        headers=auth_headers,
++    )
++    assert client_filtered.status_code == 200, client_filtered.text
++    client_payload = client_filtered.json()
++    assert client_payload["total"] == 4
++    assert {item["id"] for item in client_payload["items"]} == {
++        current_bill_id,
++        overdue_bill_id,
++        usd_bill_id,
++        bad_debt_bill_id,
++    }
++
++    status_filtered = client.get(
++        f"/api/v1/bills?status=UNSETTLED&client_id={client_a}&page=1&page_size=20",
++        headers=auth_headers,
++    )
++    assert status_filtered.status_code == 200, status_filtered.text
++    status_payload = status_filtered.json()
++    assert status_payload["total"] == 2
++    assert {item["id"] for item in status_payload["items"]} == {current_bill_id, overdue_bill_id}
++
++    currency_filtered = client.get(
++        f"/api/v1/bills?currency=USD&client_id={client_a}&page=1&page_size=20",
++        headers=auth_headers,
++    )
++    assert currency_filtered.status_code == 200, currency_filtered.text
++    currency_payload = currency_filtered.json()
++    assert currency_payload["total"] == 1
++    assert [item["id"] for item in currency_payload["items"]] == [usd_bill_id]
++
++    overdue_filtered = client.get(
++        f"/api/v1/bills?is_overdue=true&client_id={client_a}&page=1&page_size=20",
++        headers=auth_headers,
++    )
++    assert overdue_filtered.status_code == 200, overdue_filtered.text
++    overdue_payload = overdue_filtered.json()
++    assert overdue_payload["total"] == 2
++    assert {item["id"] for item in overdue_payload["items"]} == {
++        overdue_bill_id,
++        usd_bill_id,
++    }
++    assert overdue_payload["summary"]["overdue_bill_count"] == 2
++    assert Decimal(str(overdue_payload["summary"]["overdue_amount"])) == Decimal("200.00")
++
++    aging_filtered = client.get(
++        f"/api/v1/bills?aging_bucket=0-30&client_id={client_a}&page=1&page_size=20",
++        headers=auth_headers,
++    )
++    assert aging_filtered.status_code == 200, aging_filtered.text
++    aging_payload = aging_filtered.json()
++    assert aging_payload["total"] == 1
++    assert [item["id"] for item in aging_payload["items"]] == [overdue_bill_id]
++    assert aging_payload["items"][0]["aging_bucket"] == "0-30"
++
++    bad_debt_filtered = client.get(
++        f"/api/v1/bills?is_bad_debt=true&client_id={client_a}&page=1&page_size=20",
++        headers=auth_headers,
++    )
++    assert bad_debt_filtered.status_code == 200, bad_debt_filtered.text
++    bad_debt_payload = bad_debt_filtered.json()
++    assert bad_debt_payload["total"] == 1
++    assert [item["id"] for item in bad_debt_payload["items"]] == [bad_debt_bill_id]
++    assert bad_debt_payload["summary"]["bad_debt_bill_count"] == 1
++
++    date_filtered = client.get(
++        f"/api/v1/bills?bill_date_from={today - timedelta(days=30)}&bill_date_to={today - timedelta(days=1)}&client_id={client_a}&page=1&page_size=20",
++        headers=auth_headers,
++    )
++    assert date_filtered.status_code == 200, date_filtered.text
++    date_payload = date_filtered.json()
++    assert date_payload["total"] == 2
++    assert {item["id"] for item in date_payload["items"]} == {current_bill_id, overdue_bill_id}

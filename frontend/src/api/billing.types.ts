@@ -24,7 +24,12 @@ export interface BillListItem {
     balance: number
     currency: string
     issue_date?: string
+    bill_date?: string
     due_date?: string
+    days_past_due?: number
+    aging_bucket?: string
+    is_overdue?: boolean
+    is_bad_debt?: boolean
 }
 
 export interface BillListBadDebtSummary {
@@ -34,7 +39,23 @@ export interface BillListBadDebtSummary {
     remaining_bad_debt_balance: number
 }
 
-export interface BillListResponse extends Pagination<BillListItem>, BillListBadDebtSummary {}
+export interface BillListAgingBucket {
+    bucket: string
+    bill_count: number
+    amount: number
+}
+
+export interface BillListReportSummary extends BillListBadDebtSummary {
+    receivable_bill_count: number
+    receivable_amount: number
+    overdue_bill_count: number
+    overdue_amount: number
+    aging_buckets: BillListAgingBucket[]
+}
+
+export interface BillListResponse extends Pagination<BillListItem>, BillListBadDebtSummary {
+    summary: BillListReportSummary
+}
 
 export interface BillItem {
     id: string
@@ -107,7 +128,14 @@ export interface BillListParams {
     page?: number
     page_size?: number
     status?: BillStatus
+    bill_status?: BillStatus
     client_id?: string
+    currency?: string
+    bill_date_from?: string
+    bill_date_to?: string
+    aging_bucket?: string
+    is_overdue?: boolean
+    is_bad_debt?: boolean
     bad_debt_status?: BadDebtStatus
 }
 

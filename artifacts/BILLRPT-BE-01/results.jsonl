@@ -1,0 +1,3 @@
+{"step":"lint","cmd":"python3 -m ruff check backend/app/modules/billing/api.py backend/app/modules/billing/schemas.py backend/app/modules/billing/service.py backend/tests/test_billing_report.py","rc":0}
+{"step":"test","cmd":"cd backend && PYTHONPATH=. pytest -q tests/test_billing_report.py","rc":0}
+{"step":"task_gate","cmd":"./scripts/task_validate.sh BILLRPT-BE-01","rc":0}
