@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
 from app.db.session import get_db
+from app.modules.annuity.schemas import AnnuityTaskListResponse
 from app.modules.annuity.service import (
     add_manual_gov_payment,
     create_historical_pay_list,
@@ -18,7 +19,7 @@ from app.modules.annuity.service import (
     export_pay_list,
     generate_fee_drafts_from_annuity_tasks,
     get_pay_list_detail,
-    list_annuity_tasks,
+    list_annuity_tasks_report,
     list_pay_lists,
     mark_pay_list_paid,
     register_gov_payment,
@@ -79,14 +80,20 @@ class PayListMarkPaidIn(BaseModel):
     paid_date: date
 
 
-@router.get("/annuity/tasks", summary="List annuity tasks")
+@router.get("/annuity/tasks", response_model=AnnuityTaskListResponse, summary="List annuity tasks")
 def get_annuity_tasks(
     due_from: date | None = Query(default=None),
     due_to: date | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
     status: str | None = Query(default=None),
+    task_status: str | None = Query(default=None),
     pending_mode: str | None = Query(default=None),
     case_id: str | None = Query(default=None),
     client_id: str | None = Query(default=None),
+    country: str | None = Query(default=None),
+    annuity_year: int | None = Query(default=None, ge=1),
+    payment_status: str | None = Query(default=None),
     notice_status: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -97,13 +104,21 @@ def get_annuity_tasks(
     filters = {
         "due_from": due_from,
         "due_to": due_to,
+        "date_from": date_from,
+        "date_to": date_to,
         "status": status,
+        "task_status": task_status,
         "pending_mode": pending_mode,
         "case_id": case_id,
         "client_id": client_id,
+        "country": country,
+        "annuity_year": annuity_year,
+        "payment_status": payment_status,
         "notice_status": notice_status,
     }
-    tasks, total = list_annuity_tasks(db, filters=filters, page=page, page_size=page_size)
+    tasks, total, summary = list_annuity_tasks_report(
+        db, filters=filters, page=page, page_size=page_size
+    )
 
     items = [
         {
@@ -130,7 +145,13 @@ def get_annuity_tasks(
         }
         for task in tasks
     ]
-    return {"items": items, "page": page, "page_size": page_size, "total": total}
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "summary": summary,
+    }
 
 
 @router.put("/annuity/tasks/{task_id}/instruction", summary="Update annuity task instruction")

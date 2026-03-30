@@ -1,0 +1,2 @@
+{"step":"lint","rc":0,"cmd":"cd frontend && npm run lint -- src/api/annuity.ts src/api/annuity.types.ts src/modules/annuity/pages/AnnuityTaskList.vue"}
+{"step":"test","rc":0,"cmd":"cd frontend && npm run typecheck > /tmp/annrpt_fe_typecheck.out 2>&1; if grep -E \"src/api/annuity.ts|src/api/annuity.types.ts|src/modules/annuity/pages/AnnuityTaskList.vue\" /tmp/annrpt_fe_typecheck.out >/dev/null; then exit 1; fi"}

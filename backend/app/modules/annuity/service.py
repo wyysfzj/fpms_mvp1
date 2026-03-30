@@ -59,6 +59,19 @@ def _normalize_statuses(value: Any) -> list[str]:
     return [text.upper()] if text else []
 
 
+def _normalize_optional_int(value: Any, field_name: str) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise_business_error(
+            "ANNUITY_REPORT_FILTER_INVALID",
+            f"Invalid {field_name}; expected integer",
+            status_code=400,
+        )
+
+
 def _normalize_pending_mode(value: Any) -> str:
     if value is None:
         return "all"
@@ -99,17 +112,11 @@ def list_annuity_tasks(
     filters = filters or {}
 
     due_from = _coerce_date(
-        filters.get("due_from")
-        or filters.get("due_date_from")
-        or filters.get("date_from")
-        or filters.get("from"),
+        filters.get("date_from") or filters.get("due_from") or filters.get("due_date_from"),
         "due_from",
     )
     due_to = _coerce_date(
-        filters.get("due_to")
-        or filters.get("due_date_to")
-        or filters.get("date_to")
-        or filters.get("to"),
+        filters.get("date_to") or filters.get("due_to") or filters.get("due_date_to"),
         "due_to",
     )
     if due_from and due_to and due_from > due_to:
@@ -119,7 +126,8 @@ def list_annuity_tasks(
             status_code=400,
         )
 
-    status_values = _normalize_statuses(filters.get("status"))
+    status_values = _normalize_statuses(filters.get("task_status", filters.get("status")))
+    report_year = _normalize_optional_int(filters.get("annuity_year"), "annuity_year")
     pending_mode = _normalize_pending_mode(
         filters.get("pending_mode", filters.get("pending_filter", filters.get("pending")))
     )
@@ -138,6 +146,8 @@ def list_annuity_tasks(
         stmt = stmt.where(AnnuityTask.due_date >= due_from)
     if due_to:
         stmt = stmt.where(AnnuityTask.due_date <= due_to)
+    if report_year is not None:
+        stmt = stmt.where(AnnuityTask.year_no == report_year)
     if status_values:
         if len(status_values) == 1:
             stmt = stmt.where(func.upper(AnnuityTask.status) == status_values[0])
@@ -184,6 +194,118 @@ def extract_annuity_tasks(
 ) -> tuple[list[AnnuityTask], int]:
     """Compatibility alias for task-extraction wording in enhancement runbooks."""
     return list_annuity_tasks(db, filters=filters, page=page, page_size=page_size)
+
+
+def summarize_annuity_tasks(tasks: list[AnnuityTask]) -> dict[str, Any]:
+    today = date.today()
+    status_counts: dict[str, int] = {}
+    year_counts: dict[str, int] = {}
+    open_task_count = 0
+    done_task_count = 0
+    overdue_task_count = 0
+
+    for task in tasks:
+        status = ((task.status or "").strip().upper()) or "UNKNOWN"
+        year_key = str(task.year_no)
+
+        status_counts[status] = status_counts.get(status, 0) + 1
+        year_counts[year_key] = year_counts.get(year_key, 0) + 1
+
+        if status == "OPEN":
+            open_task_count += 1
+        if status == "DONE":
+            done_task_count += 1
+        if task.due_date < today and status == "OPEN":
+            overdue_task_count += 1
+
+    return {
+        "total_task_count": len(tasks),
+        "open_task_count": open_task_count,
+        "done_task_count": done_task_count,
+        "overdue_task_count": overdue_task_count,
+        "status_counts": [
+            {"key": key, "count": status_counts[key]} for key in sorted(status_counts.keys())
+        ],
+        "year_counts": [
+            {"key": key, "count": year_counts[key]} for key in sorted(year_counts.keys(), key=int)
+        ],
+    }
+
+
+def list_annuity_tasks_report(
+    db: Session,
+    *,
+    filters: dict[str, Any] | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[AnnuityTask], int, dict[str, Any]]:
+    """List annuity tasks with a report summary across the filtered result set."""
+    filters = filters or {}
+    stmt = select(AnnuityTask)
+
+    due_from = _coerce_date(
+        filters.get("date_from") or filters.get("due_from") or filters.get("due_date_from"),
+        "due_from",
+    )
+    due_to = _coerce_date(
+        filters.get("date_to") or filters.get("due_to") or filters.get("due_date_to"),
+        "due_to",
+    )
+    if due_from and due_to and due_from > due_to:
+        raise_business_error(
+            "ANNUITY_DATE_RANGE_INVALID",
+            "due_from must be <= due_to",
+            status_code=400,
+        )
+
+    status_values = _normalize_statuses(filters.get("task_status", filters.get("status")))
+    report_year = _normalize_optional_int(filters.get("annuity_year"), "annuity_year")
+    pending_mode = _normalize_pending_mode(
+        filters.get("pending_mode", filters.get("pending_filter", filters.get("pending")))
+    )
+
+    case_id = filters.get("case_id")
+    client_id = filters.get("client_id")
+    notice_status_values = _normalize_statuses(filters.get("notice_status"))
+
+    if case_id:
+        stmt = stmt.where(AnnuityTask.case_id == case_id)
+    if client_id:
+        stmt = stmt.where(AnnuityTask.client_id == client_id)
+    if due_from:
+        stmt = stmt.where(AnnuityTask.due_date >= due_from)
+    if due_to:
+        stmt = stmt.where(AnnuityTask.due_date <= due_to)
+    if report_year is not None:
+        stmt = stmt.where(AnnuityTask.year_no == report_year)
+    if status_values:
+        if len(status_values) == 1:
+            stmt = stmt.where(func.upper(AnnuityTask.status) == status_values[0])
+        else:
+            stmt = stmt.where(func.upper(AnnuityTask.status).in_(status_values))
+    if notice_status_values:
+        if len(notice_status_values) == 1:
+            stmt = stmt.where(func.upper(AnnuityTask.notice_status) == notice_status_values[0])
+        else:
+            stmt = stmt.where(func.upper(AnnuityTask.notice_status).in_(notice_status_values))
+
+    if pending_mode == "pending":
+        stmt = stmt.where(
+            AnnuityTask.status.is_(None) | (~func.upper(AnnuityTask.status).in_(_TERMINAL_STATUSES))
+        )
+    elif pending_mode == "processed":
+        stmt = stmt.where(func.upper(AnnuityTask.status).in_(_TERMINAL_STATUSES))
+
+    ordered_stmt = stmt.order_by(
+        AnnuityTask.due_date.asc(),
+        AnnuityTask.created_at.desc(),
+        AnnuityTask.id.asc(),
+    )
+    all_items = db.execute(ordered_stmt).scalars().all()
+    total = len(all_items)
+    offset = (page - 1) * page_size
+    items = all_items[offset : offset + page_size]
+    return items, total, summarize_annuity_tasks(all_items)
 
 
 def update_annuity_task_instruction(

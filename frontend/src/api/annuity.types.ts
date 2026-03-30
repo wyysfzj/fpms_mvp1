@@ -27,13 +27,41 @@ export interface AnnuityTask {
 
 export type AnnuityPendingMode = 'pending' | 'processed'
 
+export interface AnnuityTaskReportCount {
+    key: string
+    count: number
+}
+
+export interface AnnuityTaskReportSummary {
+    total_task_count: number
+    open_task_count: number
+    done_task_count: number
+    overdue_task_count: number
+    status_counts: AnnuityTaskReportCount[]
+    year_counts: AnnuityTaskReportCount[]
+}
+
+export interface AnnuityTaskListResponse {
+    items: AnnuityTask[]
+    page: number
+    page_size: number
+    total: number
+    summary: AnnuityTaskReportSummary
+}
+
 export interface AnnuityTaskListParams {
     due_from?: string
     due_to?: string
+    date_from?: string
+    date_to?: string
     status?: string
+    task_status?: string
     pending_mode?: AnnuityPendingMode
     case_id?: string
     client_id?: string
+    country?: string
+    annuity_year?: number
+    payment_status?: string
     notice_status?: string
     page?: number
     page_size?: number

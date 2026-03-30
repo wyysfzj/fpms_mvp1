@@ -1,0 +1,2 @@
+Baseline was already dirty outside the task allowlist at task start.
+The task-scoped change set is captured in `artifacts/ANNRPT-BE-01/git/diff.patch`.

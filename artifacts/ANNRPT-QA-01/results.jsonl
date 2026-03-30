@@ -1,0 +1,2 @@
+{"step":"lint","rc":0,"cmd":"./scripts/task_validate.sh ANNRPT-BE-01"}
+{"step":"test","rc":0,"cmd":"./scripts/task_validate.sh ANNRPT-FE-01"}
