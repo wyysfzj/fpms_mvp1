@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"cd frontend && npm run lint -- src/api/cases.ts src/api/cases.types.ts src/modules/cases/pages/CaseList.vue","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck > /tmp/caserpt_fe_typecheck.out 2>&1; if grep -E 'src/api/cases.ts|src/api/cases.types.ts|src/modules/cases/pages/CaseList.vue' /tmp/caserpt_fe_typecheck.out >/dev/null; then cat /tmp/caserpt_fe_typecheck.out; exit 1; fi","rc":0}

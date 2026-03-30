@@ -310,6 +310,25 @@ class CaseListItem(BaseModel):
     primary_agent_id: str | None = None
 
 
+class CaseReportCountResponse(BaseModel):
+    key: str
+    count: int = 0
+
+
+class CaseReportSummaryResponse(BaseModel):
+    total_case_count: int = 0
+    status_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+    case_type_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+
+
+class CaseListReportResponse(BaseModel):
+    items: list[CaseListItem]
+    page: int
+    page_size: int
+    total: int
+    summary: CaseReportSummaryResponse
+
+
 class CaseBatchFilingCandidateItem(BaseModel):
     id: str
     case_no: str

@@ -1,0 +1,802 @@
+diff --git a/backend/app/modules/cases/api.py b/backend/app/modules/cases/api.py
+index 9ee1f08..b8a15ba 100644
+--- a/backend/app/modules/cases/api.py
++++ b/backend/app/modules/cases/api.py
+@@ -19,7 +19,12 @@ from app.modules.cases.models import (
+     T_CaseInventor,
+     T_Priority,
+ )
+-from app.modules.cases.schemas import CaseBatchFilingActionIn, CaseCreateIn, CaseUpdateFull
++from app.modules.cases.schemas import (
++    CaseBatchFilingActionIn,
++    CaseCreateIn,
++    CaseListReportResponse,
++    CaseUpdateFull,
++)
+ from app.modules.cases.service import (
+     create_case as create_case_service,
+ )
+@@ -29,6 +34,9 @@ from app.modules.cases.service import (
+ from app.modules.cases.service import (
+     list_batch_filing_candidates as list_batch_filing_candidates_service,
+ )
++from app.modules.cases.service import (
++    list_cases as list_cases_report_service,
++)
+ from app.modules.cases.service import (
+     update_case_full as update_case_full_service,
+ )
+@@ -224,7 +232,7 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
+     }
+ 
+ 
+-@router.get("/cases", summary="List cases")
++@router.get("/cases", summary="List cases", response_model=CaseListReportResponse)
+ def get_cases(
+     q: str | None = Query(default=None),
+     case_no: str | None = Query(default=None),
+@@ -239,6 +247,8 @@ def get_cases(
+     filing_date_from: date | None = Query(default=None),
+     filing_date_to: date | None = Query(default=None),
+     primary_agent_id: str | None = Query(default=None),
++    country: str | None = Query(default=None),
++    agent_id: str | None = Query(default=None),
+     sort_by: str | None = Query(default=None),
+     sort_dir: str = Query(default="asc"),
+     page: int = Query(default=1, ge=1),
+@@ -246,108 +256,27 @@ def get_cases(
+     _perm: None = Depends(require_perm("Case.Read")),
+     db: Session = Depends(get_db),
+ ) -> dict[str, Any]:
+-    """
+-    List cases with filters and pagination.
+-
+-    **Auth**: Bearer JWT
+-    **Permission**: Case.Read
+-    **Request example**:
+-    `GET /api/v1/cases?page=1&page_size=20&case_no=CURL_CASE_001`
+-    **Curl example**:
+-    ```bash
+-    curl -s -X GET "http://localhost:8000/api/v1/cases?page=1&page_size=20" \\
+-      -H "Authorization: Bearer $FPMS_TOKEN"
+-    ```
+-    **Responses**:
+-    - 200: List of cases
+-    - 401: AUTH_REQUIRED
+-    - 403: FORBIDDEN
+-    - 422: VALIDATION_ERROR
+-    """
+-    query = db.query(Case)
+-
+-    if q:
+-        pattern = f"%{q}%"
+-        query = query.filter(
+-            or_(
+-                Case.case_no.ilike(pattern),
+-                Case.title_cn.ilike(pattern),
+-                Case.title_en.ilike(pattern),
+-                Case.app_no.ilike(pattern),
+-            )
+-        )
+-    if case_no:
+-        query = query.filter(Case.case_no == case_no)
+-    if app_no:
+-        query = query.filter(Case.app_no == app_no)
+-    if client_id:
+-        query = query.filter(Case.client_id == client_id)
+-    if status:
+-        query = query.filter(Case.status == status)
+-    if date_from:
+-        query = query.filter(Case.recv_date >= date_from)
+-    if date_to:
+-        query = query.filter(Case.recv_date <= date_to)
+-    if case_type:
+-        query = query.filter(Case.case_type == case_type)
+-    if patent_category:
+-        query = query.filter(Case.patent_category == patent_category)
+-    if flow_dir:
+-        query = query.filter(Case.flow_dir == flow_dir)
+-    if filing_date_from:
+-        query = query.filter(Case.filing_date >= filing_date_from)
+-    if filing_date_to:
+-        query = query.filter(Case.filing_date <= filing_date_to)
+-    if primary_agent_id:
+-        query = query.filter(Case.primary_agent_id == primary_agent_id)
+-
+-    total = query.count()
+-
+-    sort_field = Case.case_no
+-    allowed_sort_fields = {
+-        "case_no": Case.case_no,
+-        "recv_date": Case.recv_date,
+-        "filing_date": Case.filing_date,
+-        "created_at": Case.created_at,
+-    }
+-    if sort_by in allowed_sort_fields:
+-        sort_field = allowed_sort_fields[sort_by]
+-
+-    if sort_dir.lower() == "desc":
+-        query = query.order_by(sort_field.desc())
+-    else:
+-        query = query.order_by(sort_field.asc())
+-
+-    cases = query.offset((page - 1) * page_size).limit(page_size).all()
+-
+-    # Batch-resolve client names for all cases in this page
+-    client_ids = {case.client_id for case in cases if case.client_id}
+-    client_name_map: dict[str, str] = {}
+-    if client_ids:
+-        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
+-        client_name_map = {c.id: c.name_cn for c in clients}
+-
+-    items = [
+-        {
+-            "id": case.id,
+-            "case_no": case.case_no,
+-            "case_type": case.case_type,
+-            "patent_category": case.patent_category,
+-            "client_id": case.client_id,
+-            "client_name": client_name_map.get(case.client_id) if case.client_id else None,
+-            "title_cn": case.title_cn,
+-            "title_en": case.title_en,
+-            "app_no": case.app_no,
+-            "status": case.status,
+-            "filing_date": str(case.filing_date) if case.filing_date else None,
+-            "recv_date": str(case.recv_date) if case.recv_date else None,
+-            "patent_no": case.patent_no,
+-            "primary_agent_id": case.primary_agent_id,
+-        }
+-        for case in cases
+-    ]
+-
+-    return {"items": items, "page": page, "page_size": page_size, "total": total}
++    result = list_cases_report_service(
++        db,
++        q=q,
++        case_no=case_no,
++        app_no=app_no,
++        client_id=client_id,
++        status=status,
++        date_from=date_from,
++        date_to=date_to,
++        case_type=case_type,
++        patent_category=patent_category,
++        flow_dir=flow_dir,
++        filing_date_from=filing_date_from,
++        filing_date_to=filing_date_to,
++        primary_agent_id=primary_agent_id,
++        country=country,
++        agent_id=agent_id,
++        page=page,
++        page_size=page_size,
++    )
++    return result.model_dump()
+ 
+ 
+ @router.get("/cases/batch-filing/candidates", summary="List batch filing candidates")
+diff --git a/backend/app/modules/cases/schemas.py b/backend/app/modules/cases/schemas.py
+index 55f7613..c9f52d3 100644
+--- a/backend/app/modules/cases/schemas.py
++++ b/backend/app/modules/cases/schemas.py
+@@ -310,6 +310,25 @@ class CaseListItem(BaseModel):
+     primary_agent_id: str | None = None
+ 
+ 
++class CaseReportCountResponse(BaseModel):
++    key: str
++    count: int = 0
++
++
++class CaseReportSummaryResponse(BaseModel):
++    total_case_count: int = 0
++    status_counts: list[CaseReportCountResponse] = Field(default_factory=list)
++    case_type_counts: list[CaseReportCountResponse] = Field(default_factory=list)
++
++
++class CaseListReportResponse(BaseModel):
++    items: list[CaseListItem]
++    page: int
++    page_size: int
++    total: int
++    summary: CaseReportSummaryResponse
++
++
+ class CaseBatchFilingCandidateItem(BaseModel):
+     id: str
+     case_no: str
+diff --git a/backend/app/modules/cases/service.py b/backend/app/modules/cases/service.py
+index 5419a5b..b7b2e46 100644
+--- a/backend/app/modules/cases/service.py
++++ b/backend/app/modules/cases/service.py
+@@ -4,7 +4,7 @@ from datetime import date
+ from decimal import Decimal
+ from uuid import uuid4
+ 
+-from sqlalchemy import or_
++from sqlalchemy import func, or_
+ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+@@ -25,6 +25,9 @@ from app.modules.cases.schemas import (
+     CaseBatchFilingCandidateItem,
+     CaseCreate,
+     CaseListItem,
++    CaseListReportResponse,
++    CaseReportCountResponse,
++    CaseReportSummaryResponse,
+     CaseUpdateFull,
+     CaseUpdateLimited,
+ )
+@@ -388,6 +391,93 @@ def validate_status_required_fields(
+         )
+ 
+ 
++def _apply_case_report_filters(
++    query,
++    *,
++    q: str | None = None,
++    case_no: str | None = None,
++    app_no: str | None = None,
++    client_id: str | None = None,
++    status: str | None = None,
++    date_from: date | None = None,
++    date_to: date | None = None,
++    case_type: str | None = None,
++    patent_category: str | None = None,
++    flow_dir: str | None = None,
++    filing_date_from: date | None = None,
++    filing_date_to: date | None = None,
++    primary_agent_id: str | None = None,
++    country: str | None = None,
++    agent_id: str | None = None,
++):
++    if q:
++        query = query.filter(
++            or_(
++                Case.case_no.contains(q),
++                Case.title_cn.contains(q),
++                Case.title_en.contains(q),
++                Case.app_no.contains(q),
++            )
++        )
++    if case_no:
++        query = query.filter(Case.case_no == case_no)
++    if app_no:
++        query = query.filter(Case.app_no == app_no)
++    if client_id:
++        query = query.filter(Case.client_id == client_id)
++    if status:
++        query = query.filter(Case.status == status)
++    if date_from:
++        query = query.filter(Case.recv_date >= date_from)
++    if date_to:
++        query = query.filter(Case.recv_date <= date_to)
++    if case_type:
++        query = query.filter(Case.case_type == case_type)
++    if patent_category:
++        query = query.filter(Case.patent_category == patent_category)
++    if flow_dir:
++        query = query.filter(Case.flow_dir == flow_dir)
++    if filing_date_from:
++        query = query.filter(Case.filing_date >= filing_date_from)
++    if filing_date_to:
++        query = query.filter(Case.filing_date <= filing_date_to)
++    if primary_agent_id:
++        query = query.filter(Case.primary_agent_id == primary_agent_id)
++    if country:
++        query = query.filter(or_(Case.from_country == country, Case.to_country == country))
++    if agent_id:
++        query = query.filter(
++            or_(Case.primary_agent_id == agent_id, Case.second_agent_id == agent_id)
++        )
++    return query
++
++
++def _build_case_report_summary(query) -> CaseReportSummaryResponse:
++    status_rows = (
++        query.with_entities(Case.status, func.count(Case.id))
++        .group_by(Case.status)
++        .order_by(Case.status.asc())
++        .all()
++    )
++    case_type_rows = (
++        query.with_entities(Case.case_type, func.count(Case.id))
++        .group_by(Case.case_type)
++        .order_by(Case.case_type.asc())
++        .all()
++    )
++    return CaseReportSummaryResponse(
++        total_case_count=query.count(),
++        status_counts=[
++            CaseReportCountResponse(key=status_key, count=count)
++            for status_key, count in status_rows
++        ],
++        case_type_counts=[
++            CaseReportCountResponse(key=case_type_key, count=count)
++            for case_type_key, count in case_type_rows
++        ],
++    )
++
++
+ def validate_case_status_transition(current_status: str | None, target_status: str | None) -> None:
+     if not target_status or not current_status or target_status == current_status:
+         return
+@@ -413,48 +503,45 @@ def validate_case_status_transition(current_status: str | None, target_status: s
+ def list_cases(
+     db: Session,
+     q: str | None = None,
++    case_no: str | None = None,
++    app_no: str | None = None,
+     client_id: str | None = None,
+     status: str | None = None,
++    date_from: date | None = None,
++    date_to: date | None = None,
+     case_type: str | None = None,
+     patent_category: str | None = None,
+     flow_dir: str | None = None,
+     filing_date_from: date | None = None,
+     filing_date_to: date | None = None,
+     primary_agent_id: str | None = None,
++    country: str | None = None,
++    agent_id: str | None = None,
+     page: int = 1,
+     page_size: int = 20,
+-) -> PageResult[CaseListItem]:
+-    """List cases with pagination and filters."""
+-    query = db.query(Case)
+-
+-    if q:
+-        query = query.filter(
+-            or_(
+-                Case.case_no.contains(q),
+-                Case.title_cn.contains(q),
+-                Case.title_en.contains(q),
+-                Case.app_no.contains(q),
+-            )
+-        )
+-
+-    if client_id:
+-        query = query.filter(Case.client_id == client_id)
+-    if status:
+-        query = query.filter(Case.status == status)
+-    if case_type:
+-        query = query.filter(Case.case_type == case_type)
+-    if patent_category:
+-        query = query.filter(Case.patent_category == patent_category)
+-    if flow_dir:
+-        query = query.filter(Case.flow_dir == flow_dir)
+-    if filing_date_from:
+-        query = query.filter(Case.filing_date >= filing_date_from)
+-    if filing_date_to:
+-        query = query.filter(Case.filing_date <= filing_date_to)
+-    if primary_agent_id:
+-        query = query.filter(Case.primary_agent_id == primary_agent_id)
++) -> CaseListReportResponse:
++    """List cases with pagination, filters, and report summary."""
++    query = _apply_case_report_filters(
++        db.query(Case),
++        q=q,
++        case_no=case_no,
++        app_no=app_no,
++        client_id=client_id,
++        status=status,
++        date_from=date_from,
++        date_to=date_to,
++        case_type=case_type,
++        patent_category=patent_category,
++        flow_dir=flow_dir,
++        filing_date_from=filing_date_from,
++        filing_date_to=filing_date_to,
++        primary_agent_id=primary_agent_id,
++        country=country,
++        agent_id=agent_id,
++    )
+ 
+     total = query.count()
++    summary = _build_case_report_summary(query)
+ 
+     off, lim = offset_limit(page, page_size)
+     items = query.order_by(Case.created_at.desc()).offset(off).limit(lim).all()
+@@ -476,7 +563,13 @@ def list_cases(
+         for case in items
+     ]
+ 
+-    return PageResult(items=list_items, page=page, page_size=page_size, total=total)
++    return CaseListReportResponse(
++        items=list_items,
++        page=page,
++        page_size=page_size,
++        total=total,
++        summary=summary,
++    )
+ 
+ 
+ def list_batch_filing_candidates(
+diff --git a/frontend/src/api/cases.ts b/frontend/src/api/cases.ts
+index 58db38f..53e8685 100644
+--- a/frontend/src/api/cases.ts
++++ b/frontend/src/api/cases.ts
+@@ -5,6 +5,7 @@ import type {
+     CaseBatchFilingActionPayload,
+     CaseBatchFilingActionResult,
+     CaseBatchFilingCandidate,
++    CaseListResponse,
+     CaseBatchFilingQueryParams,
+     CaseCreatePayload,
+     CaseLimitedEditPayload,
+@@ -12,18 +13,6 @@ import type {
+     CaseUpdatePayload,
+ } from './cases.types'
+ 
+-/** FB5: Server-side filter parameters for case list */
+-interface CaseFilterParams extends CaseListParams {
+-  client_id?: string
+-  case_type?: string
+-  patent_category?: string
+-  flow_dir?: string
+-  status?: string
+-  filing_date_from?: string   // YYYY-MM-DD
+-  filing_date_to?: string     // YYYY-MM-DD
+-  primary_agent_id?: string
+-}
+-
+ interface BackendCase {
+     id: string
+     case_no: string
+@@ -101,6 +90,18 @@ interface BackendCase {
+     updated_at?: string
+ }
+ 
++interface BackendCaseListResponse {
++    items: BackendCase[]
++    page: number
++    page_size: number
++    total: number
++    summary: {
++        total_case_count?: number
++        status_counts?: Array<{ key: string; count: number }>
++        case_type_counts?: Array<{ key: string; count: number }>
++    }
++}
++
+ interface BackendCaseBatchFilingCandidate {
+     id: string
+     case_no: string
+@@ -349,22 +350,29 @@ function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
+ /**
+  * Get paginated list of cases
+  */
+-export async function getCases(params: CaseFilterParams = {}): Promise<Pagination<Case>> {
++export async function getCases(params: CaseListParams = {}): Promise<CaseListResponse> {
+     const { page = 1, page_size = 20, ...filters } = params
+     // Build clean params — only include non-empty filter values
+     const queryParams: Record<string, string | number> = { page, page_size }
+     for (const [key, value] of Object.entries(filters)) {
+         if (value !== undefined && value !== null && value !== '') {
+-            queryParams[key] = value
++            queryParams[key] = String(value)
+         }
+     }
+-    const response = await http.get<Pagination<BackendCase>>('/cases', {
++    const response = await http.get<BackendCaseListResponse>('/cases', {
+         params: queryParams
+     })
+ 
+     return {
+-        ...response.data,
++        page: response.data.page,
++        page_size: response.data.page_size,
++        total: response.data.total,
+         items: response.data.items.map(mapCase),
++        summary: {
++            total_case_count: response.data.summary?.total_case_count || 0,
++            status_counts: response.data.summary?.status_counts || [],
++            case_type_counts: response.data.summary?.case_type_counts || [],
++        },
+     }
+ }
+ 
+diff --git a/frontend/src/api/cases.types.ts b/frontend/src/api/cases.types.ts
+index 4daa9a7..927bc3e 100644
+--- a/frontend/src/api/cases.types.ts
++++ b/frontend/src/api/cases.types.ts
+@@ -119,6 +119,33 @@ export interface Case {
+ export interface CaseListParams {
+     page?: number
+     page_size?: number
++    client_id?: string
++    status?: string
++    case_type?: string
++    patent_category?: string
++    country?: string
++    agent_id?: string
++    date_from?: string
++    date_to?: string
++}
++
++export interface CaseReportCount {
++    key: string
++    count: number
++}
++
++export interface CaseListSummary {
++    total_case_count: number
++    status_counts: CaseReportCount[]
++    case_type_counts: CaseReportCount[]
++}
++
++export interface CaseListResponse {
++    items: Case[]
++    page: number
++    page_size: number
++    total: number
++    summary: CaseListSummary
+ }
+ 
+ export interface CaseCreatePayload {
+diff --git a/frontend/src/modules/cases/pages/CaseList.vue b/frontend/src/modules/cases/pages/CaseList.vue
+index fb87c11..98ae240 100644
+--- a/frontend/src/modules/cases/pages/CaseList.vue
++++ b/frontend/src/modules/cases/pages/CaseList.vue
+@@ -60,12 +60,12 @@
+           </el-form-item>
+         </el-col>
+         <el-col :span="6">
+-          <el-form-item label="流向" class="filter-item">
+-            <el-select v-model="filters.flow_dir" placeholder="全部" clearable style="width: 100%">
+-              <el-option label="国内" value="CN_DOMESTIC" />
+-              <el-option label="出境" value="CN_OUTBOUND" />
+-              <el-option label="入境" value="FOREIGN_INBOUND" />
+-            </el-select>
++          <el-form-item label="国家/地区" class="filter-item">
++            <el-input
++              v-model="filters.country"
++              placeholder="请输入国家/地区代码"
++              clearable
++            />
+           </el-form-item>
+         </el-col>
+       </el-row>
+@@ -83,9 +83,9 @@
+           </el-form-item>
+         </el-col>
+         <el-col :span="6">
+-          <el-form-item label="申请日从" class="filter-item">
++          <el-form-item label="时间区间从" class="filter-item">
+             <el-date-picker
+-              v-model="filters.filing_date_from"
++              v-model="filters.date_from"
+               type="date"
+               placeholder="起始日期"
+               format="YYYY-MM-DD"
+@@ -95,9 +95,9 @@
+           </el-form-item>
+         </el-col>
+         <el-col :span="6">
+-          <el-form-item label="申请日至" class="filter-item">
++          <el-form-item label="时间区间至" class="filter-item">
+             <el-date-picker
+-              v-model="filters.filing_date_to"
++              v-model="filters.date_to"
+               type="date"
+               placeholder="截止日期"
+               format="YYYY-MM-DD"
+@@ -107,9 +107,9 @@
+           </el-form-item>
+         </el-col>
+         <el-col :span="6">
+-          <el-form-item label="主办代理人" class="filter-item">
++          <el-form-item label="代理人" class="filter-item">
+             <el-input
+-              v-model="filters.primary_agent_id"
++              v-model="filters.agent_id"
+               placeholder="请输入代理人ID"
+               clearable
+             />
+@@ -122,6 +122,52 @@
+       </el-row>
+     </el-card>
+ 
++    <div class="report-summary">
++      <div class="summary-card">
++        <span class="summary-label">案件总数</span>
++        <span class="summary-value">{{ summary.total_case_count }} 件</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">状态分布</span>
++        <span class="summary-value">{{ summary.status_counts.length }} 类</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">类型分布</span>
++        <span class="summary-value">{{ summary.case_type_counts.length }} 类</span>
++      </div>
++    </div>
++
++    <div class="distribution-grid">
++      <div class="distribution-card">
++        <div class="distribution-title">按状态统计</div>
++        <div v-if="summary.status_counts.length" class="distribution-list">
++          <div
++            v-for="item in summary.status_counts"
++            :key="`status-${item.key}`"
++            class="distribution-item"
++          >
++            <span>{{ statusOptions[item.key] || item.key }}</span>
++            <span class="distribution-count">{{ item.count }} 件</span>
++          </div>
++        </div>
++        <div v-else class="distribution-empty">暂无状态统计</div>
++      </div>
++      <div class="distribution-card">
++        <div class="distribution-title">按案件类型统计</div>
++        <div v-if="summary.case_type_counts.length" class="distribution-list">
++          <div
++            v-for="item in summary.case_type_counts"
++            :key="`type-${item.key}`"
++            class="distribution-item"
++          >
++            <span>{{ caseTypeLabel(item.key) }}</span>
++            <span class="distribution-count">{{ item.count }} 件</span>
++          </div>
++        </div>
++        <div v-else class="distribution-empty">暂无类型统计</div>
++      </div>
++    </div>
++
+     <!-- Filter subtitle -->
+     <div v-if="stepFilter && stepLabel" class="page-filter-subtitle muted" style="margin-bottom: 12px;">
+       共 {{ total }} 件，均处于{{ stepNoText }}
+@@ -199,7 +245,7 @@ import { useRoute, useRouter } from 'vue-router'
+ import dayjs from 'dayjs'
+ import { getCases } from '../../../api/cases'
+ import { getClients } from '../../../api/clients'
+-import type { Case } from '../../../api/cases.types'
++import type { Case, CaseListResponse } from '../../../api/cases.types'
+ import type { ApiError } from '../../../api/types'
+ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+ import EmptyState from '../../../components/state/EmptyState.vue'
+@@ -225,11 +271,16 @@ const filters = reactive({
+   client_id: '',
+   case_type: '',
+   patent_category: '',
+-  flow_dir: '',
++  country: '',
+   status: '',
+-  filing_date_from: '',
+-  filing_date_to: '',
+-  primary_agent_id: '',
++  date_from: '',
++  date_to: '',
++  agent_id: '',
++})
++const summary = ref<CaseListResponse['summary']>({
++  total_case_count: 0,
++  status_counts: [],
++  case_type_counts: [],
+ })
+ 
+ // Client options for selector
+@@ -276,10 +327,10 @@ async function fetchCases() {
+     const result = await getCases({
+       page: page.value,
+       page_size: stepFilter.value ? 200 : pageSize.value,
+-      // FB5: pass active filter values
+       ...filters,
+     })
+     cases.value = result.items
++    summary.value = result.summary
+     if (stepFilter.value) {
+       total.value = displayCases.value.length
+     } else {
+@@ -334,15 +385,34 @@ function handleResetFilters() {
+   filters.client_id = ''
+   filters.case_type = ''
+   filters.patent_category = ''
+-  filters.flow_dir = ''
++  filters.country = ''
+   filters.status = ''
+-  filters.filing_date_from = ''
+-  filters.filing_date_to = ''
+-  filters.primary_agent_id = ''
++  filters.date_from = ''
++  filters.date_to = ''
++  filters.agent_id = ''
+   page.value = 1
+   fetchCases()
+ }
+ 
++function caseTypeLabel(value?: string) {
++  switch (value) {
++    case 'NORMAL':
++      return '普通申请'
++    case 'PCT_INTL':
++      return 'PCT国际'
++    case 'PCT_NATL':
++      return 'PCT国内'
++    case 'PRIORITY':
++      return '优先权'
++    case 'SEARCH':
++      return '检索'
++    case 'CONSULTING':
++      return '咨询'
++    default:
++      return value || '未分类'
++  }
++}
++
+ // Watch for pagination and filter changes
+ watch([page, pageSize], () => {
+   fetchCases()
+@@ -371,4 +441,70 @@ onMounted(() => {
+   color: var(--text-sub);
+   padding-bottom: 2px;
+ }
+-</style>
+\ No newline at end of file
++
++.report-summary {
++  display: grid;
++  grid-template-columns: repeat(3, minmax(0, 1fr));
++  gap: 12px;
++  margin-bottom: 16px;
++}
++
++.summary-card,
++.distribution-card {
++  border: 1px solid var(--color-border);
++  border-radius: 10px;
++  background: var(--el-bg-color);
++  padding: 14px 16px;
++}
++
++.summary-label,
++.distribution-title {
++  font-size: 12px;
++  color: var(--text-sub);
++}
++
++.summary-value {
++  display: block;
++  margin-top: 6px;
++  font-size: 18px;
++  font-weight: 600;
++}
++
++.distribution-grid {
++  display: grid;
++  grid-template-columns: repeat(2, minmax(0, 1fr));
++  gap: 12px;
++  margin-bottom: 16px;
++}
++
++.distribution-list {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  margin-top: 10px;
++}
++
++.distribution-item {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  font-size: 13px;
++}
++
++.distribution-count {
++  font-weight: 600;
++}
++
++.distribution-empty {
++  margin-top: 10px;
++  color: var(--text-sub);
++  font-size: 13px;
++}
++
++@media (max-width: 960px) {
++  .report-summary,
++  .distribution-grid {
++    grid-template-columns: 1fr;
++  }
++}
++</style>

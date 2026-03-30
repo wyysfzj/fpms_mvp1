@@ -19,7 +19,12 @@ from app.modules.cases.models import (
     T_CaseInventor,
     T_Priority,
 )
-from app.modules.cases.schemas import CaseBatchFilingActionIn, CaseCreateIn, CaseUpdateFull
+from app.modules.cases.schemas import (
+    CaseBatchFilingActionIn,
+    CaseCreateIn,
+    CaseListReportResponse,
+    CaseUpdateFull,
+)
 from app.modules.cases.service import (
     create_case as create_case_service,
 )
@@ -28,6 +33,9 @@ from app.modules.cases.service import (
 )
 from app.modules.cases.service import (
     list_batch_filing_candidates as list_batch_filing_candidates_service,
+)
+from app.modules.cases.service import (
+    list_cases as list_cases_report_service,
 )
 from app.modules.cases.service import (
     update_case_full as update_case_full_service,
@@ -224,7 +232,7 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
     }
 
 
-@router.get("/cases", summary="List cases")
+@router.get("/cases", summary="List cases", response_model=CaseListReportResponse)
 def get_cases(
     q: str | None = Query(default=None),
     case_no: str | None = Query(default=None),
@@ -239,6 +247,8 @@ def get_cases(
     filing_date_from: date | None = Query(default=None),
     filing_date_to: date | None = Query(default=None),
     primary_agent_id: str | None = Query(default=None),
+    country: str | None = Query(default=None),
+    agent_id: str | None = Query(default=None),
     sort_by: str | None = Query(default=None),
     sort_dir: str = Query(default="asc"),
     page: int = Query(default=1, ge=1),
@@ -246,108 +256,27 @@ def get_cases(
     _perm: None = Depends(require_perm("Case.Read")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    List cases with filters and pagination.
-
-    **Auth**: Bearer JWT
-    **Permission**: Case.Read
-    **Request example**:
-    `GET /api/v1/cases?page=1&page_size=20&case_no=CURL_CASE_001`
-    **Curl example**:
-    ```bash
-    curl -s -X GET "http://localhost:8000/api/v1/cases?page=1&page_size=20" \\
-      -H "Authorization: Bearer $FPMS_TOKEN"
-    ```
-    **Responses**:
-    - 200: List of cases
-    - 401: AUTH_REQUIRED
-    - 403: FORBIDDEN
-    - 422: VALIDATION_ERROR
-    """
-    query = db.query(Case)
-
-    if q:
-        pattern = f"%{q}%"
-        query = query.filter(
-            or_(
-                Case.case_no.ilike(pattern),
-                Case.title_cn.ilike(pattern),
-                Case.title_en.ilike(pattern),
-                Case.app_no.ilike(pattern),
-            )
-        )
-    if case_no:
-        query = query.filter(Case.case_no == case_no)
-    if app_no:
-        query = query.filter(Case.app_no == app_no)
-    if client_id:
-        query = query.filter(Case.client_id == client_id)
-    if status:
-        query = query.filter(Case.status == status)
-    if date_from:
-        query = query.filter(Case.recv_date >= date_from)
-    if date_to:
-        query = query.filter(Case.recv_date <= date_to)
-    if case_type:
-        query = query.filter(Case.case_type == case_type)
-    if patent_category:
-        query = query.filter(Case.patent_category == patent_category)
-    if flow_dir:
-        query = query.filter(Case.flow_dir == flow_dir)
-    if filing_date_from:
-        query = query.filter(Case.filing_date >= filing_date_from)
-    if filing_date_to:
-        query = query.filter(Case.filing_date <= filing_date_to)
-    if primary_agent_id:
-        query = query.filter(Case.primary_agent_id == primary_agent_id)
-
-    total = query.count()
-
-    sort_field = Case.case_no
-    allowed_sort_fields = {
-        "case_no": Case.case_no,
-        "recv_date": Case.recv_date,
-        "filing_date": Case.filing_date,
-        "created_at": Case.created_at,
-    }
-    if sort_by in allowed_sort_fields:
-        sort_field = allowed_sort_fields[sort_by]
-
-    if sort_dir.lower() == "desc":
-        query = query.order_by(sort_field.desc())
-    else:
-        query = query.order_by(sort_field.asc())
-
-    cases = query.offset((page - 1) * page_size).limit(page_size).all()
-
-    # Batch-resolve client names for all cases in this page
-    client_ids = {case.client_id for case in cases if case.client_id}
-    client_name_map: dict[str, str] = {}
-    if client_ids:
-        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
-        client_name_map = {c.id: c.name_cn for c in clients}
-
-    items = [
-        {
-            "id": case.id,
-            "case_no": case.case_no,
-            "case_type": case.case_type,
-            "patent_category": case.patent_category,
-            "client_id": case.client_id,
-            "client_name": client_name_map.get(case.client_id) if case.client_id else None,
-            "title_cn": case.title_cn,
-            "title_en": case.title_en,
-            "app_no": case.app_no,
-            "status": case.status,
-            "filing_date": str(case.filing_date) if case.filing_date else None,
-            "recv_date": str(case.recv_date) if case.recv_date else None,
-            "patent_no": case.patent_no,
-            "primary_agent_id": case.primary_agent_id,
-        }
-        for case in cases
-    ]
-
-    return {"items": items, "page": page, "page_size": page_size, "total": total}
+    result = list_cases_report_service(
+        db,
+        q=q,
+        case_no=case_no,
+        app_no=app_no,
+        client_id=client_id,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        case_type=case_type,
+        patent_category=patent_category,
+        flow_dir=flow_dir,
+        filing_date_from=filing_date_from,
+        filing_date_to=filing_date_to,
+        primary_agent_id=primary_agent_id,
+        country=country,
+        agent_id=agent_id,
+        page=page,
+        page_size=page_size,
+    )
+    return result.model_dump()
 
 
 @router.get("/cases/batch-filing/candidates", summary="List batch filing candidates")

@@ -60,12 +60,12 @@
           </el-form-item>
         </el-col>
         <el-col :span="6">
-          <el-form-item label="流向" class="filter-item">
-            <el-select v-model="filters.flow_dir" placeholder="全部" clearable style="width: 100%">
-              <el-option label="国内" value="CN_DOMESTIC" />
-              <el-option label="出境" value="CN_OUTBOUND" />
-              <el-option label="入境" value="FOREIGN_INBOUND" />
-            </el-select>
+          <el-form-item label="国家/地区" class="filter-item">
+            <el-input
+              v-model="filters.country"
+              placeholder="请输入国家/地区代码"
+              clearable
+            />
           </el-form-item>
         </el-col>
       </el-row>
@@ -83,9 +83,9 @@
           </el-form-item>
         </el-col>
         <el-col :span="6">
-          <el-form-item label="申请日从" class="filter-item">
+          <el-form-item label="时间区间从" class="filter-item">
             <el-date-picker
-              v-model="filters.filing_date_from"
+              v-model="filters.date_from"
               type="date"
               placeholder="起始日期"
               format="YYYY-MM-DD"
@@ -95,9 +95,9 @@
           </el-form-item>
         </el-col>
         <el-col :span="6">
-          <el-form-item label="申请日至" class="filter-item">
+          <el-form-item label="时间区间至" class="filter-item">
             <el-date-picker
-              v-model="filters.filing_date_to"
+              v-model="filters.date_to"
               type="date"
               placeholder="截止日期"
               format="YYYY-MM-DD"
@@ -107,9 +107,9 @@
           </el-form-item>
         </el-col>
         <el-col :span="6">
-          <el-form-item label="主办代理人" class="filter-item">
+          <el-form-item label="代理人" class="filter-item">
             <el-input
-              v-model="filters.primary_agent_id"
+              v-model="filters.agent_id"
               placeholder="请输入代理人ID"
               clearable
             />
@@ -121,6 +121,52 @@
         <el-button @click="handleResetFilters">重置</el-button>
       </el-row>
     </el-card>
+
+    <div class="report-summary">
+      <div class="summary-card">
+        <span class="summary-label">案件总数</span>
+        <span class="summary-value">{{ summary.total_case_count }} 件</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">状态分布</span>
+        <span class="summary-value">{{ summary.status_counts.length }} 类</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">类型分布</span>
+        <span class="summary-value">{{ summary.case_type_counts.length }} 类</span>
+      </div>
+    </div>
+
+    <div class="distribution-grid">
+      <div class="distribution-card">
+        <div class="distribution-title">按状态统计</div>
+        <div v-if="summary.status_counts.length" class="distribution-list">
+          <div
+            v-for="item in summary.status_counts"
+            :key="`status-${item.key}`"
+            class="distribution-item"
+          >
+            <span>{{ statusOptions[item.key] || item.key }}</span>
+            <span class="distribution-count">{{ item.count }} 件</span>
+          </div>
+        </div>
+        <div v-else class="distribution-empty">暂无状态统计</div>
+      </div>
+      <div class="distribution-card">
+        <div class="distribution-title">按案件类型统计</div>
+        <div v-if="summary.case_type_counts.length" class="distribution-list">
+          <div
+            v-for="item in summary.case_type_counts"
+            :key="`type-${item.key}`"
+            class="distribution-item"
+          >
+            <span>{{ caseTypeLabel(item.key) }}</span>
+            <span class="distribution-count">{{ item.count }} 件</span>
+          </div>
+        </div>
+        <div v-else class="distribution-empty">暂无类型统计</div>
+      </div>
+    </div>
 
     <!-- Filter subtitle -->
     <div v-if="stepFilter && stepLabel" class="page-filter-subtitle muted" style="margin-bottom: 12px;">
@@ -199,7 +245,7 @@ import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { getCases } from '../../../api/cases'
 import { getClients } from '../../../api/clients'
-import type { Case } from '../../../api/cases.types'
+import type { Case, CaseListResponse } from '../../../api/cases.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
@@ -225,11 +271,16 @@ const filters = reactive({
   client_id: '',
   case_type: '',
   patent_category: '',
-  flow_dir: '',
+  country: '',
   status: '',
-  filing_date_from: '',
-  filing_date_to: '',
-  primary_agent_id: '',
+  date_from: '',
+  date_to: '',
+  agent_id: '',
+})
+const summary = ref<CaseListResponse['summary']>({
+  total_case_count: 0,
+  status_counts: [],
+  case_type_counts: [],
 })
 
 // Client options for selector
@@ -276,10 +327,10 @@ async function fetchCases() {
     const result = await getCases({
       page: page.value,
       page_size: stepFilter.value ? 200 : pageSize.value,
-      // FB5: pass active filter values
       ...filters,
     })
     cases.value = result.items
+    summary.value = result.summary
     if (stepFilter.value) {
       total.value = displayCases.value.length
     } else {
@@ -334,13 +385,32 @@ function handleResetFilters() {
   filters.client_id = ''
   filters.case_type = ''
   filters.patent_category = ''
-  filters.flow_dir = ''
+  filters.country = ''
   filters.status = ''
-  filters.filing_date_from = ''
-  filters.filing_date_to = ''
-  filters.primary_agent_id = ''
+  filters.date_from = ''
+  filters.date_to = ''
+  filters.agent_id = ''
   page.value = 1
   fetchCases()
+}
+
+function caseTypeLabel(value?: string) {
+  switch (value) {
+    case 'NORMAL':
+      return '普通申请'
+    case 'PCT_INTL':
+      return 'PCT国际'
+    case 'PCT_NATL':
+      return 'PCT国内'
+    case 'PRIORITY':
+      return '优先权'
+    case 'SEARCH':
+      return '检索'
+    case 'CONSULTING':
+      return '咨询'
+    default:
+      return value || '未分类'
+  }
 }
 
 // Watch for pagination and filter changes
@@ -370,5 +440,71 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-sub);
   padding-bottom: 2px;
+}
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-card,
+.distribution-card {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+  padding: 14px 16px;
+}
+
+.summary-label,
+.distribution-title {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.summary-value {
+  display: block;
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.distribution-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.distribution-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.distribution-count {
+  font-weight: 600;
+}
+
+.distribution-empty {
+  margin-top: 10px;
+  color: var(--text-sub);
+  font-size: 13px;
+}
+
+@media (max-width: 960px) {
+  .report-summary,
+  .distribution-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -5,24 +5,13 @@ import type {
     CaseBatchFilingActionPayload,
     CaseBatchFilingActionResult,
     CaseBatchFilingCandidate,
+    CaseListResponse,
     CaseBatchFilingQueryParams,
     CaseCreatePayload,
     CaseLimitedEditPayload,
     CaseListParams,
     CaseUpdatePayload,
 } from './cases.types'
-
-/** FB5: Server-side filter parameters for case list */
-interface CaseFilterParams extends CaseListParams {
-  client_id?: string
-  case_type?: string
-  patent_category?: string
-  flow_dir?: string
-  status?: string
-  filing_date_from?: string   // YYYY-MM-DD
-  filing_date_to?: string     // YYYY-MM-DD
-  primary_agent_id?: string
-}
 
 interface BackendCase {
     id: string
@@ -99,6 +88,18 @@ interface BackendCase {
     applicant_kind?: string | null
     created_at?: string
     updated_at?: string
+}
+
+interface BackendCaseListResponse {
+    items: BackendCase[]
+    page: number
+    page_size: number
+    total: number
+    summary: {
+        total_case_count?: number
+        status_counts?: Array<{ key: string; count: number }>
+        case_type_counts?: Array<{ key: string; count: number }>
+    }
 }
 
 interface BackendCaseBatchFilingCandidate {
@@ -349,22 +350,29 @@ function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
 /**
  * Get paginated list of cases
  */
-export async function getCases(params: CaseFilterParams = {}): Promise<Pagination<Case>> {
+export async function getCases(params: CaseListParams = {}): Promise<CaseListResponse> {
     const { page = 1, page_size = 20, ...filters } = params
     // Build clean params — only include non-empty filter values
     const queryParams: Record<string, string | number> = { page, page_size }
     for (const [key, value] of Object.entries(filters)) {
         if (value !== undefined && value !== null && value !== '') {
-            queryParams[key] = value
+            queryParams[key] = String(value)
         }
     }
-    const response = await http.get<Pagination<BackendCase>>('/cases', {
+    const response = await http.get<BackendCaseListResponse>('/cases', {
         params: queryParams
     })
 
     return {
-        ...response.data,
+        page: response.data.page,
+        page_size: response.data.page_size,
+        total: response.data.total,
         items: response.data.items.map(mapCase),
+        summary: {
+            total_case_count: response.data.summary?.total_case_count || 0,
+            status_counts: response.data.summary?.status_counts || [],
+            case_type_counts: response.data.summary?.case_type_counts || [],
+        },
     }
 }
 

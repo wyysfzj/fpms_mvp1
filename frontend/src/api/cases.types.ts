@@ -119,6 +119,33 @@ export interface Case {
 export interface CaseListParams {
     page?: number
     page_size?: number
+    client_id?: string
+    status?: string
+    case_type?: string
+    patent_category?: string
+    country?: string
+    agent_id?: string
+    date_from?: string
+    date_to?: string
+}
+
+export interface CaseReportCount {
+    key: string
+    count: number
+}
+
+export interface CaseListSummary {
+    total_case_count: number
+    status_counts: CaseReportCount[]
+    case_type_counts: CaseReportCount[]
+}
+
+export interface CaseListResponse {
+    items: Case[]
+    page: number
+    page_size: number
+    total: number
+    summary: CaseListSummary
 }
 
 export interface CaseCreatePayload {

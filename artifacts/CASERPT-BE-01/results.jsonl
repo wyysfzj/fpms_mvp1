@@ -1,0 +1,3 @@
+{"step":"lint","rc":0,"cmd":"python3 -m ruff check backend/app/modules/cases/api.py backend/app/modules/cases/service.py backend/app/modules/cases/schemas.py backend/tests/test_case_report.py"}
+{"step":"test","rc":0,"cmd":"cd backend && PYTHONPATH=. pytest -q tests/test_case_report.py"}
+{"step":"validate","rc":0,"cmd":"./scripts/task_validate.sh CASERPT-BE-01"}

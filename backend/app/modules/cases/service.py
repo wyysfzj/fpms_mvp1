@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -25,6 +25,9 @@ from app.modules.cases.schemas import (
     CaseBatchFilingCandidateItem,
     CaseCreate,
     CaseListItem,
+    CaseListReportResponse,
+    CaseReportCountResponse,
+    CaseReportSummaryResponse,
     CaseUpdateFull,
     CaseUpdateLimited,
 )
@@ -388,6 +391,93 @@ def validate_status_required_fields(
         )
 
 
+def _apply_case_report_filters(
+    query,
+    *,
+    q: str | None = None,
+    case_no: str | None = None,
+    app_no: str | None = None,
+    client_id: str | None = None,
+    status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    case_type: str | None = None,
+    patent_category: str | None = None,
+    flow_dir: str | None = None,
+    filing_date_from: date | None = None,
+    filing_date_to: date | None = None,
+    primary_agent_id: str | None = None,
+    country: str | None = None,
+    agent_id: str | None = None,
+):
+    if q:
+        query = query.filter(
+            or_(
+                Case.case_no.contains(q),
+                Case.title_cn.contains(q),
+                Case.title_en.contains(q),
+                Case.app_no.contains(q),
+            )
+        )
+    if case_no:
+        query = query.filter(Case.case_no == case_no)
+    if app_no:
+        query = query.filter(Case.app_no == app_no)
+    if client_id:
+        query = query.filter(Case.client_id == client_id)
+    if status:
+        query = query.filter(Case.status == status)
+    if date_from:
+        query = query.filter(Case.recv_date >= date_from)
+    if date_to:
+        query = query.filter(Case.recv_date <= date_to)
+    if case_type:
+        query = query.filter(Case.case_type == case_type)
+    if patent_category:
+        query = query.filter(Case.patent_category == patent_category)
+    if flow_dir:
+        query = query.filter(Case.flow_dir == flow_dir)
+    if filing_date_from:
+        query = query.filter(Case.filing_date >= filing_date_from)
+    if filing_date_to:
+        query = query.filter(Case.filing_date <= filing_date_to)
+    if primary_agent_id:
+        query = query.filter(Case.primary_agent_id == primary_agent_id)
+    if country:
+        query = query.filter(or_(Case.from_country == country, Case.to_country == country))
+    if agent_id:
+        query = query.filter(
+            or_(Case.primary_agent_id == agent_id, Case.second_agent_id == agent_id)
+        )
+    return query
+
+
+def _build_case_report_summary(query) -> CaseReportSummaryResponse:
+    status_rows = (
+        query.with_entities(Case.status, func.count(Case.id))
+        .group_by(Case.status)
+        .order_by(Case.status.asc())
+        .all()
+    )
+    case_type_rows = (
+        query.with_entities(Case.case_type, func.count(Case.id))
+        .group_by(Case.case_type)
+        .order_by(Case.case_type.asc())
+        .all()
+    )
+    return CaseReportSummaryResponse(
+        total_case_count=query.count(),
+        status_counts=[
+            CaseReportCountResponse(key=status_key, count=count)
+            for status_key, count in status_rows
+        ],
+        case_type_counts=[
+            CaseReportCountResponse(key=case_type_key, count=count)
+            for case_type_key, count in case_type_rows
+        ],
+    )
+
+
 def validate_case_status_transition(current_status: str | None, target_status: str | None) -> None:
     if not target_status or not current_status or target_status == current_status:
         return
@@ -413,48 +503,45 @@ def validate_case_status_transition(current_status: str | None, target_status: s
 def list_cases(
     db: Session,
     q: str | None = None,
+    case_no: str | None = None,
+    app_no: str | None = None,
     client_id: str | None = None,
     status: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     case_type: str | None = None,
     patent_category: str | None = None,
     flow_dir: str | None = None,
     filing_date_from: date | None = None,
     filing_date_to: date | None = None,
     primary_agent_id: str | None = None,
+    country: str | None = None,
+    agent_id: str | None = None,
     page: int = 1,
     page_size: int = 20,
-) -> PageResult[CaseListItem]:
-    """List cases with pagination and filters."""
-    query = db.query(Case)
-
-    if q:
-        query = query.filter(
-            or_(
-                Case.case_no.contains(q),
-                Case.title_cn.contains(q),
-                Case.title_en.contains(q),
-                Case.app_no.contains(q),
-            )
-        )
-
-    if client_id:
-        query = query.filter(Case.client_id == client_id)
-    if status:
-        query = query.filter(Case.status == status)
-    if case_type:
-        query = query.filter(Case.case_type == case_type)
-    if patent_category:
-        query = query.filter(Case.patent_category == patent_category)
-    if flow_dir:
-        query = query.filter(Case.flow_dir == flow_dir)
-    if filing_date_from:
-        query = query.filter(Case.filing_date >= filing_date_from)
-    if filing_date_to:
-        query = query.filter(Case.filing_date <= filing_date_to)
-    if primary_agent_id:
-        query = query.filter(Case.primary_agent_id == primary_agent_id)
+) -> CaseListReportResponse:
+    """List cases with pagination, filters, and report summary."""
+    query = _apply_case_report_filters(
+        db.query(Case),
+        q=q,
+        case_no=case_no,
+        app_no=app_no,
+        client_id=client_id,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        case_type=case_type,
+        patent_category=patent_category,
+        flow_dir=flow_dir,
+        filing_date_from=filing_date_from,
+        filing_date_to=filing_date_to,
+        primary_agent_id=primary_agent_id,
+        country=country,
+        agent_id=agent_id,
+    )
 
     total = query.count()
+    summary = _build_case_report_summary(query)
 
     off, lim = offset_limit(page, page_size)
     items = query.order_by(Case.created_at.desc()).offset(off).limit(lim).all()
@@ -476,7 +563,13 @@ def list_cases(
         for case in items
     ]
 
-    return PageResult(items=list_items, page=page, page_size=page_size, total=total)
+    return CaseListReportResponse(
+        items=list_items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        summary=summary,
+    )
 
 
 def list_batch_filing_candidates(
