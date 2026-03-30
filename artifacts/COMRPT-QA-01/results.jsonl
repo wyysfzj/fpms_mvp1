@@ -1,0 +1,3 @@
+{"step":"lint","cmd":"./scripts/task_validate.sh COMRPT-BE-01","rc":0}
+{"step":"test","cmd":"./scripts/task_validate.sh COMRPT-FE-01","rc":0}
+{"step":"qa","cmd":"./scripts/task_validate.sh COMRPT-QA-01","rc":0}

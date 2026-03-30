@@ -144,6 +144,13 @@ export interface CommissionSettlementReportResult {
         date_to?: string
         time_field: 'line_created_at' | 'settleable_date' | 'settlement_period'
     }
+    summary: {
+        line_count: number
+        settlement_count: number
+        agent_count: number
+        case_count: number
+        total_amount: number
+    }
     totals: {
         line_count: number
         total_amount: number

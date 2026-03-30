@@ -92,6 +92,13 @@ interface BackendCommissionSettlementReportResult {
         date_to?: string | null
         time_field?: 'line_created_at' | 'settleable_date' | 'settlement_period' | null
     }
+    summary?: {
+        line_count?: number | null
+        settlement_count?: number | null
+        agent_count?: number | null
+        case_count?: number | null
+        total_amount?: number | string | null
+    }
     totals: {
         line_count?: number | null
         total_amount?: number | string | null
@@ -215,6 +222,13 @@ function mapCommissionSettlementReport(
             date_from: input.filters.date_from ?? undefined,
             date_to: input.filters.date_to ?? undefined,
             time_field: input.filters.time_field ?? 'line_created_at',
+        },
+        summary: {
+            line_count: input.summary?.line_count ?? input.totals.line_count ?? 0,
+            settlement_count: input.summary?.settlement_count ?? 0,
+            agent_count: input.summary?.agent_count ?? 0,
+            case_count: input.summary?.case_count ?? 0,
+            total_amount: asNumber(input.summary?.total_amount ?? input.totals.total_amount),
         },
         totals: {
             line_count: input.totals.line_count ?? 0,

@@ -1,0 +1,496 @@
+diff --git a/frontend/src/api/commission.ts b/frontend/src/api/commission.ts
+index b7e4b73..f524162 100644
+--- a/frontend/src/api/commission.ts
++++ b/frontend/src/api/commission.ts
+@@ -92,6 +92,13 @@ interface BackendCommissionSettlementReportResult {
+         date_to?: string | null
+         time_field?: 'line_created_at' | 'settleable_date' | 'settlement_period' | null
+     }
++    summary?: {
++        line_count?: number | null
++        settlement_count?: number | null
++        agent_count?: number | null
++        case_count?: number | null
++        total_amount?: number | string | null
++    }
+     totals: {
+         line_count?: number | null
+         total_amount?: number | string | null
+@@ -216,6 +223,13 @@ function mapCommissionSettlementReport(
+             date_to: input.filters.date_to ?? undefined,
+             time_field: input.filters.time_field ?? 'line_created_at',
+         },
++        summary: {
++            line_count: input.summary?.line_count ?? input.totals.line_count ?? 0,
++            settlement_count: input.summary?.settlement_count ?? 0,
++            agent_count: input.summary?.agent_count ?? 0,
++            case_count: input.summary?.case_count ?? 0,
++            total_amount: asNumber(input.summary?.total_amount ?? input.totals.total_amount),
++        },
+         totals: {
+             line_count: input.totals.line_count ?? 0,
+             total_amount: asNumber(input.totals.total_amount),
+diff --git a/frontend/src/api/commission.types.ts b/frontend/src/api/commission.types.ts
+index f229a24..470fd20 100644
+--- a/frontend/src/api/commission.types.ts
++++ b/frontend/src/api/commission.types.ts
+@@ -144,6 +144,13 @@ export interface CommissionSettlementReportResult {
+         date_to?: string
+         time_field: 'line_created_at' | 'settleable_date' | 'settlement_period'
+     }
++    summary: {
++        line_count: number
++        settlement_count: number
++        agent_count: number
++        case_count: number
++        total_amount: number
++    }
+     totals: {
+         line_count: number
+         total_amount: number
+diff --git a/frontend/src/modules/commission/pages/CommissionSettlement.vue b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+index d5f0fa2..510d949 100644
+--- a/frontend/src/modules/commission/pages/CommissionSettlement.vue
++++ b/frontend/src/modules/commission/pages/CommissionSettlement.vue
+@@ -3,7 +3,7 @@
+     <div class="page-header">
+       <div class="page-header-left">
+         <h1 class="page-title">提成结算批次</h1>
+-        <span class="page-count" aria-live="polite">统计行数：{{ report?.totals.line_count ?? 0 }}</span>
++        <span class="page-count" aria-live="polite">统计行数：{{ report?.summary.line_count ?? 0 }}</span>
+       </div>
+     </div>
+ 
+@@ -193,189 +193,177 @@
+ 
+       <div v-else>
+         <el-row :gutter="12" class="stat-grid">
+-          <el-col :xs="24" :sm="12" :md="8">
++          <el-col :xs="24" :sm="12" :md="8" :lg="4">
+             <el-card shadow="never" class="stat-card">
+               <div class="stat-label">明细总数</div>
+-              <div class="stat-value">{{ report.totals.line_count }}</div>
++              <div class="stat-value">{{ report.summary.line_count }}</div>
+             </el-card>
+           </el-col>
+-          <el-col :xs="24" :sm="12" :md="8">
++          <el-col :xs="24" :sm="12" :md="8" :lg="4">
+             <el-card shadow="never" class="stat-card">
+-              <div class="stat-label">提成总额</div>
+-              <div class="stat-value mono-num">{{ formatMoney(report.totals.total_amount) }}</div>
++              <div class="stat-label">结算批次数</div>
++              <div class="stat-value">{{ report.summary.settlement_count }}</div>
++            </el-card>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8" :lg="4">
++            <el-card shadow="never" class="stat-card">
++              <div class="stat-label">代理人数</div>
++              <div class="stat-value">{{ report.summary.agent_count }}</div>
+             </el-card>
+           </el-col>
+-          <el-col :xs="24" :sm="12" :md="8">
++          <el-col :xs="24" :sm="12" :md="8" :lg="4">
+             <el-card shadow="never" class="stat-card">
+-              <div class="stat-label">分组维度</div>
+-              <div class="stat-value">{{ report.filters.time_field }}</div>
++              <div class="stat-label">案件数</div>
++              <div class="stat-value">{{ report.summary.case_count }}</div>
++            </el-card>
++          </el-col>
++          <el-col :xs="24" :sm="12" :md="8" :lg="8">
++            <el-card shadow="never" class="stat-card">
++              <div class="stat-label">提成总额</div>
++              <div class="stat-value mono-num">{{ formatMoney(report.summary.total_amount) }}</div>
++              <div class="stat-hint">时间口径：{{ timeFieldLabel(report.filters.time_field) }}</div>
+             </el-card>
+           </el-col>
+         </el-row>
+ 
+-        <div v-if="stageSummary.hasAnyStatus" class="result-block">
+-          <div class="sub-title">阶段完成概览</div>
+-          <el-row :gutter="12" class="stat-grid">
+-            <el-col :xs="24" :sm="12">
+-              <el-card shadow="never" class="stat-card">
+-                <div class="stat-label">批次状态分布</div>
+-                <div class="stage-tag-list">
++        <div class="report-hint">
++          统计口径仅覆盖已生成的提成记录与结算数据，不包含潜在提成预测或成本占比分析。
++        </div>
++
++        <div class="table-section">
++          <div class="sub-title">当前筛选摘要</div>
++          <el-descriptions :column="4" border size="small">
++            <el-descriptions-item label="代理人">{{ report.filters.agent_id || '全部' }}</el-descriptions-item>
++            <el-descriptions-item label="案件">{{ report.filters.case_id || '全部' }}</el-descriptions-item>
++            <el-descriptions-item label="币种">{{ report.filters.currency || '全部' }}</el-descriptions-item>
++            <el-descriptions-item label="时间口径">{{ timeFieldLabel(report.filters.time_field) }}</el-descriptions-item>
++            <el-descriptions-item label="批次状态">{{ report.filters.settlement_status || '全部' }}</el-descriptions-item>
++            <el-descriptions-item label="明细状态">{{ report.filters.line_status || '全部' }}</el-descriptions-item>
++            <el-descriptions-item label="开始日期">{{ report.filters.date_from || '未设置' }}</el-descriptions-item>
++            <el-descriptions-item label="结束日期">{{ report.filters.date_to || '未设置' }}</el-descriptions-item>
++          </el-descriptions>
++        </div>
++
++        <div v-if="!report.by_agent.length && !report.by_case.length && !report.details.length" class="page-empty">
++          <EmptyState title="没有匹配的提成统计结果" message="请调整筛选条件后重新查询。" icon="📄" />
++        </div>
++
++        <template v-else>
++          <div class="table-section">
++            <div class="sub-title">按代理人统计</div>
++            <el-table :data="report.by_agent" stripe size="small" class="compact-table">
++              <el-table-column prop="agent_id" label="代理人编号" min-width="160">
++                <template #default="{ row }">
++                  {{ row.agent_id || '—' }}
++                </template>
++              </el-table-column>
++              <el-table-column prop="line_count" label="明细数" width="100" />
++              <el-table-column label="总额" width="140" align="right">
++                <template #default="{ row }">
++                  <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++                </template>
++              </el-table-column>
++            </el-table>
++          </div>
++
++          <div class="table-section">
++            <div class="sub-title">按案件统计</div>
++            <el-table :data="report.by_case" stripe size="small" class="compact-table">
++              <el-table-column prop="case_id" label="案件编号" min-width="180">
++                <template #default="{ row }">
++                  {{ row.case_id || '—' }}
++                </template>
++              </el-table-column>
++              <el-table-column prop="line_count" label="明细数" width="100" />
++              <el-table-column label="总额" width="140" align="right">
++                <template #default="{ row }">
++                  <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
++                </template>
++              </el-table-column>
++            </el-table>
++          </div>
++
++          <div class="table-section">
++            <div class="sub-title">明细列表</div>
++            <el-table :data="report.details" stripe size="small" class="compact-table">
++              <el-table-column prop="settlement_id" label="批次编号" width="90" />
++              <el-table-column prop="commission_id" label="提成编号" width="90" />
++              <el-table-column prop="agent_id" label="代理人编号" min-width="140">
++                <template #default="{ row }">
++                  {{ row.agent_id || '—' }}
++                </template>
++              </el-table-column>
++              <el-table-column prop="case_id" label="案件编号" min-width="150" />
++              <el-table-column prop="settlement_status" label="批次状态" width="100">
++                <template #default="{ row }">
+                   <el-tag
+-                    v-for="item in stageSummary.settlementStatuses"
+-                    :key="`settlement-${item.status}`"
+-                    :type="settlementStatusTagType(item.status)"
++                    v-if="row.settlement_status"
++                    :type="settlementStatusTagType(row.settlement_status)"
+                     size="small"
+                   >
+-                    {{ settlementStatusLabel(item.status) }} ×{{ item.count }}
++                    {{ settlementStatusLabel(row.settlement_status) }}
+                   </el-tag>
+-                </div>
+-              </el-card>
+-            </el-col>
+-            <el-col :xs="24" :sm="12">
+-              <el-card shadow="never" class="stat-card">
+-                <div class="stat-label">明细状态分布</div>
+-                <div class="stage-tag-list">
++                  <span v-else>—</span>
++                </template>
++              </el-table-column>
++              <el-table-column prop="line_status" label="明细状态" width="100">
++                <template #default="{ row }">
+                   <el-tag
+-                    v-for="item in stageSummary.lineStatuses"
+-                    :key="`line-${item.status}`"
+-                    :type="lineStatusTagType(item.status)"
++                    v-if="row.line_status"
++                    :type="lineStatusTagType(row.line_status)"
+                     size="small"
+                   >
+-                    {{ lineStatusLabel(item.status) }} ×{{ item.count }}
++                    {{ lineStatusLabel(row.line_status) }}
+                   </el-tag>
+-                </div>
+-              </el-card>
+-            </el-col>
+-          </el-row>
+-        </div>
+-
+-        <div class="table-section">
+-          <div class="sub-title">按代理人统计</div>
+-          <el-table :data="report.by_agent" stripe size="small" class="compact-table">
+-            <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+-              <template #default="{ row }">
+-                {{ row.agent_id || '—' }}
+-              </template>
+-            </el-table-column>
+-            <el-table-column prop="line_count" label="明细数" width="100" />
+-            <el-table-column label="总额" width="140" align="right">
+-              <template #default="{ row }">
+-                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
+-              </template>
+-            </el-table-column>
+-          </el-table>
+-        </div>
+-
+-        <div class="table-section">
+-          <div class="sub-title">按案件统计</div>
+-          <el-table :data="report.by_case" stripe size="small" class="compact-table">
+-            <el-table-column prop="case_id" label="案件编号" min-width="180">
+-              <template #default="{ row }">
+-                {{ row.case_id || '—' }}
+-              </template>
+-            </el-table-column>
+-            <el-table-column prop="line_count" label="明细数" width="100" />
+-            <el-table-column label="总额" width="140" align="right">
+-              <template #default="{ row }">
+-                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
+-              </template>
+-            </el-table-column>
+-          </el-table>
+-        </div>
+-
+-        <div class="table-section">
+-          <div class="sub-title">按时间统计</div>
+-          <el-table :data="report.by_time" stripe size="small" class="compact-table">
+-            <el-table-column prop="time_bucket" label="时间桶" min-width="160" />
+-            <el-table-column prop="line_count" label="明细数" width="100" />
+-            <el-table-column label="总额" width="140" align="right">
+-              <template #default="{ row }">
+-                <span class="mono-num">{{ formatMoney(row.total_amount) }}</span>
+-              </template>
+-            </el-table-column>
+-          </el-table>
+-        </div>
+-
+-        <div class="table-section">
+-          <div class="sub-title">明细列表</div>
+-          <el-table :data="report.details" stripe size="small" class="compact-table">
+-            <el-table-column prop="settlement_id" label="批次编号" width="90" />
+-            <el-table-column prop="commission_id" label="提成编号" width="90" />
+-            <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+-              <template #default="{ row }">
+-                {{ row.agent_id || '—' }}
+-              </template>
+-            </el-table-column>
+-            <el-table-column prop="case_id" label="案件编号" min-width="150" />
+-            <el-table-column prop="settlement_status" label="批次状态" width="100">
+-              <template #default="{ row }">
+-                <el-tag
+-                  v-if="row.settlement_status"
+-                  :type="settlementStatusTagType(row.settlement_status)"
+-                  size="small"
+-                >
+-                  {{ settlementStatusLabel(row.settlement_status) }}
+-                </el-tag>
+-                <span v-else>—</span>
+-              </template>
+-            </el-table-column>
+-            <el-table-column prop="line_status" label="明细状态" width="100">
+-              <template #default="{ row }">
+-                <el-tag
+-                  v-if="row.line_status"
+-                  :type="lineStatusTagType(row.line_status)"
+-                  size="small"
+-                >
+-                  {{ lineStatusLabel(row.line_status) }}
+-                </el-tag>
+-                <span v-else>—</span>
+-              </template>
+-            </el-table-column>
+-            <el-table-column label="S1 阶段" width="90">
+-              <template #default="{ row }">
+-                <el-tag :type="completionTagType(row.s1_done)" size="small">
+-                  {{ completionLabel(row.s1_done) }}
+-                </el-tag>
+-              </template>
+-            </el-table-column>
+-            <el-table-column label="S2 阶段" width="90">
+-              <template #default="{ row }">
+-                <el-tag :type="completionTagType(row.s2_done)" size="small">
+-                  {{ completionLabel(row.s2_done) }}
+-                </el-tag>
+-              </template>
+-            </el-table-column>
+-            <el-table-column label="可结算" width="90">
+-              <template #default="{ row }">
+-                <el-tag :type="completionTagType(row.is_settleable)" size="small">
+-                  {{ settleableLabel(row.is_settleable) }}
+-                </el-tag>
+-              </template>
+-            </el-table-column>
+-            <el-table-column label="金额" width="120" align="right">
+-              <template #default="{ row }">
+-                <span class="mono-num">{{ formatMoney(row.amount) }}</span>
+-              </template>
+-            </el-table-column>
+-            <el-table-column prop="settleable_date" label="可结算日期" width="120">
+-              <template #default="{ row }">
+-                {{ row.settleable_date || '—' }}
+-              </template>
+-            </el-table-column>
+-            <el-table-column prop="created_at" label="创建时间" min-width="170">
+-              <template #default="{ row }">
+-                {{ formatDateTime(row.created_at) }}
+-              </template>
+-            </el-table-column>
+-          </el-table>
+-        </div>
++                  <span v-else>—</span>
++                </template>
++              </el-table-column>
++              <el-table-column label="S1 阶段" width="90">
++                <template #default="{ row }">
++                  <el-tag :type="completionTagType(row.s1_done)" size="small">
++                    {{ completionLabel(row.s1_done) }}
++                  </el-tag>
++                </template>
++              </el-table-column>
++              <el-table-column label="S2 阶段" width="90">
++                <template #default="{ row }">
++                  <el-tag :type="completionTagType(row.s2_done)" size="small">
++                    {{ completionLabel(row.s2_done) }}
++                  </el-tag>
++                </template>
++              </el-table-column>
++              <el-table-column label="可结算" width="90">
++                <template #default="{ row }">
++                  <el-tag :type="completionTagType(row.is_settleable)" size="small">
++                    {{ settleableLabel(row.is_settleable) }}
++                  </el-tag>
++                </template>
++              </el-table-column>
++              <el-table-column label="金额" width="120" align="right">
++                <template #default="{ row }">
++                  <span class="mono-num">{{ formatMoney(row.amount) }}</span>
++                </template>
++              </el-table-column>
++              <el-table-column prop="settleable_date" label="可结算日期" width="120">
++                <template #default="{ row }">
++                  {{ row.settleable_date || '—' }}
++                </template>
++              </el-table-column>
++              <el-table-column prop="created_at" label="创建时间" min-width="170">
++                <template #default="{ row }">
++                  {{ formatDateTime(row.created_at) }}
++                </template>
++              </el-table-column>
++            </el-table>
++          </div>
++        </template>
+       </div>
+     </el-card>
+   </main>
+ </template>
+ 
+ <script setup lang="ts">
+-import { computed, onMounted, reactive, ref } from 'vue'
++import { onMounted, reactive, ref } from 'vue'
+ import type { FormInstance, FormRules } from 'element-plus'
+ import { ElMessage } from 'element-plus'
+ import {
+@@ -430,11 +418,6 @@ const reportFilters = reactive({
+   time_field: 'line_created_at' as CommissionSettlementReportParams['time_field'],
+ })
+ 
+-type StageCount = {
+-  status: string
+-  count: number
+-}
+-
+ function toApiError(errorLike: unknown): ApiError | null {
+   if (!errorLike || typeof errorLike !== 'object') return null
+   const candidate = errorLike as Partial<ApiError>
+@@ -513,6 +496,18 @@ function formatDateTime(value: string): string {
+   return date.toLocaleString('zh-CN', { hour12: false })
+ }
+ 
++function timeFieldLabel(value: CommissionSettlementReportParams['time_field'] | undefined): string {
++  switch (value) {
++    case 'settleable_date':
++      return '按可结算日期'
++    case 'settlement_period':
++      return '按结算期间'
++    case 'line_created_at':
++    default:
++      return '按明细创建时间'
++  }
++}
++
+ function settlementStatusLabel(status: string | undefined): string {
+   const map: Record<string, string> = {
+     DRAFT: '草稿',
+@@ -582,10 +577,6 @@ function lineStatusTagType(status: string | undefined): 'success' | 'warning' |
+   }
+ }
+ 
+-function normalizeStatus(status: string | undefined): string {
+-  return (status || '').trim().toUpperCase()
+-}
+-
+ function completionLabel(done: boolean | undefined): string {
+   return done ? '已完成' : '未完成'
+ }
+@@ -598,34 +589,6 @@ function completionTagType(done: boolean | undefined): 'success' | 'info' {
+   return done ? 'success' : 'info'
+ }
+ 
+-const stageSummary = computed(() => {
+-  const settlementCounts = new Map<string, number>()
+-  const lineCounts = new Map<string, number>()
+-
+-  for (const detail of report.value?.details ?? []) {
+-    const settlementStatus = normalizeStatus(detail.settlement_status)
+-    const lineStatus = normalizeStatus(detail.line_status)
+-
+-    if (settlementStatus) {
+-      settlementCounts.set(settlementStatus, (settlementCounts.get(settlementStatus) || 0) + 1)
+-    }
+-    if (lineStatus) {
+-      lineCounts.set(lineStatus, (lineCounts.get(lineStatus) || 0) + 1)
+-    }
+-  }
+-
+-  const toList = (counts: Map<string, number>): StageCount[] =>
+-    [...counts.entries()]
+-      .map(([status, count]) => ({ status, count }))
+-      .sort((left, right) => right.count - left.count || left.status.localeCompare(right.status))
+-
+-  return {
+-    hasAnyStatus: settlementCounts.size > 0 || lineCounts.size > 0,
+-    settlementStatuses: toList(settlementCounts),
+-    lineStatuses: toList(lineCounts),
+-  }
+-})
+-
+ function buildCreatePayload(): CommissionSettlementCreatePayload {
+   return {
+     agent_id: createForm.agent_id.trim(),
+@@ -791,11 +754,15 @@ onMounted(() => {
+   font-weight: 700;
+ }
+ 
+-.stage-tag-list {
+-  display: flex;
+-  flex-wrap: wrap;
+-  gap: 8px;
+-  margin-top: 12px;
++.stat-hint {
++  margin-top: 8px;
++  font-size: 12px;
++  color: var(--text-sub);
++}
++
++.report-hint {
++  margin-bottom: 16px;
++  color: var(--text-sub);
+ }
+ 
+ .table-section {

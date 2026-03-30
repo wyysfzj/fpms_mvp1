@@ -1,0 +1,22 @@
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/commission/service.py
+ M backend/app/modules/expenses/models.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+ M frontend/src/api/commission.ts
+ M frontend/src/api/commission.types.ts
+ M frontend/src/modules/commission/pages/CommissionSettlement.vue
+?? .superpowers/
+?? backend/tests/test_commission_report.py
+?? docs/superpowers/plans/2026-03-30-commission-statistics-report.md
+?? docs/superpowers/plans/2026-03-30-reports-program-decomposition.md
+?? docs/superpowers/specs/2026-03-30-commission-statistics-report-design.md
+?? docs/superpowers/specs/2026-03-30-reports-program-decomposition-design.md
+?? tasks/postenhancement/backend/COMRPT-BE-01.md
+?? tasks/postenhancement/backend/COMRPT-QA-01.md
+?? tasks/postenhancement/frontend/COMRPT-FE-01.md

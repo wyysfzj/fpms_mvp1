@@ -1201,6 +1201,7 @@ def get_commission_settlement_report(
     by_agent_map: dict[str | None, dict[str, Any]] = {}
     by_case_map: dict[str | None, dict[str, Any]] = {}
     by_time_map: dict[str, dict[str, Any]] = {}
+    settlement_ids: set[int] = set()
     total_amount = Decimal("0")
 
     for line, settlement, commission in rows:
@@ -1237,6 +1238,7 @@ def get_commission_settlement_report(
         }
         details.append(detail)
         total_amount += line_amount
+        settlement_ids.add(settlement.id)
 
         if agent_value not in by_agent_map:
             by_agent_map[agent_value] = {
@@ -1279,6 +1281,14 @@ def get_commission_settlement_report(
     for entry in by_time:
         entry["total_amount"] = _quantize_money(entry["total_amount"])
 
+    summary = {
+        "line_count": len(details),
+        "settlement_count": len(settlement_ids),
+        "agent_count": len(by_agent),
+        "case_count": len(by_case),
+        "total_amount": _quantize_money(total_amount),
+    }
+
     return {
         "filters": {
             "agent_id": normalized_agent_id,
@@ -1292,9 +1302,10 @@ def get_commission_settlement_report(
             "date_to": date_to,
             "time_field": effective_time_field,
         },
+        "summary": summary,
         "totals": {
-            "line_count": len(details),
-            "total_amount": _quantize_money(total_amount),
+            "line_count": summary["line_count"],
+            "total_amount": summary["total_amount"],
         },
         "by_agent": by_agent,
         "by_case": by_case,

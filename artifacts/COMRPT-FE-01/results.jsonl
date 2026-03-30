@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"cd frontend && npm run lint -- src/api/commission.ts src/api/commission.types.ts src/modules/commission/pages/CommissionSettlement.vue","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}
