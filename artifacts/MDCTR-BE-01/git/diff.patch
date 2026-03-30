@@ -1,0 +1,445 @@
+diff --git a/backend/app/modules/masterdata/countries/api.py b/backend/app/modules/masterdata/countries/api.py
+index 014cb25..9de47e1 100644
+--- a/backend/app/modules/masterdata/countries/api.py
++++ b/backend/app/modules/masterdata/countries/api.py
+@@ -2,13 +2,24 @@ from __future__ import annotations
+ 
+ from typing import Any
+ 
+-from fastapi import APIRouter, Depends, Query
++from fastapi import APIRouter, Depends, Query, status
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import require_perm
+ from app.db.session import get_db
+-from app.modules.masterdata.countries.schemas import CountryListItemOut
+-from app.modules.masterdata.countries.service import list_countries
++from app.modules.masterdata.countries.schemas import (
++    CountryCreateIn,
++    CountryListItemOut,
++    CountryOut,
++    CountryUpdateIn,
++    OkOut,
++)
++from app.modules.masterdata.countries.service import (
++    create_country,
++    deactivate_country,
++    list_countries,
++    update_country,
++)
+ 
+ router = APIRouter()
+ 
+@@ -33,3 +44,47 @@ def get_countries(
+         CountryListItemOut.model_validate(country).model_dump(mode="json") for country in countries
+     ]
+     return {"items": items, "page": page, "page_size": page_size, "total": total}
++
++
++@router.post(
++    "/countries",
++    status_code=status.HTTP_201_CREATED,
++    response_model=CountryOut,
++    summary="Create country",
++)
++def create_country_endpoint(
++    payload: CountryCreateIn,
++    _perm: None = Depends(require_perm("Country.Write")),
++    db: Session = Depends(get_db),
++) -> CountryOut:
++    country = create_country(db, data=payload)
++    return CountryOut.model_validate(country)
++
++
++@router.put(
++    "/countries/{country_id}",
++    response_model=CountryOut,
++    summary="Update country",
++)
++def update_country_endpoint(
++    country_id: str,
++    payload: CountryUpdateIn,
++    _perm: None = Depends(require_perm("Country.Write")),
++    db: Session = Depends(get_db),
++) -> CountryOut:
++    country = update_country(db, country_id=country_id, data=payload)
++    return CountryOut.model_validate(country)
++
++
++@router.put(
++    "/countries/{country_id}/deactivate",
++    response_model=OkOut,
++    summary="Deactivate country",
++)
++def deactivate_country_endpoint(
++    country_id: str,
++    _perm: None = Depends(require_perm("Country.Write")),
++    db: Session = Depends(get_db),
++) -> OkOut:
++    deactivate_country(db, country_id=country_id)
++    return OkOut()
+diff --git a/backend/app/modules/masterdata/countries/schemas.py b/backend/app/modules/masterdata/countries/schemas.py
+index 20a136f..40a5a41 100644
+--- a/backend/app/modules/masterdata/countries/schemas.py
++++ b/backend/app/modules/masterdata/countries/schemas.py
+@@ -3,6 +3,30 @@ from __future__ import annotations
+ from pydantic import BaseModel, ConfigDict
+ 
+ 
++class CountryCreateIn(BaseModel):
++    code: str
++    name_cn: str
++    name_en: str | None = None
++    is_active: bool = True
++
++
++class CountryUpdateIn(BaseModel):
++    code: str | None = None
++    name_cn: str | None = None
++    name_en: str | None = None
++    is_active: bool | None = None
++
++
++class CountryOut(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    id: str
++    code: str
++    name_cn: str
++    name_en: str | None
++    is_active: bool
++
++
+ class CountryListItemOut(BaseModel):
+     model_config = ConfigDict(from_attributes=True)
+ 
+@@ -11,3 +35,7 @@ class CountryListItemOut(BaseModel):
+     name_cn: str
+     name_en: str | None
+     is_active: bool
++
++
++class OkOut(BaseModel):
++    status: str = "ok"
+diff --git a/backend/app/modules/masterdata/countries/service.py b/backend/app/modules/masterdata/countries/service.py
+index d46784e..4cd8f65 100644
+--- a/backend/app/modules/masterdata/countries/service.py
++++ b/backend/app/modules/masterdata/countries/service.py
+@@ -1,9 +1,13 @@
+ from __future__ import annotations
+ 
++from uuid import uuid4
++
+ from sqlalchemy import func, or_, select
+ from sqlalchemy.orm import Session
+ 
++from app.core.errors import raise_business_error
+ from app.modules.masterdata.countries.models import Country
++from app.modules.masterdata.countries.schemas import CountryCreateIn, CountryUpdateIn
+ 
+ 
+ def list_countries(
+@@ -36,3 +40,90 @@ def list_countries(
+     stmt = stmt.order_by(Country.code.asc()).offset(offset).limit(page_size)
+     items = db.execute(stmt).scalars().all()
+     return items, total
++
++
++def get_country(db: Session, *, country_id: str) -> Country:
++    country = db.execute(select(Country).where(Country.id == country_id)).scalar_one_or_none()
++    if not country:
++        raise_business_error("COUNTRY_NOT_FOUND", "Country not found", status_code=404)
++    return country
++
++
++def assert_country_code_unique(
++    db: Session,
++    *,
++    code: str,
++    exclude_country_id: str | None = None,
++) -> None:
++    stmt = select(Country).where(Country.code == code)
++    if exclude_country_id:
++        stmt = stmt.where(Country.id != exclude_country_id)
++    if db.execute(stmt).scalar_one_or_none():
++        raise_business_error("COUNTRY_CODE_DUPLICATE", "Country code already exists")
++
++
++def assert_country_name_cn_unique(
++    db: Session,
++    *,
++    name_cn: str,
++    exclude_country_id: str | None = None,
++) -> None:
++    stmt = select(Country).where(Country.name_cn == name_cn)
++    if exclude_country_id:
++        stmt = stmt.where(Country.id != exclude_country_id)
++    if db.execute(stmt).scalar_one_or_none():
++        raise_business_error("COUNTRY_NAME_CN_DUPLICATE", "Country Chinese name already exists")
++
++
++def create_country(db: Session, *, data: CountryCreateIn) -> Country:
++    assert_country_code_unique(db, code=data.code)
++    assert_country_name_cn_unique(db, name_cn=data.name_cn)
++
++    country = Country(
++        id=str(uuid4()),
++        code=data.code,
++        name_cn=data.name_cn,
++        name_en=data.name_en,
++        is_active=data.is_active,
++    )
++    db.add(country)
++    db.commit()
++    db.refresh(country)
++    return country
++
++
++def update_country(
++    db: Session,
++    *,
++    country_id: str,
++    data: CountryUpdateIn,
++) -> Country:
++    country = get_country(db, country_id=country_id)
++    updates = data.model_dump(exclude_unset=True)
++
++    if "code" in updates and updates["code"] is not None and updates["code"] != country.code:
++        assert_country_code_unique(db, code=updates["code"], exclude_country_id=country_id)
++    if (
++        "name_cn" in updates
++        and updates["name_cn"] is not None
++        and updates["name_cn"] != country.name_cn
++    ):
++        assert_country_name_cn_unique(
++            db,
++            name_cn=updates["name_cn"],
++            exclude_country_id=country_id,
++        )
++
++    for field, value in updates.items():
++        setattr(country, field, value)
++
++    db.commit()
++    db.refresh(country)
++    return country
++
++
++def deactivate_country(db: Session, *, country_id: str) -> None:
++    country = get_country(db, country_id=country_id)
++    if country.is_active:
++        country.is_active = False
++        db.commit()
+diff --git a/backend/tests/test_country_masterdata_api.py b/backend/tests/test_country_masterdata_api.py
+new file mode 100644
+index 0000000..24ea8c5
+--- /dev/null
++++ b/backend/tests/test_country_masterdata_api.py
+@@ -0,0 +1,207 @@
++from __future__ import annotations
++
++from typing import Any
++from uuid import uuid4
++
++import pytest
++from sqlalchemy import select
++
++import app.api.deps as deps
++from app.modules.masterdata.countries.models import Country
++
++
++def _seed_country(
++    session_factory,
++    *,
++    code: str,
++    name_cn: str,
++    name_en: str | None = None,
++    is_active: bool = True,
++) -> str:
++    country_id = str(uuid4())
++    with session_factory() as db:
++        db.add(
++            Country(
++                id=country_id,
++                code=code,
++                name_cn=name_cn,
++                name_en=name_en,
++                is_active=is_active,
++            )
++        )
++        db.commit()
++    return country_id
++
++
++def test_create_country_returns_list_shape_and_defaults_active(client, auth_headers) -> None:
++    code = f"CTY-{uuid4().hex[:8].upper()}"
++    payload = {
++        "code": code,
++        "name_cn": "测试国家甲",
++        "name_en": "Test Country A",
++    }
++
++    response = client.post("/api/v1/countries", json=payload, headers=auth_headers)
++
++    assert response.status_code == 201
++    body: dict[str, Any] = response.json()
++    assert set(body) == {"id", "code", "name_cn", "name_en", "is_active"}
++    assert body["code"] == code
++    assert body["name_cn"] == "测试国家甲"
++    assert body["name_en"] == "Test Country A"
++    assert body["is_active"] is True
++
++
++@pytest.mark.parametrize(
++    ("method", "path", "json_payload"),
++    [
++        ("post", "/api/v1/countries", {"code": "DENY-C1", "name_cn": "拒绝国家"}),
++        (
++            "put",
++            "/api/v1/countries/deny-country",
++            {"code": "DENY-C2", "name_cn": "拒绝国家二"},
++        ),
++        ("put", "/api/v1/countries/deny-country/deactivate", None),
++    ],
++)
++def test_country_write_endpoints_require_country_write_permission(
++    client,
++    auth_headers,
++    monkeypatch,
++    method: str,
++    path: str,
++    json_payload: dict[str, Any] | None,
++) -> None:
++    def _no_perms(_db, _user_id) -> set[str]:
++        return set()
++
++    monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
++
++    response = getattr(client, method)(path, json=json_payload, headers=auth_headers)
++
++    assert response.status_code == 403
++    body = response.json()
++    assert body["error"]["details"]["required_perm"] == "Country.Write"
++
++
++@pytest.mark.parametrize(
++    ("seed_field", "payload_field", "duplicate_error_code"),
++    [
++        ("code", "code", "COUNTRY_CODE_DUPLICATE"),
++        ("name_cn", "name_cn", "COUNTRY_NAME_CN_DUPLICATE"),
++    ],
++)
++def test_create_country_rejects_duplicate_unique_fields(
++    client,
++    auth_headers,
++    session_factory,
++    seed_field: str,
++    payload_field: str,
++    duplicate_error_code: str,
++) -> None:
++    unique = uuid4().hex[:8].upper()
++    seed_kwargs = {
++        "code": f"CTY-{unique}",
++        "name_cn": f"测试国家{unique}",
++        "name_en": f"Test Country {unique}",
++    }
++    seed_value = seed_kwargs[seed_field]
++    _seed_country(session_factory, **seed_kwargs)
++
++    create_payload = {
++        "code": f"NEW-{unique}",
++        "name_cn": f"新国家{unique}",
++        "name_en": f"New Country {unique}",
++    }
++    create_payload[payload_field] = seed_value
++
++    response = client.post("/api/v1/countries", json=create_payload, headers=auth_headers)
++
++    assert response.status_code == 400
++    body = response.json()
++    assert body["error"]["code"] == duplicate_error_code
++
++
++def test_update_country_and_deactivate_country_roundtrip(
++    client,
++    auth_headers,
++    session_factory,
++) -> None:
++    country_id = _seed_country(
++        session_factory,
++        code="CTY-OLD",
++        name_cn="测试国家旧",
++        name_en="Old Country",
++    )
++    _seed_country(
++        session_factory,
++        code="CTY-TAKEN",
++        name_cn="测试国家已占用",
++        name_en="Taken Country",
++    )
++
++    update_response = client.put(
++        f"/api/v1/countries/{country_id}",
++        json={
++            "code": "CTY-NEW",
++            "name_cn": "测试国家新",
++            "name_en": "New Country",
++            "is_active": False,
++        },
++        headers=auth_headers,
++    )
++
++    assert update_response.status_code == 200
++    updated_body: dict[str, Any] = update_response.json()
++    assert updated_body["code"] == "CTY-NEW"
++    assert updated_body["name_cn"] == "测试国家新"
++    assert updated_body["name_en"] == "New Country"
++    assert updated_body["is_active"] is False
++
++    deactivate_response = client.put(
++        f"/api/v1/countries/{country_id}/deactivate",
++        headers=auth_headers,
++    )
++
++    assert deactivate_response.status_code == 200
++    assert deactivate_response.json() == {"status": "ok"}
++
++    with session_factory() as db:
++        country = db.execute(select(Country).where(Country.id == country_id)).scalar_one()
++        assert country.is_active is False
++
++
++def test_update_country_rejects_unique_conflicts(
++    client,
++    auth_headers,
++    session_factory,
++) -> None:
++    country_id = _seed_country(
++        session_factory,
++        code="CTY-A",
++        name_cn="测试国家A",
++        name_en="Country A",
++    )
++    _seed_country(
++        session_factory,
++        code="CTY-B",
++        name_cn="测试国家B",
++        name_en="Country B",
++    )
++
++    code_conflict = client.put(
++        f"/api/v1/countries/{country_id}",
++        json={"code": "CTY-B"},
++        headers=auth_headers,
++    )
++    assert code_conflict.status_code == 400
++    assert code_conflict.json()["error"]["code"] == "COUNTRY_CODE_DUPLICATE"
++
++    name_conflict = client.put(
++        f"/api/v1/countries/{country_id}",
++        json={"name_cn": "测试国家B"},
++        headers=auth_headers,
++    )
++    assert name_conflict.status_code == 400
++    assert name_conflict.json()["error"]["code"] == "COUNTRY_NAME_CN_DUPLICATE"
++

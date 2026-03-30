@@ -1,0 +1,1094 @@
+diff --git a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+index a475de8..b3afbdb 100644
+--- a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
++++ b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+@@ -47,9 +47,7 @@ def upgrade() -> None:
+         sa.Column("created_by", sa.String(36), nullable=True),
+         sa.Column("updated_by", sa.String(36), nullable=True),
+     )
+-    op.create_index(
+-        "ix_t_commission_settlement_status", "t_commission_settlement", ["status"]
+-    )
++    op.create_index("ix_t_commission_settlement_status", "t_commission_settlement", ["status"])
+     op.create_index(
+         "ix_t_commission_settlement_settle_date", "t_commission_settlement", ["settle_date"]
+     )
+@@ -71,9 +69,7 @@ def upgrade() -> None:
+         ),
+         sa.Column("line_no", sa.Integer(), nullable=False, server_default=sa.text("1")),
+         sa.Column("amount", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
+-        sa.Column(
+-            "status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")
+-        ),
++        sa.Column("status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")),
+         sa.Column("remark", sa.Text(), nullable=True),
+         sa.Column(
+             "created_at",
+diff --git a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+index 813d25a..290f4e9 100644
+--- a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+@@ -6,6 +6,7 @@ Create Date: 2026-03-25
+ 
+ Add 6 columns to t_annuity_task and 1 column to t_case (first_annuity_year).
+ """
++
+ from __future__ import annotations
+ 
+ import sqlalchemy as sa
+@@ -44,9 +45,7 @@ def upgrade() -> None:
+         existing_case = {col["name"] for col in insp.get_columns("t_case")}
+         if "first_annuity_year" not in existing_case:
+             with op.batch_alter_table("t_case") as batch_op:
+-                batch_op.add_column(
+-                    sa.Column("first_annuity_year", sa.Integer(), nullable=True)
+-                )
++                batch_op.add_column(sa.Column("first_annuity_year", sa.Integer(), nullable=True))
+ 
+ 
+ def downgrade() -> None:
+diff --git a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+index 685c45a..c90eb2e 100644
+--- a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+@@ -6,6 +6,7 @@ Create Date: 2026-03-24
+ 
+ Add 4 columns to t_case_receipt: fee_name, due_date, is_prepayment, remark.
+ """
++
+ from __future__ import annotations
+ 
+ import sqlalchemy as sa
+diff --git a/backend/app/modules/annuity/models.py b/backend/app/modules/annuity/models.py
+index 5d1f089..aabe939 100644
+--- a/backend/app/modules/annuity/models.py
++++ b/backend/app/modules/annuity/models.py
+@@ -102,7 +102,15 @@ class AnnuityTask(Base):
+     service_fee_amt: Mapped[Decimal | None] = mapped_column(
+         Numeric(18, 2), nullable=True, server_default=text("0")
+     )
+-    notify_count: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
+-    pay_next_year: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+-    draft_generated: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+-    notice_sent: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
++    notify_count: Mapped[int | None] = mapped_column(
++        Integer, nullable=True, server_default=text("0")
++    )
++    pay_next_year: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
++    draft_generated: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
++    notice_sent: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
+diff --git a/backend/app/modules/commission/models.py b/backend/app/modules/commission/models.py
+index 4a22cf8..dac84e9 100644
+--- a/backend/app/modules/commission/models.py
++++ b/backend/app/modules/commission/models.py
+@@ -29,8 +29,12 @@ class CommissionRule(Base):
+     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     flow_dir: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     patent_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
+-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s1_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
++    s2_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s1_fixed_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+@@ -65,13 +69,19 @@ class Commission(Base):
+         Integer, ForeignKey("t_commission_rule.id", ondelete="SET NULL"), nullable=True
+     )
+     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+-    base_fee: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
+-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    base_fee: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    s1_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s1_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+     s1_done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s2_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s2_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+@@ -122,9 +132,7 @@ class CommissionSettleLine(Base):
+     __tablename__ = "t_commission_settle_line"
+     __table_args__ = (
+         UniqueConstraint("settlement_id", "line_no", name="uq_t_comm_settle_line_no"),
+-        UniqueConstraint(
+-            "settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"
+-        ),
++        UniqueConstraint("settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"),
+     )
+ 
+     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+diff --git a/backend/app/modules/expenses/models.py b/backend/app/modules/expenses/models.py
+index 09d291b..f2e4001 100644
+--- a/backend/app/modules/expenses/models.py
++++ b/backend/app/modules/expenses/models.py
+@@ -26,11 +26,11 @@ class Expense(Base):
+     vendor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+     expense_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+     currency: Mapped[str] = mapped_column(String(8), nullable=False, server_default=text("'CNY'"))
+-    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
+-    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+-    status: Mapped[str] = mapped_column(
+-        String(24), nullable=False, server_default=text("'DRAFT'")
++    amount: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
+     )
++    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
++    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'DRAFT'"))
+     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+diff --git a/backend/app/modules/masterdata/countries/api.py b/backend/app/modules/masterdata/countries/api.py
+index 014cb25..9de47e1 100644
+--- a/backend/app/modules/masterdata/countries/api.py
++++ b/backend/app/modules/masterdata/countries/api.py
+@@ -2,13 +2,24 @@ from __future__ import annotations
+ 
+ from typing import Any
+ 
+-from fastapi import APIRouter, Depends, Query
++from fastapi import APIRouter, Depends, Query, status
+ from sqlalchemy.orm import Session
+ 
+ from app.api.deps import require_perm
+ from app.db.session import get_db
+-from app.modules.masterdata.countries.schemas import CountryListItemOut
+-from app.modules.masterdata.countries.service import list_countries
++from app.modules.masterdata.countries.schemas import (
++    CountryCreateIn,
++    CountryListItemOut,
++    CountryOut,
++    CountryUpdateIn,
++    OkOut,
++)
++from app.modules.masterdata.countries.service import (
++    create_country,
++    deactivate_country,
++    list_countries,
++    update_country,
++)
+ 
+ router = APIRouter()
+ 
+@@ -33,3 +44,47 @@ def get_countries(
+         CountryListItemOut.model_validate(country).model_dump(mode="json") for country in countries
+     ]
+     return {"items": items, "page": page, "page_size": page_size, "total": total}
++
++
++@router.post(
++    "/countries",
++    status_code=status.HTTP_201_CREATED,
++    response_model=CountryOut,
++    summary="Create country",
++)
++def create_country_endpoint(
++    payload: CountryCreateIn,
++    _perm: None = Depends(require_perm("Country.Write")),
++    db: Session = Depends(get_db),
++) -> CountryOut:
++    country = create_country(db, data=payload)
++    return CountryOut.model_validate(country)
++
++
++@router.put(
++    "/countries/{country_id}",
++    response_model=CountryOut,
++    summary="Update country",
++)
++def update_country_endpoint(
++    country_id: str,
++    payload: CountryUpdateIn,
++    _perm: None = Depends(require_perm("Country.Write")),
++    db: Session = Depends(get_db),
++) -> CountryOut:
++    country = update_country(db, country_id=country_id, data=payload)
++    return CountryOut.model_validate(country)
++
++
++@router.put(
++    "/countries/{country_id}/deactivate",
++    response_model=OkOut,
++    summary="Deactivate country",
++)
++def deactivate_country_endpoint(
++    country_id: str,
++    _perm: None = Depends(require_perm("Country.Write")),
++    db: Session = Depends(get_db),
++) -> OkOut:
++    deactivate_country(db, country_id=country_id)
++    return OkOut()
+diff --git a/backend/app/modules/masterdata/countries/schemas.py b/backend/app/modules/masterdata/countries/schemas.py
+index 20a136f..40a5a41 100644
+--- a/backend/app/modules/masterdata/countries/schemas.py
++++ b/backend/app/modules/masterdata/countries/schemas.py
+@@ -3,6 +3,30 @@ from __future__ import annotations
+ from pydantic import BaseModel, ConfigDict
+ 
+ 
++class CountryCreateIn(BaseModel):
++    code: str
++    name_cn: str
++    name_en: str | None = None
++    is_active: bool = True
++
++
++class CountryUpdateIn(BaseModel):
++    code: str | None = None
++    name_cn: str | None = None
++    name_en: str | None = None
++    is_active: bool | None = None
++
++
++class CountryOut(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    id: str
++    code: str
++    name_cn: str
++    name_en: str | None
++    is_active: bool
++
++
+ class CountryListItemOut(BaseModel):
+     model_config = ConfigDict(from_attributes=True)
+ 
+@@ -11,3 +35,7 @@ class CountryListItemOut(BaseModel):
+     name_cn: str
+     name_en: str | None
+     is_active: bool
++
++
++class OkOut(BaseModel):
++    status: str = "ok"
+diff --git a/backend/app/modules/masterdata/countries/service.py b/backend/app/modules/masterdata/countries/service.py
+index d46784e..4cd8f65 100644
+--- a/backend/app/modules/masterdata/countries/service.py
++++ b/backend/app/modules/masterdata/countries/service.py
+@@ -1,9 +1,13 @@
+ from __future__ import annotations
+ 
++from uuid import uuid4
++
+ from sqlalchemy import func, or_, select
+ from sqlalchemy.orm import Session
+ 
++from app.core.errors import raise_business_error
+ from app.modules.masterdata.countries.models import Country
++from app.modules.masterdata.countries.schemas import CountryCreateIn, CountryUpdateIn
+ 
+ 
+ def list_countries(
+@@ -36,3 +40,90 @@ def list_countries(
+     stmt = stmt.order_by(Country.code.asc()).offset(offset).limit(page_size)
+     items = db.execute(stmt).scalars().all()
+     return items, total
++
++
++def get_country(db: Session, *, country_id: str) -> Country:
++    country = db.execute(select(Country).where(Country.id == country_id)).scalar_one_or_none()
++    if not country:
++        raise_business_error("COUNTRY_NOT_FOUND", "Country not found", status_code=404)
++    return country
++
++
++def assert_country_code_unique(
++    db: Session,
++    *,
++    code: str,
++    exclude_country_id: str | None = None,
++) -> None:
++    stmt = select(Country).where(Country.code == code)
++    if exclude_country_id:
++        stmt = stmt.where(Country.id != exclude_country_id)
++    if db.execute(stmt).scalar_one_or_none():
++        raise_business_error("COUNTRY_CODE_DUPLICATE", "Country code already exists")
++
++
++def assert_country_name_cn_unique(
++    db: Session,
++    *,
++    name_cn: str,
++    exclude_country_id: str | None = None,
++) -> None:
++    stmt = select(Country).where(Country.name_cn == name_cn)
++    if exclude_country_id:
++        stmt = stmt.where(Country.id != exclude_country_id)
++    if db.execute(stmt).scalar_one_or_none():
++        raise_business_error("COUNTRY_NAME_CN_DUPLICATE", "Country Chinese name already exists")
++
++
++def create_country(db: Session, *, data: CountryCreateIn) -> Country:
++    assert_country_code_unique(db, code=data.code)
++    assert_country_name_cn_unique(db, name_cn=data.name_cn)
++
++    country = Country(
++        id=str(uuid4()),
++        code=data.code,
++        name_cn=data.name_cn,
++        name_en=data.name_en,
++        is_active=data.is_active,
++    )
++    db.add(country)
++    db.commit()
++    db.refresh(country)
++    return country
++
++
++def update_country(
++    db: Session,
++    *,
++    country_id: str,
++    data: CountryUpdateIn,
++) -> Country:
++    country = get_country(db, country_id=country_id)
++    updates = data.model_dump(exclude_unset=True)
++
++    if "code" in updates and updates["code"] is not None and updates["code"] != country.code:
++        assert_country_code_unique(db, code=updates["code"], exclude_country_id=country_id)
++    if (
++        "name_cn" in updates
++        and updates["name_cn"] is not None
++        and updates["name_cn"] != country.name_cn
++    ):
++        assert_country_name_cn_unique(
++            db,
++            name_cn=updates["name_cn"],
++            exclude_country_id=country_id,
++        )
++
++    for field, value in updates.items():
++        setattr(country, field, value)
++
++    db.commit()
++    db.refresh(country)
++    return country
++
++
++def deactivate_country(db: Session, *, country_id: str) -> None:
++    country = get_country(db, country_id=country_id)
++    if country.is_active:
++        country.is_active = False
++        db.commit()
+diff --git a/backend/tests/test_annuity_generate.py b/backend/tests/test_annuity_generate.py
+index 21ae97c..577fd45 100644
+--- a/backend/tests/test_annuity_generate.py
++++ b/backend/tests/test_annuity_generate.py
+@@ -1,8 +1,8 @@
+ """Tests for AnnuityTask multi-year generation (FR-FE-06)."""
++
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
+-from decimal import Decimal
+ from uuid import uuid4
+ 
+ import pytest
+@@ -29,7 +29,9 @@ def client_id(client: TestClient, auth_headers: dict) -> str:
+ 
+ 
+ @pytest.fixture
+-def granted_case_id(client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker) -> str:
++def granted_case_id(
++    client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker
++) -> str:
+     resp = client.post(
+         "/api/v1/cases",
+         json={
+@@ -115,7 +117,10 @@ def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
+ 
+ # --- GENERATE ---
+ 
+-def test_generate_annuity_tasks_success(client: TestClient, auth_headers: dict, granted_case_id: str):
++
++def test_generate_annuity_tasks_success(
++    client: TestClient, auth_headers: dict, granted_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": granted_case_id},
+@@ -136,7 +141,9 @@ def test_generate_case_not_found(client: TestClient, auth_headers: dict):
+     assert resp.status_code == 404
+ 
+ 
+-def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_granted_case_id: str):
++def test_generate_case_not_granted(
++    client: TestClient, auth_headers: dict, not_granted_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": not_granted_case_id},
+@@ -145,7 +152,9 @@ def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_g
+     assert resp.status_code == 400
+ 
+ 
+-def test_generate_no_first_annuity_year(client: TestClient, auth_headers: dict, granted_no_year_case_id: str):
++def test_generate_no_first_annuity_year(
++    client: TestClient, auth_headers: dict, granted_no_year_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": granted_no_year_case_id},
+@@ -173,7 +182,9 @@ def test_generate_idempotent(client: TestClient, auth_headers: dict, granted_cas
+     assert resp2.json()["tasks_skipped"] == created_first
+ 
+ 
+-def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, granted_case_id: str):
++def test_generate_prefills_fee_amounts(
++    client: TestClient, auth_headers: dict, granted_case_id: str
++):
+     _seed_annuity_rates(client, auth_headers)
+ 
+     # Re-generate (delete old tasks first via direct DB or just use new case)
+@@ -201,6 +212,7 @@ def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, g
+ 
+ # --- LIST NEW FIELDS ---
+ 
++
+ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, granted_case_id: str):
+     client.post(
+         "/api/v1/annuity/tasks/generate",
+@@ -212,12 +224,21 @@ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, grante
+     items = resp.json()["items"]
+     assert len(items) > 0
+     item = items[0]
+-    for field in ("gov_fee_amt", "service_fee_amt", "notify_count", "pay_next_year",
+-                  "draft_generated", "notice_sent", "is_overdue"):
++    for field in (
++        "gov_fee_amt",
++        "service_fee_amt",
++        "notify_count",
++        "pay_next_year",
++        "draft_generated",
++        "notice_sent",
++        "is_overdue",
++    ):
+         assert field in item, f"Missing field: {field}"
+ 
+ 
+-def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++def test_list_is_overdue_computed(
++    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
++):
+     with session_factory() as db:
+         task = AnnuityTask(
+             case_id=granted_case_id,
+@@ -240,7 +261,9 @@ def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, grante
+     assert overdue_items[0]["is_overdue"] is True
+ 
+ 
+-def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++def test_list_is_overdue_false_when_done(
++    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
++):
+     with session_factory() as db:
+         task = AnnuityTask(
+             case_id=granted_case_id,
+@@ -265,6 +288,7 @@ def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict,
+ 
+ # --- DRAFT GENERATED FLAG ---
+ 
++
+ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, granted_case_id: str):
+     _seed_annuity_rates(client, auth_headers)
+ 
+@@ -312,6 +336,7 @@ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, grante
+ 
+ # --- PERMISSIONS ---
+ 
++
+ def test_permissions_generate(client: TestClient):
+     resp = client.post("/api/v1/annuity/tasks/generate", json={"case_id": "x"})
+     assert resp.status_code == 401
+diff --git a/backend/tests/test_b2_reply_chain.py b/backend/tests/test_b2_reply_chain.py
+index 8e4549b..b2f5ab6 100644
+--- a/backend/tests/test_b2_reply_chain.py
++++ b/backend/tests/test_b2_reply_chain.py
+@@ -575,9 +575,7 @@ def test_document_list_includes_reply_fields(client: TestClient, auth_headers: d
+         assert "reply_date" in item, "List item must include reply_date"
+ 
+ 
+-def test_document_list_can_filter_by_reply_state(
+-    client: TestClient, auth_headers: dict
+-) -> None:
++def test_document_list_can_filter_by_reply_state(client: TestClient, auth_headers: dict) -> None:
+     """GET /documents supports need_reply/replied filters for Batch 2 query scope."""
+     case = _create_case(client, auth_headers)
+     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
+diff --git a/backend/tests/test_case_receipt_crud.py b/backend/tests/test_case_receipt_crud.py
+index 025bbc8..f322e0d 100644
+--- a/backend/tests/test_case_receipt_crud.py
++++ b/backend/tests/test_case_receipt_crud.py
+@@ -1,4 +1,5 @@
+ """Tests for CaseReceipt manual CRUD (FR-FE-07)."""
++
+ from __future__ import annotations
+ 
+ from decimal import Decimal
+@@ -28,6 +29,7 @@ def case_id(client: TestClient, auth_headers: dict) -> str:
+ 
+ # --- CREATE ---
+ 
++
+ def test_create_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
+     resp = client.post(
+         "/api/v1/case-receipts",
+@@ -137,6 +139,7 @@ def test_create_user_override_prepayment(client: TestClient, auth_headers: dict,
+ 
+ # --- UPDATE ---
+ 
++
+ def test_update_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
+     create_resp = client.post(
+         "/api/v1/case-receipts",
+@@ -183,6 +186,7 @@ def test_update_not_found(client: TestClient, auth_headers: dict):
+ 
+ # --- LIST ---
+ 
++
+ def test_list_case_receipts_no_filter(client: TestClient, auth_headers: dict, case_id: str):
+     client.post(
+         "/api/v1/case-receipts",
+@@ -263,8 +267,11 @@ def test_list_pagination(client: TestClient, auth_headers: dict):
+ 
+ # --- PERMISSIONS ---
+ 
++
+ def test_permissions_create(client: TestClient):
+-    resp = client.post("/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"})
++    resp = client.post(
++        "/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"}
++    )
+     assert resp.status_code == 401
+ 
+ 
+@@ -275,6 +282,7 @@ def test_permissions_update(client: TestClient):
+ 
+ # --- INTEGRATION ---
+ 
++
+ def test_manual_receipt_no_conflict_with_auto(client: TestClient, auth_headers: dict, case_id: str):
+     resp = client.post(
+         "/api/v1/case-receipts",
+diff --git a/frontend/src/modules/settings/pages/CountryList.vue b/frontend/src/modules/settings/pages/CountryList.vue
+index d57eeab..e7ee377 100644
+--- a/frontend/src/modules/settings/pages/CountryList.vue
++++ b/frontend/src/modules/settings/pages/CountryList.vue
+@@ -1,45 +1,470 @@
+ <template>
+-  <section class="placeholder-page">
+-    <p class="eyebrow">设置 / 主数据 / 国家</p>
+-    <h1>国家主数据（预留）</h1>
+-    <p>
+-      这个入口保留给国家主数据的后续列表与维护能力。当前阶段仅提供稳定路由，暂不开放对象级 CRUD、案件联动或导入导出。
+-    </p>
+-    <ul>
+-      <li>未来承载国家列表与筛选</li>
+-      <li>未来承载国家新增、编辑与启停用</li>
+-      <li>当前仅用于占位和导航落点</li>
+-    </ul>
+-  </section>
++  <div class="page-container country-page">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">国家主数据</h1>
++        <span class="page-count">{{ total }} 条</span>
++      </div>
++      <div class="page-header-right">
++        <el-button @click="handleRefresh" :loading="loading">刷新</el-button>
++        <el-button type="primary" @click="openCreate">新增国家</el-button>
++      </div>
++    </div>
++
++    <div v-if="pageError" class="page-error">
++      <ApiErrorBanner :error="pageError" @dismiss="pageError = null" />
++    </div>
++
++    <div class="filter-bar">
++      <el-input
++        v-model.trim="filters.q"
++        class="filter-input"
++        clearable
++        placeholder="请输入国家编码、中文名或英文名"
++        @keyup.enter="handleSearch"
++      />
++      <el-select v-model="filters.is_active" class="filter-select" @change="handleSearch">
++        <el-option label="全部状态" value="all" />
++        <el-option label="启用" value="true" />
++        <el-option label="停用" value="false" />
++      </el-select>
++      <el-button type="primary" @click="handleSearch">查询</el-button>
++      <el-button @click="handleReset">重置</el-button>
++    </div>
++
++    <LoadingBlock v-if="loading && countries.length === 0" :rows="8" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无国家"
++        message="创建首个国家后，可在这里维护启用状态和基础信息。"
++        icon="🌍"
++        cta-label="新增国家"
++        @cta="openCreate"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table
++        v-loading="loading && countries.length > 0"
++        :data="countries"
++        stripe
++        size="small"
++        class="compact-table"
++      >
++        <el-table-column prop="code" label="编码" width="120" />
++        <el-table-column prop="name_cn" label="中文名称" min-width="180" />
++        <el-table-column label="英文名称" min-width="180">
++          <template #default="{ row }">
++            {{ row.name_en || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column label="状态" width="100">
++          <template #default="{ row }">
++            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
++              {{ row.is_active ? '启用' : '停用' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="操作" width="220" fixed="right">
++          <template #default="{ row }">
++            <el-button text size="small" @click="openEdit(row)">编辑</el-button>
++            <el-button
++              v-if="row.is_active"
++              text
++              type="danger"
++              size="small"
++              :loading="isRowBusy(row.id, 'deactivate')"
++              @click="handleDeactivate(row)"
++            >
++              停用
++            </el-button>
++            <el-button
++              v-else
++              text
++              type="success"
++              size="small"
++              :loading="isRowBusy(row.id, 'activate')"
++              @click="handleActivate(row)"
++            >
++              启用
++            </el-button>
++          </template>
++        </el-table-column>
++        <template #empty>
++          <div class="table-empty">暂无符合条件的国家。</div>
++        </template>
++      </el-table>
++
++      <div class="pagination-wrap">
++        <el-pagination
++          :current-page="currentPage"
++          :page-size="pageSize"
++          :page-sizes="[10, 20, 50, 100]"
++          :total="total"
++          layout="total, sizes, prev, pager, next"
++          @current-change="handleCurrentChange"
++          @size-change="handlePageSizeChange"
++        />
++      </div>
++    </div>
++
++    <el-dialog
++      v-model="showDialog"
++      :close-on-click-modal="false"
++      :title="isEdit ? '编辑国家' : '新增国家'"
++      width="720px"
++      @closed="handleDialogClosed"
++    >
++      <div v-if="dialogError" class="dialog-error">
++        <ApiErrorBanner :error="dialogError" @dismiss="dialogError = null" />
++      </div>
++
++      <el-form
++        ref="formRef"
++        :model="form"
++        :rules="formRules"
++        label-position="top"
++      >
++        <el-row :gutter="16">
++          <el-col :span="12">
++            <el-form-item label="国家编码" prop="code" :error="fieldErrors.get('code')?.join('，')">
++              <el-input v-model.trim="form.code" placeholder="请输入国家编码，例如 CN" />
++            </el-form-item>
++          </el-col>
++          <el-col :span="12">
++            <el-form-item label="启用状态">
++              <el-switch v-model="form.is_active" active-text="启用" inactive-text="停用" />
++            </el-form-item>
++          </el-col>
++        </el-row>
++
++        <el-form-item label="中文名称" prop="name_cn" :error="fieldErrors.get('name_cn')?.join('，')">
++          <el-input v-model.trim="form.name_cn" placeholder="请输入中文名称" />
++        </el-form-item>
++
++        <el-form-item label="英文名称" prop="name_en" :error="fieldErrors.get('name_en')?.join('，')">
++          <el-input v-model.trim="form.name_en" placeholder="请输入英文名称（可选）" />
++        </el-form-item>
++      </el-form>
++
++      <template #footer>
++        <el-button @click="showDialog = false">取消</el-button>
++        <el-button type="primary" :loading="saving" @click="handleSave">
++          {{ isEdit ? '保存修改' : '创建国家' }}
++        </el-button>
++      </template>
++    </el-dialog>
++  </div>
+ </template>
+ 
++<script setup lang="ts">
++import { computed, onMounted, reactive, ref } from 'vue'
++import { ElMessage, ElMessageBox } from 'element-plus'
++import type { FormInstance, FormRules } from 'element-plus'
++import { createCountry, deactivateCountry, getCountries, updateCountry } from '../../../api/masterdata'
++import type { Country } from '../../../api/masterdata.types'
++import type { ApiError } from '../../../api/types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import { mapValidationDetailsToFieldErrors } from '../../../utils/validation'
++
++type RowAction = 'activate' | 'deactivate'
++type StatusFilter = 'all' | 'true' | 'false'
++
++const countries = ref<Country[]>([])
++const loading = ref(false)
++const pageError = ref<ApiError | null>(null)
++const dialogError = ref<ApiError | null>(null)
++const currentPage = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++const isEmpty = computed(() => !loading.value && !pageError.value && countries.value.length === 0)
++
++const filters = reactive<{
++  q: string
++  is_active: StatusFilter
++}>({
++  q: '',
++  is_active: 'all',
++})
++
++const showDialog = ref(false)
++const isEdit = ref(false)
++const editingId = ref('')
++const saving = ref(false)
++const formRef = ref<FormInstance>()
++const fieldErrors = ref<Map<string, string[]>>(new Map())
++const rowActionId = ref('')
++const rowActionType = ref<RowAction | ''>('')
++const skipNextCurrentChange = ref(false)
++
++const form = reactive({
++  code: '',
++  name_cn: '',
++  name_en: '',
++  is_active: true,
++})
++
++const formRules: FormRules = {
++  code: [
++    { required: true, message: '国家编码为必填项', trigger: 'blur' },
++  ],
++  name_cn: [
++    { required: true, message: '中文名称为必填项', trigger: 'blur' },
++  ],
++}
++
++function toListParams() {
++  return {
++    page: currentPage.value,
++    page_size: pageSize.value,
++    q: filters.q.trim() || undefined,
++    is_active:
++      filters.is_active === 'all'
++        ? undefined
++        : filters.is_active === 'true',
++  }
++}
++
++async function fetchCountries() {
++  loading.value = true
++  pageError.value = null
++  try {
++    const result = await getCountries(toListParams())
++    countries.value = result.items
++    total.value = result.total
++  } catch (err) {
++    pageError.value = err as ApiError
++  } finally {
++    loading.value = false
++  }
++}
++
++function resetForm() {
++  fieldErrors.value = new Map()
++  form.code = ''
++  form.name_cn = ''
++  form.name_en = ''
++  form.is_active = true
++}
++
++function openCreate() {
++  resetForm()
++  dialogError.value = null
++  isEdit.value = false
++  editingId.value = ''
++  showDialog.value = true
++}
++
++function openEdit(row: Country) {
++  resetForm()
++  dialogError.value = null
++  isEdit.value = true
++  editingId.value = row.id
++  form.code = row.code
++  form.name_cn = row.name_cn
++  form.name_en = row.name_en || ''
++  form.is_active = row.is_active
++  showDialog.value = true
++}
++
++function handleDialogClosed() {
++  dialogError.value = null
++  fieldErrors.value = new Map()
++  resetForm()
++  editingId.value = ''
++  isEdit.value = false
++}
++
++async function handleSave() {
++  fieldErrors.value = new Map()
++  dialogError.value = null
++
++  const valid = await formRef.value?.validate().catch(() => false)
++  if (!valid) return
++
++  saving.value = true
++  try {
++    if (isEdit.value && editingId.value) {
++      await updateCountry(editingId.value, {
++        code: form.code,
++        name_cn: form.name_cn,
++        name_en: form.name_en,
++        is_active: form.is_active,
++      })
++      ElMessage.success('国家更新成功')
++    } else {
++      await createCountry({
++        code: form.code,
++        name_cn: form.name_cn,
++        name_en: form.name_en,
++        is_active: form.is_active,
++      })
++      ElMessage.success('国家创建成功')
++    }
++    showDialog.value = false
++    await fetchCountries()
++  } catch (err) {
++    const apiError = err as ApiError
++    dialogError.value = apiError
++    if (apiError.status === 422 && apiError.details) {
++      fieldErrors.value = mapValidationDetailsToFieldErrors(apiError.details)
++    }
++  } finally {
++    saving.value = false
++  }
++}
++
++function isRowBusy(id: string, action: RowAction): boolean {
++  return rowActionId.value === id && rowActionType.value === action
++}
++
++async function handleDeactivate(row: Country) {
++  try {
++    await ElMessageBox.confirm(
++      `确定要停用国家“${row.code}”吗？停用后该国家将不再显示为启用状态。`,
++      '停用国家',
++      {
++        confirmButtonText: '确认停用',
++        cancelButtonText: '取消',
++        type: 'warning',
++        confirmButtonClass: 'el-button--danger',
++      },
++    )
++  } catch {
++    return
++  }
++
++  rowActionId.value = row.id
++  rowActionType.value = 'deactivate'
++  pageError.value = null
++
++  try {
++    await deactivateCountry(row.id)
++    ElMessage.success('国家已停用')
++    await fetchCountries()
++  } catch (err) {
++    pageError.value = err as ApiError
++  } finally {
++    rowActionId.value = ''
++    rowActionType.value = ''
++  }
++}
++
++async function handleActivate(row: Country) {
++  try {
++    await ElMessageBox.confirm(
++      `确定要启用国家“${row.code}”吗？`,
++      '启用国家',
++      {
++        confirmButtonText: '确认启用',
++        cancelButtonText: '取消',
++        type: 'info',
++      },
++    )
++  } catch {
++    return
++  }
++
++  rowActionId.value = row.id
++  rowActionType.value = 'activate'
++  pageError.value = null
++
++  try {
++    await updateCountry(row.id, { is_active: true })
++    ElMessage.success('国家已启用')
++    await fetchCountries()
++  } catch (err) {
++    pageError.value = err as ApiError
++  } finally {
++    rowActionId.value = ''
++    rowActionType.value = ''
++  }
++}
++
++function handleSearch() {
++  currentPage.value = 1
++  fetchCountries()
++}
++
++function handleReset() {
++  filters.q = ''
++  filters.is_active = 'all'
++  currentPage.value = 1
++  fetchCountries()
++}
++
++function handleRefresh() {
++  fetchCountries()
++}
++
++function handleCurrentChange(nextPage: number) {
++  if (skipNextCurrentChange.value) {
++    skipNextCurrentChange.value = false
++    return
++  }
++  currentPage.value = nextPage
++  fetchCountries()
++}
++
++function handlePageSizeChange(nextSize: number) {
++  pageSize.value = nextSize
++  currentPage.value = 1
++  skipNextCurrentChange.value = true
++  queueMicrotask(() => {
++    skipNextCurrentChange.value = false
++  })
++  fetchCountries()
++}
++
++onMounted(() => {
++  fetchCountries()
++})
++</script>
++
+ <style scoped>
+-.placeholder-page {
++.country-page {
+   display: grid;
++  gap: 16px;
++}
++
++.filter-bar {
++  display: flex;
++  flex-wrap: wrap;
+   gap: 12px;
+-  padding: 24px;
+-  max-width: 760px;
++  align-items: center;
++}
++
++.filter-input {
++  width: min(360px, 100%);
++}
++
++.filter-select {
++  width: 140px;
++}
++
++.page-empty {
++  padding: 12px 0 8px;
+ }
+ 
+-.eyebrow {
+-  margin: 0;
+-  color: #6b7280;
+-  font-size: 14px;
++.page-table {
++  display: grid;
++  gap: 16px;
+ }
+ 
+-h1 {
+-  margin: 0;
+-  font-size: 28px;
++.pagination-wrap {
++  display: flex;
++  justify-content: flex-end;
+ }
+ 
+-p,
+-li {
+-  color: #4b5563;
+-  line-height: 1.75;
++.table-empty {
++  padding: 32px 0;
++  color: var(--text-sub);
+ }
+ 
+-ul {
+-  margin: 0;
+-  padding-left: 20px;
++.dialog-error {
++  margin-bottom: 16px;
+ }
+ </style>

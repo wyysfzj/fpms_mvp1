@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/api/masterdata.ts src/api/masterdata.types.ts src/modules/settings/pages/CountryList.vue
+

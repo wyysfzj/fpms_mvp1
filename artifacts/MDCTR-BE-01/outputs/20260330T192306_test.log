@@ -1,0 +1,13 @@
+........                                                                 [100%]
+=============================== warnings summary ===============================
+../../../../../../Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_country_masterdata_api.py::test_create_country_returns_list_shape_and_defaults_active
+tests/test_country_masterdata_api.py::test_create_country_returns_list_shape_and_defaults_active
+  /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pydantic/fields.py:1093: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'strip_whitespace'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 3 warnings in 2.80s

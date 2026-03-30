@@ -1,0 +1,25 @@
+## master
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/expenses/models.py
+ M backend/app/modules/masterdata/countries/api.py
+ M backend/app/modules/masterdata/countries/schemas.py
+ M backend/app/modules/masterdata/countries/service.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+ M frontend/src/modules/settings/pages/CountryList.vue
+?? .superpowers/
+?? backend/tests/test_country_masterdata_api.py
+?? docs/superpowers/plans/2026-03-30-country-masterdata-crud.md
+?? docs/superpowers/plans/2026-03-30-reports-program-decomposition.md
+?? docs/superpowers/specs/2026-03-30-country-masterdata-crud-design.md
+?? docs/superpowers/specs/2026-03-30-reports-program-decomposition-design.md
+?? frontend/src/api/masterdata.ts
+?? frontend/src/api/masterdata.types.ts
+?? tasks/postenhancement/backend/MDCTR-BE-01.md
+?? tasks/postenhancement/backend/MDCTR-QA-01.md
+?? tasks/postenhancement/frontend/MDCTR-FE-01.md

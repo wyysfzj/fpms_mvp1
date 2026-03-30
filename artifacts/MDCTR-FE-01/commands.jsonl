@@ -1,0 +1,8 @@
+{"ts":"20260330T192705","step":"lint","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/masterdata.ts\ src/api/masterdata.types.ts\ src/modules/settings/pages/CountryList.vue"}
+{"ts":"20260330T192705","step":"test","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260330T192713","step":"gate","cmd":"./scripts/task_validate.sh MDCTR-FE-01"}
+{"ts":"20260330T192815","step":"gate","cmd":"./scripts/task_validate.sh MDCTR-FE-01"}
+{"ts":"20260330T192857","step":"lint","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/masterdata.ts\ src/api/masterdata.types.ts\ src/modules/settings/pages/CountryList.vue"}
+{"ts":"20260330T192902","step":"test","cmd":"bash -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260330T192908","step":"gate","cmd":"./scripts/task_validate.sh MDCTR-FE-01"}
+{"ts":"20260330T192917","step":"gate","cmd":"./scripts/task_validate.sh MDCTR-FE-01"}
