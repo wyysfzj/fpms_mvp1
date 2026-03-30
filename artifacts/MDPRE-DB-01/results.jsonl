@@ -1,0 +1,4 @@
+{"step":"lint","cmd":"cd backend && python3 -m ruff check --fix alembic/versions/mdpre_db_01_masterdata_carriers.py app/modules/masterdata/applicants/models.py app/modules/masterdata/countries/models.py tests/test_masterdata_prereq_schema.py app/models/__init__.py","rc":0}
+{"step":"test","cmd":"cd backend && PYTHONPATH=. pytest -q tests/test_masterdata_prereq_schema.py","rc":0}
+{"step":"upgrade","cmd":"cd backend && PYTHONPATH=. alembic upgrade head","rc":0}
+{"step":"gate","cmd":"./scripts/task_validate.sh MDPRE-DB-01","rc":0}

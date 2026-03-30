@@ -3,7 +3,9 @@ from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Paym
 from app.modules.cases.models import Case
 from app.modules.documents.models import DocAttachment, DocTemplate, Document
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress, ClientContact
+from app.modules.masterdata.countries.models import Country
 from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 from app.modules.templates.models import Template
 
@@ -18,12 +20,14 @@ __all__ = [
     "Client",
     "ClientAddress",
     "ClientContact",
+    "Applicant",
     "DocAttachment",
     "DocTemplate",
     "Document",
     "FeeDraft",
     "FeeItem",
     "FeeRate",
+    "Country",
     "LetterHead",
     "Offset",
     "Payment",

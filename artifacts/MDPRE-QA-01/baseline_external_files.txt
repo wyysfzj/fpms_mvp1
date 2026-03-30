@@ -1,0 +1,30 @@
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/api/router.py
+ M backend/app/models/__init__.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/expenses/models.py
+ M backend/app/modules/rbac/service.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+ M frontend/src/router/index.ts
+?? .superpowers/
+?? backend/alembic/versions/mdpre_db_01_masterdata_carriers.py
+?? backend/app/modules/masterdata/applicants/
+?? backend/app/modules/masterdata/countries/
+?? backend/tests/test_masterdata_prereq_contract.py
+?? backend/tests/test_masterdata_prereq_schema.py
+?? docs/superpowers/plans/2026-03-30-masterdata-prereq.md
+?? docs/superpowers/plans/2026-03-30-reports-program-decomposition.md
+?? docs/superpowers/specs/2026-03-30-masterdata-prereq-design.md
+?? docs/superpowers/specs/2026-03-30-reports-program-decomposition-design.md
+?? frontend/src/modules/settings/pages/ApplicantList.vue
+?? frontend/src/modules/settings/pages/CountryList.vue
+?? frontend/src/modules/settings/pages/MasterDataHome.vue
+?? tasks/postenhancement/backend/MDPRE-BE-01.md
+?? tasks/postenhancement/backend/MDPRE-DB-01.md
+?? tasks/postenhancement/backend/MDPRE-QA-01.md
+?? tasks/postenhancement/frontend/MDPRE-FE-01.md

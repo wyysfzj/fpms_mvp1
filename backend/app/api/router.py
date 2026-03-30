@@ -13,7 +13,9 @@ from app.modules.consulting.api import router as consulting_router
 from app.modules.documents.api import router as documents_router
 from app.modules.expenses.api import router as expenses_router
 from app.modules.fees.api import router as fees_router
+from app.modules.masterdata.applicants.api import router as applicants_router
 from app.modules.masterdata.clients.api import router as clients_router
+from app.modules.masterdata.countries.api import router as countries_router
 from app.modules.system.api import router as system_router
 from app.modules.tasks.api import router as tasks_router
 from app.modules.templates.api import router as templates_router
@@ -23,7 +25,9 @@ api_router.include_router(admin_router, tags=["Admin"])
 api_router.include_router(auth_router, prefix="/auth", tags=["Auth"])
 api_router.include_router(system_router, tags=["System"])
 api_router.include_router(templates_router, tags=["Templates"])
+api_router.include_router(applicants_router, tags=["Applicants"])
 api_router.include_router(clients_router, tags=["Clients"])
+api_router.include_router(countries_router, tags=["Countries"])
 api_router.include_router(case_router, tags=["Cases"])
 api_router.include_router(documents_router, tags=["Documents"])
 api_router.include_router(tasks_router, tags=["Tasks"])

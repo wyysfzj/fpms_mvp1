@@ -24,6 +24,17 @@ const routes = [
       { path: 'clients/:id', name: 'client_detail', component: () => import('../modules/clients/pages/ClientDetail.vue') },
       // Keep legacy entry to avoid breaking existing navigation.
       { path: 'settings/clients', name: 'settings_clients', component: () => import('../modules/settings/pages/ClientList.vue') },
+      { path: 'settings/masterdata', name: 'settings_masterdata_home', component: () => import('../modules/settings/pages/MasterDataHome.vue') },
+      {
+        path: 'settings/masterdata/applicants',
+        name: 'settings_masterdata_applicants',
+        component: () => import('../modules/settings/pages/ApplicantList.vue'),
+      },
+      {
+        path: 'settings/masterdata/countries',
+        name: 'settings_masterdata_countries',
+        component: () => import('../modules/settings/pages/CountryList.vue'),
+      },
 
       // Documents
       { path: 'documents', name: 'documents', component: () => import('../modules/documents/pages/DocumentList.vue') },

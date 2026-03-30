@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/router/index.ts src/modules/settings/pages/MasterDataHome.vue src/modules/settings/pages/ApplicantList.vue src/modules/settings/pages/CountryList.vue
+
