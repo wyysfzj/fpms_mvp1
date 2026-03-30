@@ -1,0 +1,6 @@
+{"ts":"20260330T202838","step":"test_red","rc":1,"log":"artifacts/MDAPP-BE-01/outputs/20260330T202838_test_red.log"}
+{"ts":"20260330T202901","step":"test_create","rc":0,"log":"artifacts/MDAPP-BE-01/outputs/20260330T202901_test_create.log"}
+{"ts":"20260330T202919","step":"test_red2","rc":1,"log":"artifacts/MDAPP-BE-01/outputs/20260330T202919_test_red2.log"}
+{"ts":"20260330T202945","step":"test_green","rc":0,"log":"artifacts/MDAPP-BE-01/outputs/20260330T202945_test_green.log"}
+{"ts":"20260330T202958","step":"test","rc":0,"log":"artifacts/MDAPP-BE-01/outputs/20260330T202958_test.log"}
+{"ts":"20260330T203010","step":"lint","rc":0,"log":"artifacts/MDAPP-BE-01/outputs/20260330T203010_lint.log"}

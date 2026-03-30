@@ -1,0 +1,3 @@
+{"step":"lint","cmd":"cd frontend && npm run lint -- src/api/masterdata.ts src/api/masterdata.types.ts src/modules/settings/pages/ApplicantList.vue","rc":0}
+{"step":"test","cmd":"cd frontend && npm run typecheck","rc":0}
+{"step":"task_validate","cmd":"./scripts/task_validate.sh MDAPP-FE-01","rc":0}

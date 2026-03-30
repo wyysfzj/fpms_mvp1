@@ -1,0 +1,205 @@
+..FFF..F                                                                 [100%]
+=================================== FAILURES ===================================
+_ test_applicant_write_endpoints_require_applicant_write_permission[put-/api/v1/applicants/deny-applicant-json_payload1] _
+
+client = <starlette.testclient.TestClient object at 0x105cdcd10>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzN2I3MGY0YS0wNjYzLTQzOWEtOTBmNC02MTZkYjRmN2NjOTAiLCJleHAiOjE3NzQ4NzczNjF9.EVHtOv7E4IS1VWTa-t_SZuv6tgizx1muBVskJuCsA7s'}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10a2aa590>
+method = 'put', path = '/api/v1/applicants/deny-applicant'
+json_payload = {'code': 'DENY-A2', 'name_cn': '拒绝申请人二'}
+
+    @pytest.mark.parametrize(
+        ("method", "path", "json_payload"),
+        [
+            ("post", "/api/v1/applicants", {"code": "DENY-A1", "name_cn": "拒绝申请人一"}),
+            (
+                "put",
+                "/api/v1/applicants/deny-applicant",
+                {"code": "DENY-A2", "name_cn": "拒绝申请人二"},
+            ),
+            ("put", "/api/v1/applicants/deny-applicant/deactivate", None),
+        ],
+    )
+    def test_applicant_write_endpoints_require_applicant_write_permission(
+        client,
+        auth_headers,
+        monkeypatch,
+        method: str,
+        path: str,
+        json_payload: dict[str, Any] | None,
+    ) -> None:
+        def _no_perms(_db, _user_id) -> set[str]:
+            return set()
+    
+        monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
+    
+        response = getattr(client, method)(path, json=json_payload, headers=auth_headers)
+    
+>       assert response.status_code == 403
+E       assert 404 == 403
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_applicant_masterdata_api.py:85: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+{"timestamp": "2026-03-30T12:29:21.523738+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "2e974b4f-247b-4ea7-b36e-129759682f11"}
+------------------------------ Captured log setup ------------------------------
+INFO     app.request:middleware.py:68 request complete
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-03-30T12:29:21.525114+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "fc7e2654-8e56-4620-927c-d80b4a4a0413"}
+------------------------------ Captured log call -------------------------------
+INFO     app.request:middleware.py:68 request complete
+_ test_applicant_write_endpoints_require_applicant_write_permission[put-/api/v1/applicants/deny-applicant/deactivate-None] _
+
+client = <starlette.testclient.TestClient object at 0x10a1ea450>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzN2I3MGY0YS0wNjYzLTQzOWEtOTBmNC02MTZkYjRmN2NjOTAiLCJleHAiOjE3NzQ4NzczNjF9.EVHtOv7E4IS1VWTa-t_SZuv6tgizx1muBVskJuCsA7s'}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10a2a8150>
+method = 'put', path = '/api/v1/applicants/deny-applicant/deactivate'
+json_payload = None
+
+    @pytest.mark.parametrize(
+        ("method", "path", "json_payload"),
+        [
+            ("post", "/api/v1/applicants", {"code": "DENY-A1", "name_cn": "拒绝申请人一"}),
+            (
+                "put",
+                "/api/v1/applicants/deny-applicant",
+                {"code": "DENY-A2", "name_cn": "拒绝申请人二"},
+            ),
+            ("put", "/api/v1/applicants/deny-applicant/deactivate", None),
+        ],
+    )
+    def test_applicant_write_endpoints_require_applicant_write_permission(
+        client,
+        auth_headers,
+        monkeypatch,
+        method: str,
+        path: str,
+        json_payload: dict[str, Any] | None,
+    ) -> None:
+        def _no_perms(_db, _user_id) -> set[str]:
+            return set()
+    
+        monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
+    
+        response = getattr(client, method)(path, json=json_payload, headers=auth_headers)
+    
+>       assert response.status_code == 403
+E       assert 404 == 403
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_applicant_masterdata_api.py:85: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+{"timestamp": "2026-03-30T12:29:21.777125+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "d949d379-290f-4348-bb03-ac567a90a47e"}
+------------------------------ Captured log setup ------------------------------
+INFO     app.request:middleware.py:68 request complete
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-03-30T12:29:21.778511+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "cdc82c69-1aef-447c-936b-584f8da4c141"}
+------------------------------ Captured log call -------------------------------
+INFO     app.request:middleware.py:68 request complete
+___________ test_update_applicant_and_deactivate_applicant_roundtrip ___________
+
+client = <starlette.testclient.TestClient object at 0x10a284910>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzN2I3MGY0YS0wNjYzLTQzOWEtOTBmNC02MTZkYjRmN2NjOTAiLCJleHAiOjE3NzQ4NzczNjJ9.SRHR7sTQDyW2i_ZtQD5TYA7sagwLx0qKUXBe6JKM72U'}
+session_factory = sessionmaker(class_='Session', autocommit=False, bind=Engine(sqlite:////private/var/folders/sk/ztjhws892vb_t2v7fplsqk7h0000gn/T/pytest-of-cfcc/pytest-342/db0/test.db), autoflush=False, expire_on_commit=True)
+
+    def test_update_applicant_and_deactivate_applicant_roundtrip(
+        client,
+        auth_headers,
+        session_factory,
+    ) -> None:
+        applicant_id = _seed_applicant(
+            session_factory,
+            code="APP-OLD",
+            name_cn="测试申请人旧",
+            name_en="Old Applicant",
+        )
+        _seed_applicant(
+            session_factory,
+            code="APP-TAKEN",
+            name_cn="测试申请人已占用",
+            name_en="Taken Applicant",
+        )
+    
+        update_response = client.put(
+            f"/api/v1/applicants/{applicant_id}",
+            json={
+                "code": "APP-NEW",
+                "name_cn": "测试申请人新",
+                "name_en": "New Applicant",
+                "is_active": False,
+            },
+            headers=auth_headers,
+        )
+    
+>       assert update_response.status_code == 200
+E       assert 404 == 200
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_applicant_masterdata_api.py:119: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+{"timestamp": "2026-03-30T12:29:22.003798+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "c8009bd5-53ee-4fc9-86d2-b1217413bbb1"}
+------------------------------ Captured log setup ------------------------------
+INFO     app.request:middleware.py:68 request complete
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-03-30T12:29:22.007243+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "4b12b077-afc8-4269-b048-066396f3dfa2"}
+------------------------------ Captured log call -------------------------------
+INFO     app.request:middleware.py:68 request complete
+________________ test_update_applicant_rejects_unique_conflicts ________________
+
+client = <starlette.testclient.TestClient object at 0x10a1ea810>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzN2I3MGY0YS0wNjYzLTQzOWEtOTBmNC02MTZkYjRmN2NjOTAiLCJleHAiOjE3NzQ4NzczNjJ9.SRHR7sTQDyW2i_ZtQD5TYA7sagwLx0qKUXBe6JKM72U'}
+session_factory = sessionmaker(class_='Session', autocommit=False, bind=Engine(sqlite:////private/var/folders/sk/ztjhws892vb_t2v7fplsqk7h0000gn/T/pytest-of-cfcc/pytest-342/db0/test.db), autoflush=False, expire_on_commit=True)
+
+    def test_update_applicant_rejects_unique_conflicts(
+        client,
+        auth_headers,
+        session_factory,
+    ) -> None:
+        applicant_id = _seed_applicant(
+            session_factory,
+            code="APP-A",
+            name_cn="测试申请人A",
+            name_en="Applicant A",
+        )
+        _seed_applicant(
+            session_factory,
+            code="APP-B",
+            name_cn="测试申请人B",
+            name_en="Applicant B",
+        )
+    
+        code_conflict = client.put(
+            f"/api/v1/applicants/{applicant_id}",
+            json={"code": "APP-B"},
+            headers=auth_headers,
+        )
+>       assert code_conflict.status_code == 400
+E       assert 404 == 400
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/test_applicant_masterdata_api.py:200: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+{"timestamp": "2026-03-30T12:29:22.677764+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "9c0fc46a-ac24-4d28-ae33-9e088914046c"}
+------------------------------ Captured log setup ------------------------------
+INFO     app.request:middleware.py:68 request complete
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-03-30T12:29:22.680799+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "477c7b7a-7476-43f2-896b-75b6c72dcd31"}
+------------------------------ Captured log call -------------------------------
+INFO     app.request:middleware.py:68 request complete
+=============================== warnings summary ===============================
+../../../../../../Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_applicant_masterdata_api.py::test_create_applicant_returns_object_shape_and_defaults_active
+tests/test_applicant_masterdata_api.py::test_create_applicant_returns_object_shape_and_defaults_active
+  /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pydantic/fields.py:1093: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'strip_whitespace'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_applicant_masterdata_api.py::test_applicant_write_endpoints_require_applicant_write_permission[put-/api/v1/applicants/deny-applicant-json_payload1]
+FAILED tests/test_applicant_masterdata_api.py::test_applicant_write_endpoints_require_applicant_write_permission[put-/api/v1/applicants/deny-applicant/deactivate-None]
+FAILED tests/test_applicant_masterdata_api.py::test_update_applicant_and_deactivate_applicant_roundtrip
+FAILED tests/test_applicant_masterdata_api.py::test_update_applicant_rejects_unique_conflicts
+4 failed, 4 passed, 3 warnings in 2.87s

@@ -1,5 +1,5 @@
 /**
- * Country masterdata API types
+ * Masterdata API types
  */
 
 export interface Country {
@@ -25,6 +25,35 @@ export interface CountryCreatePayload {
 }
 
 export interface CountryUpdatePayload {
+    code?: string
+    name_cn?: string
+    name_en?: string
+    is_active?: boolean
+}
+
+export interface Applicant {
+    id: string
+    code: string
+    name_cn: string
+    name_en?: string
+    is_active: boolean
+}
+
+export interface ApplicantListParams {
+    page?: number
+    page_size?: number
+    q?: string
+    is_active?: boolean
+}
+
+export interface ApplicantCreatePayload {
+    code: string
+    name_cn: string
+    name_en?: string
+    is_active?: boolean
+}
+
+export interface ApplicantUpdatePayload {
     code?: string
     name_cn?: string
     name_en?: string

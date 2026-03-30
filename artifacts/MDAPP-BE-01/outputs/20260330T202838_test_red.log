@@ -1,0 +1,90 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________ test_create_applicant_returns_object_shape_and_defaults_active ________
+
+client = <starlette.testclient.TestClient object at 0x1210815d0>
+auth_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3YmZmMTYzZi01MWY2LTQxYjktODE2YS1iNzE4ZjJmMTg1MTAiLCJleHAiOjE3NzQ4NzczMjF9.H5xOyE0atSuuJoxmX6qYewz6THsNKhYUF5A6KvI4oUI'}
+
+    def test_create_applicant_returns_object_shape_and_defaults_active(
+        client,
+        auth_headers,
+    ) -> None:
+        code = f"APP-{uuid4().hex[:8].upper()}"
+        payload = {
+            "code": code,
+            "name_cn": "测试申请人甲",
+            "name_en": "Applicant A",
+        }
+    
+        response = client.post("/api/v1/applicants", json=payload, headers=auth_headers)
+    
+>       assert response.status_code == 201
+E       assert 405 == 201
+E        +  where 405 = <Response [405 Method Not Allowed]>.status_code
+
+tests/test_applicant_masterdata_api.py:19: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+{"timestamp": "2026-03-30T12:28:41.033117+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "3ce288d9-31fb-4425-b89c-1c7d34c1d219"}
+---------------------------- Captured stderr setup -----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001_mvp1_core, mvp1 core tables (RBAC + Client + Case)
+INFO  [alembic.runtime.migration] Running upgrade 0001_mvp1_core -> 0002_documents, documents + templates tables
+INFO  [alembic.runtime.migration] Running upgrade 0002_documents -> 0003_tasks, task templates + tasks + logs
+INFO  [alembic.runtime.migration] Running upgrade 0003_tasks -> 0004_fees, fee rate + fee draft + fee items
+INFO  [alembic.runtime.migration] Running upgrade 0004_fees -> 0005_billing, billing + payment + offset + case receipt
+INFO  [alembic.runtime.migration] Running upgrade 0005_billing -> 0006_01_create_t_client_address, 0006-01 create t_client_address
+INFO  [alembic.runtime.migration] Running upgrade 0006_01_create_t_client_address -> 0006_02_create_t_client_contact, 0006-02 create t_client_contact
+INFO  [alembic.runtime.migration] Running upgrade 0006_02_create_t_client_contact -> 0007_01_create_t_system_param, 0007-01 create t_system_param
+INFO  [alembic.runtime.migration] Running upgrade 0007_01_create_t_system_param -> 0007_02_create_t_letter_head, 0007-02 create t_letter_head
+INFO  [alembic.runtime.migration] Running upgrade 0007_02_create_t_letter_head -> ea0de36a1dde, add_t_role_perm
+INFO  [alembic.runtime.migration] Running upgrade ea0de36a1dde -> enh_10_02_mvp1_baseline_schema, mvp1 baseline schema (idempotent, create-if-missing).
+INFO  [alembic.runtime.migration] Running upgrade enh_10_02_mvp1_baseline_schema -> enh_10_03_add_indexes, add mvp1 indexes and unique constraints (idempotent).
+INFO  [alembic.runtime.migration] Running upgrade enh_10_03_add_indexes -> enh_10_04_add_foreign_keys, add mvp1 foreign keys (sqlite-safe, idempotent).
+INFO  [alembic.runtime.migration] Running upgrade enh_10_04_add_foreign_keys -> e109a0b1c2d3, add audit columns across MVP1 tables (idempotent).
+INFO  [alembic.runtime.migration] Running upgrade e109a0b1c2d3 -> 4e3a8e291947, add_email_to_client
+INFO  [alembic.runtime.migration] Running upgrade 4e3a8e291947 -> 53f7a0c139cc, a0_add_audit_cols_case_subtables
+INFO  [alembic.runtime.migration] Running upgrade 53f7a0c139cc -> a1_task_template_01, a1_task_template_fields
+INFO  [alembic.runtime.migration] Running upgrade a1_task_template_01 -> a2_client_addr_01, a2_client_address_contact
+INFO  [alembic.runtime.migration] Running upgrade a2_client_addr_01 -> a3_case_fields_01, a3_case_field_expansion
+INFO  [alembic.runtime.migration] Running upgrade a3_case_fields_01 -> b1_doc_tpl_01, b1_doc_template_spec_fields
+INFO  [alembic.runtime.migration] Running upgrade b1_doc_tpl_01 -> b2_doc_reply_01, b2_document_reply_chain
+INFO  [alembic.runtime.migration] Running upgrade b2_doc_reply_01 -> b4_fee_rate_dims_01, b4_fee_rate_dimensions
+INFO  [alembic.runtime.migration] Running upgrade b4_fee_rate_dims_01 -> b5_case_receipt_01, b5_case_receipt_enrich
+INFO  [alembic.runtime.migration] Running upgrade b5_case_receipt_01 -> pe_be_db_01_expense_01, pe_be_db_01_create_t_expense
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_01_expense_01 -> pe_be_db_02_pay_list_01, pe_be_db_02_create_t_pay_list
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_02_pay_list_01 -> pe_be_db_03_gov_payment_01, pe_be_db_03_create_t_gov_payment
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_03_gov_payment_01 -> pe_be_db_04_annuity_task_01, pe_be_db_04_create_t_annuity_task
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_04_annuity_task_01 -> pe_be_db_05_dunning_01, pe_be_db_05_create_t_dunning
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_05_dunning_01 -> pe_be_db_06_comm_rule_01, pe_be_db_06_create_t_commission_rule
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_06_comm_rule_01 -> pe_be_db_07_commission_01, pe_be_db_07_create_t_commission
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_07_commission_01 -> pe_be_db_08_comm_settle_01, pe_be_db_08_create_t_commission_settlement
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_08_comm_settle_01 -> pe_be_db_cm_02_case_ext_01, pe_be_db_cm_02_case_ext_fields
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_cm_02_case_ext_01 -> pe_fr_fe_07_01, pe_fr_fe_07_case_receipt_ext
+INFO  [alembic.runtime.migration] Running upgrade pe_fr_fe_07_01 -> pe_fr_fe_06_01, pe_fr_fe_06_annuity_task_ext
+INFO  [alembic.runtime.migration] Running upgrade pe_be_db_cm_02_case_ext_01 -> frcom03_db_01_case_agent_split_01, frcom03_db_01_create_t_case_agent_split
+INFO  [alembic.runtime.migration] Running upgrade frcom03_db_01_case_agent_split_01, pe_fr_fe_06_01 -> frcom03_db_merge_01_merge_heads, frcom03_db_merge_01_merge_heads
+INFO  [alembic.runtime.migration] Running upgrade frcom03_db_merge_01_merge_heads -> baddebt_db_01_create_bad_debt_tables_01, baddebt_db_01_create_bad_debt_tables
+INFO  [alembic.runtime.migration] Running upgrade baddebt_db_01_create_bad_debt_tables_01 -> dltpl_db_01_task_template_reminder_fields_01, dltpl_db_01_task_template_reminder_fields
+INFO  [alembic.runtime.migration] Running upgrade dltpl_db_01_task_template_reminder_fields_01 -> casefld_db_01_case_missing_fields_01, casefld_db_01_case_missing_fields
+INFO  [alembic.runtime.migration] Running upgrade casefld_db_01_case_missing_fields_01 -> casebf_db_01_case_submitted_date_01, casebf_db_01_case_submitted_date
+INFO  [alembic.runtime.migration] Running upgrade casebf_db_01_case_submitted_date_01 -> docdsp_db_01_doc_dispatch_tables_01, docdsp_db_01_doc_dispatch_tables
+INFO  [alembic.runtime.migration] Running upgrade docdsp_db_01_doc_dispatch_tables_01 -> mdpre_db_01_masterdata_carriers_01, mdpre_db_01_masterdata_carriers
+----------------------------- Captured stdout call -----------------------------
+{"timestamp": "2026-03-30T12:28:41.034632+00:00", "level": "INFO", "logger": "app.request", "message": "request complete", "request_id": "0ef78690-eefd-4a26-ae9d-625d684f18c3"}
+------------------------------ Captured log call -------------------------------
+INFO     app.request:middleware.py:68 request complete
+=============================== warnings summary ===============================
+../../../../../../Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_applicant_masterdata_api.py::test_create_applicant_returns_object_shape_and_defaults_active
+tests/test_applicant_masterdata_api.py::test_create_applicant_returns_object_shape_and_defaults_active
+  /Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/pydantic/fields.py:1093: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'strip_whitespace'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+    warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_applicant_masterdata_api.py::test_create_applicant_returns_object_shape_and_defaults_active
+1 failed, 3 warnings in 1.31s
