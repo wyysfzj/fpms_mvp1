@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/api/tasks.ts src/api/tasks.types.ts src/modules/tasks/pages/TaskSpecialSearch.vue src/router/index.ts src/constants/menu.ts
+

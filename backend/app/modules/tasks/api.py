@@ -24,6 +24,8 @@ from app.modules.tasks.schemas import (
     TaskListItemOut,
     TaskLogOut,
     TaskOut,
+    TaskSpecialSearchItemOut,
+    TaskSpecialSearchOut,
     TaskTemplateCreateIn,
     TaskTemplateOut,
     TaskTemplateUpdateIn,
@@ -36,9 +38,9 @@ from app.modules.tasks.service import create_task as create_task_service
 from app.modules.tasks.service import create_task_template as create_task_template_service
 from app.modules.tasks.service import delete_task as delete_task_service
 from app.modules.tasks.service import get_task as get_task_service
+from app.modules.tasks.service import list_special_search_tasks, list_tasks, list_tasks_today
 from app.modules.tasks.service import list_task_logs as list_task_logs_service
 from app.modules.tasks.service import list_task_templates as list_task_templates_service
-from app.modules.tasks.service import list_tasks, list_tasks_today
 from app.modules.tasks.service import reopen_task as reopen_task_service
 from app.modules.tasks.service import update_task as update_task_service
 from app.modules.tasks.service import update_task_template as update_task_template_service
@@ -220,6 +222,52 @@ def get_tasks_today(
     tasks, total = list_tasks_today(db, actor_id=current_user.id, as_role=as_role)
     items = [item.model_dump(mode="json") for item in _build_task_list_items(db, tasks)]
     return {"items": items, "page": page, "page_size": page_size, "total": total}
+
+
+@router.get(
+    "/tasks/special/search",
+    response_model=TaskSpecialSearchOut,
+    summary="List special deadline tasks",
+)
+def get_special_search_tasks(
+    task_code: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
+    client_name: str | None = Query(default=None),
+    due_date_from: date | None = Query(default=None),
+    due_date_to: date | None = Query(default=None),
+    is_overdue: bool | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _perm: None = Depends(require_perm("Task.Read")),
+    db: Session = Depends(get_db),
+) -> TaskSpecialSearchOut:
+    filters = {
+        "task_code": task_code,
+        "status": status,
+        "case_no": case_no,
+        "client_name": client_name,
+        "due_date_from": due_date_from,
+        "due_date_to": due_date_to,
+        "is_overdue": is_overdue,
+    }
+    tasks, total = list_special_search_tasks(db, filters=filters, page=page, page_size=page_size)
+    items = [
+        TaskSpecialSearchItemOut(
+            task_code=item["task_code"],
+            task_id=item["task_id"],
+            case_id=item["case_id"],
+            case_no=item["case_no"],
+            client_name=item["client_name"],
+            title=item["title"],
+            status=item["status"],
+            due_date=item["due_date"],
+            is_overdue=item["is_overdue"],
+            remark=item["remark"],
+        )
+        for item in tasks
+    ]
+    return TaskSpecialSearchOut(items=items, page=page, page_size=page_size, total=total)
 
 
 @router.post(

@@ -49,6 +49,11 @@ const routes = [
       { path: 'tasks', name: 'tasks', component: () => import('../modules/tasks/pages/TaskList.vue') },
       { path: 'tasks/new', name: 'task_new', component: () => import('../modules/tasks/pages/TaskCreate.vue') },
       { path: 'tasks/today', name: 'tasks_today', component: () => import('../modules/tasks/pages/TodayReminders.vue') },
+      {
+        path: 'tasks/special-search',
+        name: 'task_special_search',
+        component: () => import('../modules/tasks/pages/TaskSpecialSearch.vue'),
+      },
       { path: 'tasks/:id', name: 'task_detail', component: () => import('../modules/tasks/pages/TaskDetail.vue') },
 
       // Annuity

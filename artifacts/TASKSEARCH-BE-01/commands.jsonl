@@ -1,0 +1,4 @@
+{"ts":"20260331T201416","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_task_special_search_api.py"}
+{"ts":"20260331T201416","step":"lint","cmd":"python3 -m ruff check backend/app/modules/tasks/api.py backend/app/modules/tasks/schemas.py backend/app/modules/tasks/service.py backend/tests/test_task_special_search_api.py"}
+{"ts":"20260331T201455","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ PYTHONPATH=.\ pytest\ -q\ tests/test_task_special_search_api.py"}
+{"ts":"20260331T201455","step":"lint","cmd":"python3 -m ruff check backend/app/modules/tasks/api.py backend/app/modules/tasks/schemas.py backend/app/modules/tasks/service.py backend/tests/test_task_special_search_api.py"}

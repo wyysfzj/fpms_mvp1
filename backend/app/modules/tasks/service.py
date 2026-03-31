@@ -4,13 +4,14 @@ from datetime import date, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.documents.models import Document
+from app.modules.masterdata.clients.models import Client
 from app.modules.tasks.enums import TaskAction, TaskStatus, TaskTodayAs
 from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 from app.modules.tasks.schemas import (
@@ -19,6 +20,8 @@ from app.modules.tasks.schemas import (
     TaskTemplateUpdateIn,
     TaskUpdateIn,
 )
+
+SPECIAL_SEARCH_TASK_CODES = {"APPLY_FEE_LIMIT", "EXAM_REQUEST_LIMIT"}
 
 
 def _validate_transition(from_status: str, to_status: str) -> None:
@@ -375,6 +378,89 @@ def list_tasks_today(
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = db.execute(count_stmt).scalar_one()
     items = db.execute(stmt.order_by(Task.due_date.asc(), Task.created_at.desc())).scalars().all()
+    return items, total
+
+
+def list_special_search_tasks(
+    db: Session,
+    *,
+    filters: dict[str, Any],
+    page: int,
+    page_size: int,
+) -> tuple[list[dict[str, Any]], int]:
+    today = date.today()
+    stmt = (
+        select(
+            TaskTemplate.code.label("task_code"),
+            Task.id.label("task_id"),
+            Task.case_id.label("case_id"),
+            Case.case_no.label("case_no"),
+            Client.name_cn.label("client_name"),
+            Task.title.label("title"),
+            Task.status.label("status"),
+            Task.due_date.label("due_date"),
+            # Task currently has no mapped persisted remark column; keep the
+            # frozen projection field present and nullable.
+            literal(None).label("remark"),
+        )
+        .join(TaskTemplate, Task.task_template_id == TaskTemplate.id)
+        .join(Case, Task.case_id == Case.id)
+        .outerjoin(Client, Case.client_id == Client.id)
+        .where(TaskTemplate.code.in_(SPECIAL_SEARCH_TASK_CODES))
+    )
+
+    task_code = filters.get("task_code")
+    status = filters.get("status")
+    case_no = filters.get("case_no")
+    client_name = filters.get("client_name")
+    due_date_from: date | None = filters.get("due_date_from")
+    due_date_to: date | None = filters.get("due_date_to")
+    is_overdue = filters.get("is_overdue")
+
+    if task_code:
+        stmt = stmt.where(TaskTemplate.code == task_code)
+    if status:
+        stmt = stmt.where(Task.status == status)
+    if case_no:
+        stmt = stmt.where(func.lower(Case.case_no).like(f"%{case_no.strip().lower()}%"))
+    if client_name:
+        stmt = stmt.where(
+            func.lower(func.coalesce(Client.name_cn, "")).like(f"%{client_name.strip().lower()}%")
+        )
+    if due_date_from:
+        stmt = stmt.where(Task.due_date >= due_date_from)
+    if due_date_to:
+        stmt = stmt.where(Task.due_date <= due_date_to)
+    if is_overdue is True:
+        stmt = stmt.where(Task.due_date < today, Task.status != TaskStatus.DONE.value)
+    elif is_overdue is False:
+        stmt = stmt.where(
+            or_(
+                Task.due_date.is_(None),
+                Task.due_date >= today,
+                Task.status == TaskStatus.DONE.value,
+            )
+        )
+
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = db.execute(count_stmt).scalar_one()
+
+    offset = (page - 1) * page_size
+    rows = db.execute(
+        stmt.order_by(Task.due_date.asc(), Task.created_at.desc(), Task.id.asc())
+        .offset(offset)
+        .limit(page_size)
+    ).all()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row._mapping)
+        due_date = item.get("due_date")
+        status_value = item.get("status")
+        item["title"] = item.get("title") or ""
+        item["is_overdue"] = bool(
+            due_date is not None and due_date < today and status_value != TaskStatus.DONE.value
+        )
+        items.append(item)
     return items, total
 
 

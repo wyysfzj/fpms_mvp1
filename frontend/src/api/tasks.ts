@@ -5,6 +5,8 @@ import type {
     TaskCreatePayload,
     TaskListParams,
     TaskLog,
+    TaskSpecialSearchParams,
+    TaskSpecialSearchResponse,
     TaskTemplate,
     TaskTemplateCreatePayload,
     TaskTemplateUpdatePayload,
@@ -178,6 +180,18 @@ export async function getTodayReminders(mode: 'worker' | 'supervisor'): Promise<
         ...response.data,
         items: response.data.items.map(mapTask),
     }
+}
+
+/**
+ * Search special deadline tasks
+ */
+export async function searchSpecialTasks(
+    params: TaskSpecialSearchParams = {},
+): Promise<TaskSpecialSearchResponse> {
+    const response = await http.get<TaskSpecialSearchResponse>('/tasks/special/search', {
+        params,
+    })
+    return response.data
 }
 
 // ── Task Template CRUD ─────────────────────────────

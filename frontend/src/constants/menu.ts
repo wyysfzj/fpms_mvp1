@@ -41,6 +41,13 @@ export const MENU_GROUPS: MenuGroup[] = [
             { key: 'clients', label: '客户管理', icon: '👥', route: '/clients', requiredPerms: [Perms.CLIENTS_READ] },
             { key: 'cases', label: '案件管理', icon: '📂', route: '/cases', requiredPerms: [Perms.CASES_READ] },
             { key: 'tasks', label: '任务与期限', icon: '📅', route: '/tasks', requiredPerms: [Perms.TASKS_READ] },
+            {
+                key: 'task_special_search',
+                label: '专项期限检索',
+                icon: '🔎',
+                route: '/tasks/special-search',
+                requiredPerms: [Perms.TASKS_READ],
+            },
             { key: 'annuity_tasks', label: '年费任务', icon: '⏰', route: '/annuity/tasks', requiredPerms: [Perms.TASKS_WRITE] },
             { key: 'dunning', label: '催款管理', icon: '📮', route: '/collections/dunning', requiredPerms: [Perms.BILLING_WRITE] },
             { key: 'consulting_case_new', label: '顾问项目立案', icon: '🧠', route: '/consulting/cases/new', requiredPerms: [Perms.CASES_WRITE] },

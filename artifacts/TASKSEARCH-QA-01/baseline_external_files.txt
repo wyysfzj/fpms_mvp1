@@ -1,0 +1,30 @@
+ A artifacts/TASKSEARCH-FE-01/baseline_allowlist.diff
+ A artifacts/TASKSEARCH-FE-01/baseline_external_files.txt
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/expenses/models.py
+ M backend/app/modules/tasks/api.py
+ M backend/app/modules/tasks/schemas.py
+ M backend/app/modules/tasks/service.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+ M frontend/src/api/tasks.ts
+ M frontend/src/api/tasks.types.ts
+ M frontend/src/constants/menu.ts
+ A frontend/src/modules/tasks/pages/TaskSpecialSearch.vue
+ M frontend/src/router/index.ts
+?? .superpowers/
+?? backend/tests/test_task_special_search_api.py
+?? docs/superpowers/plans/2026-03-30-grant-fee-workflow-decomposition.md
+?? docs/superpowers/plans/2026-03-30-reports-program-decomposition.md
+?? docs/superpowers/plans/2026-03-31-task-deadline-special-search.md
+?? docs/superpowers/specs/2026-03-30-grant-fee-workflow-decomposition-design.md
+?? docs/superpowers/specs/2026-03-30-reports-program-decomposition-design.md
+?? docs/superpowers/specs/2026-03-31-task-deadline-special-search-design.md
+?? tasks/postenhancement/backend/TASKSEARCH-BE-01.md
+?? tasks/postenhancement/backend/TASKSEARCH-QA-01.md
+?? tasks/postenhancement/frontend/TASKSEARCH-FE-01.md

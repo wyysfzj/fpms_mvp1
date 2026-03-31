@@ -1,0 +1,480 @@
+diff --git a/frontend/src/api/tasks.ts b/frontend/src/api/tasks.ts
+index 6bb2002..6f7a226 100644
+--- a/frontend/src/api/tasks.ts
++++ b/frontend/src/api/tasks.ts
+@@ -5,6 +5,8 @@ import type {
+     TaskCreatePayload,
+     TaskListParams,
+     TaskLog,
++    TaskSpecialSearchParams,
++    TaskSpecialSearchResponse,
+     TaskTemplate,
+     TaskTemplateCreatePayload,
+     TaskTemplateUpdatePayload,
+@@ -180,6 +182,18 @@ export async function getTodayReminders(mode: 'worker' | 'supervisor'): Promise<
+     }
+ }
+ 
++/**
++ * Search special deadline tasks
++ */
++export async function searchSpecialTasks(
++    params: TaskSpecialSearchParams = {},
++): Promise<TaskSpecialSearchResponse> {
++    const response = await http.get<TaskSpecialSearchResponse>('/tasks/special/search', {
++        params,
++    })
++    return response.data
++}
++
+ // ── Task Template CRUD ─────────────────────────────
+ 
+ export async function getTaskTemplates(enabledOnly?: boolean): Promise<TaskTemplate[]> {
+diff --git a/frontend/src/api/tasks.types.ts b/frontend/src/api/tasks.types.ts
+index 63ddf30..0b56202 100644
+--- a/frontend/src/api/tasks.types.ts
++++ b/frontend/src/api/tasks.types.ts
+@@ -2,6 +2,8 @@
+  * Task API Types
+  */
+ 
++import type { Pagination } from './types'
++
+ export type TaskDeadlineBase =
+     | 'FILING_DATE'
+     | 'RECEIVE_DATE'
+@@ -55,6 +57,33 @@ export interface TaskListParams {
+     as?: 'worker' | 'supervisor'
+ }
+ 
++export interface TaskSpecialSearchItem {
++    task_code: string
++    task_id: string
++    case_id: string
++    case_no?: string | null
++    client_name?: string | null
++    title: string
++    status: string
++    due_date?: string | null
++    is_overdue: boolean
++    remark?: string | null
++}
++
++export interface TaskSpecialSearchParams {
++    page?: number
++    page_size?: number
++    task_code?: string
++    status?: string
++    case_no?: string
++    client_name?: string
++    due_date_from?: string
++    due_date_to?: string
++    is_overdue?: boolean
++}
++
++export type TaskSpecialSearchResponse = Pagination<TaskSpecialSearchItem>
++
+ export interface TaskCreatePayload {
+     title: string
+     description?: string
+diff --git a/frontend/src/constants/menu.ts b/frontend/src/constants/menu.ts
+index 72af496..33bce00 100644
+--- a/frontend/src/constants/menu.ts
++++ b/frontend/src/constants/menu.ts
+@@ -41,6 +41,13 @@ export const MENU_GROUPS: MenuGroup[] = [
+             { key: 'clients', label: '客户管理', icon: '👥', route: '/clients', requiredPerms: [Perms.CLIENTS_READ] },
+             { key: 'cases', label: '案件管理', icon: '📂', route: '/cases', requiredPerms: [Perms.CASES_READ] },
+             { key: 'tasks', label: '任务与期限', icon: '📅', route: '/tasks', requiredPerms: [Perms.TASKS_READ] },
++            {
++                key: 'task_special_search',
++                label: '专项期限检索',
++                icon: '🔎',
++                route: '/tasks/special-search',
++                requiredPerms: [Perms.TASKS_READ],
++            },
+             { key: 'annuity_tasks', label: '年费任务', icon: '⏰', route: '/annuity/tasks', requiredPerms: [Perms.TASKS_WRITE] },
+             { key: 'dunning', label: '催款管理', icon: '📮', route: '/collections/dunning', requiredPerms: [Perms.BILLING_WRITE] },
+             { key: 'consulting_case_new', label: '顾问项目立案', icon: '🧠', route: '/consulting/cases/new', requiredPerms: [Perms.CASES_WRITE] },
+diff --git a/frontend/src/modules/tasks/pages/TaskSpecialSearch.vue b/frontend/src/modules/tasks/pages/TaskSpecialSearch.vue
+new file mode 100644
+index 0000000..f667eab
+--- /dev/null
++++ b/frontend/src/modules/tasks/pages/TaskSpecialSearch.vue
+@@ -0,0 +1,361 @@
++<template>
++  <main class="page-container" role="main">
++    <div class="page-header">
++      <div class="page-header-left">
++        <h1 class="page-title">专项期限检索</h1>
++        <span class="page-count" aria-live="polite">{{ total }} 条</span>
++      </div>
++      <div class="page-header-right">
++        <router-link to="/tasks">
++          <el-button>返回任务列表</el-button>
++        </router-link>
++      </div>
++    </div>
++
++    <el-form :model="filters" inline class="filter-form">
++      <el-form-item label="任务类型">
++        <el-select
++          v-model="filters.task_code"
++          clearable
++          class="filter-select"
++          placeholder="全部"
++          @change="applyFilters"
++        >
++          <el-option label="全部" value="" />
++          <el-option label="申请费时限" value="APPLY_FEE_LIMIT" />
++          <el-option label="实审请求时限" value="EXAM_REQUEST_LIMIT" />
++        </el-select>
++      </el-form-item>
++      <el-form-item label="状态">
++        <el-select
++          v-model="filters.status"
++          clearable
++          class="filter-select"
++          placeholder="全部"
++          @change="applyFilters"
++        >
++          <el-option label="全部" value="" />
++          <el-option
++            v-for="option in statusOptions"
++            :key="option.value"
++            :label="option.label"
++            :value="option.value"
++          />
++        </el-select>
++      </el-form-item>
++      <el-form-item label="案件编号">
++        <el-input
++          v-model.trim="filters.case_no"
++          clearable
++          class="filter-input"
++          placeholder="请输入案件编号"
++          @keyup.enter="applyFilters"
++          @change="applyFilters"
++        />
++      </el-form-item>
++      <el-form-item label="客户名称">
++        <el-input
++          v-model.trim="filters.client_name"
++          clearable
++          class="filter-input"
++          placeholder="请输入客户名称"
++          @keyup.enter="applyFilters"
++          @change="applyFilters"
++        />
++      </el-form-item>
++      <el-form-item label="截止日期">
++        <el-date-picker
++          v-model="filters.due_date_range"
++          clearable
++          class="filter-range"
++          end-placeholder="结束日期"
++          range-separator="至"
++          start-placeholder="开始日期"
++          type="daterange"
++          value-format="YYYY-MM-DD"
++          @change="applyFilters"
++        />
++      </el-form-item>
++      <el-form-item label="是否逾期">
++        <el-select
++          v-model="filters.is_overdue"
++          clearable
++          class="filter-select"
++          placeholder="全部"
++          @change="applyFilters"
++        >
++          <el-option label="全部" :value="null" />
++          <el-option label="已逾期" :value="true" />
++          <el-option label="未逾期" :value="false" />
++        </el-select>
++      </el-form-item>
++      <el-form-item>
++        <el-button type="primary" :loading="loading" @click="applyFilters">查询</el-button>
++        <el-button :disabled="loading" @click="resetFilters">重置</el-button>
++      </el-form-item>
++    </el-form>
++
++    <div v-if="error" class="page-error">
++      <ApiErrorBanner :error="error" @dismiss="error = null" />
++    </div>
++
++    <LoadingBlock v-if="loading && items.length === 0" :rows="10" />
++
++    <div v-else-if="isEmpty" class="page-empty">
++      <EmptyState
++        title="暂无专项检索结果"
++        message="请调整筛选条件后重试。"
++        icon="🔎"
++        cta-label="返回任务列表"
++        cta-to="/tasks"
++      />
++    </div>
++
++    <div v-else class="page-table">
++      <el-table
++        :data="items"
++        stripe
++        size="small"
++        class="compact-table"
++      >
++        <el-table-column prop="task_code" label="任务编码" width="160">
++          <template #default="{ row }">
++            <div class="code-cell">
++              <span class="mono-num">{{ row.task_code }}</span>
++              <span class="code-label">{{ getTaskCodeLabel(row.task_code) }}</span>
++            </div>
++          </template>
++        </el-table-column>
++        <el-table-column prop="task_id" label="任务ID" min-width="220" show-overflow-tooltip>
++          <template #default="{ row }">
++            <router-link class="task-link mono-num" :to="`/tasks/${row.task_id}`">
++              {{ row.task_id }}
++            </router-link>
++          </template>
++        </el-table-column>
++        <el-table-column label="案件" min-width="220" show-overflow-tooltip>
++          <template #default="{ row }">
++            <div class="code-cell">
++              <router-link v-if="row.case_id" class="case-link" :to="`/cases/${row.case_id}`">
++                {{ row.case_no || '未填写案件编号' }}
++              </router-link>
++              <span v-else>—</span>
++              <span class="code-label mono-num">{{ row.case_id }}</span>
++            </div>
++          </template>
++        </el-table-column>
++        <el-table-column prop="client_name" label="客户名称" min-width="180" show-overflow-tooltip>
++          <template #default="{ row }">
++            {{ row.client_name || '—' }}
++          </template>
++        </el-table-column>
++        <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip>
++          <template #default="{ row }">
++            <router-link class="task-title-link" :to="`/tasks/${row.task_id}`">
++              {{ row.title }}
++            </router-link>
++          </template>
++        </el-table-column>
++        <el-table-column label="状态" width="120" align="center">
++          <template #default="{ row }">
++            <el-tag :type="getStatusType(row.status)" size="small">
++              {{ getStatusText(row.status) }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column label="截止日期" width="120">
++          <template #default="{ row }">
++            <span :class="{ 'task-due-urgent': row.is_overdue }">
++              {{ formatDate(row.due_date) }}
++            </span>
++          </template>
++        </el-table-column>
++        <el-table-column label="逾期" width="100" align="center">
++          <template #default="{ row }">
++            <el-tag :type="row.is_overdue ? 'danger' : 'success'" size="small">
++              {{ row.is_overdue ? '已逾期' : '未逾期' }}
++            </el-tag>
++          </template>
++        </el-table-column>
++        <el-table-column prop="remark" label="备注" min-width="220" show-overflow-tooltip>
++          <template #default="{ row }">
++            {{ row.remark || '—' }}
++          </template>
++        </el-table-column>
++      </el-table>
++
++      <PaginationBar
++        v-model:page="page"
++        v-model:page-size="pageSize"
++        :total="total"
++        :page-sizes="[10, 20, 50]"
++      />
++    </div>
++  </main>
++</template>
++
++<script setup lang="ts">
++import { computed, reactive, ref, watch } from 'vue'
++import dayjs from 'dayjs'
++import { searchSpecialTasks } from '../../../api/tasks'
++import type { ApiError } from '../../../api/types'
++import type { TaskSpecialSearchItem } from '../../../api/tasks.types'
++import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
++import EmptyState from '../../../components/state/EmptyState.vue'
++import LoadingBlock from '../../../components/state/LoadingBlock.vue'
++import PaginationBar from '../../../components/state/PaginationBar.vue'
++import { getTaskStatusText } from '../../../constants/displayText'
++
++const items = ref<TaskSpecialSearchItem[]>([])
++const loading = ref(false)
++const error = ref<ApiError | null>(null)
++const page = ref(1)
++const pageSize = ref(20)
++const total = ref(0)
++
++const filters = reactive({
++  task_code: null as string | null,
++  status: null as string | null,
++  case_no: '',
++  client_name: '',
++  due_date_range: null as [string, string] | null,
++  is_overdue: null as boolean | null,
++})
++
++const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
++
++const TASK_CODE_LABELS: Record<string, string> = {
++  APPLY_FEE_LIMIT: '申请费时限',
++  EXAM_REQUEST_LIMIT: '实审请求时限',
++}
++
++const statusOptions = [
++  { value: 'OPEN', label: getTaskStatusText('OPEN') },
++  { value: 'PENDING', label: getTaskStatusText('PENDING') },
++  { value: 'IN_PROGRESS', label: getTaskStatusText('IN_PROGRESS') },
++  { value: 'DONE', label: getTaskStatusText('DONE') },
++  { value: 'COMPLETED', label: getTaskStatusText('COMPLETED') },
++  { value: 'CLOSED', label: getTaskStatusText('CLOSED') },
++  { value: 'CANCELLED', label: getTaskStatusText('CANCELLED') },
++  { value: 'BLOCKED', label: getTaskStatusText('BLOCKED') },
++  { value: 'OVERDUE', label: getTaskStatusText('OVERDUE') },
++]
++
++function buildParams() {
++  const dueDateRange = filters.due_date_range || []
++  const [dueDateFrom, dueDateTo] = dueDateRange
++
++  return {
++    page: page.value,
++    page_size: pageSize.value,
++    ...(filters.task_code ? { task_code: filters.task_code } : {}),
++    ...(filters.status ? { status: filters.status } : {}),
++    ...(filters.case_no ? { case_no: filters.case_no } : {}),
++    ...(filters.client_name ? { client_name: filters.client_name } : {}),
++    ...(dueDateFrom && dueDateTo ? { due_date_from: dueDateFrom, due_date_to: dueDateTo } : {}),
++    ...(filters.is_overdue !== null ? { is_overdue: filters.is_overdue } : {}),
++  }
++}
++
++async function fetchSpecialSearch() {
++  loading.value = true
++  error.value = null
++  try {
++    const result = await searchSpecialTasks(buildParams())
++    items.value = result.items
++    total.value = result.total
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    loading.value = false
++  }
++}
++
++function applyFilters() {
++  if (page.value !== 1) {
++    page.value = 1
++    return
++  }
++  fetchSpecialSearch()
++}
++
++function resetFilters() {
++  filters.task_code = null
++  filters.status = null
++  filters.case_no = ''
++  filters.client_name = ''
++  filters.due_date_range = null
++  filters.is_overdue = null
++
++  if (page.value !== 1) {
++    page.value = 1
++    return
++  }
++  fetchSpecialSearch()
++}
++
++function formatDate(value?: string | null): string {
++  return value ? dayjs(value).format('YYYY-MM-DD') : '—'
++}
++
++function getTaskCodeLabel(code: string): string {
++  return TASK_CODE_LABELS[code] || code
++}
++
++function getStatusText(status: string): string {
++  return getTaskStatusText(status)
++}
++
++function getStatusType(status: string): '' | 'success' | 'warning' | 'danger' | 'info' {
++  switch (status?.toUpperCase()) {
++    case 'DONE':
++      return 'success'
++    case 'CANCELLED':
++      return 'danger'
++    case 'OPEN':
++      return 'warning'
++    default:
++      return 'info'
++  }
++}
++
++watch([page, pageSize], () => {
++  fetchSpecialSearch()
++}, { immediate: true })
++</script>
++
++<style scoped>
++.filter-form {
++  margin-bottom: 16px;
++}
++
++.filter-input,
++.filter-select,
++.filter-range {
++  width: 220px;
++}
++
++.code-cell {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++
++.code-label {
++  font-size: 12px;
++  color: var(--text-sub);
++}
++
++.task-link,
++.case-link,
++.task-title-link {
++  color: inherit;
++  text-decoration: none;
++}
++
++.task-link:hover,
++.case-link:hover,
++.task-title-link:hover {
++  color: var(--color-primary);
++}
++</style>
+diff --git a/frontend/src/router/index.ts b/frontend/src/router/index.ts
+index 1a3b165..5c1baa8 100644
+--- a/frontend/src/router/index.ts
++++ b/frontend/src/router/index.ts
+@@ -49,6 +49,11 @@ const routes = [
+       { path: 'tasks', name: 'tasks', component: () => import('../modules/tasks/pages/TaskList.vue') },
+       { path: 'tasks/new', name: 'task_new', component: () => import('../modules/tasks/pages/TaskCreate.vue') },
+       { path: 'tasks/today', name: 'tasks_today', component: () => import('../modules/tasks/pages/TodayReminders.vue') },
++      {
++        path: 'tasks/special-search',
++        name: 'task_special_search',
++        component: () => import('../modules/tasks/pages/TaskSpecialSearch.vue'),
++      },
+       { path: 'tasks/:id', name: 'task_detail', component: () => import('../modules/tasks/pages/TaskDetail.vue') },
+ 
+       // Annuity

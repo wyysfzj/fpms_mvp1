@@ -73,6 +73,26 @@ class TaskListItemOut(BaseModel):
     updated_at: datetime | None = None
 
 
+class TaskSpecialSearchItemOut(BaseModel):
+    task_code: str
+    task_id: str
+    case_id: str
+    case_no: str | None = None
+    client_name: str | None = None
+    title: str
+    status: TaskStatus
+    due_date: date | None = None
+    is_overdue: bool
+    remark: str | None = None
+
+
+class TaskSpecialSearchOut(BaseModel):
+    items: list[TaskSpecialSearchItemOut]
+    page: int
+    page_size: int
+    total: int
+
+
 class TaskActionIn(BaseModel):
     remark: str | None = None
 

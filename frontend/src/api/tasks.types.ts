@@ -2,6 +2,8 @@
  * Task API Types
  */
 
+import type { Pagination } from './types'
+
 export type TaskDeadlineBase =
     | 'FILING_DATE'
     | 'RECEIVE_DATE'
@@ -54,6 +56,33 @@ export interface TaskListParams {
     client_id?: string
     as?: 'worker' | 'supervisor'
 }
+
+export interface TaskSpecialSearchItem {
+    task_code: string
+    task_id: string
+    case_id: string
+    case_no?: string | null
+    client_name?: string | null
+    title: string
+    status: string
+    due_date?: string | null
+    is_overdue: boolean
+    remark?: string | null
+}
+
+export interface TaskSpecialSearchParams {
+    page?: number
+    page_size?: number
+    task_code?: string
+    status?: string
+    case_no?: string
+    client_name?: string
+    due_date_from?: string
+    due_date_to?: string
+    is_overdue?: boolean
+}
+
+export type TaskSpecialSearchResponse = Pagination<TaskSpecialSearchItem>
 
 export interface TaskCreatePayload {
     title: string

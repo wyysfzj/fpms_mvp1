@@ -1,0 +1,2 @@
+{"ts":"20260331T204122","step":"lint","cmd":"npm --prefix frontend run lint -- src/api/tasks.ts src/api/tasks.types.ts src/modules/tasks/pages/TaskSpecialSearch.vue src/router/index.ts src/constants/menu.ts"}
+{"ts":"20260331T204126","step":"test","cmd":"npm --prefix frontend run typecheck"}
