@@ -242,6 +242,30 @@ class PaymentListResponse(BaseModel):
     remaining_prepayment_balance: Decimal = Field(Decimal("0"), ge=0)
 
 
+class FeeUnifiedQueryItemResponse(BaseModel):
+    """Response schema for the fee unified query projection."""
+
+    record_type: Literal["PAYMENT", "RECEIPT"]
+    record_id: str
+    case_id: str | None = None
+    biz_no: str | None = None
+    party_name: str | None = None
+    amount: Decimal = Field(Decimal("0"), ge=0)
+    currency: str
+    status: str
+    biz_date: date | None = None
+    remark: str | None = None
+
+
+class FeeUnifiedQueryListResponse(BaseModel):
+    """Response schema for the first-round fee unified query list."""
+
+    items: list[FeeUnifiedQueryItemResponse]
+    page: int
+    page_size: int
+    total: int
+
+
 class OffsetCreateSchema(BaseModel):
     """Schema for creating offsets."""
 

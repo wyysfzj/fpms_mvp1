@@ -227,9 +227,15 @@ def _bill_matches_report_filters(
 
     if client_id and bill.client_id != client_id:
         return False
-    if normalized_bill_status is not None and _normalize_text_filter(bill.status) != normalized_bill_status:
+    if (
+        normalized_bill_status is not None
+        and _normalize_text_filter(bill.status) != normalized_bill_status
+    ):
         return False
-    if normalized_currency is not None and _normalize_text_filter(bill.currency) != normalized_currency:
+    if (
+        normalized_currency is not None
+        and _normalize_text_filter(bill.currency) != normalized_currency
+    ):
         return False
     if bill_date_from and bill.bill_date and bill.bill_date < bill_date_from:
         return False
@@ -239,9 +245,10 @@ def _bill_matches_report_filters(
         return False
     if bill_date_to and bill.bill_date is None:
         return False
-    if normalized_bad_debt_status is not None and _normalize_bad_debt_status_filter(
-        bill.bad_debt_status
-    ) != normalized_bad_debt_status:
+    if (
+        normalized_bad_debt_status is not None
+        and _normalize_bad_debt_status_filter(bill.bad_debt_status) != normalized_bad_debt_status
+    ):
         return False
 
     bill_is_bad_debt = _is_bad_debt_bill(bill)
@@ -264,7 +271,9 @@ def _bill_matches_report_filters(
     return True
 
 
-def _summarize_bill_report_rows(db: Session, bills: list[Bill], *, today: date) -> dict[str, object]:
+def _summarize_bill_report_rows(
+    db: Session, bills: list[Bill], *, today: date
+) -> dict[str, object]:
     receivable_rows = [bill for bill in bills if _is_receivable_bill(bill)]
     overdue_rows = [bill for bill in receivable_rows if _is_bill_overdue(bill, today=today)]
 
@@ -283,7 +292,9 @@ def _summarize_bill_report_rows(db: Session, bills: list[Bill], *, today: date) 
     )
     return {
         "receivable_bill_count": len(receivable_rows),
-        "receivable_amount": sum((Decimal(bill.balance or 0) for bill in receivable_rows), Decimal("0")),
+        "receivable_amount": sum(
+            (Decimal(bill.balance or 0) for bill in receivable_rows), Decimal("0")
+        ),
         "overdue_bill_count": len(overdue_rows),
         "overdue_amount": sum((Decimal(bill.balance or 0) for bill in overdue_rows), Decimal("0")),
         "aging_buckets": [aging_buckets[bucket] for bucket in _AGING_BUCKETS],
@@ -530,6 +541,284 @@ def list_bills(
     bills = report_rows[(page - 1) * page_size : (page - 1) * page_size + page_size]
     summary = _summarize_bill_report_rows(db, report_rows, today=today)
     return bills, total, summary
+
+
+def _normalize_fee_unified_record_type(record_type: str | None) -> str | None:
+    if record_type is None:
+        return None
+    normalized = record_type.strip().upper()
+    if not normalized:
+        return None
+    if normalized not in {"PAYMENT", "RECEIPT"}:
+        raise_business_error(
+            "INVALID_RECORD_TYPE",
+            "不支持的记录类型",
+            status_code=400,
+        )
+    return normalized
+
+
+def _resolve_receipt_unified_status(receipt: CaseReceipt) -> str:
+    receivable_amt = Decimal(receipt.receivable_amt or 0)
+    received_amt = Decimal(receipt.received_amt or 0)
+    if received_amt <= Decimal("0"):
+        return "UNPAID"
+    if receivable_amt <= Decimal("0"):
+        return "PREPAYMENT"
+    if received_amt > receivable_amt:
+        return "PREPAYMENT"
+    if received_amt >= receivable_amt:
+        return "SETTLED"
+    if bool(receipt.is_arrears):
+        return "ARREARS"
+    return "PARTIAL"
+
+
+def _validate_fee_unified_query_ranges(
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    amount_from: Decimal | None,
+    amount_to: Decimal | None,
+) -> None:
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise_business_error(
+            "INVALID_DATE_RANGE",
+            "date_from must be less than or equal to date_to",
+            status_code=400,
+        )
+    if amount_from is not None and amount_to is not None and amount_from > amount_to:
+        raise_business_error(
+            "INVALID_AMOUNT_RANGE",
+            "amount_from must be less than or equal to amount_to",
+            status_code=400,
+        )
+
+
+def _collect_unique_payment_case_ids(lines: list[PaymentLine]) -> list[str]:
+    case_ids: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        case_id = line.case_id
+        if not case_id or case_id in seen:
+            continue
+        seen.add(case_id)
+        case_ids.append(case_id)
+    return case_ids
+
+
+def _build_fee_unified_payment_rows(db: Session) -> list[dict[str, object]]:
+    from app.modules.masterdata.clients.models import Client
+
+    payment_rows = (
+        db.query(Payment, func.coalesce(Client.name_cn, Client.name_en).label("client_name"))
+        .outerjoin(Client, Client.id == Payment.client_id)
+        .order_by(Payment.created_at.desc(), Payment.id.desc())
+        .all()
+    )
+    if not payment_rows:
+        return []
+
+    payment_ids = [payment.id for payment, _client_name in payment_rows]
+    payment_line_map: dict[str, list[PaymentLine]] = {}
+    payment_lines = (
+        db.query(PaymentLine)
+        .filter(PaymentLine.payment_id.in_(payment_ids))
+        .order_by(PaymentLine.created_at.asc(), PaymentLine.id.asc())
+        .all()
+    )
+    for line in payment_lines:
+        payment_line_map.setdefault(line.payment_id, []).append(line)
+
+    rows: list[dict[str, object]] = []
+    for payment, client_name in payment_rows:
+        lines = payment_line_map.get(payment.id, [])
+        case_ids = _collect_unique_payment_case_ids(lines)
+        case_id = case_ids[0] if len(case_ids) == 1 else None
+        rows.append(
+            {
+                "record_type": "PAYMENT",
+                "record_id": payment.id,
+                "case_id": case_id,
+                "case_ids": case_ids,
+                "biz_no": payment.pay_no or payment.id,
+                "party_name": client_name,
+                "amount": Decimal(payment.amount or 0),
+                "currency": payment.currency,
+                "status": _resolve_payment_prepayment_status(lines),
+                "biz_date": payment.pay_date,
+                "remark": payment.remark,
+                "created_at": payment.created_at,
+            }
+        )
+    return rows
+
+
+def _build_fee_unified_receipt_rows(db: Session) -> list[dict[str, object]]:
+    from app.modules.cases.models import Case
+    from app.modules.masterdata.clients.models import Client
+
+    receipt_rows = (
+        db.query(
+            CaseReceipt,
+            func.coalesce(Client.name_cn, Client.name_en).label("client_name"),
+        )
+        .join(Case, Case.id == CaseReceipt.case_id)
+        .outerjoin(Client, Client.id == Case.client_id)
+        .order_by(CaseReceipt.created_at.desc(), CaseReceipt.id.desc())
+        .all()
+    )
+    if not receipt_rows:
+        return []
+
+    rows: list[dict[str, object]] = []
+    for receipt, client_name in receipt_rows:
+        rows.append(
+            {
+                "record_type": "RECEIPT",
+                "record_id": receipt.id,
+                "case_id": receipt.case_id,
+                "biz_no": receipt.invoice_no or receipt.id,
+                "party_name": client_name,
+                "amount": Decimal(receipt.received_amt or 0),
+                "currency": receipt.currency,
+                "status": _resolve_receipt_unified_status(receipt),
+                "biz_date": receipt.last_receipt_date,
+                "remark": receipt.remark,
+                "created_at": receipt.created_at,
+            }
+        )
+    return rows
+
+
+def _fee_unified_row_matches(
+    row: dict[str, object],
+    *,
+    record_type: str | None,
+    case_id: str | None,
+    biz_no: str | None,
+    party_name: str | None,
+    status: str | None,
+    currency: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    amount_from: Decimal | None,
+    amount_to: Decimal | None,
+) -> bool:
+    if record_type is not None and row["record_type"] != record_type:
+        return False
+    if case_id is not None:
+        row_case_ids = row.get("case_ids")
+        if row_case_ids is not None:
+            if case_id not in row_case_ids:
+                return False
+        elif row["case_id"] != case_id:
+            return False
+    if biz_no is not None:
+        candidate = str(row["biz_no"] or "").casefold()
+        if biz_no.casefold() not in candidate:
+            return False
+    if party_name is not None:
+        candidate = str(row["party_name"] or "").casefold()
+        if party_name.casefold() not in candidate:
+            return False
+    if status is not None and _normalize_text_filter(str(row["status"] or None)) != status:
+        return False
+    if currency is not None and _normalize_text_filter(str(row["currency"] or None)) != currency:
+        return False
+
+    row_biz_date = row["biz_date"]
+    if date_from is not None and (row_biz_date is None or row_biz_date < date_from):
+        return False
+    if date_to is not None and (row_biz_date is None or row_biz_date > date_to):
+        return False
+
+    row_amount = Decimal(row["amount"] or 0)
+    if amount_from is not None and row_amount < amount_from:
+        return False
+    if amount_to is not None and row_amount > amount_to:
+        return False
+    return True
+
+
+def list_fee_unified_queries(
+    db: Session,
+    *,
+    record_type: str | None = None,
+    case_id: str | None = None,
+    biz_no: str | None = None,
+    party_name: str | None = None,
+    status: str | None = None,
+    currency: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    amount_from: Decimal | None = None,
+    amount_to: Decimal | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, object]:
+    normalized_record_type = _normalize_fee_unified_record_type(record_type)
+    normalized_status = _normalize_text_filter(status)
+    normalized_currency = _normalize_text_filter(currency)
+    _validate_fee_unified_query_ranges(
+        date_from=date_from,
+        date_to=date_to,
+        amount_from=amount_from,
+        amount_to=amount_to,
+    )
+
+    rows = _build_fee_unified_payment_rows(db) + _build_fee_unified_receipt_rows(db)
+    filtered_rows = [
+        row
+        for row in rows
+        if _fee_unified_row_matches(
+            row,
+            record_type=normalized_record_type,
+            case_id=case_id,
+            biz_no=biz_no,
+            party_name=party_name,
+            status=normalized_status,
+            currency=normalized_currency,
+            date_from=date_from,
+            date_to=date_to,
+            amount_from=amount_from,
+            amount_to=amount_to,
+        )
+    ]
+
+    filtered_rows.sort(
+        key=lambda row: (
+            row["biz_date"] or date.min,
+            row["created_at"] or datetime.min.replace(tzinfo=timezone.utc),
+            str(row["record_type"]),
+            str(row["record_id"]),
+        ),
+        reverse=True,
+    )
+
+    total = len(filtered_rows)
+    start = (page - 1) * page_size
+    items = filtered_rows[start : start + page_size]
+    return {
+        "items": [
+            {
+                "record_type": row["record_type"],
+                "record_id": row["record_id"],
+                "case_id": row["case_id"],
+                "biz_no": row["biz_no"],
+                "party_name": row["party_name"],
+                "amount": row["amount"],
+                "currency": row["currency"],
+                "status": row["status"],
+                "biz_date": row["biz_date"],
+                "remark": row["remark"],
+            }
+            for row in items
+        ],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+    }
 
 
 def _get_bill_for_bad_debt_action(db: Session, bill_id: str) -> Bill:

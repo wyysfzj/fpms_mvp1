@@ -18,6 +18,9 @@ import type {
     CaseReceiptUpdate,
     OffsetCreatePayload,
     OffsetListItem,
+    FeeUnifiedQueryItem,
+    FeeUnifiedQueryParams,
+    FeeUnifiedQueryResponse,
     PaymentCreatePayload,
     PaymentLineItem,
     PaymentListItem,
@@ -302,6 +305,34 @@ function mapOffset(input: BackendOffset): OffsetListItem {
     }
 }
 
+interface BackendFeeUnifiedQueryItem {
+    record_type: string
+    record_id: string
+    case_id?: string | null
+    biz_no?: string | null
+    party_name?: string | null
+    amount?: number | string | null
+    currency?: string | null
+    status?: string | null
+    biz_date?: string | null
+    remark?: string | null
+}
+
+function mapFeeUnifiedQueryItem(input: BackendFeeUnifiedQueryItem): FeeUnifiedQueryItem {
+    return {
+        record_type: input.record_type,
+        record_id: input.record_id,
+        case_id: input.case_id || undefined,
+        biz_no: input.biz_no || undefined,
+        party_name: input.party_name || undefined,
+        amount: asNumber(input.amount),
+        currency: input.currency || 'CNY',
+        status: input.status || undefined,
+        biz_date: input.biz_date || undefined,
+        remark: input.remark || undefined,
+    }
+}
+
 /**
  * Get paginated list of bills
  */
@@ -505,6 +536,54 @@ export async function getPaymentLines(paymentId: string): Promise<PaymentLineIte
     const response = await http.get<BackendPaymentDetail>(`/payments/${paymentId}`)
     const lines = response.data.payment_lines || []
     return lines.map(mapPaymentLine)
+}
+
+// ============ Fee Unified Query ============
+
+/**
+ * Get unified fee query records with pagination and filters.
+ */
+export async function getFeeUnifiedQuery(
+    params: FeeUnifiedQueryParams = {}
+): Promise<FeeUnifiedQueryResponse> {
+    const {
+        page = 1,
+        page_size = 20,
+        record_type,
+        case_id,
+        biz_no,
+        party_name,
+        status,
+        currency,
+        date_range,
+        amount_range,
+    } = params
+    const date_from = date_range?.[0]
+    const date_to = date_range?.[1]
+    const amount_from = amount_range?.[0]
+    const amount_to = amount_range?.[1]
+
+    const response = await http.get<Pagination<BackendFeeUnifiedQueryItem>>('/fee-unified-query', {
+        params: {
+            page,
+            page_size,
+            record_type,
+            case_id,
+            biz_no,
+            party_name,
+            status,
+            currency,
+            date_from,
+            date_to,
+            amount_from,
+            amount_to,
+        },
+    })
+
+    return {
+        ...response.data,
+        items: response.data.items.map(mapFeeUnifiedQueryItem),
+    }
 }
 
 // ============ Offsets ============

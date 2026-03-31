@@ -260,6 +260,35 @@ export interface OffsetCreatePayload {
     offset_date?: string
 }
 
+// Unified fee query types
+export interface FeeUnifiedQueryItem {
+    record_type: string
+    record_id: string
+    case_id?: string | null
+    biz_no?: string | null
+    party_name?: string | null
+    amount: number
+    currency: string
+    status?: string | null
+    biz_date?: string | null
+    remark?: string | null
+}
+
+export interface FeeUnifiedQueryParams {
+    page?: number
+    page_size?: number
+    record_type?: string
+    case_id?: string
+    biz_no?: string
+    party_name?: string
+    status?: string
+    currency?: string
+    date_range?: [string, string] | []
+    amount_range?: [number, number] | []
+}
+
+export type FeeUnifiedQueryResponse = Pagination<FeeUnifiedQueryItem>
+
 // Case Receipts Summary
 export interface CaseReceiptsSummary {
     case_id: string

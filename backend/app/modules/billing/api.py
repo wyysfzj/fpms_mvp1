@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -31,6 +32,7 @@ from app.modules.billing.schemas import (
     CaseReceiptCreate,
     CaseReceiptResponse,
     CaseReceiptUpdate,
+    FeeUnifiedQueryListResponse,
     OffsetCreateSchema,
     OffsetListItemResponse,
     OffsetResponse,
@@ -47,6 +49,7 @@ from app.modules.billing.service import (
     generate_bill_from_drafts,
     list_bills,
     list_case_receipts,
+    list_fee_unified_queries,
     list_payments,
     load_bill_bad_debt_chain,
     process_payment,
@@ -509,6 +512,53 @@ def get_payments(
             pay_date_from=pay_date_from,
             pay_date_to=pay_date_to,
             has_unapplied_only=has_unapplied_only,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get(
+    "/fee-unified-query",
+    response_model=FeeUnifiedQueryListResponse,
+    summary="统一费用查询",
+)
+def get_fee_unified_query(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    record_type: str | None = Query(default=None),
+    case_id: str | None = Query(default=None),
+    biz_no: str | None = Query(default=None),
+    party_name: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    currency: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    amount_from: Decimal | None = Query(default=None),
+    amount_to: Decimal | None = Query(default=None),
+    _payment_perm: None = Depends(require_perm("Payment.Read")),
+    _receipt_perm: None = Depends(require_perm("CaseReceipt.Read")),
+    db: Session = Depends(get_db),
+) -> FeeUnifiedQueryListResponse:
+    """
+    Get the unified payment and receipt list.
+
+    **Auth**: Bearer JWT
+    **Permission**: Payment.Read + CaseReceipt.Read
+    """
+    return FeeUnifiedQueryListResponse(
+        **list_fee_unified_queries(
+            db,
+            record_type=record_type,
+            case_id=case_id,
+            biz_no=biz_no,
+            party_name=party_name,
+            status=status,
+            currency=currency,
+            date_from=date_from,
+            date_to=date_to,
+            amount_from=amount_from,
+            amount_to=amount_to,
             page=page,
             page_size=page_size,
         )
