@@ -5,9 +5,11 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
 from app.db.session import get_db
+from app.modules.auth.models import T_User
 from app.modules.grant_fees.schemas import (
+    GrantFeeDraftGenerateOut,
     GrantFeeTaskListResponse,
     GrantFeeTaskModuleOut,
     GrantFeeTaskStateActionIn,
@@ -15,6 +17,7 @@ from app.modules.grant_fees.schemas import (
 )
 from app.modules.grant_fees.service import (
     apply_grant_fee_task_action,
+    generate_grant_fee_draft,
     get_grant_fee_module_contract,
     get_grant_fee_task_state,
     list_grant_fee_tasks,
@@ -91,4 +94,16 @@ def put_grant_fee_task_state_endpoint(
 ) -> GrantFeeTaskStateOut:
     return GrantFeeTaskStateOut.model_validate(
         apply_grant_fee_task_action(db, task_id=task_id, action=payload.action)
+    )
+
+
+@router.post("/grant-fee-tasks/{task_id}/generate-draft", summary="Generate grant fee draft")
+def post_grant_fee_task_generate_draft_endpoint(
+    task_id: str,
+    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantFeeDraftGenerateOut:
+    return GrantFeeDraftGenerateOut.model_validate(
+        generate_grant_fee_draft(db, task_id=task_id, actor_id=current_user.id)
     )

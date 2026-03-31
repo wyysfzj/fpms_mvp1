@@ -1,0 +1,28 @@
+## master
+ M backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+ M backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+ M backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+ M backend/app/modules/annuity/models.py
+ M backend/app/modules/commission/models.py
+ M backend/app/modules/expenses/models.py
+ M backend/app/modules/grant_fees/api.py
+ M backend/app/modules/grant_fees/schemas.py
+ M backend/app/modules/grant_fees/service.py
+ M backend/tests/test_annuity_generate.py
+ M backend/tests/test_b2_reply_chain.py
+ M backend/tests/test_case_receipt_crud.py
+ M frontend/src/api/grantFees.ts
+ M frontend/src/api/grantFees.types.ts
+ M frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue
+?? .superpowers/
+?? backend/tests/test_grant_fee_draft_linkage_api.py
+?? docs/superpowers/plans/2026-03-30-grant-fee-draft-linkage.md
+?? docs/superpowers/plans/2026-03-30-grant-fee-workflow-decomposition.md
+?? docs/superpowers/plans/2026-03-30-reports-program-decomposition.md
+?? docs/superpowers/specs/2026-03-30-grant-fee-draft-linkage-design.md
+?? docs/superpowers/specs/2026-03-30-grant-fee-workflow-decomposition-design.md
+?? docs/superpowers/specs/2026-03-30-reports-program-decomposition-design.md
+?? frontend/tests/grant-fee-draft-linkage.smoke.md
+?? tasks/postenhancement/backend/GFDRAFT-BE-01.md
+?? tasks/postenhancement/backend/GFDRAFT-QA-01.md
+?? tasks/postenhancement/frontend/GFDRAFT-FE-01.md

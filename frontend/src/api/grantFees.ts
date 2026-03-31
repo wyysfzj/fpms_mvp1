@@ -1,6 +1,7 @@
 import { http } from './http'
 import type {
     GrantFeeMoney,
+    GrantFeeDraftGenerateResult,
     GrantFeeTaskClientInstruction,
     GrantFeeTaskListItem,
     GrantFeeTaskListParams,
@@ -27,6 +28,19 @@ interface BackendGrantFeeTaskListResponse {
     page: number
     page_size: number
     total: number
+}
+
+interface BackendGrantFeeDraftGenerateResponse {
+    task_id: string
+    case_id: string
+    draft_id: string
+    draft_type: string
+    state: string
+    draft_generated: boolean
+    currency: string
+    amount: GrantFeeMoney
+    item_count: number
+    reused: boolean
 }
 
 function normalizeBoolean(input: boolean | undefined): boolean | undefined {
@@ -60,6 +74,23 @@ function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListIt
         draft_generated: Boolean(input.draft_generated),
         notice_sent: Boolean(input.notice_sent),
         is_overdue: Boolean(input.is_overdue),
+    }
+}
+
+function mapGrantFeeDraftGenerateResult(
+    input: BackendGrantFeeDraftGenerateResponse,
+): GrantFeeDraftGenerateResult {
+    return {
+        task_id: input.task_id,
+        case_id: input.case_id,
+        draft_id: input.draft_id,
+        draft_type: input.draft_type,
+        state: normalizeStatus(input.state),
+        draft_generated: Boolean(input.draft_generated),
+        currency: input.currency,
+        amount: input.amount,
+        item_count: input.item_count,
+        reused: Boolean(input.reused),
     }
 }
 
@@ -99,4 +130,12 @@ export async function getGrantFeeTasks(
         ...response.data,
         items: response.data.items.map(mapGrantFeeTask),
     }
+}
+
+/**
+ * Generate a grant-fee draft from one task row
+ */
+export async function generateGrantFeeDraft(taskId: string): Promise<GrantFeeDraftGenerateResult> {
+    const response = await http.post<BackendGrantFeeDraftGenerateResponse>(`/grant-fee-tasks/${taskId}/generate-draft`)
+    return mapGrantFeeDraftGenerateResult(response.data)
 }

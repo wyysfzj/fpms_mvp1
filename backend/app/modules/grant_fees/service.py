@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
-from app.modules.fees.models import T_GrantFeeTask
+from app.modules.cases.models import Case
+from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
+from app.modules.fees.service import recalc_fee_draft_totals
 
 GRANT_FEE_TASK_PERMISSION_CODES = ("GrantFeeTask.Read", "GrantFeeTask.Write")
 GRANT_FEE_TASK_STATES = ("OPEN", "WAITING_CLIENT", "READY_TO_DRAFT", "DRAFT_GENERATED", "DONE")
@@ -17,6 +21,11 @@ GRANT_FEE_TASK_ACTIONS = (
     "mark_draft_generated",
     "mark_done",
 )
+
+GRANT_FEE_DRAFT_TYPE = "GRANT_FEE"
+GRANT_FEE_DRAFT_MARKER_PREFIX = "GRANT_FEE_TASK:"
+GRANT_FEE_GOV_FEE_CODE = "GRANT_FEE_GOV"
+GRANT_FEE_SERVICE_FEE_CODE = "GRANT_FEE_SERVICE"
 
 _STATE_ALLOWED_ACTIONS = {
     "OPEN": ("mark_waiting_client",),
@@ -115,6 +124,26 @@ def _normalize_action(action: Any) -> str:
     return str(action or "").strip()
 
 
+def _draft_marker(task_id: str) -> str:
+    return f"{GRANT_FEE_DRAFT_MARKER_PREFIX}{task_id}"
+
+
+def _find_existing_grant_fee_draft(db: Session, *, marker: str) -> FeeDraft | None:
+    stmt = (
+        select(FeeDraft)
+        .where(
+            FeeDraft.draft_type == GRANT_FEE_DRAFT_TYPE,
+            FeeDraft.id.in_(select(FeeItem.draft_id).where(FeeItem.remark == marker)),
+        )
+        .order_by(FeeDraft.created_at.asc(), FeeDraft.id.asc())
+    )
+    return db.execute(stmt).scalars().first()
+
+
+def _count_fee_items_for_draft(db: Session, *, draft_id: str) -> int:
+    return len(db.execute(select(FeeItem).where(FeeItem.draft_id == draft_id)).scalars().all())
+
+
 def derive_grant_fee_task_state(task: T_GrantFeeTask) -> str:
     notify_count = int(task.notify_count or 0)
     client_instruction = (task.client_instruction or "").strip().upper() or "NONE"
@@ -184,6 +213,130 @@ def apply_grant_fee_task_action(
     return _serialize_grant_fee_task_state(task, state=derive_grant_fee_task_state(task))
 
 
+def generate_grant_fee_draft(
+    db: Session,
+    *,
+    task_id: str,
+    actor_id: str | None,
+) -> dict[str, Any]:
+    task = _load_grant_fee_task(db, task_id=task_id)
+    state = derive_grant_fee_task_state(task)
+    marker = _draft_marker(task_id)
+    existing_draft = _find_existing_grant_fee_draft(db, marker=marker)
+
+    if existing_draft is not None:
+        if not task.draft_generated:
+            task.draft_generated = True
+            db.commit()
+            db.refresh(task)
+            state = derive_grant_fee_task_state(task)
+        return _serialize_grant_fee_draft_generation_result(
+            task,
+            draft=existing_draft,
+            state=state,
+            reused=True,
+            item_count=_count_fee_items_for_draft(db, draft_id=existing_draft.id),
+        )
+
+    normalized_currency = str(task.currency or "").strip().upper()
+    if state != "READY_TO_DRAFT" or task.draft_generated or not str(task.case_id or "").strip():
+        raise_business_error(
+            "GRANT_FEE_DRAFT_PRECONDITION_FAILED",
+            "Grant fee task is not ready to generate draft",
+            details={
+                "task_id": task_id,
+                "state": state,
+                "draft_generated": bool(task.draft_generated),
+                "case_id": task.case_id,
+                "currency": task.currency,
+            },
+            status_code=400,
+        )
+    if not normalized_currency:
+        raise_business_error(
+            "GRANT_FEE_DRAFT_PRECONDITION_FAILED",
+            "Grant fee task currency is required",
+            details={"task_id": task_id, "currency": task.currency},
+            status_code=400,
+        )
+
+    case = db.execute(select(Case).where(Case.id == task.case_id)).scalar_one_or_none()
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    gov_amount = Decimal(task.gov_fee_amt or 0)
+    service_amount = Decimal(task.service_fee_amt or 0)
+    total_amount = gov_amount + service_amount
+
+    draft = FeeDraft(
+        id=str(uuid4()),
+        case_id=case.id,
+        client_id=case.client_id,
+        draft_type=GRANT_FEE_DRAFT_TYPE,
+        currency=normalized_currency,
+        status="OPEN",
+        total_gov=Decimal("0"),
+        total_service=Decimal("0"),
+        total_misc=Decimal("0"),
+        amount=Decimal("0"),
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(draft)
+    db.flush()
+
+    fee_items = [
+        {
+            "fee_code": GRANT_FEE_GOV_FEE_CODE,
+            "fee_name": "Grant fee government fee",
+            "fee_type": "GOV",
+            "amount": gov_amount,
+        },
+        {
+            "fee_code": GRANT_FEE_SERVICE_FEE_CODE,
+            "fee_name": "Grant fee service fee",
+            "fee_type": "SERVICE",
+            "amount": service_amount,
+        },
+    ]
+    for line in fee_items:
+        db.add(
+            FeeItem(
+                id=str(uuid4()),
+                draft_id=draft.id,
+                case_id=case.id,
+                fee_code=line["fee_code"],
+                fee_name=line["fee_name"],
+                fee_type=line["fee_type"],
+                quantity=Decimal("1"),
+                unit_price=line["amount"],
+                amount=line["amount"],
+                remark=marker,
+                created_by=actor_id,
+                updated_by=actor_id,
+            )
+        )
+
+    db.flush()
+    recalc_fee_draft_totals(db, draft_id=draft.id)
+    draft = db.get(FeeDraft, draft.id)
+    if draft is None:
+        raise_business_error("GRANT_FEE_DRAFT_GENERATION_FAILED", "Draft generation failed", status_code=500)
+
+    task.draft_generated = True
+    db.commit()
+    db.refresh(task)
+    db.refresh(draft)
+    return _serialize_grant_fee_draft_generation_result(
+        task,
+        draft=draft,
+        state=derive_grant_fee_task_state(task),
+        reused=False,
+        item_count=len(fee_items),
+        amount=total_amount,
+    )
+
+
 def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict[str, Any]:
     return {
         "task_id": task.id,
@@ -211,4 +364,31 @@ def _serialize_grant_fee_task_list_item(task: T_GrantFeeTask, *, state: str) -> 
         "draft_generated": bool(task.draft_generated),
         "notice_sent": bool(task.notice_sent),
         "is_overdue": bool(task.is_overdue),
+    }
+
+
+def _serialize_grant_fee_draft_generation_result(
+    task: T_GrantFeeTask,
+    *,
+    draft: FeeDraft,
+    state: str,
+    reused: bool,
+    item_count: int | None = None,
+    amount: Decimal | None = None,
+) -> dict[str, Any]:
+    draft_amount = amount if amount is not None else Decimal(draft.amount or 0)
+    if item_count is None:
+        item_count = 0
+
+    return {
+        "task_id": task.id,
+        "case_id": task.case_id,
+        "draft_id": draft.id,
+        "draft_type": draft.draft_type,
+        "state": state,
+        "draft_generated": bool(task.draft_generated),
+        "currency": draft.currency,
+        "amount": draft_amount,
+        "item_count": item_count,
+        "reused": reused,
     }

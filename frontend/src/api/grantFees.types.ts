@@ -28,6 +28,19 @@ export interface GrantFeeTaskListResponse {
     total: number
 }
 
+export interface GrantFeeDraftGenerateResult {
+    task_id: string
+    case_id: string
+    draft_id: string
+    draft_type: string
+    state: GrantFeeTaskStatus
+    draft_generated: boolean
+    currency: string
+    amount: GrantFeeMoney
+    item_count: number
+    reused: boolean
+}
+
 export interface GrantFeeTaskListParams {
     status?: GrantFeeTaskStatus
     client_instruction?: GrantFeeTaskClientInstruction

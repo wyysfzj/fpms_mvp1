@@ -1,0 +1,837 @@
+diff --git a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+index a475de8..b3afbdb 100644
+--- a/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
++++ b/backend/alembic/versions/pe_be_db_08_create_t_commission_settlement.py
+@@ -47,9 +47,7 @@ def upgrade() -> None:
+         sa.Column("created_by", sa.String(36), nullable=True),
+         sa.Column("updated_by", sa.String(36), nullable=True),
+     )
+-    op.create_index(
+-        "ix_t_commission_settlement_status", "t_commission_settlement", ["status"]
+-    )
++    op.create_index("ix_t_commission_settlement_status", "t_commission_settlement", ["status"])
+     op.create_index(
+         "ix_t_commission_settlement_settle_date", "t_commission_settlement", ["settle_date"]
+     )
+@@ -71,9 +69,7 @@ def upgrade() -> None:
+         ),
+         sa.Column("line_no", sa.Integer(), nullable=False, server_default=sa.text("1")),
+         sa.Column("amount", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
+-        sa.Column(
+-            "status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")
+-        ),
++        sa.Column("status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")),
+         sa.Column("remark", sa.Text(), nullable=True),
+         sa.Column(
+             "created_at",
+diff --git a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+index 813d25a..290f4e9 100644
+--- a/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_06_annuity_task_ext.py
+@@ -6,6 +6,7 @@ Create Date: 2026-03-25
+ 
+ Add 6 columns to t_annuity_task and 1 column to t_case (first_annuity_year).
+ """
++
+ from __future__ import annotations
+ 
+ import sqlalchemy as sa
+@@ -44,9 +45,7 @@ def upgrade() -> None:
+         existing_case = {col["name"] for col in insp.get_columns("t_case")}
+         if "first_annuity_year" not in existing_case:
+             with op.batch_alter_table("t_case") as batch_op:
+-                batch_op.add_column(
+-                    sa.Column("first_annuity_year", sa.Integer(), nullable=True)
+-                )
++                batch_op.add_column(sa.Column("first_annuity_year", sa.Integer(), nullable=True))
+ 
+ 
+ def downgrade() -> None:
+diff --git a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+index 685c45a..c90eb2e 100644
+--- a/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
++++ b/backend/alembic/versions/pe_fr_fe_07_case_receipt_ext.py
+@@ -6,6 +6,7 @@ Create Date: 2026-03-24
+ 
+ Add 4 columns to t_case_receipt: fee_name, due_date, is_prepayment, remark.
+ """
++
+ from __future__ import annotations
+ 
+ import sqlalchemy as sa
+diff --git a/backend/app/modules/annuity/models.py b/backend/app/modules/annuity/models.py
+index 5d1f089..aabe939 100644
+--- a/backend/app/modules/annuity/models.py
++++ b/backend/app/modules/annuity/models.py
+@@ -102,7 +102,15 @@ class AnnuityTask(Base):
+     service_fee_amt: Mapped[Decimal | None] = mapped_column(
+         Numeric(18, 2), nullable=True, server_default=text("0")
+     )
+-    notify_count: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
+-    pay_next_year: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+-    draft_generated: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+-    notice_sent: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
++    notify_count: Mapped[int | None] = mapped_column(
++        Integer, nullable=True, server_default=text("0")
++    )
++    pay_next_year: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
++    draft_generated: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
++    notice_sent: Mapped[bool | None] = mapped_column(
++        Boolean, nullable=True, server_default=text("0")
++    )
+diff --git a/backend/app/modules/commission/models.py b/backend/app/modules/commission/models.py
+index 4a22cf8..dac84e9 100644
+--- a/backend/app/modules/commission/models.py
++++ b/backend/app/modules/commission/models.py
+@@ -29,8 +29,12 @@ class CommissionRule(Base):
+     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     flow_dir: Mapped[str | None] = mapped_column(String(32), nullable=True)
+     patent_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
+-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s1_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
++    s2_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s1_fixed_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+@@ -65,13 +69,19 @@ class Commission(Base):
+         Integer, ForeignKey("t_commission_rule.id", ondelete="SET NULL"), nullable=True
+     )
+     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+-    base_fee: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
+-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    base_fee: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
++    )
++    s1_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s1_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+     s1_done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
++    s2_rate: Mapped[Decimal] = mapped_column(
++        Numeric(8, 4), nullable=False, server_default=text("0")
++    )
+     s2_amount: Mapped[Decimal] = mapped_column(
+         Numeric(18, 2), nullable=False, server_default=text("0")
+     )
+@@ -122,9 +132,7 @@ class CommissionSettleLine(Base):
+     __tablename__ = "t_commission_settle_line"
+     __table_args__ = (
+         UniqueConstraint("settlement_id", "line_no", name="uq_t_comm_settle_line_no"),
+-        UniqueConstraint(
+-            "settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"
+-        ),
++        UniqueConstraint("settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"),
+     )
+ 
+     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+diff --git a/backend/app/modules/expenses/models.py b/backend/app/modules/expenses/models.py
+index 09d291b..f2e4001 100644
+--- a/backend/app/modules/expenses/models.py
++++ b/backend/app/modules/expenses/models.py
+@@ -26,11 +26,11 @@ class Expense(Base):
+     vendor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+     expense_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+     currency: Mapped[str] = mapped_column(String(8), nullable=False, server_default=text("'CNY'"))
+-    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
+-    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+-    status: Mapped[str] = mapped_column(
+-        String(24), nullable=False, server_default=text("'DRAFT'")
++    amount: Mapped[Decimal] = mapped_column(
++        Numeric(18, 2), nullable=False, server_default=text("0")
+     )
++    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
++    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'DRAFT'"))
+     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+     created_at: Mapped[datetime] = mapped_column(
+         DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+diff --git a/backend/app/modules/grant_fees/api.py b/backend/app/modules/grant_fees/api.py
+index 4090949..7dd7e9a 100644
+--- a/backend/app/modules/grant_fees/api.py
++++ b/backend/app/modules/grant_fees/api.py
+@@ -5,9 +5,11 @@ from datetime import date
+ from fastapi import APIRouter, Depends, Query
+ from sqlalchemy.orm import Session
+ 
+-from app.api.deps import require_perm
++from app.api.deps import current_user_dep, require_perm
+ from app.db.session import get_db
++from app.modules.auth.models import T_User
+ from app.modules.grant_fees.schemas import (
++    GrantFeeDraftGenerateOut,
+     GrantFeeTaskListResponse,
+     GrantFeeTaskModuleOut,
+     GrantFeeTaskStateActionIn,
+@@ -15,6 +17,7 @@ from app.modules.grant_fees.schemas import (
+ )
+ from app.modules.grant_fees.service import (
+     apply_grant_fee_task_action,
++    generate_grant_fee_draft,
+     get_grant_fee_module_contract,
+     get_grant_fee_task_state,
+     list_grant_fee_tasks,
+@@ -92,3 +95,15 @@ def put_grant_fee_task_state_endpoint(
+     return GrantFeeTaskStateOut.model_validate(
+         apply_grant_fee_task_action(db, task_id=task_id, action=payload.action)
+     )
++
++
++@router.post("/grant-fee-tasks/{task_id}/generate-draft", summary="Generate grant fee draft")
++def post_grant_fee_task_generate_draft_endpoint(
++    task_id: str,
++    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
++    current_user: T_User = current_user_dep,
++    db: Session = Depends(get_db),
++) -> GrantFeeDraftGenerateOut:
++    return GrantFeeDraftGenerateOut.model_validate(
++        generate_grant_fee_draft(db, task_id=task_id, actor_id=current_user.id)
++    )
+diff --git a/backend/app/modules/grant_fees/schemas.py b/backend/app/modules/grant_fees/schemas.py
+index 4ca421e..8011860 100644
+--- a/backend/app/modules/grant_fees/schemas.py
++++ b/backend/app/modules/grant_fees/schemas.py
+@@ -54,3 +54,18 @@ class GrantFeeTaskListResponse(BaseModel):
+     page: int
+     page_size: int
+     total: int
++
++
++class GrantFeeDraftGenerateOut(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    task_id: str
++    case_id: str
++    draft_id: str
++    draft_type: str
++    state: str
++    draft_generated: bool
++    currency: str
++    amount: Decimal
++    item_count: int
++    reused: bool = Field(default=False)
+diff --git a/backend/app/modules/grant_fees/service.py b/backend/app/modules/grant_fees/service.py
+index 2517fb8..03bd26c 100644
+--- a/backend/app/modules/grant_fees/service.py
++++ b/backend/app/modules/grant_fees/service.py
+@@ -1,12 +1,16 @@
+ from __future__ import annotations
+ 
++from decimal import Decimal
+ from typing import Any
++from uuid import uuid4
+ 
+ from sqlalchemy import and_, select
+ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+-from app.modules.fees.models import T_GrantFeeTask
++from app.modules.cases.models import Case
++from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
++from app.modules.fees.service import recalc_fee_draft_totals
+ 
+ GRANT_FEE_TASK_PERMISSION_CODES = ("GrantFeeTask.Read", "GrantFeeTask.Write")
+ GRANT_FEE_TASK_STATES = ("OPEN", "WAITING_CLIENT", "READY_TO_DRAFT", "DRAFT_GENERATED", "DONE")
+@@ -18,6 +22,11 @@ GRANT_FEE_TASK_ACTIONS = (
+     "mark_done",
+ )
+ 
++GRANT_FEE_DRAFT_TYPE = "GRANT_FEE"
++GRANT_FEE_DRAFT_MARKER_PREFIX = "GRANT_FEE_TASK:"
++GRANT_FEE_GOV_FEE_CODE = "GRANT_FEE_GOV"
++GRANT_FEE_SERVICE_FEE_CODE = "GRANT_FEE_SERVICE"
++
+ _STATE_ALLOWED_ACTIONS = {
+     "OPEN": ("mark_waiting_client",),
+     "WAITING_CLIENT": ("record_pay_instruction", "record_abandon_instruction"),
+@@ -115,6 +124,26 @@ def _normalize_action(action: Any) -> str:
+     return str(action or "").strip()
+ 
+ 
++def _draft_marker(task_id: str) -> str:
++    return f"{GRANT_FEE_DRAFT_MARKER_PREFIX}{task_id}"
++
++
++def _find_existing_grant_fee_draft(db: Session, *, marker: str) -> FeeDraft | None:
++    stmt = (
++        select(FeeDraft)
++        .where(
++            FeeDraft.draft_type == GRANT_FEE_DRAFT_TYPE,
++            FeeDraft.id.in_(select(FeeItem.draft_id).where(FeeItem.remark == marker)),
++        )
++        .order_by(FeeDraft.created_at.asc(), FeeDraft.id.asc())
++    )
++    return db.execute(stmt).scalars().first()
++
++
++def _count_fee_items_for_draft(db: Session, *, draft_id: str) -> int:
++    return len(db.execute(select(FeeItem).where(FeeItem.draft_id == draft_id)).scalars().all())
++
++
+ def derive_grant_fee_task_state(task: T_GrantFeeTask) -> str:
+     notify_count = int(task.notify_count or 0)
+     client_instruction = (task.client_instruction or "").strip().upper() or "NONE"
+@@ -184,6 +213,130 @@ def apply_grant_fee_task_action(
+     return _serialize_grant_fee_task_state(task, state=derive_grant_fee_task_state(task))
+ 
+ 
++def generate_grant_fee_draft(
++    db: Session,
++    *,
++    task_id: str,
++    actor_id: str | None,
++) -> dict[str, Any]:
++    task = _load_grant_fee_task(db, task_id=task_id)
++    state = derive_grant_fee_task_state(task)
++    marker = _draft_marker(task_id)
++    existing_draft = _find_existing_grant_fee_draft(db, marker=marker)
++
++    if existing_draft is not None:
++        if not task.draft_generated:
++            task.draft_generated = True
++            db.commit()
++            db.refresh(task)
++            state = derive_grant_fee_task_state(task)
++        return _serialize_grant_fee_draft_generation_result(
++            task,
++            draft=existing_draft,
++            state=state,
++            reused=True,
++            item_count=_count_fee_items_for_draft(db, draft_id=existing_draft.id),
++        )
++
++    normalized_currency = str(task.currency or "").strip().upper()
++    if state != "READY_TO_DRAFT" or task.draft_generated or not str(task.case_id or "").strip():
++        raise_business_error(
++            "GRANT_FEE_DRAFT_PRECONDITION_FAILED",
++            "Grant fee task is not ready to generate draft",
++            details={
++                "task_id": task_id,
++                "state": state,
++                "draft_generated": bool(task.draft_generated),
++                "case_id": task.case_id,
++                "currency": task.currency,
++            },
++            status_code=400,
++        )
++    if not normalized_currency:
++        raise_business_error(
++            "GRANT_FEE_DRAFT_PRECONDITION_FAILED",
++            "Grant fee task currency is required",
++            details={"task_id": task_id, "currency": task.currency},
++            status_code=400,
++        )
++
++    case = db.execute(select(Case).where(Case.id == task.case_id)).scalar_one_or_none()
++    if case is None:
++        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
++
++    gov_amount = Decimal(task.gov_fee_amt or 0)
++    service_amount = Decimal(task.service_fee_amt or 0)
++    total_amount = gov_amount + service_amount
++
++    draft = FeeDraft(
++        id=str(uuid4()),
++        case_id=case.id,
++        client_id=case.client_id,
++        draft_type=GRANT_FEE_DRAFT_TYPE,
++        currency=normalized_currency,
++        status="OPEN",
++        total_gov=Decimal("0"),
++        total_service=Decimal("0"),
++        total_misc=Decimal("0"),
++        amount=Decimal("0"),
++        created_by=actor_id,
++        updated_by=actor_id,
++    )
++    db.add(draft)
++    db.flush()
++
++    fee_items = [
++        {
++            "fee_code": GRANT_FEE_GOV_FEE_CODE,
++            "fee_name": "Grant fee government fee",
++            "fee_type": "GOV",
++            "amount": gov_amount,
++        },
++        {
++            "fee_code": GRANT_FEE_SERVICE_FEE_CODE,
++            "fee_name": "Grant fee service fee",
++            "fee_type": "SERVICE",
++            "amount": service_amount,
++        },
++    ]
++    for line in fee_items:
++        db.add(
++            FeeItem(
++                id=str(uuid4()),
++                draft_id=draft.id,
++                case_id=case.id,
++                fee_code=line["fee_code"],
++                fee_name=line["fee_name"],
++                fee_type=line["fee_type"],
++                quantity=Decimal("1"),
++                unit_price=line["amount"],
++                amount=line["amount"],
++                remark=marker,
++                created_by=actor_id,
++                updated_by=actor_id,
++            )
++        )
++
++    db.flush()
++    recalc_fee_draft_totals(db, draft_id=draft.id)
++    draft = db.get(FeeDraft, draft.id)
++    if draft is None:
++        raise_business_error("GRANT_FEE_DRAFT_GENERATION_FAILED", "Draft generation failed", status_code=500)
++
++    task.draft_generated = True
++    db.commit()
++    db.refresh(task)
++    db.refresh(draft)
++    return _serialize_grant_fee_draft_generation_result(
++        task,
++        draft=draft,
++        state=derive_grant_fee_task_state(task),
++        reused=False,
++        item_count=len(fee_items),
++        amount=total_amount,
++    )
++
++
+ def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict[str, Any]:
+     return {
+         "task_id": task.id,
+@@ -212,3 +365,30 @@ def _serialize_grant_fee_task_list_item(task: T_GrantFeeTask, *, state: str) ->
+         "notice_sent": bool(task.notice_sent),
+         "is_overdue": bool(task.is_overdue),
+     }
++
++
++def _serialize_grant_fee_draft_generation_result(
++    task: T_GrantFeeTask,
++    *,
++    draft: FeeDraft,
++    state: str,
++    reused: bool,
++    item_count: int | None = None,
++    amount: Decimal | None = None,
++) -> dict[str, Any]:
++    draft_amount = amount if amount is not None else Decimal(draft.amount or 0)
++    if item_count is None:
++        item_count = 0
++
++    return {
++        "task_id": task.id,
++        "case_id": task.case_id,
++        "draft_id": draft.id,
++        "draft_type": draft.draft_type,
++        "state": state,
++        "draft_generated": bool(task.draft_generated),
++        "currency": draft.currency,
++        "amount": draft_amount,
++        "item_count": item_count,
++        "reused": reused,
++    }
+diff --git a/backend/tests/test_annuity_generate.py b/backend/tests/test_annuity_generate.py
+index 21ae97c..577fd45 100644
+--- a/backend/tests/test_annuity_generate.py
++++ b/backend/tests/test_annuity_generate.py
+@@ -1,8 +1,8 @@
+ """Tests for AnnuityTask multi-year generation (FR-FE-06)."""
++
+ from __future__ import annotations
+ 
+ from datetime import date, timedelta
+-from decimal import Decimal
+ from uuid import uuid4
+ 
+ import pytest
+@@ -29,7 +29,9 @@ def client_id(client: TestClient, auth_headers: dict) -> str:
+ 
+ 
+ @pytest.fixture
+-def granted_case_id(client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker) -> str:
++def granted_case_id(
++    client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker
++) -> str:
+     resp = client.post(
+         "/api/v1/cases",
+         json={
+@@ -115,7 +117,10 @@ def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
+ 
+ # --- GENERATE ---
+ 
+-def test_generate_annuity_tasks_success(client: TestClient, auth_headers: dict, granted_case_id: str):
++
++def test_generate_annuity_tasks_success(
++    client: TestClient, auth_headers: dict, granted_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": granted_case_id},
+@@ -136,7 +141,9 @@ def test_generate_case_not_found(client: TestClient, auth_headers: dict):
+     assert resp.status_code == 404
+ 
+ 
+-def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_granted_case_id: str):
++def test_generate_case_not_granted(
++    client: TestClient, auth_headers: dict, not_granted_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": not_granted_case_id},
+@@ -145,7 +152,9 @@ def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_g
+     assert resp.status_code == 400
+ 
+ 
+-def test_generate_no_first_annuity_year(client: TestClient, auth_headers: dict, granted_no_year_case_id: str):
++def test_generate_no_first_annuity_year(
++    client: TestClient, auth_headers: dict, granted_no_year_case_id: str
++):
+     resp = client.post(
+         "/api/v1/annuity/tasks/generate",
+         json={"case_id": granted_no_year_case_id},
+@@ -173,7 +182,9 @@ def test_generate_idempotent(client: TestClient, auth_headers: dict, granted_cas
+     assert resp2.json()["tasks_skipped"] == created_first
+ 
+ 
+-def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, granted_case_id: str):
++def test_generate_prefills_fee_amounts(
++    client: TestClient, auth_headers: dict, granted_case_id: str
++):
+     _seed_annuity_rates(client, auth_headers)
+ 
+     # Re-generate (delete old tasks first via direct DB or just use new case)
+@@ -201,6 +212,7 @@ def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, g
+ 
+ # --- LIST NEW FIELDS ---
+ 
++
+ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, granted_case_id: str):
+     client.post(
+         "/api/v1/annuity/tasks/generate",
+@@ -212,12 +224,21 @@ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, grante
+     items = resp.json()["items"]
+     assert len(items) > 0
+     item = items[0]
+-    for field in ("gov_fee_amt", "service_fee_amt", "notify_count", "pay_next_year",
+-                  "draft_generated", "notice_sent", "is_overdue"):
++    for field in (
++        "gov_fee_amt",
++        "service_fee_amt",
++        "notify_count",
++        "pay_next_year",
++        "draft_generated",
++        "notice_sent",
++        "is_overdue",
++    ):
+         assert field in item, f"Missing field: {field}"
+ 
+ 
+-def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++def test_list_is_overdue_computed(
++    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
++):
+     with session_factory() as db:
+         task = AnnuityTask(
+             case_id=granted_case_id,
+@@ -240,7 +261,9 @@ def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, grante
+     assert overdue_items[0]["is_overdue"] is True
+ 
+ 
+-def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
++def test_list_is_overdue_false_when_done(
++    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
++):
+     with session_factory() as db:
+         task = AnnuityTask(
+             case_id=granted_case_id,
+@@ -265,6 +288,7 @@ def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict,
+ 
+ # --- DRAFT GENERATED FLAG ---
+ 
++
+ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, granted_case_id: str):
+     _seed_annuity_rates(client, auth_headers)
+ 
+@@ -312,6 +336,7 @@ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, grante
+ 
+ # --- PERMISSIONS ---
+ 
++
+ def test_permissions_generate(client: TestClient):
+     resp = client.post("/api/v1/annuity/tasks/generate", json={"case_id": "x"})
+     assert resp.status_code == 401
+diff --git a/backend/tests/test_b2_reply_chain.py b/backend/tests/test_b2_reply_chain.py
+index 8e4549b..b2f5ab6 100644
+--- a/backend/tests/test_b2_reply_chain.py
++++ b/backend/tests/test_b2_reply_chain.py
+@@ -575,9 +575,7 @@ def test_document_list_includes_reply_fields(client: TestClient, auth_headers: d
+         assert "reply_date" in item, "List item must include reply_date"
+ 
+ 
+-def test_document_list_can_filter_by_reply_state(
+-    client: TestClient, auth_headers: dict
+-) -> None:
++def test_document_list_can_filter_by_reply_state(client: TestClient, auth_headers: dict) -> None:
+     """GET /documents supports need_reply/replied filters for Batch 2 query scope."""
+     case = _create_case(client, auth_headers)
+     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
+diff --git a/backend/tests/test_case_receipt_crud.py b/backend/tests/test_case_receipt_crud.py
+index 025bbc8..f322e0d 100644
+--- a/backend/tests/test_case_receipt_crud.py
++++ b/backend/tests/test_case_receipt_crud.py
+@@ -1,4 +1,5 @@
+ """Tests for CaseReceipt manual CRUD (FR-FE-07)."""
++
+ from __future__ import annotations
+ 
+ from decimal import Decimal
+@@ -28,6 +29,7 @@ def case_id(client: TestClient, auth_headers: dict) -> str:
+ 
+ # --- CREATE ---
+ 
++
+ def test_create_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
+     resp = client.post(
+         "/api/v1/case-receipts",
+@@ -137,6 +139,7 @@ def test_create_user_override_prepayment(client: TestClient, auth_headers: dict,
+ 
+ # --- UPDATE ---
+ 
++
+ def test_update_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
+     create_resp = client.post(
+         "/api/v1/case-receipts",
+@@ -183,6 +186,7 @@ def test_update_not_found(client: TestClient, auth_headers: dict):
+ 
+ # --- LIST ---
+ 
++
+ def test_list_case_receipts_no_filter(client: TestClient, auth_headers: dict, case_id: str):
+     client.post(
+         "/api/v1/case-receipts",
+@@ -263,8 +267,11 @@ def test_list_pagination(client: TestClient, auth_headers: dict):
+ 
+ # --- PERMISSIONS ---
+ 
++
+ def test_permissions_create(client: TestClient):
+-    resp = client.post("/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"})
++    resp = client.post(
++        "/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"}
++    )
+     assert resp.status_code == 401
+ 
+ 
+@@ -275,6 +282,7 @@ def test_permissions_update(client: TestClient):
+ 
+ # --- INTEGRATION ---
+ 
++
+ def test_manual_receipt_no_conflict_with_auto(client: TestClient, auth_headers: dict, case_id: str):
+     resp = client.post(
+         "/api/v1/case-receipts",
+diff --git a/frontend/src/api/grantFees.ts b/frontend/src/api/grantFees.ts
+index 3b5daa1..620e012 100644
+--- a/frontend/src/api/grantFees.ts
++++ b/frontend/src/api/grantFees.ts
+@@ -1,6 +1,7 @@
+ import { http } from './http'
+ import type {
+     GrantFeeMoney,
++    GrantFeeDraftGenerateResult,
+     GrantFeeTaskClientInstruction,
+     GrantFeeTaskListItem,
+     GrantFeeTaskListParams,
+@@ -29,6 +30,19 @@ interface BackendGrantFeeTaskListResponse {
+     total: number
+ }
+ 
++interface BackendGrantFeeDraftGenerateResponse {
++    task_id: string
++    case_id: string
++    draft_id: string
++    draft_type: string
++    state: string
++    draft_generated: boolean
++    currency: string
++    amount: GrantFeeMoney
++    item_count: number
++    reused: boolean
++}
++
+ function normalizeBoolean(input: boolean | undefined): boolean | undefined {
+     return input === undefined ? undefined : Boolean(input)
+ }
+@@ -63,6 +77,23 @@ function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListIt
+     }
+ }
+ 
++function mapGrantFeeDraftGenerateResult(
++    input: BackendGrantFeeDraftGenerateResponse,
++): GrantFeeDraftGenerateResult {
++    return {
++        task_id: input.task_id,
++        case_id: input.case_id,
++        draft_id: input.draft_id,
++        draft_type: input.draft_type,
++        state: normalizeStatus(input.state),
++        draft_generated: Boolean(input.draft_generated),
++        currency: input.currency,
++        amount: input.amount,
++        item_count: input.item_count,
++        reused: Boolean(input.reused),
++    }
++}
++
+ /**
+  * Get paginated grant-fee task list
+  */
+@@ -100,3 +131,11 @@ export async function getGrantFeeTasks(
+         items: response.data.items.map(mapGrantFeeTask),
+     }
+ }
++
++/**
++ * Generate a grant-fee draft from one task row
++ */
++export async function generateGrantFeeDraft(taskId: string): Promise<GrantFeeDraftGenerateResult> {
++    const response = await http.post<BackendGrantFeeDraftGenerateResponse>(`/grant-fee-tasks/${taskId}/generate-draft`)
++    return mapGrantFeeDraftGenerateResult(response.data)
++}
+diff --git a/frontend/src/api/grantFees.types.ts b/frontend/src/api/grantFees.types.ts
+index 2d98673..3d7fe92 100644
+--- a/frontend/src/api/grantFees.types.ts
++++ b/frontend/src/api/grantFees.types.ts
+@@ -28,6 +28,19 @@ export interface GrantFeeTaskListResponse {
+     total: number
+ }
+ 
++export interface GrantFeeDraftGenerateResult {
++    task_id: string
++    case_id: string
++    draft_id: string
++    draft_type: string
++    state: GrantFeeTaskStatus
++    draft_generated: boolean
++    currency: string
++    amount: GrantFeeMoney
++    item_count: number
++    reused: boolean
++}
++
+ export interface GrantFeeTaskListParams {
+     status?: GrantFeeTaskStatus
+     client_instruction?: GrantFeeTaskClientInstruction
+diff --git a/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue b/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue
+index 51c449c..0c97a42 100644
+--- a/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue
++++ b/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue
+@@ -15,7 +15,7 @@
+ 
+     <el-alert
+       class="page-note"
+-      title="当前页面仅支持查看与筛选，状态操作和草单联动入口暂未开放。"
++      title="当前页面支持查看、筛选与单行草单生成，其他联动暂未开放。"
+       type="info"
+       show-icon
+       :closable="false"
+@@ -98,7 +98,7 @@
+       </div>
+       <div class="summary-card">
+         <span class="summary-label">页面说明</span>
+-        <span class="summary-value summary-note">仅查看与筛选</span>
++        <span class="summary-value summary-note">查看、筛选、单行生成</span>
+       </div>
+     </div>
+ 
+@@ -172,11 +172,16 @@
+           </template>
+         </el-table-column>
+         <el-table-column label="动作入口" min-width="180" fixed="right">
+-          <template #default>
+-            <el-space wrap>
+-              <el-button disabled size="small" type="primary">状态操作</el-button>
+-              <el-button disabled size="small">草单联动</el-button>
+-            </el-space>
++          <template #default="{ row }">
++            <el-button
++              size="small"
++              type="primary"
++              :loading="generatingTaskId === row.task_id"
++              :disabled="!canGenerateDraft(row)"
++              @click="handleGenerateDraft(row)"
++            >
++              生成草单
++            </el-button>
+           </template>
+         </el-table-column>
+       </el-table>
+@@ -188,7 +193,8 @@
+ 
+ <script setup lang="ts">
+ import { computed, onMounted, reactive, ref, watch } from 'vue'
+-import { getGrantFeeTasks } from '../../../api/grantFees'
++import { ElMessage } from 'element-plus'
++import { generateGrantFeeDraft, getGrantFeeTasks } from '../../../api/grantFees'
+ import type {
+   GrantFeeTaskClientInstruction,
+   GrantFeeTaskListItem,
+@@ -204,6 +210,7 @@ import PaginationBar from '../../../components/state/PaginationBar.vue'
+ const tasks = ref<GrantFeeTaskListItem[]>([])
+ const loading = ref(false)
+ const error = ref<ApiError | null>(null)
++const generatingTaskId = ref<string | null>(null)
+ const page = ref(1)
+ const pageSize = ref(20)
+ const total = ref(0)
+@@ -270,6 +277,10 @@ function clientInstructionText(input: GrantFeeTaskClientInstruction): string {
+   return labels[input] || input
+ }
+ 
++function canGenerateDraft(row: GrantFeeTaskListItem): boolean {
++  return row.status === 'READY_TO_DRAFT' && !row.draft_generated && generatingTaskId.value !== row.task_id
++}
++
+ function buildParams() {
+   const [date_from, date_to] = filters.date_range
+   return {
+@@ -299,6 +310,26 @@ async function fetchTasks() {
+   }
+ }
+ 
++async function handleGenerateDraft(row: GrantFeeTaskListItem) {
++  if (!canGenerateDraft(row)) {
++    ElMessage.warning('当前任务不能生成草单')
++    return
++  }
++
++  generatingTaskId.value = row.task_id
++  try {
++    const result = await generateGrantFeeDraft(row.task_id)
++    ElMessage.success(result.reused ? '草单已存在，已复用' : '草单生成成功')
++    await fetchTasks()
++  } catch (err) {
++    const apiError = err as ApiError | undefined
++    const message = apiError?.message || '草单生成失败，请重试'
++    ElMessage.error(message)
++  } finally {
++    generatingTaskId.value = null
++  }
++}
++
+ function applyFilters() {
+   page.value = 1
+   void fetchTasks()

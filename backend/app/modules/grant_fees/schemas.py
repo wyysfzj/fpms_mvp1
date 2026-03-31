@@ -54,3 +54,18 @@ class GrantFeeTaskListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class GrantFeeDraftGenerateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    task_id: str
+    case_id: str
+    draft_id: str
+    draft_type: str
+    state: str
+    draft_generated: bool
+    currency: str
+    amount: Decimal
+    item_count: int
+    reused: bool = Field(default=False)

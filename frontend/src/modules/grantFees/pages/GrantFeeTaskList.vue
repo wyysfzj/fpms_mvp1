@@ -15,7 +15,7 @@
 
     <el-alert
       class="page-note"
-      title="当前页面仅支持查看与筛选，状态操作和草单联动入口暂未开放。"
+      title="当前页面支持查看、筛选与单行草单生成，其他联动暂未开放。"
       type="info"
       show-icon
       :closable="false"
@@ -98,7 +98,7 @@
       </div>
       <div class="summary-card">
         <span class="summary-label">页面说明</span>
-        <span class="summary-value summary-note">仅查看与筛选</span>
+        <span class="summary-value summary-note">查看、筛选、单行生成</span>
       </div>
     </div>
 
@@ -172,11 +172,16 @@
           </template>
         </el-table-column>
         <el-table-column label="动作入口" min-width="180" fixed="right">
-          <template #default>
-            <el-space wrap>
-              <el-button disabled size="small" type="primary">状态操作</el-button>
-              <el-button disabled size="small">草单联动</el-button>
-            </el-space>
+          <template #default="{ row }">
+            <el-button
+              size="small"
+              type="primary"
+              :loading="generatingTaskId === row.task_id"
+              :disabled="!canGenerateDraft(row)"
+              @click="handleGenerateDraft(row)"
+            >
+              生成草单
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -188,7 +193,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { getGrantFeeTasks } from '../../../api/grantFees'
+import { ElMessage } from 'element-plus'
+import { generateGrantFeeDraft, getGrantFeeTasks } from '../../../api/grantFees'
 import type {
   GrantFeeTaskClientInstruction,
   GrantFeeTaskListItem,
@@ -204,6 +210,7 @@ import PaginationBar from '../../../components/state/PaginationBar.vue'
 const tasks = ref<GrantFeeTaskListItem[]>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
+const generatingTaskId = ref<string | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -270,6 +277,10 @@ function clientInstructionText(input: GrantFeeTaskClientInstruction): string {
   return labels[input] || input
 }
 
+function canGenerateDraft(row: GrantFeeTaskListItem): boolean {
+  return row.status === 'READY_TO_DRAFT' && !row.draft_generated && generatingTaskId.value !== row.task_id
+}
+
 function buildParams() {
   const [date_from, date_to] = filters.date_range
   return {
@@ -296,6 +307,26 @@ async function fetchTasks() {
     error.value = err as ApiError
   } finally {
     loading.value = false
+  }
+}
+
+async function handleGenerateDraft(row: GrantFeeTaskListItem) {
+  if (!canGenerateDraft(row)) {
+    ElMessage.warning('当前任务不能生成草单')
+    return
+  }
+
+  generatingTaskId.value = row.task_id
+  try {
+    const result = await generateGrantFeeDraft(row.task_id)
+    ElMessage.success(result.reused ? '草单已存在，已复用' : '草单生成成功')
+    await fetchTasks()
+  } catch (err) {
+    const apiError = err as ApiError | undefined
+    const message = apiError?.message || '草单生成失败，请重试'
+    ElMessage.error(message)
+  } finally {
+    generatingTaskId.value = null
   }
 }
 

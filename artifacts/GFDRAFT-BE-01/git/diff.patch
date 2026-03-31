@@ -1,0 +1,536 @@
+diff --git a/backend/app/modules/grant_fees/api.py b/backend/app/modules/grant_fees/api.py
+index 4090949..7dd7e9a 100644
+--- a/backend/app/modules/grant_fees/api.py
++++ b/backend/app/modules/grant_fees/api.py
+@@ -5,9 +5,11 @@ from datetime import date
+ from fastapi import APIRouter, Depends, Query
+ from sqlalchemy.orm import Session
+ 
+-from app.api.deps import require_perm
++from app.api.deps import current_user_dep, require_perm
+ from app.db.session import get_db
++from app.modules.auth.models import T_User
+ from app.modules.grant_fees.schemas import (
++    GrantFeeDraftGenerateOut,
+     GrantFeeTaskListResponse,
+     GrantFeeTaskModuleOut,
+     GrantFeeTaskStateActionIn,
+@@ -15,6 +17,7 @@ from app.modules.grant_fees.schemas import (
+ )
+ from app.modules.grant_fees.service import (
+     apply_grant_fee_task_action,
++    generate_grant_fee_draft,
+     get_grant_fee_module_contract,
+     get_grant_fee_task_state,
+     list_grant_fee_tasks,
+@@ -92,3 +95,15 @@ def put_grant_fee_task_state_endpoint(
+     return GrantFeeTaskStateOut.model_validate(
+         apply_grant_fee_task_action(db, task_id=task_id, action=payload.action)
+     )
++
++
++@router.post("/grant-fee-tasks/{task_id}/generate-draft", summary="Generate grant fee draft")
++def post_grant_fee_task_generate_draft_endpoint(
++    task_id: str,
++    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
++    current_user: T_User = current_user_dep,
++    db: Session = Depends(get_db),
++) -> GrantFeeDraftGenerateOut:
++    return GrantFeeDraftGenerateOut.model_validate(
++        generate_grant_fee_draft(db, task_id=task_id, actor_id=current_user.id)
++    )
+diff --git a/backend/app/modules/grant_fees/schemas.py b/backend/app/modules/grant_fees/schemas.py
+index 4ca421e..8011860 100644
+--- a/backend/app/modules/grant_fees/schemas.py
++++ b/backend/app/modules/grant_fees/schemas.py
+@@ -54,3 +54,18 @@ class GrantFeeTaskListResponse(BaseModel):
+     page: int
+     page_size: int
+     total: int
++
++
++class GrantFeeDraftGenerateOut(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    task_id: str
++    case_id: str
++    draft_id: str
++    draft_type: str
++    state: str
++    draft_generated: bool
++    currency: str
++    amount: Decimal
++    item_count: int
++    reused: bool = Field(default=False)
+diff --git a/backend/app/modules/grant_fees/service.py b/backend/app/modules/grant_fees/service.py
+index 2517fb8..03bd26c 100644
+--- a/backend/app/modules/grant_fees/service.py
++++ b/backend/app/modules/grant_fees/service.py
+@@ -1,12 +1,16 @@
+ from __future__ import annotations
+ 
++from decimal import Decimal
+ from typing import Any
++from uuid import uuid4
+ 
+ from sqlalchemy import and_, select
+ from sqlalchemy.orm import Session
+ 
+ from app.core.errors import raise_business_error
+-from app.modules.fees.models import T_GrantFeeTask
++from app.modules.cases.models import Case
++from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
++from app.modules.fees.service import recalc_fee_draft_totals
+ 
+ GRANT_FEE_TASK_PERMISSION_CODES = ("GrantFeeTask.Read", "GrantFeeTask.Write")
+ GRANT_FEE_TASK_STATES = ("OPEN", "WAITING_CLIENT", "READY_TO_DRAFT", "DRAFT_GENERATED", "DONE")
+@@ -18,6 +22,11 @@ GRANT_FEE_TASK_ACTIONS = (
+     "mark_done",
+ )
+ 
++GRANT_FEE_DRAFT_TYPE = "GRANT_FEE"
++GRANT_FEE_DRAFT_MARKER_PREFIX = "GRANT_FEE_TASK:"
++GRANT_FEE_GOV_FEE_CODE = "GRANT_FEE_GOV"
++GRANT_FEE_SERVICE_FEE_CODE = "GRANT_FEE_SERVICE"
++
+ _STATE_ALLOWED_ACTIONS = {
+     "OPEN": ("mark_waiting_client",),
+     "WAITING_CLIENT": ("record_pay_instruction", "record_abandon_instruction"),
+@@ -115,6 +124,26 @@ def _normalize_action(action: Any) -> str:
+     return str(action or "").strip()
+ 
+ 
++def _draft_marker(task_id: str) -> str:
++    return f"{GRANT_FEE_DRAFT_MARKER_PREFIX}{task_id}"
++
++
++def _find_existing_grant_fee_draft(db: Session, *, marker: str) -> FeeDraft | None:
++    stmt = (
++        select(FeeDraft)
++        .where(
++            FeeDraft.draft_type == GRANT_FEE_DRAFT_TYPE,
++            FeeDraft.id.in_(select(FeeItem.draft_id).where(FeeItem.remark == marker)),
++        )
++        .order_by(FeeDraft.created_at.asc(), FeeDraft.id.asc())
++    )
++    return db.execute(stmt).scalars().first()
++
++
++def _count_fee_items_for_draft(db: Session, *, draft_id: str) -> int:
++    return len(db.execute(select(FeeItem).where(FeeItem.draft_id == draft_id)).scalars().all())
++
++
+ def derive_grant_fee_task_state(task: T_GrantFeeTask) -> str:
+     notify_count = int(task.notify_count or 0)
+     client_instruction = (task.client_instruction or "").strip().upper() or "NONE"
+@@ -184,6 +213,130 @@ def apply_grant_fee_task_action(
+     return _serialize_grant_fee_task_state(task, state=derive_grant_fee_task_state(task))
+ 
+ 
++def generate_grant_fee_draft(
++    db: Session,
++    *,
++    task_id: str,
++    actor_id: str | None,
++) -> dict[str, Any]:
++    task = _load_grant_fee_task(db, task_id=task_id)
++    state = derive_grant_fee_task_state(task)
++    marker = _draft_marker(task_id)
++    existing_draft = _find_existing_grant_fee_draft(db, marker=marker)
++
++    if existing_draft is not None:
++        if not task.draft_generated:
++            task.draft_generated = True
++            db.commit()
++            db.refresh(task)
++            state = derive_grant_fee_task_state(task)
++        return _serialize_grant_fee_draft_generation_result(
++            task,
++            draft=existing_draft,
++            state=state,
++            reused=True,
++            item_count=_count_fee_items_for_draft(db, draft_id=existing_draft.id),
++        )
++
++    normalized_currency = str(task.currency or "").strip().upper()
++    if state != "READY_TO_DRAFT" or task.draft_generated or not str(task.case_id or "").strip():
++        raise_business_error(
++            "GRANT_FEE_DRAFT_PRECONDITION_FAILED",
++            "Grant fee task is not ready to generate draft",
++            details={
++                "task_id": task_id,
++                "state": state,
++                "draft_generated": bool(task.draft_generated),
++                "case_id": task.case_id,
++                "currency": task.currency,
++            },
++            status_code=400,
++        )
++    if not normalized_currency:
++        raise_business_error(
++            "GRANT_FEE_DRAFT_PRECONDITION_FAILED",
++            "Grant fee task currency is required",
++            details={"task_id": task_id, "currency": task.currency},
++            status_code=400,
++        )
++
++    case = db.execute(select(Case).where(Case.id == task.case_id)).scalar_one_or_none()
++    if case is None:
++        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
++
++    gov_amount = Decimal(task.gov_fee_amt or 0)
++    service_amount = Decimal(task.service_fee_amt or 0)
++    total_amount = gov_amount + service_amount
++
++    draft = FeeDraft(
++        id=str(uuid4()),
++        case_id=case.id,
++        client_id=case.client_id,
++        draft_type=GRANT_FEE_DRAFT_TYPE,
++        currency=normalized_currency,
++        status="OPEN",
++        total_gov=Decimal("0"),
++        total_service=Decimal("0"),
++        total_misc=Decimal("0"),
++        amount=Decimal("0"),
++        created_by=actor_id,
++        updated_by=actor_id,
++    )
++    db.add(draft)
++    db.flush()
++
++    fee_items = [
++        {
++            "fee_code": GRANT_FEE_GOV_FEE_CODE,
++            "fee_name": "Grant fee government fee",
++            "fee_type": "GOV",
++            "amount": gov_amount,
++        },
++        {
++            "fee_code": GRANT_FEE_SERVICE_FEE_CODE,
++            "fee_name": "Grant fee service fee",
++            "fee_type": "SERVICE",
++            "amount": service_amount,
++        },
++    ]
++    for line in fee_items:
++        db.add(
++            FeeItem(
++                id=str(uuid4()),
++                draft_id=draft.id,
++                case_id=case.id,
++                fee_code=line["fee_code"],
++                fee_name=line["fee_name"],
++                fee_type=line["fee_type"],
++                quantity=Decimal("1"),
++                unit_price=line["amount"],
++                amount=line["amount"],
++                remark=marker,
++                created_by=actor_id,
++                updated_by=actor_id,
++            )
++        )
++
++    db.flush()
++    recalc_fee_draft_totals(db, draft_id=draft.id)
++    draft = db.get(FeeDraft, draft.id)
++    if draft is None:
++        raise_business_error("GRANT_FEE_DRAFT_GENERATION_FAILED", "Draft generation failed", status_code=500)
++
++    task.draft_generated = True
++    db.commit()
++    db.refresh(task)
++    db.refresh(draft)
++    return _serialize_grant_fee_draft_generation_result(
++        task,
++        draft=draft,
++        state=derive_grant_fee_task_state(task),
++        reused=False,
++        item_count=len(fee_items),
++        amount=total_amount,
++    )
++
++
+ def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict[str, Any]:
+     return {
+         "task_id": task.id,
+@@ -212,3 +365,30 @@ def _serialize_grant_fee_task_list_item(task: T_GrantFeeTask, *, state: str) ->
+         "notice_sent": bool(task.notice_sent),
+         "is_overdue": bool(task.is_overdue),
+     }
++
++
++def _serialize_grant_fee_draft_generation_result(
++    task: T_GrantFeeTask,
++    *,
++    draft: FeeDraft,
++    state: str,
++    reused: bool,
++    item_count: int | None = None,
++    amount: Decimal | None = None,
++) -> dict[str, Any]:
++    draft_amount = amount if amount is not None else Decimal(draft.amount or 0)
++    if item_count is None:
++        item_count = 0
++
++    return {
++        "task_id": task.id,
++        "case_id": task.case_id,
++        "draft_id": draft.id,
++        "draft_type": draft.draft_type,
++        "state": state,
++        "draft_generated": bool(task.draft_generated),
++        "currency": draft.currency,
++        "amount": draft_amount,
++        "item_count": item_count,
++        "reused": reused,
++    }
+diff --git a/backend/tests/test_grant_fee_draft_linkage_api.py b/backend/tests/test_grant_fee_draft_linkage_api.py
+new file mode 100644
+index 0000000..5f90454
+--- /dev/null
++++ b/backend/tests/test_grant_fee_draft_linkage_api.py
+@@ -0,0 +1,243 @@
++from __future__ import annotations
++
++from datetime import date
++from decimal import Decimal
++from uuid import uuid4
++
++from fastapi.testclient import TestClient
++from sqlalchemy import select
++from sqlalchemy.orm import sessionmaker
++
++import app.api.deps as deps
++from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
++from app.modules.grant_fees.schemas import GrantFeeDraftGenerateOut
++from app.modules.grant_fees.service import derive_grant_fee_task_state
++
++STATE_BASE = "/api/v1/grant-fee-tasks"
++GENERATE_PATH_SUFFIX = "/generate-draft"
++
++
++def _uid(prefix: str) -> str:
++    return f"{prefix}-{uuid4().hex[:8].upper()}"
++
++
++def _create_client(client: TestClient, auth_headers: dict[str, str]) -> dict:
++    resp = client.post(
++        "/api/v1/clients",
++        json={
++            "client_code": _uid("GFD-CLI"),
++            "name_cn": _uid("GFD-CLIENT"),
++            "default_currency": "CNY",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 201, resp.text
++    return resp.json()
++
++
++def _create_case(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    *,
++    client_id: str | None = None,
++) -> dict:
++    payload = {
++        "case_no": _uid("GFD-CASE"),
++        "case_type": "NORMAL",
++        "patent_category": "INV",
++        "flow_dir": "CN_DOMESTIC",
++        "title_cn": "Grant Fee Draft Test Case",
++    }
++    if client_id:
++        payload["client_id"] = client_id
++
++    resp = client.post("/api/v1/cases", json=payload, headers=auth_headers)
++    assert resp.status_code == 201, resp.text
++    return resp.json()
++
++
++def _insert_task(
++    session_factory: sessionmaker,
++    *,
++    case_id: str,
++    **overrides,
++) -> str:
++    with session_factory() as db:
++        task = T_GrantFeeTask(
++            case_id=case_id,
++            due_date=overrides.pop("due_date", date(2026, 4, 30)),
++            gov_fee_amt=overrides.pop("gov_fee_amt", Decimal("0")),
++            service_fee_amt=overrides.pop("service_fee_amt", Decimal("0")),
++            currency=overrides.pop("currency", "CNY"),
++            client_instruction=overrides.pop("client_instruction", "PAY"),
++            notify_count=overrides.pop("notify_count", 2),
++            draft_generated=overrides.pop("draft_generated", False),
++            notice_sent=overrides.pop("notice_sent", True),
++            is_overdue=overrides.pop("is_overdue", False),
++            remark=overrides.pop("remark", None),
++        )
++        db.add(task)
++        db.commit()
++        db.refresh(task)
++        return task.id
++
++
++def _count_fee_drafts(
++    session_factory: sessionmaker,
++    *,
++    case_id: str,
++    draft_type: str = "GRANT_FEE",
++) -> int:
++    with session_factory() as db:
++        return (
++            db.execute(
++                select(FeeDraft).where(
++                    FeeDraft.case_id == case_id,
++                    FeeDraft.draft_type == draft_type,
++                    FeeDraft.status == "OPEN",
++                )
++            )
++            .scalars()
++            .all()
++            .__len__()
++        )
++
++
++def _load_task(session_factory: sessionmaker, task_id: str) -> T_GrantFeeTask:
++    with session_factory() as db:
++        return db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.id == task_id)).scalar_one()
++
++
++def _count_fee_items_for_draft(session_factory: sessionmaker, draft_id: str) -> int:
++    with session_factory() as db:
++        return (
++            db.execute(select(FeeItem).where(FeeItem.draft_id == draft_id))
++            .scalars()
++            .all()
++            .__len__()
++        )
++
++
++def test_grant_fee_generate_draft_creates_fee_draft_and_items_and_marks_task_generated(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_row = _create_client(client, auth_headers)
++    case = _create_case(client, auth_headers, client_id=client_row["id"])
++    task_id = _insert_task(session_factory, case_id=case["id"])
++
++    resp = client.post(f"{STATE_BASE}/{task_id}{GENERATE_PATH_SUFFIX}", headers=auth_headers)
++    assert resp.status_code == 200, resp.text
++
++    data = resp.json()
++    assert set(data) == {
++        "task_id",
++        "case_id",
++        "draft_id",
++        "draft_type",
++        "state",
++        "draft_generated",
++        "currency",
++        "amount",
++        "item_count",
++        "reused",
++    }
++    assert GrantFeeDraftGenerateOut.model_validate(data)
++    assert data["task_id"] == task_id
++    assert data["case_id"] == case["id"]
++    assert data["draft_type"] == "GRANT_FEE"
++    assert data["state"] == "DRAFT_GENERATED"
++    assert data["draft_generated"] is True
++    assert data["currency"] == "CNY"
++    assert Decimal(str(data["amount"])) == Decimal("0")
++    assert data["item_count"] == 2
++    assert data["reused"] is False
++
++    with session_factory() as db:
++        task = db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.id == task_id)).scalar_one()
++        drafts = (
++            db.execute(
++                select(FeeDraft).where(
++                    FeeDraft.case_id == case["id"],
++                    FeeDraft.draft_type == "GRANT_FEE",
++                    FeeDraft.status == "OPEN",
++                )
++            )
++            .scalars()
++            .all()
++        )
++
++    assert task.draft_generated is True
++    assert derive_grant_fee_task_state(task) == "DRAFT_GENERATED"
++    assert len(drafts) == 1
++    draft = drafts[0]
++    assert draft.client_id == client_row["id"]
++    assert draft.currency == "CNY"
++    assert draft.amount == Decimal("0")
++    assert _count_fee_items_for_draft(session_factory, draft.id) == 2
++
++
++def test_grant_fee_generate_draft_is_idempotent_for_same_task(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    client_row = _create_client(client, auth_headers)
++    case = _create_case(client, auth_headers, client_id=client_row["id"])
++    task_id = _insert_task(session_factory, case_id=case["id"])
++
++    first_resp = client.post(f"{STATE_BASE}/{task_id}{GENERATE_PATH_SUFFIX}", headers=auth_headers)
++    assert first_resp.status_code == 200, first_resp.text
++    first_payload = first_resp.json()
++
++    second_resp = client.post(f"{STATE_BASE}/{task_id}{GENERATE_PATH_SUFFIX}", headers=auth_headers)
++    assert second_resp.status_code == 200, second_resp.text
++    second_payload = second_resp.json()
++
++    assert second_payload["reused"] is True
++    assert second_payload["draft_id"] == first_payload["draft_id"]
++    assert second_payload["amount"] == first_payload["amount"]
++    assert second_payload["item_count"] == first_payload["item_count"]
++    assert _count_fee_drafts(session_factory, case_id=case["id"]) == 1
++
++
++def test_grant_fee_generate_draft_rejects_non_ready_task(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    session_factory: sessionmaker,
++) -> None:
++    case = _create_case(client, auth_headers)
++    task_id = _insert_task(
++        session_factory,
++        case_id=case["id"],
++        client_instruction="NONE",
++        notify_count=0,
++        draft_generated=False,
++        notice_sent=False,
++    )
++
++    resp = client.post(f"{STATE_BASE}/{task_id}{GENERATE_PATH_SUFFIX}", headers=auth_headers)
++    assert resp.status_code == 400, resp.text
++    body = resp.json()
++    assert body["error"]["code"] == "GRANT_FEE_DRAFT_PRECONDITION_FAILED"
++
++
++def test_grant_fee_generate_draft_requires_write_permission(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    monkeypatch,
++    session_factory: sessionmaker,
++) -> None:
++    client_row = _create_client(client, auth_headers)
++    case = _create_case(client, auth_headers, client_id=client_row["id"])
++    task_id = _insert_task(session_factory, case_id=case["id"])
++
++    def _no_perms(_db, _user_id) -> set[str]:
++        return set()
++
++    monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
++
++    resp = client.post(f"{STATE_BASE}/{task_id}{GENERATE_PATH_SUFFIX}", headers=auth_headers)
++    assert resp.status_code == 403, resp.text
++    assert resp.json()["error"]["details"]["required_perm"] == "GrantFeeTask.Write"
