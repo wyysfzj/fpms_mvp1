@@ -11,10 +11,19 @@ from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategor
 class CaseApplicantIn(BaseModel):
     seq: int = Field(..., ge=1)
     is_first: bool = False
+    applicant_id: str | None = Field(default=None, max_length=36)
     name_cn: str | None = None
     name_en: str | None = None
     address_cn: str | None = None
     address_en: str | None = None
+
+    @field_validator("applicant_id", mode="before")
+    @classmethod
+    def _blank_applicant_id_to_none(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return value
 
 
 class CaseInventorIn(BaseModel):

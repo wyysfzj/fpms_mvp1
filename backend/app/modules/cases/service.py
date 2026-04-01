@@ -21,6 +21,7 @@ from app.modules.cases.models import (
 )
 from app.modules.cases.schemas import (
     CaseAgentSplitIn,
+    CaseApplicantIn,
     CaseBatchFilingActionOut,
     CaseBatchFilingCandidateItem,
     CaseCreate,
@@ -31,6 +32,7 @@ from app.modules.cases.schemas import (
     CaseUpdateFull,
     CaseUpdateLimited,
 )
+from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress
 
 _CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
@@ -116,6 +118,16 @@ def validate_client_exists(db: Session, client_id: str | None) -> None:
     exists = db.query(Client.id).filter(Client.id == client_id).first()
     if not exists:
         raise_business_error("CLIENT_NOT_FOUND", "Client not found", status_code=404)
+
+
+def validate_case_applicant_links(db: Session, applicants: list[CaseApplicantIn]) -> None:
+    for applicant in applicants:
+        applicant_id = getattr(applicant, "applicant_id", None)
+        if not applicant_id:
+            continue
+        exists = db.query(Applicant.id).filter(Applicant.id == applicant_id).first()
+        if not exists:
+            raise_business_error("APPLICANT_NOT_FOUND", "Applicant not found", status_code=404)
 
 
 def validate_foreign_agent(
@@ -715,6 +727,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
     bio_deposits_dict = [bio_deposit.model_dump() for bio_deposit in data.bio_deposits]
     if applicants_dict:
         validate_applicants(applicants_dict)
+        validate_case_applicant_links(db, data.applicants)
     validate_client_exists(db, data.client_id)
     validate_foreign_agent(db, flow_dir=data.flow_dir.value, foreign_agent_id=data.foreign_agent_id)
     validate_country_fields(flow_dir=data.flow_dir.value, to_country=data.to_country)
@@ -813,6 +826,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
             T_CaseApplicant(
                 id=str(uuid4()),
                 case_id=case.id,
+                applicant_id=applicant.applicant_id,
                 seq=applicant.seq,
                 is_first=applicant.is_first,
                 name_cn=applicant.name_cn,
@@ -1123,6 +1137,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         applicants_dict = [applicant.model_dump() for applicant in data.applicants]
         if applicants_dict:
             validate_applicants(applicants_dict)
+            validate_case_applicant_links(db, data.applicants)
 
         db.query(T_CaseApplicant).filter(T_CaseApplicant.case_id == case_id).delete()
 
@@ -1131,6 +1146,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
                 T_CaseApplicant(
                     id=str(uuid4()),
                     case_id=case.id,
+                    applicant_id=applicant.applicant_id,
                     seq=applicant.seq,
                     is_first=applicant.is_first,
                     name_cn=applicant.name_cn,

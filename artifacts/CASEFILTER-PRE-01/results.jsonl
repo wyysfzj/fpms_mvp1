@@ -1,0 +1,5 @@
+{"step":"red-test","cmd":"cd backend && PYTHONPATH=. pytest -q tests/test_case_applicant_masterdata_link_write_path.py::test_blank_applicant_id_normalizes_to_none_on_create_and_update","rc":1}
+{"step":"lint","cmd":"python3 -m ruff check backend/app/modules/cases/schemas.py backend/app/modules/cases/service.py backend/tests/test_case_applicant_masterdata_link_write_path.py","rc":0}
+{"step":"test","cmd":"cd backend && PYTHONPATH=. pytest -q tests/test_case_applicant_masterdata_link_write_path.py","rc":0}
+{"step":"stability-test","cmd":"cd backend && PYTHONPATH=. pytest -q tests/test_case_applicant_masterdata_link_write_path.py","rc":0}
+{"step":"task_validate","cmd":"./scripts/task_validate.sh CASEFILTER-PRE-01","rc":0}

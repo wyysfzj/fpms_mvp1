@@ -1,0 +1,5 @@
+{"step":"lint","cmd":"python3 -m ruff check backend/app/modules/cases/models.py backend/alembic/versions/casefilter_pre_01_case_applicant_masterdata_link.py backend/tests/test_case_applicant_masterdata_link_schema.py","rc":0}
+{"step":"test","cmd":"pytest -q backend/tests/test_case_applicant_masterdata_link_schema.py","rc":0}
+{"step":"upgrade","cmd":"cd backend && DATABASE_URL=sqlite:////tmp/fpms_casefilter_pre_verify_$$.db alembic upgrade head","rc":0}
+{"step":"gate","cmd":"./scripts/task_validate.sh CASEFILTER-DB-01","rc":1}
+{"step":"gate","cmd":"./scripts/task_validate.sh CASEFILTER-DB-01","rc":0}

@@ -1,0 +1,2 @@
+{"step":"lint","cmd":"./scripts/task_validate.sh CASEFILTER-DB-01","rc":0}
+{"step":"test","cmd":"./scripts/task_validate.sh CASEFILTER-PRE-01","rc":0}
