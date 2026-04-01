@@ -70,6 +70,7 @@ class DocumentOut(BaseModel):
     case_id: str
     case_no: str | None = None
     doc_template_id: str | None
+    template_code: str | None = None
     direction: DocumentDirection
     doc_date: date | None
     title: str | None

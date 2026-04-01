@@ -208,8 +208,11 @@ def update_doc_template_endpoint(
 @router.get("/documents", response_model=DocumentListOut, summary="List documents")
 def get_documents(
     q: str | None = Query(default=None),
+    doc_name: str | None = Query(default=None),
     direction: DocumentDirection | None = Query(default=None),
+    template_code: str | None = Query(default=None),
     doc_template_id: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
     case_id: str | None = Query(default=None),
     client_id: str | None = Query(default=None),
     need_reply: bool | None = Query(default=None),
@@ -242,8 +245,11 @@ def get_documents(
     documents, total = list_documents(
         db,
         q=q,
+        doc_name=doc_name,
         direction=direction,
+        template_code=template_code,
         doc_template_id=doc_template_id,
+        case_no=case_no,
         case_id=case_id,
         client_id=client_id,
         need_reply=need_reply,
@@ -259,6 +265,13 @@ def get_documents(
     if case_ids:
         cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
         case_no_map = {c.id: c.case_no for c in cases}
+    template_ids = {doc.doc_template_id for doc in documents if doc.doc_template_id}
+    template_code_map: dict[str, str] = {}
+    if template_ids:
+        templates = (
+            db.query(DocTemplate.id, DocTemplate.code).filter(DocTemplate.id.in_(template_ids)).all()
+        )
+        template_code_map = {t.id: t.code for t in templates}
 
     items = [
         DocumentOut(
@@ -266,6 +279,9 @@ def get_documents(
             case_id=document.case_id,
             case_no=case_no_map.get(document.case_id) if document.case_id else None,
             doc_template_id=document.doc_template_id,
+            template_code=template_code_map.get(document.doc_template_id)
+            if document.doc_template_id
+            else None,
             direction=document.direction,
             doc_date=document.doc_date,
             title=document.title,

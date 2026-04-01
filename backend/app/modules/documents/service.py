@@ -274,8 +274,11 @@ def list_documents(
     db: Session,
     *,
     q: str | None = None,
+    doc_name: str | None = None,
     direction: DocumentDirection | None = None,
+    template_code: str | None = None,
     doc_template_id: str | None = None,
+    case_no: str | None = None,
     case_id: str | None = None,
     client_id: str | None = None,
     need_reply: bool | None = None,
@@ -287,6 +290,7 @@ def list_documents(
 ) -> tuple[list[Document], int]:
     """List documents with filters and pagination."""
     stmt = select(Document)
+    joined_case = False
 
     if q:
         q_like = f"%{q.lower()}%"
@@ -296,15 +300,27 @@ def list_documents(
                 func.lower(Document.ref_no).like(q_like),
             )
         )
+    if doc_name:
+        stmt = stmt.where(func.lower(Document.title).like(f"%{doc_name.lower()}%"))
 
     if direction:
         stmt = stmt.where(Document.direction == direction)
+    if template_code:
+        stmt = stmt.join(DocTemplate, Document.doc_template_id == DocTemplate.id)
+        stmt = stmt.where(func.lower(DocTemplate.code) == template_code.lower())
     if doc_template_id:
         stmt = stmt.where(Document.doc_template_id == doc_template_id)
+    if case_no:
+        stmt = stmt.join(Case, Document.case_id == Case.id)
+        joined_case = True
+        stmt = stmt.where(func.lower(Case.case_no).like(f"%{case_no.lower()}%"))
     if case_id:
         stmt = stmt.where(Document.case_id == case_id)
     if client_id:
-        stmt = stmt.join(Case, Document.case_id == Case.id).where(Case.client_id == client_id)
+        if not joined_case:
+            stmt = stmt.join(Case, Document.case_id == Case.id)
+            joined_case = True
+        stmt = stmt.where(Case.client_id == client_id)
     if need_reply is not None:
         stmt = stmt.where(Document.need_reply.is_(need_reply))
     if replied is True:

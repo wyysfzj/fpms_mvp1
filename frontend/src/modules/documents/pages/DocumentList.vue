@@ -16,8 +16,8 @@
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6">
         <el-input
-          v-model="filterKeyword"
-          placeholder="按标题或文号搜索"
+          v-model="filterDocName"
+          placeholder="按文件名称搜索"
           clearable
           @keyup.enter="onFilterChange"
           @clear="onFilterChange"
@@ -31,25 +31,18 @@
         </el-select>
       </el-col>
       <el-col :span="6">
-        <el-select
-          v-model="filterClientId"
-          placeholder="全部客户"
+        <el-input
+          v-model="filterCaseNo"
+          placeholder="按案件号搜索"
           clearable
-          filterable
-          @change="onFilterChange"
-        >
-          <el-option
-            v-for="c in clientOptions"
-            :key="c.id"
-            :label="c.name"
-            :value="c.id"
-          />
-        </el-select>
+          @keyup.enter="onFilterChange"
+          @clear="onFilterChange"
+        />
       </el-col>
       <el-col :span="6">
         <el-select
-          v-model="filterTemplateId"
-          placeholder="全部模板"
+          v-model="filterTemplateCode"
+          placeholder="全部模板代码"
           clearable
           filterable
           @change="onFilterChange"
@@ -58,7 +51,7 @@
             v-for="t in templateOptions"
             :key="t.id"
             :label="`${t.code} — ${t.name}`"
-            :value="t.id"
+            :value="t.code"
           />
         </el-select>
       </el-col>
@@ -87,6 +80,22 @@
           <el-option label="需回复" value="PENDING" />
           <el-option label="已回复" value="DONE" />
           <el-option label="无需回复" value="NONE" />
+        </el-select>
+      </el-col>
+      <el-col :span="6">
+        <el-select
+          v-model="filterClientId"
+          placeholder="全部客户"
+          clearable
+          filterable
+          @change="onFilterChange"
+        >
+          <el-option
+            v-for="c in clientOptions"
+            :key="c.id"
+            :label="c.name"
+            :value="c.id"
+          />
         </el-select>
       </el-col>
       <el-col :span="6">
@@ -138,9 +147,9 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="doc_type" :label="ZH.docList.type" width="120">
+        <el-table-column label="模板代码" width="140">
           <template #default="{ row }">
-            {{ row.doc_type || '-' }}
+            {{ row.template_code || '-' }}
           </template>
         </el-table-column>
         <el-table-column :label="ZH.docList.date" width="120">
@@ -201,10 +210,11 @@ const error = ref<ApiError | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const filterKeyword = ref('')
+const filterDocName = ref('')
+const filterCaseNo = ref('')
 const filterDirection = ref<'' | 'IN' | 'OUT'>('')
 const filterClientId = ref('')
-const filterTemplateId = ref('')
+const filterTemplateCode = ref('')
 const filterDateRange = ref<string[]>([])
 const filterReplyState = ref<'' | 'PENDING' | 'DONE' | 'NONE'>('')
 const clientOptions = ref<Client[]>([])
@@ -232,10 +242,11 @@ async function fetchDocuments() {
     const result = await getDocuments({
       page: page.value,
       page_size: pageSize.value,
-      q: filterKeyword.value.trim() || undefined,
+      doc_name: filterDocName.value.trim() || undefined,
+      case_no: filterCaseNo.value.trim() || undefined,
+      template_code: filterTemplateCode.value || undefined,
       direction: filterDirection.value || undefined,
       client_id: filterClientId.value || undefined,
-      doc_template_id: filterTemplateId.value || undefined,
       need_reply,
       replied,
       date_from: date_from || undefined,
@@ -287,10 +298,11 @@ async function loadTemplates() {
 }
 
 function resetFilters() {
-  filterKeyword.value = ''
+  filterDocName.value = ''
+  filterCaseNo.value = ''
   filterDirection.value = ''
   filterClientId.value = ''
-  filterTemplateId.value = ''
+  filterTemplateCode.value = ''
   filterDateRange.value = []
   filterReplyState.value = ''
   onFilterChange()

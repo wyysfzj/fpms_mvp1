@@ -8,6 +8,7 @@ export interface Document {
     direction: 'IN' | 'OUT'
     case_id?: string
     case_no?: string
+    template_code?: string
     client_id?: string
     client_name?: string
     doc_template_id?: string | null
@@ -28,6 +29,9 @@ export interface DocumentListParams {
     page?: number
     page_size?: number
     q?: string
+    doc_name?: string
+    case_no?: string
+    template_code?: string
     direction?: 'IN' | 'OUT'
     doc_template_id?: string
     case_id?: string

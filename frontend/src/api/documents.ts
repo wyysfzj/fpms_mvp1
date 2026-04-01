@@ -38,6 +38,7 @@ interface BackendDocument {
     client_id?: string | null
     client_name?: string | null
     doc_template_id?: string | null
+    template_code?: string | null
     direction: 'IN' | 'OUT'
     doc_date?: string | null
     title?: string | null
@@ -71,6 +72,7 @@ function mapDocument(input: BackendDocument): Document {
         client_id: input.client_id || undefined,
         client_name: input.client_name || undefined,
         doc_template_id: input.doc_template_id,
+        template_code: input.template_code || undefined,
         direction: input.direction,
         doc_date: input.doc_date || undefined,
         title: input.title || 'Untitled Document',
@@ -151,6 +153,9 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
         page = 1,
         page_size = 20,
         q,
+        doc_name,
+        case_no,
+        template_code,
         direction,
         doc_template_id,
         case_id,
@@ -165,6 +170,9 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
             page,
             page_size,
             ...(q ? { q } : {}),
+            ...(doc_name ? { doc_name } : {}),
+            ...(case_no ? { case_no } : {}),
+            ...(template_code ? { template_code } : {}),
             ...(direction ? { direction } : {}),
             ...(doc_template_id ? { doc_template_id } : {}),
             ...(case_id ? { case_id } : {}),
