@@ -355,6 +355,13 @@ export async function getCases(params: CaseListParams = {}): Promise<CaseListRes
     // Build clean params — only include non-empty filter values
     const queryParams: Record<string, string | number> = { page, page_size }
     for (const [key, value] of Object.entries(filters)) {
+        if (typeof value === 'string') {
+            const normalized = value.trim()
+            if (normalized) {
+                queryParams[key] = normalized
+            }
+            continue
+        }
         if (value !== undefined && value !== null && value !== '') {
             queryParams[key] = String(value)
         }

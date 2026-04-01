@@ -4,12 +4,13 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
 from app.core.pagination import PageResult, offset_limit
 from app.modules.auth.models import T_Role, T_User, T_UserRole
+from app.modules.billing.models import BillItem, PaymentLine
 from app.modules.cases.enums import CaseStatus, CaseType, FlowDir
 from app.modules.cases.models import (
     Case,
@@ -32,6 +33,7 @@ from app.modules.cases.schemas import (
     CaseUpdateFull,
     CaseUpdateLimited,
 )
+from app.modules.fees.models import FeeDraft
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress
 
@@ -57,6 +59,7 @@ _TERMINAL_STATUS_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
 _STATUSES_REQUIRING_APPLICATION_FIELDS = {
     status.value for status in CaseStatus if status != CaseStatus.NOT_FILED
 }
+_CASE_FEE_STATUSES = {"DRAFT", "BILLED", "PAID"}
 
 
 def _normalize_required_text(value: str | None, field_name: str) -> str:
@@ -68,6 +71,11 @@ def _normalize_required_text(value: str | None, field_name: str) -> str:
             status_code=400,
         )
     return normalized
+
+
+def _normalize_search_token(value: str | None) -> str | None:
+    normalized = (value or "").strip().lower().replace(" ", "").replace("-", "")
+    return normalized or None
 
 
 def validate_applicants(applicants: list[dict]) -> None:
@@ -421,6 +429,9 @@ def _apply_case_report_filters(
     primary_agent_id: str | None = None,
     country: str | None = None,
     agent_id: str | None = None,
+    applicant_id: str | None = None,
+    patent_no: str | None = None,
+    fee_status: str | None = None,
 ):
     if q:
         query = query.filter(
@@ -461,6 +472,37 @@ def _apply_case_report_filters(
         query = query.filter(
             or_(Case.primary_agent_id == agent_id, Case.second_agent_id == agent_id)
         )
+    normalized_applicant_id = (applicant_id or "").strip()
+    if normalized_applicant_id:
+        applicant_case_ids = select(T_CaseApplicant.case_id).where(
+            T_CaseApplicant.applicant_id == normalized_applicant_id
+        )
+        query = query.filter(Case.id.in_(applicant_case_ids))
+    normalized_patent_no = _normalize_search_token(patent_no)
+    if normalized_patent_no:
+        patent_no_expr = func.replace(
+            func.replace(func.lower(func.coalesce(Case.patent_no, "")), " ", ""),
+            "-",
+            "",
+        )
+        query = query.filter(patent_no_expr.contains(normalized_patent_no))
+    normalized_fee_status = (fee_status or "").strip().upper()
+    if normalized_fee_status:
+        if normalized_fee_status not in _CASE_FEE_STATUSES:
+            raise_business_error(
+                "CASE_FEE_STATUS_INVALID",
+                "Unsupported fee_status",
+                status_code=400,
+            )
+        has_payment = select(PaymentLine.id).where(PaymentLine.case_id == Case.id).exists()
+        has_bill = select(BillItem.id).where(BillItem.case_id == Case.id).exists()
+        has_draft = select(FeeDraft.id).where(FeeDraft.case_id == Case.id).exists()
+        if normalized_fee_status == "PAID":
+            query = query.filter(has_payment)
+        elif normalized_fee_status == "BILLED":
+            query = query.filter(and_(~has_payment, has_bill))
+        else:
+            query = query.filter(and_(~has_payment, ~has_bill, has_draft))
     return query
 
 
@@ -529,6 +571,9 @@ def list_cases(
     primary_agent_id: str | None = None,
     country: str | None = None,
     agent_id: str | None = None,
+    applicant_id: str | None = None,
+    patent_no: str | None = None,
+    fee_status: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> CaseListReportResponse:
@@ -550,6 +595,9 @@ def list_cases(
         primary_agent_id=primary_agent_id,
         country=country,
         agent_id=agent_id,
+        applicant_id=applicant_id,
+        patent_no=patent_no,
+        fee_status=fee_status,
     )
 
     total = query.count()

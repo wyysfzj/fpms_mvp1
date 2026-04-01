@@ -127,6 +127,9 @@ export interface CaseListParams {
     agent_id?: string
     date_from?: string
     date_to?: string
+    applicant_id?: string
+    patent_no?: string
+    fee_status?: string
 }
 
 export interface CaseReportCount {

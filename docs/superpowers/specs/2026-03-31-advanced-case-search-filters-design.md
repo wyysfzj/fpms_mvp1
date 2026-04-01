@@ -1,19 +1,19 @@
-# P2 #18 高级案件查询增强设计说明（Replanned）
+# P2 #18 高级案件查询增强设计说明（Post-Prerequisite）
 
 ## Story Shape Classification
 
 - `shared_file_density`: `medium`
-- `prereq_dependency_density`: `high`
-- `be_fe_coupling`: `chained (DB -> BE -> FE)`
+- `prereq_dependency_density`: `low`
+- `be_fe_coupling`: `chained (BE -> FE)`
 - `evidence_cost`: `medium`
 
 ## chosen_runbook
 
-- `P0-prereq-heavy-story`
+- `P0-frontend-heavy-story`
 
 ## Problem Statement
 
-当前 repo 已具备现有案件统一列表、基础案件筛选和案件详情中的 `patent_no` 承载，但缺少 review 指定的三项高级案件查询增强能力：`applicant_id`、`patent_no`、`fee_status`。在执行前的仓库核查中发现，`applicant_id` 当前无法按已批准语义实现，因为 case applicant 承载还没有到 applicant masterdata 的稳定查询路径。因此 `P2 #18` 不能再被视为一个直接可执行的单一 query enhancement story，而必须先拆成 prerequisite + follow-up query story。
+`P2 #18` 的 prerequisite 已经关闭：`T_CaseApplicant` 现在具备了到 applicant masterdata 的稳定查询路径。因此这条工作不再是 prerequisite-heavy program，而是一个标准的 case query enhancement story：在现有 `GET /cases` 与现有案件列表页上，补齐 `applicant_id`、`patent_no`、`fee_status` 三个高级筛选。
 
 ## Assumptions
 
@@ -28,22 +28,26 @@
   - 精确匹配
   - 一案多申请人时任一命中即可返回案件
 - `patent_no` 语义固定为：
-  - 对现有案件承载中的编号字段做大小写不敏感模糊匹配
+  - 对现有案件承载中的 `patent_no` 做大小写不敏感模糊匹配
   - 允许基础空格/连接符归一化
 - `fee_status` 语义固定为：
-  - 基于案件关联的 `fee draft / bill / payment` 记录
+  - 基于案件关联的 `FeeDraft / Bill / PaymentLine`
   - 做最小聚合派生状态过滤
-  - 仅作为案件级筛选条件，不做 drill-down
-- 原始第一轮最小闭环曾冻结为：
+  - 第一轮只冻结三档：
+    - `DRAFT`
+    - `BILLED`
+    - `PAID`
+  - 派生优先级：
+    - `PAID`：存在关联 `PaymentLine`
+    - `BILLED`：无 `PaymentLine`，但存在关联 `BillItem`
+    - `DRAFT`：无 `PaymentLine` / `BillItem`，但存在关联 `FeeDraft`
+- 第一轮最小闭环固定为：
   - 在现有 case query 上新增：
     - `applicant_id`
     - `patent_no`
     - `fee_status`
   - 其他既有筛选不变
   - 列表投影不变
-- 执行前重新判定后，当前实际可执行边界变为：
-  - `CASEFILTER-PRE`：仅建立 case applicant -> applicant masterdata 的稳定查询路径
-  - 后续 `CASEFILTER-QRY`：在 prerequisite 完成后再补 `applicant_id` + `patent_no` + `fee_status`
 - 第一轮 deferred slices 固定为：
   - `summary cards`
   - `export`
@@ -53,19 +57,19 @@
 
 ## Scope
 
-- 识别并冻结 `applicant_id` prerequisite
-- 识别并冻结后续 query story 边界
-- 为 prerequisite 与 follow-up query story 提供 decomposition ledger
+- 在现有 `GET /cases` 上新增三个 query filters
+- 在现有 `CaseList.vue` 上新增三个筛选控件
+- 在现有 `cases.ts / cases.types.ts` 上补齐 query contract
 
 ## Explicit Non-scope
 
+- 新建高级搜索页
 - `summary cards`
 - `export`
 - `reporting/dashboard`
 - `fee drill-down`
 - `applicant selector 深度联动`
-- 在本轮 replanning 中直接实现任何产品代码
-- 绕过 prerequisite 继续强做 `applicant_id`
+- 变更现有列表投影
 
 ## Exact Source Tables / Field Inventory
 
@@ -75,13 +79,14 @@
 - `backend/app/modules/cases/models.py::T_CaseApplicant`
 - `backend/app/modules/masterdata/applicants/models.py::Applicant`
 - `backend/app/modules/fees/models.py::FeeDraft`
-- `backend/app/modules/billing/models.py::Bill`
-- `backend/app/modules/billing/models.py::Payment`
+- `backend/app/modules/billing/models.py::BillItem`
+- `backend/app/modules/billing/models.py::PaymentLine`
 
 ### Existing List Projection Impact
 
-- 后续 query story 仍应保持现有 `CaseListItem` 投影不变
-- 当前 replanning 不变更列表投影
+- 继续复用当前 `CaseListItem`
+- 不新增列表列
+- 只增强 query contract 和 FE filter controls
 
 ## `applicant_id` Filter Definition
 
@@ -92,14 +97,10 @@
   - applicant active-only 语义
   - case applicant 行级 id 过滤
   - applicant selector 深度联动
-- 执行前新发现的 blocker：
-  - 当前 `T_CaseApplicant` 没有 `applicant_id`
-  - 当前也没有到 applicant masterdata 的稳定映射列或查询桥
-  - 因此该 filter 不能在现有 schema 下按批准语义诚实实现
 
 ## `patent_no` Filter Definition
 
-- 来源于现有案件承载中的编号字段
+- 来源于 `Case.patent_no`
 - 匹配语义是大小写不敏感模糊匹配
 - 第一轮允许：
   - 首尾空白裁剪
@@ -112,34 +113,20 @@
 
 - 来源于案件关联的：
   - `FeeDraft`
-  - `Bill`
-  - `Payment`
-- 第一轮语义是案件级最小聚合派生状态
-- 过滤行为是：
-  - 只决定案件是否命中
-  - 不返回财务 drill-down 结果
-- 当前不要求：
-  - 财务明细联查
-  - 账务时间线
-  - dashboard/reporting 聚合
-
-## Replanning Result
-
-### CASEFILTER-PRE
-
-- 目标：为 case applicant 建立到 applicant masterdata 的稳定查询路径
-- 当前高概率属于：
-  - schema / migration prerequisite
-  - carrier/contract prerequisite
-- 非闭包：
-  - 不做 case list UI
-  - 不做 `patent_no`
-  - 不做 `fee_status`
-
-### CASEFILTER-QRY
-
-- 目标：在 prerequisite 关闭后，完成 `applicant_id` + `patent_no` + `fee_status` 的 query enhancement
-- 当前是 follow-up story，不应在 prerequisite 未完成前直接执行
+  - `BillItem`
+  - `PaymentLine`
+- 第一轮只提供三档过滤值：
+  - `DRAFT`
+  - `BILLED`
+  - `PAID`
+- 派生规则：
+  - `PAID`：案件存在任意 `PaymentLine.case_id = Case.id`
+  - `BILLED`：案件不存在 `PaymentLine`，但存在任意 `BillItem.case_id = Case.id`
+  - `DRAFT`：案件不存在 `PaymentLine` / `BillItem`，但存在任意 `FeeDraft.case_id = Case.id`
+- 第一轮不引入：
+  - bill/payment 细分状态过滤
+  - 财务 drill-down
+  - 多值组合逻辑
 
 ## First-round Result Shape
 
@@ -166,66 +153,58 @@
 
 ## Model-layer Impact
 
-- `CASEFILTER-PRE` 是明确的 schema-bearing prerequisite
-- 需要在 `T_CaseApplicant` 上新增可空 `applicant_id`
-- 需要 SQLite-safe migration、索引与到 `Applicant.id` 的稳定引用
-- 在 prerequisite 关闭前，后续 `applicant_id` query enhancement 不应开启
+- 本轮不需要新的 schema / migration
+- prerequisite 已提供：
+  - `T_CaseApplicant.applicant_id`
+- 本轮只消耗现有 carrier
 
 ## API / Service Impact
 
-- 对于 `CASEFILTER-PRE`：
-  - 先落在 data carrier / mapping 层
-  - 再落在 case full create/update 的 payload 与持久化路径
-  - 当前不扩现有 `GET /cases`
-- 对于后续 `CASEFILTER-QRY`：
-  - 在 prerequisite 关闭后再扩 `backend/app/modules/cases/service.py`
-  - 在 prerequisite 关闭后再扩 `backend/app/modules/cases/api.py`
-  - 在 prerequisite 关闭后再扩 `frontend/src/api/cases.types.ts`
-  - 在 prerequisite 关闭后再扩 `frontend/src/api/cases.ts`
+- 在 `backend/app/modules/cases/api.py` 扩 query params
+- 在 `backend/app/modules/cases/service.py` 扩 filter / join / fee-status 派生逻辑
+- 保持现有 response envelope 与 `CaseListItem` 不变
 
 ## UI / Permission Impact
 
-- `CASEFILTER-PRE` 当前不应触达前端
-- 后续 `CASEFILTER-QRY` 仍应仅增强现有 [CaseList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/cases/pages/CaseList.vue)
+- 增强现有 [CaseList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/cases/pages/CaseList.vue)
+- 扩 `frontend/src/api/cases.types.ts`
+- 扩 `frontend/src/api/cases.ts`
 - 权限继续沿用：
   - `Case.Read`
 - 所有用户可见文案必须使用简体中文
 
 ## Cross-module Impact
 
-当前明确不进入：
+本轮读取但不进入：
 
-- billing drill-down
-- fee reporting
+- applicant masterdata 编辑链路
+- fee drill-down
 - export
 - dashboard
-- applicant selector 深度联动
 
 ## SQLite / Phase Compatibility Assessment
 
 - SQLite 兼容：必需
-- `patent_no` 与 `fee_status` 单独看没有明显 schema prerequisite
-- 但 `applicant_id` 已发现明确 prerequisite：
-  - 当前 case applicant 承载无法连接 applicant masterdata
-- 因此 `P2 #18` 作为整体应改判为 prerequisite-heavy
+- 当前没有新的 schema prerequisite
+- `applicant_id / patent_no / fee_status` 都可在现有 ORM 上完成
+- 当前可作为标准 `BE -> FE` query enhancement story 执行
 
 ## Risks / Blockers / Prerequisite Tasks
 
-- 已确认 blocker：
-  - `T_CaseApplicant` 当前不持有 `applicant_id`
-  - 现有 repo 中不存在 case applicant -> applicant masterdata 的稳定查询路径
-- 第二个风险是 `fee_status` 漂移成财务 drill-down 语义
-- 第三个风险是把现有案件列表增强误做成新页面或报表页
-- 必须新增 prerequisite task：
-  - `CASEFILTER-PRE`
+- 最大风险是 `fee_status` 漂移成财务 drill-down 语义
+- 第二个风险是前端 scope creep，把筛选增强扩成新页面或报表页
+- prerequisite 已关闭：
+  - `CASEFILTER-DB-01`
+  - `CASEFILTER-PRE-01`
+  - `CASEFILTER-QA-01`
+- 当前没有新的 prerequisite blocker
 
 ## Exact Closure Slice Candidates
 
-建议改冻结为两段：
-
-- `CASEFILTER-PRE`: 建立 case applicant -> applicant masterdata 的稳定查询路径
-- `CASEFILTER-QRY`: 在 prerequisite 完成后，再完成 applicant_id、patent_no、fee_status 三个新增筛选的 query enhancement
+- `CASEFILTER-BE-01`：在现有 `GET /cases` 上新增 `applicant_id / patent_no / fee_status` backend query contract 与 service filter logic
+- `CASEFILTER-FE-01`：在现有 `CaseList.vue` 与 `cases.ts/cases.types.ts` 上新增三项筛选 UI 与 query wiring
+- `CASEFILTER-QA-01`：完成 query enhancement 的 gates、evidence 与 close audit
 
 ## Final Design Judgment
 
-- `不可直接实现，必须先新增 prerequisite task(s)`
+- `可在当前约束下拆成可执行原子任务`

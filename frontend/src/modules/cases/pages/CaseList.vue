@@ -116,6 +116,38 @@
           </el-form-item>
         </el-col>
       </el-row>
+      <el-row :gutter="16">
+        <el-col :span="6">
+          <el-form-item label="申请人ID" class="filter-item">
+            <el-input
+              v-model="filters.applicant_id"
+              placeholder="请输入申请人ID"
+              clearable
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
+          <el-form-item label="专利号" class="filter-item">
+            <el-input
+              v-model="filters.patent_no"
+              placeholder="请输入专利号"
+              clearable
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
+          <el-form-item label="费用状态" class="filter-item">
+            <el-select v-model="filters.fee_status" placeholder="全部" clearable style="width: 100%">
+              <el-option
+                v-for="option in feeStatusOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
       <el-row justify="end">
         <el-button type="primary" @click="handleSearch">搜索</el-button>
         <el-button @click="handleResetFilters">重置</el-button>
@@ -276,6 +308,9 @@ const filters = reactive({
   date_from: '',
   date_to: '',
   agent_id: '',
+  applicant_id: '',
+  patent_no: '',
+  fee_status: '',
 })
 const summary = ref<CaseListResponse['summary']>({
   total_case_count: 0,
@@ -288,6 +323,11 @@ const clientOptions = ref<Array<{ id: string; name: string }>>([])
 
 // Status options (from displayText.ts)
 const statusOptions = CASE_STATUS_TEXT
+const feeStatusOptions = [
+  { label: '仅草单', value: 'DRAFT' },
+  { label: '已出账', value: 'BILLED' },
+  { label: '已收款', value: 'PAID' },
+]
 
 // Step filter from route query
 const stepFilter = computed(() => (route.query.step as string) || null)
@@ -390,6 +430,9 @@ function handleResetFilters() {
   filters.date_from = ''
   filters.date_to = ''
   filters.agent_id = ''
+  filters.applicant_id = ''
+  filters.patent_no = ''
+  filters.fee_status = ''
   page.value = 1
   fetchCases()
 }
