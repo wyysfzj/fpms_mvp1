@@ -261,6 +261,13 @@
             {{ row.issue_date ? formatDate(row.issue_date) : '—' }}
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button text size="small" :loading="printingBillId === row.id" @click.stop="handlePrint(row)">
+              打印
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <PaginationBar v-model:page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[10, 20, 50]" />
@@ -271,7 +278,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getBills } from '../../../api/billing'
+import { ElMessage } from 'element-plus'
+import { getBills, printBill } from '../../../api/billing'
 import type { BillListItem, BillStatus, BillListResponse } from '../../../api/billing.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -286,6 +294,7 @@ const router = useRouter()
 const bills = ref<BillListItem[]>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
+const printingBillId = ref<string | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -413,6 +422,38 @@ function formatDate(dateStr: string): string {
 
 function handleRowClick(row: BillListItem) {
   router.push(`/billing/bills/${row.id}`)
+}
+
+async function handlePrint(row: BillListItem) {
+  printingBillId.value = row.id
+  error.value = null
+
+  try {
+    const blob = await printBill(row.id)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const billNo = row.bill_no || row.id
+
+    link.href = url
+    link.download = `bill-${billNo}.docx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    ElMessage.success('账单下载成功')
+  } catch (err) {
+    const apiError = err as ApiError
+    error.value = apiError
+
+    if (apiError.status === 409) {
+      ElMessage.error('账单模板未配置，请在系统设置中配置模板。')
+    } else {
+      ElMessage.error('打印失败，请稍后重试。')
+    }
+  } finally {
+    printingBillId.value = null
+  }
 }
 
 watch([page, pageSize], () => {
