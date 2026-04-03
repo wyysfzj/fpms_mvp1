@@ -4,11 +4,12 @@ This ledger is derived from [FPMS_SPEC2_2nd_Review_REFRESH.md](/Users/cfcc/Works
 
 ## 1. Mitigation Summary
 
-Current non-`Closed` items: `3`
+Current non-`Closed` items: `4`
 
 - `Still Missing`
   - `None`
 - `Partially Closed`
+  - `#8 中间文件 5 步向导`
   - `#15 授权费管理`
   - `#19 中间文件专项查询`
 - `Blocked by Prerequisite`
@@ -17,6 +18,17 @@ Current non-`Closed` items: `3`
   - `#13 所有统计报表`
 
 ## 2. Priority-ranked Mitigation Ledger
+
+### `#8 中间文件 5 步向导`
+- `Current Status`: `Partially Closed`
+- `Recommended Interpretation`: strict spec-gap ledger before claiming closure
+- `Why This Interpretation Is Correct`: Step 1/2 and residual contracts exist, but full 5-step product implementation does not
+- `Exact Closure Slice`: enumerate Step 3/4/5 implementation residuals against `FPMS SPEC 2.0.md`
+- `Explicit Non-closure`: do not treat contract-freeze docs as product closure
+- `Likely Ownership`: `shared`
+- `Prerequisite Needed?`: `No`
+- `Suggested Story Shape`: `multi-lane`
+- `Recommended Next Action`: `write spec`
 
 ### `#13 所有统计报表`
 - `Current Status`: `Needs Reclassification`
@@ -52,6 +64,26 @@ Current non-`Closed` items: `3`
 - `Recommended Next Action`: `write spec`
 
 ## 3. Next-story Candidates
+
+### For `#8 中间文件 5 步向导`
+
+#### Candidate 1
+- `Story ID`: `DOCWIZ-IMPL-LEDGER-01`
+- `Title`: 向导 strict spec-gap implementation ledger
+- `Exact Closure Slice`: enumerate Step 3/4/5 implementation residuals against `FPMS SPEC 2.0.md`
+- `Explicit Non-closure`: no closure decision change until implementation ledger exists
+- `Likely Ownership`: `shared`
+- `Suggested Story Shape`: `multi-lane`
+- `Recommended Next Action`: `write spec`
+
+#### Candidate 2
+- `Story ID`: `DOCWIZ-STEP3-IMPL-01`
+- `Title`: 向导 Step 3 时限联动实现
+- `Exact Closure Slice`: one Step 3 product implementation slice after ledger freeze
+- `Explicit Non-closure`: no Step 4/5, no dispatch
+- `Likely Ownership`: `shared`
+- `Suggested Story Shape`: `multi-lane`
+- `Recommended Next Action`: `implement after ledger`
 
 ### For `#13 所有统计报表`
 
