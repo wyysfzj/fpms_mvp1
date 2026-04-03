@@ -1,0 +1,9 @@
+backend/app/modules/documents/api.py
+backend/app/modules/documents/fee_linking_service.py
+backend/app/modules/documents/schemas.py
+backend/app/modules/documents/service.py
+backend/tests/test_document_wizard_batch_create.py
+frontend/src/api/cases.ts
+frontend/src/api/cases.types.ts
+tasks/postenhancement/backend/DOCWIZ-STEP4-BE-FINAL-01.md
+tasks/postenhancement/backend/DOCWIZ-QA-STEP4-FINAL-01.md

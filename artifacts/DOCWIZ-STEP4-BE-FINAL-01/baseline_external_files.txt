@@ -1,0 +1,10 @@
+frontend/src/api/cases.ts
+frontend/src/api/cases.types.ts
+frontend/src/api/documents.ts
+frontend/src/api/documents.types.ts
+frontend/src/modules/documents/pages/DocumentWizard.vue
+docs/superpowers/plans/2026-04-04-docwiz-step4-final-submit-integration.md
+docs/superpowers/specs/2026-04-04-docwiz-step4-final-submit-integration-design.md
+tasks/postenhancement/backend/DOCWIZ-QA-STEP4-FINAL-01.md
+tasks/postenhancement/backend/DOCWIZ-STEP4-BE-FINAL-01.md
+tasks/postenhancement/frontend/DOCWIZ-STEP4-FE-FINAL-01.md

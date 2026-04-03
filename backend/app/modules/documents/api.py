@@ -422,7 +422,7 @@ def preview_document_wizard_fee_candidates_endpoint(
     "/documents/wizard/batch-create",
     status_code=status.HTTP_201_CREATED,
     response_model=DocumentWizardBatchCreateOut,
-    summary="Create documents from wizard batch with Step 3 task rows",
+    summary="Create documents from wizard batch with Step 3 task rows and Step 4 fee rows",
 )
 def create_document_wizard_batch_endpoint(
     payload: DocumentWizardBatchCreateIn,

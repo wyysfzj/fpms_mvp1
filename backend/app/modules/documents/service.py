@@ -14,6 +14,7 @@ from app.modules.cases.models import Case, T_CaseApplicant
 from app.modules.cases.service import validate_case_status_transition
 from app.modules.documents.enums import DocumentDirection
 from app.modules.documents.fee_linking_service import (
+    create_fee_draft_from_wizard_row,
     maybe_create_fee_draft,
     parse_fee_item_list_candidates,
 )
@@ -34,6 +35,7 @@ from app.modules.documents.schemas import (
     DocumentUpdateIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchRowIn,
+    DocumentWizardFeeFinalRowIn,
     DocumentWizardFeePreviewIn,
     DocumentWizardTaskFinalRowIn,
 )
@@ -380,15 +382,17 @@ def create_document_wizard_batch(
 
     created_rows: list[tuple[int, Document]] = []
     task_rows_by_row_index: dict[int, list[DocumentWizardTaskFinalRowIn]] = {}
+    fee_rows_by_row_index: dict[int, DocumentWizardFeeFinalRowIn] = {}
     if data.task_rows:
         task_rows_by_row_index = _group_document_wizard_task_rows(
             data.task_rows, row_count=len(rows)
         )
+    if data.fee_rows:
+        fee_rows_by_row_index = _group_document_wizard_fee_rows(data.fee_rows, row_count=len(rows))
     try:
         for idx, row in enumerate(rows, start=1):
             payload = _build_document_wizard_payload(data.defaults, row, template)
             document = _create_document_record(db, payload, commit=False)
-            maybe_create_fee_draft(db, document, template)
             explicit_task_rows = task_rows_by_row_index.get(idx, [])
             if explicit_task_rows:
                 _create_document_wizard_tasks_from_rows(
@@ -396,6 +400,29 @@ def create_document_wizard_batch(
                     document=document,
                     row_task_rows=explicit_task_rows,
                 )
+            explicit_fee_row = fee_rows_by_row_index.get(idx)
+            if explicit_fee_row:
+                if _normalize_text(explicit_fee_row.case_id) != document.case_id:
+                    raise_business_error(
+                        "DOCUMENT_WIZARD_BATCH_INVALID",
+                        "Document wizard batch contains invalid fee rows",
+                        details={
+                            "row_errors": [
+                                {
+                                    "row_index": idx,
+                                    "field": "case_id",
+                                    "code": "CASE_ID_MISMATCH",
+                                    "message": "Fee row case_id does not match document row case_id",
+                                    "case_id": explicit_fee_row.case_id,
+                                    "document_case_id": document.case_id,
+                                }
+                            ]
+                        },
+                        status_code=400,
+                    )
+                create_fee_draft_from_wizard_row(db, document, explicit_fee_row)
+            else:
+                maybe_create_fee_draft(db, document, template)
             TaskGenerationService().generate_from_document(db, document)
             created_rows.append((idx, document))
 
@@ -575,6 +602,76 @@ def _group_document_wizard_task_rows(
         raise_business_error(
             "DOCUMENT_WIZARD_BATCH_INVALID",
             "Document wizard batch contains invalid task rows",
+            details={"row_errors": row_errors},
+            status_code=400,
+        )
+
+    return grouped
+
+
+def _group_document_wizard_fee_rows(
+    fee_rows: list[DocumentWizardFeeFinalRowIn],
+    *,
+    row_count: int,
+) -> dict[int, DocumentWizardFeeFinalRowIn]:
+    row_errors: list[dict[str, object]] = []
+    grouped: dict[int, DocumentWizardFeeFinalRowIn] = {}
+    seen_row_indices: set[int] = set()
+
+    for idx, fee_row in enumerate(fee_rows, start=1):
+        if fee_row.row_index < 1 or fee_row.row_index > row_count:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "row_index",
+                    "code": "ROW_INDEX_OUT_OF_RANGE",
+                    "message": "Fee row row_index is out of range",
+                    "value": fee_row.row_index,
+                }
+            )
+            continue
+
+        if fee_row.row_index in seen_row_indices:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "row_index",
+                    "code": "DUPLICATE_ROW_INDEX",
+                    "message": "Duplicate fee row_index",
+                    "value": fee_row.row_index,
+                }
+            )
+            continue
+
+        if not _normalize_text(fee_row.case_id):
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "case_id",
+                    "code": "CASE_ID_REQUIRED",
+                    "message": "case_id is required",
+                }
+            )
+            continue
+
+        if not _normalize_text(fee_row.fee_draft_type):
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "fee_draft_type",
+                    "code": "FEE_DRAFT_TYPE_REQUIRED",
+                    "message": "fee_draft_type is required",
+                }
+            )
+            continue
+
+        seen_row_indices.add(fee_row.row_index)
+        grouped[fee_row.row_index] = fee_row
+
+    if row_errors:
+        raise_business_error(
+            "DOCUMENT_WIZARD_BATCH_INVALID",
+            "Document wizard batch contains invalid fee rows",
             details={"row_errors": row_errors},
             status_code=400,
         )

@@ -178,6 +178,7 @@ export interface DocumentWizardBatchCreatePayload {
     defaults: DocumentWizardBatchDefaults
     rows: DocumentWizardBatchRowDraft[]
     task_rows?: DocumentWizardTaskFinalRowDraft[]
+    fee_rows?: DocumentWizardFeeFinalRowDraft[]
 }
 
 export interface DocumentWizardBatchCreatedRow {
@@ -239,6 +240,14 @@ export interface DocumentWizardFeePreviewItem {
 export interface DocumentWizardFeePreviewResult {
     total_candidates: number
     items: DocumentWizardFeePreviewItem[]
+}
+
+export interface DocumentWizardFeeFinalRowDraft {
+    row_index: number
+    case_id: string
+    fee_draft_type: string
+    skip_this_candidate?: boolean
+    fee_items: DocumentWizardFeePreviewFeeItem[]
 }
 
 export interface DocumentWizardBatchRowError {

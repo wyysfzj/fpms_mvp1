@@ -668,6 +668,7 @@ import type {
   DocumentWizardBatchCreatePayload,
   DocumentWizardBatchRowError,
   DocumentWizardCaseRow,
+  DocumentWizardFeeFinalRowDraft,
   DocumentWizardFeePreviewFeeItem,
   DocumentWizardFeePreviewItem,
   DocumentWizardParsedCase,
@@ -1139,7 +1140,28 @@ function buildFinalSubmitPayload(): DocumentWizardBatchCreatePayload {
   return {
     ...buildStep2Payload(),
     task_rows: buildStep3TaskRows(),
+    fee_rows: buildStep4FeeRows(),
   }
+}
+
+function buildStep4FeeRows(): DocumentWizardFeeFinalRowDraft[] {
+  return step4PreviewRows.value
+    .filter((row) => !row.skip_this_candidate)
+    .map((row) => ({
+      row_index: row.row_index,
+      case_id: row.case_id,
+      fee_draft_type: row.fee_draft_type,
+      skip_this_candidate: row.skip_this_candidate,
+      fee_items: row.fee_items.map((item) => ({
+        fee_code: item.fee_code,
+        fee_name: item.fee_name,
+        fee_type: item.fee_type,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        amount: item.amount,
+        remark: item.remark,
+      })),
+    }))
 }
 
 async function reloadStep3Preview(): Promise<void> {

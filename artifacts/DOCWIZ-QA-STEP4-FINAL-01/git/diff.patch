@@ -1,0 +1,655 @@
+diff --git a/backend/app/modules/documents/api.py b/backend/app/modules/documents/api.py
+index 5060471..7bde91c 100644
+--- a/backend/app/modules/documents/api.py
++++ b/backend/app/modules/documents/api.py
+@@ -422,7 +422,7 @@ def preview_document_wizard_fee_candidates_endpoint(
+     "/documents/wizard/batch-create",
+     status_code=status.HTTP_201_CREATED,
+     response_model=DocumentWizardBatchCreateOut,
+-    summary="Create documents from wizard batch with Step 3 task rows",
++    summary="Create documents from wizard batch with Step 3 task rows and Step 4 fee rows",
+ )
+ def create_document_wizard_batch_endpoint(
+     payload: DocumentWizardBatchCreateIn,
+diff --git a/backend/app/modules/documents/fee_linking_service.py b/backend/app/modules/documents/fee_linking_service.py
+index 5eb2f36..ea60c87 100644
+--- a/backend/app/modules/documents/fee_linking_service.py
++++ b/backend/app/modules/documents/fee_linking_service.py
+@@ -9,8 +9,10 @@ from uuid import uuid4
+ 
+ from sqlalchemy.orm import Session
+ 
++from app.core.errors import raise_business_error
+ from app.modules.cases.models import Case
+ from app.modules.documents.models import DocTemplate, Document
++from app.modules.documents.schemas import DocumentWizardFeeFinalRowIn
+ from app.modules.fees.models import FeeDraft, FeeItem
+ 
+ logger = logging.getLogger(__name__)
+@@ -115,6 +117,59 @@ def maybe_create_fee_draft(
+     return draft
+ 
+ 
++def create_fee_draft_from_wizard_row(
++    db: Session,
++    document: Document,
++    fee_row: DocumentWizardFeeFinalRowIn,
++) -> FeeDraft | None:
++    """Create a FeeDraft from explicit wizard fee row values."""
++    if fee_row.skip_this_candidate:
++        return None
++
++    case = db.get(Case, document.case_id)
++    if not case:
++        logger.warning(
++            "B3: Case %s not found for document %s, skipping explicit fee draft",
++            document.case_id,
++            document.id,
++        )
++        return None
++
++    draft_type = str(fee_row.fee_draft_type).strip()
++    if not draft_type:
++        raise_business_error(
++            "DOCUMENT_WIZARD_BATCH_INVALID",
++            "Document wizard batch contains invalid fee rows",
++            details={
++                "row_errors": [
++                    {
++                        "row_index": fee_row.row_index,
++                        "field": "fee_draft_type",
++                        "code": "FEE_DRAFT_TYPE_REQUIRED",
++                        "message": "fee_draft_type is required",
++                    }
++                ]
++            },
++            status_code=400,
++        )
++
++    draft = FeeDraft(
++        id=str(uuid4()),
++        case_id=document.case_id,
++        client_id=case.client_id,
++        draft_type=draft_type,
++        currency="CNY",
++        status="OPEN",
++        total_gov=Decimal("0"),
++        total_service=Decimal("0"),
++        total_misc=Decimal("0"),
++        amount=Decimal("0"),
++    )
++    db.add(draft)
++    _create_fee_items_from_wizard_row(db, draft, document, fee_row)
++    return draft
++
++
+ def _create_fee_items_from_candidates(
+     db: Session,
+     draft: FeeDraft,
+@@ -135,3 +190,45 @@ def _create_fee_items_from_candidates(
+             amount=item_data.get("amount", Decimal("0")),
+         )
+         db.add(fee_item)
++
++
++def _create_fee_items_from_wizard_row(
++    db: Session,
++    draft: FeeDraft,
++    document: Document,
++    fee_row: DocumentWizardFeeFinalRowIn,
++) -> None:
++    total_gov = Decimal("0")
++    total_service = Decimal("0")
++    total_misc = Decimal("0")
++    total_amount = Decimal("0")
++
++    for item_data in fee_row.fee_items:
++        fee_type = (item_data.fee_type or "SERVICE").upper()
++        amount = item_data.amount or Decimal("0")
++        total_amount += amount
++        if fee_type == "GOV":
++            total_gov += amount
++        elif fee_type == "SERVICE":
++            total_service += amount
++        else:
++            total_misc += amount
++
++        fee_item = FeeItem(
++            id=str(uuid4()),
++            draft_id=draft.id,
++            case_id=document.case_id,
++            fee_code=item_data.fee_code,
++            fee_name=item_data.fee_name,
++            fee_type=item_data.fee_type or "SERVICE",
++            quantity=item_data.quantity,
++            unit_price=item_data.unit_price,
++            amount=amount,
++            remark=item_data.remark,
++        )
++        db.add(fee_item)
++
++    draft.total_gov = total_gov
++    draft.total_service = total_service
++    draft.total_misc = total_misc
++    draft.amount = total_amount
+diff --git a/backend/app/modules/documents/schemas.py b/backend/app/modules/documents/schemas.py
+index 091ec82..db064cf 100644
+--- a/backend/app/modules/documents/schemas.py
++++ b/backend/app/modules/documents/schemas.py
+@@ -63,10 +63,29 @@ class DocumentWizardTaskFinalRowIn(BaseModel):
+     daily_remind: bool | None = None
+ 
+ 
++class DocumentWizardFeeFinalFeeItemIn(BaseModel):
++    fee_code: str | None = None
++    fee_name: str | None = None
++    fee_type: str = Field(default="SERVICE", max_length=16)
++    quantity: Decimal | None = None
++    unit_price: Decimal | None = None
++    amount: Decimal = Field(default=Decimal("0"), ge=0)
++    remark: str | None = None
++
++
++class DocumentWizardFeeFinalRowIn(BaseModel):
++    row_index: int = Field(..., ge=1)
++    case_id: str = Field(..., min_length=1, max_length=36)
++    fee_draft_type: str = Field(..., min_length=1, max_length=32)
++    skip_this_candidate: bool = False
++    fee_items: list[DocumentWizardFeeFinalFeeItemIn] = Field(default_factory=list)
++
++
+ class DocumentWizardBatchCreateIn(BaseModel):
+     defaults: DocumentWizardBatchDefaultsIn
+     rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
+     task_rows: list[DocumentWizardTaskFinalRowIn] = Field(default_factory=list)
++    fee_rows: list[DocumentWizardFeeFinalRowIn] = Field(default_factory=list)
+ 
+ 
+ class DocumentWizardFeePreviewIn(BaseModel):
+diff --git a/backend/app/modules/documents/service.py b/backend/app/modules/documents/service.py
+index bbc3cd8..2bbadc1 100644
+--- a/backend/app/modules/documents/service.py
++++ b/backend/app/modules/documents/service.py
+@@ -14,6 +14,7 @@ from app.modules.cases.models import Case, T_CaseApplicant
+ from app.modules.cases.service import validate_case_status_transition
+ from app.modules.documents.enums import DocumentDirection
+ from app.modules.documents.fee_linking_service import (
++    create_fee_draft_from_wizard_row,
+     maybe_create_fee_draft,
+     parse_fee_item_list_candidates,
+ )
+@@ -34,6 +35,7 @@ from app.modules.documents.schemas import (
+     DocumentUpdateIn,
+     DocumentWizardBatchCreateIn,
+     DocumentWizardBatchRowIn,
++    DocumentWizardFeeFinalRowIn,
+     DocumentWizardFeePreviewIn,
+     DocumentWizardTaskFinalRowIn,
+ )
+@@ -380,15 +382,17 @@ def create_document_wizard_batch(
+ 
+     created_rows: list[tuple[int, Document]] = []
+     task_rows_by_row_index: dict[int, list[DocumentWizardTaskFinalRowIn]] = {}
++    fee_rows_by_row_index: dict[int, DocumentWizardFeeFinalRowIn] = {}
+     if data.task_rows:
+         task_rows_by_row_index = _group_document_wizard_task_rows(
+             data.task_rows, row_count=len(rows)
+         )
++    if data.fee_rows:
++        fee_rows_by_row_index = _group_document_wizard_fee_rows(data.fee_rows, row_count=len(rows))
+     try:
+         for idx, row in enumerate(rows, start=1):
+             payload = _build_document_wizard_payload(data.defaults, row, template)
+             document = _create_document_record(db, payload, commit=False)
+-            maybe_create_fee_draft(db, document, template)
+             explicit_task_rows = task_rows_by_row_index.get(idx, [])
+             if explicit_task_rows:
+                 _create_document_wizard_tasks_from_rows(
+@@ -396,6 +400,29 @@ def create_document_wizard_batch(
+                     document=document,
+                     row_task_rows=explicit_task_rows,
+                 )
++            explicit_fee_row = fee_rows_by_row_index.get(idx)
++            if explicit_fee_row:
++                if _normalize_text(explicit_fee_row.case_id) != document.case_id:
++                    raise_business_error(
++                        "DOCUMENT_WIZARD_BATCH_INVALID",
++                        "Document wizard batch contains invalid fee rows",
++                        details={
++                            "row_errors": [
++                                {
++                                    "row_index": idx,
++                                    "field": "case_id",
++                                    "code": "CASE_ID_MISMATCH",
++                                    "message": "Fee row case_id does not match document row case_id",
++                                    "case_id": explicit_fee_row.case_id,
++                                    "document_case_id": document.case_id,
++                                }
++                            ]
++                        },
++                        status_code=400,
++                    )
++                create_fee_draft_from_wizard_row(db, document, explicit_fee_row)
++            else:
++                maybe_create_fee_draft(db, document, template)
+             TaskGenerationService().generate_from_document(db, document)
+             created_rows.append((idx, document))
+ 
+@@ -582,6 +609,76 @@ def _group_document_wizard_task_rows(
+     return grouped
+ 
+ 
++def _group_document_wizard_fee_rows(
++    fee_rows: list[DocumentWizardFeeFinalRowIn],
++    *,
++    row_count: int,
++) -> dict[int, DocumentWizardFeeFinalRowIn]:
++    row_errors: list[dict[str, object]] = []
++    grouped: dict[int, DocumentWizardFeeFinalRowIn] = {}
++    seen_row_indices: set[int] = set()
++
++    for idx, fee_row in enumerate(fee_rows, start=1):
++        if fee_row.row_index < 1 or fee_row.row_index > row_count:
++            row_errors.append(
++                {
++                    "row_index": idx,
++                    "field": "row_index",
++                    "code": "ROW_INDEX_OUT_OF_RANGE",
++                    "message": "Fee row row_index is out of range",
++                    "value": fee_row.row_index,
++                }
++            )
++            continue
++
++        if fee_row.row_index in seen_row_indices:
++            row_errors.append(
++                {
++                    "row_index": idx,
++                    "field": "row_index",
++                    "code": "DUPLICATE_ROW_INDEX",
++                    "message": "Duplicate fee row_index",
++                    "value": fee_row.row_index,
++                }
++            )
++            continue
++
++        if not _normalize_text(fee_row.case_id):
++            row_errors.append(
++                {
++                    "row_index": idx,
++                    "field": "case_id",
++                    "code": "CASE_ID_REQUIRED",
++                    "message": "case_id is required",
++                }
++            )
++            continue
++
++        if not _normalize_text(fee_row.fee_draft_type):
++            row_errors.append(
++                {
++                    "row_index": idx,
++                    "field": "fee_draft_type",
++                    "code": "FEE_DRAFT_TYPE_REQUIRED",
++                    "message": "fee_draft_type is required",
++                }
++            )
++            continue
++
++        seen_row_indices.add(fee_row.row_index)
++        grouped[fee_row.row_index] = fee_row
++
++    if row_errors:
++        raise_business_error(
++            "DOCUMENT_WIZARD_BATCH_INVALID",
++            "Document wizard batch contains invalid fee rows",
++            details={"row_errors": row_errors},
++            status_code=400,
++        )
++
++    return grouped
++
++
+ def _create_document_wizard_tasks_from_rows(
+     db: Session,
+     *,
+diff --git a/backend/tests/test_document_wizard_batch_create.py b/backend/tests/test_document_wizard_batch_create.py
+index b6a2341..2126579 100644
+--- a/backend/tests/test_document_wizard_batch_create.py
++++ b/backend/tests/test_document_wizard_batch_create.py
+@@ -1,10 +1,13 @@
+ from __future__ import annotations
+ 
++import json
+ from uuid import uuid4
+ 
+ from fastapi.testclient import TestClient
++from sqlalchemy import select
+ from sqlalchemy.orm import sessionmaker
+ 
++from app.modules.fees.models import FeeDraft, FeeItem
+ from app.modules.tasks.models import Task
+ 
+ BASE = "/api/v1/documents/wizard/batch-create"
+@@ -42,6 +45,33 @@ def _get_template(client: TestClient, auth_headers: dict, code: str) -> dict:
+     return match[0]
+ 
+ 
++def _create_fee_template(client: TestClient, auth_headers: dict) -> dict:
++    code = f"STEP4_FEE_{uuid4().hex[:8].upper()}"
++    resp = client.post(
++        DOC_TMPL_BASE,
++        headers=auth_headers,
++        json={
++            "code": code,
++            "name": f"Step 4 Fee Template {code}",
++            "direction": "IN",
++            "enabled": True,
++            "fee_draft_type": "CUSTOM_FEE",
++            "fee_item_list": json.dumps(
++                [
++                    {
++                        "fee_code": "REG_FEE",
++                        "fee_name": "登记费",
++                        "fee_type": "GOV",
++                        "amount": 200,
++                    }
++                ]
++            ),
++        },
++    )
++    assert resp.status_code == 201, resp.text
++    return resp.json()
++
++
+ def _preview_task_candidates(
+     client: TestClient,
+     auth_headers: dict[str, str],
+@@ -66,6 +96,30 @@ def _preview_task_candidates(
+     return resp.json()
+ 
+ 
++def _preview_fee_candidates(
++    client: TestClient,
++    auth_headers: dict[str, str],
++    *,
++    template_id: str,
++    case_id: str,
++    title: str,
++) -> dict:
++    resp = client.post(
++        "/api/v1/documents/wizard/fee-preview",
++        headers=auth_headers,
++        json={
++            "defaults": {
++                "doc_template_id": template_id,
++                "direction": "IN",
++                "doc_date": "2026-01-15",
++            },
++            "rows": [{"case_id": case_id, "title": title}],
++        },
++    )
++    assert resp.status_code == 200, resp.text
++    return resp.json()
++
++
+ def test_batch_create_documents_success(client: TestClient, auth_headers: dict) -> None:
+     case_one = _create_case(client, auth_headers)
+     case_two = _create_case(client, auth_headers)
+@@ -179,6 +233,83 @@ def test_batch_create_documents_uses_step3_task_rows(
+         assert created_task.daily_remind is False
+ 
+ 
++def test_batch_create_documents_uses_step4_fee_rows(
++    client: TestClient, auth_headers: dict, session_factory: sessionmaker
++) -> None:
++    case_one = _create_case(client, auth_headers)
++    template = _create_fee_template(client, auth_headers)
++
++    preview = _preview_fee_candidates(
++        client,
++        auth_headers,
++        template_id=template["id"],
++        case_id=case_one["id"],
++        title="费用预览文书",
++    )
++    assert preview["total_candidates"] == 1
++    preview_item = preview["items"][0]
++    preview_fee_item = preview_item["fee_items"][0]
++
++    resp = client.post(
++        BASE,
++        headers=auth_headers,
++        json={
++            "defaults": {
++                "doc_template_id": template["id"],
++                "direction": "IN",
++                "doc_date": "2026-01-15",
++            },
++            "rows": [{"case_id": case_one["id"], "title": "费用最终提交文书"}],
++            "fee_rows": [
++                {
++                    "row_index": preview_item["row_index"],
++                    "case_id": case_one["id"],
++                    "fee_draft_type": preview_item["fee_draft_type"],
++                    "skip_this_candidate": False,
++                    "fee_items": [
++                        {
++                            "fee_code": preview_fee_item["fee_code"],
++                            "fee_name": "登记费（调整）",
++                            "fee_type": preview_fee_item["fee_type"],
++                            "quantity": 1,
++                            "unit_price": 180,
++                            "amount": 180,
++                            "remark": "手动调整",
++                        }
++                    ],
++                }
++            ],
++        },
++    )
++
++    assert resp.status_code == 201, resp.text
++    payload = resp.json()
++    assert payload["created"] == 1
++
++    with session_factory() as db:
++        drafts = (
++            db.execute(select(FeeDraft).where(FeeDraft.case_id == case_one["id"])).scalars().all()
++        )
++        assert len(drafts) == 1
++        draft = drafts[0]
++        assert draft.draft_type == preview_item["fee_draft_type"]
++        assert float(draft.amount) == 180.0
++        assert float(draft.total_gov) == 180.0
++        assert float(draft.total_service) == 0.0
++        assert float(draft.total_misc) == 0.0
++
++        items = db.execute(select(FeeItem).where(FeeItem.draft_id == draft.id)).scalars().all()
++        assert len(items) == 1
++        item = items[0]
++        assert item.fee_code == preview_fee_item["fee_code"]
++        assert item.fee_name == "登记费（调整）"
++        assert item.fee_type == preview_fee_item["fee_type"]
++        assert float(item.quantity) == 1.0
++        assert float(item.unit_price) == 180.0
++        assert float(item.amount) == 180.0
++        assert item.remark == "手动调整"
++
++
+ def test_batch_create_documents_rejects_invalid_row(client: TestClient, auth_headers: dict) -> None:
+     case_one = _create_case(client, auth_headers)
+     template = _get_template(client, auth_headers, "CLIENT_IN")
+@@ -236,3 +367,47 @@ def test_batch_create_documents_rejects_invalid_step3_task_row(
+     payload = resp.json()
+     assert payload["error"]["code"] == "DOCUMENT_WIZARD_BATCH_INVALID"
+     assert payload["error"]["details"]["row_errors"]
++
++
++def test_batch_create_documents_rejects_invalid_step4_fee_row(
++    client: TestClient, auth_headers: dict
++) -> None:
++    case_one = _create_case(client, auth_headers)
++    template = _create_fee_template(client, auth_headers)
++
++    resp = client.post(
++        BASE,
++        headers=auth_headers,
++        json={
++            "defaults": {
++                "doc_template_id": template["id"],
++                "direction": "IN",
++                "doc_date": "2026-01-15",
++            },
++            "rows": [{"case_id": case_one["id"], "title": "费用最终提交文书"}],
++            "fee_rows": [
++                {
++                    "row_index": 2,
++                    "case_id": case_one["id"],
++                    "fee_draft_type": "CUSTOM_FEE",
++                    "skip_this_candidate": False,
++                    "fee_items": [
++                        {
++                            "fee_code": "REG_FEE",
++                            "fee_name": "登记费（调整）",
++                            "fee_type": "GOV",
++                            "quantity": 1,
++                            "unit_price": 180,
++                            "amount": 180,
++                            "remark": "手动调整",
++                        }
++                    ],
++                }
++            ],
++        },
++    )
++
++    assert resp.status_code == 400, resp.text
++    payload = resp.json()
++    assert payload["error"]["code"] == "DOCUMENT_WIZARD_BATCH_INVALID"
++    assert payload["error"]["details"]["row_errors"]
+diff --git a/frontend/src/api/cases.ts b/frontend/src/api/cases.ts
+index 1457770..7e04afe 100644
+--- a/frontend/src/api/cases.ts
++++ b/frontend/src/api/cases.ts
+@@ -439,6 +439,13 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
+             prio_no: trimToUndefined(priority.prio_no),
+             prio_date: trimToUndefined(priority.prio_date),
+         })),
++        agent_splits: data.agent_splits?.map((agentSplit) => ({
++            agent_id: trimToUndefined(agentSplit.agent_id),
++            role: trimToUndefined(agentSplit.role),
++            share_ratio: agentSplit.share_ratio === null || agentSplit.share_ratio === undefined
++                ? null
++                : agentSplit.share_ratio,
++        })),
+         bio_deposits: data.bio_deposits
+             ?.map((bioDeposit) => ({
+                 seq: bioDeposit.seq,
+diff --git a/frontend/src/api/cases.types.ts b/frontend/src/api/cases.types.ts
+index 12c767d..49175dd 100644
+--- a/frontend/src/api/cases.types.ts
++++ b/frontend/src/api/cases.types.ts
+@@ -213,6 +213,7 @@ export interface CaseCreatePayload {
+     applicant_kind?: string
+     applicants?: CaseApplicant[]
+     priorities?: CasePriority[]
++    agent_splits?: CaseAgentSplit[]
+ }
+ 
+ export interface CaseUpdatePayload {
+diff --git a/frontend/src/api/documents.ts b/frontend/src/api/documents.ts
+index 7dc8cc7..0332d06 100644
+--- a/frontend/src/api/documents.ts
++++ b/frontend/src/api/documents.ts
+@@ -162,6 +162,21 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
+                 : {}),
+             ...(row.daily_remind !== undefined ? { daily_remind: row.daily_remind } : {}),
+         })),
++        fee_rows: data.fee_rows?.map((row) => ({
++                row_index: row.row_index,
++                case_id: row.case_id,
++                fee_draft_type: row.fee_draft_type,
++                ...(row.skip_this_candidate !== undefined ? { skip_this_candidate: row.skip_this_candidate } : {}),
++                fee_items: row.fee_items.map((item) => ({
++                    ...(trimToUndefined(item.fee_code ?? undefined) ? { fee_code: trimToUndefined(item.fee_code ?? undefined) } : {}),
++                    ...(trimToUndefined(item.fee_name ?? undefined) ? { fee_name: trimToUndefined(item.fee_name ?? undefined) } : {}),
++                    fee_type: item.fee_type,
++                    ...(trimToUndefined(item.quantity ?? undefined) ? { quantity: trimToUndefined(item.quantity ?? undefined) } : {}),
++                    ...(trimToUndefined(item.unit_price ?? undefined) ? { unit_price: trimToUndefined(item.unit_price ?? undefined) } : {}),
++                    amount: item.amount,
++                    ...(trimToUndefined(item.remark ?? undefined) ? { remark: trimToUndefined(item.remark ?? undefined) } : {}),
++                })),
++            })) || [],
+     }
+ }
+ 
+diff --git a/frontend/src/api/documents.types.ts b/frontend/src/api/documents.types.ts
+index b1cf5a7..dfa6e2c 100644
+--- a/frontend/src/api/documents.types.ts
++++ b/frontend/src/api/documents.types.ts
+@@ -178,6 +178,7 @@ export interface DocumentWizardBatchCreatePayload {
+     defaults: DocumentWizardBatchDefaults
+     rows: DocumentWizardBatchRowDraft[]
+     task_rows?: DocumentWizardTaskFinalRowDraft[]
++    fee_rows?: DocumentWizardFeeFinalRowDraft[]
+ }
+ 
+ export interface DocumentWizardBatchCreatedRow {
+@@ -241,6 +242,14 @@ export interface DocumentWizardFeePreviewResult {
+     items: DocumentWizardFeePreviewItem[]
+ }
+ 
++export interface DocumentWizardFeeFinalRowDraft {
++    row_index: number
++    case_id: string
++    fee_draft_type: string
++    skip_this_candidate?: boolean
++    fee_items: DocumentWizardFeePreviewFeeItem[]
++}
++
+ export interface DocumentWizardBatchRowError {
+     row_index: number
+     field: string
+diff --git a/frontend/src/modules/documents/pages/DocumentWizard.vue b/frontend/src/modules/documents/pages/DocumentWizard.vue
+index becb8c9..ae4846b 100644
+--- a/frontend/src/modules/documents/pages/DocumentWizard.vue
++++ b/frontend/src/modules/documents/pages/DocumentWizard.vue
+@@ -668,6 +668,7 @@ import type {
+   DocumentWizardBatchCreatePayload,
+   DocumentWizardBatchRowError,
+   DocumentWizardCaseRow,
++  DocumentWizardFeeFinalRowDraft,
+   DocumentWizardFeePreviewFeeItem,
+   DocumentWizardFeePreviewItem,
+   DocumentWizardParsedCase,
+@@ -1139,9 +1140,30 @@ function buildFinalSubmitPayload(): DocumentWizardBatchCreatePayload {
+   return {
+     ...buildStep2Payload(),
+     task_rows: buildStep3TaskRows(),
++    fee_rows: buildStep4FeeRows(),
+   }
+ }
+ 
++function buildStep4FeeRows(): DocumentWizardFeeFinalRowDraft[] {
++  return step4PreviewRows.value
++    .filter((row) => !row.skip_this_candidate)
++    .map((row) => ({
++      row_index: row.row_index,
++      case_id: row.case_id,
++      fee_draft_type: row.fee_draft_type,
++      skip_this_candidate: row.skip_this_candidate,
++      fee_items: row.fee_items.map((item) => ({
++        fee_code: item.fee_code,
++        fee_name: item.fee_name,
++        fee_type: item.fee_type,
++        quantity: item.quantity,
++        unit_price: item.unit_price,
++        amount: item.amount,
++        remark: item.remark,
++      })),
++    }))
++}
++
+ async function reloadStep3Preview(): Promise<void> {
+   if (!step2Rows.value.length || !documentWizardState.defaults.doc_template_id) {
+     step3PreviewRows.value = []

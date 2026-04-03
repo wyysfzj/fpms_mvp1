@@ -1,0 +1,9 @@
+{"ts":"20260404T014625","step":"ruff-format","rc":0,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014625_ruff-format.log"}
+{"ts":"20260404T014625","step":"ruff-check-fix","rc":0,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014625_ruff-check-fix.log"}
+{"ts":"20260404T014627","step":"ruff-check","rc":0,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014627_ruff-check.log"}
+{"ts":"20260404T014643","step":"pytest-step4-final","rc":0,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014643_pytest-step4-final.log"}
+{"ts":"20260404T014648","step":"task-validate","rc":1,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014648_task-validate.log"}
+{"ts":"20260404T014712","step":"task-validate","rc":1,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014712_task-validate.log"}
+{"ts":"20260404T014721","step":"lint","rc":0,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014721_lint.log"}
+{"ts":"20260404T014721","step":"test","rc":0,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014721_test.log"}
+{"ts":"20260404T014726","step":"task-validate","rc":0,"log":"artifacts/DOCWIZ-STEP4-BE-FINAL-01/outputs/20260404T014726_task-validate.log"}

@@ -162,6 +162,21 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
                 : {}),
             ...(row.daily_remind !== undefined ? { daily_remind: row.daily_remind } : {}),
         })),
+        fee_rows: data.fee_rows?.map((row) => ({
+                row_index: row.row_index,
+                case_id: row.case_id,
+                fee_draft_type: row.fee_draft_type,
+                ...(row.skip_this_candidate !== undefined ? { skip_this_candidate: row.skip_this_candidate } : {}),
+                fee_items: row.fee_items.map((item) => ({
+                    ...(trimToUndefined(item.fee_code ?? undefined) ? { fee_code: trimToUndefined(item.fee_code ?? undefined) } : {}),
+                    ...(trimToUndefined(item.fee_name ?? undefined) ? { fee_name: trimToUndefined(item.fee_name ?? undefined) } : {}),
+                    fee_type: item.fee_type,
+                    ...(trimToUndefined(item.quantity ?? undefined) ? { quantity: trimToUndefined(item.quantity ?? undefined) } : {}),
+                    ...(trimToUndefined(item.unit_price ?? undefined) ? { unit_price: trimToUndefined(item.unit_price ?? undefined) } : {}),
+                    amount: item.amount,
+                    ...(trimToUndefined(item.remark ?? undefined) ? { remark: trimToUndefined(item.remark ?? undefined) } : {}),
+                })),
+            })) || [],
     }
 }
 

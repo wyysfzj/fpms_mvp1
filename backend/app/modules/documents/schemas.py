@@ -63,10 +63,29 @@ class DocumentWizardTaskFinalRowIn(BaseModel):
     daily_remind: bool | None = None
 
 
+class DocumentWizardFeeFinalFeeItemIn(BaseModel):
+    fee_code: str | None = None
+    fee_name: str | None = None
+    fee_type: str = Field(default="SERVICE", max_length=16)
+    quantity: Decimal | None = None
+    unit_price: Decimal | None = None
+    amount: Decimal = Field(default=Decimal("0"), ge=0)
+    remark: str | None = None
+
+
+class DocumentWizardFeeFinalRowIn(BaseModel):
+    row_index: int = Field(..., ge=1)
+    case_id: str = Field(..., min_length=1, max_length=36)
+    fee_draft_type: str = Field(..., min_length=1, max_length=32)
+    skip_this_candidate: bool = False
+    fee_items: list[DocumentWizardFeeFinalFeeItemIn] = Field(default_factory=list)
+
+
 class DocumentWizardBatchCreateIn(BaseModel):
     defaults: DocumentWizardBatchDefaultsIn
     rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
     task_rows: list[DocumentWizardTaskFinalRowIn] = Field(default_factory=list)
+    fee_rows: list[DocumentWizardFeeFinalRowIn] = Field(default_factory=list)
 
 
 class DocumentWizardFeePreviewIn(BaseModel):

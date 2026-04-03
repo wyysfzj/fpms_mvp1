@@ -1,0 +1,96 @@
+diff --git a/frontend/src/api/documents.ts b/frontend/src/api/documents.ts
+index 7dc8cc7..0332d06 100644
+--- a/frontend/src/api/documents.ts
++++ b/frontend/src/api/documents.ts
+@@ -162,6 +162,21 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
+                 : {}),
+             ...(row.daily_remind !== undefined ? { daily_remind: row.daily_remind } : {}),
+         })),
++        fee_rows: data.fee_rows?.map((row) => ({
++                row_index: row.row_index,
++                case_id: row.case_id,
++                fee_draft_type: row.fee_draft_type,
++                ...(row.skip_this_candidate !== undefined ? { skip_this_candidate: row.skip_this_candidate } : {}),
++                fee_items: row.fee_items.map((item) => ({
++                    ...(trimToUndefined(item.fee_code ?? undefined) ? { fee_code: trimToUndefined(item.fee_code ?? undefined) } : {}),
++                    ...(trimToUndefined(item.fee_name ?? undefined) ? { fee_name: trimToUndefined(item.fee_name ?? undefined) } : {}),
++                    fee_type: item.fee_type,
++                    ...(trimToUndefined(item.quantity ?? undefined) ? { quantity: trimToUndefined(item.quantity ?? undefined) } : {}),
++                    ...(trimToUndefined(item.unit_price ?? undefined) ? { unit_price: trimToUndefined(item.unit_price ?? undefined) } : {}),
++                    amount: item.amount,
++                    ...(trimToUndefined(item.remark ?? undefined) ? { remark: trimToUndefined(item.remark ?? undefined) } : {}),
++                })),
++            })) || [],
+     }
+ }
+ 
+diff --git a/frontend/src/api/documents.types.ts b/frontend/src/api/documents.types.ts
+index b1cf5a7..dfa6e2c 100644
+--- a/frontend/src/api/documents.types.ts
++++ b/frontend/src/api/documents.types.ts
+@@ -178,6 +178,7 @@ export interface DocumentWizardBatchCreatePayload {
+     defaults: DocumentWizardBatchDefaults
+     rows: DocumentWizardBatchRowDraft[]
+     task_rows?: DocumentWizardTaskFinalRowDraft[]
++    fee_rows?: DocumentWizardFeeFinalRowDraft[]
+ }
+ 
+ export interface DocumentWizardBatchCreatedRow {
+@@ -241,6 +242,14 @@ export interface DocumentWizardFeePreviewResult {
+     items: DocumentWizardFeePreviewItem[]
+ }
+ 
++export interface DocumentWizardFeeFinalRowDraft {
++    row_index: number
++    case_id: string
++    fee_draft_type: string
++    skip_this_candidate?: boolean
++    fee_items: DocumentWizardFeePreviewFeeItem[]
++}
++
+ export interface DocumentWizardBatchRowError {
+     row_index: number
+     field: string
+diff --git a/frontend/src/modules/documents/pages/DocumentWizard.vue b/frontend/src/modules/documents/pages/DocumentWizard.vue
+index becb8c9..ae4846b 100644
+--- a/frontend/src/modules/documents/pages/DocumentWizard.vue
++++ b/frontend/src/modules/documents/pages/DocumentWizard.vue
+@@ -668,6 +668,7 @@ import type {
+   DocumentWizardBatchCreatePayload,
+   DocumentWizardBatchRowError,
+   DocumentWizardCaseRow,
++  DocumentWizardFeeFinalRowDraft,
+   DocumentWizardFeePreviewFeeItem,
+   DocumentWizardFeePreviewItem,
+   DocumentWizardParsedCase,
+@@ -1139,9 +1140,30 @@ function buildFinalSubmitPayload(): DocumentWizardBatchCreatePayload {
+   return {
+     ...buildStep2Payload(),
+     task_rows: buildStep3TaskRows(),
++    fee_rows: buildStep4FeeRows(),
+   }
+ }
+ 
++function buildStep4FeeRows(): DocumentWizardFeeFinalRowDraft[] {
++  return step4PreviewRows.value
++    .filter((row) => !row.skip_this_candidate)
++    .map((row) => ({
++      row_index: row.row_index,
++      case_id: row.case_id,
++      fee_draft_type: row.fee_draft_type,
++      skip_this_candidate: row.skip_this_candidate,
++      fee_items: row.fee_items.map((item) => ({
++        fee_code: item.fee_code,
++        fee_name: item.fee_name,
++        fee_type: item.fee_type,
++        quantity: item.quantity,
++        unit_price: item.unit_price,
++        amount: item.amount,
++        remark: item.remark,
++      })),
++    }))
++}
++
+ async function reloadStep3Preview(): Promise<void> {
+   if (!step2Rows.value.length || !documentWizardState.defaults.doc_template_id) {
+     step3PreviewRows.value = []
