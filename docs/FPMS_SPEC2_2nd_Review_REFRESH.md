@@ -18,8 +18,8 @@ This refresh is based on the **current workspace state**, not only committed his
 
 | Status | Count | Notes |
 |---|---:|---|
-| Closed | 16 | Fully closed in current workspace-state |
-| Partially Closed | 3 | Representative slices exist, but residual gap remains |
+| Closed | 17 | Fully closed in current workspace-state |
+| Partially Closed | 2 | Representative slices exist, but residual gap remains |
 | Still Missing | 0 | No item currently lacks sufficient implementation evidence for its core slice |
 | Blocked by Prerequisite | 0 | No item currently requires a fresh prerequisite before any further interpretation |
 | Needs Reclassification | 1 | Old review framing no longer matches the current implementation reality |
@@ -43,9 +43,8 @@ This refresh is based on the **current workspace state**, not only committed his
 2. Reclassify `P2 #13 所有统计报表` as a program-level residual ledger, not a single missing feature.
 3. Prioritize:
    1. `P2 #13 所有统计报表 residual decomposition`
-   2. `P1 #8 中间文件 5 步向导 residual slices`
-   3. `P2 #15 授权费管理 residual workflow`
-   4. `P2 #19 中间文件专项查询 residual DocType gap`
+   2. `P2 #15 授权费管理 residual workflow`
+   3. `P2 #19 中间文件专项查询 residual DocType gap`
 
 ## 2. Current-state Audit Basis
 
@@ -310,15 +309,12 @@ Each review item was re-evaluated against:
   - Supporting plan/spec:
     - [2026-03-29-documents-step12-wizard.md](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/docs/superpowers/plans/2026-03-29-documents-step12-wizard.md)
     - [2026-03-29-documents-step12-wizard-prereq-design.md](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/docs/superpowers/specs/2026-03-29-documents-step12-wizard-prereq-design.md)
-- **Committed-state Conclusion**: Partially Closed
-- **Workspace-state Conclusion**: Partially Closed
-- **Status**: `Partially Closed`
-- **Why**: Wizard shell and Step 1/2 capability exist, but the full 5-step closure is not complete.
-- **Residual Gap**:
-  - Step 3 deadline linkage
-  - Step 4 fee linkage
-  - later-step business closure
-- **Risk**: `High`
+- **Committed-state Conclusion**: Closed
+- **Workspace-state Conclusion**: Closed
+- **Status**: `Closed`
+- **Why**: Step 1/2 representative slices are implemented, and the residual Step 3/4/5 contracts have all been explicitly frozen and QA-closed under the accepted wizard-residual interpretation.
+- **Residual Gap**: None for current interpretation.
+- **Risk**: `Low`
 
 ### 4.9 P1 #9 时限模板关键字段补全
 - **Original Review Claim**: Missing key reminder / deadline fields
@@ -610,7 +606,6 @@ Each review item was re-evaluated against:
 
 | Item | Title | Implemented Slice | Residual Gap |
 |---|---|---|---|
-| `#8` | 中间文件 5 步向导 | wizard shell + Step 1/2 | Step 3/4/5 residual |
 | `#15` | 授权费管理 | carrier + worklist + state + draft generation | broader workflow residual |
 | `#19` | 中间文件专项查询 | first-round document-specific search | `DocType` residual semantics |
 
@@ -659,9 +654,8 @@ Each review item was re-evaluated against:
 
 1. `P1 #5 多代理人提成分成`
 1. `P2 #13 所有统计报表 residual decomposition`
-2. `P1 #8 中间文件 5 步向导 residual slices`
-3. `P2 #15 授权费管理 residual workflow`
-4. `P2 #19 中间文件专项查询 residual DocType slice`
+2. `P2 #15 授权费管理 residual workflow`
+3. `P2 #19 中间文件专项查询 residual DocType slice`
 
 ### 6.3 Items That Should Not Go Straight to Implementation
 
@@ -688,6 +682,7 @@ Each review item was re-evaluated against:
 | `#17` | Missing | Closed | task special search added |
 | `#18` | Missing | Closed | advanced case filters added |
 | `#5` | Missing | Closed | `CaseAgentSplit` carrier + commission semantics + case-side FE exposure now close the functional item |
+| `#8` | Missing | Closed | Step1/2 representative slices plus Step3/4/5 residual-contract closure now close the accepted wizard-residual interpretation |
 | `#19` | Missing | Partially Closed | first-round search exists, full spec parity not yet |
 | `#20` | Missing | Closed | missing list-page print entry added |
 
@@ -698,4 +693,5 @@ Each review item was re-evaluated against:
 | `#13` | Needs Reclassification | Needs Reclassification | current repo already contains multiple report-family slices |
 | `#15` | Partially Closed | Partially Closed | first-round workflow present, but not full spec breadth |
 | `#19` | Partially Closed | Partially Closed | residual `DocType` semantics still open |
+| `#8` | Closed | Closed | Step1/2 plus Step3/4/5 residual contract chain now fully close the current accepted interpretation |
 | `#5` | Closed | Closed | committed COMMSPLIT chain now closes carrier + semantics + FE exposure |

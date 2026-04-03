@@ -4,12 +4,11 @@ This ledger is derived from [FPMS_SPEC2_2nd_Review_REFRESH.md](/Users/cfcc/Works
 
 ## 1. Mitigation Summary
 
-Current non-`Closed` items: `4`
+Current non-`Closed` items: `3`
 
 - `Still Missing`
   - `None`
 - `Partially Closed`
-  - `#8 中间文件 5 步向导`
   - `#15 授权费管理`
   - `#19 中间文件专项查询`
 - `Blocked by Prerequisite`
@@ -18,17 +17,6 @@ Current non-`Closed` items: `4`
   - `#13 所有统计报表`
 
 ## 2. Priority-ranked Mitigation Ledger
-
-### `#8 中间文件 5 步向导`
-- `Current Status`: `Partially Closed`
-- `Recommended Interpretation`: wizard residual program, not one missing story
-- `Why This Interpretation Is Correct`: wizard shell exists but full 5-step closure does not
-- `Exact Closure Slice`: Step 3 deadline linkage first
-- `Explicit Non-closure`: no dispatch/reporting/full-text
-- `Likely Ownership`: `shared`
-- `Prerequisite Needed?`: `Maybe`
-- `Suggested Story Shape`: `multi-lane`
-- `Recommended Next Action`: `replan`
 
 ### `#13 所有统计报表`
 - `Current Status`: `Needs Reclassification`
@@ -64,26 +52,6 @@ Current non-`Closed` items: `4`
 - `Recommended Next Action`: `write spec`
 
 ## 3. Next-story Candidates
-
-### For `#8 中间文件 5 步向导`
-
-#### Candidate 1
-- `Story ID`: `DOCWIZ-STEP3-SPEC-01`
-- `Title`: 向导 Step 3 时限联动 residual spec
-- `Exact Closure Slice`: freeze Step 3 deadline linkage contract
-- `Explicit Non-closure`: no Step 4/5, no dispatch
-- `Likely Ownership`: `shared`
-- `Suggested Story Shape`: `multi-lane`
-- `Recommended Next Action`: `write spec`
-
-#### Candidate 2
-- `Story ID`: `DOCWIZ-STEP4-SPEC-01`
-- `Title`: 向导 Step 4 费用联动 residual spec
-- `Exact Closure Slice`: freeze fee linkage semantics
-- `Explicit Non-closure`: no dispatch/reporting
-- `Likely Ownership`: `shared`
-- `Suggested Story Shape`: `multi-lane`
-- `Recommended Next Action`: `write spec`
 
 ### For `#13 所有统计报表`
 
