@@ -1,0 +1,7 @@
+# Baseline Allowlist Note
+
+At task start, the allowlisted planning/task files were already present as untracked files:
+- `docs/superpowers/specs/2026-04-03-docwiz-step3-deadline-linkage-design.md`
+- `docs/superpowers/plans/2026-04-03-docwiz-step3-deadline-linkage.md`
+- `tasks/postenhancement/backend/DOCWIZ-STEP3-SPEC-01.md`
+- `tasks/postenhancement/backend/DOCWIZ-QA-STEP3-01.md`

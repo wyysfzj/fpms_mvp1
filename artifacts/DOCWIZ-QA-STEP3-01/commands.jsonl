@@ -1,0 +1,3 @@
+{"ts":"20260403T210845","step":"test","cmd":"./scripts/task_validate.sh DOCWIZ-STEP3-SPEC-01"}
+{"ts":"20260403T210845","step":"lint","cmd":"/bin/zsh -lc test\ -f\ artifacts/DOCWIZ-STEP3-SPEC-01/summary.md\ \&\&\ test\ -f\ artifacts/DOCWIZ-STEP3-SPEC-01/git/diff.patch"}
+{"ts":"20260403T210852","step":"task_validate","cmd":"./scripts/task_validate.sh DOCWIZ-QA-STEP3-01"}
