@@ -1,6 +1,6 @@
 # FPMS SPEC 2.0 Implementation Review Report (Refresh)
 
-**Refresh Date**: 2026-04-02  
+**Refresh Date**: 2026-04-03  
 **Scope**: Full `Priority-Ranked MISSING Features` re-audit against current workspace state  
 **Baseline Type**: `workspace-state`  
 **Authority Sources**:
@@ -18,9 +18,9 @@ This refresh is based on the **current workspace state**, not only committed his
 
 | Status | Count | Notes |
 |---|---:|---|
-| Closed | 15 | Fully closed in current workspace-state |
+| Closed | 16 | Fully closed in current workspace-state |
 | Partially Closed | 3 | Representative slices exist, but residual gap remains |
-| Still Missing | 1 | No sufficient implementation evidence for the core slice |
+| Still Missing | 0 | No item currently lacks sufficient implementation evidence for its core slice |
 | Blocked by Prerequisite | 0 | No item currently requires a fresh prerequisite before any further interpretation |
 | Needs Reclassification | 1 | Old review framing no longer matches the current implementation reality |
 
@@ -35,15 +35,14 @@ This refresh is based on the **current workspace state**, not only committed his
 - Several other items are not truly `missing` anymore, but should now be interpreted as:
   - `Partially Closed`
   - `Needs Reclassification`
-- The highest-risk remaining true gap is still:
-  - `P1 #5 多代理人提成分成`
+- `P1 #5 多代理人提成分成` is no longer a true missing gap; the original review framing is now out of date relative to the implemented split carrier, commission semantics, and FE exposure.
 
 ### 1.3 Recommended Immediate Actions
 
 1. Update the review baseline using this refresh.
 2. Reclassify `P2 #13 所有统计报表` as a program-level residual ledger, not a single missing feature.
 3. Prioritize:
-   1. `P1 #5 多代理人提成分成`
+   1. `P2 #13 所有统计报表 residual decomposition`
    2. `P1 #8 中间文件 5 步向导 residual slices`
    3. `P2 #15 授权费管理 residual workflow`
    4. `P2 #19 中间文件专项查询 residual DocType gap`
@@ -229,22 +228,37 @@ Each review item was re-evaluated against:
   - Module 6 `多代理人提成分成`
   - `SecondAgentID` / allocation / ratio semantics
 - **Current Implementation Evidence**:
-  - Backend carrier:
+  - Backend carrier and validation:
+    - [cases/models.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/cases/models.py) `T_CaseAgentSplit`
+    - [cases/service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/cases/service.py) `validate_case_agent_splits(...)`
+    - [cases/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/cases/api.py) `agent_splits` output
+  - Backend commission semantics:
+    - [commission/service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/service.py)
+      - `_load_case_agent_splits(...)`
+      - `_split_money_by_ratios(...)`
+      - `apply_commission_for_bill(...)`
+      - `_commission_is_rewritable(...)`
+      - `recompute_commission_settleable(...)`
+      - `generate_commission_settlement_lines(...)`
     - [commission/models.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/models.py)
-      - still commission-centric single-agent design
-  - Related case field exists:
-    - [cases/models.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/cases/models.py) `second_agent_id`
-  - Current worktree diff on commission model is formatting-only
-- **Committed-state Conclusion**: Still Missing
-- **Workspace-state Conclusion**: Still Missing
-- **Status**: `Still Missing`
-- **Why**: `SecondAgentID` existence on case is not equal to commission allocation closure.
-- **Residual Gap**:
-  - allocation carrier
-  - ratio logic
-  - settlement semantics
-  - FE exposure
-- **Risk**: `High`
+      - `Commission.is_settleable`
+      - `CommissionSettleLine`
+  - Frontend exposure:
+    - [CaseCreate.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/cases/pages/CaseCreate.vue)
+    - [CaseEdit.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/cases/pages/CaseEdit.vue)
+    - [CaseDetail.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/cases/pages/CaseDetail.vue)
+  - Close-audit evidence:
+    - `artifacts/COMMSPLIT-BE-01/**`
+    - `artifacts/COMMSPLIT-BE-02/**`
+    - `artifacts/COMMSPLIT-BE-03/**`
+    - `artifacts/COMMSPLIT-FE-EDIT-01/**`
+    - `artifacts/COMMSPLIT-FE-VIEW-01/**`
+- **Committed-state Conclusion**: Closed
+- **Workspace-state Conclusion**: Closed
+- **Status**: `Closed`
+- **Why**: Multi-agent split is now functionally closed via case-level split carrier, split-aware commission generation, row-level settlement semantics, and case-side FE editing/viewing. The old review expected a commission-model redesign, but the implemented closure uses `CaseAgentSplit` as the effective carrier.
+- **Residual Gap**: no residual remains inside the old review interpretation of `FR-COM-03`.
+- **Risk**: `Medium`
 
 ### 4.6 P1 #6 坏账完整流程
 - **Original Review Claim**: Partial
@@ -583,13 +597,14 @@ Each review item was re-evaluated against:
 | `#16` | 费用综合查询 | closed first-round |
 | `#17` | 专项检索 | closed first-round |
 | `#18` | 高级案件查询增强 | closed first-round |
+| `#5` | 多代理人提成分成 | closed via `CaseAgentSplit` + commission semantics + FE exposure |
 | `#20` | 账单打印前端按钮 | closed |
 
 ### 5.2 Still Missing
 
 | Item | Title | Core Missing Slice | Risk |
 |---|---|---|---|
-| `#5` | 多代理人提成分成 | allocation carrier + ratio logic + settlement semantics | High |
+| `None` | — | — | — |
 
 ### 5.3 Partially Closed
 
@@ -620,6 +635,7 @@ Each review item was re-evaluated against:
 | `#16` | first-round fee unified query is implemented |
 | `#17` | special task search now exists |
 | `#18` | advanced case filters now exist |
+| `#5` | functional closure now exists through `CaseAgentSplit` + split-aware commission semantics |
 | `#20` | list-page print entry now exists |
 
 ### 5.7 Likely False Negatives / Coarse Framing in Old Review
@@ -642,14 +658,13 @@ Each review item was re-evaluated against:
 ### 6.2 Highest-value Gaps to Prioritize Next
 
 1. `P1 #5 多代理人提成分成`
-2. `P2 #13 所有统计报表 residual decomposition`
+1. `P2 #13 所有统计报表 residual decomposition`
+2. `P1 #8 中间文件 5 步向导 residual slices`
 3. `P2 #15 授权费管理 residual workflow`
-4. `P1 #8 中间文件 5 步向导 residual slices`
-5. `P2 #19 中间文件专项查询 residual DocType slice`
+4. `P2 #19 中间文件专项查询 residual DocType slice`
 
 ### 6.3 Items That Should Not Go Straight to Implementation
 
-- `#5` → prerequisite first
 - `#13` → reclassification first
 - `#19` → residual contract freeze first
 
@@ -660,6 +675,7 @@ Each review item was re-evaluated against:
 - `#16`
 - `#17`
 - `#18`
+- `#5`
 - `#20`
 
 ## Appendix A. Old Review Position vs Current Workspace Finding
@@ -671,6 +687,7 @@ Each review item was re-evaluated against:
 | `#16` | Missing | Closed | fee unified query added |
 | `#17` | Missing | Closed | task special search added |
 | `#18` | Missing | Closed | advanced case filters added |
+| `#5` | Missing | Closed | `CaseAgentSplit` carrier + commission semantics + case-side FE exposure now close the functional item |
 | `#19` | Missing | Partially Closed | first-round search exists, full spec parity not yet |
 | `#20` | Missing | Closed | missing list-page print entry added |
 
@@ -681,4 +698,4 @@ Each review item was re-evaluated against:
 | `#13` | Needs Reclassification | Needs Reclassification | current repo already contains multiple report-family slices |
 | `#15` | Partially Closed | Partially Closed | first-round workflow present, but not full spec breadth |
 | `#19` | Partially Closed | Partially Closed | residual `DocType` semantics still open |
-| `#5` | Still Missing | Still Missing | current worktree diffs do not alter core carrier gap |
+| `#5` | Closed | Closed | committed COMMSPLIT chain now closes carrier + semantics + FE exposure |

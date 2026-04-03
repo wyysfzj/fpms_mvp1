@@ -1,0 +1,11 @@
+# Baseline Allowlist Note
+
+At task start, the allowlisted planning/task files were already present as untracked files:
+- `docs/superpowers/specs/2026-04-03-commission-split-close-audit-design.md`
+- `docs/superpowers/plans/2026-04-03-commission-split-close-audit.md`
+- `tasks/postenhancement/backend/COMMSPLIT-CLOSE-01.md`
+- `tasks/postenhancement/backend/COMMSPLIT-QA-10.md`
+
+Within product files, this task only claims changes to:
+- `docs/FPMS_SPEC2_2nd_Review_REFRESH.md`
+- `docs/priority-ranked-mitigation-ledger.md`

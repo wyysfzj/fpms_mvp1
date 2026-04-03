@@ -1,0 +1,4 @@
+{"ts":"20260403T204246","step":"test","rc":1,"log":"artifacts/COMMSPLIT-CLOSE-01/outputs/20260403T204246_test.log"}
+{"ts":"20260403T204246","step":"lint","rc":0,"log":"artifacts/COMMSPLIT-CLOSE-01/outputs/20260403T204246_lint.log"}
+{"ts":"20260403T204304","step":"test","rc":0,"log":"artifacts/COMMSPLIT-CLOSE-01/outputs/20260403T204304_test.log"}
+{"ts":"20260403T204406","step":"task_validate","rc":0,"log":"artifacts/COMMSPLIT-CLOSE-01/outputs/20260403T204406_task_validate.log"}

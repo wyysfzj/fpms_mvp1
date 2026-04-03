@@ -4,10 +4,10 @@ This ledger is derived from [FPMS_SPEC2_2nd_Review_REFRESH.md](/Users/cfcc/Works
 
 ## 1. Mitigation Summary
 
-Current non-`Closed` items: `5`
+Current non-`Closed` items: `4`
 
 - `Still Missing`
-  - `#5 多代理人提成分成`
+  - `None`
 - `Partially Closed`
   - `#8 中间文件 5 步向导`
   - `#15 授权费管理`
@@ -18,17 +18,6 @@ Current non-`Closed` items: `5`
   - `#13 所有统计报表`
 
 ## 2. Priority-ranked Mitigation Ledger
-
-### `#5 多代理人提成分成`
-- `Current Status`: `Still Missing`
-- `Recommended Interpretation`: true structural gap, not a small rule patch
-- `Why This Interpretation Is Correct`: current commission carrier remains single-agent centric
-- `Exact Closure Slice`: multi-agent allocation carrier + ratio semantics
-- `Explicit Non-closure`: no commission report redesign, no full settlement UX rewrite
-- `Likely Ownership`: `prereq-heavy`
-- `Prerequisite Needed?`: `Yes`
-- `Suggested Story Shape`: `prereq-heavy`
-- `Recommended Next Action`: `split prerequisite`
 
 ### `#8 中间文件 5 步向导`
 - `Current Status`: `Partially Closed`
@@ -75,26 +64,6 @@ Current non-`Closed` items: `5`
 - `Recommended Next Action`: `write spec`
 
 ## 3. Next-story Candidates
-
-### For `#5 多代理人提成分成`
-
-#### Candidate 1
-- `Story ID`: `COMMSPLIT-PRE-01`
-- `Title`: 提成多代理分成 prerequisite
-- `Exact Closure Slice`: freeze allocation carrier / ratio / settlement ownership semantics
-- `Explicit Non-closure`: no report redesign
-- `Likely Ownership`: `prereq-heavy`
-- `Suggested Story Shape`: `prereq-heavy`
-- `Recommended Next Action`: `write spec`
-
-#### Candidate 2
-- `Story ID`: `COMMSPLIT-BE-01`
-- `Title`: 多代理提成计算最小后端闭环
-- `Exact Closure Slice`: allocation logic after prerequisite
-- `Explicit Non-closure`: no FE editor, no report work
-- `Likely Ownership`: `backend`
-- `Suggested Story Shape`: `single-lane`
-- `Recommended Next Action`: `split prerequisite`
 
 ### For `#8 中间文件 5 步向导`
 
@@ -178,13 +147,11 @@ Current non-`Closed` items: `5`
 
 ## 4. Recommended Priority Queue
 
-1. `COMMSPLIT-PRE-01`
-   - Only remaining clearly structural gap.
-2. `REPORTS-LEDGER-01`
+1. `REPORTS-LEDGER-01`
    - Reclassification must happen before any honest reports closure claims.
-3. `DOCWIZ-STEP3-SPEC-01`
+2. `DOCWIZ-STEP3-SPEC-01`
    - Wizard shell already exists, so residual-slice confusion risk is high.
-4. `GF-RESIDUAL-SPEC-01`
+3. `GF-RESIDUAL-SPEC-01`
    - Existing workflow should be clarified before any further implementation.
-5. `DOCSEARCH-DOCTYPE-SPEC-01`
+4. `DOCSEARCH-DOCTYPE-SPEC-01`
    - Small residual gap, but contract semantics are important.

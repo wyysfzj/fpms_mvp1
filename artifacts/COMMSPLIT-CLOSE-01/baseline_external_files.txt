@@ -1,0 +1,9 @@
+Pre-existing dirty files outside this task's claimed closure were present at task start:
+- `frontend/src/api/cases.ts`
+- `frontend/src/api/cases.types.ts`
+- `docs/superpowers/specs/2026-04-03-commission-split-close-audit-design.md`
+- `docs/superpowers/plans/2026-04-03-commission-split-close-audit.md`
+- `tasks/postenhancement/backend/COMMSPLIT-CLOSE-01.md`
+- `tasks/postenhancement/backend/COMMSPLIT-QA-10.md`
+
+This task did not claim or modify the pre-existing API file changes.
