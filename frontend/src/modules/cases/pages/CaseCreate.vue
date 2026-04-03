@@ -664,6 +664,19 @@
             </el-row>
           </el-collapse-item>
 
+          <el-collapse-item title="代理人分摊" name="agent_split">
+            <div class="section-toolbar">
+              <div class="field-hint">当前仅支持“代理人”角色。每行填写代理人、角色和分摊比例，比例总和必须等于 100。</div>
+            </div>
+            <div v-if="agentSplitErrorItems.length" class="section-error">
+              <div>代理人分摊校验未通过：</div>
+              <ul class="validation-summary-list">
+                <li v-for="item in agentSplitErrorItems" :key="item.key + item.message">{{ item.message }}</li>
+              </ul>
+            </div>
+            <CaseAgentSplitEditor v-model="form.agent_splits" :row-errors="agentSplitRowErrors" />
+          </el-collapse-item>
+
           <el-collapse-item v-if="showSpecificationSection" title="控制标记" name="flags">
             <el-row :gutter="20">
               <el-col :span="8">
@@ -765,10 +778,11 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { createCase } from '../../../api/cases'
 import { createClient, getClients } from '../../../api/clients'
-import type { CaseApplicant, CaseCreatePayload, CasePriority } from '../../../api/cases.types'
+import type { CaseAgentSplit, CaseApplicant, CaseCreatePayload, CasePriority } from '../../../api/cases.types'
 import type { Client, ClientCreatePayload } from '../../../api/clients.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import CaseAgentSplitEditor from '../components/CaseAgentSplitEditor.vue'
 import { mapValidationDetailsToFieldErrors } from '../../../utils/validation'
 
 interface ValidationItem {
@@ -816,6 +830,7 @@ const creatingClient = ref(false)
 const error = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 const validationSummary = ref<ValidationItem[]>([])
+const agentSplitRowErrors = ref<string[][]>([])
 
 const clients = ref<Client[]>([])
 const clientsTotal = ref(0)
@@ -823,6 +838,26 @@ const expandedSections = ref<string[]>([])
 const showQuickClientDialog = ref(false)
 const quickClientMode = ref<'client' | 'applicant' | 'foreign_agent'>('client')
 const quickApplicantIndex = ref<number | null>(null)
+const agentSplitErrorItems = computed(() => {
+  const items: ValidationItem[] = []
+  const seen = new Set<string>()
+  const addMessages = (key: string, label: string) => {
+    const messages = fieldErrors.value.get(key) || []
+    for (const message of messages) {
+      const token = `${key}:${message}`
+      if (seen.has(token)) continue
+      seen.add(token)
+      items.push({ key, message: `${label}${message}` })
+    }
+  }
+
+  addMessages('agent_splits', '代理人分摊：')
+  addMessages('agent_id', '代理人：')
+  addMessages('role', '角色：')
+  addMessages('share_ratio', '分摊比例：')
+
+  return items
+})
 
 const form = reactive<CaseCreatePayload>({
   case_no: '',
@@ -868,6 +903,7 @@ const form = reactive<CaseCreatePayload>({
   invalid_patentee: '',
   invalid_requester: '',
   invalid_role: '',
+  agent_splits: [],
 })
 
 const quickClientForm = reactive<ClientCreatePayload>({
@@ -1152,6 +1188,60 @@ function normalizeFieldErrorsFromSummary(items: ValidationItem[]) {
   fieldErrors.value = next
 }
 
+function resetAgentSplitErrors() {
+  agentSplitRowErrors.value = []
+}
+
+function splitFieldLabel(field: string) {
+  if (field === 'agent_id') return '代理人'
+  if (field === 'role') return '角色'
+  if (field === 'share_ratio') return '分摊比例'
+  return field
+}
+
+function extractAgentSplitRowErrors(details?: unknown): string[][] {
+  const rows: string[][] = []
+  const errors = Array.isArray(details)
+    ? details
+    : details && typeof details === 'object' && Array.isArray((details as Record<string, unknown>).errors)
+      ? (details as Record<string, unknown>).errors
+      : null
+  if (!Array.isArray(errors)) return rows
+
+  for (const err of errors) {
+    if (typeof err !== 'object' || err === null) continue
+    const loc = (err as { loc?: unknown[] }).loc
+    const msg = (err as { msg?: string }).msg
+    if (!Array.isArray(loc) || typeof msg !== 'string') continue
+
+    const path = loc.map((item) => String(item))
+    const splitIndex = path.indexOf('agent_splits')
+    if (splitIndex < 0) continue
+
+    const rowIndex = Number(path[splitIndex + 1])
+    if (!Number.isInteger(rowIndex) || rowIndex < 0) continue
+
+    const field = path[splitIndex + 2]
+    const prefix = field ? `${splitFieldLabel(field)}：` : ''
+    rows[rowIndex] ??= []
+    rows[rowIndex].push(`${prefix}${msg}`)
+  }
+
+  return rows
+}
+
+function normalizeAgentSplitRows(agentSplits: CaseAgentSplit[] | null | undefined): CaseAgentSplit[] {
+  return (agentSplits || [])
+    .map((split) => ({
+      agent_id: String(split.agent_id || '').trim(),
+      role: String(split.role || '').trim(),
+      share_ratio: split.share_ratio === null || split.share_ratio === undefined ? null : Number(split.share_ratio),
+    }))
+    .filter((split) =>
+      [split.agent_id, split.role, split.share_ratio !== null && split.share_ratio !== undefined].some(Boolean)
+    )
+}
+
 function runCustomValidation(): ValidationItem[] {
   const items: ValidationItem[] = []
   const seen = new Set<string>()
@@ -1236,12 +1326,47 @@ function runCustomValidation(): ValidationItem[] {
     }
   }
 
+  const normalizedAgentSplits = normalizeAgentSplitRows(form.agent_splits)
+  if (normalizedAgentSplits.length) {
+    const seenAgentIds = new Set<string>()
+    let ratioTenThousandths = 0
+    let hasRatioError = false
+
+    normalizedAgentSplits.forEach((split, index) => {
+      if (!split.agent_id) {
+        add('agent_splits', `代理人分摊 ${index + 1} 需要填写代理人。`, 'agent_split')
+      } else if (seenAgentIds.has(split.agent_id)) {
+        add('agent_splits', `代理人分摊 ${index + 1} 的代理人不能重复。`, 'agent_split')
+      } else {
+        seenAgentIds.add(split.agent_id)
+      }
+
+      if (!split.role) {
+        add('agent_splits', `代理人分摊 ${index + 1} 需要选择角色。`, 'agent_split')
+      } else if (split.role !== 'Agent') {
+        add('agent_splits', `代理人分摊 ${index + 1} 的角色必须为代理人。`, 'agent_split')
+      }
+
+      if (split.share_ratio === null || !Number.isFinite(split.share_ratio) || split.share_ratio <= 0) {
+        add('agent_splits', `代理人分摊 ${index + 1} 的分摊比例必须大于 0。`, 'agent_split')
+        hasRatioError = true
+      } else {
+        ratioTenThousandths += Math.round(split.share_ratio * 10000)
+      }
+    })
+
+    if (!hasRatioError && ratioTenThousandths !== 1000000) {
+      add('agent_splits', '代理人分摊比例总和必须等于 100。', 'agent_split')
+    }
+  }
+
   return items
 }
 
 async function handleSave() {
   fieldErrors.value = new Map()
   validationSummary.value = []
+  resetAgentSplitErrors()
 
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) {
@@ -1280,6 +1405,7 @@ async function handleSave() {
       bio_deposits: form.bio_deposits?.filter((bioDeposit) =>
         [bioDeposit.deposit_no, bioDeposit.deposit_unit_name, bioDeposit.deposit_date, bioDeposit.name].some((value) => String(value || '').trim())
       ),
+      agent_splits: normalizeAgentSplitRows(form.agent_splits),
     })
     ElMessage.success('案件创建成功')
     router.push('/cases')
@@ -1287,9 +1413,20 @@ async function handleSave() {
     const apiError = err as ApiError
     error.value = apiError
 
-    if (apiError.status === 422 && apiError.details) {
+    if ((apiError.status === 422 || apiError.status === 400) && apiError.details) {
       fieldErrors.value = mapValidationDetailsToFieldErrors(apiError.details)
-      validationSummary.value = [{ key: 'api', message: '后端校验未通过，请检查表单字段。' }]
+      validationSummary.value = [{
+        key: 'api',
+        message: apiError.status === 400
+          ? '后端业务校验未通过，请检查代理人分摊。'
+          : '后端校验未通过，请检查表单字段。',
+      }]
+      const splitRowErrors = extractAgentSplitRowErrors(apiError.details)
+      if (splitRowErrors.some((row) => row.length > 0)) {
+        agentSplitRowErrors.value = splitRowErrors
+        expandedSections.value = Array.from(new Set([...expandedSections.value, 'agent_split']))
+        validationSummary.value = validationSummary.value.filter((item) => item.key !== 'api')
+      }
     }
   } finally {
     saving.value = false
