@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -68,6 +69,11 @@ class DocumentWizardBatchCreateIn(BaseModel):
     task_rows: list[DocumentWizardTaskFinalRowIn] = Field(default_factory=list)
 
 
+class DocumentWizardFeePreviewIn(BaseModel):
+    defaults: DocumentWizardBatchDefaultsIn
+    rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
+
+
 class DocumentWizardTaskPreviewItemOut(BaseModel):
     row_index: int
     case_id: str
@@ -90,6 +96,32 @@ class DocumentWizardTaskPreviewItemOut(BaseModel):
 class DocumentWizardTaskPreviewOut(BaseModel):
     total_candidates: int
     items: list[DocumentWizardTaskPreviewItemOut]
+
+
+class DocumentWizardFeePreviewFeeItemOut(BaseModel):
+    fee_code: str | None = None
+    fee_name: str | None = None
+    fee_type: str = Field(default="SERVICE", max_length=16)
+    quantity: Decimal | None = None
+    unit_price: Decimal | None = None
+    amount: Decimal = Field(default=Decimal("0"), ge=0)
+    remark: str | None = None
+
+
+class DocumentWizardFeePreviewItemOut(BaseModel):
+    row_index: int
+    case_id: str
+    case_no: str | None = None
+    source_title: str | None = None
+    document_title: str | None = None
+    fee_draft_type: str
+    fee_items: list[DocumentWizardFeePreviewFeeItemOut] = Field(default_factory=list)
+    skip_this_candidate: bool = False
+
+
+class DocumentWizardFeePreviewOut(BaseModel):
+    total_candidates: int
+    items: list[DocumentWizardFeePreviewItemOut]
 
 
 class DocumentUpdateIn(BaseModel):

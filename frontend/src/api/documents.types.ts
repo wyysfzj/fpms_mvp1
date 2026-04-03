@@ -215,6 +215,32 @@ export interface DocumentWizardTaskPreviewResult {
     items: DocumentWizardTaskPreviewItem[]
 }
 
+export interface DocumentWizardFeePreviewFeeItem {
+    fee_code?: string | null
+    fee_name?: string | null
+    fee_type: string
+    quantity?: string | null
+    unit_price?: string | null
+    amount: string
+    remark?: string | null
+}
+
+export interface DocumentWizardFeePreviewItem {
+    row_index: number
+    case_id: string
+    case_no?: string
+    source_title?: string
+    document_title?: string
+    fee_draft_type: string
+    fee_items: DocumentWizardFeePreviewFeeItem[]
+    skip_this_candidate: boolean
+}
+
+export interface DocumentWizardFeePreviewResult {
+    total_candidates: number
+    items: DocumentWizardFeePreviewItem[]
+}
+
 export interface DocumentWizardBatchRowError {
     row_index: number
     field: string

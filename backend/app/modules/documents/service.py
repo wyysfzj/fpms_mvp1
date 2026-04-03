@@ -13,7 +13,10 @@ from app.core.storage import ensure_dir, safe_join
 from app.modules.cases.models import Case, T_CaseApplicant
 from app.modules.cases.service import validate_case_status_transition
 from app.modules.documents.enums import DocumentDirection
-from app.modules.documents.fee_linking_service import maybe_create_fee_draft
+from app.modules.documents.fee_linking_service import (
+    maybe_create_fee_draft,
+    parse_fee_item_list_candidates,
+)
 from app.modules.documents.models import (
     DocAttachment,
     DocDispatch,
@@ -31,6 +34,7 @@ from app.modules.documents.schemas import (
     DocumentUpdateIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchRowIn,
+    DocumentWizardFeePreviewIn,
     DocumentWizardTaskFinalRowIn,
 )
 from app.modules.masterdata.clients.models import Client, ClientAddress
@@ -109,6 +113,12 @@ def _normalize_text(value: str | None) -> str | None:
         return None
     text = value.strip()
     return text or None
+
+
+def _resolve_case_title(case: Case) -> str | None:
+    return _normalize_text(getattr(case, "title_cn", None)) or _normalize_text(
+        getattr(case, "title_en", None)
+    )
 
 
 def _format_mailing_address(address: ClientAddress) -> str | None:
@@ -449,7 +459,7 @@ def preview_document_wizard_tasks(
                     "row_index": idx,
                     "case_id": case.id,
                     "case_no": case.case_no,
-                    "source_title": getattr(case, "title", None),
+                    "source_title": _resolve_case_title(case),
                     "document_title": payload.title,
                     "task_template_code": task_template.code,
                     "task_template_name": task_template.name,
@@ -464,6 +474,49 @@ def preview_document_wizard_tasks(
                     "daily_remind": bool(getattr(task_template, "daily_remind", False)),
                 }
             )
+
+    return preview_rows
+
+
+def preview_document_wizard_fee_candidates(
+    db: Session,
+    data: DocumentWizardFeePreviewIn,
+) -> list[dict[str, object]]:
+    template = db.execute(
+        select(DocTemplate).where(DocTemplate.id == data.defaults.doc_template_id)
+    ).scalar_one_or_none()
+    if not template:
+        raise_business_error("DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404)
+
+    _validate_document_wizard_rows(db, data.rows)
+
+    fee_draft_type = _normalize_text(getattr(template, "fee_draft_type", None))
+    if not fee_draft_type:
+        return []
+
+    case_ids = [_normalize_text(row.case_id) for row in data.rows]
+    cases = db.execute(select(Case).where(Case.id.in_(case_ids))).scalars().all()
+    case_by_id = {case.id: case for case in cases}
+    fee_items = parse_fee_item_list_candidates(
+        getattr(template, "fee_item_list", None), template.code
+    )
+    preview_rows: list[dict[str, object]] = []
+
+    for idx, row in enumerate(data.rows, start=1):
+        payload = _build_document_wizard_payload(data.defaults, row, template)
+        case = case_by_id[payload.case_id]
+        preview_rows.append(
+            {
+                "row_index": idx,
+                "case_id": case.id,
+                "case_no": case.case_no,
+                "source_title": _resolve_case_title(case),
+                "document_title": payload.title,
+                "fee_draft_type": fee_draft_type,
+                "fee_items": fee_items,
+                "skip_this_candidate": False,
+            }
+        )
 
     return preview_rows
 

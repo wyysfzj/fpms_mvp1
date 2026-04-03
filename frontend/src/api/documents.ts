@@ -20,6 +20,7 @@ import type {
     DocumentWizardBatchCreatePayload,
     DocumentWizardBatchCreateResult,
     DocumentWizardBatchDefaults,
+    DocumentWizardFeePreviewResult,
     DocumentWizardTaskPreviewResult,
     DocumentWizardStep1State,
     DocumentWizardState,
@@ -371,6 +372,16 @@ export async function createDocumentWizardTaskPreview(
 ): Promise<DocumentWizardTaskPreviewResult> {
     const response = await http.post<DocumentWizardTaskPreviewResult>(
         '/documents/wizard/task-preview',
+        toWizardBatchPayload(data)
+    )
+    return response.data
+}
+
+export async function createDocumentWizardFeePreview(
+    data: DocumentWizardBatchCreatePayload
+): Promise<DocumentWizardFeePreviewResult> {
+    const response = await http.post<DocumentWizardFeePreviewResult>(
+        '/documents/wizard/fee-preview',
         toWizardBatchPayload(data)
     )
     return response.data

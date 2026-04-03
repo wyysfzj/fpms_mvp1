@@ -16,6 +16,55 @@ from app.modules.fees.models import FeeDraft, FeeItem
 logger = logging.getLogger(__name__)
 
 
+def _to_decimal(value) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+
+
+def parse_fee_item_list_candidates(
+    raw_json: str | None, template_code: str
+) -> list[dict[str, object]]:
+    """Parse fee_item_list JSON into preview-safe candidate dicts."""
+    if not raw_json:
+        return []
+
+    try:
+        items = json.loads(raw_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.warning("B3: Malformed fee_item_list JSON in template %s: %s", template_code, exc)
+        return []
+
+    if not isinstance(items, list):
+        logger.warning("B3: fee_item_list in template %s is not a list", template_code)
+        return []
+
+    candidates: list[dict[str, object]] = []
+    for item_data in items:
+        if not isinstance(item_data, dict):
+            continue
+        amount = _to_decimal(item_data.get("amount"))
+        if amount is None:
+            amount = Decimal("0")
+        candidates.append(
+            {
+                "fee_code": item_data.get("code") or item_data.get("fee_code"),
+                "fee_name": item_data.get("name") or item_data.get("fee_name"),
+                "fee_type": item_data.get("fee_type", "SERVICE"),
+                "quantity": _to_decimal(item_data.get("quantity")),
+                "unit_price": _to_decimal(item_data.get("unit_price")),
+                "amount": amount,
+                "remark": item_data.get("remark")
+                or item_data.get("description")
+                or item_data.get("label"),
+            }
+        )
+    return candidates
+
+
 def maybe_create_fee_draft(
     db: Session,
     document: Document,
@@ -54,48 +103,35 @@ def maybe_create_fee_draft(
     )
     db.add(draft)
 
-    # Parse fee_item_list if present
     fee_item_list_raw = getattr(template, "fee_item_list", None)
     if fee_item_list_raw:
-        _parse_and_create_fee_items(db, draft, document, fee_item_list_raw, template.code)
+        _create_fee_items_from_candidates(
+            db,
+            draft,
+            document,
+            parse_fee_item_list_candidates(fee_item_list_raw, template.code),
+        )
 
     return draft
 
 
-def _parse_and_create_fee_items(
+def _create_fee_items_from_candidates(
     db: Session,
     draft: FeeDraft,
     document: Document,
-    raw_json: str,
-    template_code: str,
+    candidates: list[dict[str, object]],
 ) -> None:
-    """Parse fee_item_list JSON and create FeeItem rows. Logs warning on malformed data."""
-    try:
-        items = json.loads(raw_json)
-    except (json.JSONDecodeError, TypeError) as exc:
-        logger.warning("B3: Malformed fee_item_list JSON in template %s: %s", template_code, exc)
-        return
-
-    if not isinstance(items, list):
-        logger.warning("B3: fee_item_list in template %s is not a list", template_code)
-        return
-
-    for item_data in items:
-        if not isinstance(item_data, dict):
-            continue
+    """Create FeeItem rows from parsed candidates."""
+    for item_data in candidates:
         fee_item = FeeItem(
             id=str(uuid4()),
             draft_id=draft.id,
             case_id=document.case_id,
-            fee_code=item_data.get("code") or item_data.get("fee_code"),
-            fee_name=item_data.get("name") or item_data.get("fee_name"),
+            fee_code=item_data.get("fee_code"),
+            fee_name=item_data.get("fee_name"),
             fee_type=item_data.get("fee_type", "SERVICE"),
-            quantity=Decimal(str(item_data["quantity"]))
-            if item_data.get("quantity") is not None
-            else None,
-            unit_price=Decimal(str(item_data["unit_price"]))
-            if item_data.get("unit_price") is not None
-            else None,
-            amount=Decimal(str(item_data.get("amount", 0))),
+            quantity=item_data.get("quantity"),
+            unit_price=item_data.get("unit_price"),
+            amount=item_data.get("amount", Decimal("0")),
         )
         db.add(fee_item)

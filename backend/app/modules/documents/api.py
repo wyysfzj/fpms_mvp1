@@ -34,6 +34,8 @@ from app.modules.documents.schemas import (
     DocumentUpdateIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchCreateOut,
+    DocumentWizardFeePreviewIn,
+    DocumentWizardFeePreviewOut,
     DocumentWizardTaskPreviewOut,
 )
 from app.modules.documents.service import (
@@ -50,6 +52,7 @@ from app.modules.documents.service import (
     get_document_envelope_preview,
     list_doc_templates,
     list_documents,
+    preview_document_wizard_fee_candidates,
     preview_document_wizard_tasks,
     update_doc_template,
 )
@@ -395,6 +398,24 @@ def preview_document_wizard_tasks_endpoint(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     return DocumentWizardTaskPreviewOut(total_candidates=len(items), items=items)
+
+
+@router.post(
+    "/documents/wizard/fee-preview",
+    response_model=DocumentWizardFeePreviewOut,
+    summary="Preview fee candidates from wizard batch",
+)
+def preview_document_wizard_fee_candidates_endpoint(
+    payload: DocumentWizardFeePreviewIn,
+    _perm: None = Depends(require_perm("Doc.Create")),
+    db: Session = Depends(get_db),
+) -> DocumentWizardFeePreviewOut:
+    try:
+        items = preview_document_wizard_fee_candidates(db, payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    return DocumentWizardFeePreviewOut(total_candidates=len(items), items=items)
 
 
 @router.post(

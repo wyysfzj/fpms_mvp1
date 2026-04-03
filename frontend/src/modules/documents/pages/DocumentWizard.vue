@@ -473,18 +473,139 @@
         </div>
       </div>
 
-      <div v-else-if="isStep4" class="wizard-placeholder">
-        <div class="wizard-placeholder-title">Step 4：费用联动</div>
-        <div class="wizard-placeholder-text">
-          该步骤将承载费用草单候选、费用项预览与用户确认边界。本轮只搭建步骤结构，不实现费用联动逻辑。
-        </div>
+      <div v-else-if="isStep4" class="wizard-step">
         <el-alert
-          title="当前仅开放壳层占位。若需继续批量提交，请返回第二步使用现有提交入口。"
+          title="当前步骤会根据第二步的文书草案预览费用候选。你可以调整允许编辑的字段，但这些修改目前只保存在页面内存中。"
           type="info"
           :closable="false"
           show-icon
         />
-        <el-empty description="费用联动步骤待后续实现" />
+
+        <el-alert
+          v-if="step4Error"
+          :title="step4Error"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+
+        <div class="step-panel">
+          <div class="step-panel-header">
+            <div>
+              <div class="section-title">费用候选预览</div>
+              <div class="section-hint">仅显示当前草案中适用费用联动的文书。当前不会写入真实费用草稿。</div>
+            </div>
+            <div class="step-panel-actions">
+              <el-button :loading="step4Loading" @click="reloadStep4Preview">重新生成预览</el-button>
+            </div>
+          </div>
+
+          <el-descriptions :column="3" border>
+            <el-descriptions-item label="草案行数">{{ step2RowCount }}</el-descriptions-item>
+            <el-descriptions-item label="费用候选">{{ step4PreviewCount }}</el-descriptions-item>
+            <el-descriptions-item label="当前模板">{{ templateLabel }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <el-empty
+          v-if="!step2Rows.length"
+          description="请先完成第二步的逐案编辑后再查看费用候选预览"
+        />
+
+        <el-empty
+          v-else-if="!step4Loading && !step4PreviewRows.length"
+          description="当前草案没有可生成的费用候选"
+        />
+
+        <div v-else class="wizard-row-stack">
+          <div v-for="(row, index) in step4PreviewRows" :key="row.id" class="step4-row-card">
+            <div class="step2-row-header">
+              <div>
+                <div class="step2-row-title">费用候选 {{ index + 1 }}</div>
+                <div class="step2-row-subtitle">
+                  {{ row.case_no || '未关联案卷号' }}
+                  <span>· {{ row.fee_draft_type }}</span>
+                </div>
+              </div>
+              <el-tag type="warning" effect="light">预览中</el-tag>
+            </div>
+
+            <div class="step2-row-case">
+              {{ row.source_title || row.document_title || '暂无案件标题' }}
+            </div>
+
+            <div class="step3-meta-grid">
+              <div class="step3-meta-item">
+                <div class="step2-field-label">费用草稿类型</div>
+                <div class="step3-meta-value">{{ row.fee_draft_type }}</div>
+              </div>
+              <div class="step3-meta-item">
+                <div class="step2-field-label">候选项目数</div>
+                <div class="step3-meta-value">{{ row.fee_items.length }}</div>
+              </div>
+            </div>
+
+            <div class="step2-field">
+              <div class="step2-field-label">跳过本候选</div>
+              <el-switch
+                v-model="row.skip_this_candidate"
+                inline-prompt
+                active-text="是"
+                inactive-text="否"
+              />
+            </div>
+
+            <div class="step4-fee-list">
+              <div v-for="(item, feeIndex) in row.fee_items" :key="item.id" class="step4-fee-item">
+                <div class="step4-fee-item-title">费用项 {{ feeIndex + 1 }}</div>
+
+                <div class="step3-meta-grid">
+                  <div class="step3-meta-item">
+                    <div class="step2-field-label">费用代码</div>
+                    <div class="step3-meta-value">{{ item.fee_code || '—' }}</div>
+                  </div>
+                  <div class="step3-meta-item">
+                    <div class="step2-field-label">费用类型</div>
+                    <div class="step3-meta-value">{{ item.fee_type }}</div>
+                  </div>
+                </div>
+
+                <div class="step2-field-grid">
+                  <div class="step2-field">
+                    <div class="step2-field-label">费用名称</div>
+                    <el-input v-model="item.fee_name" placeholder="请输入费用名称" />
+                  </div>
+
+                  <div class="step2-field">
+                    <div class="step2-field-label">金额</div>
+                    <el-input v-model="item.amount" placeholder="请输入金额" />
+                  </div>
+
+                  <div class="step2-field">
+                    <div class="step2-field-label">数量</div>
+                    <el-input v-model="item.quantity" placeholder="可选" />
+                  </div>
+
+                  <div class="step2-field">
+                    <div class="step2-field-label">单价</div>
+                    <el-input v-model="item.unit_price" placeholder="可选" />
+                  </div>
+
+                  <div class="step2-field step2-field--full">
+                    <div class="step2-field-label">说明</div>
+                    <el-input
+                      v-model="item.remark"
+                      type="textarea"
+                      :rows="2"
+                      resize="vertical"
+                      placeholder="可填写费用项说明"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-else class="wizard-placeholder">
@@ -535,6 +656,7 @@ import { useRouter } from 'vue-router'
 import { getCases } from '../../../api/cases'
 import {
   createDocumentWizardBatch,
+  createDocumentWizardFeePreview,
   createDocumentWizardTaskPreview,
   documentWizardState,
   getDocTemplates,
@@ -546,6 +668,8 @@ import type {
   DocumentWizardBatchCreatePayload,
   DocumentWizardBatchRowError,
   DocumentWizardCaseRow,
+  DocumentWizardFeePreviewFeeItem,
+  DocumentWizardFeePreviewItem,
   DocumentWizardParsedCase,
   DocumentWizardTaskFinalRowDraft,
   DocumentWizardTaskPreviewItem,
@@ -588,6 +712,15 @@ interface Step3PreviewRowView extends DocumentWizardTaskPreviewItem {
   id: string
 }
 
+interface Step4PreviewFeeItemView extends DocumentWizardFeePreviewFeeItem {
+  id: string
+}
+
+interface Step4PreviewRowView extends Omit<DocumentWizardFeePreviewItem, 'fee_items'> {
+  id: string
+  fee_items: Step4PreviewFeeItemView[]
+}
+
 const activeStepIndex = computed(() => documentWizardState.activeStep - 1)
 const isStep1 = computed(() => documentWizardState.activeStep === 1)
 const isStep2 = computed(() => documentWizardState.activeStep === 2)
@@ -605,6 +738,9 @@ const step2Rows = ref<Step2CaseRowView[]>([])
 const step3PreviewRows = ref<Step3PreviewRowView[]>([])
 const step3Loading = ref(false)
 const step3Error = ref<string | null>(null)
+const step4PreviewRows = ref<Step4PreviewRowView[]>([])
+const step4Loading = ref(false)
+const step4Error = ref<string | null>(null)
 const step2SourceSignature = ref('')
 const submitLoading = ref(false)
 const submitError = ref<string | null>(null)
@@ -658,6 +794,7 @@ const failedRows = computed<FailedCaseRowView[]>(() =>
 const parsedCaseCount = computed(() => parsedCases.value.length)
 const step2RowCount = computed(() => step2Rows.value.length)
 const step3PreviewCount = computed(() => step3PreviewRows.value.length)
+const step4PreviewCount = computed(() => step4PreviewRows.value.length)
 const failedRowCount = computed(() => failedRows.value.length)
 const draftLineCount = computed(() => splitDraftLines(draftText.value).length)
 const canEnterStep2 = computed(() => parsedCaseCount.value > 0)
@@ -682,6 +819,10 @@ async function goNext() {
 
   if (isStep2.value) {
     await reloadStep3Preview()
+  }
+
+  if (isStep3.value) {
+    await reloadStep4Preview()
   }
 
   if (documentWizardState.activeStep < TOTAL_STEPS) {
@@ -769,6 +910,21 @@ function createStep3PreviewRow(item: DocumentWizardTaskPreviewItem): Step3Previe
   }
 }
 
+function createStep4FeeItem(item: DocumentWizardFeePreviewFeeItem): Step4PreviewFeeItemView {
+  return {
+    id: createStep2RowId(),
+    ...item,
+  }
+}
+
+function createStep4PreviewRow(item: DocumentWizardFeePreviewItem): Step4PreviewRowView {
+  return {
+    id: createStep2RowId(),
+    ...item,
+    fee_items: item.fee_items.map((feeItem) => createStep4FeeItem(feeItem)),
+  }
+}
+
 function createStep2Row(parsedCase: ParsedCaseRowView): Step2CaseRowView {
   return {
     id: createStep2RowId(),
@@ -803,6 +959,8 @@ function reloadStep2Rows(): void {
     step2Rows.value = []
     step3PreviewRows.value = []
     step3Error.value = null
+    step4PreviewRows.value = []
+    step4Error.value = null
     step2SourceSignature.value = ''
     return
   }
@@ -821,6 +979,8 @@ function reloadStep2Rows(): void {
   step2Rows.value = parsedCases.value.map((item) => createStep2Row(item))
   step3PreviewRows.value = []
   step3Error.value = null
+  step4PreviewRows.value = []
+  step4Error.value = null
   step2SourceSignature.value = signature
   submitError.value = null
 }
@@ -1003,6 +1163,27 @@ async function reloadStep3Preview(): Promise<void> {
   }
 }
 
+async function reloadStep4Preview(): Promise<void> {
+  if (!step2Rows.value.length || !documentWizardState.defaults.doc_template_id) {
+    step4PreviewRows.value = []
+    step4Error.value = null
+    return
+  }
+
+  step4Loading.value = true
+  step4Error.value = null
+
+  try {
+    const result = await createDocumentWizardFeePreview(buildStep2Payload())
+    step4PreviewRows.value = result.items.map((item) => createStep4PreviewRow(item))
+  } catch {
+    step4PreviewRows.value = []
+    step4Error.value = '费用候选预览加载失败，请稍后重试。'
+  } finally {
+    step4Loading.value = false
+  }
+}
+
 function localizeWizardRowError(error: DocumentWizardBatchRowError): string {
   switch (error.code) {
     case 'CASE_ID_REQUIRED':
@@ -1064,6 +1245,7 @@ async function submitStep2Batch(): Promise<void> {
     resetDocumentWizardState()
     step2Rows.value = []
     step3PreviewRows.value = []
+    step4PreviewRows.value = []
     step2SourceSignature.value = ''
     router.push('/documents')
   } catch (err) {
@@ -1091,6 +1273,9 @@ onMounted(() => {
   step3PreviewRows.value = []
   step3Loading.value = false
   step3Error.value = null
+  step4PreviewRows.value = []
+  step4Loading.value = false
+  step4Error.value = null
   step2SourceSignature.value = ''
   submitLoading.value = false
   submitError.value = null
@@ -1246,6 +1431,33 @@ onMounted(() => {
   border: 1px solid var(--border-color, #ebeef5);
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(255, 251, 235, 0.85), #ffffff);
+}
+
+.step4-row-card {
+  padding: 16px;
+  border: 1px solid var(--border-color, #ebeef5);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.92), #ffffff);
+}
+
+.step4-fee-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.step4-fee-item {
+  padding: 14px;
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  border-radius: 10px;
+  background: rgba(240, 253, 250, 0.9);
+}
+
+.step4-fee-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 12px;
 }
 
 .step3-meta-grid {
