@@ -175,6 +175,30 @@ export interface DocumentWizardBatchCreateResult {
     items: DocumentWizardBatchCreatedRow[]
 }
 
+export interface DocumentWizardTaskPreviewItem {
+    row_index: number
+    case_id: string
+    case_no?: string
+    source_title?: string
+    document_title?: string
+    task_template_code: string
+    task_template_name?: string
+    title?: string
+    base_date?: string | null
+    due_date?: string | null
+    internal_due_date?: string | null
+    remind1?: string | null
+    remind2?: string | null
+    remind3?: string | null
+    daily_remind_from?: string | null
+    daily_remind: boolean
+}
+
+export interface DocumentWizardTaskPreviewResult {
+    total_candidates: number
+    items: DocumentWizardTaskPreviewItem[]
+}
+
 export interface DocumentWizardBatchRowError {
     row_index: number
     field: string
@@ -205,7 +229,7 @@ export interface DocumentWizardStep1State {
 }
 
 export interface DocumentWizardState {
-    activeStep: 1 | 2
+    activeStep: 1 | 2 | 3 | 4 | 5
     defaults: DocumentWizardBatchDefaults
     step1: DocumentWizardStep1State
 }

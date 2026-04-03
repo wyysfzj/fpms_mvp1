@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select
@@ -33,7 +34,7 @@ from app.modules.documents.schemas import (
 )
 from app.modules.masterdata.clients.models import Client, ClientAddress
 from app.modules.tasks.enums import TaskAction, TaskStatus
-from app.modules.tasks.models import Task
+from app.modules.tasks.models import Task, TaskTemplate
 from app.modules.tasks.service import _create_task_log
 from app.modules.tasks.task_generation_service import TaskGenerationService
 
@@ -364,58 +365,7 @@ def create_document_wizard_batch(
         raise_business_error("DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404)
 
     rows = data.rows
-    row_errors: list[dict[str, object]] = []
-    seen_case_ids: set[str] = set()
-    case_ids: list[str] = []
-
-    for idx, row in enumerate(rows, start=1):
-        case_id = _normalize_text(row.case_id)
-        if not case_id:
-            row_errors.append(
-                {
-                    "row_index": idx,
-                    "field": "case_id",
-                    "code": "CASE_ID_REQUIRED",
-                    "message": "Case ID is required",
-                }
-            )
-            continue
-        if case_id in seen_case_ids:
-            row_errors.append(
-                {
-                    "row_index": idx,
-                    "field": "case_id",
-                    "code": "CASE_ID_DUPLICATE",
-                    "message": "Case ID must be unique within the batch",
-                }
-            )
-            continue
-        seen_case_ids.add(case_id)
-        case_ids.append(case_id)
-
-    existing_case_ids = set(
-        db.execute(select(Case.id).where(Case.id.in_(case_ids))).scalars().all()
-    )
-    for idx, row in enumerate(rows, start=1):
-        case_id = _normalize_text(row.case_id)
-        if case_id and case_id not in existing_case_ids:
-            row_errors.append(
-                {
-                    "row_index": idx,
-                    "field": "case_id",
-                    "code": "CASE_NOT_FOUND",
-                    "message": "Case not found",
-                    "case_id": case_id,
-                }
-            )
-
-    if row_errors:
-        raise_business_error(
-            "DOCUMENT_WIZARD_BATCH_INVALID",
-            "Document wizard batch contains invalid rows",
-            details={"row_errors": row_errors},
-            status_code=400,
-        )
+    _validate_document_wizard_rows(db, rows)
 
     created_rows: list[tuple[int, Document]] = []
     try:
@@ -433,6 +383,76 @@ def create_document_wizard_batch(
     except Exception:
         db.rollback()
         raise
+
+
+def preview_document_wizard_tasks(
+    db: Session,
+    data: DocumentWizardBatchCreateIn,
+) -> list[dict[str, object]]:
+    template = db.execute(
+        select(DocTemplate).where(DocTemplate.id == data.defaults.doc_template_id)
+    ).scalar_one_or_none()
+    if not template:
+        raise_business_error("DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404)
+
+    _validate_document_wizard_rows(db, data.rows)
+
+    case_ids = [_normalize_text(row.case_id) for row in data.rows]
+    cases = db.execute(select(Case).where(Case.id.in_(case_ids))).scalars().all()
+    case_by_id = {case.id: case for case in cases}
+    task_service = TaskGenerationService()
+    preview_rows: list[dict[str, object]] = []
+
+    for idx, row in enumerate(data.rows, start=1):
+        payload = _build_document_wizard_payload(data.defaults, row, template)
+        case = case_by_id[payload.case_id]
+        preview_document = SimpleNamespace(
+            id=None,
+            case_id=payload.case_id,
+            doc_date=payload.doc_date,
+            direction=getattr(payload.direction, "value", payload.direction),
+            doc_template_id=payload.doc_template_id,
+            title=payload.title,
+            case=case,
+        )
+        task_templates = _list_task_templates_for_preview(db, task_service, preview_document)
+        if not task_templates:
+            continue
+
+        for task_template in task_templates:
+            due_date = task_service._compute_due_date(preview_document, case, task_template)
+            title = task_template.name or task_template.code
+            inner_offset = getattr(task_template, "inner_offset_days", None)
+            internal_due_date = (
+                due_date - timedelta(days=inner_offset) if inner_offset is not None else None
+            )
+            remind1, remind2, remind3, daily_remind_from = task_service._compute_reminders(
+                due_date,
+                internal_due_date,
+                task_template,
+            )
+            preview_rows.append(
+                {
+                    "row_index": idx,
+                    "case_id": case.id,
+                    "case_no": case.case_no,
+                    "source_title": getattr(case, "title", None),
+                    "document_title": payload.title,
+                    "task_template_code": task_template.code,
+                    "task_template_name": task_template.name,
+                    "title": title,
+                    "base_date": preview_document.doc_date,
+                    "due_date": due_date,
+                    "internal_due_date": internal_due_date,
+                    "remind1": remind1,
+                    "remind2": remind2,
+                    "remind3": remind3,
+                    "daily_remind_from": daily_remind_from,
+                    "daily_remind": bool(getattr(task_template, "daily_remind", False)),
+                }
+            )
+
+    return preview_rows
 
 
 def batch_register_document_mailing(
@@ -668,6 +688,76 @@ def _build_document_wizard_payload(
     data["reply_to_id"] = _normalize_text(data.get("reply_to_id"))
 
     return DocumentCreateIn(**data)
+
+
+def _validate_document_wizard_rows(db: Session, rows: list[DocumentWizardBatchRowIn]) -> None:
+    row_errors: list[dict[str, object]] = []
+    seen_case_ids: set[str] = set()
+    case_ids: list[str] = []
+
+    for idx, row in enumerate(rows, start=1):
+        case_id = _normalize_text(row.case_id)
+        if not case_id:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "case_id",
+                    "code": "CASE_ID_REQUIRED",
+                    "message": "Case ID is required",
+                }
+            )
+            continue
+        if case_id in seen_case_ids:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "case_id",
+                    "code": "CASE_ID_DUPLICATE",
+                    "message": "Case ID must be unique within the batch",
+                }
+            )
+            continue
+        seen_case_ids.add(case_id)
+        case_ids.append(case_id)
+
+    existing_case_ids = set(
+        db.execute(select(Case.id).where(Case.id.in_(case_ids))).scalars().all()
+    )
+    for idx, row in enumerate(rows, start=1):
+        case_id = _normalize_text(row.case_id)
+        if case_id and case_id not in existing_case_ids:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "case_id",
+                    "code": "CASE_NOT_FOUND",
+                    "message": "Case not found",
+                    "case_id": case_id,
+                }
+            )
+
+    if row_errors:
+        raise_business_error(
+            "DOCUMENT_WIZARD_BATCH_INVALID",
+            "Document wizard batch contains invalid rows",
+            details={"row_errors": row_errors},
+            status_code=400,
+        )
+
+
+def _list_task_templates_for_preview(
+    db: Session,
+    task_service: TaskGenerationService,
+    preview_document,
+) -> list[TaskTemplate]:
+    if not task_service._is_incoming(preview_document):
+        return []
+
+    doc_type = task_service._get_document_type(db, preview_document)
+    if not doc_type:
+        return []
+
+    return db.query(TaskTemplate).filter(TaskTemplate.code == doc_type).all()
 
 
 def get_document(db: Session, document_id: str) -> Document:

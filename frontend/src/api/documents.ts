@@ -20,6 +20,7 @@ import type {
     DocumentWizardBatchCreatePayload,
     DocumentWizardBatchCreateResult,
     DocumentWizardBatchDefaults,
+    DocumentWizardTaskPreviewResult,
     DocumentWizardStep1State,
     DocumentWizardState,
 } from './documents.types'
@@ -345,6 +346,16 @@ export async function createDocumentWizardBatch(
             document: mapDocument(item.document as BackendDocument),
         })),
     }
+}
+
+export async function createDocumentWizardTaskPreview(
+    data: DocumentWizardBatchCreatePayload
+): Promise<DocumentWizardTaskPreviewResult> {
+    const response = await http.post<DocumentWizardTaskPreviewResult>(
+        '/documents/wizard/task-preview',
+        toWizardBatchPayload(data)
+    )
+    return response.data
 }
 
 function createDocumentWizardDefaults(): DocumentWizardBatchDefaults {

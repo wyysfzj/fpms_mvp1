@@ -330,18 +330,147 @@
         </div>
       </div>
 
-      <div v-else-if="isStep3" class="wizard-placeholder">
-        <div class="wizard-placeholder-title">Step 3：时限联动</div>
-        <div class="wizard-placeholder-text">
-          该步骤将承载时限任务候选预览、校验与最终联动写入。本轮只完成 5 步向导壳层，不在这里实现真实任务逻辑。
-        </div>
+      <div v-else-if="isStep3" class="wizard-step">
         <el-alert
-          title="当前仅开放壳层占位。若需继续批量提交，请返回第二步使用现有提交入口。"
+          title="当前步骤会根据第二步的文书草案预览相关时限任务候选。你可以调整允许编辑的字段，但这些修改目前只保存在页面内存中。"
           type="info"
           :closable="false"
           show-icon
         />
-        <el-empty description="时限联动步骤待后续实现" />
+
+        <el-alert
+          v-if="step3Error"
+          :title="step3Error"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+
+        <div class="step-panel">
+          <div class="step-panel-header">
+            <div>
+              <div class="section-title">任务候选预览</div>
+              <div class="section-hint">仅显示当前草案中适用时限联动的文书。当前不会写入真实任务。</div>
+            </div>
+            <div class="step-panel-actions">
+              <el-button :loading="step3Loading" @click="reloadStep3Preview">重新生成预览</el-button>
+            </div>
+          </div>
+
+          <el-descriptions :column="3" border>
+            <el-descriptions-item label="草案行数">{{ step2RowCount }}</el-descriptions-item>
+            <el-descriptions-item label="任务候选">{{ step3PreviewCount }}</el-descriptions-item>
+            <el-descriptions-item label="当前模板">{{ templateLabel }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <el-empty
+          v-if="!step2Rows.length"
+          description="请先完成第二步的逐案编辑后再查看任务候选预览"
+        />
+
+        <el-empty
+          v-else-if="!step3Loading && !step3PreviewRows.length"
+          description="当前草案没有可生成的时限任务候选"
+        />
+
+        <div v-else class="wizard-row-stack">
+          <div v-for="(row, index) in step3PreviewRows" :key="row.id" class="step3-row-card">
+            <div class="step2-row-header">
+              <div>
+                <div class="step2-row-title">任务候选 {{ index + 1 }}</div>
+                <div class="step2-row-subtitle">
+                  {{ row.case_no || '未关联案卷号' }}
+                  <span v-if="row.task_template_name">· {{ row.task_template_name }}</span>
+                </div>
+              </div>
+              <el-tag type="warning" effect="light">预览中</el-tag>
+            </div>
+
+            <div class="step2-row-case">
+              {{ row.source_title || row.document_title || '暂无案件标题' }}
+            </div>
+
+            <div class="step3-meta-grid">
+              <div class="step3-meta-item">
+                <div class="step2-field-label">任务模板代码</div>
+                <div class="step3-meta-value">{{ row.task_template_code }}</div>
+              </div>
+              <div class="step3-meta-item">
+                <div class="step2-field-label">基准日期</div>
+                <div class="step3-meta-value">{{ row.base_date || '—' }}</div>
+              </div>
+              <div class="step3-meta-item">
+                <div class="step2-field-label">法定期限</div>
+                <div class="step3-meta-value">{{ row.due_date || '—' }}</div>
+              </div>
+              <div class="step3-meta-item">
+                <div class="step2-field-label">日提醒起始</div>
+                <div class="step3-meta-value">{{ row.daily_remind_from || '—' }}</div>
+              </div>
+            </div>
+
+            <div class="step2-field-grid">
+              <div class="step2-field">
+                <div class="step2-field-label">任务标题</div>
+                <el-input v-model="row.title" placeholder="请输入任务标题" />
+              </div>
+
+              <div class="step2-field">
+                <div class="step2-field-label">内部期限</div>
+                <el-date-picker
+                  v-model="row.internal_due_date"
+                  type="date"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  placeholder="请选择内部期限"
+                  class="full-width"
+                />
+              </div>
+
+              <div class="step2-field">
+                <div class="step2-field-label">提醒 1</div>
+                <el-date-picker
+                  v-model="row.remind1"
+                  type="date"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  placeholder="请选择提醒日期"
+                  class="full-width"
+                />
+              </div>
+
+              <div class="step2-field">
+                <div class="step2-field-label">提醒 2</div>
+                <el-date-picker
+                  v-model="row.remind2"
+                  type="date"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  placeholder="请选择提醒日期"
+                  class="full-width"
+                />
+              </div>
+
+              <div class="step2-field">
+                <div class="step2-field-label">提醒 3</div>
+                <el-date-picker
+                  v-model="row.remind3"
+                  type="date"
+                  format="YYYY-MM-DD"
+                  value-format="YYYY-MM-DD"
+                  placeholder="请选择提醒日期"
+                  class="full-width"
+                />
+              </div>
+
+              <div class="step2-field">
+                <div class="step2-field-label">每日提醒</div>
+                <div class="step3-meta-value">{{ row.daily_remind ? '启用' : '未启用' }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-else-if="isStep4" class="wizard-placeholder">
@@ -406,6 +535,7 @@ import { useRouter } from 'vue-router'
 import { getCases } from '../../../api/cases'
 import {
   createDocumentWizardBatch,
+  createDocumentWizardTaskPreview,
   documentWizardState,
   getDocTemplates,
   resetDocumentWizardState,
@@ -417,11 +547,11 @@ import type {
   DocumentWizardBatchRowError,
   DocumentWizardCaseRow,
   DocumentWizardParsedCase,
+  DocumentWizardTaskPreviewItem,
 } from '../../../api/documents.types'
 
 const router = useRouter()
 const TOTAL_STEPS = 5
-const wizardState = documentWizardState as Omit<typeof documentWizardState, 'activeStep'> & { activeStep: number }
 
 interface ParsedCaseRowView {
   line_no: number
@@ -453,12 +583,16 @@ interface Step2CaseRowView {
   error_message?: string
 }
 
-const activeStepIndex = computed(() => wizardState.activeStep - 1)
-const isStep1 = computed(() => wizardState.activeStep === 1)
-const isStep2 = computed(() => wizardState.activeStep === 2)
-const isStep3 = computed(() => wizardState.activeStep === 3)
-const isStep4 = computed(() => wizardState.activeStep === 4)
-const isStep5 = computed(() => wizardState.activeStep === 5)
+interface Step3PreviewRowView extends DocumentWizardTaskPreviewItem {
+  id: string
+}
+
+const activeStepIndex = computed(() => documentWizardState.activeStep - 1)
+const isStep1 = computed(() => documentWizardState.activeStep === 1)
+const isStep2 = computed(() => documentWizardState.activeStep === 2)
+const isStep3 = computed(() => documentWizardState.activeStep === 3)
+const isStep4 = computed(() => documentWizardState.activeStep === 4)
+const isStep5 = computed(() => documentWizardState.activeStep === 5)
 const directionLabel = computed(() => (documentWizardState.defaults.direction === 'IN' ? '收文' : '发文'))
 const docTemplates = ref<DocTemplate[]>([])
 const templatesLoading = ref(false)
@@ -467,6 +601,9 @@ const rows = computed(() => documentWizardState.step1.rows)
 const draftText = ref('')
 const parseAllLoading = ref(false)
 const step2Rows = ref<Step2CaseRowView[]>([])
+const step3PreviewRows = ref<Step3PreviewRowView[]>([])
+const step3Loading = ref(false)
+const step3Error = ref<string | null>(null)
 const step2SourceSignature = ref('')
 const submitLoading = ref(false)
 const submitError = ref<string | null>(null)
@@ -519,6 +656,7 @@ const failedRows = computed<FailedCaseRowView[]>(() =>
 
 const parsedCaseCount = computed(() => parsedCases.value.length)
 const step2RowCount = computed(() => step2Rows.value.length)
+const step3PreviewCount = computed(() => step3PreviewRows.value.length)
 const failedRowCount = computed(() => failedRows.value.length)
 const draftLineCount = computed(() => splitDraftLines(draftText.value).length)
 const canEnterStep2 = computed(() => parsedCaseCount.value > 0)
@@ -526,12 +664,12 @@ const canSubmitStep2 = computed(() => step2RowCount.value > 0 && !submitLoading.
 
 function goBack() {
   if (!isStep1.value) {
-    wizardState.activeStep -= 1
+    documentWizardState.activeStep -= 1
     submitError.value = null
   }
 }
 
-function goNext() {
+async function goNext() {
   if (isStep1.value && !canEnterStep2.value) {
     ElMessage.warning('请至少解析出 1 条有效案件后再进入下一步。')
     return
@@ -541,13 +679,17 @@ function goNext() {
     reloadStep2Rows()
   }
 
-  if (wizardState.activeStep < TOTAL_STEPS) {
-    wizardState.activeStep += 1
+  if (isStep2.value) {
+    await reloadStep3Preview()
+  }
+
+  if (documentWizardState.activeStep < TOTAL_STEPS) {
+    documentWizardState.activeStep += 1
   }
 }
 
 function returnToStep2(): void {
-  wizardState.activeStep = 2
+  documentWizardState.activeStep = 2
   submitError.value = null
 }
 
@@ -619,6 +761,13 @@ function createStep2RowId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+function createStep3PreviewRow(item: DocumentWizardTaskPreviewItem): Step3PreviewRowView {
+  return {
+    id: createStep2RowId(),
+    ...item,
+  }
+}
+
 function createStep2Row(parsedCase: ParsedCaseRowView): Step2CaseRowView {
   return {
     id: createStep2RowId(),
@@ -651,6 +800,8 @@ function markStep2RowDirty(row: Step2CaseRowView): void {
 function reloadStep2Rows(): void {
   if (!parsedCases.value.length) {
     step2Rows.value = []
+    step3PreviewRows.value = []
+    step3Error.value = null
     step2SourceSignature.value = ''
     return
   }
@@ -667,11 +818,13 @@ function reloadStep2Rows(): void {
   }
 
   step2Rows.value = parsedCases.value.map((item) => createStep2Row(item))
+  step3PreviewRows.value = []
+  step3Error.value = null
   step2SourceSignature.value = signature
   submitError.value = null
 }
 
-watch(() => wizardState.activeStep, (step) => {
+watch(() => documentWizardState.activeStep, (step) => {
   if (step === 2) {
     reloadStep2Rows()
   } else {
@@ -804,6 +957,27 @@ function buildStep2Payload(): DocumentWizardBatchCreatePayload {
   }
 }
 
+async function reloadStep3Preview(): Promise<void> {
+  if (!step2Rows.value.length || !documentWizardState.defaults.doc_template_id) {
+    step3PreviewRows.value = []
+    step3Error.value = null
+    return
+  }
+
+  step3Loading.value = true
+  step3Error.value = null
+
+  try {
+    const result = await createDocumentWizardTaskPreview(buildStep2Payload())
+    step3PreviewRows.value = result.items.map((item) => createStep3PreviewRow(item))
+  } catch {
+    step3PreviewRows.value = []
+    step3Error.value = '任务候选预览加载失败，请稍后重试。'
+  } finally {
+    step3Loading.value = false
+  }
+}
+
 function localizeWizardRowError(error: DocumentWizardBatchRowError): string {
   switch (error.code) {
     case 'CASE_ID_REQUIRED':
@@ -864,6 +1038,7 @@ async function submitStep2Batch(): Promise<void> {
     ElMessage.success(`已成功批量创建 ${result.created} 份文书。`)
     resetDocumentWizardState()
     step2Rows.value = []
+    step3PreviewRows.value = []
     step2SourceSignature.value = ''
     router.push('/documents')
   } catch (err) {
@@ -888,6 +1063,9 @@ onMounted(() => {
   resetDocumentWizardState()
   draftText.value = ''
   step2Rows.value = []
+  step3PreviewRows.value = []
+  step3Loading.value = false
+  step3Error.value = null
   step2SourceSignature.value = ''
   submitLoading.value = false
   submitError.value = null
@@ -1038,6 +1216,32 @@ onMounted(() => {
   line-height: 1.6;
 }
 
+.step3-row-card {
+  padding: 16px;
+  border: 1px solid var(--border-color, #ebeef5);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 251, 235, 0.85), #ffffff);
+}
+
+.step3-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin-bottom: 14px;
+}
+
+.step3-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step3-meta-value {
+  min-height: 22px;
+  color: var(--text-main);
+  line-height: 1.6;
+}
+
 .full-width {
   width: 100%;
 }
@@ -1125,6 +1329,10 @@ onMounted(() => {
   }
 
   .step2-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .step3-meta-grid {
     grid-template-columns: 1fr;
   }
 

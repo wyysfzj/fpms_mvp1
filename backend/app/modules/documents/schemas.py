@@ -52,6 +52,30 @@ class DocumentWizardBatchCreateIn(BaseModel):
     rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
 
 
+class DocumentWizardTaskPreviewItemOut(BaseModel):
+    row_index: int
+    case_id: str
+    case_no: str | None = None
+    source_title: str | None = None
+    document_title: str | None = None
+    task_template_code: str
+    task_template_name: str | None = None
+    title: str | None = None
+    base_date: date | None = None
+    due_date: date | None = None
+    internal_due_date: date | None = None
+    remind1: date | None = None
+    remind2: date | None = None
+    remind3: date | None = None
+    daily_remind_from: date | None = None
+    daily_remind: bool = False
+
+
+class DocumentWizardTaskPreviewOut(BaseModel):
+    total_candidates: int
+    items: list[DocumentWizardTaskPreviewItemOut]
+
+
 class DocumentUpdateIn(BaseModel):
     case_id: str | None = None
     doc_template_id: str | None = None

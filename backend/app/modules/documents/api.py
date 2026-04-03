@@ -34,6 +34,7 @@ from app.modules.documents.schemas import (
     DocumentUpdateIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchCreateOut,
+    DocumentWizardTaskPreviewOut,
 )
 from app.modules.documents.service import (
     add_attachment as add_attachment_service,
@@ -49,6 +50,7 @@ from app.modules.documents.service import (
     get_document_envelope_preview,
     list_doc_templates,
     list_documents,
+    preview_document_wizard_tasks,
     update_doc_template,
 )
 from app.modules.documents.service import (
@@ -269,7 +271,9 @@ def get_documents(
     template_code_map: dict[str, str] = {}
     if template_ids:
         templates = (
-            db.query(DocTemplate.id, DocTemplate.code).filter(DocTemplate.id.in_(template_ids)).all()
+            db.query(DocTemplate.id, DocTemplate.code)
+            .filter(DocTemplate.id.in_(template_ids))
+            .all()
         )
         template_code_map = {t.id: t.code for t in templates}
 
@@ -373,6 +377,24 @@ def create_document(
         response.headers["X-Auto-Fee-Draft-Created"] = auto_fee_draft_id
     case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
     return _build_document_out(document, case_no=case.case_no if case else None)
+
+
+@router.post(
+    "/documents/wizard/task-preview",
+    response_model=DocumentWizardTaskPreviewOut,
+    summary="Preview task candidates from wizard batch",
+)
+def preview_document_wizard_tasks_endpoint(
+    payload: DocumentWizardBatchCreateIn,
+    _perm: None = Depends(require_perm("Doc.Create")),
+    db: Session = Depends(get_db),
+) -> DocumentWizardTaskPreviewOut:
+    try:
+        items = preview_document_wizard_tasks(db, payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    return DocumentWizardTaskPreviewOut(total_candidates=len(items), items=items)
 
 
 @router.post(
