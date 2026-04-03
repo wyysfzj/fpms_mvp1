@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="page-header-left">
         <h1 class="page-title">中间文件向导</h1>
-        <span class="page-subtitle">两步完成批量登记</span>
+        <span class="page-subtitle">五步完成批量登记</span>
       </div>
       <div class="page-header-right">
         <el-button @click="handleReturn">返回文书列表</el-button>
@@ -14,11 +14,14 @@
       <el-steps :active="activeStepIndex" align-center finish-status="success">
         <el-step title="解析案件" description="录入案件清单" />
         <el-step title="编辑并提交" description="核对批量内容" />
+        <el-step title="时限联动" description="预留任务步骤" />
+        <el-step title="费用联动" description="预留费用步骤" />
+        <el-step title="附件生成" description="预留附件步骤" />
       </el-steps>
     </el-card>
 
     <el-card class="wizard-card wizard-body" shadow="never">
-      <div v-if="isFirstStep" class="wizard-step">
+      <div v-if="isStep1" class="wizard-step">
         <el-alert
           title="每行输入一个案卷号或申请号，点击“拆分为逐行列表”后可逐条解析。至少解析出 1 条有效案件后，才能进入下一步。"
           type="info"
@@ -208,7 +211,7 @@
         </div>
       </div>
 
-      <div v-else class="wizard-step">
+      <div v-else-if="isStep2" class="wizard-step">
         <el-alert
           title="请逐案补录标题、文书日期、内部文号、是否需要回复、回复来源文件 ID 和补充说明，然后一次性批量提交。"
           type="info"
@@ -326,19 +329,71 @@
           </div>
         </div>
       </div>
+
+      <div v-else-if="isStep3" class="wizard-placeholder">
+        <div class="wizard-placeholder-title">Step 3：时限联动</div>
+        <div class="wizard-placeholder-text">
+          该步骤将承载时限任务候选预览、校验与最终联动写入。本轮只完成 5 步向导壳层，不在这里实现真实任务逻辑。
+        </div>
+        <el-alert
+          title="当前仅开放壳层占位。若需继续批量提交，请返回第二步使用现有提交入口。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
+        <el-empty description="时限联动步骤待后续实现" />
+      </div>
+
+      <div v-else-if="isStep4" class="wizard-placeholder">
+        <div class="wizard-placeholder-title">Step 4：费用联动</div>
+        <div class="wizard-placeholder-text">
+          该步骤将承载费用草单候选、费用项预览与用户确认边界。本轮只搭建步骤结构，不实现费用联动逻辑。
+        </div>
+        <el-alert
+          title="当前仅开放壳层占位。若需继续批量提交，请返回第二步使用现有提交入口。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
+        <el-empty description="费用联动步骤待后续实现" />
+      </div>
+
+      <div v-else class="wizard-placeholder">
+        <div class="wizard-placeholder-title">Step 5：附件与模板生成</div>
+        <div class="wizard-placeholder-text">
+          该步骤将承载附件上传、模板生成与最终写入时机控制。本轮只扩展向导壳层，不在此实现附件生成流程。
+        </div>
+        <el-alert
+          title="当前仅开放壳层占位。若需继续批量提交，请返回第二步使用现有提交入口。"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+        <el-empty description="附件与模板生成步骤待后续实现" />
+      </div>
     </el-card>
 
     <div class="wizard-actions">
-      <el-button :disabled="isFirstStep" @click="goBack">上一步</el-button>
-      <el-button v-if="isFirstStep" type="primary" :disabled="!canEnterStep2" @click="goNext">下一步</el-button>
+      <el-button :disabled="isStep1" @click="goBack">上一步</el-button>
+      <el-button v-if="isStep1" type="primary" :disabled="!canEnterStep2" @click="goNext">下一步</el-button>
+      <template v-else-if="isStep2">
+        <el-button @click="goNext">查看后续步骤壳层</el-button>
+        <el-button
+          type="primary"
+          :loading="submitLoading"
+          :disabled="!canSubmitStep2"
+          @click="submitStep2Batch"
+        >
+          批量提交
+        </el-button>
+      </template>
+      <el-button v-else-if="!isStep5" type="primary" @click="goNext">下一步</el-button>
       <el-button
         v-else
         type="primary"
-        :loading="submitLoading"
-        :disabled="!canSubmitStep2"
-        @click="submitStep2Batch"
+        @click="returnToStep2"
       >
-        批量提交
+        返回第二步提交
       </el-button>
     </div>
   </div>
@@ -365,6 +420,8 @@ import type {
 } from '../../../api/documents.types'
 
 const router = useRouter()
+const TOTAL_STEPS = 5
+const wizardState = documentWizardState as Omit<typeof documentWizardState, 'activeStep'> & { activeStep: number }
 
 interface ParsedCaseRowView {
   line_no: number
@@ -396,9 +453,12 @@ interface Step2CaseRowView {
   error_message?: string
 }
 
-const activeStepIndex = computed(() => documentWizardState.activeStep - 1)
-const isFirstStep = computed(() => documentWizardState.activeStep === 1)
-const isLastStep = computed(() => documentWizardState.activeStep === 2)
+const activeStepIndex = computed(() => wizardState.activeStep - 1)
+const isStep1 = computed(() => wizardState.activeStep === 1)
+const isStep2 = computed(() => wizardState.activeStep === 2)
+const isStep3 = computed(() => wizardState.activeStep === 3)
+const isStep4 = computed(() => wizardState.activeStep === 4)
+const isStep5 = computed(() => wizardState.activeStep === 5)
 const directionLabel = computed(() => (documentWizardState.defaults.direction === 'IN' ? '收文' : '发文'))
 const docTemplates = ref<DocTemplate[]>([])
 const templatesLoading = ref(false)
@@ -465,23 +525,30 @@ const canEnterStep2 = computed(() => parsedCaseCount.value > 0)
 const canSubmitStep2 = computed(() => step2RowCount.value > 0 && !submitLoading.value)
 
 function goBack() {
-  if (!isFirstStep.value) {
-    documentWizardState.activeStep = 1
+  if (!isStep1.value) {
+    wizardState.activeStep -= 1
     submitError.value = null
   }
 }
 
 function goNext() {
-  if (!canEnterStep2.value) {
+  if (isStep1.value && !canEnterStep2.value) {
     ElMessage.warning('请至少解析出 1 条有效案件后再进入下一步。')
     return
   }
 
-  reloadStep2Rows()
-
-  if (!isLastStep.value) {
-    documentWizardState.activeStep = 2
+  if (isStep1.value) {
+    reloadStep2Rows()
   }
+
+  if (wizardState.activeStep < TOTAL_STEPS) {
+    wizardState.activeStep += 1
+  }
+}
+
+function returnToStep2(): void {
+  wizardState.activeStep = 2
+  submitError.value = null
 }
 
 function handleReturn() {
@@ -604,7 +671,7 @@ function reloadStep2Rows(): void {
   submitError.value = null
 }
 
-watch(() => documentWizardState.activeStep, (step) => {
+watch(() => wizardState.activeStep, (step) => {
   if (step === 2) {
     reloadStep2Rows()
   } else {
@@ -873,6 +940,7 @@ onMounted(() => {
 .wizard-placeholder-text {
   color: var(--text-sub);
   line-height: 1.7;
+  margin-bottom: 8px;
 }
 
 .wizard-row-stack {
