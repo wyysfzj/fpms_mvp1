@@ -547,6 +547,7 @@ import type {
   DocumentWizardBatchRowError,
   DocumentWizardCaseRow,
   DocumentWizardParsedCase,
+  DocumentWizardTaskFinalRowDraft,
   DocumentWizardTaskPreviewItem,
 } from '../../../api/documents.types'
 
@@ -957,6 +958,30 @@ function buildStep2Payload(): DocumentWizardBatchCreatePayload {
   }
 }
 
+function buildStep3TaskRows(): DocumentWizardTaskFinalRowDraft[] {
+  return step3PreviewRows.value.map((row) => ({
+    row_index: row.row_index,
+    case_id: row.case_id,
+    task_template_code: row.task_template_code,
+    title: row.title || undefined,
+    base_date: row.base_date || undefined,
+    due_date: row.due_date || undefined,
+    internal_due_date: row.internal_due_date || undefined,
+    remind1: row.remind1 || undefined,
+    remind2: row.remind2 || undefined,
+    remind3: row.remind3 || undefined,
+    daily_remind_from: row.daily_remind_from || undefined,
+    daily_remind: row.daily_remind,
+  }))
+}
+
+function buildFinalSubmitPayload(): DocumentWizardBatchCreatePayload {
+  return {
+    ...buildStep2Payload(),
+    task_rows: buildStep3TaskRows(),
+  }
+}
+
 async function reloadStep3Preview(): Promise<void> {
   if (!step2Rows.value.length || !documentWizardState.defaults.doc_template_id) {
     step3PreviewRows.value = []
@@ -1034,7 +1059,7 @@ async function submitStep2Batch(): Promise<void> {
   submitError.value = null
 
   try {
-    const result = await createDocumentWizardBatch(buildStep2Payload())
+    const result = await createDocumentWizardBatch(buildFinalSubmitPayload())
     ElMessage.success(`已成功批量创建 ${result.created} 份文书。`)
     resetDocumentWizardState()
     step2Rows.value = []

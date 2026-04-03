@@ -31,6 +31,7 @@ from app.modules.documents.schemas import (
     DocumentUpdateIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchRowIn,
+    DocumentWizardTaskFinalRowIn,
 )
 from app.modules.masterdata.clients.models import Client, ClientAddress
 from app.modules.tasks.enums import TaskAction, TaskStatus
@@ -368,11 +369,23 @@ def create_document_wizard_batch(
     _validate_document_wizard_rows(db, rows)
 
     created_rows: list[tuple[int, Document]] = []
+    task_rows_by_row_index: dict[int, list[DocumentWizardTaskFinalRowIn]] = {}
+    if data.task_rows:
+        task_rows_by_row_index = _group_document_wizard_task_rows(
+            data.task_rows, row_count=len(rows)
+        )
     try:
         for idx, row in enumerate(rows, start=1):
             payload = _build_document_wizard_payload(data.defaults, row, template)
             document = _create_document_record(db, payload, commit=False)
             maybe_create_fee_draft(db, document, template)
+            explicit_task_rows = task_rows_by_row_index.get(idx, [])
+            if explicit_task_rows:
+                _create_document_wizard_tasks_from_rows(
+                    db,
+                    document=document,
+                    row_task_rows=explicit_task_rows,
+                )
             TaskGenerationService().generate_from_document(db, document)
             created_rows.append((idx, document))
 
@@ -453,6 +466,197 @@ def preview_document_wizard_tasks(
             )
 
     return preview_rows
+
+
+def _group_document_wizard_task_rows(
+    task_rows: list[DocumentWizardTaskFinalRowIn],
+    *,
+    row_count: int,
+) -> dict[int, list[DocumentWizardTaskFinalRowIn]]:
+    row_errors: list[dict[str, object]] = []
+    grouped: dict[int, list[DocumentWizardTaskFinalRowIn]] = {}
+    seen_keys: set[tuple[int, str]] = set()
+
+    for idx, task_row in enumerate(task_rows, start=1):
+        if task_row.row_index < 1 or task_row.row_index > row_count:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "row_index",
+                    "code": "ROW_INDEX_OUT_OF_RANGE",
+                    "message": "Task row row_index is out of range",
+                    "value": task_row.row_index,
+                }
+            )
+            continue
+
+        template_code = _normalize_text(task_row.task_template_code)
+        if not template_code:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "task_template_code",
+                    "code": "TASK_TEMPLATE_CODE_REQUIRED",
+                    "message": "task_template_code is required",
+                }
+            )
+            continue
+
+        key = (task_row.row_index, template_code.lower())
+        if key in seen_keys:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "task_template_code",
+                    "code": "DUPLICATE_TASK_TEMPLATE_CODE",
+                    "message": "Duplicate task_template_code for the same row",
+                    "task_template_code": template_code,
+                }
+            )
+            continue
+
+        seen_keys.add(key)
+        grouped.setdefault(task_row.row_index, []).append(task_row)
+
+    if row_errors:
+        raise_business_error(
+            "DOCUMENT_WIZARD_BATCH_INVALID",
+            "Document wizard batch contains invalid task rows",
+            details={"row_errors": row_errors},
+            status_code=400,
+        )
+
+    return grouped
+
+
+def _create_document_wizard_tasks_from_rows(
+    db: Session,
+    *,
+    document: Document,
+    row_task_rows: list[DocumentWizardTaskFinalRowIn],
+) -> None:
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    task_service = TaskGenerationService()
+    preview_document = SimpleNamespace(
+        id=document.id,
+        case_id=document.case_id,
+        doc_date=document.doc_date,
+        direction=getattr(document.direction, "value", document.direction),
+        doc_template_id=document.doc_template_id,
+        title=document.title,
+        case=case,
+    )
+
+    explicit_rows_by_code: dict[str, DocumentWizardTaskFinalRowIn] = {}
+    for task_row in row_task_rows:
+        template_code = _normalize_text(task_row.task_template_code)
+        if not template_code:
+            raise_business_error(
+                "DOCUMENT_WIZARD_BATCH_INVALID",
+                "Document wizard batch contains invalid task rows",
+                details={
+                    "row_errors": [
+                        {
+                            "row_index": task_row.row_index,
+                            "field": "task_template_code",
+                            "code": "TASK_TEMPLATE_CODE_REQUIRED",
+                            "message": "task_template_code is required",
+                        }
+                    ]
+                },
+                status_code=400,
+            )
+        if _normalize_text(task_row.case_id) != document.case_id:
+            raise_business_error(
+                "DOCUMENT_WIZARD_BATCH_INVALID",
+                "Document wizard batch contains invalid task rows",
+                details={
+                    "row_errors": [
+                        {
+                            "row_index": task_row.row_index,
+                            "field": "case_id",
+                            "code": "CASE_ID_MISMATCH",
+                            "message": "Task row case_id does not match document row case_id",
+                            "case_id": task_row.case_id,
+                            "document_case_id": document.case_id,
+                        }
+                    ]
+                },
+                status_code=400,
+            )
+        explicit_rows_by_code[template_code.lower()] = task_row
+
+    available_templates = _list_task_templates_for_preview(db, task_service, preview_document)
+    available_templates_by_code = {
+        template.code.lower(): template for template in available_templates
+    }
+
+    for template_code_lower, task_row in explicit_rows_by_code.items():
+        template = available_templates_by_code.get(template_code_lower)
+        if not template:
+            raise_business_error(
+                "TASK_TEMPLATE_NOT_FOUND",
+                "Task template not found",
+                status_code=404,
+            )
+        if getattr(template, "enabled", True) is False:
+            raise_business_error(
+                "TASK_TEMPLATE_DISABLED",
+                "Task template disabled",
+                status_code=400,
+            )
+
+        due_date = task_row.due_date or task_service._compute_due_date(
+            preview_document, case, template
+        )
+        base_date = task_row.base_date or getattr(document, "doc_date", None)
+        title = task_row.title or template.name or template.code
+
+        effective_internal_due_date = task_row.internal_due_date
+        if (
+            effective_internal_due_date is None
+            and getattr(template, "inner_offset_days", None) is not None
+        ):
+            effective_internal_due_date = due_date - timedelta(
+                days=getattr(template, "inner_offset_days", 0) or 0
+            )
+
+        remind1, remind2, remind3, daily_remind_from = task_service._compute_reminders(
+            due_date,
+            effective_internal_due_date,
+            template,
+        )
+
+        task = Task(
+            id=str(uuid4()),
+            case_id=document.case_id,
+            document_id=document.id,
+            task_template_id=template.id,
+            title=title,
+            base_date=base_date,
+            due_date=due_date,
+            internal_due_date=effective_internal_due_date,
+            remind1=task_row.remind1 or remind1,
+            remind2=task_row.remind2 or remind2,
+            remind3=task_row.remind3 or remind3,
+            daily_remind_from=task_row.daily_remind_from or daily_remind_from,
+            daily_remind=task_row.daily_remind
+            if task_row.daily_remind is not None
+            else bool(getattr(template, "daily_remind", False)),
+            status=TaskStatus.OPEN.value,
+        )
+        db.add(task)
+        _create_task_log(
+            db,
+            task_id=task.id,
+            action=TaskAction.AUTO_CREATE_FROM_DOCUMENT,
+            from_status=None,
+            to_status=TaskStatus.OPEN.value,
+            remark=None,
+        )
 
 
 def batch_register_document_mailing(

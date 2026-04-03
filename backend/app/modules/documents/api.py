@@ -401,7 +401,7 @@ def preview_document_wizard_tasks_endpoint(
     "/documents/wizard/batch-create",
     status_code=status.HTTP_201_CREATED,
     response_model=DocumentWizardBatchCreateOut,
-    summary="Create documents from wizard batch",
+    summary="Create documents from wizard batch with Step 3 task rows",
 )
 def create_document_wizard_batch_endpoint(
     payload: DocumentWizardBatchCreateIn,

@@ -159,9 +159,25 @@ export interface DocumentWizardBatchRowDraft {
     extra_data?: string
 }
 
+export interface DocumentWizardTaskFinalRowDraft {
+    row_index: number
+    case_id: string
+    task_template_code: string
+    title?: string
+    base_date?: string | null
+    due_date?: string | null
+    internal_due_date?: string | null
+    remind1?: string | null
+    remind2?: string | null
+    remind3?: string | null
+    daily_remind_from?: string | null
+    daily_remind?: boolean
+}
+
 export interface DocumentWizardBatchCreatePayload {
     defaults: DocumentWizardBatchDefaults
     rows: DocumentWizardBatchRowDraft[]
+    task_rows?: DocumentWizardTaskFinalRowDraft[]
 }
 
 export interface DocumentWizardBatchCreatedRow {

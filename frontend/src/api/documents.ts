@@ -143,6 +143,24 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
             ...(trimToUndefined(row.reply_to_id) ? { reply_to_id: trimToUndefined(row.reply_to_id) } : {}),
             ...(trimToUndefined(row.extra_data) ? { extra_data: trimToUndefined(row.extra_data) } : {}),
         })),
+        task_rows: (data.task_rows || []).map((row) => ({
+            row_index: row.row_index,
+            case_id: row.case_id,
+            task_template_code: row.task_template_code,
+            ...(trimToUndefined(row.title) ? { title: trimToUndefined(row.title) } : {}),
+            ...(trimToUndefined(row.base_date ?? undefined) ? { base_date: trimToUndefined(row.base_date ?? undefined) } : {}),
+            ...(trimToUndefined(row.due_date ?? undefined) ? { due_date: trimToUndefined(row.due_date ?? undefined) } : {}),
+            ...(trimToUndefined(row.internal_due_date ?? undefined)
+                ? { internal_due_date: trimToUndefined(row.internal_due_date ?? undefined) }
+                : {}),
+            ...(trimToUndefined(row.remind1 ?? undefined) ? { remind1: trimToUndefined(row.remind1 ?? undefined) } : {}),
+            ...(trimToUndefined(row.remind2 ?? undefined) ? { remind2: trimToUndefined(row.remind2 ?? undefined) } : {}),
+            ...(trimToUndefined(row.remind3 ?? undefined) ? { remind3: trimToUndefined(row.remind3 ?? undefined) } : {}),
+            ...(trimToUndefined(row.daily_remind_from ?? undefined)
+                ? { daily_remind_from: trimToUndefined(row.daily_remind_from ?? undefined) }
+                : {}),
+            ...(row.daily_remind !== undefined ? { daily_remind: row.daily_remind } : {}),
+        })),
     }
 }
 
