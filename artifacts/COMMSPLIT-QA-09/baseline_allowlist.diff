@@ -1,0 +1,10 @@
+# Baseline Allowlist Note
+
+At QA task start, the task/planning files and implementation change already existed for audit:
+- `frontend/src/modules/cases/pages/CaseDetail.vue`
+- `docs/superpowers/specs/2026-04-03-commission-split-fe-view-detail-design.md`
+- `docs/superpowers/plans/2026-04-03-commission-split-fe-view-detail.md`
+- `tasks/postenhancement/frontend/COMMSPLIT-FE-VIEW-01.md`
+- `tasks/postenhancement/frontend/COMMSPLIT-QA-09.md`
+
+This QA task only claims audit evidence under `artifacts/COMMSPLIT-FE-VIEW-01/**` and `artifacts/COMMSPLIT-QA-09/**`.

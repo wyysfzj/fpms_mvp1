@@ -1,0 +1,5 @@
+{"ts":"20260403T202209","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260403T202209","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/modules/cases/pages/CaseDetail.vue"}
+{"ts":"20260403T202302","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/modules/cases/pages/CaseDetail.vue"}
+{"ts":"20260403T202302","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260403T202438","step":"task_validate","cmd":"./scripts/task_validate.sh COMMSPLIT-FE-VIEW-01"}

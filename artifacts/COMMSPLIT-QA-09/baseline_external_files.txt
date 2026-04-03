@@ -1,0 +1,10 @@
+Pre-existing dirty files outside this audit task's claimed product closure were present at task start:
+- `frontend/src/api/cases.ts`
+- `frontend/src/api/cases.types.ts`
+- `frontend/src/modules/cases/pages/CaseDetail.vue`
+- `docs/superpowers/specs/2026-04-03-commission-split-fe-view-detail-design.md`
+- `docs/superpowers/plans/2026-04-03-commission-split-fe-view-detail.md`
+- `tasks/postenhancement/frontend/COMMSPLIT-FE-VIEW-01.md`
+- `tasks/postenhancement/frontend/COMMSPLIT-QA-09.md`
+
+This audit task did not claim ownership of the pre-existing API file changes.

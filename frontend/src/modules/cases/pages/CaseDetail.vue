@@ -342,6 +342,22 @@
                   </div>
                 </div>
 
+                <div v-if="caseData.agent_splits?.length" class="info-section">
+                  <h4 class="info-section-title">代理人分摊</h4>
+                  <div class="priority-list">
+                    <div
+                      v-for="(agentSplit, index) in caseData.agent_splits"
+                      :key="`${agentSplit.agent_id || 'agent'}-${agentSplit.role || 'role'}-${index}`"
+                      class="priority-item"
+                    >
+                      <span>分摊 {{ index + 1 }}</span>
+                      <span>{{ agentSplit.agent_id || '-' }}</span>
+                      <span>{{ formatAgentSplitRole(agentSplit.role) }}</span>
+                      <span>{{ formatShareRatio(agentSplit.share_ratio) }}</span>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- A3: Control Flags -->
                 <div v-if="caseData.is_fee_monitor != null || caseData.fee_reduction || caseData.applicant_kind || caseData.discount_rate || caseData.no_power != null || caseData.no_prio_text != null || caseData.require_hk != null || caseData.first_annuity_year != null" class="info-section">
                   <h4 class="info-section-title">控制标记</h4>
@@ -601,6 +617,16 @@ function handleEdit() {
 
 function handleLimitedEditSuccess() {
   fetchCase()
+}
+
+function formatAgentSplitRole(role?: string | null) {
+  if (role === 'Agent') return '代理人'
+  return '-'
+}
+
+function formatShareRatio(ratio?: number | null) {
+  if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return '-'
+  return `${ratio}%`
 }
 
 onMounted(() => {
