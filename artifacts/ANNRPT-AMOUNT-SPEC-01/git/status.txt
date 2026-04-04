@@ -1,0 +1,14 @@
+A  artifacts/ANNRPT-AMOUNT-SPEC-01/commands.jsonl
+A  artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003035_lint.log
+A  artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003036_test.log
+A  artifacts/ANNRPT-AMOUNT-SPEC-01/results.jsonl
+A  artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md
+A  artifacts/ANNRPT-QA-AMOUNT-SPEC-01/commands.jsonl
+A  artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003036_lint.log
+A  artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003116_test.log
+A  artifacts/ANNRPT-QA-AMOUNT-SPEC-01/results.jsonl
+A  artifacts/ANNRPT-QA-AMOUNT-SPEC-01/summary.md
+A  docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md
+A  docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md
+A  tasks/postenhancement/backend/ANNRPT-AMOUNT-SPEC-01.md
+A  tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md

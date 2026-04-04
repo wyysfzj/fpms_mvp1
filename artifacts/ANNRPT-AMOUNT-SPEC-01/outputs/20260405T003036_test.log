@@ -1,0 +1,34 @@
+19:- `T_GovPayment` 的官方实缴 carrier
+20:- `T_CaseReceipt` 的客户实收 carrier
+26:- 把 `CaseReceipt` 和 `GovPayment` 混成单一“实缴”
+42:- 冻结 `payable_amount` 的 authority
+43:- 冻结 `official_paid_amount` 的 authority
+44:- 冻结 `client_received_amount` 的 authority
+63:  - `GovPayment.case_id`
+64:  - `GovPayment.fee_item_id`
+65:  - `GovPayment.paid_amount`
+66:  - `GovPayment.paid_date`
+68:  - `CaseReceipt.case_id`
+69:  - `CaseReceipt.year_no`
+70:  - `CaseReceipt.receivable_amt`
+71:  - `CaseReceipt.received_amt`
+84:- `payable_amount` authority 采用：
+91:- `official_paid_amount` authority 采用：
+92:  - `T_GovPayment.paid_amount`
+101:- `client_received_amount` authority 采用：
+102:  - `T_CaseReceipt.received_amt`
+104:  - `CaseReceipt.year_no` 非空
+106:- `GovPayment.paid_amount` 不能自动替代客户实收
+115:  - `GovPayment` / `CaseReceipt` 需回投到相同 `year_no`
+119:  - `GovPayment`
+120:  - `CaseReceipt`
+125:- `payable_amount`
+127:- `official_paid_amount`
+129:- `client_received_amount`
+141:- `ANNRPT-AMOUNT-01`
+148:    - `payable_amount`
+149:    - `official_paid_amount`
+150:    - `client_received_amount`
+164:- 把 `GovPayment.paid_amount` 错当成客户实收
+165:- 未经 lineage 回投就把任意 `CaseReceipt` 行吸入年费报表
+171:- 但必须先以本语义冻结作为 authority，再进入 `ANNRPT-AMOUNT-01`

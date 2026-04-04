@@ -1,0 +1,9 @@
+docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:38:- `success-rate` 继续 deferred，不在本 wave 中吸收
+docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:52:- 不做 success-rate semantics
+docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:137:- 但必须单独作为一个 grouped amount implementation slice，不能与 success-rate semantics 混做
+docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:141:- `ANNRPT-AMOUNT-01`
+docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:156:- success-rate semantics
+docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:166:- 在同一条 story 里混入 success-rate
+docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:171:- 但必须先以本语义冻结作为 authority，再进入 `ANNRPT-AMOUNT-01`
+artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md:7:- `rg -n 'payable_amount|official_paid_amount|client_received_amount|GovPayment|CaseReceipt|ANNRPT-AMOUNT-01' docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md`
+artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md:20:- `success-rate` remains explicitly deferred.

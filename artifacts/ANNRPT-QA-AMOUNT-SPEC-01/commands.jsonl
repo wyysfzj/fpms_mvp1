@@ -1,0 +1,2 @@
+{"ts":"20260405T003036","step":"lint","cmd":"test -f tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md"}
+{"ts":"20260405T003116","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md\ \&\&\ rg\ -n\ \'ANNRPT-AMOUNT-01\|success-rate\|no\ product-code\ changes\'\ artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md\ docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md"}

@@ -1,0 +1,380 @@
+diff --git a/artifacts/ANNRPT-AMOUNT-SPEC-01/commands.jsonl b/artifacts/ANNRPT-AMOUNT-SPEC-01/commands.jsonl
+new file mode 100644
+index 0000000..5441d07
+--- /dev/null
++++ b/artifacts/ANNRPT-AMOUNT-SPEC-01/commands.jsonl
+@@ -0,0 +1,2 @@
++{"ts":"20260405T003035","step":"lint","cmd":"test -f docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md"}
++{"ts":"20260405T003036","step":"test","cmd":"/bin/zsh -lc test\ -f\ docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md\ \&\&\ test\ -f\ tasks/postenhancement/backend/ANNRPT-AMOUNT-SPEC-01.md\ \&\&\ rg\ -n\ \'payable_amount\|official_paid_amount\|client_received_amount\|GovPayment\|CaseReceipt\|ANNRPT-AMOUNT-01\'\ docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md"}
+diff --git a/artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003035_lint.log b/artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003035_lint.log
+new file mode 100644
+index 0000000..e69de29
+diff --git a/artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003036_test.log b/artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003036_test.log
+new file mode 100644
+index 0000000..da055fa
+--- /dev/null
++++ b/artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003036_test.log
+@@ -0,0 +1,34 @@
++19:- `T_GovPayment` 的官方实缴 carrier
++20:- `T_CaseReceipt` 的客户实收 carrier
++26:- 把 `CaseReceipt` 和 `GovPayment` 混成单一“实缴”
++42:- 冻结 `payable_amount` 的 authority
++43:- 冻结 `official_paid_amount` 的 authority
++44:- 冻结 `client_received_amount` 的 authority
++63:  - `GovPayment.case_id`
++64:  - `GovPayment.fee_item_id`
++65:  - `GovPayment.paid_amount`
++66:  - `GovPayment.paid_date`
++68:  - `CaseReceipt.case_id`
++69:  - `CaseReceipt.year_no`
++70:  - `CaseReceipt.receivable_amt`
++71:  - `CaseReceipt.received_amt`
++84:- `payable_amount` authority 采用：
++91:- `official_paid_amount` authority 采用：
++92:  - `T_GovPayment.paid_amount`
++101:- `client_received_amount` authority 采用：
++102:  - `T_CaseReceipt.received_amt`
++104:  - `CaseReceipt.year_no` 非空
++106:- `GovPayment.paid_amount` 不能自动替代客户实收
++115:  - `GovPayment` / `CaseReceipt` 需回投到相同 `year_no`
++119:  - `GovPayment`
++120:  - `CaseReceipt`
++125:- `payable_amount`
++127:- `official_paid_amount`
++129:- `client_received_amount`
++141:- `ANNRPT-AMOUNT-01`
++148:    - `payable_amount`
++149:    - `official_paid_amount`
++150:    - `client_received_amount`
++164:- 把 `GovPayment.paid_amount` 错当成客户实收
++165:- 未经 lineage 回投就把任意 `CaseReceipt` 行吸入年费报表
++171:- 但必须先以本语义冻结作为 authority，再进入 `ANNRPT-AMOUNT-01`
+diff --git a/artifacts/ANNRPT-AMOUNT-SPEC-01/results.jsonl b/artifacts/ANNRPT-AMOUNT-SPEC-01/results.jsonl
+new file mode 100644
+index 0000000..8eb9560
+--- /dev/null
++++ b/artifacts/ANNRPT-AMOUNT-SPEC-01/results.jsonl
+@@ -0,0 +1,2 @@
++{"ts":"20260405T003035","step":"lint","rc":0,"log":"artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003035_lint.log"}
++{"ts":"20260405T003036","step":"test","rc":0,"log":"artifacts/ANNRPT-AMOUNT-SPEC-01/outputs/20260405T003036_test.log"}
+diff --git a/artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md b/artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md
+new file mode 100644
+index 0000000..f56d67f
+--- /dev/null
++++ b/artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md
+@@ -0,0 +1,20 @@
++# Summary
++
++## Commands
++- `test -f docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md`
++- `test -f docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md`
++- `test -f tasks/postenhancement/backend/ANNRPT-AMOUNT-SPEC-01.md`
++- `rg -n 'payable_amount|official_paid_amount|client_received_amount|GovPayment|CaseReceipt|ANNRPT-AMOUNT-01' docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md`
++
++## Results
++- Froze `RPT-ANN` grouped amount semantics for：
++  - `payable_amount`
++  - `official_paid_amount`
++  - `client_received_amount`
++- Set `T_AnnuityTask` as payable authority, `T_GovPayment` as official-paid authority, and `T_CaseReceipt` as client-received authority.
++- Froze `client / country / year` grouping lineage through `AnnuityTask -> Case`.
++- Confirmed the next implementation slice can proceed without schema change.
++
++## Notes
++- This wave does not implement any annuity-report product behavior.
++- `success-rate` remains explicitly deferred.
+diff --git a/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/commands.jsonl b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/commands.jsonl
+new file mode 100644
+index 0000000..b6690ed
+--- /dev/null
++++ b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/commands.jsonl
+@@ -0,0 +1,2 @@
++{"ts":"20260405T003036","step":"lint","cmd":"test -f tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md"}
++{"ts":"20260405T003116","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md\ \&\&\ rg\ -n\ \'ANNRPT-AMOUNT-01\|success-rate\|no\ product-code\ changes\'\ artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md\ docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md"}
+diff --git a/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003036_lint.log b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003036_lint.log
+new file mode 100644
+index 0000000..e69de29
+diff --git a/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003116_test.log b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003116_test.log
+new file mode 100644
+index 0000000..b317dfc
+--- /dev/null
++++ b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003116_test.log
+@@ -0,0 +1,9 @@
++docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:38:- `success-rate` 继续 deferred，不在本 wave 中吸收
++docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:52:- 不做 success-rate semantics
++docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:137:- 但必须单独作为一个 grouped amount implementation slice，不能与 success-rate semantics 混做
++docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:141:- `ANNRPT-AMOUNT-01`
++docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:156:- success-rate semantics
++docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:166:- 在同一条 story 里混入 success-rate
++docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md:171:- 但必须先以本语义冻结作为 authority，再进入 `ANNRPT-AMOUNT-01`
++artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md:7:- `rg -n 'payable_amount|official_paid_amount|client_received_amount|GovPayment|CaseReceipt|ANNRPT-AMOUNT-01' docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md`
++artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md:20:- `success-rate` remains explicitly deferred.
+diff --git a/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/results.jsonl b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/results.jsonl
+new file mode 100644
+index 0000000..6db61e2
+--- /dev/null
++++ b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/results.jsonl
+@@ -0,0 +1,2 @@
++{"ts":"20260405T003036","step":"lint","rc":0,"log":"artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003036_lint.log"}
++{"ts":"20260405T003116","step":"test","rc":0,"log":"artifacts/ANNRPT-QA-AMOUNT-SPEC-01/outputs/20260405T003116_test.log"}
+diff --git a/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/summary.md b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/summary.md
+new file mode 100644
+index 0000000..2f04591
+--- /dev/null
++++ b/artifacts/ANNRPT-QA-AMOUNT-SPEC-01/summary.md
+@@ -0,0 +1,14 @@
++# Summary
++
++## Commands
++- `test -f tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md`
++- `test -f artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md`
++- `rg -n 'ANNRPT-AMOUNT-01|success-rate|no product-code changes' artifacts/ANNRPT-AMOUNT-SPEC-01/summary.md docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md`
++
++## Results
++- Audited the `RPT-ANN` grouped amount semantics freeze wave.
++- Confirmed this wave only froze source semantics and implementation readiness.
++- Confirmed no annuity FE/BE product implementation or close update was absorbed.
++
++## Notes
++- QA close is limited to evidence and scope compliance for the doc-only prerequisite wave.
+diff --git a/docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md b/docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md
+new file mode 100644
+index 0000000..499b14c
+--- /dev/null
++++ b/docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md
+@@ -0,0 +1,47 @@
++# ANNRPT-AMOUNT-SPEC-01 Plan
++
++## Story Shape Classification
++
++- `shared_file_density`: `low`
++- `prereq_dependency_density`: `medium`
++- `be_fe_coupling`: `semantics freeze before grouped amount implementation`
++- `evidence_cost`: `medium`
++
++## chosen_runbook
++
++- `P0-single-lane-story`
++
++## Batch Manifest
++
++### Task 1
++
++- task: `tasks/postenhancement/backend/ANNRPT-AMOUNT-SPEC-01.md`
++- owner: `main thread`
++- allowlist:
++  - `docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md`
++  - `docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md`
++  - `tasks/postenhancement/backend/ANNRPT-AMOUNT-SPEC-01.md`
++- verification:
++  - `./scripts/task_validate.sh ANNRPT-AMOUNT-SPEC-01`
++
++### Task 2
++
++- task: `tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md`
++- owner: `main thread`
++- allowlist:
++  - `docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md`
++  - `docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md`
++  - `tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md`
++- verification:
++  - `./scripts/task_validate.sh ANNRPT-QA-AMOUNT-SPEC-01`
++
++## Exact Closure
++
++- freeze `RPT-ANN` payable / official-paid / client-received grouped amount semantics only
++
++## Explicit Non-closure
++
++- no product implementation
++- no success-rate semantics
++- no chart / export
++- no closure update
+diff --git a/docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md b/docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md
+new file mode 100644
+index 0000000..585da37
+--- /dev/null
++++ b/docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md
+@@ -0,0 +1,171 @@
++# RPT-ANN Amount Semantics Design
++
++## Story Shape Classification
++
++- `shared_file_density`: `low`
++- `prereq_dependency_density`: `medium`
++- `be_fe_coupling`: `semantics freeze before grouped amount implementation`
++- `evidence_cost`: `medium`
++
++## chosen_runbook
++
++- `P0-single-lane-story`
++
++## Problem Statement
++
++`RPT-ANN` 在 residual mapping 后，最容易被误做假的能力是“按国别/客户/年份统计年费应缴/实缴情况”。当前 repo 同时存在：
++
++- `T_AnnuityTask` 的年度应缴 carrier
++- `T_GovPayment` 的官方实缴 carrier
++- `T_CaseReceipt` 的客户实收 carrier
++
++如果不先冻结年费金额统计的 source-of-truth，后续实现很容易在：
++
++- 直接把 `PayList.total_amount` 当官方实缴
++- 把 `AnnuityTask.gov_fee_amt + service_fee_amt` 当客户实收
++- 把 `CaseReceipt` 和 `GovPayment` 混成单一“实缴”
++
++之间随意切换，导致年费报表口径不一致。
++
++## Assumptions
++
++- `FPMS SPEC 2.0 9.4.3` 的 residual 语义包括：
++  - 按国别 / 客户 / 年份统计年费应缴 / 实缴情况
++- `RPT-ANN` 当前 authority 仍是：
++  - `GET /annuity/tasks`
++  - `AnnuityTaskList.vue`
++- 本 wave 只冻结 grouped amount semantics，不做任何产品实现
++- `success-rate` 继续 deferred，不在本 wave 中吸收
++
++## Scope
++
++- 冻结 `payable_amount` 的 authority
++- 冻结 `official_paid_amount` 的 authority
++- 冻结 `client_received_amount` 的 authority
++- 冻结 `client / country / year` 三个维度的 grouping lineage
++- 判断该 residual 当前是否可直接进入实现
++- 推荐下一条 implementation slice
++
++## Explicit Non-scope
++
++- 不做任何 annuity 产品实现补丁
++- 不做 success-rate semantics
++- 不做图表 / 导出
++- 不更新 `RPT-ANN` 或 `#13` close decision
++
++## Current Carrier Evidence
++
++- `backend/app/modules/annuity/models.py`
++  - `AnnuityTask.year_no`
++  - `AnnuityTask.client_id`
++  - `AnnuityTask.gov_fee_amt`
++  - `AnnuityTask.service_fee_amt`
++  - `GovPayment.case_id`
++  - `GovPayment.fee_item_id`
++  - `GovPayment.paid_amount`
++  - `GovPayment.paid_date`
++- `backend/app/modules/billing/models.py`
++  - `CaseReceipt.case_id`
++  - `CaseReceipt.year_no`
++  - `CaseReceipt.receivable_amt`
++  - `CaseReceipt.received_amt`
++- `backend/app/modules/annuity/service.py`
++  - `list_annuity_tasks_report(...)`
++  - `mark_pay_list_paid(...)`
++  - gov payment persistence helpers
++- `backend/app/modules/billing/service.py`
++  - `create_case_receipt(...)`
++  - case receipt list/get carriers
++
++## Semantics Decision
++
++### Payable source-of-truth
++
++- `payable_amount` authority 采用：
++  - `T_AnnuityTask.gov_fee_amt + T_AnnuityTask.service_fee_amt`
++- 该值表示某年费任务在任务层面的应缴金额
++- 第一轮 grouped amount reporting 以任务行为最小粒度，不要求必须已经生成 pay list 或账单
++
++### Official paid source-of-truth
++
++- `official_paid_amount` authority 采用：
++  - `T_GovPayment.paid_amount`
++- 只计入满足以下条件的 gov payment rows：
++  - 关联到 annuity fee item / annuity pay-list lineage
++  - `paid_date` 非空或 status 属于 `PAID/RECORDED`
++- `PayList.total_amount` 仅作为 pay-list header 投影
++  - 不作为 grouped official-paid 统计的第一权威
++
++### Client received source-of-truth
++
++- `client_received_amount` authority 采用：
++  - `T_CaseReceipt.received_amt`
++- 只计入：
++  - `CaseReceipt.year_no` 非空
++  - 且能代表 annuity year-specific receipt lineage 的 rows
++- `GovPayment.paid_amount` 不能自动替代客户实收
++  - 官方实缴与客户实收在财务语义上不同
++
++### Grouping lineage
++
++- `client` 维度：
++  - 直接使用 `AnnuityTask.client_id`
++- `year` 维度：
++  - 直接使用 `AnnuityTask.year_no`
++  - `GovPayment` / `CaseReceipt` 需回投到相同 `year_no`
++- `country` 维度：
++  - 通过 `AnnuityTask.case_id -> Case.to_country / from_country`
++- 第一轮 grouped amount implementation 必须以 `AnnuityTask` 为主表，再左联：
++  - `GovPayment`
++  - `CaseReceipt`
++  的同年 / 同案 lineage
++
++### Metric separation
++
++- `payable_amount`
++  - 来自 annuity task layer
++- `official_paid_amount`
++  - 来自 gov payment layer
++- `client_received_amount`
++  - 来自 case receipt layer
++- 这三者不得在同一个 source 上互相替代
++
++## Implementation Readiness Judgment
++
++- grouped annuity amount summaries 在当前 carrier 下可直接进入实现
++- 不需要新增 schema / migration
++- 但必须单独作为一个 grouped amount implementation slice，不能与 success-rate semantics 混做
++
++## Recommended Next Slice
++
++- `ANNRPT-AMOUNT-01`
++- exact closure candidate:
++  - extend `GET /annuity/tasks` summary with grouped:
++    - `client_amounts`
++    - `country_amounts`
++    - `year_amounts`
++  - each row contains:
++    - `payable_amount`
++    - `official_paid_amount`
++    - `client_received_amount`
++    - `task_count`
++  - render those grouped summaries on `AnnuityTaskList.vue`
++
++## Explicitly Deferred
++
++- success-rate semantics
++- chart / export
++- predictive monitoring analytics
++- pay-list header reporting as a separate family
++
++## Risks
++
++- 把 `PayList.total_amount` 错当成官方实缴第一权威
++- 把 `GovPayment.paid_amount` 错当成客户实收
++- 未经 lineage 回投就把任意 `CaseReceipt` 行吸入年费报表
++- 在同一条 story 里混入 success-rate
++
++## Design Conclusion
++
++- `可在当前约束下拆成可执行原子任务`
++- 但必须先以本语义冻结作为 authority，再进入 `ANNRPT-AMOUNT-01`
+diff --git a/tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md b/tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md
+new file mode 100644
+index 0000000..4bc2e47
+--- /dev/null
++++ b/tasks/postenhancement/backend/ANNRPT-QA-AMOUNT-SPEC-01.md
+@@ -0,0 +1,5 @@
++# ANNRPT-QA-AMOUNT-SPEC-01
++
++- exact closure slice: audit evidence and close summary for the `RPT-ANN` grouped amount semantics freeze wave
++- explicit non-closure: no product-code changes, no success-rate semantics, no chart/export work, no close-decision update
++- remaining follow-up task ids: `None`

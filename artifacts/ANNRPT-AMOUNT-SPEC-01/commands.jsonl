@@ -1,0 +1,2 @@
+{"ts":"20260405T003035","step":"lint","cmd":"test -f docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md"}
+{"ts":"20260405T003036","step":"test","cmd":"/bin/zsh -lc test\ -f\ docs/superpowers/plans/2026-04-05-annuity-report-amount-semantics.md\ \&\&\ test\ -f\ tasks/postenhancement/backend/ANNRPT-AMOUNT-SPEC-01.md\ \&\&\ rg\ -n\ \'payable_amount\|official_paid_amount\|client_received_amount\|GovPayment\|CaseReceipt\|ANNRPT-AMOUNT-01\'\ docs/superpowers/specs/2026-04-05-annuity-report-amount-semantics-design.md"}
