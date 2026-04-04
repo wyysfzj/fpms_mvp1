@@ -48,6 +48,10 @@ class AnnuityTaskReportSummaryResponse(BaseModel):
     open_task_count: int = 0
     done_task_count: int = 0
     overdue_task_count: int = 0
+    monitored_task_count: int = 0
+    on_time_paid_count: int = 0
+    late_paid_count: int = 0
+    success_rate: float | None = None
     status_counts: list[AnnuityTaskReportCountResponse] = Field(default_factory=list)
     year_counts: list[AnnuityTaskReportCountResponse] = Field(default_factory=list)
     client_amounts: list[AnnuityTaskGroupedAmountResponse] = Field(default_factory=list)

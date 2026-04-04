@@ -1,0 +1,2 @@
+{"ts":"20260405T010619","step":"lint","cmd":"/bin/zsh -lc test\ -f\ artifacts/ANNRPT-SUCCESS-BE-01/summary.md\ \&\&\ test\ -f\ artifacts/ANNRPT-SUCCESS-FE-01/summary.md\ \&\&\ test\ -f\ tasks/postenhancement/backend/ANNRPT-SUCCESS-QA-01.md"}
+{"ts":"20260405T010619","step":"test","cmd":"/bin/zsh -lc ./scripts/task_validate.sh\ ANNRPT-SUCCESS-BE-01\ \&\&\ ./scripts/task_validate.sh\ ANNRPT-SUCCESS-FE-01"}

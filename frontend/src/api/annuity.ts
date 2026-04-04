@@ -48,6 +48,10 @@ interface BackendAnnuityTaskReportSummary {
     open_task_count: number
     done_task_count: number
     overdue_task_count: number
+    monitored_task_count: number
+    on_time_paid_count: number
+    late_paid_count: number
+    success_rate: number | null
     status_counts: BackendAnnuityTaskReportCount[]
     year_counts: BackendAnnuityTaskReportCount[]
     client_amounts: BackendAnnuityTaskGroupedAmount[]
@@ -161,6 +165,10 @@ function mapReportSummary(input: BackendAnnuityTaskReportSummary): AnnuityTaskRe
         open_task_count: Number(input.open_task_count || 0),
         done_task_count: Number(input.done_task_count || 0),
         overdue_task_count: Number(input.overdue_task_count || 0),
+        monitored_task_count: Number(input.monitored_task_count || 0),
+        on_time_paid_count: Number(input.on_time_paid_count || 0),
+        late_paid_count: Number(input.late_paid_count || 0),
+        success_rate: input.success_rate ?? null,
         status_counts: (input.status_counts || []).map(mapReportCount),
         year_counts: (input.year_counts || []).map(mapReportCount),
         client_amounts: (input.client_amounts || []).map(mapGroupedAmount),

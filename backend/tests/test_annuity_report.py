@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.billing.models import CaseReceipt
+from app.modules.fees.models import FeeDraft, FeeItem
 
 
 def _uid(prefix: str) -> str:
@@ -64,6 +65,7 @@ def _insert_annuity_task(
     notice_status: str = "PENDING",
     gov_fee_amt: Decimal = Decimal("0"),
     service_fee_amt: Decimal = Decimal("0"),
+    client_instruction: str | None = None,
 ) -> int:
     with session_factory() as db:
         task = AnnuityTask(
@@ -75,6 +77,7 @@ def _insert_annuity_task(
             notice_status=notice_status,
             gov_fee_amt=gov_fee_amt,
             service_fee_amt=service_fee_amt,
+            client_instruction=client_instruction,
         )
         db.add(task)
         db.commit()
@@ -103,6 +106,7 @@ def _insert_gov_payment(
     case_id: str,
     paid_amount: Decimal,
     paid_date: date,
+    fee_item_id: str | None = None,
 ) -> int:
     with session_factory() as db:
         payment = GovPayment(
@@ -112,11 +116,46 @@ def _insert_gov_payment(
             paid_date=paid_date,
             currency="CNY",
             status="PAID",
+            fee_item_id=fee_item_id,
         )
         db.add(payment)
         db.commit()
         db.refresh(payment)
         return payment.id
+
+
+def _insert_fee_item_with_draft(
+    session_factory: sessionmaker,
+    *,
+    case_id: str,
+    client_id: str,
+    year_no: int,
+    amount: Decimal,
+) -> str:
+    with session_factory() as db:
+        draft = FeeDraft(
+            case_id=case_id,
+            client_id=client_id,
+            draft_type="ANNUITY_FEE",
+            currency="CNY",
+            total_gov=amount,
+            amount=amount,
+        )
+        db.add(draft)
+        db.flush()
+        item = FeeItem(
+            draft_id=draft.id,
+            case_id=case_id,
+            fee_type="GOV",
+            year_no=year_no,
+            amount=amount,
+            fee_code=f"ANN-GOV-{year_no}",
+            fee_name=f"年费官费 {year_no}",
+        )
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        return item.id
 
 
 def _insert_case_receipt(
@@ -485,3 +524,113 @@ def test_get_annuity_tasks_returns_grouped_amount_summaries(
     assert year_amounts["202"]["payable_amount"] == "200.00"
     assert year_amounts["202"]["official_paid_amount"] == "200.00"
     assert year_amounts["202"]["client_received_amount"] == "230.00"
+
+
+def test_get_annuity_tasks_returns_success_rate_metrics(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    today = date.today()
+    client_id = _create_client(client, auth_headers, name_prefix="ANN-SUC-CLI")
+    case = _create_case(
+        client,
+        auth_headers,
+        client_id=client_id,
+        case_no_prefix="ANN-SUC-CASE",
+        from_country=f"S{uuid4().hex[:3].upper()}",
+    )
+
+    _insert_annuity_task(
+        session_factory,
+        case_id=case["id"],
+        client_id=client_id,
+        year_no=301,
+        due_date=today + timedelta(days=10),
+        status="OPEN",
+        client_instruction="PAY",
+    )
+    _insert_annuity_task(
+        session_factory,
+        case_id=case["id"],
+        client_id=client_id,
+        year_no=302,
+        due_date=today + timedelta(days=10),
+        status="OPEN",
+        client_instruction="PAY",
+    )
+    _insert_annuity_task(
+        session_factory,
+        case_id=case["id"],
+        client_id=client_id,
+        year_no=303,
+        due_date=today + timedelta(days=10),
+        status="OPEN",
+        client_instruction="PAY",
+    )
+    _insert_annuity_task(
+        session_factory,
+        case_id=case["id"],
+        client_id=client_id,
+        year_no=304,
+        due_date=today + timedelta(days=10),
+        status="OPEN",
+        client_instruction="ABANDON",
+    )
+
+    on_time_item_id = _insert_fee_item_with_draft(
+        session_factory,
+        case_id=case["id"],
+        client_id=client_id,
+        year_no=301,
+        amount=Decimal("100.00"),
+    )
+    late_item_id = _insert_fee_item_with_draft(
+        session_factory,
+        case_id=case["id"],
+        client_id=client_id,
+        year_no=302,
+        amount=Decimal("120.00"),
+    )
+    pay_list_id = _insert_pay_list(
+        session_factory,
+        client_id=client_id,
+        total_amount=Decimal("220.00"),
+    )
+    _insert_gov_payment(
+        session_factory,
+        pay_list_id=pay_list_id,
+        case_id=case["id"],
+        paid_amount=Decimal("100.00"),
+        paid_date=today + timedelta(days=5),
+        fee_item_id=on_time_item_id,
+    )
+    _insert_gov_payment(
+        session_factory,
+        pay_list_id=pay_list_id,
+        case_id=case["id"],
+        paid_amount=Decimal("120.00"),
+        paid_date=today + timedelta(days=20),
+        fee_item_id=late_item_id,
+    )
+    _insert_gov_payment(
+        session_factory,
+        pay_list_id=pay_list_id,
+        case_id=case["id"],
+        paid_amount=Decimal("50.00"),
+        paid_date=today + timedelta(days=2),
+        fee_item_id=None,
+    )
+
+    resp = client.get(
+        "/api/v1/annuity/tasks",
+        headers=auth_headers,
+        params={"page": 1, "page_size": 20},
+    )
+    assert resp.status_code == 200, resp.text
+    summary = resp.json()["summary"]
+
+    assert summary["monitored_task_count"] == 3
+    assert summary["on_time_paid_count"] == 1
+    assert summary["late_paid_count"] == 1
+    assert summary["success_rate"] == 1 / 3

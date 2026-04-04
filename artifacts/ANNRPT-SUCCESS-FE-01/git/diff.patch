@@ -1,0 +1,102 @@
+diff --git a/frontend/src/api/annuity.ts b/frontend/src/api/annuity.ts
+index 71ed906..68cf1f8 100644
+--- a/frontend/src/api/annuity.ts
++++ b/frontend/src/api/annuity.ts
+@@ -48,6 +48,10 @@ interface BackendAnnuityTaskReportSummary {
+     open_task_count: number
+     done_task_count: number
+     overdue_task_count: number
++    monitored_task_count: number
++    on_time_paid_count: number
++    late_paid_count: number
++    success_rate: number | null
+     status_counts: BackendAnnuityTaskReportCount[]
+     year_counts: BackendAnnuityTaskReportCount[]
+     client_amounts: BackendAnnuityTaskGroupedAmount[]
+@@ -161,6 +165,10 @@ function mapReportSummary(input: BackendAnnuityTaskReportSummary): AnnuityTaskRe
+         open_task_count: Number(input.open_task_count || 0),
+         done_task_count: Number(input.done_task_count || 0),
+         overdue_task_count: Number(input.overdue_task_count || 0),
++        monitored_task_count: Number(input.monitored_task_count || 0),
++        on_time_paid_count: Number(input.on_time_paid_count || 0),
++        late_paid_count: Number(input.late_paid_count || 0),
++        success_rate: input.success_rate ?? null,
+         status_counts: (input.status_counts || []).map(mapReportCount),
+         year_counts: (input.year_counts || []).map(mapReportCount),
+         client_amounts: (input.client_amounts || []).map(mapGroupedAmount),
+diff --git a/frontend/src/api/annuity.types.ts b/frontend/src/api/annuity.types.ts
+index 2f7c343..e2ebfdd 100644
+--- a/frontend/src/api/annuity.types.ts
++++ b/frontend/src/api/annuity.types.ts
+@@ -46,6 +46,10 @@ export interface AnnuityTaskReportSummary {
+     open_task_count: number
+     done_task_count: number
+     overdue_task_count: number
++    monitored_task_count: number
++    on_time_paid_count: number
++    late_paid_count: number
++    success_rate: number | null
+     status_counts: AnnuityTaskReportCount[]
+     year_counts: AnnuityTaskReportCount[]
+     client_amounts: AnnuityTaskGroupedAmount[]
+diff --git a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+index 968d8eb..185fe16 100644
+--- a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
++++ b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+@@ -130,6 +130,22 @@
+         <span class="summary-label">逾期任务</span>
+         <span class="summary-value">{{ summary.overdue_task_count }} 条</span>
+       </div>
++      <div class="summary-card">
++        <span class="summary-label">监视任务</span>
++        <span class="summary-value">{{ summary.monitored_task_count }} 条</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">按时缴费</span>
++        <span class="summary-value">{{ summary.on_time_paid_count }} 条</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">逾期缴费</span>
++        <span class="summary-value">{{ summary.late_paid_count }} 条</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">监视成功率</span>
++        <span class="summary-value">{{ formatSuccessRate(summary.success_rate) }}</span>
++      </div>
+     </div>
+ 
+     <div class="distribution-summary">
+@@ -494,6 +510,10 @@ const summary = ref<AnnuityTaskReportSummary>({
+   open_task_count: 0,
+   done_task_count: 0,
+   overdue_task_count: 0,
++  monitored_task_count: 0,
++  on_time_paid_count: 0,
++  late_paid_count: 0,
++  success_rate: null,
+   status_counts: [],
+   year_counts: [],
+   client_amounts: [],
+@@ -563,6 +583,10 @@ async function fetchTasks() {
+       open_task_count: 0,
+       done_task_count: 0,
+       overdue_task_count: 0,
++      monitored_task_count: 0,
++      on_time_paid_count: 0,
++      late_paid_count: 0,
++      success_rate: null,
+       status_counts: [],
+       year_counts: [],
+       client_amounts: [],
+@@ -705,6 +729,11 @@ function formatMoney(amount: number, currency = 'CNY'): string {
+   }).format(amount || 0)
+ }
+ 
++function formatSuccessRate(value: number | null): string {
++  if (value === null) return '暂无'
++  return `${(value * 100).toFixed(1)}%`
++}
++
+ async function handleBatchGenerateDrafts() {
+   if (selectedTaskIds.value.length === 0) {
+     ElMessage.warning('请先选择至少一条任务。')

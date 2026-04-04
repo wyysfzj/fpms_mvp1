@@ -46,6 +46,10 @@ export interface AnnuityTaskReportSummary {
     open_task_count: number
     done_task_count: number
     overdue_task_count: number
+    monitored_task_count: number
+    on_time_paid_count: number
+    late_paid_count: number
+    success_rate: number | null
     status_counts: AnnuityTaskReportCount[]
     year_counts: AnnuityTaskReportCount[]
     client_amounts: AnnuityTaskGroupedAmount[]

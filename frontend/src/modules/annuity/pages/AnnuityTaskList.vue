@@ -130,6 +130,22 @@
         <span class="summary-label">逾期任务</span>
         <span class="summary-value">{{ summary.overdue_task_count }} 条</span>
       </div>
+      <div class="summary-card">
+        <span class="summary-label">监视任务</span>
+        <span class="summary-value">{{ summary.monitored_task_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">按时缴费</span>
+        <span class="summary-value">{{ summary.on_time_paid_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">逾期缴费</span>
+        <span class="summary-value">{{ summary.late_paid_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">监视成功率</span>
+        <span class="summary-value">{{ formatSuccessRate(summary.success_rate) }}</span>
+      </div>
     </div>
 
     <div class="distribution-summary">
@@ -494,6 +510,10 @@ const summary = ref<AnnuityTaskReportSummary>({
   open_task_count: 0,
   done_task_count: 0,
   overdue_task_count: 0,
+  monitored_task_count: 0,
+  on_time_paid_count: 0,
+  late_paid_count: 0,
+  success_rate: null,
   status_counts: [],
   year_counts: [],
   client_amounts: [],
@@ -563,6 +583,10 @@ async function fetchTasks() {
       open_task_count: 0,
       done_task_count: 0,
       overdue_task_count: 0,
+      monitored_task_count: 0,
+      on_time_paid_count: 0,
+      late_paid_count: 0,
+      success_rate: null,
       status_counts: [],
       year_counts: [],
       client_amounts: [],
@@ -703,6 +727,11 @@ function formatMoney(amount: number, currency = 'CNY'): string {
     style: 'currency',
     currency: currency || 'CNY',
   }).format(amount || 0)
+}
+
+function formatSuccessRate(value: number | null): string {
+  if (value === null) return '暂无'
+  return `${(value * 100).toFixed(1)}%`
 }
 
 async function handleBatchGenerateDrafts() {

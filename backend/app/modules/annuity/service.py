@@ -228,6 +228,10 @@ def summarize_annuity_tasks(tasks: list[AnnuityTask]) -> dict[str, Any]:
         "open_task_count": open_task_count,
         "done_task_count": done_task_count,
         "overdue_task_count": overdue_task_count,
+        "monitored_task_count": 0,
+        "on_time_paid_count": 0,
+        "late_paid_count": 0,
+        "success_rate": None,
         "status_counts": [
             {"key": key, "count": status_counts[key]} for key in sorted(status_counts.keys())
         ],
@@ -404,6 +408,57 @@ def _build_annuity_grouped_amounts(
     }
 
 
+def _build_annuity_success_metrics(db: Session, tasks: list[AnnuityTask]) -> dict[str, Any]:
+    monitored_tasks = [
+        task for task in tasks if (task.client_instruction or "").strip().upper() == "PAY"
+    ]
+    monitored_task_count = len(monitored_tasks)
+    if monitored_task_count == 0:
+        return {
+            "monitored_task_count": 0,
+            "on_time_paid_count": 0,
+            "late_paid_count": 0,
+            "success_rate": None,
+        }
+
+    case_ids = sorted({task.case_id for task in monitored_tasks})
+    lineage_payments = db.execute(
+        select(GovPayment.case_id, FeeItem.year_no, GovPayment.paid_date)
+        .join(FeeItem, FeeItem.id == GovPayment.fee_item_id)
+        .where(GovPayment.case_id.in_(case_ids))
+        .where(GovPayment.paid_date.is_not(None))
+        .where(FeeItem.year_no.is_not(None))
+        .where(func.upper(GovPayment.status).in_(("PAID", "RECORDED")))
+    ).all()
+
+    paid_dates_by_case_year: dict[tuple[str, int], list[date]] = defaultdict(list)
+    for row in lineage_payments:
+        if row.paid_date is None or row.year_no is None:
+            continue
+        paid_dates_by_case_year[(row.case_id, int(row.year_no))].append(row.paid_date)
+
+    on_time_paid_count = 0
+    late_paid_count = 0
+    for task in monitored_tasks:
+        paid_dates = paid_dates_by_case_year.get((task.case_id, task.year_no), [])
+        if not paid_dates:
+            continue
+        earliest_paid_date = min(paid_dates)
+        if earliest_paid_date <= task.due_date:
+            on_time_paid_count += 1
+        else:
+            late_paid_count += 1
+
+    return {
+        "monitored_task_count": monitored_task_count,
+        "on_time_paid_count": on_time_paid_count,
+        "late_paid_count": late_paid_count,
+        "success_rate": (
+            on_time_paid_count / monitored_task_count if monitored_task_count > 0 else None
+        ),
+    }
+
+
 def list_annuity_tasks_report(
     db: Session,
     *,
@@ -478,6 +533,7 @@ def list_annuity_tasks_report(
     offset = (page - 1) * page_size
     items = all_items[offset : offset + page_size]
     summary = summarize_annuity_tasks(all_items)
+    summary.update(_build_annuity_success_metrics(db, all_items))
     summary.update(_build_annuity_grouped_amounts(db, all_items))
     return items, total, summary
 
