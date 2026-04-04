@@ -1,0 +1,2 @@
+{"ts":"20260405T001843","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/FEERPT-BALANCE-BE-01/summary.md\ \&\&\ test\ -f\ artifacts/FEERPT-BALANCE-FE-01/summary.md\ \&\&\ rg\ -n\ \'billed_amount\|received_amount\|unpaid_balance_amount\|partially_received_bill_count\'\ backend/app/modules/fees/service.py\ frontend/src/api/fees.types.ts"}
+{"ts":"20260405T001843","step":"lint","cmd":"test -f tasks/postenhancement/backend/FEERPT-BALANCE-QA-01.md"}

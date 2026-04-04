@@ -58,6 +58,10 @@ class FeeDraftReportSummaryResponse(BaseModel):
     service_fee_amount: Decimal = Decimal("0")
     government_fee_amount: Decimal = Decimal("0")
     income_amount: Decimal = Decimal("0")
+    billed_amount: Decimal = Decimal("0")
+    received_amount: Decimal = Decimal("0")
+    unpaid_balance_amount: Decimal = Decimal("0")
+    partially_received_bill_count: int = 0
     client_amounts: list["FeeDraftGroupedAmountResponse"] = []
     case_type_amounts: list["FeeDraftGroupedAmountResponse"] = []
     country_amounts: list["FeeDraftGroupedAmountResponse"] = []

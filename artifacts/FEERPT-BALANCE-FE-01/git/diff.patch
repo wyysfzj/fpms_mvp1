@@ -1,0 +1,346 @@
+diff --git a/artifacts/FEERPT-BALANCE-FE-01/commands.jsonl b/artifacts/FEERPT-BALANCE-FE-01/commands.jsonl
+new file mode 100644
+index 0000000..4664e09
+--- /dev/null
++++ b/artifacts/FEERPT-BALANCE-FE-01/commands.jsonl
+@@ -0,0 +1,2 @@
++{"ts":"20260405T001737","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/fees.ts\ src/api/fees.types.ts\ src/modules/fees/pages/FeeDraftList.vue"}
++{"ts":"20260405T001737","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+diff --git a/artifacts/FEERPT-BALANCE-FE-01/outputs/20260405T001737_lint.log b/artifacts/FEERPT-BALANCE-FE-01/outputs/20260405T001737_lint.log
+new file mode 100644
+index 0000000..8858128
+--- /dev/null
++++ b/artifacts/FEERPT-BALANCE-FE-01/outputs/20260405T001737_lint.log
+@@ -0,0 +1,4 @@
++
++> fpms-spa@0.1.0 lint
++> eslint . --max-warnings 0 src/api/fees.ts src/api/fees.types.ts src/modules/fees/pages/FeeDraftList.vue
++
+diff --git a/artifacts/FEERPT-BALANCE-FE-01/outputs/20260405T001737_test.log b/artifacts/FEERPT-BALANCE-FE-01/outputs/20260405T001737_test.log
+new file mode 100644
+index 0000000..154f4e6
+--- /dev/null
++++ b/artifacts/FEERPT-BALANCE-FE-01/outputs/20260405T001737_test.log
+@@ -0,0 +1,4 @@
++
++> fpms-spa@0.1.0 typecheck
++> vue-tsc --noEmit
++
+diff --git a/artifacts/FEERPT-BALANCE-FE-01/results.jsonl b/artifacts/FEERPT-BALANCE-FE-01/results.jsonl
+new file mode 100644
+index 0000000..fc3de4b
+--- /dev/null
++++ b/artifacts/FEERPT-BALANCE-FE-01/results.jsonl
+@@ -0,0 +1,2 @@
++{"ts":"20260405T001737","step":"lint","rc":0,"log":"artifacts/FEERPT-BALANCE-FE-01/outputs/20260405T001737_lint.log"}
++{"ts":"20260405T001737","step":"test","rc":0,"log":"artifacts/FEERPT-BALANCE-FE-01/outputs/20260405T001737_test.log"}
+diff --git a/artifacts/FEERPT-BALANCE-FE-01/summary.md b/artifacts/FEERPT-BALANCE-FE-01/summary.md
+new file mode 100644
+index 0000000..2eddf58
+--- /dev/null
++++ b/artifacts/FEERPT-BALANCE-FE-01/summary.md
+@@ -0,0 +1,14 @@
++# Summary
++
++## Commands
++- `cd frontend && npm run lint -- src/api/fees.ts src/api/fees.types.ts src/modules/fees/pages/FeeDraftList.vue`
++- `cd frontend && npm run typecheck`
++
++## Results
++- Wired the new fee balance summary fields into `fees.ts` and `fees.types.ts`.
++- Added a Simplified-Chinese billed / received / unpaid summary block to `FeeDraftList.vue`.
++- Preserved the existing grouped summary sections and page flow.
++
++## Notes
++- This task does not create a new report page.
++- Chart, export, and trend views remain deferred.
+diff --git a/docs/superpowers/plans/2026-04-05-fee-report-balance-implementation.md b/docs/superpowers/plans/2026-04-05-fee-report-balance-implementation.md
+new file mode 100644
+index 0000000..8fecd9d
+--- /dev/null
++++ b/docs/superpowers/plans/2026-04-05-fee-report-balance-implementation.md
+@@ -0,0 +1,60 @@
++# FEERPT-BALANCE-01 Plan
++
++## Story Shape Classification
++
++- `shared_file_density`: `medium`
++- `prereq_dependency_density`: `medium`
++- `be_fe_coupling`: `shared FE/BE balance-summary implementation after semantics freeze`
++- `evidence_cost`: `medium`
++
++## chosen_runbook
++
++- `P0-frontend-heavy-story`
++
++## Batch Manifest
++
++| Task ID | Owner | Allowlist | Dependency Notes | Exact Closure Slice | Explicit Non-closure |
++|---|---|---|---|---|---|
++| `FEERPT-BALANCE-BE-01` | main thread | `backend/app/modules/fees/service.py`, `backend/app/modules/fees/schemas.py`, `backend/tests/test_fee_report.py`, `docs/superpowers/specs/2026-04-05-fee-report-balance-implementation-design.md`, `docs/superpowers/plans/2026-04-05-fee-report-balance-implementation.md`, `tasks/postenhancement/backend/FEERPT-BALANCE-BE-01.md` | Depends on `FEERPT-BALANCE-SPEC-01`; owns fee summary backend contract and test coverage | Add `billed_amount`, `received_amount`, `unpaid_balance_amount`, `partially_received_bill_count` to fee report summary with correct bill-lineage semantics | No FE rendering, no trend/export, no hand-made bill lineage support |
++| `FEERPT-BALANCE-FE-01` | main thread | `frontend/src/api/fees.ts`, `frontend/src/api/fees.types.ts`, `frontend/src/modules/fees/pages/FeeDraftList.vue`, `docs/superpowers/specs/2026-04-05-fee-report-balance-implementation-design.md`, `docs/superpowers/plans/2026-04-05-fee-report-balance-implementation.md`, `tasks/postenhancement/frontend/FEERPT-BALANCE-FE-01.md` | Runs after backend contract is in place | Render billed / received / unpaid summary block and wire FE contract | No new page, no chart/export, no trend reporting |
++| `FEERPT-BALANCE-QA-01` | main thread | `artifacts/FEERPT-BALANCE-BE-01/**`, `artifacts/FEERPT-BALANCE-FE-01/**`, `artifacts/FEERPT-BALANCE-QA-01/**`, `tasks/postenhancement/backend/FEERPT-BALANCE-QA-01.md` | Runs after BE and FE tasks pass | Audit evidence, gates, and exact closure for the balance summary slice | No product-code changes |
++
++## Serialized Shared-file Decisions
++
++- `backend/app/modules/fees/service.py`
++- `backend/app/modules/fees/schemas.py`
++- `backend/tests/test_fee_report.py`
++
++must be owned only by `FEERPT-BALANCE-BE-01`.
++
++- `frontend/src/api/fees.ts`
++- `frontend/src/api/fees.types.ts`
++- `frontend/src/modules/fees/pages/FeeDraftList.vue`
++
++must be owned only by `FEERPT-BALANCE-FE-01`.
++
++## Verification
++
++### Backend
++
++- `python3 -m ruff format backend/app/modules/fees/schemas.py backend/app/modules/fees/service.py backend/tests/test_fee_report.py`
++- `python3 -m ruff check backend/app/modules/fees/api.py backend/app/modules/fees/service.py backend/app/modules/fees/schemas.py backend/tests/test_fee_report.py`
++- `cd backend && pytest -q tests/test_fee_report.py`
++- `./scripts/task_validate.sh FEERPT-BALANCE-BE-01`
++
++### Frontend
++
++- `cd frontend && npm run lint -- src/api/fees.ts src/api/fees.types.ts src/modules/fees/pages/FeeDraftList.vue`
++- `cd frontend && npm run typecheck`
++- `./scripts/task_validate.sh FEERPT-BALANCE-FE-01`
++
++### QA
++
++- `./scripts/task_validate.sh FEERPT-BALANCE-QA-01`
++
++## Done Definition
++
++- Fee report summary exposes the four new balance metrics
++- FE renders the new summary block in Simplified Chinese
++- Hand-made bill items without `draft_id` lineage are excluded
++- Required evidence exists and all three task gates pass
+diff --git a/docs/superpowers/specs/2026-04-05-fee-report-balance-implementation-design.md b/docs/superpowers/specs/2026-04-05-fee-report-balance-implementation-design.md
+new file mode 100644
+index 0000000..c4df708
+--- /dev/null
++++ b/docs/superpowers/specs/2026-04-05-fee-report-balance-implementation-design.md
+@@ -0,0 +1,117 @@
++# RPT-FEE Balance Implementation Design
++
++## Story Shape Classification
++
++- `shared_file_density`: `medium`
++- `prereq_dependency_density`: `medium`
++- `be_fe_coupling`: `shared FE/BE balance-summary implementation after semantics freeze`
++- `evidence_cost`: `medium`
++
++## chosen_runbook
++
++- `P0-frontend-heavy-story`
++
++## Problem Statement
++
++`RPT-FEE` 已经完成 grouped aggregate 与 agent-income residual，但相对 `FPMS SPEC 2.0 9.4.2` 仍缺少 billed / received / unpaid 统计语义。`FEERPT-BALANCE-SPEC-01` 已冻结 authority：
++
++- billed -> `T_Bill / T_BillItem`
++- received -> `Bill.amount - Bill.balance`
++- unpaid -> `Bill.balance`
++
++下一步应把这组语义落成真实产品行为，继续复用 `GET /fees/drafts` 与 `FeeDraftList.vue`，而不是再新建第二个费报页面。
++
++## Assumptions
++
++- `FEERPT-BALANCE-SPEC-01` 是本 wave 的 authority
++- in-scope lineage 仅包含：
++  - `Bill.direction == "AR"`
++  - 且 `BillItem.draft_id` 可回投到 fee-draft rows 的账单项
++- 不可追溯到 `draft_id` 的手工账单项继续 deferred
++- close 标准固定为：
++  - 只有真实 API + FE summary block 存在，才允许该 residual capability 计入 closure
++
++## Scope
++
++- 后端为 `GET /fees/drafts` summary 新增：
++  - `billed_amount`
++  - `received_amount`
++  - `unpaid_balance_amount`
++  - `partially_received_bill_count`
++- 前端在 `FeeDraftList.vue` 增加一组 billed / received / unpaid 摘要展示
++- 更新 `fees.ts / fees.types.ts` 对应 summary contract
++- 为上述语义补 targeted tests
++
++## Explicit Non-scope
++
++- 不做 time trend reporting
++- 不做 service/gov/misc billed-received-balance breakdown
++- 不做 chart / export
++- 不做手工账单项 lineage 补齐
++- 不更新 `RPT-FEE` 或 `#13` close decision
++
++## Shared-file Ownership
++
++### Backend shared files
++
++- `backend/app/modules/fees/service.py`
++- `backend/app/modules/fees/schemas.py`
++- `backend/tests/test_fee_report.py`
++
++### Frontend shared files
++
++- `frontend/src/api/fees.ts`
++- `frontend/src/api/fees.types.ts`
++- `frontend/src/modules/fees/pages/FeeDraftList.vue`
++
++These files require serialized ownership:
++
++1. BE balance summary implementation
++2. FE contract wiring + page rendering
++3. QA close
++
++## Implementation Recommendation
++
++### Backend closure slice
++
++- Extend fee report summary builder to:
++  - load in-scope draft ids
++  - aggregate distinct AR bills reachable through `BillItem.draft_id`
++  - compute:
++    - `billed_amount = Σ Bill.amount`
++    - `received_amount = Σ (Bill.amount - Bill.balance)`
++    - `unpaid_balance_amount = Σ Bill.balance`
++    - `partially_received_bill_count = count(0 < balance < amount)`
++- Distinct bill counting is required because one bill can contain multiple fee items tied to the same or multiple drafts
++
++### Frontend closure slice
++
++- Extend fee summary types/mappers with the new four fields
++- Render one narrow summary block on `FeeDraftList.vue`
++- Keep all visible text in Simplified Chinese
++
++## Test Strategy
++
++### Backend
++
++- Extend `backend/tests/test_fee_report.py`
++- Add a focused scenario containing:
++  - at least one settled bill
++  - at least one partially received bill
++  - at least one fully unpaid bill
++  - one hand-made bill item without `draft_id` to ensure it is excluded
++
++### Frontend
++
++- Existing lint + typecheck coverage is sufficient for this slice
++
++## Exact Closure Candidates
++
++- `FEERPT-BALANCE-BE-01`
++- `FEERPT-BALANCE-FE-01`
++- `FEERPT-BALANCE-QA-01`
++
++## Design Conclusion
++
++- `可在当前约束下拆成可执行原子任务`
++- Execution should proceed as a serialized three-task wave: BE -> FE -> QA
+diff --git a/frontend/src/api/fees.ts b/frontend/src/api/fees.ts
+index 6ddbbf8..188e7b5 100644
+--- a/frontend/src/api/fees.ts
++++ b/frontend/src/api/fees.ts
+@@ -64,6 +64,10 @@ interface BackendFeeDraftReportSummary {
+     service_fee_amount: string | number
+     government_fee_amount: string | number
+     income_amount: string | number
++    billed_amount?: string | number
++    received_amount?: string | number
++    unpaid_balance_amount?: string | number
++    partially_received_bill_count?: number
+     client_amounts?: BackendFeeDraftGroupedAmount[]
+     case_type_amounts?: BackendFeeDraftGroupedAmount[]
+     country_amounts?: BackendFeeDraftGroupedAmount[]
+@@ -178,6 +182,10 @@ function mapFeeDraftReportSummary(input: BackendFeeDraftReportSummary): FeeDraft
+         service_fee_amount: Number(input.service_fee_amount || 0),
+         government_fee_amount: Number(input.government_fee_amount || 0),
+         income_amount: Number(input.income_amount || 0),
++        billed_amount: Number(input.billed_amount || 0),
++        received_amount: Number(input.received_amount || 0),
++        unpaid_balance_amount: Number(input.unpaid_balance_amount || 0),
++        partially_received_bill_count: Number(input.partially_received_bill_count || 0),
+         client_amounts: (input.client_amounts || []).map(mapFeeDraftGroupedAmount),
+         case_type_amounts: (input.case_type_amounts || []).map(mapFeeDraftGroupedAmount),
+         country_amounts: (input.country_amounts || []).map(mapFeeDraftGroupedAmount),
+diff --git a/frontend/src/api/fees.types.ts b/frontend/src/api/fees.types.ts
+index 57b73d2..4450334 100644
+--- a/frontend/src/api/fees.types.ts
++++ b/frontend/src/api/fees.types.ts
+@@ -88,6 +88,10 @@ export interface FeeDraftReportSummary {
+     service_fee_amount: FeeMoney
+     government_fee_amount: FeeMoney
+     income_amount: FeeMoney
++    billed_amount: FeeMoney
++    received_amount: FeeMoney
++    unpaid_balance_amount: FeeMoney
++    partially_received_bill_count: number
+     client_amounts: FeeDraftGroupedAmount[]
+     case_type_amounts: FeeDraftGroupedAmount[]
+     country_amounts: FeeDraftGroupedAmount[]
+diff --git a/frontend/src/modules/fees/pages/FeeDraftList.vue b/frontend/src/modules/fees/pages/FeeDraftList.vue
+index 81cac75..244388d 100644
+--- a/frontend/src/modules/fees/pages/FeeDraftList.vue
++++ b/frontend/src/modules/fees/pages/FeeDraftList.vue
+@@ -113,6 +113,22 @@
+         <span class="summary-label">草稿总收入</span>
+         <span class="summary-value amount">{{ formatAmount(summary.income_amount, summaryCurrency) }}</span>
+       </div>
++      <div class="summary-card">
++        <span class="summary-label">已开账单金额</span>
++        <span class="summary-value amount">{{ formatAmount(summary.billed_amount, summaryCurrency) }}</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">已收金额</span>
++        <span class="summary-value amount">{{ formatAmount(summary.received_amount, summaryCurrency) }}</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">未收余额</span>
++        <span class="summary-value amount">{{ formatAmount(summary.unpaid_balance_amount, summaryCurrency) }}</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">部分收款账单数</span>
++        <span class="summary-value">{{ summary.partially_received_bill_count }} 张</span>
++      </div>
+     </div>
+ 
+     <div class="grouped-summary-grid">
+@@ -339,6 +355,10 @@ const summary = ref<FeeDraftReportSummary>({
+   service_fee_amount: 0,
+   government_fee_amount: 0,
+   income_amount: 0,
++  billed_amount: 0,
++  received_amount: 0,
++  unpaid_balance_amount: 0,
++  partially_received_bill_count: 0,
+   client_amounts: [],
+   case_type_amounts: [],
+   country_amounts: [],
+@@ -393,6 +413,10 @@ async function fetchDrafts() {
+       service_fee_amount: 0,
+       government_fee_amount: 0,
+       income_amount: 0,
++      billed_amount: 0,
++      received_amount: 0,
++      unpaid_balance_amount: 0,
++      partially_received_bill_count: 0,
+       client_amounts: [],
+       case_type_amounts: [],
+       country_amounts: [],
+diff --git a/tasks/postenhancement/frontend/FEERPT-BALANCE-FE-01.md b/tasks/postenhancement/frontend/FEERPT-BALANCE-FE-01.md
+new file mode 100644
+index 0000000..1d08a71
+--- /dev/null
++++ b/tasks/postenhancement/frontend/FEERPT-BALANCE-FE-01.md
+@@ -0,0 +1,5 @@
++# FEERPT-BALANCE-FE-01
++
++- exact closure slice: wire the fee report balance summary contract into `fees.ts / fees.types.ts` and render a Simplified-Chinese billed / received / unpaid summary block on `FeeDraftList.vue`
++- explicit non-closure: no new page, no chart/export work, no trend reporting
++- remaining follow-up task ids: `FEERPT-BALANCE-QA-01`

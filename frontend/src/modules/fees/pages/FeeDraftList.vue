@@ -113,6 +113,22 @@
         <span class="summary-label">草稿总收入</span>
         <span class="summary-value amount">{{ formatAmount(summary.income_amount, summaryCurrency) }}</span>
       </div>
+      <div class="summary-card">
+        <span class="summary-label">已开账单金额</span>
+        <span class="summary-value amount">{{ formatAmount(summary.billed_amount, summaryCurrency) }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">已收金额</span>
+        <span class="summary-value amount">{{ formatAmount(summary.received_amount, summaryCurrency) }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">未收余额</span>
+        <span class="summary-value amount">{{ formatAmount(summary.unpaid_balance_amount, summaryCurrency) }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">部分收款账单数</span>
+        <span class="summary-value">{{ summary.partially_received_bill_count }} 张</span>
+      </div>
     </div>
 
     <div class="grouped-summary-grid">
@@ -339,6 +355,10 @@ const summary = ref<FeeDraftReportSummary>({
   service_fee_amount: 0,
   government_fee_amount: 0,
   income_amount: 0,
+  billed_amount: 0,
+  received_amount: 0,
+  unpaid_balance_amount: 0,
+  partially_received_bill_count: 0,
   client_amounts: [],
   case_type_amounts: [],
   country_amounts: [],
@@ -393,6 +413,10 @@ async function fetchDrafts() {
       service_fee_amount: 0,
       government_fee_amount: 0,
       income_amount: 0,
+      billed_amount: 0,
+      received_amount: 0,
+      unpaid_balance_amount: 0,
+      partially_received_bill_count: 0,
       client_amounts: [],
       case_type_amounts: [],
       country_amounts: [],

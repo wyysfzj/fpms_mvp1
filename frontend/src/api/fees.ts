@@ -64,6 +64,10 @@ interface BackendFeeDraftReportSummary {
     service_fee_amount: string | number
     government_fee_amount: string | number
     income_amount: string | number
+    billed_amount?: string | number
+    received_amount?: string | number
+    unpaid_balance_amount?: string | number
+    partially_received_bill_count?: number
     client_amounts?: BackendFeeDraftGroupedAmount[]
     case_type_amounts?: BackendFeeDraftGroupedAmount[]
     country_amounts?: BackendFeeDraftGroupedAmount[]
@@ -178,6 +182,10 @@ function mapFeeDraftReportSummary(input: BackendFeeDraftReportSummary): FeeDraft
         service_fee_amount: Number(input.service_fee_amount || 0),
         government_fee_amount: Number(input.government_fee_amount || 0),
         income_amount: Number(input.income_amount || 0),
+        billed_amount: Number(input.billed_amount || 0),
+        received_amount: Number(input.received_amount || 0),
+        unpaid_balance_amount: Number(input.unpaid_balance_amount || 0),
+        partially_received_bill_count: Number(input.partially_received_bill_count || 0),
         client_amounts: (input.client_amounts || []).map(mapFeeDraftGroupedAmount),
         case_type_amounts: (input.case_type_amounts || []).map(mapFeeDraftGroupedAmount),
         country_amounts: (input.country_amounts || []).map(mapFeeDraftGroupedAmount),

@@ -93,6 +93,86 @@ def _create_bill_from_drafts(client, auth_headers, *, draft_ids: list[str]) -> d
     return resp.json()
 
 
+def _create_manual_bill(
+    client,
+    auth_headers,
+    *,
+    client_id: str,
+    case_id: str | None,
+    currency: str,
+    amount: str,
+) -> dict:
+    resp = client.post(
+        "/api/v1/bills/manual",
+        json={
+            "client_id": client_id,
+            "case_id": case_id,
+            "currency": currency,
+            "direction": "AR",
+            "status": "UNSETTLED",
+            "bill_date": "2026-03-29",
+            "due_date": "2026-04-15",
+            "items": [
+                {
+                    "description": "手工账单项",
+                    "quantity": 1,
+                    "unit_price": amount,
+                    "fee_type": "SERVICE",
+                }
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def _create_payment(client, auth_headers, *, client_id: str, amount: str, currency: str) -> dict:
+    resp = client.post(
+        "/api/v1/payments",
+        json={
+            "client_id": client_id,
+            "amount": amount,
+            "pay_date": "2026-03-30",
+            "pay_no": _uid("PAY"),
+            "currency": currency,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def _get_payment_line_id(client, auth_headers, *, payment_id: str) -> str:
+    resp = client.get(f"/api/v1/payments/{payment_id}", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    lines = resp.json()["payment_lines"]
+    assert lines, "expected payment lines"
+    return lines[0]["id"]
+
+
+def _create_offset(
+    client,
+    auth_headers,
+    *,
+    payment_line_id: str,
+    bill_id: str,
+    amount: str,
+) -> dict:
+    resp = client.post(
+        "/api/v1/offsets",
+        json={
+            "payment_line_id": payment_line_id,
+            "bill_id": bill_id,
+            "offset_amt": amount,
+            "offset_date": "2026-03-30",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 def _insert_fee_draft(
     session_factory: sessionmaker,
     *,
@@ -515,3 +595,128 @@ def test_fee_drafts_report_returns_agent_service_amount_summaries(
     assert Decimal(str(agent_amounts["AGENT-SPLIT-B"]["service_fee_amount"])) == Decimal("32.00")
     assert agent_amounts["AGENT-SPLIT-B"]["draft_count"] == 1
     assert "AGENT-PRIMARY-CONTEXT" not in agent_amounts
+
+
+def test_fee_drafts_report_returns_balance_metrics_from_bill_lineage(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+) -> None:
+    client_a = _create_client(client, auth_headers, name_prefix="FEE-RPT-BAL-A")
+    case_a = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        case_tag="FEE-BAL-CASE-A",
+    )
+    case_b = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        case_tag="FEE-BAL-CASE-B",
+    )
+    case_c = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        case_tag="FEE-BAL-CASE-C",
+    )
+
+    settled_draft_id = _insert_fee_draft(
+        session_factory,
+        case_id=case_a["id"],
+        client_id=client_a["id"],
+        draft_type="BAL_SERVICE",
+        currency="SGD",
+        status="OPEN",
+        created_at=datetime(2026, 3, 25, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "100.00")],
+    )
+    partial_draft_id = _insert_fee_draft(
+        session_factory,
+        case_id=case_b["id"],
+        client_id=client_a["id"],
+        draft_type="BAL_SERVICE",
+        currency="SGD",
+        status="OPEN",
+        created_at=datetime(2026, 3, 26, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "200.00")],
+    )
+    unpaid_draft_id = _insert_fee_draft(
+        session_factory,
+        case_id=case_c["id"],
+        client_id=client_a["id"],
+        draft_type="BAL_SERVICE",
+        currency="SGD",
+        status="OPEN",
+        created_at=datetime(2026, 3, 27, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "300.00")],
+    )
+
+    settled_bill = _create_bill_from_drafts(client, auth_headers, draft_ids=[settled_draft_id])
+    partial_bill = _create_bill_from_drafts(client, auth_headers, draft_ids=[partial_draft_id])
+    _create_bill_from_drafts(client, auth_headers, draft_ids=[unpaid_draft_id])
+
+    manual_bill = _create_manual_bill(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        case_id=case_a["id"],
+        currency="SGD",
+        amount="999.00",
+    )
+
+    settled_payment = _create_payment(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        amount="100.00",
+        currency="SGD",
+    )
+    settled_payment_line_id = _get_payment_line_id(
+        client, auth_headers, payment_id=settled_payment["id"]
+    )
+    _create_offset(
+        client,
+        auth_headers,
+        payment_line_id=settled_payment_line_id,
+        bill_id=settled_bill["id"],
+        amount="100.00",
+    )
+
+    partial_payment = _create_payment(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        amount="80.00",
+        currency="SGD",
+    )
+    partial_payment_line_id = _get_payment_line_id(
+        client, auth_headers, payment_id=partial_payment["id"]
+    )
+    _create_offset(
+        client,
+        auth_headers,
+        payment_line_id=partial_payment_line_id,
+        bill_id=partial_bill["id"],
+        amount="80.00",
+    )
+
+    resp = client.get(
+        FEE_DRAFTS_URL,
+        params={
+            "currency": "SGD",
+            "date_from": "2026-03-25",
+            "date_to": "2026-03-27",
+            "client_id": client_a["id"],
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    summary = resp.json()["summary"]
+
+    assert Decimal(str(summary["billed_amount"])) == Decimal("600.00")
+    assert Decimal(str(summary["received_amount"])) == Decimal("180.00")
+    assert Decimal(str(summary["unpaid_balance_amount"])) == Decimal("420.00")
+    assert summary["partially_received_bill_count"] == 1
+    assert manual_bill["amount"] == "999.00"

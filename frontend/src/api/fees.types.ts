@@ -88,6 +88,10 @@ export interface FeeDraftReportSummary {
     service_fee_amount: FeeMoney
     government_fee_amount: FeeMoney
     income_amount: FeeMoney
+    billed_amount: FeeMoney
+    received_amount: FeeMoney
+    unpaid_balance_amount: FeeMoney
+    partially_received_bill_count: number
     client_amounts: FeeDraftGroupedAmount[]
     case_type_amounts: FeeDraftGroupedAmount[]
     country_amounts: FeeDraftGroupedAmount[]

@@ -1,0 +1,24 @@
+backend/app/modules/fees/service.py:177:            "billed_amount": Decimal("0"),
+backend/app/modules/fees/service.py:178:            "received_amount": Decimal("0"),
+backend/app/modules/fees/service.py:179:            "unpaid_balance_amount": Decimal("0"),
+backend/app/modules/fees/service.py:180:            "partially_received_bill_count": 0,
+backend/app/modules/fees/service.py:192:    billed_amount = Decimal("0")
+backend/app/modules/fees/service.py:193:    received_amount = Decimal("0")
+backend/app/modules/fees/service.py:194:    unpaid_balance_amount = Decimal("0")
+backend/app/modules/fees/service.py:195:    partially_received_bill_count = 0
+backend/app/modules/fees/service.py:200:        billed_amount += bill_amount
+backend/app/modules/fees/service.py:201:        received_amount += bill_amount - bill_balance
+backend/app/modules/fees/service.py:202:        unpaid_balance_amount += bill_balance
+backend/app/modules/fees/service.py:204:            partially_received_bill_count += 1
+backend/app/modules/fees/service.py:207:        "billed_amount": _quantize_money(billed_amount),
+backend/app/modules/fees/service.py:208:        "received_amount": _quantize_money(received_amount),
+backend/app/modules/fees/service.py:209:        "unpaid_balance_amount": _quantize_money(unpaid_balance_amount),
+backend/app/modules/fees/service.py:210:        "partially_received_bill_count": partially_received_bill_count,
+backend/app/modules/fees/service.py:380:        "billed_amount": bill_balance_summary["billed_amount"],
+backend/app/modules/fees/service.py:381:        "received_amount": bill_balance_summary["received_amount"],
+backend/app/modules/fees/service.py:382:        "unpaid_balance_amount": bill_balance_summary["unpaid_balance_amount"],
+backend/app/modules/fees/service.py:383:        "partially_received_bill_count": bill_balance_summary["partially_received_bill_count"],
+frontend/src/api/fees.types.ts:91:    billed_amount: FeeMoney
+frontend/src/api/fees.types.ts:92:    received_amount: FeeMoney
+frontend/src/api/fees.types.ts:93:    unpaid_balance_amount: FeeMoney
+frontend/src/api/fees.types.ts:94:    partially_received_bill_count: number

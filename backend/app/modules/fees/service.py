@@ -167,6 +167,50 @@ def _agent_service_amount_payload(
     return sorted(rows, key=lambda row: (-int(row["draft_count"]), str(row["label"])))
 
 
+def _draft_report_bill_balance_summary(
+    db: Session,
+    *,
+    draft_ids: list[str],
+) -> dict[str, Decimal | int]:
+    if not draft_ids:
+        return {
+            "billed_amount": Decimal("0"),
+            "received_amount": Decimal("0"),
+            "unpaid_balance_amount": Decimal("0"),
+            "partially_received_bill_count": 0,
+        }
+
+    rows = db.execute(
+        select(Bill.id, Bill.amount, Bill.balance)
+        .join(BillItem, BillItem.bill_id == Bill.id)
+        .where(Bill.direction == "AR")
+        .where(BillItem.draft_id.is_not(None))
+        .where(BillItem.draft_id.in_(draft_ids))
+        .group_by(Bill.id, Bill.amount, Bill.balance)
+    ).all()
+
+    billed_amount = Decimal("0")
+    received_amount = Decimal("0")
+    unpaid_balance_amount = Decimal("0")
+    partially_received_bill_count = 0
+
+    for _bill_id, amount, balance in rows:
+        bill_amount = _to_decimal(amount, field_name="bill.amount")
+        bill_balance = _to_decimal(balance, field_name="bill.balance")
+        billed_amount += bill_amount
+        received_amount += bill_amount - bill_balance
+        unpaid_balance_amount += bill_balance
+        if Decimal("0") < bill_balance < bill_amount:
+            partially_received_bill_count += 1
+
+    return {
+        "billed_amount": _quantize_money(billed_amount),
+        "received_amount": _quantize_money(received_amount),
+        "unpaid_balance_amount": _quantize_money(unpaid_balance_amount),
+        "partially_received_bill_count": partially_received_bill_count,
+    }
+
+
 def _accumulate_grouped_amount(
     grouped_amounts: dict[str, dict[str, Decimal | int | str]],
     *,
@@ -250,6 +294,7 @@ def _draft_report_amount_summary(
     db: Session,
     drafts: list[FeeDraft],
 ) -> dict[str, Decimal | int | list[dict[str, Decimal | int | str]]]:
+    draft_ids = [draft.id for draft in drafts]
     case_ids = {draft.case_id for draft in drafts if draft.case_id}
     cases = db.execute(select(Case).where(Case.id.in_(case_ids))).scalars().all()
     case_map = {case.id: case for case in cases}
@@ -258,6 +303,7 @@ def _draft_report_amount_summary(
     clients = db.execute(select(Client).where(Client.id.in_(client_ids))).scalars().all()
     client_map = {client.id: client for client in clients}
     case_agent_split_map = _load_case_agent_split_map(db, case_ids=case_ids)
+    bill_balance_summary = _draft_report_bill_balance_summary(db, draft_ids=draft_ids)
 
     client_amounts: dict[str, dict[str, Decimal | int | str]] = {}
     case_type_amounts: dict[str, dict[str, Decimal | int | str]] = {}
@@ -331,6 +377,10 @@ def _draft_report_amount_summary(
         "income_amount": _quantize_money(
             sum((Decimal(draft.amount or 0) for draft in drafts), Decimal("0"))
         ),
+        "billed_amount": bill_balance_summary["billed_amount"],
+        "received_amount": bill_balance_summary["received_amount"],
+        "unpaid_balance_amount": bill_balance_summary["unpaid_balance_amount"],
+        "partially_received_bill_count": bill_balance_summary["partially_received_bill_count"],
         "client_amounts": _grouped_amount_payload(client_amounts),
         "case_type_amounts": _grouped_amount_payload(case_type_amounts),
         "country_amounts": _grouped_amount_payload(country_amounts),
