@@ -1435,6 +1435,66 @@ def persist_generated_attachment(
     return attachment
 
 
+def build_document_template_render_context(
+    db: Session,
+    *,
+    document: Document,
+) -> dict[str, object]:
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    client = None
+    if case.client_id:
+        client = db.execute(select(Client).where(Client.id == case.client_id)).scalar_one_or_none()
+
+    template_code = None
+    if document.doc_template_id:
+        template = db.execute(
+            select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
+        ).scalar_one_or_none()
+        template_code = getattr(template, "code", None) if template else None
+
+    case_title = _normalize_text(case.title_cn) or _normalize_text(case.title_en)
+    client_name_cn = _normalize_text(getattr(client, "name_cn", None)) if client else None
+    client_name_en = _normalize_text(getattr(client, "name_en", None)) if client else None
+    client_name = client_name_cn or client_name_en
+    document_direction = getattr(document.direction, "value", document.direction)
+
+    return {
+        "document_id": document.id,
+        "document_title": document.title,
+        "document_direction": document_direction,
+        "document_date": document.doc_date.isoformat() if document.doc_date else None,
+        "document_ref_no": document.ref_no,
+        "document_extra_data": document.extra_data,
+        "template_code": template_code,
+        "case": {
+            "id": case.id,
+            "case_no": case.case_no,
+            "title": case_title,
+            "title_cn": case.title_cn,
+            "title_en": case.title_en,
+            "app_no": case.app_no,
+        },
+        "client": {
+            "id": getattr(client, "id", None),
+            "name": client_name,
+            "name_cn": client_name_cn,
+            "name_en": client_name_en,
+        },
+        "document": {
+            "id": document.id,
+            "title": document.title,
+            "direction": document_direction,
+            "doc_date": document.doc_date.isoformat() if document.doc_date else None,
+            "ref_no": document.ref_no,
+            "extra_data": document.extra_data,
+            "template_code": template_code,
+        },
+    }
+
+
 def get_attachment_download(
     db: Session,
     document_id: str,
