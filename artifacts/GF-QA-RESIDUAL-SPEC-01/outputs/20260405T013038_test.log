@@ -1,0 +1,11 @@
+tasks/postenhancement/backend/GF-QA-RESIDUAL-SPEC-01.md:1:# GF-QA-RESIDUAL-SPEC-01 — `#15` residual workflow spec audit
+tasks/postenhancement/backend/GF-QA-RESIDUAL-SPEC-01.md:9:- Goal: 审计 `GF-RESIDUAL-SPEC-01` 的 evidence 与文档输出，确认 `#15` 的 residual workflow map 已形成，并生成 close summary。
+tasks/postenhancement/backend/GF-QA-RESIDUAL-SPEC-01.md:15:  - 不触发 `#15` close update
+tasks/postenhancement/backend/GF-QA-RESIDUAL-SPEC-01.md:28:- [ ] Confirm first-round workflow slices remain preserved
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:1:# P2 #15 授权费管理 Residual Workflow Design
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:16:`#15 授权费管理` 当前已经不能诚实地描述为“缺模型 + 缺完整 workflow”。`GF-PRE / GF-SM / GF-WL / GF-DRAFT` 已形成第一轮真实产品闭环：有 `T_GrantFeeTask` 承载、有主干状态机、有 worklist 页面，也有最小 `GrantFeeTask -> FeeDraft` 生成链路。但对照 `FPMS SPEC 2.0` 中“授权费管理”的完整业务宽度，当前 family 仍缺 post-draft 之后的多条 workflow 语义，因此下一步不应重做已完成 slice，而应先冻结 strict residual workflow map。
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:36:- 对 `#15` 做 strict residual workflow map
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:48:- 不触发 `#15` close update
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:119:- `GF-POSTDRAFT-01`
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:161:- no product implementation
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:162:- no close update for `#15`

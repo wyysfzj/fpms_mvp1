@@ -1,0 +1,2 @@
+{"ts":"20260405T013023","step":"lint","cmd":"test -f docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md"}
+{"ts":"20260405T013038","step":"test","cmd":"/bin/zsh -lc rg\ -n\ \"GF-POSTDRAFT-01\|bill\ linkage\|document\ /\ reminder\ linkage\|detail/edit\|no\ product\ implementation\"\ docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md\ tasks/postenhancement/backend/GF-RESIDUAL-SPEC-01.md"}

@@ -1,0 +1,12 @@
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:86:- bill linkage / receivable follow-through
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:87:- document / reminder linkage
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:88:- detail/edit capability
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:99:#### Residual bucket B — bill linkage
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:105:#### Residual bucket C — document / reminder linkage
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:110:#### Residual bucket D — detail/edit / batch actions
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:119:- `GF-POSTDRAFT-01`
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:128:- it is narrower than bill linkage, document linkage, or detail/edit expansion
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:133:- bill linkage
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:135:- detail/edit page
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:150:- folding post-draft state, bill linkage, document linkage, and detail UI into one next story
+docs/superpowers/specs/2026-04-05-grant-fee-residual-workflow-design.md:161:- no product implementation
