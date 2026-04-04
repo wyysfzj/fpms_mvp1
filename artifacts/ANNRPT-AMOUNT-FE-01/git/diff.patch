@@ -1,0 +1,268 @@
+diff --git a/frontend/src/api/annuity.ts b/frontend/src/api/annuity.ts
+index 4020013..71ed906 100644
+--- a/frontend/src/api/annuity.ts
++++ b/frontend/src/api/annuity.ts
+@@ -12,6 +12,7 @@ import type {
+     AnnuityGenerateDraftsPayload,
+     AnnuityTaskGeneratePayload,
+     AnnuityTaskGenerateResult,
++    AnnuityTaskGroupedAmount,
+ } from './annuity.types'
+ 
+ interface BackendAnnuityTask {
+@@ -49,6 +50,18 @@ interface BackendAnnuityTaskReportSummary {
+     overdue_task_count: number
+     status_counts: BackendAnnuityTaskReportCount[]
+     year_counts: BackendAnnuityTaskReportCount[]
++    client_amounts: BackendAnnuityTaskGroupedAmount[]
++    country_amounts: BackendAnnuityTaskGroupedAmount[]
++    year_amounts: BackendAnnuityTaskGroupedAmount[]
++}
++
++interface BackendAnnuityTaskGroupedAmount {
++    key: string
++    label: string
++    task_count: number
++    payable_amount: number | string
++    official_paid_amount: number | string
++    client_received_amount: number | string
+ }
+ 
+ interface BackendAnnuityTaskListResponse {
+@@ -131,6 +144,17 @@ function mapReportCount(input: BackendAnnuityTaskReportCount): AnnuityTaskReport
+     }
+ }
+ 
++function mapGroupedAmount(input: BackendAnnuityTaskGroupedAmount): AnnuityTaskGroupedAmount {
++    return {
++        key: input.key,
++        label: input.label,
++        task_count: Number(input.task_count || 0),
++        payable_amount: asNumber(input.payable_amount),
++        official_paid_amount: asNumber(input.official_paid_amount),
++        client_received_amount: asNumber(input.client_received_amount),
++    }
++}
++
+ function mapReportSummary(input: BackendAnnuityTaskReportSummary): AnnuityTaskReportSummary {
+     return {
+         total_task_count: Number(input.total_task_count || 0),
+@@ -139,6 +163,9 @@ function mapReportSummary(input: BackendAnnuityTaskReportSummary): AnnuityTaskRe
+         overdue_task_count: Number(input.overdue_task_count || 0),
+         status_counts: (input.status_counts || []).map(mapReportCount),
+         year_counts: (input.year_counts || []).map(mapReportCount),
++        client_amounts: (input.client_amounts || []).map(mapGroupedAmount),
++        country_amounts: (input.country_amounts || []).map(mapGroupedAmount),
++        year_amounts: (input.year_amounts || []).map(mapGroupedAmount),
+     }
+ }
+ 
+diff --git a/frontend/src/api/annuity.types.ts b/frontend/src/api/annuity.types.ts
+index 4f8dc3d..2f7c343 100644
+--- a/frontend/src/api/annuity.types.ts
++++ b/frontend/src/api/annuity.types.ts
+@@ -32,6 +32,15 @@ export interface AnnuityTaskReportCount {
+     count: number
+ }
+ 
++export interface AnnuityTaskGroupedAmount {
++    key: string
++    label: string
++    task_count: number
++    payable_amount: number
++    official_paid_amount: number
++    client_received_amount: number
++}
++
+ export interface AnnuityTaskReportSummary {
+     total_task_count: number
+     open_task_count: number
+@@ -39,6 +48,9 @@ export interface AnnuityTaskReportSummary {
+     overdue_task_count: number
+     status_counts: AnnuityTaskReportCount[]
+     year_counts: AnnuityTaskReportCount[]
++    client_amounts: AnnuityTaskGroupedAmount[]
++    country_amounts: AnnuityTaskGroupedAmount[]
++    year_amounts: AnnuityTaskGroupedAmount[]
+ }
+ 
+ export interface AnnuityTaskListResponse {
+diff --git a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+index e045781..968d8eb 100644
+--- a/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
++++ b/frontend/src/modules/annuity/pages/AnnuityTaskList.vue
+@@ -161,6 +161,77 @@
+       </div>
+     </div>
+ 
++    <div class="grouped-summary-grid">
++      <div class="distribution-card">
++        <div class="distribution-header">
++          <div class="distribution-title">按客户金额汇总</div>
++          <span>{{ summary.client_amounts.length }} 组</span>
++        </div>
++        <div v-if="summary.client_amounts.length" class="grouped-summary-list">
++          <div
++            v-for="item in summary.client_amounts"
++            :key="`client-${item.key}`"
++            class="grouped-summary-item"
++          >
++            <div class="grouped-summary-name">{{ item.label }}</div>
++            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
++            <div class="grouped-summary-amounts">
++              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
++              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
++              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
++            </div>
++          </div>
++        </div>
++        <div v-else class="distribution-empty">暂无客户金额汇总</div>
++      </div>
++
++      <div class="distribution-card">
++        <div class="distribution-header">
++          <div class="distribution-title">按国家金额汇总</div>
++          <span>{{ summary.country_amounts.length }} 组</span>
++        </div>
++        <div v-if="summary.country_amounts.length" class="grouped-summary-list">
++          <div
++            v-for="item in summary.country_amounts"
++            :key="`country-${item.key}`"
++            class="grouped-summary-item"
++          >
++            <div class="grouped-summary-name">{{ item.label }}</div>
++            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
++            <div class="grouped-summary-amounts">
++              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
++              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
++              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
++            </div>
++          </div>
++        </div>
++        <div v-else class="distribution-empty">暂无国家金额汇总</div>
++      </div>
++
++      <div class="distribution-card">
++        <div class="distribution-header">
++          <div class="distribution-title">按年度金额汇总</div>
++          <span>{{ summary.year_amounts.length }} 组</span>
++        </div>
++        <div v-if="summary.year_amounts.length" class="grouped-summary-list">
++          <div
++            v-for="item in summary.year_amounts"
++            :key="`year-amount-${item.key}`"
++            class="grouped-summary-item"
++          >
++            <div class="grouped-summary-name">{{ item.label }}</div>
++            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
++            <div class="grouped-summary-amounts">
++              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
++              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
++              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
++            </div>
++          </div>
++        </div>
++        <div v-else class="distribution-empty">暂无年度金额汇总</div>
++      </div>
++    </div>
++
+     <div class="batch-action-bar">
+       <span class="batch-action-text">已选择 {{ selectedTaskIds.length }} 项</span>
+       <el-checkbox v-model="generatePayNextYear">同时生成下一年度</el-checkbox>
+@@ -425,6 +496,9 @@ const summary = ref<AnnuityTaskReportSummary>({
+   overdue_task_count: 0,
+   status_counts: [],
+   year_counts: [],
++  client_amounts: [],
++  country_amounts: [],
++  year_amounts: [],
+ })
+ const instructionDialogVisible = ref(false)
+ const activeTask = ref<AnnuityTask | null>(null)
+@@ -491,6 +565,9 @@ async function fetchTasks() {
+       overdue_task_count: 0,
+       status_counts: [],
+       year_counts: [],
++      client_amounts: [],
++      country_amounts: [],
++      year_amounts: [],
+     }
+   } finally {
+     loading.value = false
+@@ -621,7 +698,7 @@ function formatBackendMessage(message?: string): string {
+   return message ? `后端信息：${message}` : '后端信息：无'
+ }
+ 
+-function formatMoney(amount: number, currency: string): string {
++function formatMoney(amount: number, currency = 'CNY'): string {
+   return new Intl.NumberFormat('zh-CN', {
+     style: 'currency',
+     currency: currency || 'CNY',
+@@ -751,8 +828,17 @@ onMounted(() => {
+   background: var(--surface-raised);
+ }
+ 
+-.distribution-title {
++.distribution-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
+   margin-bottom: 8px;
++  color: var(--text-sub);
++  font-size: 13px;
++}
++
++.distribution-title {
+   font-size: 13px;
+   color: var(--text-sub);
+ }
+@@ -763,6 +849,48 @@ onMounted(() => {
+   gap: 8px;
+ }
+ 
++.grouped-summary-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
++  gap: 12px;
++  margin-bottom: 16px;
++}
++
++.grouped-summary-list {
++  display: flex;
++  flex-direction: column;
++  gap: 10px;
++}
++
++.grouped-summary-item {
++  padding: 12px;
++  border-radius: 10px;
++  background: var(--el-fill-color-extra-light);
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.grouped-summary-name {
++  font-size: 14px;
++  font-weight: 600;
++  color: var(--color-text-primary);
++}
++
++.grouped-summary-meta,
++.distribution-empty {
++  font-size: 13px;
++  color: var(--text-sub);
++}
++
++.grouped-summary-amounts {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  font-size: 13px;
++  color: var(--color-text-secondary);
++}
++
+ .batch-action-text {
+   color: var(--color-text-secondary);
+ }

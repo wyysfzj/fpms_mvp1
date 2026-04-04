@@ -1,0 +1,2 @@
+{"ts":"20260405T005301","step":"test","cmd":"/bin/zsh -lc ./scripts/task_validate.sh\ ANNRPT-AMOUNT-BE-01\ \&\&\ ./scripts/task_validate.sh\ ANNRPT-AMOUNT-FE-01"}
+{"ts":"20260405T005301","step":"lint","cmd":"/bin/zsh -lc test\ -f\ artifacts/ANNRPT-AMOUNT-BE-01/summary.md\ \&\&\ test\ -f\ artifacts/ANNRPT-AMOUNT-FE-01/summary.md\ \&\&\ test\ -f\ tasks/postenhancement/backend/ANNRPT-AMOUNT-QA-01.md"}

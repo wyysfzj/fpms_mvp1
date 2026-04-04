@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from app.modules.annuity.models import AnnuityTask
+from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
+from app.modules.billing.models import CaseReceipt
 
 
 def _uid(prefix: str) -> str:
@@ -60,6 +62,8 @@ def _insert_annuity_task(
     due_date: date,
     status: str,
     notice_status: str = "PENDING",
+    gov_fee_amt: Decimal = Decimal("0"),
+    service_fee_amt: Decimal = Decimal("0"),
 ) -> int:
     with session_factory() as db:
         task = AnnuityTask(
@@ -69,11 +73,72 @@ def _insert_annuity_task(
             due_date=due_date,
             status=status,
             notice_status=notice_status,
+            gov_fee_amt=gov_fee_amt,
+            service_fee_amt=service_fee_amt,
         )
         db.add(task)
         db.commit()
         db.refresh(task)
         return task.id
+
+
+def _insert_pay_list(
+    session_factory: sessionmaker,
+    *,
+    client_id: str,
+    total_amount: Decimal,
+) -> int:
+    with session_factory() as db:
+        pay_list = PayList(client_id=client_id, currency="CNY", total_amount=total_amount)
+        db.add(pay_list)
+        db.commit()
+        db.refresh(pay_list)
+        return pay_list.id
+
+
+def _insert_gov_payment(
+    session_factory: sessionmaker,
+    *,
+    pay_list_id: int,
+    case_id: str,
+    paid_amount: Decimal,
+    paid_date: date,
+) -> int:
+    with session_factory() as db:
+        payment = GovPayment(
+            pay_list_id=pay_list_id,
+            case_id=case_id,
+            paid_amount=paid_amount,
+            paid_date=paid_date,
+            currency="CNY",
+            status="PAID",
+        )
+        db.add(payment)
+        db.commit()
+        db.refresh(payment)
+        return payment.id
+
+
+def _insert_case_receipt(
+    session_factory: sessionmaker,
+    *,
+    case_id: str,
+    year_no: int,
+    received_amt: Decimal,
+) -> str:
+    with session_factory() as db:
+        receipt = CaseReceipt(
+            case_id=case_id,
+            year_no=year_no,
+            received_amt=received_amt,
+            receivable_amt=received_amt,
+            currency="CNY",
+            fee_type="ANNUITY",
+        )
+        db.add(receipt)
+        db.commit()
+        db.refresh(receipt)
+        return receipt.id
 
 
 def test_get_annuity_tasks_returns_report_summary_and_keeps_list_shape(
@@ -281,3 +346,142 @@ def test_get_annuity_tasks_supports_report_filters(
     assert task_status_payload["total"] == 1
     assert [item["id"] for item in task_status_payload["items"]] == [us_done_task_id]
     assert task_status_payload["summary"]["done_task_count"] == 1
+
+
+def test_get_annuity_tasks_returns_grouped_amount_summaries(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    today = date.today()
+    country_a = f"C{uuid4().hex[:3].upper()}"
+    country_b = f"U{uuid4().hex[:3].upper()}"
+    client_a = _create_client(client, auth_headers, name_prefix="ANN-AMT-CLI-A")
+    client_b = _create_client(client, auth_headers, name_prefix="ANN-AMT-CLI-B")
+    case_cn = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_no_prefix="ANN-AMT-CASE-CN",
+        from_country=country_a,
+    )
+    case_us = _create_case(
+        client,
+        auth_headers,
+        client_id=client_b,
+        case_no_prefix="ANN-AMT-CASE-US",
+        to_country=country_b,
+    )
+
+    _insert_annuity_task(
+        session_factory,
+        case_id=case_cn["id"],
+        client_id=client_a,
+        year_no=101,
+        due_date=today + timedelta(days=10),
+        status="OPEN",
+        gov_fee_amt=Decimal("60.00"),
+        service_fee_amt=Decimal("40.00"),
+    )
+    _insert_annuity_task(
+        session_factory,
+        case_id=case_cn["id"],
+        client_id=client_a,
+        year_no=202,
+        due_date=today + timedelta(days=40),
+        status="DONE",
+        gov_fee_amt=Decimal("110.00"),
+        service_fee_amt=Decimal("90.00"),
+    )
+    _insert_annuity_task(
+        session_factory,
+        case_id=case_us["id"],
+        client_id=client_b,
+        year_no=101,
+        due_date=today + timedelta(days=20),
+        status="OPEN",
+        gov_fee_amt=Decimal("40.00"),
+        service_fee_amt=Decimal("20.00"),
+    )
+
+    pay_list_a = _insert_pay_list(
+        session_factory, client_id=client_a, total_amount=Decimal("300.00")
+    )
+    pay_list_b = _insert_pay_list(
+        session_factory, client_id=client_b, total_amount=Decimal("60.00")
+    )
+    _insert_gov_payment(
+        session_factory,
+        pay_list_id=pay_list_a,
+        case_id=case_cn["id"],
+        paid_amount=Decimal("300.00"),
+        paid_date=today,
+    )
+    _insert_gov_payment(
+        session_factory,
+        pay_list_id=pay_list_b,
+        case_id=case_us["id"],
+        paid_amount=Decimal("60.00"),
+        paid_date=today,
+    )
+    _insert_case_receipt(
+        session_factory,
+        case_id=case_cn["id"],
+        year_no=101,
+        received_amt=Decimal("150.00"),
+    )
+    _insert_case_receipt(
+        session_factory,
+        case_id=case_cn["id"],
+        year_no=202,
+        received_amt=Decimal("230.00"),
+    )
+    _insert_case_receipt(
+        session_factory,
+        case_id=case_us["id"],
+        year_no=101,
+        received_amt=Decimal("70.00"),
+    )
+
+    resp = client.get(
+        "/api/v1/annuity/tasks",
+        headers=auth_headers,
+        params={"page": 1, "page_size": 20},
+    )
+    assert resp.status_code == 200, resp.text
+    summary = resp.json()["summary"]
+
+    client_amounts = {item["key"]: item for item in summary["client_amounts"]}
+    assert client_amounts[client_a]["task_count"] == 2
+    assert client_amounts[client_a]["payable_amount"] == "300.00"
+    assert client_amounts[client_a]["official_paid_amount"] == "300.00"
+    assert client_amounts[client_a]["client_received_amount"] == "380.00"
+    assert client_amounts[client_a]["label"]
+    assert client_amounts[client_b]["task_count"] == 1
+    assert client_amounts[client_b]["payable_amount"] == "60.00"
+    assert client_amounts[client_b]["official_paid_amount"] == "60.00"
+    assert client_amounts[client_b]["client_received_amount"] == "70.00"
+    assert client_amounts[client_b]["label"]
+    country_amounts = {item["key"]: item for item in summary["country_amounts"]}
+    assert country_amounts[country_a]["label"] == country_a
+    assert country_amounts[country_a]["task_count"] == 2
+    assert country_amounts[country_a]["payable_amount"] == "300.00"
+    assert country_amounts[country_a]["official_paid_amount"] == "300.00"
+    assert country_amounts[country_a]["client_received_amount"] == "380.00"
+    assert country_amounts[country_b]["label"] == country_b
+    assert country_amounts[country_b]["task_count"] == 1
+    assert country_amounts[country_b]["payable_amount"] == "60.00"
+    assert country_amounts[country_b]["official_paid_amount"] == "60.00"
+    assert country_amounts[country_b]["client_received_amount"] == "70.00"
+
+    year_amounts = {item["key"]: item for item in summary["year_amounts"]}
+    assert year_amounts["101"]["label"] == "第 101 年"
+    assert year_amounts["101"]["task_count"] == 2
+    assert year_amounts["101"]["payable_amount"] == "160.00"
+    assert year_amounts["101"]["official_paid_amount"] == "160.00"
+    assert year_amounts["101"]["client_received_amount"] == "220.00"
+    assert year_amounts["202"]["label"] == "第 202 年"
+    assert year_amounts["202"]["task_count"] == 1
+    assert year_amounts["202"]["payable_amount"] == "200.00"
+    assert year_amounts["202"]["official_paid_amount"] == "200.00"
+    assert year_amounts["202"]["client_received_amount"] == "230.00"

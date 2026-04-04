@@ -1,0 +1,2 @@
+{"ts":"20260405T005124","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/annuity.ts\ src/api/annuity.types.ts\ src/modules/annuity/pages/AnnuityTaskList.vue"}
+{"ts":"20260405T005142","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}

@@ -34,6 +34,15 @@ class AnnuityTaskReportCountResponse(BaseModel):
     count: int = 0
 
 
+class AnnuityTaskGroupedAmountResponse(BaseModel):
+    key: str
+    label: str
+    task_count: int = 0
+    payable_amount: Decimal = Decimal("0")
+    official_paid_amount: Decimal = Decimal("0")
+    client_received_amount: Decimal = Decimal("0")
+
+
 class AnnuityTaskReportSummaryResponse(BaseModel):
     total_task_count: int = 0
     open_task_count: int = 0
@@ -41,6 +50,9 @@ class AnnuityTaskReportSummaryResponse(BaseModel):
     overdue_task_count: int = 0
     status_counts: list[AnnuityTaskReportCountResponse] = Field(default_factory=list)
     year_counts: list[AnnuityTaskReportCountResponse] = Field(default_factory=list)
+    client_amounts: list[AnnuityTaskGroupedAmountResponse] = Field(default_factory=list)
+    country_amounts: list[AnnuityTaskGroupedAmountResponse] = Field(default_factory=list)
+    year_amounts: list[AnnuityTaskGroupedAmountResponse] = Field(default_factory=list)
 
 
 class AnnuityTaskListResponse(BaseModel):

@@ -32,6 +32,15 @@ export interface AnnuityTaskReportCount {
     count: number
 }
 
+export interface AnnuityTaskGroupedAmount {
+    key: string
+    label: string
+    task_count: number
+    payable_amount: number
+    official_paid_amount: number
+    client_received_amount: number
+}
+
 export interface AnnuityTaskReportSummary {
     total_task_count: number
     open_task_count: number
@@ -39,6 +48,9 @@ export interface AnnuityTaskReportSummary {
     overdue_task_count: number
     status_counts: AnnuityTaskReportCount[]
     year_counts: AnnuityTaskReportCount[]
+    client_amounts: AnnuityTaskGroupedAmount[]
+    country_amounts: AnnuityTaskGroupedAmount[]
+    year_amounts: AnnuityTaskGroupedAmount[]
 }
 
 export interface AnnuityTaskListResponse {

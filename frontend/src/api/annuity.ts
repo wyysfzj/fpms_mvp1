@@ -12,6 +12,7 @@ import type {
     AnnuityGenerateDraftsPayload,
     AnnuityTaskGeneratePayload,
     AnnuityTaskGenerateResult,
+    AnnuityTaskGroupedAmount,
 } from './annuity.types'
 
 interface BackendAnnuityTask {
@@ -49,6 +50,18 @@ interface BackendAnnuityTaskReportSummary {
     overdue_task_count: number
     status_counts: BackendAnnuityTaskReportCount[]
     year_counts: BackendAnnuityTaskReportCount[]
+    client_amounts: BackendAnnuityTaskGroupedAmount[]
+    country_amounts: BackendAnnuityTaskGroupedAmount[]
+    year_amounts: BackendAnnuityTaskGroupedAmount[]
+}
+
+interface BackendAnnuityTaskGroupedAmount {
+    key: string
+    label: string
+    task_count: number
+    payable_amount: number | string
+    official_paid_amount: number | string
+    client_received_amount: number | string
 }
 
 interface BackendAnnuityTaskListResponse {
@@ -131,6 +144,17 @@ function mapReportCount(input: BackendAnnuityTaskReportCount): AnnuityTaskReport
     }
 }
 
+function mapGroupedAmount(input: BackendAnnuityTaskGroupedAmount): AnnuityTaskGroupedAmount {
+    return {
+        key: input.key,
+        label: input.label,
+        task_count: Number(input.task_count || 0),
+        payable_amount: asNumber(input.payable_amount),
+        official_paid_amount: asNumber(input.official_paid_amount),
+        client_received_amount: asNumber(input.client_received_amount),
+    }
+}
+
 function mapReportSummary(input: BackendAnnuityTaskReportSummary): AnnuityTaskReportSummary {
     return {
         total_task_count: Number(input.total_task_count || 0),
@@ -139,6 +163,9 @@ function mapReportSummary(input: BackendAnnuityTaskReportSummary): AnnuityTaskRe
         overdue_task_count: Number(input.overdue_task_count || 0),
         status_counts: (input.status_counts || []).map(mapReportCount),
         year_counts: (input.year_counts || []).map(mapReportCount),
+        client_amounts: (input.client_amounts || []).map(mapGroupedAmount),
+        country_amounts: (input.country_amounts || []).map(mapGroupedAmount),
+        year_amounts: (input.year_amounts || []).map(mapGroupedAmount),
     }
 }
 

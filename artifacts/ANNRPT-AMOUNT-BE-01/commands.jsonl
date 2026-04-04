@@ -1,0 +1,2 @@
+{"ts":"20260405T005124","step":"lint","cmd":"python3 -m ruff check backend/app/modules/annuity/api.py backend/app/modules/annuity/service.py backend/app/modules/annuity/schemas.py backend/tests/test_annuity_report.py"}
+{"ts":"20260405T005142","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_annuity_report.py"}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.export_excel import build_pay_list_export_xlsx
 from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
+from app.modules.billing.models import CaseReceipt
 from app.modules.cases.models import Case
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
 from app.modules.masterdata.clients.models import Client
@@ -26,6 +28,9 @@ _TERMINAL_STATUSES = (
     "SETTLED",
     "COMPLETED",
 )
+
+_ZERO = Decimal("0")
+_MONEY_QUANT = Decimal("0.01")
 
 
 def _coerce_date(value: Any, field_name: str) -> date | None:
@@ -232,6 +237,173 @@ def summarize_annuity_tasks(tasks: list[AnnuityTask]) -> dict[str, Any]:
     }
 
 
+def _coerce_decimal(value: Decimal | None) -> Decimal:
+    return value if value is not None else _ZERO
+
+
+def _quantize_money(value: Decimal) -> Decimal:
+    return value.quantize(_MONEY_QUANT)
+
+
+def _build_annuity_grouped_amounts(
+    db: Session, tasks: list[AnnuityTask]
+) -> dict[str, list[dict[str, Any]]]:
+    if not tasks:
+        return {
+            "client_amounts": [],
+            "country_amounts": [],
+            "year_amounts": [],
+        }
+
+    case_ids = sorted({task.case_id for task in tasks})
+    client_ids = sorted({task.client_id for task in tasks if task.client_id})
+
+    case_rows = db.execute(
+        select(Case.id, Case.from_country, Case.to_country).where(Case.id.in_(case_ids))
+    ).all()
+    case_map = {
+        row.id: {
+            "country": (row.to_country or row.from_country or "未填写"),
+        }
+        for row in case_rows
+    }
+
+    client_rows = db.execute(
+        select(Client.id, Client.name_cn).where(Client.id.in_(client_ids))
+    ).all()
+    client_label_map = {row.id: row.name_cn or row.id for row in client_rows}
+
+    payable_by_case_year: dict[tuple[str, int], Decimal] = defaultdict(lambda: _ZERO)
+    case_total_payable: dict[str, Decimal] = defaultdict(lambda: _ZERO)
+    case_year_client: dict[tuple[str, int], str] = {}
+    client_totals: dict[str, dict[str, Any]] = {}
+    country_totals: dict[str, dict[str, Any]] = {}
+    year_totals: dict[str, dict[str, Any]] = {}
+
+    for task in tasks:
+        case_year_key = (task.case_id, task.year_no)
+        task_amount = _coerce_decimal(task.gov_fee_amt) + _coerce_decimal(task.service_fee_amt)
+        payable_by_case_year[case_year_key] += task_amount
+        case_total_payable[task.case_id] += task_amount
+        case_year_client[case_year_key] = task.client_id
+
+        client_key = task.client_id
+        client_bucket = client_totals.setdefault(
+            client_key,
+            {
+                "key": client_key,
+                "label": client_label_map.get(client_key, client_key),
+                "task_count": 0,
+                "payable_amount": _ZERO,
+                "official_paid_amount": _ZERO,
+                "client_received_amount": _ZERO,
+            },
+        )
+        client_bucket["task_count"] += 1
+        client_bucket["payable_amount"] += _coerce_decimal(task.gov_fee_amt) + _coerce_decimal(
+            task.service_fee_amt
+        )
+
+        country_key = case_map.get(task.case_id, {}).get("country", "未填写")
+        country_bucket = country_totals.setdefault(
+            country_key,
+            {
+                "key": country_key,
+                "label": country_key,
+                "task_count": 0,
+                "payable_amount": _ZERO,
+                "official_paid_amount": _ZERO,
+                "client_received_amount": _ZERO,
+            },
+        )
+        country_bucket["task_count"] += 1
+        country_bucket["payable_amount"] += _coerce_decimal(task.gov_fee_amt) + _coerce_decimal(
+            task.service_fee_amt
+        )
+
+        year_key = str(task.year_no)
+        year_bucket = year_totals.setdefault(
+            year_key,
+            {
+                "key": year_key,
+                "label": f"第 {task.year_no} 年",
+                "task_count": 0,
+                "payable_amount": _ZERO,
+                "official_paid_amount": _ZERO,
+                "client_received_amount": _ZERO,
+            },
+        )
+        year_bucket["task_count"] += 1
+        year_bucket["payable_amount"] += _coerce_decimal(task.gov_fee_amt) + _coerce_decimal(
+            task.service_fee_amt
+        )
+
+    gov_payments = db.execute(
+        select(GovPayment.case_id, GovPayment.paid_amount)
+        .where(GovPayment.case_id.in_(case_ids))
+        .where(GovPayment.paid_date.is_not(None))
+        .where(func.upper(GovPayment.status).in_(("PAID", "RECORDED")))
+    ).all()
+    for payment in gov_payments:
+        case_id = payment.case_id
+        amount = _coerce_decimal(payment.paid_amount)
+        total_case_amount = case_total_payable.get(case_id, _ZERO)
+        if amount == _ZERO or total_case_amount == _ZERO:
+            continue
+        for (task_case_id, year_no), task_total in payable_by_case_year.items():
+            if task_case_id != case_id or task_total == _ZERO:
+                continue
+            share = amount * (task_total / total_case_amount)
+            client_id = case_year_client[(case_id, year_no)]
+            country_key = case_map.get(case_id, {}).get("country", "未填写")
+            year_key = str(year_no)
+            client_totals[client_id]["official_paid_amount"] += share
+            country_totals[country_key]["official_paid_amount"] += share
+            year_totals[year_key]["official_paid_amount"] += share
+
+    case_receipts = db.execute(
+        select(CaseReceipt.case_id, CaseReceipt.year_no, CaseReceipt.received_amt)
+        .where(CaseReceipt.case_id.in_(case_ids))
+        .where(CaseReceipt.year_no.is_not(None))
+    ).all()
+    for receipt in case_receipts:
+        case_year_key = (receipt.case_id, int(receipt.year_no))
+        if case_year_key not in payable_by_case_year:
+            continue
+        amount = _coerce_decimal(receipt.received_amt)
+        if amount == _ZERO:
+            continue
+        client_id = case_year_client[case_year_key]
+        country_key = case_map.get(receipt.case_id, {}).get("country", "未填写")
+        year_key = str(int(receipt.year_no))
+        client_totals[client_id]["client_received_amount"] += amount
+        country_totals[country_key]["client_received_amount"] += amount
+        year_totals[year_key]["client_received_amount"] += amount
+
+    def _normalize_bucket(bucket: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **bucket,
+            "payable_amount": _quantize_money(bucket["payable_amount"]),
+            "official_paid_amount": _quantize_money(bucket["official_paid_amount"]),
+            "client_received_amount": _quantize_money(bucket["client_received_amount"]),
+        }
+
+    return {
+        "client_amounts": [
+            _normalize_bucket(item)
+            for item in sorted(client_totals.values(), key=lambda item: item["key"])
+        ],
+        "country_amounts": [
+            _normalize_bucket(item)
+            for item in sorted(country_totals.values(), key=lambda item: item["key"])
+        ],
+        "year_amounts": [
+            _normalize_bucket(item)
+            for item in sorted(year_totals.values(), key=lambda item: int(item["key"]))
+        ],
+    }
+
+
 def list_annuity_tasks_report(
     db: Session,
     *,
@@ -305,7 +477,9 @@ def list_annuity_tasks_report(
     total = len(all_items)
     offset = (page - 1) * page_size
     items = all_items[offset : offset + page_size]
-    return items, total, summarize_annuity_tasks(all_items)
+    summary = summarize_annuity_tasks(all_items)
+    summary.update(_build_annuity_grouped_amounts(db, all_items))
+    return items, total, summary
 
 
 def update_annuity_task_instruction(

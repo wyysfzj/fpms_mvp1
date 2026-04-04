@@ -161,6 +161,77 @@
       </div>
     </div>
 
+    <div class="grouped-summary-grid">
+      <div class="distribution-card">
+        <div class="distribution-header">
+          <div class="distribution-title">按客户金额汇总</div>
+          <span>{{ summary.client_amounts.length }} 组</span>
+        </div>
+        <div v-if="summary.client_amounts.length" class="grouped-summary-list">
+          <div
+            v-for="item in summary.client_amounts"
+            :key="`client-${item.key}`"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-name">{{ item.label }}</div>
+            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
+            <div class="grouped-summary-amounts">
+              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
+              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
+              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="distribution-empty">暂无客户金额汇总</div>
+      </div>
+
+      <div class="distribution-card">
+        <div class="distribution-header">
+          <div class="distribution-title">按国家金额汇总</div>
+          <span>{{ summary.country_amounts.length }} 组</span>
+        </div>
+        <div v-if="summary.country_amounts.length" class="grouped-summary-list">
+          <div
+            v-for="item in summary.country_amounts"
+            :key="`country-${item.key}`"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-name">{{ item.label }}</div>
+            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
+            <div class="grouped-summary-amounts">
+              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
+              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
+              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="distribution-empty">暂无国家金额汇总</div>
+      </div>
+
+      <div class="distribution-card">
+        <div class="distribution-header">
+          <div class="distribution-title">按年度金额汇总</div>
+          <span>{{ summary.year_amounts.length }} 组</span>
+        </div>
+        <div v-if="summary.year_amounts.length" class="grouped-summary-list">
+          <div
+            v-for="item in summary.year_amounts"
+            :key="`year-amount-${item.key}`"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-name">{{ item.label }}</div>
+            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
+            <div class="grouped-summary-amounts">
+              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
+              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
+              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="distribution-empty">暂无年度金额汇总</div>
+      </div>
+    </div>
+
     <div class="batch-action-bar">
       <span class="batch-action-text">已选择 {{ selectedTaskIds.length }} 项</span>
       <el-checkbox v-model="generatePayNextYear">同时生成下一年度</el-checkbox>
@@ -425,6 +496,9 @@ const summary = ref<AnnuityTaskReportSummary>({
   overdue_task_count: 0,
   status_counts: [],
   year_counts: [],
+  client_amounts: [],
+  country_amounts: [],
+  year_amounts: [],
 })
 const instructionDialogVisible = ref(false)
 const activeTask = ref<AnnuityTask | null>(null)
@@ -491,6 +565,9 @@ async function fetchTasks() {
       overdue_task_count: 0,
       status_counts: [],
       year_counts: [],
+      client_amounts: [],
+      country_amounts: [],
+      year_amounts: [],
     }
   } finally {
     loading.value = false
@@ -621,7 +698,7 @@ function formatBackendMessage(message?: string): string {
   return message ? `后端信息：${message}` : '后端信息：无'
 }
 
-function formatMoney(amount: number, currency: string): string {
+function formatMoney(amount: number, currency = 'CNY'): string {
   return new Intl.NumberFormat('zh-CN', {
     style: 'currency',
     currency: currency || 'CNY',
@@ -751,8 +828,17 @@ onMounted(() => {
   background: var(--surface-raised);
 }
 
-.distribution-title {
+.distribution-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 8px;
+  color: var(--text-sub);
+  font-size: 13px;
+}
+
+.distribution-title {
   font-size: 13px;
   color: var(--text-sub);
 }
@@ -761,6 +847,48 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.grouped-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.grouped-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grouped-summary-item {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--el-fill-color-extra-light);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grouped-summary-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.grouped-summary-meta,
+.distribution-empty {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.grouped-summary-amounts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
 }
 
 .batch-action-text {
