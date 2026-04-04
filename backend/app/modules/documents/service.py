@@ -1392,6 +1392,49 @@ def add_attachment(
     return attachment
 
 
+def persist_generated_attachment(
+    db: Session,
+    *,
+    document_id: str,
+    file_name: str,
+    content_bytes: bytes,
+    storage_dir: str,
+    mime_type: str | None = None,
+) -> DocAttachment:
+    document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
+    if not document:
+        raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
+
+    normalized_name = Path(_normalize_text(file_name) or "").name
+    if not normalized_name:
+        raise_business_error(
+            "ATTACHMENT_FILENAME_REQUIRED",
+            "Attachment filename is required",
+            status_code=400,
+        )
+
+    stored_name = f"{uuid4().hex}_{normalized_name}"
+    relative_path = f"attachments/{document_id}/{stored_name}"
+    dest_path = safe_join(storage_dir, relative_path)
+    ensure_dir(str(Path(dest_path).parent))
+
+    with open(dest_path, "wb") as output_file:
+        output_file.write(content_bytes)
+
+    attachment = DocAttachment(
+        id=str(uuid4()),
+        document_id=document_id,
+        file_name=normalized_name,
+        file_path=relative_path,
+        mime_type=mime_type or "application/octet-stream",
+        file_size=len(content_bytes),
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
 def get_attachment_download(
     db: Session,
     document_id: str,
