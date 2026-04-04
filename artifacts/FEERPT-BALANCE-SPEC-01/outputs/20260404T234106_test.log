@@ -1,0 +1,20 @@
+20:- `T_Offset` 的冲销明细
+21:- `T_CaseReceipt` 的个案实收汇总
+26:- 以 `Bill.amount - Bill.balance` 当 received
+27:- 以 `CaseReceipt.received_amt` 当全量 received
+46:- 冻结 `Bill / Offset / CaseReceipt` 的优先级与职责边界
+62:  - `Bill.balance`
+68:  - `CaseReceipt.receivable_amt`
+69:  - `CaseReceipt.received_amt`
+74:    - 冲销时更新 `Bill.balance / status`
+75:    - 同步按比例更新 `CaseReceipt.received_amt`
+78:  - `CaseReceiptResponse`
+97:  - `T_Offset` 驱动的 `Bill.amount - Bill.balance`
+98:- `T_CaseReceipt.received_amt` 只作为 case-view 投影与核对 carrier
+101:  - `CaseReceipt` 在 `_allocate_offset_to_receipts(...)` 中是按 bill item 分摊后的派生结果
+107:  - `Bill.balance`
+156:- `FEERPT-BALANCE-01`
+165:    - `Bill.amount - Bill.balance` for received
+166:    - `Bill.balance` for unpaid
+180:- 把 `CaseReceipt.received_amt` 错当成第一权威 received source
+187:- 但必须先以本语义冻结作为 authority，再进入 `FEERPT-BALANCE-01`

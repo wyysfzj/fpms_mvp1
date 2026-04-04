@@ -1,0 +1,2 @@
+{"ts":"20260404T234137","step":"lint","cmd":"test -f tasks/postenhancement/backend/FEERPT-QA-BALANCE-SPEC-01.md"}
+{"ts":"20260404T234137","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/FEERPT-BALANCE-SPEC-01/summary.md\ \&\&\ rg\ -n\ \'billed\ /\ received\ /\ unpaid\|no\ product\ implementation\|FEERPT-BALANCE-01\'\ artifacts/FEERPT-BALANCE-SPEC-01/summary.md\ docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md"}

@@ -1,0 +1,11 @@
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:16:`RPT-FEE` 在 grouped aggregate 与 agent-income slice 后，剩余最容易被误做假的能力是 “billed / received / unpaid”。当前 repo 同时存在：
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:41:- 本 wave 只冻结 billed / received / unpaid semantics，不做任何产品实现
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:45:- 冻结 `billed / received / unpaid` 的 source-of-truth
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:80:  - 当前 fee report summary 仍未实现 billed / received / unpaid residual
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:131:- fee report 的 billed / received / unpaid 汇总必须按 `BillItem.draft_id -> FeeDraft` 回投到 fee-report authority
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:138:- 第一轮 billed / received / unpaid 先按总额语义落地：
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:150:- `billed / received / unpaid` 在当前 carrier 下可直接进入实现
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:156:- `FEERPT-BALANCE-01`
+docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md:187:- 但必须先以本语义冻结作为 authority，再进入 `FEERPT-BALANCE-01`
+artifacts/FEERPT-BALANCE-SPEC-01/summary.md:7:- `rg -n 'Bill\.balance|Bill\.amount - Bill\.balance|CaseReceipt|T_Offset|FEERPT-BALANCE-01' docs/superpowers/specs/2026-04-04-fee-report-balance-semantics-design.md`
+artifacts/FEERPT-BALANCE-SPEC-01/summary.md:10:- Froze `RPT-FEE` billed / received / unpaid semantics.
