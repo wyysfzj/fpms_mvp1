@@ -1,0 +1,14 @@
+19:- `T_GovPayment.paid_date / paid_amount / fee_item_id`
+20:- `T_FeeItem.year_no`
+27:- 把没有 `fee_item_id -> year_no` lineage 的手工 `GovPayment` 算成功
+45:- 冻结 manual gov payment / missing lineage rows 的处理
+64:  - `GovPayment.fee_item_id`
+66:  - `FeeItem.year_no`
+69:  - `add_manual_gov_payment(...)`
+77:  - 且 `client_instruction = "PAY"`
+98:  - `GovPayment.fee_item_id -> FeeItem.year_no`
+99:- 若 `GovPayment.fee_item_id` 为空，或无法解析到 `FeeItem.year_no`：
+110:- `paid_date <= due_date` 记为按时成功
+127:  - 无 `fee_item -> year_no` lineage 的 manual gov payments
+144:- 把 manual historical payments 补齐 year lineage
+150:- 把无 `fee_item_id` 的 manual `GovPayment` 误当成 task-year success evidence

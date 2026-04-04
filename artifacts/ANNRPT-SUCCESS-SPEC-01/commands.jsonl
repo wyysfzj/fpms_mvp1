@@ -1,0 +1,2 @@
+{"ts":"20260405T005711","step":"lint","cmd":"test -f docs/superpowers/specs/2026-04-05-annuity-report-success-semantics-design.md"}
+{"ts":"20260405T005711","step":"test","cmd":"/bin/zsh -lc test\ -f\ docs/superpowers/specs/2026-04-05-annuity-report-success-semantics-design.md\ \&\&\ rg\ -n\ \'client_instruction\ =\ \"PAY\"\|fee_item_id\|FeeItem.year_no\|paid_date\ \<=\ due_date\|manual\'\ docs/superpowers/specs/2026-04-05-annuity-report-success-semantics-design.md"}

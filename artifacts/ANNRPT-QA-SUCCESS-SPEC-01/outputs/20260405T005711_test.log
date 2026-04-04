@@ -1,0 +1,6 @@
+docs/superpowers/plans/2026-04-05-annuity-report-success-semantics.md:19:- explicit non-closure: no product-code changes, no grouped-amount rework, no chart/export, no close update
+docs/superpowers/plans/2026-04-05-annuity-report-success-semantics.md:21:  - `ANNRPT-SUCCESS-01`
+docs/superpowers/plans/2026-04-05-annuity-report-success-semantics.md:26:- exact closure slice: audit evidence and exact closure for the success-rate semantics freeze
+docs/superpowers/plans/2026-04-05-annuity-report-success-semantics.md:27:- explicit non-closure: no product-code changes
+tasks/postenhancement/backend/ANNRPT-QA-SUCCESS-SPEC-01.md:3:- exact closure slice: audit evidence and exact closure for the annuity success-rate semantics freeze
+tasks/postenhancement/backend/ANNRPT-QA-SUCCESS-SPEC-01.md:4:- explicit non-closure: no product-code changes

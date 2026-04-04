@@ -1,0 +1,2 @@
+{"ts":"20260405T005711","step":"test","cmd":"/bin/zsh -lc test\ -f\ tasks/postenhancement/backend/ANNRPT-QA-SUCCESS-SPEC-01.md\ \&\&\ rg\ -n\ \'success-rate\ semantics\ freeze\|no\ product-code\ changes\|ANNRPT-SUCCESS-01\'\ tasks/postenhancement/backend/ANNRPT-QA-SUCCESS-SPEC-01.md\ docs/superpowers/plans/2026-04-05-annuity-report-success-semantics.md"}
+{"ts":"20260405T005711","step":"lint","cmd":"test -f tasks/postenhancement/backend/ANNRPT-QA-SUCCESS-SPEC-01.md"}
