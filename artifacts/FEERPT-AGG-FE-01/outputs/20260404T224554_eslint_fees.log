@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/api/fees.ts src/api/fees.types.ts src/modules/fees/pages/FeeDraftList.vue
+

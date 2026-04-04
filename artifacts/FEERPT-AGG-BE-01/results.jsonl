@@ -1,0 +1,5 @@
+{"ts":"20260404T224524","step":"ruff_format","rc":0,"log":"artifacts/FEERPT-AGG-BE-01/outputs/20260404T224524_ruff_format.log"}
+{"ts":"20260404T224530","step":"ruff_check","rc":0,"log":"artifacts/FEERPT-AGG-BE-01/outputs/20260404T224530_ruff_check.log"}
+{"ts":"20260404T224535","step":"pytest_fee_report","rc":0,"log":"artifacts/FEERPT-AGG-BE-01/outputs/20260404T224535_pytest_fee_report.log"}
+{"ts":"20260404T224725","step":"lint","rc":0,"log":"artifacts/FEERPT-AGG-BE-01/outputs/20260404T224725_lint.log"}
+{"ts":"20260404T224740","step":"test","rc":0,"log":"artifacts/FEERPT-AGG-BE-01/outputs/20260404T224740_test.log"}

@@ -1,0 +1,563 @@
+diff --git a/backend/app/modules/fees/schemas.py b/backend/app/modules/fees/schemas.py
+index 9d9cde3..c100a8e 100644
+--- a/backend/app/modules/fees/schemas.py
++++ b/backend/app/modules/fees/schemas.py
+@@ -58,6 +58,18 @@ class FeeDraftReportSummaryResponse(BaseModel):
+     service_fee_amount: Decimal = Decimal("0")
+     government_fee_amount: Decimal = Decimal("0")
+     income_amount: Decimal = Decimal("0")
++    client_amounts: list["FeeDraftGroupedAmountResponse"] = []
++    case_type_amounts: list["FeeDraftGroupedAmountResponse"] = []
++    country_amounts: list["FeeDraftGroupedAmountResponse"] = []
++
++
++class FeeDraftGroupedAmountResponse(BaseModel):
++    key: str
++    label: str
++    draft_count: int = 0
++    service_fee_amount: Decimal = Decimal("0")
++    government_fee_amount: Decimal = Decimal("0")
++    income_amount: Decimal = Decimal("0")
+ 
+ 
+ class FeeDraftReportListResponse(BaseModel):
+diff --git a/backend/app/modules/fees/service.py b/backend/app/modules/fees/service.py
+index 87feb5f..c6c4694 100644
+--- a/backend/app/modules/fees/service.py
++++ b/backend/app/modules/fees/service.py
+@@ -108,7 +108,121 @@ def _draft_report_date_bounds(
+     return lower_bound, upper_bound
+ 
+ 
+-def _draft_report_amount_summary(drafts: list[FeeDraft]) -> dict[str, Decimal | int]:
++def _client_report_label(client: Client | None, client_id: str | None) -> tuple[str, str]:
++    if client is not None:
++        display_name = (client.name_cn or client.name_en or "").strip()
++        if display_name:
++            return client.id, display_name
++    if client_id:
++        return client_id, client_id
++    return "UNASSIGNED", "未分配客户"
++
++
++def _case_type_report_label(case: Case | None) -> tuple[str, str]:
++    case_type = (case.case_type or "").strip() if case is not None else ""
++    if case_type:
++        return case_type, case_type
++    return "UNSPECIFIED", "未填写"
++
++
++def _country_report_label(case: Case | None) -> tuple[str, str]:
++    if case is not None:
++        country = (case.to_country or case.from_country or "").strip()
++        if country:
++            return country, country
++    return "未填写", "未填写"
++
++
++def _grouped_amount_payload(
++    grouped_amounts: dict[str, dict[str, Decimal | int | str]],
++) -> list[dict[str, Decimal | int | str]]:
++    rows = []
++    for values in grouped_amounts.values():
++        rows.append(
++            {
++                "key": str(values["key"]),
++                "label": str(values["label"]),
++                "draft_count": int(values["draft_count"]),
++                "service_fee_amount": _quantize_money(Decimal(values["service_fee_amount"])),
++                "government_fee_amount": _quantize_money(Decimal(values["government_fee_amount"])),
++                "income_amount": _quantize_money(Decimal(values["income_amount"])),
++            }
++        )
++    return sorted(rows, key=lambda row: (-int(row["draft_count"]), str(row["label"])))
++
++
++def _accumulate_grouped_amount(
++    grouped_amounts: dict[str, dict[str, Decimal | int | str]],
++    *,
++    key: str,
++    label: str,
++    draft: FeeDraft,
++) -> None:
++    row = grouped_amounts.setdefault(
++        key,
++        {
++            "key": key,
++            "label": label,
++            "draft_count": 0,
++            "service_fee_amount": Decimal("0"),
++            "government_fee_amount": Decimal("0"),
++            "income_amount": Decimal("0"),
++        },
++    )
++    row["draft_count"] = int(row["draft_count"]) + 1
++    row["service_fee_amount"] = Decimal(row["service_fee_amount"]) + Decimal(
++        draft.total_service or 0
++    )
++    row["government_fee_amount"] = Decimal(row["government_fee_amount"]) + Decimal(
++        draft.total_gov or 0
++    )
++    row["income_amount"] = Decimal(row["income_amount"]) + Decimal(draft.amount or 0)
++
++
++def _draft_report_amount_summary(
++    db: Session,
++    drafts: list[FeeDraft],
++) -> dict[str, Decimal | int | list[dict[str, Decimal | int | str]]]:
++    case_ids = {draft.case_id for draft in drafts if draft.case_id}
++    cases = db.execute(select(Case).where(Case.id.in_(case_ids))).scalars().all()
++    case_map = {case.id: case for case in cases}
++
++    client_ids = {draft.client_id for draft in drafts if draft.client_id}
++    clients = db.execute(select(Client).where(Client.id.in_(client_ids))).scalars().all()
++    client_map = {client.id: client for client in clients}
++
++    client_amounts: dict[str, dict[str, Decimal | int | str]] = {}
++    case_type_amounts: dict[str, dict[str, Decimal | int | str]] = {}
++    country_amounts: dict[str, dict[str, Decimal | int | str]] = {}
++
++    for draft in drafts:
++        case = case_map.get(draft.case_id)
++        client = client_map.get(draft.client_id) if draft.client_id else None
++
++        client_key, client_label = _client_report_label(client, draft.client_id)
++        _accumulate_grouped_amount(
++            client_amounts,
++            key=client_key,
++            label=client_label,
++            draft=draft,
++        )
++
++        case_type_key, case_type_label = _case_type_report_label(case)
++        _accumulate_grouped_amount(
++            case_type_amounts,
++            key=case_type_key,
++            label=case_type_label,
++            draft=draft,
++        )
++
++        country_key, country_label = _country_report_label(case)
++        _accumulate_grouped_amount(
++            country_amounts,
++            key=country_key,
++            label=country_label,
++            draft=draft,
++        )
++
+     return {
+         "total_draft_count": len(drafts),
+         "service_fee_amount": _quantize_money(
+@@ -120,6 +234,9 @@ def _draft_report_amount_summary(drafts: list[FeeDraft]) -> dict[str, Decimal |
+         "income_amount": _quantize_money(
+             sum((Decimal(draft.amount or 0) for draft in drafts), Decimal("0"))
+         ),
++        "client_amounts": _grouped_amount_payload(client_amounts),
++        "case_type_amounts": _grouped_amount_payload(case_type_amounts),
++        "country_amounts": _grouped_amount_payload(country_amounts),
+     }
+ 
+ 
+@@ -227,7 +344,7 @@ def list_fee_drafts(
+     total = len(drafts)
+     offset = (page - 1) * page_size
+     items = drafts[offset : offset + page_size]
+-    summary = _draft_report_amount_summary(drafts)
++    summary = _draft_report_amount_summary(db, drafts)
+     return items, total, summary
+ 
+ 
+diff --git a/backend/tests/test_fee_report.py b/backend/tests/test_fee_report.py
+index 70b31e9..c3a67cd 100644
+--- a/backend/tests/test_fee_report.py
++++ b/backend/tests/test_fee_report.py
+@@ -32,16 +32,27 @@ def _create_client(client, auth_headers, *, name_prefix: str) -> dict:
+     return resp.json()
+ 
+ 
+-def _create_case(client, auth_headers, *, client_id: str, case_tag: str) -> dict:
++def _create_case(
++    client,
++    auth_headers,
++    *,
++    client_id: str,
++    case_tag: str,
++    case_type: str = "NORMAL",
++    from_country: str | None = None,
++    to_country: str | None = None,
++) -> dict:
+     resp = client.post(
+         "/api/v1/cases",
+         json={
+             "case_no": _uid(case_tag),
+-            "case_type": "NORMAL",
++            "case_type": case_type,
+             "patent_category": "INV",
+             "flow_dir": "CN_DOMESTIC",
+             "client_id": client_id,
+             "title_cn": f"{case_tag} 案件",
++            "from_country": from_country,
++            "to_country": to_country,
+             "applicants": [{"seq": 1, "is_first": True, "name_cn": f"{case_tag} 申请人"}],
+         },
+         headers=auth_headers,
+@@ -304,3 +315,108 @@ def test_fee_drafts_report_supports_approved_filters(
+     assert date_payload["total"] == 1
+     assert date_payload["summary"]["total_draft_count"] == 1
+     assert [item["id"] for item in date_payload["items"]] == [gov_draft_id]
++
++
++def test_fee_drafts_report_returns_grouped_amount_summaries(
++    client,
++    auth_headers,
++    session_factory: sessionmaker,
++) -> None:
++    client_a = _create_client(client, auth_headers, name_prefix="FEE-RPT-GRP-A")
++    client_b = _create_client(client, auth_headers, name_prefix="FEE-RPT-GRP-B")
++    case_a = _create_case(
++        client,
++        auth_headers,
++        client_id=client_a["id"],
++        case_tag="FEE-GRP-CASE-A",
++        case_type="NORMAL",
++        from_country="CN",
++    )
++    case_b = _create_case(
++        client,
++        auth_headers,
++        client_id=client_b["id"],
++        case_tag="FEE-GRP-CASE-B",
++        case_type="SEARCH",
++        to_country="US",
++    )
++    case_c = _create_case(
++        client,
++        auth_headers,
++        client_id=client_a["id"],
++        case_tag="FEE-GRP-CASE-C",
++        case_type="NORMAL",
++    )
++
++    _insert_fee_draft(
++        session_factory,
++        case_id=case_a["id"],
++        client_id=client_a["id"],
++        draft_type="SERVICE_REPORT",
++        currency="JPY",
++        status="OPEN",
++        created_at=datetime(2026, 3, 12, 9, 0, tzinfo=timezone.utc),
++        lines=[("SERVICE", "100.00"), ("GOV", "30.00")],
++    )
++    _insert_fee_draft(
++        session_factory,
++        case_id=case_b["id"],
++        client_id=client_b["id"],
++        draft_type="SEARCH_REPORT",
++        currency="JPY",
++        status="OPEN",
++        created_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
++        lines=[("SERVICE", "80.00"), ("GOV", "20.00"), ("MISC", "10.00")],
++    )
++    _insert_fee_draft(
++        session_factory,
++        case_id=case_c["id"],
++        client_id=client_a["id"],
++        draft_type="GOV_REPORT",
++        currency="JPY",
++        status="LOCKED",
++        created_at=datetime(2026, 3, 14, 9, 0, tzinfo=timezone.utc),
++        lines=[("GOV", "50.00")],
++    )
++
++    resp = client.get(
++        FEE_DRAFTS_URL,
++        params={
++            "currency": "JPY",
++            "date_from": "2026-03-12",
++            "date_to": "2026-03-14",
++        },
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200, resp.text
++    payload = resp.json()
++
++    summary = payload["summary"]
++
++    client_amounts = {item["key"]: item for item in summary["client_amounts"]}
++    assert Decimal(str(client_amounts[client_a["id"]]["service_fee_amount"])) == Decimal("100.00")
++    assert Decimal(str(client_amounts[client_a["id"]]["government_fee_amount"])) == Decimal("80.00")
++    assert Decimal(str(client_amounts[client_a["id"]]["income_amount"])) == Decimal("180.00")
++    assert client_amounts[client_a["id"]]["draft_count"] == 2
++    assert Decimal(str(client_amounts[client_b["id"]]["service_fee_amount"])) == Decimal("80.00")
++    assert Decimal(str(client_amounts[client_b["id"]]["government_fee_amount"])) == Decimal("20.00")
++    assert Decimal(str(client_amounts[client_b["id"]]["income_amount"])) == Decimal("110.00")
++    assert client_amounts[client_b["id"]]["draft_count"] == 1
++
++    case_type_amounts = {item["key"]: item for item in summary["case_type_amounts"]}
++    assert Decimal(str(case_type_amounts["NORMAL"]["service_fee_amount"])) == Decimal("100.00")
++    assert Decimal(str(case_type_amounts["NORMAL"]["government_fee_amount"])) == Decimal("80.00")
++    assert Decimal(str(case_type_amounts["NORMAL"]["income_amount"])) == Decimal("180.00")
++    assert case_type_amounts["NORMAL"]["draft_count"] == 2
++    assert Decimal(str(case_type_amounts["SEARCH"]["service_fee_amount"])) == Decimal("80.00")
++    assert Decimal(str(case_type_amounts["SEARCH"]["government_fee_amount"])) == Decimal("20.00")
++    assert Decimal(str(case_type_amounts["SEARCH"]["income_amount"])) == Decimal("110.00")
++    assert case_type_amounts["SEARCH"]["draft_count"] == 1
++
++    country_amounts = {item["key"]: item for item in summary["country_amounts"]}
++    assert Decimal(str(country_amounts["CN"]["income_amount"])) == Decimal("130.00")
++    assert country_amounts["CN"]["draft_count"] == 1
++    assert Decimal(str(country_amounts["US"]["income_amount"])) == Decimal("110.00")
++    assert country_amounts["US"]["draft_count"] == 1
++    assert Decimal(str(country_amounts["未填写"]["income_amount"])) == Decimal("50.00")
++    assert country_amounts["未填写"]["draft_count"] == 1
+diff --git a/frontend/src/api/fees.ts b/frontend/src/api/fees.ts
+index 93cde0d..3533631 100644
+--- a/frontend/src/api/fees.ts
++++ b/frontend/src/api/fees.ts
+@@ -64,6 +64,18 @@ interface BackendFeeDraftReportSummary {
+     service_fee_amount: string | number
+     government_fee_amount: string | number
+     income_amount: string | number
++    client_amounts?: BackendFeeDraftGroupedAmount[]
++    case_type_amounts?: BackendFeeDraftGroupedAmount[]
++    country_amounts?: BackendFeeDraftGroupedAmount[]
++}
++
++interface BackendFeeDraftGroupedAmount {
++    key: string
++    label: string
++    draft_count: number
++    service_fee_amount: string | number
++    government_fee_amount: string | number
++    income_amount: string | number
+ }
+ 
+ interface BackendFeeDraftListResponse extends Pagination<BackendFeeDraftListItem> {
+@@ -158,6 +170,20 @@ function mapFeeDraftReportSummary(input: BackendFeeDraftReportSummary): FeeDraft
+         service_fee_amount: Number(input.service_fee_amount || 0),
+         government_fee_amount: Number(input.government_fee_amount || 0),
+         income_amount: Number(input.income_amount || 0),
++        client_amounts: (input.client_amounts || []).map(mapFeeDraftGroupedAmount),
++        case_type_amounts: (input.case_type_amounts || []).map(mapFeeDraftGroupedAmount),
++        country_amounts: (input.country_amounts || []).map(mapFeeDraftGroupedAmount),
++    }
++}
++
++function mapFeeDraftGroupedAmount(input: BackendFeeDraftGroupedAmount) {
++    return {
++        key: input.key,
++        label: input.label,
++        draft_count: Number(input.draft_count || 0),
++        service_fee_amount: Number(input.service_fee_amount || 0),
++        government_fee_amount: Number(input.government_fee_amount || 0),
++        income_amount: Number(input.income_amount || 0),
+     }
+ }
+ 
+diff --git a/frontend/src/api/fees.types.ts b/frontend/src/api/fees.types.ts
+index 257da75..a0bc2bf 100644
+--- a/frontend/src/api/fees.types.ts
++++ b/frontend/src/api/fees.types.ts
+@@ -88,6 +88,18 @@ export interface FeeDraftReportSummary {
+     service_fee_amount: FeeMoney
+     government_fee_amount: FeeMoney
+     income_amount: FeeMoney
++    client_amounts: FeeDraftGroupedAmount[]
++    case_type_amounts: FeeDraftGroupedAmount[]
++    country_amounts: FeeDraftGroupedAmount[]
++}
++
++export interface FeeDraftGroupedAmount {
++    key: string
++    label: string
++    draft_count: number
++    service_fee_amount: FeeMoney
++    government_fee_amount: FeeMoney
++    income_amount: FeeMoney
+ }
+ 
+ export interface FeeDraftListResponse {
+diff --git a/frontend/src/modules/fees/pages/FeeDraftList.vue b/frontend/src/modules/fees/pages/FeeDraftList.vue
+index f994310..03f6f3d 100644
+--- a/frontend/src/modules/fees/pages/FeeDraftList.vue
++++ b/frontend/src/modules/fees/pages/FeeDraftList.vue
+@@ -115,6 +115,83 @@
+       </div>
+     </div>
+ 
++    <div class="grouped-summary-grid">
++      <section class="grouped-summary-card">
++        <div class="grouped-summary-header">
++          <h3>按客户汇总</h3>
++          <span>{{ summary.client_amounts.length }} 组</span>
++        </div>
++        <div v-if="summary.client_amounts.length" class="grouped-summary-list">
++          <div
++            v-for="item in summary.client_amounts"
++            :key="`client-${item.key}`"
++            class="grouped-summary-item"
++          >
++            <div class="grouped-summary-main">
++              <span class="grouped-summary-title">{{ item.label }}</span>
++              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
++            </div>
++            <div class="grouped-summary-amounts">
++              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
++              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
++              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
++            </div>
++          </div>
++        </div>
++        <el-empty v-else description="暂无客户汇总数据" :image-size="72" />
++      </section>
++
++      <section class="grouped-summary-card">
++        <div class="grouped-summary-header">
++          <h3>按案件类型汇总</h3>
++          <span>{{ summary.case_type_amounts.length }} 组</span>
++        </div>
++        <div v-if="summary.case_type_amounts.length" class="grouped-summary-list">
++          <div
++            v-for="item in summary.case_type_amounts"
++            :key="`case-type-${item.key}`"
++            class="grouped-summary-item"
++          >
++            <div class="grouped-summary-main">
++              <span class="grouped-summary-title">{{ item.label }}</span>
++              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
++            </div>
++            <div class="grouped-summary-amounts">
++              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
++              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
++              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
++            </div>
++          </div>
++        </div>
++        <el-empty v-else description="暂无案件类型汇总数据" :image-size="72" />
++      </section>
++
++      <section class="grouped-summary-card">
++        <div class="grouped-summary-header">
++          <h3>按国家汇总</h3>
++          <span>{{ summary.country_amounts.length }} 组</span>
++        </div>
++        <div v-if="summary.country_amounts.length" class="grouped-summary-list">
++          <div
++            v-for="item in summary.country_amounts"
++            :key="`country-${item.key}`"
++            class="grouped-summary-item"
++          >
++            <div class="grouped-summary-main">
++              <span class="grouped-summary-title">{{ item.label }}</span>
++              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
++            </div>
++            <div class="grouped-summary-amounts">
++              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
++              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
++              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
++            </div>
++          </div>
++        </div>
++        <el-empty v-else description="暂无国家汇总数据" :image-size="72" />
++      </section>
++    </div>
++
+     <div v-if="error" class="page-error">
+       <ApiErrorBanner :error="error" @dismiss="error = null" />
+     </div>
+@@ -239,6 +316,9 @@ const summary = ref<FeeDraftReportSummary>({
+   service_fee_amount: 0,
+   government_fee_amount: 0,
+   income_amount: 0,
++  client_amounts: [],
++  case_type_amounts: [],
++  country_amounts: [],
+ })
+ const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+ const summaryCurrency = computed(() => filters.currency || drafts.value[0]?.currency || 'CNY')
+@@ -289,6 +369,9 @@ async function fetchDrafts() {
+       service_fee_amount: 0,
+       government_fee_amount: 0,
+       income_amount: 0,
++      client_amounts: [],
++      case_type_amounts: [],
++      country_amounts: [],
+     }
+   } finally {
+     loading.value = false
+@@ -373,6 +456,75 @@ onMounted(() => {
+   margin-bottom: 16px;
+ }
+ 
++.grouped-summary-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
++  gap: 16px;
++  margin-bottom: 20px;
++}
++
++.grouped-summary-card {
++  padding: 16px;
++  border: 1px solid var(--border-default);
++  border-radius: 12px;
++  background: var(--surface-raised);
++}
++
++.grouped-summary-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  margin-bottom: 12px;
++}
++
++.grouped-summary-header h3 {
++  margin: 0;
++  font-size: 15px;
++}
++
++.grouped-summary-header span {
++  color: var(--text-sub);
++  font-size: 12px;
++}
++
++.grouped-summary-list {
++  display: flex;
++  flex-direction: column;
++  gap: 10px;
++}
++
++.grouped-summary-item {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  padding: 12px;
++  border-radius: 10px;
++  background: var(--surface-default);
++}
++
++.grouped-summary-main {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
++}
++
++.grouped-summary-title {
++  font-weight: 600;
++}
++
++.grouped-summary-sub {
++  color: var(--text-sub);
++  font-size: 12px;
++}
++
++.grouped-summary-amounts {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  font-size: 13px;
++}
++
+ .summary-card {
+   display: flex;
+   flex-direction: column;

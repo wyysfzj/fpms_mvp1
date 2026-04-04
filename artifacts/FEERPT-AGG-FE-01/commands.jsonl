@@ -1,0 +1,4 @@
+{"ts":"20260404T224554","step":"eslint_fees","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/fees.ts\ src/api/fees.types.ts\ src/modules/fees/pages/FeeDraftList.vue"}
+{"ts":"20260404T224554","step":"typecheck","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260404T224725","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/fees.ts\ src/api/fees.types.ts\ src/modules/fees/pages/FeeDraftList.vue"}
+{"ts":"20260404T224740","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}

@@ -1,0 +1,5 @@
+{"ts":"20260404T224524","step":"ruff_format","cmd":"python3 -m ruff format backend/app/modules/fees/schemas.py backend/app/modules/fees/service.py backend/tests/test_fee_report.py"}
+{"ts":"20260404T224530","step":"ruff_check","cmd":"python3 -m ruff check backend/app/modules/fees/api.py backend/app/modules/fees/service.py backend/app/modules/fees/schemas.py backend/tests/test_fee_report.py"}
+{"ts":"20260404T224535","step":"pytest_fee_report","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_fee_report.py"}
+{"ts":"20260404T224725","step":"lint","cmd":"python3 -m ruff check backend/app/modules/fees/api.py backend/app/modules/fees/service.py backend/app/modules/fees/schemas.py backend/tests/test_fee_report.py"}
+{"ts":"20260404T224740","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_fee_report.py"}

@@ -108,7 +108,121 @@ def _draft_report_date_bounds(
     return lower_bound, upper_bound
 
 
-def _draft_report_amount_summary(drafts: list[FeeDraft]) -> dict[str, Decimal | int]:
+def _client_report_label(client: Client | None, client_id: str | None) -> tuple[str, str]:
+    if client is not None:
+        display_name = (client.name_cn or client.name_en or "").strip()
+        if display_name:
+            return client.id, display_name
+    if client_id:
+        return client_id, client_id
+    return "UNASSIGNED", "未分配客户"
+
+
+def _case_type_report_label(case: Case | None) -> tuple[str, str]:
+    case_type = (case.case_type or "").strip() if case is not None else ""
+    if case_type:
+        return case_type, case_type
+    return "UNSPECIFIED", "未填写"
+
+
+def _country_report_label(case: Case | None) -> tuple[str, str]:
+    if case is not None:
+        country = (case.to_country or case.from_country or "").strip()
+        if country:
+            return country, country
+    return "未填写", "未填写"
+
+
+def _grouped_amount_payload(
+    grouped_amounts: dict[str, dict[str, Decimal | int | str]],
+) -> list[dict[str, Decimal | int | str]]:
+    rows = []
+    for values in grouped_amounts.values():
+        rows.append(
+            {
+                "key": str(values["key"]),
+                "label": str(values["label"]),
+                "draft_count": int(values["draft_count"]),
+                "service_fee_amount": _quantize_money(Decimal(values["service_fee_amount"])),
+                "government_fee_amount": _quantize_money(Decimal(values["government_fee_amount"])),
+                "income_amount": _quantize_money(Decimal(values["income_amount"])),
+            }
+        )
+    return sorted(rows, key=lambda row: (-int(row["draft_count"]), str(row["label"])))
+
+
+def _accumulate_grouped_amount(
+    grouped_amounts: dict[str, dict[str, Decimal | int | str]],
+    *,
+    key: str,
+    label: str,
+    draft: FeeDraft,
+) -> None:
+    row = grouped_amounts.setdefault(
+        key,
+        {
+            "key": key,
+            "label": label,
+            "draft_count": 0,
+            "service_fee_amount": Decimal("0"),
+            "government_fee_amount": Decimal("0"),
+            "income_amount": Decimal("0"),
+        },
+    )
+    row["draft_count"] = int(row["draft_count"]) + 1
+    row["service_fee_amount"] = Decimal(row["service_fee_amount"]) + Decimal(
+        draft.total_service or 0
+    )
+    row["government_fee_amount"] = Decimal(row["government_fee_amount"]) + Decimal(
+        draft.total_gov or 0
+    )
+    row["income_amount"] = Decimal(row["income_amount"]) + Decimal(draft.amount or 0)
+
+
+def _draft_report_amount_summary(
+    db: Session,
+    drafts: list[FeeDraft],
+) -> dict[str, Decimal | int | list[dict[str, Decimal | int | str]]]:
+    case_ids = {draft.case_id for draft in drafts if draft.case_id}
+    cases = db.execute(select(Case).where(Case.id.in_(case_ids))).scalars().all()
+    case_map = {case.id: case for case in cases}
+
+    client_ids = {draft.client_id for draft in drafts if draft.client_id}
+    clients = db.execute(select(Client).where(Client.id.in_(client_ids))).scalars().all()
+    client_map = {client.id: client for client in clients}
+
+    client_amounts: dict[str, dict[str, Decimal | int | str]] = {}
+    case_type_amounts: dict[str, dict[str, Decimal | int | str]] = {}
+    country_amounts: dict[str, dict[str, Decimal | int | str]] = {}
+
+    for draft in drafts:
+        case = case_map.get(draft.case_id)
+        client = client_map.get(draft.client_id) if draft.client_id else None
+
+        client_key, client_label = _client_report_label(client, draft.client_id)
+        _accumulate_grouped_amount(
+            client_amounts,
+            key=client_key,
+            label=client_label,
+            draft=draft,
+        )
+
+        case_type_key, case_type_label = _case_type_report_label(case)
+        _accumulate_grouped_amount(
+            case_type_amounts,
+            key=case_type_key,
+            label=case_type_label,
+            draft=draft,
+        )
+
+        country_key, country_label = _country_report_label(case)
+        _accumulate_grouped_amount(
+            country_amounts,
+            key=country_key,
+            label=country_label,
+            draft=draft,
+        )
+
     return {
         "total_draft_count": len(drafts),
         "service_fee_amount": _quantize_money(
@@ -120,6 +234,9 @@ def _draft_report_amount_summary(drafts: list[FeeDraft]) -> dict[str, Decimal | 
         "income_amount": _quantize_money(
             sum((Decimal(draft.amount or 0) for draft in drafts), Decimal("0"))
         ),
+        "client_amounts": _grouped_amount_payload(client_amounts),
+        "case_type_amounts": _grouped_amount_payload(case_type_amounts),
+        "country_amounts": _grouped_amount_payload(country_amounts),
     }
 
 
@@ -227,7 +344,7 @@ def list_fee_drafts(
     total = len(drafts)
     offset = (page - 1) * page_size
     items = drafts[offset : offset + page_size]
-    summary = _draft_report_amount_summary(drafts)
+    summary = _draft_report_amount_summary(db, drafts)
     return items, total, summary
 
 

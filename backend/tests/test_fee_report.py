@@ -32,16 +32,27 @@ def _create_client(client, auth_headers, *, name_prefix: str) -> dict:
     return resp.json()
 
 
-def _create_case(client, auth_headers, *, client_id: str, case_tag: str) -> dict:
+def _create_case(
+    client,
+    auth_headers,
+    *,
+    client_id: str,
+    case_tag: str,
+    case_type: str = "NORMAL",
+    from_country: str | None = None,
+    to_country: str | None = None,
+) -> dict:
     resp = client.post(
         "/api/v1/cases",
         json={
             "case_no": _uid(case_tag),
-            "case_type": "NORMAL",
+            "case_type": case_type,
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": f"{case_tag} 案件",
+            "from_country": from_country,
+            "to_country": to_country,
             "applicants": [{"seq": 1, "is_first": True, "name_cn": f"{case_tag} 申请人"}],
         },
         headers=auth_headers,
@@ -304,3 +315,108 @@ def test_fee_drafts_report_supports_approved_filters(
     assert date_payload["total"] == 1
     assert date_payload["summary"]["total_draft_count"] == 1
     assert [item["id"] for item in date_payload["items"]] == [gov_draft_id]
+
+
+def test_fee_drafts_report_returns_grouped_amount_summaries(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+) -> None:
+    client_a = _create_client(client, auth_headers, name_prefix="FEE-RPT-GRP-A")
+    client_b = _create_client(client, auth_headers, name_prefix="FEE-RPT-GRP-B")
+    case_a = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        case_tag="FEE-GRP-CASE-A",
+        case_type="NORMAL",
+        from_country="CN",
+    )
+    case_b = _create_case(
+        client,
+        auth_headers,
+        client_id=client_b["id"],
+        case_tag="FEE-GRP-CASE-B",
+        case_type="SEARCH",
+        to_country="US",
+    )
+    case_c = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        case_tag="FEE-GRP-CASE-C",
+        case_type="NORMAL",
+    )
+
+    _insert_fee_draft(
+        session_factory,
+        case_id=case_a["id"],
+        client_id=client_a["id"],
+        draft_type="SERVICE_REPORT",
+        currency="JPY",
+        status="OPEN",
+        created_at=datetime(2026, 3, 12, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "100.00"), ("GOV", "30.00")],
+    )
+    _insert_fee_draft(
+        session_factory,
+        case_id=case_b["id"],
+        client_id=client_b["id"],
+        draft_type="SEARCH_REPORT",
+        currency="JPY",
+        status="OPEN",
+        created_at=datetime(2026, 3, 13, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "80.00"), ("GOV", "20.00"), ("MISC", "10.00")],
+    )
+    _insert_fee_draft(
+        session_factory,
+        case_id=case_c["id"],
+        client_id=client_a["id"],
+        draft_type="GOV_REPORT",
+        currency="JPY",
+        status="LOCKED",
+        created_at=datetime(2026, 3, 14, 9, 0, tzinfo=timezone.utc),
+        lines=[("GOV", "50.00")],
+    )
+
+    resp = client.get(
+        FEE_DRAFTS_URL,
+        params={
+            "currency": "JPY",
+            "date_from": "2026-03-12",
+            "date_to": "2026-03-14",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    summary = payload["summary"]
+
+    client_amounts = {item["key"]: item for item in summary["client_amounts"]}
+    assert Decimal(str(client_amounts[client_a["id"]]["service_fee_amount"])) == Decimal("100.00")
+    assert Decimal(str(client_amounts[client_a["id"]]["government_fee_amount"])) == Decimal("80.00")
+    assert Decimal(str(client_amounts[client_a["id"]]["income_amount"])) == Decimal("180.00")
+    assert client_amounts[client_a["id"]]["draft_count"] == 2
+    assert Decimal(str(client_amounts[client_b["id"]]["service_fee_amount"])) == Decimal("80.00")
+    assert Decimal(str(client_amounts[client_b["id"]]["government_fee_amount"])) == Decimal("20.00")
+    assert Decimal(str(client_amounts[client_b["id"]]["income_amount"])) == Decimal("110.00")
+    assert client_amounts[client_b["id"]]["draft_count"] == 1
+
+    case_type_amounts = {item["key"]: item for item in summary["case_type_amounts"]}
+    assert Decimal(str(case_type_amounts["NORMAL"]["service_fee_amount"])) == Decimal("100.00")
+    assert Decimal(str(case_type_amounts["NORMAL"]["government_fee_amount"])) == Decimal("80.00")
+    assert Decimal(str(case_type_amounts["NORMAL"]["income_amount"])) == Decimal("180.00")
+    assert case_type_amounts["NORMAL"]["draft_count"] == 2
+    assert Decimal(str(case_type_amounts["SEARCH"]["service_fee_amount"])) == Decimal("80.00")
+    assert Decimal(str(case_type_amounts["SEARCH"]["government_fee_amount"])) == Decimal("20.00")
+    assert Decimal(str(case_type_amounts["SEARCH"]["income_amount"])) == Decimal("110.00")
+    assert case_type_amounts["SEARCH"]["draft_count"] == 1
+
+    country_amounts = {item["key"]: item for item in summary["country_amounts"]}
+    assert Decimal(str(country_amounts["CN"]["income_amount"])) == Decimal("130.00")
+    assert country_amounts["CN"]["draft_count"] == 1
+    assert Decimal(str(country_amounts["US"]["income_amount"])) == Decimal("110.00")
+    assert country_amounts["US"]["draft_count"] == 1
+    assert Decimal(str(country_amounts["未填写"]["income_amount"])) == Decimal("50.00")
+    assert country_amounts["未填写"]["draft_count"] == 1

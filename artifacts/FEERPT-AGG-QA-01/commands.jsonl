@@ -1,0 +1,2 @@
+{"ts":"20260404T224725","step":"lint","cmd":"qa-evidence-check"}
+{"ts":"20260404T224740","step":"test","cmd":"qa-gate-check"}
