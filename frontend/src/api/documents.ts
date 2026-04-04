@@ -17,6 +17,7 @@ import type {
     DocumentCreatePayload,
     DocumentListParams,
     DocumentUpdatePayload,
+    DocumentWizardAttachmentPreviewResult,
     DocumentWizardBatchCreatePayload,
     DocumentWizardBatchCreateResult,
     DocumentWizardBatchDefaults,
@@ -397,6 +398,16 @@ export async function createDocumentWizardFeePreview(
 ): Promise<DocumentWizardFeePreviewResult> {
     const response = await http.post<DocumentWizardFeePreviewResult>(
         '/documents/wizard/fee-preview',
+        toWizardBatchPayload(data)
+    )
+    return response.data
+}
+
+export async function createDocumentWizardAttachmentPreview(
+    data: DocumentWizardBatchCreatePayload
+): Promise<DocumentWizardAttachmentPreviewResult> {
+    const response = await http.post<DocumentWizardAttachmentPreviewResult>(
+        '/documents/wizard/attachment-preview',
         toWizardBatchPayload(data)
     )
     return response.data

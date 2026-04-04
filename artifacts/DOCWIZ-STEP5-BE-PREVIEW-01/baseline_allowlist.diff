@@ -1,0 +1,164 @@
+diff --git a/backend/app/modules/documents/api.py b/backend/app/modules/documents/api.py
+index 7bde91c..b35909e 100644
+--- a/backend/app/modules/documents/api.py
++++ b/backend/app/modules/documents/api.py
+@@ -32,6 +32,8 @@ from app.modules.documents.schemas import (
+     DocumentMailingBatchOut,
+     DocumentOut,
+     DocumentUpdateIn,
++    DocumentWizardAttachmentPreviewIn,
++    DocumentWizardAttachmentPreviewOut,
+     DocumentWizardBatchCreateIn,
+     DocumentWizardBatchCreateOut,
+     DocumentWizardFeePreviewIn,
+@@ -52,6 +54,7 @@ from app.modules.documents.service import (
+     get_document_envelope_preview,
+     list_doc_templates,
+     list_documents,
++    preview_document_wizard_attachment_candidates,
+     preview_document_wizard_fee_candidates,
+     preview_document_wizard_tasks,
+     update_doc_template,
+@@ -418,6 +421,24 @@ def preview_document_wizard_fee_candidates_endpoint(
+     return DocumentWizardFeePreviewOut(total_candidates=len(items), items=items)
+ 
+ 
++@router.post(
++    "/documents/wizard/attachment-preview",
++    response_model=DocumentWizardAttachmentPreviewOut,
++    summary="Preview attachment candidates from wizard batch",
++)
++def preview_document_wizard_attachment_candidates_endpoint(
++    payload: DocumentWizardAttachmentPreviewIn,
++    _perm: None = Depends(require_perm("Doc.Create")),
++    db: Session = Depends(get_db),
++) -> DocumentWizardAttachmentPreviewOut:
++    try:
++        items = preview_document_wizard_attachment_candidates(db, payload)
++    except RuntimeError as exc:
++        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
++
++    return DocumentWizardAttachmentPreviewOut(total_candidates=len(items), items=items)
++
++
+ @router.post(
+     "/documents/wizard/batch-create",
+     status_code=status.HTTP_201_CREATED,
+diff --git a/backend/app/modules/documents/schemas.py b/backend/app/modules/documents/schemas.py
+index db064cf..00ba6f0 100644
+--- a/backend/app/modules/documents/schemas.py
++++ b/backend/app/modules/documents/schemas.py
+@@ -143,6 +143,32 @@ class DocumentWizardFeePreviewOut(BaseModel):
+     items: list[DocumentWizardFeePreviewItemOut]
+ 
+ 
++class DocumentWizardAttachmentPreviewIn(BaseModel):
++    defaults: DocumentWizardBatchDefaultsIn
++    rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
++
++
++class DocumentWizardAttachmentPreviewItemOut(BaseModel):
++    row_index: int
++    case_id: str
++    case_no: str | None = None
++    source_title: str | None = None
++    document_title: str | None = None
++    template_code: str
++    template_name: str | None = None
++    output_name: str | None = None
++    output_file_name: str
++    output_format: str = "DOCX"
++    candidate_source_kind: str = "DOC_TEMPLATE"
++    generate_this_candidate: bool = True
++    remark: str | None = None
++
++
++class DocumentWizardAttachmentPreviewOut(BaseModel):
++    total_candidates: int
++    items: list[DocumentWizardAttachmentPreviewItemOut]
++
++
+ class DocumentUpdateIn(BaseModel):
+     case_id: str | None = None
+     doc_template_id: str | None = None
+diff --git a/backend/app/modules/documents/service.py b/backend/app/modules/documents/service.py
+index 2bbadc1..8380364 100644
+--- a/backend/app/modules/documents/service.py
++++ b/backend/app/modules/documents/service.py
+@@ -33,6 +33,7 @@ from app.modules.documents.schemas import (
+     DocumentEnvelopePreviewOut,
+     DocumentMailingBatchIn,
+     DocumentUpdateIn,
++    DocumentWizardAttachmentPreviewIn,
+     DocumentWizardBatchCreateIn,
+     DocumentWizardBatchRowIn,
+     DocumentWizardFeeFinalRowIn,
+@@ -548,6 +549,54 @@ def preview_document_wizard_fee_candidates(
+     return preview_rows
+ 
+ 
++def preview_document_wizard_attachment_candidates(
++    db: Session,
++    data: DocumentWizardAttachmentPreviewIn,
++) -> list[dict[str, object]]:
++    template = db.execute(
++        select(DocTemplate).where(DocTemplate.id == data.defaults.doc_template_id)
++    ).scalar_one_or_none()
++    if not template:
++        raise_business_error("DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404)
++
++    if not template.enabled:
++        return []
++
++    if _normalize_text(getattr(template, "direction", None)) != data.defaults.direction.value:
++        return []
++
++    _validate_document_wizard_rows(db, data.rows)
++
++    case_ids = [_normalize_text(row.case_id) for row in data.rows]
++    cases = db.execute(select(Case).where(Case.id.in_(case_ids))).scalars().all()
++    case_by_id = {case.id: case for case in cases}
++    preview_rows: list[dict[str, object]] = []
++
++    for idx, row in enumerate(data.rows, start=1):
++        payload = _build_document_wizard_payload(data.defaults, row, template)
++        case = case_by_id[payload.case_id]
++        output_name = _normalize_text(payload.title) or template.name or payload.case_id
++        preview_rows.append(
++            {
++                "row_index": idx,
++                "case_id": case.id,
++                "case_no": case.case_no,
++                "source_title": _resolve_case_title(case),
++                "document_title": payload.title,
++                "template_code": template.code,
++                "template_name": template.name,
++                "output_name": output_name,
++                "output_file_name": f"{_sanitize_filename_component(output_name)}.docx",
++                "output_format": "DOCX",
++                "candidate_source_kind": "DOC_TEMPLATE",
++                "generate_this_candidate": True,
++                "remark": None,
++            }
++        )
++
++    return preview_rows
++
++
+ def _group_document_wizard_task_rows(
+     task_rows: list[DocumentWizardTaskFinalRowIn],
+     *,
+@@ -1044,6 +1093,13 @@ def _build_document_wizard_payload(
+     return DocumentCreateIn(**data)
+ 
+ 
++def _sanitize_filename_component(value: str) -> str:
++    normalized = value.strip()
++    if not normalized:
++        return "attachment"
++    return normalized.replace("/", "_").replace("\\", "_")
++
++
+ def _validate_document_wizard_rows(db: Session, rows: list[DocumentWizardBatchRowIn]) -> None:
+     row_errors: list[dict[str, object]] = []
+     seen_case_ids: set[str] = set()

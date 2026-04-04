@@ -1,0 +1,6 @@
+{"ts":"20260404T030424","step":"ruff-check-fix","cmd":"ruff check --fix backend/app/modules/documents/api.py backend/app/modules/documents/service.py backend/app/modules/documents/schemas.py backend/tests/test_document_wizard_attachment_preview.py"}
+{"ts":"20260404T030424","step":"ruff-format","cmd":"ruff format backend/app/modules/documents/api.py backend/app/modules/documents/service.py backend/app/modules/documents/schemas.py backend/tests/test_document_wizard_attachment_preview.py"}
+{"ts":"20260404T030424","step":"ruff-check","cmd":"ruff check backend/app/modules/documents/api.py backend/app/modules/documents/service.py backend/app/modules/documents/schemas.py backend/tests/test_document_wizard_attachment_preview.py"}
+{"ts":"20260404T030431","step":"pytest-step5-preview","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_document_wizard_attachment_preview.py"}
+{"ts":"20260404T030530","step":"lint","cmd":"ruff check backend/app/modules/documents/api.py backend/app/modules/documents/service.py backend/app/modules/documents/schemas.py backend/tests/test_document_wizard_attachment_preview.py"}
+{"ts":"20260404T030530","step":"test","cmd":"/bin/zsh -lc cd\ backend\ \&\&\ pytest\ -q\ tests/test_document_wizard_attachment_preview.py"}

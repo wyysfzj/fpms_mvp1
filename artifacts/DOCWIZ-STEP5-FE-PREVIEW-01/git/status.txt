@@ -1,0 +1,15 @@
+## master
+ M backend/app/modules/documents/api.py
+ M backend/app/modules/documents/schemas.py
+ M backend/app/modules/documents/service.py
+ M frontend/src/api/cases.ts
+ M frontend/src/api/cases.types.ts
+ M frontend/src/api/documents.ts
+ M frontend/src/api/documents.types.ts
+ M frontend/src/modules/documents/pages/DocumentWizard.vue
+?? backend/tests/test_document_wizard_attachment_preview.py
+?? docs/superpowers/plans/2026-04-04-docwiz-step5-preview-implementation.md
+?? docs/superpowers/specs/2026-04-04-docwiz-step5-preview-implementation-design.md
+?? tasks/postenhancement/backend/DOCWIZ-QA-STEP5-IMPL-01.md
+?? tasks/postenhancement/backend/DOCWIZ-STEP5-BE-PREVIEW-01.md
+?? tasks/postenhancement/frontend/DOCWIZ-STEP5-FE-PREVIEW-01.md

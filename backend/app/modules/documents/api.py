@@ -32,6 +32,8 @@ from app.modules.documents.schemas import (
     DocumentMailingBatchOut,
     DocumentOut,
     DocumentUpdateIn,
+    DocumentWizardAttachmentPreviewIn,
+    DocumentWizardAttachmentPreviewOut,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchCreateOut,
     DocumentWizardFeePreviewIn,
@@ -52,6 +54,7 @@ from app.modules.documents.service import (
     get_document_envelope_preview,
     list_doc_templates,
     list_documents,
+    preview_document_wizard_attachment_candidates,
     preview_document_wizard_fee_candidates,
     preview_document_wizard_tasks,
     update_doc_template,
@@ -416,6 +419,24 @@ def preview_document_wizard_fee_candidates_endpoint(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     return DocumentWizardFeePreviewOut(total_candidates=len(items), items=items)
+
+
+@router.post(
+    "/documents/wizard/attachment-preview",
+    response_model=DocumentWizardAttachmentPreviewOut,
+    summary="Preview attachment candidates from wizard batch",
+)
+def preview_document_wizard_attachment_candidates_endpoint(
+    payload: DocumentWizardAttachmentPreviewIn,
+    _perm: None = Depends(require_perm("Doc.Create")),
+    db: Session = Depends(get_db),
+) -> DocumentWizardAttachmentPreviewOut:
+    try:
+        items = preview_document_wizard_attachment_candidates(db, payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    return DocumentWizardAttachmentPreviewOut(total_candidates=len(items), items=items)
 
 
 @router.post(

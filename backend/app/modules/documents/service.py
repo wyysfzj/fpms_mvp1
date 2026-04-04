@@ -33,6 +33,7 @@ from app.modules.documents.schemas import (
     DocumentEnvelopePreviewOut,
     DocumentMailingBatchIn,
     DocumentUpdateIn,
+    DocumentWizardAttachmentPreviewIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchRowIn,
     DocumentWizardFeeFinalRowIn,
@@ -548,6 +549,54 @@ def preview_document_wizard_fee_candidates(
     return preview_rows
 
 
+def preview_document_wizard_attachment_candidates(
+    db: Session,
+    data: DocumentWizardAttachmentPreviewIn,
+) -> list[dict[str, object]]:
+    template = db.execute(
+        select(DocTemplate).where(DocTemplate.id == data.defaults.doc_template_id)
+    ).scalar_one_or_none()
+    if not template:
+        raise_business_error("DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404)
+
+    if not template.enabled:
+        return []
+
+    if _normalize_text(getattr(template, "direction", None)) != data.defaults.direction.value:
+        return []
+
+    _validate_document_wizard_rows(db, data.rows)
+
+    case_ids = [_normalize_text(row.case_id) for row in data.rows]
+    cases = db.execute(select(Case).where(Case.id.in_(case_ids))).scalars().all()
+    case_by_id = {case.id: case for case in cases}
+    preview_rows: list[dict[str, object]] = []
+
+    for idx, row in enumerate(data.rows, start=1):
+        payload = _build_document_wizard_payload(data.defaults, row, template)
+        case = case_by_id[payload.case_id]
+        output_name = _normalize_text(payload.title) or template.name or payload.case_id
+        preview_rows.append(
+            {
+                "row_index": idx,
+                "case_id": case.id,
+                "case_no": case.case_no,
+                "source_title": _resolve_case_title(case),
+                "document_title": payload.title,
+                "template_code": template.code,
+                "template_name": template.name,
+                "output_name": output_name,
+                "output_file_name": f"{_sanitize_filename_component(output_name)}.docx",
+                "output_format": "DOCX",
+                "candidate_source_kind": "DOC_TEMPLATE",
+                "generate_this_candidate": True,
+                "remark": None,
+            }
+        )
+
+    return preview_rows
+
+
 def _group_document_wizard_task_rows(
     task_rows: list[DocumentWizardTaskFinalRowIn],
     *,
@@ -1042,6 +1091,13 @@ def _build_document_wizard_payload(
     data["reply_to_id"] = _normalize_text(data.get("reply_to_id"))
 
     return DocumentCreateIn(**data)
+
+
+def _sanitize_filename_component(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        return "attachment"
+    return normalized.replace("/", "_").replace("\\", "_")
 
 
 def _validate_document_wizard_rows(db: Session, rows: list[DocumentWizardBatchRowIn]) -> None:

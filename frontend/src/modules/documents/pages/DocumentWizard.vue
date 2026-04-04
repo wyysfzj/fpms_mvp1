@@ -16,7 +16,7 @@
         <el-step title="编辑并提交" description="核对批量内容" />
         <el-step title="时限联动" description="预留任务步骤" />
         <el-step title="费用联动" description="预留费用步骤" />
-        <el-step title="附件生成" description="预留附件步骤" />
+        <el-step title="附件生成" description="预览附件候选" />
       </el-steps>
     </el-card>
 
@@ -608,18 +608,115 @@
         </div>
       </div>
 
-      <div v-else class="wizard-placeholder">
-        <div class="wizard-placeholder-title">Step 5：附件与模板生成</div>
-        <div class="wizard-placeholder-text">
-          该步骤将承载附件上传、模板生成与最终写入时机控制。本轮只扩展向导壳层，不在此实现附件生成流程。
-        </div>
+      <div v-else class="wizard-step">
         <el-alert
-          title="当前仅开放壳层占位。若需继续批量提交，请返回第二步使用现有提交入口。"
-          type="warning"
+          title="当前步骤会根据第二步的文书草案预览附件与模板候选。你可以调整允许编辑的字段，但这些修改目前只保存在页面内存中。"
+          type="info"
           :closable="false"
           show-icon
         />
-        <el-empty description="附件与模板生成步骤待后续实现" />
+
+        <el-alert
+          v-if="step5Error"
+          :title="step5Error"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+
+        <div class="step-panel">
+          <div class="step-panel-header">
+            <div>
+              <div class="section-title">附件候选预览</div>
+              <div class="section-hint">仅显示当前草案中适用模板生成的文书。当前不会写入真实附件。</div>
+            </div>
+            <div class="step-panel-actions">
+              <el-button :loading="step5Loading" @click="reloadStep5Preview">重新生成预览</el-button>
+            </div>
+          </div>
+
+          <el-descriptions :column="3" border>
+            <el-descriptions-item label="草案行数">{{ step2RowCount }}</el-descriptions-item>
+            <el-descriptions-item label="附件候选">{{ step5PreviewCount }}</el-descriptions-item>
+            <el-descriptions-item label="当前模板">{{ templateLabel }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <el-empty
+          v-if="!step2Rows.length"
+          description="请先完成第二步的逐案编辑后再查看附件候选预览"
+        />
+
+        <el-empty
+          v-else-if="!step5Loading && !step5PreviewRows.length"
+          description="当前草案没有可生成的附件候选"
+        />
+
+        <div v-else class="wizard-row-stack">
+          <div v-for="(row, index) in step5PreviewRows" :key="row.id" class="step4-row-card">
+            <div class="step2-row-header">
+              <div>
+                <div class="step2-row-title">附件候选 {{ index + 1 }}</div>
+                <div class="step2-row-subtitle">
+                  {{ row.case_no || '未关联案卷号' }}
+                  <span v-if="row.template_name">· {{ row.template_name }}</span>
+                </div>
+              </div>
+              <el-tag type="warning" effect="light">预览中</el-tag>
+            </div>
+
+            <div class="step2-row-case">
+              {{ row.source_title || row.document_title || '暂无案件标题' }}
+            </div>
+
+            <div class="step3-meta-grid">
+              <div class="step3-meta-item">
+                <div class="step2-field-label">模板代码</div>
+                <div class="step3-meta-value">{{ row.template_code }}</div>
+              </div>
+              <div class="step3-meta-item">
+                <div class="step2-field-label">输出格式</div>
+                <div class="step3-meta-value">{{ row.output_format }}</div>
+              </div>
+              <div class="step3-meta-item">
+                <div class="step2-field-label">候选来源</div>
+                <div class="step3-meta-value">{{ row.candidate_source_kind }}</div>
+              </div>
+              <div class="step3-meta-item">
+                <div class="step2-field-label">预览文件名</div>
+                <div class="step3-meta-value">{{ row.output_file_name }}</div>
+              </div>
+            </div>
+
+            <div class="step2-field-grid">
+              <div class="step2-field">
+                <div class="step2-field-label">生成本候选</div>
+                <el-switch
+                  v-model="row.generate_this_candidate"
+                  inline-prompt
+                  active-text="是"
+                  inactive-text="否"
+                />
+              </div>
+
+              <div class="step2-field">
+                <div class="step2-field-label">输出名称</div>
+                <el-input v-model="row.output_name" placeholder="请输入输出名称" />
+              </div>
+
+              <div class="step2-field step2-field--full">
+                <div class="step2-field-label">备注</div>
+                <el-input
+                  v-model="row.remark"
+                  type="textarea"
+                  :rows="2"
+                  resize="vertical"
+                  placeholder="可填写附件候选说明"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </el-card>
 
@@ -655,6 +752,7 @@ import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { getCases } from '../../../api/cases'
 import {
+  createDocumentWizardAttachmentPreview,
   createDocumentWizardBatch,
   createDocumentWizardFeePreview,
   createDocumentWizardTaskPreview,
@@ -665,6 +763,7 @@ import {
 import type { ApiError } from '../../../api/types'
 import type {
   DocTemplate,
+  DocumentWizardAttachmentPreviewItem,
   DocumentWizardBatchCreatePayload,
   DocumentWizardBatchRowError,
   DocumentWizardCaseRow,
@@ -722,6 +821,10 @@ interface Step4PreviewRowView extends Omit<DocumentWizardFeePreviewItem, 'fee_it
   fee_items: Step4PreviewFeeItemView[]
 }
 
+interface Step5PreviewRowView extends DocumentWizardAttachmentPreviewItem {
+  id: string
+}
+
 const activeStepIndex = computed(() => documentWizardState.activeStep - 1)
 const isStep1 = computed(() => documentWizardState.activeStep === 1)
 const isStep2 = computed(() => documentWizardState.activeStep === 2)
@@ -742,6 +845,9 @@ const step3Error = ref<string | null>(null)
 const step4PreviewRows = ref<Step4PreviewRowView[]>([])
 const step4Loading = ref(false)
 const step4Error = ref<string | null>(null)
+const step5PreviewRows = ref<Step5PreviewRowView[]>([])
+const step5Loading = ref(false)
+const step5Error = ref<string | null>(null)
 const step2SourceSignature = ref('')
 const submitLoading = ref(false)
 const submitError = ref<string | null>(null)
@@ -796,6 +902,7 @@ const parsedCaseCount = computed(() => parsedCases.value.length)
 const step2RowCount = computed(() => step2Rows.value.length)
 const step3PreviewCount = computed(() => step3PreviewRows.value.length)
 const step4PreviewCount = computed(() => step4PreviewRows.value.length)
+const step5PreviewCount = computed(() => step5PreviewRows.value.length)
 const failedRowCount = computed(() => failedRows.value.length)
 const draftLineCount = computed(() => splitDraftLines(draftText.value).length)
 const canEnterStep2 = computed(() => parsedCaseCount.value > 0)
@@ -824,6 +931,10 @@ async function goNext() {
 
   if (isStep3.value) {
     await reloadStep4Preview()
+  }
+
+  if (isStep4.value) {
+    await reloadStep5Preview()
   }
 
   if (documentWizardState.activeStep < TOTAL_STEPS) {
@@ -926,6 +1037,13 @@ function createStep4PreviewRow(item: DocumentWizardFeePreviewItem): Step4Preview
   }
 }
 
+function createStep5PreviewRow(item: DocumentWizardAttachmentPreviewItem): Step5PreviewRowView {
+  return {
+    id: createStep2RowId(),
+    ...item,
+  }
+}
+
 function createStep2Row(parsedCase: ParsedCaseRowView): Step2CaseRowView {
   return {
     id: createStep2RowId(),
@@ -962,6 +1080,8 @@ function reloadStep2Rows(): void {
     step3Error.value = null
     step4PreviewRows.value = []
     step4Error.value = null
+    step5PreviewRows.value = []
+    step5Error.value = null
     step2SourceSignature.value = ''
     return
   }
@@ -982,6 +1102,8 @@ function reloadStep2Rows(): void {
   step3Error.value = null
   step4PreviewRows.value = []
   step4Error.value = null
+  step5PreviewRows.value = []
+  step5Error.value = null
   step2SourceSignature.value = signature
   submitError.value = null
 }
@@ -1206,6 +1328,27 @@ async function reloadStep4Preview(): Promise<void> {
   }
 }
 
+async function reloadStep5Preview(): Promise<void> {
+  if (!step2Rows.value.length || !documentWizardState.defaults.doc_template_id) {
+    step5PreviewRows.value = []
+    step5Error.value = null
+    return
+  }
+
+  step5Loading.value = true
+  step5Error.value = null
+
+  try {
+    const result = await createDocumentWizardAttachmentPreview(buildStep2Payload())
+    step5PreviewRows.value = result.items.map((item) => createStep5PreviewRow(item))
+  } catch {
+    step5PreviewRows.value = []
+    step5Error.value = '附件候选预览加载失败，请稍后重试。'
+  } finally {
+    step5Loading.value = false
+  }
+}
+
 function localizeWizardRowError(error: DocumentWizardBatchRowError): string {
   switch (error.code) {
     case 'CASE_ID_REQUIRED':
@@ -1268,6 +1411,7 @@ async function submitStep2Batch(): Promise<void> {
     step2Rows.value = []
     step3PreviewRows.value = []
     step4PreviewRows.value = []
+    step5PreviewRows.value = []
     step2SourceSignature.value = ''
     router.push('/documents')
   } catch (err) {
@@ -1298,6 +1442,9 @@ onMounted(() => {
   step4PreviewRows.value = []
   step4Loading.value = false
   step4Error.value = null
+  step5PreviewRows.value = []
+  step5Loading.value = false
+  step5Error.value = null
   step2SourceSignature.value = ''
   submitLoading.value = false
   submitError.value = null

@@ -143,6 +143,32 @@ class DocumentWizardFeePreviewOut(BaseModel):
     items: list[DocumentWizardFeePreviewItemOut]
 
 
+class DocumentWizardAttachmentPreviewIn(BaseModel):
+    defaults: DocumentWizardBatchDefaultsIn
+    rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
+
+
+class DocumentWizardAttachmentPreviewItemOut(BaseModel):
+    row_index: int
+    case_id: str
+    case_no: str | None = None
+    source_title: str | None = None
+    document_title: str | None = None
+    template_code: str
+    template_name: str | None = None
+    output_name: str | None = None
+    output_file_name: str
+    output_format: str = "DOCX"
+    candidate_source_kind: str = "DOC_TEMPLATE"
+    generate_this_candidate: bool = True
+    remark: str | None = None
+
+
+class DocumentWizardAttachmentPreviewOut(BaseModel):
+    total_candidates: int
+    items: list[DocumentWizardAttachmentPreviewItemOut]
+
+
 class DocumentUpdateIn(BaseModel):
     case_id: str | None = None
     doc_template_id: str | None = None

@@ -1,0 +1,8 @@
+backend/app/modules/documents/api.py
+backend/app/modules/documents/service.py
+backend/app/modules/documents/schemas.py
+backend/tests/test_document_wizard_attachment_preview.py
+frontend/src/api/cases.ts
+frontend/src/api/cases.types.ts
+tasks/postenhancement/backend/DOCWIZ-STEP5-BE-PREVIEW-01.md
+tasks/postenhancement/backend/DOCWIZ-QA-STEP5-IMPL-01.md

@@ -242,6 +242,27 @@ export interface DocumentWizardFeePreviewResult {
     items: DocumentWizardFeePreviewItem[]
 }
 
+export interface DocumentWizardAttachmentPreviewItem {
+    row_index: number
+    case_id: string
+    case_no?: string
+    source_title?: string
+    document_title?: string
+    template_code: string
+    template_name?: string
+    output_name?: string | null
+    output_file_name: string
+    output_format: string
+    candidate_source_kind: string
+    generate_this_candidate: boolean
+    remark?: string | null
+}
+
+export interface DocumentWizardAttachmentPreviewResult {
+    total_candidates: number
+    items: DocumentWizardAttachmentPreviewItem[]
+}
+
 export interface DocumentWizardFeeFinalRowDraft {
     row_index: number
     case_id: string

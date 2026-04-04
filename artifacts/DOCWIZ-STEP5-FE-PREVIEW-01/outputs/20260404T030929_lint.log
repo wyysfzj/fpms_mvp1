@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/modules/documents/pages/DocumentWizard.vue src/api/documents.ts src/api/documents.types.ts
+

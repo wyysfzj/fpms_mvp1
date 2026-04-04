@@ -1,0 +1,6 @@
+{"ts":"20260404T030424","step":"ruff-check","rc":0,"log":"artifacts/DOCWIZ-STEP5-BE-PREVIEW-01/outputs/20260404T030424_ruff-check.log"}
+{"ts":"20260404T030424","step":"ruff-check-fix","rc":0,"log":"artifacts/DOCWIZ-STEP5-BE-PREVIEW-01/outputs/20260404T030424_ruff-check-fix.log"}
+{"ts":"20260404T030424","step":"ruff-format","rc":0,"log":"artifacts/DOCWIZ-STEP5-BE-PREVIEW-01/outputs/20260404T030424_ruff-format.log"}
+{"ts":"20260404T030431","step":"pytest-step5-preview","rc":0,"log":"artifacts/DOCWIZ-STEP5-BE-PREVIEW-01/outputs/20260404T030431_pytest-step5-preview.log"}
+{"ts":"20260404T030530","step":"lint","rc":0,"log":"artifacts/DOCWIZ-STEP5-BE-PREVIEW-01/outputs/20260404T030530_lint.log"}
+{"ts":"20260404T030530","step":"test","rc":0,"log":"artifacts/DOCWIZ-STEP5-BE-PREVIEW-01/outputs/20260404T030530_test.log"}

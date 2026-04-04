@@ -1,0 +1,6 @@
+frontend/src/api/cases.ts
+frontend/src/api/cases.types.ts
+docs/superpowers/specs/2026-04-04-docwiz-step5-preview-implementation-design.md
+docs/superpowers/plans/2026-04-04-docwiz-step5-preview-implementation.md
+tasks/postenhancement/backend/DOCWIZ-QA-STEP5-IMPL-01.md
+tasks/postenhancement/frontend/DOCWIZ-STEP5-FE-PREVIEW-01.md
