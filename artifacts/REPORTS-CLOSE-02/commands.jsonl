@@ -1,0 +1,3 @@
+{"ts":"20260405T012525","step":"lint","cmd":"test -f docs/FPMS_SPEC2_2nd_Review_REFRESH.md"}
+{"ts":"20260405T012526","step":"test","cmd":"/bin/zsh -lc rg\ -n\ \'Partially\ Closed\ \\\|\ 3\|Needs\ Reclassification\ \\\|\ 0\|###\ 4.13\ P2\ #13\|Current\ Status.:\ \|CASERPT-CLIENT-AGG-01\'\ docs/FPMS_SPEC2_2nd_Review_REFRESH.md\ docs/priority-ranked-mitigation-ledger.md"}
+{"ts":"20260405T012538","step":"test","cmd":"/bin/zsh -lc rg\ -n\ \"Partially\ Closed\ \\\|\ 3\|Needs\ Reclassification\ \\\|\ 0\|###\ 4\\.13\ P2\ #13\|CASERPT-CLIENT-AGG-01\|Current\ Status.:\ \`Partially\ Closed\`\"\ docs/FPMS_SPEC2_2nd_Review_REFRESH.md\ docs/priority-ranked-mitigation-ledger.md"}

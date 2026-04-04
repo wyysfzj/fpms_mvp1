@@ -1,0 +1,8 @@
+docs/priority-ranked-mitigation-ledger.md:17:- `Needs Reclassification`
+docs/priority-ranked-mitigation-ledger.md:69:- `Story ID`: `CASERPT-TREND-CARRIER-01`
+docs/FPMS_SPEC2_2nd_Review_REFRESH.md:25:| Needs Reclassification | 0 | No item currently requires framing-only reclassification without product follow-through |
+docs/FPMS_SPEC2_2nd_Review_REFRESH.md:42:2. Update `P2 #13 所有统计报表` from `Needs Reclassification` to `Partially Closed` based on implemented report-family slices and remaining named residuals.
+docs/FPMS_SPEC2_2nd_Review_REFRESH.md:124:- `Needs Reclassification`
+docs/FPMS_SPEC2_2nd_Review_REFRESH.md:658:### 5.5 Needs Reclassification
+docs/FPMS_SPEC2_2nd_Review_REFRESH.md:719:| `#13` | Missing | Partially Closed | family ledger exists and multiple report-family residual slices are implemented, but named residuals remain |
+docs/FPMS_SPEC2_2nd_Review_REFRESH.md:727:| `#13` | Partially Closed | Partially Closed | strict family ledger exists and report-family implementation now exceeds framing-only reclassification |

@@ -1,0 +1,2 @@
+{"ts":"20260405T012526","step":"lint","cmd":"test -f tasks/postenhancement/backend/REPORTS-QA-CLOSE-02.md"}
+{"ts":"20260405T012526","step":"test","cmd":"/bin/zsh -lc test\ -f\ docs/FPMS_SPEC2_2nd_Review_REFRESH.md\ \&\&\ test\ -f\ docs/priority-ranked-mitigation-ledger.md\ \&\&\ rg\ -n\ \'#13.\*Partially\ Closed\|Needs\ Reclassification\|CASERPT-TREND-CARRIER-01\'\ docs/FPMS_SPEC2_2nd_Review_REFRESH.md\ docs/priority-ranked-mitigation-ledger.md"}

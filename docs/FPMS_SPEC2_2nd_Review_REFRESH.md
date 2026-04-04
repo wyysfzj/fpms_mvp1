@@ -19,10 +19,10 @@ This refresh is based on the **current workspace state**, not only committed his
 | Status | Count | Notes |
 |---|---:|---|
 | Closed | 17 | Fully closed in current workspace-state |
-| Partially Closed | 2 | Representative slices exist, but residual gap remains |
+| Partially Closed | 3 | Implemented slices exist, but residual gap remains |
 | Still Missing | 0 | No item currently lacks sufficient implementation evidence for its core slice |
 | Blocked by Prerequisite | 0 | No item currently requires a fresh prerequisite before any further interpretation |
-| Needs Reclassification | 1 | Old review framing no longer matches the current implementation reality |
+| Needs Reclassification | 0 | No item currently requires framing-only reclassification without product follow-through |
 
 ### 1.2 Headline Findings
 
@@ -34,17 +34,16 @@ This refresh is based on the **current workspace state**, not only committed his
 - Several items previously marked `MISSING` are now fully closed in current workspace-state.
 - Several other items are not truly `missing` anymore, but should now be interpreted as:
   - `Partially Closed`
-  - `Needs Reclassification`
 - `P1 #5 多代理人提成分成` is no longer a true missing gap; the original review framing is now out of date relative to the implemented split carrier, commission semantics, and FE exposure.
 
 ### 1.3 Recommended Immediate Actions
 
 1. Update the review baseline using this refresh.
-2. Reclassify `P2 #13 所有统计报表` as a program-level residual ledger, not a single missing feature.
+2. Update `P2 #13 所有统计报表` from `Needs Reclassification` to `Partially Closed` based on implemented report-family slices and remaining named residuals.
 3. Prioritize:
-   1. `P2 #13 所有统计报表 residual decomposition`
-   2. `P2 #15 授权费管理 residual workflow`
-   3. `P2 #19 中间文件专项查询 residual DocType gap`
+   1. `P2 #15 授权费管理 residual workflow`
+   2. `P2 #19 中间文件专项查询 residual DocType gap`
+   3. `P2 #13 所有统计报表 remaining family residuals`
 
 ## 2. Current-state Audit Basis
 
@@ -406,26 +405,60 @@ Each review item was re-evaluated against:
 - **Spec Reference**:
   - Module 8 reports overview
 - **Current Implementation Evidence**:
+  - strict family-ledger authority:
+    - [2026-04-04-reports-implementation-ledger-design.md](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/docs/superpowers/specs/2026-04-04-reports-implementation-ledger-design.md)
   - case-report style summary integrated into:
     - [cases/service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/cases/service.py)
     - [CaseList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/cases/pages/CaseList.vue)
+    - residual implementation now includes:
+      - `country_counts`
+      - `agent_counts`
+      - `granted_count`
+      - `grant_rate`
+      - `terminated_count`
+      - `invalidated_count`
+      - `in_prosecution_count`
+  - fee report summary:
+    - [fees/service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/fees/service.py)
+    - [FeeDraftList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/fees/pages/FeeDraftList.vue)
+    - residual implementation now includes:
+      - `client_amounts`
+      - `case_type_amounts`
+      - `country_amounts`
+      - `agent_service_amounts`
+      - `billed_amount`
+      - `received_amount`
+      - `unpaid_balance_amount`
+      - `partially_received_bill_count`
   - annuity report summary:
     - [annuity/service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/annuity/service.py)
     - [AnnuityTaskList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/annuity/pages/AnnuityTaskList.vue)
+    - residual implementation now includes:
+      - `client_amounts`
+      - `country_amounts`
+      - `year_amounts`
+      - `monitored_task_count`
+      - `on_time_paid_count`
+      - `late_paid_count`
+      - `success_rate`
   - prepayment / billing reporting slices:
     - [PaymentList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/billing/pages/PaymentList.vue)
     - [billing/schemas.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/billing/schemas.py)
   - commission settlement report:
     - [commission/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/api.py)
     - [CommissionSettlement.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/commission/pages/CommissionSettlement.vue)
-- **Committed-state Conclusion**: Needs Reclassification
-- **Workspace-state Conclusion**: Needs Reclassification
-- **Status**: `Needs Reclassification`
-- **Why**: This is no longer an honest single `missing` item. Some report families already exist; the residual gap is a report-program decomposition problem.
+- **Committed-state Conclusion**: Partially Closed
+- **Workspace-state Conclusion**: Partially Closed
+- **Status**: `Partially Closed`
+- **Why**: `#13` no longer needs framing-only reclassification. A strict family ledger exists, and multiple real residual product slices have already landed for `RPT-CASE` / `RPT-FEE` / `RPT-ANN`. The item is now honestly a partially closed multi-family reports program with named remaining residuals.
 - **Residual Gap**:
-  - case statistics family residuals
-  - fee/income family residuals
-  - billing aging/bad-debt family residuals
+  - `RPT-CASE`
+    - grouped `client` statistics remain open
+    - `year/month` trend reporting remains prerequisite-blocked by missing terminal-event date carrier
+  - `RPT-FEE`
+    - `year/month` trend reporting remains open
+  - `RPT-ANN`
+    - payment-status truth semantics beyond the current amount/success slices remain open
 - **Risk**: `Medium`
 
 ### 4.14 P2 #14 申请人/国家主数据
@@ -612,6 +645,7 @@ Each review item was re-evaluated against:
 
 | Item | Title | Implemented Slice | Residual Gap |
 |---|---|---|---|
+| `#13` | 所有统计报表 | multi-family reporting slices + case/fee/annuity residual implementation waves | named family residuals still remain |
 | `#15` | 授权费管理 | carrier + worklist + state + draft generation | broader workflow residual |
 | `#19` | 中间文件专项查询 | first-round document-specific search | `DocType` residual semantics |
 
@@ -625,7 +659,7 @@ Each review item was re-evaluated against:
 
 | Item | Title | Old Framing | Recommended New Framing |
 |---|---|---|---|
-| `#13` | 所有统计报表 | single missing feature | multi-family reporting residual program |
+| `None` | — | — | no remaining framing-only item |
 
 ### 5.6 Likely False Positives in Old Review
 
@@ -643,7 +677,7 @@ Each review item was re-evaluated against:
 
 | Item | Why Old Review Framing Is Now Too Coarse |
 |---|---|
-| `#13` | report family now needs decomposition, not a binary missing judgment |
+| `#13` | report-family decomposition has now landed as a partial-close residual program, not a binary missing judgment |
 | `#15` | current implementation is no longer `missing`, but not fully closed |
 | `#19` | current query slice exists but does not yet close full spec parity |
 
@@ -658,25 +692,18 @@ Each review item was re-evaluated against:
 
 ### 6.2 Highest-value Gaps to Prioritize Next
 
-1. `P1 #5 多代理人提成分成`
-1. `P2 #13 所有统计报表 residual decomposition`
-2. `P2 #15 授权费管理 residual workflow`
-3. `P2 #19 中间文件专项查询 residual DocType slice`
+1. `P2 #15 授权费管理 residual workflow`
+2. `P2 #19 中间文件专项查询 residual DocType slice`
+3. `P2 #13 所有统计报表 remaining family residuals`
 
 ### 6.3 Items That Should Not Go Straight to Implementation
 
-- `#13` → reclassification first
+- `#13` → reclassification is already complete; future work must stay inside named family residuals
 - `#19` → residual contract freeze first
 
 ### 6.4 Items That Need Review Baseline Update Immediately
 
-- `#12`
-- `#14`
-- `#16`
-- `#17`
-- `#18`
-- `#5`
-- `#20`
+- `None`
 
 ## Appendix A. Old Review Position vs Current Workspace Finding
 
@@ -689,6 +716,7 @@ Each review item was re-evaluated against:
 | `#18` | Missing | Closed | advanced case filters added |
 | `#5` | Missing | Closed | `CaseAgentSplit` carrier + commission semantics + case-side FE exposure now close the functional item |
 | `#8` | Missing | Closed | real 5-step wizard path and Step3/4/5 final-submit behavior now exist |
+| `#13` | Missing | Partially Closed | family ledger exists and multiple report-family residual slices are implemented, but named residuals remain |
 | `#19` | Missing | Partially Closed | first-round search exists, full spec parity not yet |
 | `#20` | Missing | Closed | missing list-page print entry added |
 
@@ -696,7 +724,7 @@ Each review item was re-evaluated against:
 
 | Item | Committed-state Conclusion | Workspace-state Conclusion | Why |
 |---|---|---|---|
-| `#13` | Needs Reclassification | Needs Reclassification | current repo already contains multiple report-family slices |
+| `#13` | Partially Closed | Partially Closed | strict family ledger exists and report-family implementation now exceeds framing-only reclassification |
 | `#8` | Closed | Closed | committed product implementation now closes strict spec parity for the 5-step wizard |
 | `#15` | Partially Closed | Partially Closed | first-round workflow present, but not full spec breadth |
 | `#19` | Partially Closed | Partially Closed | residual `DocType` semantics still open |
