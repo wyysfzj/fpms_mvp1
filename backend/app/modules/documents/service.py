@@ -45,6 +45,7 @@ from app.modules.tasks.enums import TaskAction, TaskStatus
 from app.modules.tasks.models import Task, TaskTemplate
 from app.modules.tasks.service import _create_task_log
 from app.modules.tasks.task_generation_service import TaskGenerationService
+from app.modules.templates.models import Template
 
 
 def _apply_template_defaults(
@@ -504,6 +505,87 @@ def preview_document_wizard_tasks(
             )
 
     return preview_rows
+
+
+def _backend_storage_dir() -> Path:
+    return Path(__file__).resolve().parents[3] / "storage"
+
+
+def _resolve_document_template_file_path(file_path: str) -> str:
+    normalized_path = _normalize_text(file_path)
+    if not normalized_path:
+        raise_business_error(
+            "DOCUMENT_TEMPLATE_SOURCE_NOT_FOUND",
+            "Document template source is not configured",
+            status_code=409,
+        )
+
+    candidate = Path(normalized_path)
+    storage_root = _backend_storage_dir()
+
+    if candidate.is_absolute():
+        resolved = candidate
+    elif normalized_path.startswith("storage/"):
+        resolved = (storage_root.parent / candidate).resolve()
+    elif normalized_path.startswith("templates/"):
+        resolved = Path(safe_join(str(storage_root), normalized_path))
+    else:
+        resolved = Path(safe_join(str(storage_root / "templates"), normalized_path))
+
+    if not resolved.exists():
+        raise_business_error(
+            "DOCUMENT_TEMPLATE_FILE_NOT_FOUND",
+            "Document template file not found",
+            details={"file_path": str(resolved)},
+            status_code=409,
+        )
+
+    return str(resolved)
+
+
+def resolve_document_template_render_source(
+    db: Session,
+    *,
+    doc_template: DocTemplate,
+) -> tuple[Template, str]:
+    template_code = _normalize_text(getattr(doc_template, "code", None))
+    if not template_code:
+        raise_business_error(
+            "DOCUMENT_TEMPLATE_SOURCE_NOT_FOUND",
+            "Doc template code is required to resolve template source",
+            status_code=409,
+        )
+
+    matches = (
+        db.execute(
+            select(Template).where(
+                Template.group == "DOC_TEMPLATE",
+                Template.name == template_code,
+                Template.enabled.is_(True),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    if not matches:
+        raise_business_error(
+            "DOCUMENT_TEMPLATE_SOURCE_NOT_FOUND",
+            "Document template source mapping not found",
+            details={"doc_template_code": template_code},
+            status_code=409,
+        )
+
+    if len(matches) > 1:
+        raise_business_error(
+            "DOCUMENT_TEMPLATE_SOURCE_CONFLICT",
+            "Multiple document template sources match the same doc template",
+            details={"doc_template_code": template_code, "match_count": len(matches)},
+            status_code=409,
+        )
+
+    template = matches[0]
+    return template, _resolve_document_template_file_path(template.file_path)
 
 
 def preview_document_wizard_fee_candidates(
