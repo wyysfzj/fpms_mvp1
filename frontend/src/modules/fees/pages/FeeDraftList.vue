@@ -190,6 +190,29 @@
         </div>
         <el-empty v-else description="暂无国家汇总数据" :image-size="72" />
       </section>
+
+      <section class="grouped-summary-card">
+        <div class="grouped-summary-header">
+          <h3>按代理人服务费汇总</h3>
+          <span>{{ summary.agent_service_amounts.length }} 组</span>
+        </div>
+        <div v-if="summary.agent_service_amounts.length" class="grouped-summary-list">
+          <div
+            v-for="item in summary.agent_service_amounts"
+            :key="`agent-${item.key}`"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-main">
+              <span class="grouped-summary-title">{{ item.label }}</span>
+              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
+            </div>
+            <div class="grouped-summary-amounts">
+              <span class="amount">服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
+            </div>
+          </div>
+        </div>
+        <el-empty v-else description="暂无代理人服务费汇总数据" :image-size="72" />
+      </section>
     </div>
 
     <div v-if="error" class="page-error">
@@ -319,6 +342,7 @@ const summary = ref<FeeDraftReportSummary>({
   client_amounts: [],
   case_type_amounts: [],
   country_amounts: [],
+  agent_service_amounts: [],
 })
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 const summaryCurrency = computed(() => filters.currency || drafts.value[0]?.currency || 'CNY')
@@ -372,6 +396,7 @@ async function fetchDrafts() {
       client_amounts: [],
       case_type_amounts: [],
       country_amounts: [],
+      agent_service_amounts: [],
     }
   } finally {
     loading.value = false

@@ -1,0 +1,126 @@
+diff --git a/frontend/src/api/fees.ts b/frontend/src/api/fees.ts
+index 3533631..6ddbbf8 100644
+--- a/frontend/src/api/fees.ts
++++ b/frontend/src/api/fees.ts
+@@ -67,6 +67,7 @@ interface BackendFeeDraftReportSummary {
+     client_amounts?: BackendFeeDraftGroupedAmount[]
+     case_type_amounts?: BackendFeeDraftGroupedAmount[]
+     country_amounts?: BackendFeeDraftGroupedAmount[]
++    agent_service_amounts?: BackendFeeDraftAgentServiceAmount[]
+ }
+ 
+ interface BackendFeeDraftGroupedAmount {
+@@ -78,6 +79,13 @@ interface BackendFeeDraftGroupedAmount {
+     income_amount: string | number
+ }
+ 
++interface BackendFeeDraftAgentServiceAmount {
++    key: string
++    label: string
++    draft_count: number
++    service_fee_amount: string | number
++}
++
+ interface BackendFeeDraftListResponse extends Pagination<BackendFeeDraftListItem> {
+     summary: BackendFeeDraftReportSummary
+ }
+@@ -173,6 +181,7 @@ function mapFeeDraftReportSummary(input: BackendFeeDraftReportSummary): FeeDraft
+         client_amounts: (input.client_amounts || []).map(mapFeeDraftGroupedAmount),
+         case_type_amounts: (input.case_type_amounts || []).map(mapFeeDraftGroupedAmount),
+         country_amounts: (input.country_amounts || []).map(mapFeeDraftGroupedAmount),
++        agent_service_amounts: (input.agent_service_amounts || []).map(mapFeeDraftAgentServiceAmount),
+     }
+ }
+ 
+@@ -187,6 +196,15 @@ function mapFeeDraftGroupedAmount(input: BackendFeeDraftGroupedAmount) {
+     }
+ }
+ 
++function mapFeeDraftAgentServiceAmount(input: BackendFeeDraftAgentServiceAmount) {
++    return {
++        key: input.key,
++        label: input.label,
++        draft_count: Number(input.draft_count || 0),
++        service_fee_amount: Number(input.service_fee_amount || 0),
++    }
++}
++
+ function buildFeeCode(name: string): string {
+     const base = name
+         .trim()
+diff --git a/frontend/src/api/fees.types.ts b/frontend/src/api/fees.types.ts
+index a0bc2bf..57b73d2 100644
+--- a/frontend/src/api/fees.types.ts
++++ b/frontend/src/api/fees.types.ts
+@@ -91,6 +91,7 @@ export interface FeeDraftReportSummary {
+     client_amounts: FeeDraftGroupedAmount[]
+     case_type_amounts: FeeDraftGroupedAmount[]
+     country_amounts: FeeDraftGroupedAmount[]
++    agent_service_amounts: FeeDraftAgentServiceAmount[]
+ }
+ 
+ export interface FeeDraftGroupedAmount {
+@@ -102,6 +103,13 @@ export interface FeeDraftGroupedAmount {
+     income_amount: FeeMoney
+ }
+ 
++export interface FeeDraftAgentServiceAmount {
++    key: string
++    label: string
++    draft_count: number
++    service_fee_amount: FeeMoney
++}
++
+ export interface FeeDraftListResponse {
+     items: FeeDraftListItem[]
+     page: number
+diff --git a/frontend/src/modules/fees/pages/FeeDraftList.vue b/frontend/src/modules/fees/pages/FeeDraftList.vue
+index 03f6f3d..81cac75 100644
+--- a/frontend/src/modules/fees/pages/FeeDraftList.vue
++++ b/frontend/src/modules/fees/pages/FeeDraftList.vue
+@@ -190,6 +190,29 @@
+         </div>
+         <el-empty v-else description="暂无国家汇总数据" :image-size="72" />
+       </section>
++
++      <section class="grouped-summary-card">
++        <div class="grouped-summary-header">
++          <h3>按代理人服务费汇总</h3>
++          <span>{{ summary.agent_service_amounts.length }} 组</span>
++        </div>
++        <div v-if="summary.agent_service_amounts.length" class="grouped-summary-list">
++          <div
++            v-for="item in summary.agent_service_amounts"
++            :key="`agent-${item.key}`"
++            class="grouped-summary-item"
++          >
++            <div class="grouped-summary-main">
++              <span class="grouped-summary-title">{{ item.label }}</span>
++              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
++            </div>
++            <div class="grouped-summary-amounts">
++              <span class="amount">服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
++            </div>
++          </div>
++        </div>
++        <el-empty v-else description="暂无代理人服务费汇总数据" :image-size="72" />
++      </section>
+     </div>
+ 
+     <div v-if="error" class="page-error">
+@@ -319,6 +342,7 @@ const summary = ref<FeeDraftReportSummary>({
+   client_amounts: [],
+   case_type_amounts: [],
+   country_amounts: [],
++  agent_service_amounts: [],
+ })
+ const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+ const summaryCurrency = computed(() => filters.currency || drafts.value[0]?.currency || 'CNY')
+@@ -372,6 +396,7 @@ async function fetchDrafts() {
+       client_amounts: [],
+       case_type_amounts: [],
+       country_amounts: [],
++      agent_service_amounts: [],
+     }
+   } finally {
+     loading.value = false

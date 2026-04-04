@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
 from app.modules.billing.models import Bill, BillItem
-from app.modules.cases.models import Case
+from app.modules.cases.models import Case, T_CaseAgentSplit
 from app.modules.fees.enums import FeeDraftStatus, FeeType
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
 from app.modules.fees.schemas import (
@@ -151,6 +151,22 @@ def _grouped_amount_payload(
     return sorted(rows, key=lambda row: (-int(row["draft_count"]), str(row["label"])))
 
 
+def _agent_service_amount_payload(
+    grouped_amounts: dict[str, dict[str, Decimal | int | str]],
+) -> list[dict[str, Decimal | int | str]]:
+    rows = []
+    for values in grouped_amounts.values():
+        rows.append(
+            {
+                "key": str(values["key"]),
+                "label": str(values["label"]),
+                "draft_count": int(values["draft_count"]),
+                "service_fee_amount": _quantize_money(Decimal(values["service_fee_amount"])),
+            }
+        )
+    return sorted(rows, key=lambda row: (-int(row["draft_count"]), str(row["label"])))
+
+
 def _accumulate_grouped_amount(
     grouped_amounts: dict[str, dict[str, Decimal | int | str]],
     *,
@@ -179,6 +195,57 @@ def _accumulate_grouped_amount(
     row["income_amount"] = Decimal(row["income_amount"]) + Decimal(draft.amount or 0)
 
 
+def _accumulate_agent_service_amount(
+    grouped_amounts: dict[str, dict[str, Decimal | int | str]],
+    *,
+    key: str,
+    label: str,
+    service_amount: Decimal,
+) -> None:
+    row = grouped_amounts.setdefault(
+        key,
+        {
+            "key": key,
+            "label": label,
+            "draft_count": 0,
+            "service_fee_amount": Decimal("0"),
+        },
+    )
+    row["draft_count"] = int(row["draft_count"]) + 1
+    row["service_fee_amount"] = Decimal(row["service_fee_amount"]) + service_amount
+
+
+def _load_case_agent_split_map(
+    db: Session, *, case_ids: set[str]
+) -> dict[str, list[tuple[str, Decimal]]]:
+    if not case_ids:
+        return {}
+    rows = db.execute(
+        select(T_CaseAgentSplit.case_id, T_CaseAgentSplit.agent_id, T_CaseAgentSplit.share_ratio)
+        .where(T_CaseAgentSplit.case_id.in_(case_ids))
+        .order_by(T_CaseAgentSplit.created_at.asc(), T_CaseAgentSplit.id.asc())
+    ).all()
+    mapping: dict[str, list[tuple[str, Decimal]]] = {}
+    for case_id, agent_id, share_ratio in rows:
+        mapping.setdefault(case_id, []).append(
+            (agent_id, _to_decimal(share_ratio, field_name="case_agent_split.share_ratio"))
+        )
+    return mapping
+
+
+def _split_money_by_ratios(base_amount: Decimal, ratios: list[Decimal]) -> list[Decimal]:
+    if not ratios:
+        return []
+    allocations: list[Decimal] = []
+    allocated_total = Decimal("0")
+    for ratio in ratios[:-1]:
+        share = _quantize_money((base_amount * ratio) / Decimal("100"))
+        allocations.append(share)
+        allocated_total += share
+    allocations.append(_quantize_money(base_amount - allocated_total))
+    return allocations
+
+
 def _draft_report_amount_summary(
     db: Session,
     drafts: list[FeeDraft],
@@ -190,10 +257,12 @@ def _draft_report_amount_summary(
     client_ids = {draft.client_id for draft in drafts if draft.client_id}
     clients = db.execute(select(Client).where(Client.id.in_(client_ids))).scalars().all()
     client_map = {client.id: client for client in clients}
+    case_agent_split_map = _load_case_agent_split_map(db, case_ids=case_ids)
 
     client_amounts: dict[str, dict[str, Decimal | int | str]] = {}
     case_type_amounts: dict[str, dict[str, Decimal | int | str]] = {}
     country_amounts: dict[str, dict[str, Decimal | int | str]] = {}
+    agent_service_amounts: dict[str, dict[str, Decimal | int | str]] = {}
 
     for draft in drafts:
         case = case_map.get(draft.case_id)
@@ -223,6 +292,34 @@ def _draft_report_amount_summary(
             draft=draft,
         )
 
+        service_amount = Decimal(draft.total_service or 0)
+        split_rows = case_agent_split_map.get(draft.case_id, [])
+        if split_rows:
+            split_amounts = _split_money_by_ratios(service_amount, [row[1] for row in split_rows])
+            for (agent_id, _share_ratio), split_amount in zip(
+                split_rows, split_amounts, strict=True
+            ):
+                _accumulate_agent_service_amount(
+                    agent_service_amounts,
+                    key=agent_id,
+                    label=agent_id,
+                    service_amount=split_amount,
+                )
+        elif case is not None and case.primary_agent_id:
+            _accumulate_agent_service_amount(
+                agent_service_amounts,
+                key=case.primary_agent_id,
+                label=case.primary_agent_id,
+                service_amount=service_amount,
+            )
+        else:
+            _accumulate_agent_service_amount(
+                agent_service_amounts,
+                key="UNASSIGNED",
+                label="未分配代理人",
+                service_amount=service_amount,
+            )
+
     return {
         "total_draft_count": len(drafts),
         "service_fee_amount": _quantize_money(
@@ -237,6 +334,7 @@ def _draft_report_amount_summary(
         "client_amounts": _grouped_amount_payload(client_amounts),
         "case_type_amounts": _grouped_amount_payload(case_type_amounts),
         "country_amounts": _grouped_amount_payload(country_amounts),
+        "agent_service_amounts": _agent_service_amount_payload(agent_service_amounts),
     }
 
 

@@ -67,6 +67,7 @@ interface BackendFeeDraftReportSummary {
     client_amounts?: BackendFeeDraftGroupedAmount[]
     case_type_amounts?: BackendFeeDraftGroupedAmount[]
     country_amounts?: BackendFeeDraftGroupedAmount[]
+    agent_service_amounts?: BackendFeeDraftAgentServiceAmount[]
 }
 
 interface BackendFeeDraftGroupedAmount {
@@ -76,6 +77,13 @@ interface BackendFeeDraftGroupedAmount {
     service_fee_amount: string | number
     government_fee_amount: string | number
     income_amount: string | number
+}
+
+interface BackendFeeDraftAgentServiceAmount {
+    key: string
+    label: string
+    draft_count: number
+    service_fee_amount: string | number
 }
 
 interface BackendFeeDraftListResponse extends Pagination<BackendFeeDraftListItem> {
@@ -173,6 +181,7 @@ function mapFeeDraftReportSummary(input: BackendFeeDraftReportSummary): FeeDraft
         client_amounts: (input.client_amounts || []).map(mapFeeDraftGroupedAmount),
         case_type_amounts: (input.case_type_amounts || []).map(mapFeeDraftGroupedAmount),
         country_amounts: (input.country_amounts || []).map(mapFeeDraftGroupedAmount),
+        agent_service_amounts: (input.agent_service_amounts || []).map(mapFeeDraftAgentServiceAmount),
     }
 }
 
@@ -184,6 +193,15 @@ function mapFeeDraftGroupedAmount(input: BackendFeeDraftGroupedAmount) {
         service_fee_amount: Number(input.service_fee_amount || 0),
         government_fee_amount: Number(input.government_fee_amount || 0),
         income_amount: Number(input.income_amount || 0),
+    }
+}
+
+function mapFeeDraftAgentServiceAmount(input: BackendFeeDraftAgentServiceAmount) {
+    return {
+        key: input.key,
+        label: input.label,
+        draft_count: Number(input.draft_count || 0),
+        service_fee_amount: Number(input.service_fee_amount || 0),
     }
 }
 

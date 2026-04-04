@@ -91,6 +91,7 @@ export interface FeeDraftReportSummary {
     client_amounts: FeeDraftGroupedAmount[]
     case_type_amounts: FeeDraftGroupedAmount[]
     country_amounts: FeeDraftGroupedAmount[]
+    agent_service_amounts: FeeDraftAgentServiceAmount[]
 }
 
 export interface FeeDraftGroupedAmount {
@@ -100,6 +101,13 @@ export interface FeeDraftGroupedAmount {
     service_fee_amount: FeeMoney
     government_fee_amount: FeeMoney
     income_amount: FeeMoney
+}
+
+export interface FeeDraftAgentServiceAmount {
+    key: string
+    label: string
+    draft_count: number
+    service_fee_amount: FeeMoney
 }
 
 export interface FeeDraftListResponse {

@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import sessionmaker
 
+from app.modules.cases.models import T_CaseAgentSplit
 from app.modules.fees.models import FeeDraft, FeeItem
 from app.modules.fees.service import recalc_fee_draft_totals
 
@@ -41,6 +42,7 @@ def _create_case(
     case_type: str = "NORMAL",
     from_country: str | None = None,
     to_country: str | None = None,
+    primary_agent_id: str | None = None,
 ) -> dict:
     resp = client.post(
         "/api/v1/cases",
@@ -53,12 +55,32 @@ def _create_case(
             "title_cn": f"{case_tag} 案件",
             "from_country": from_country,
             "to_country": to_country,
+            "primary_agent_id": primary_agent_id,
             "applicants": [{"seq": 1, "is_first": True, "name_cn": f"{case_tag} 申请人"}],
         },
         headers=auth_headers,
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+def _insert_case_agent_splits(
+    session_factory: sessionmaker,
+    *,
+    case_id: str,
+    rows: list[tuple[str, str | None, str]],
+) -> None:
+    with session_factory() as db:
+        for agent_id, role, share_ratio in rows:
+            db.add(
+                T_CaseAgentSplit(
+                    case_id=case_id,
+                    agent_id=agent_id,
+                    role=role,
+                    share_ratio=Decimal(share_ratio),
+                )
+            )
+        db.commit()
 
 
 def _create_bill_from_drafts(client, auth_headers, *, draft_ids: list[str]) -> dict:
@@ -420,3 +442,76 @@ def test_fee_drafts_report_returns_grouped_amount_summaries(
     assert country_amounts["US"]["draft_count"] == 1
     assert Decimal(str(country_amounts["未填写"]["income_amount"])) == Decimal("50.00")
     assert country_amounts["未填写"]["draft_count"] == 1
+
+
+def test_fee_drafts_report_returns_agent_service_amount_summaries(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+) -> None:
+    client_a = _create_client(client, auth_headers, name_prefix="FEE-RPT-AGENT-A")
+    client_b = _create_client(client, auth_headers, name_prefix="FEE-RPT-AGENT-B")
+    case_a = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a["id"],
+        case_tag="FEE-AGENT-CASE-A",
+        primary_agent_id="AGENT-FALLBACK",
+    )
+    case_b = _create_case(
+        client,
+        auth_headers,
+        client_id=client_b["id"],
+        case_tag="FEE-AGENT-CASE-B",
+        primary_agent_id="AGENT-PRIMARY-CONTEXT",
+    )
+    _insert_case_agent_splits(
+        session_factory,
+        case_id=case_b["id"],
+        rows=[
+            ("AGENT-SPLIT-A", "PRIMARY", "60"),
+            ("AGENT-SPLIT-B", "SECONDARY", "40"),
+        ],
+    )
+
+    _insert_fee_draft(
+        session_factory,
+        case_id=case_a["id"],
+        client_id=client_a["id"],
+        draft_type="SERVICE_REPORT",
+        currency="KRW",
+        status="OPEN",
+        created_at=datetime(2026, 3, 21, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "100.00"), ("GOV", "20.00")],
+    )
+    _insert_fee_draft(
+        session_factory,
+        case_id=case_b["id"],
+        client_id=client_b["id"],
+        draft_type="SERVICE_REPORT",
+        currency="KRW",
+        status="OPEN",
+        created_at=datetime(2026, 3, 22, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "80.00"), ("MISC", "5.00")],
+    )
+
+    resp = client.get(
+        FEE_DRAFTS_URL,
+        params={
+            "currency": "KRW",
+            "date_from": "2026-03-21",
+            "date_to": "2026-03-22",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    summary = resp.json()["summary"]
+
+    agent_amounts = {item["key"]: item for item in summary["agent_service_amounts"]}
+    assert Decimal(str(agent_amounts["AGENT-FALLBACK"]["service_fee_amount"])) == Decimal("100.00")
+    assert agent_amounts["AGENT-FALLBACK"]["draft_count"] == 1
+    assert Decimal(str(agent_amounts["AGENT-SPLIT-A"]["service_fee_amount"])) == Decimal("48.00")
+    assert agent_amounts["AGENT-SPLIT-A"]["draft_count"] == 1
+    assert Decimal(str(agent_amounts["AGENT-SPLIT-B"]["service_fee_amount"])) == Decimal("32.00")
+    assert agent_amounts["AGENT-SPLIT-B"]["draft_count"] == 1
+    assert "AGENT-PRIMARY-CONTEXT" not in agent_amounts

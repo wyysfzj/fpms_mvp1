@@ -1,0 +1,2 @@
+{"ts":"20260404T233208","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/fees.ts\ src/api/fees.types.ts\ src/modules/fees/pages/FeeDraftList.vue"}
+{"ts":"20260404T233208","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
