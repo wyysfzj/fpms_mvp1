@@ -1,0 +1,5 @@
+## master
+?? docs/superpowers/plans/2026-04-04-fee-report-agent-income.md
+?? docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md
+?? tasks/postenhancement/backend/FEERPT-INCOME-SPEC-01.md
+?? tasks/postenhancement/backend/FEERPT-QA-INCOME-SPEC-01.md

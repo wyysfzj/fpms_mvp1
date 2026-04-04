@@ -1,0 +1,12 @@
+tasks/postenhancement/backend/FEERPT-INCOME-SPEC-01.md:3:- exact closure slice: freeze the source-of-truth and fallback semantics for `RPT-FEE` agent-attributed service income before implementation
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:19:- `T_CaseAgentSplit`
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:43:- 冻结 `agent-attributed service income` 的 source-of-truth
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:61:  - `T_CaseAgentSplit`
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:67:    - 否则 fallback 到 `primary_agent_id = 100%`
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:75:- `T_CaseAgentSplit` 是 agent-income attribution 的首要 authority
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:76:- 当某案件存在当前有效 `T_CaseAgentSplit` rows 时：
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:82:- 当某案件不存在 `T_CaseAgentSplit` rows 时：
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:83:  - fallback 到 `primary_agent_id = 100%`
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:97:- 第一轮继续以 `T_FeeDraft.total_service` 为 amount source
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:113:- `agent-attributed service income` 在当前 carrier 下可直接进入实现
+docs/superpowers/specs/2026-04-04-fee-report-agent-income-design.md:138:- 把 `total_service` 与 billed/received service revenue 混为一谈
