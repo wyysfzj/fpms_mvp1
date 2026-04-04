@@ -1,0 +1,15 @@
+A  artifacts/ANNRPT-QA-RESIDUAL-01/commands.jsonl
+A  artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002422_lint.log
+A  artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002422_test.log
+A  artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002454_test.log
+A  artifacts/ANNRPT-QA-RESIDUAL-01/results.jsonl
+A  artifacts/ANNRPT-QA-RESIDUAL-01/summary.md
+A  artifacts/ANNRPT-RESIDUAL-01/commands.jsonl
+A  artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_lint.log
+A  artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_test.log
+A  artifacts/ANNRPT-RESIDUAL-01/results.jsonl
+A  artifacts/ANNRPT-RESIDUAL-01/summary.md
+A  docs/superpowers/plans/2026-04-05-annuity-report-residual.md
+A  docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md
+A  tasks/postenhancement/backend/ANNRPT-QA-RESIDUAL-01.md
+A  tasks/postenhancement/backend/ANNRPT-RESIDUAL-01.md

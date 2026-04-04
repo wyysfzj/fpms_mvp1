@@ -1,0 +1,377 @@
+diff --git a/artifacts/ANNRPT-QA-RESIDUAL-01/commands.jsonl b/artifacts/ANNRPT-QA-RESIDUAL-01/commands.jsonl
+new file mode 100644
+index 0000000..292e166
+--- /dev/null
++++ b/artifacts/ANNRPT-QA-RESIDUAL-01/commands.jsonl
+@@ -0,0 +1,3 @@
++{"ts":"20260405T002422","step":"lint","cmd":"test -f tasks/postenhancement/backend/ANNRPT-QA-RESIDUAL-01.md"}
++{"ts":"20260405T002422","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/ANNRPT-RESIDUAL-01/summary.md\ \|\|\ true"}
++{"ts":"20260405T002454","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/ANNRPT-RESIDUAL-01/summary.md\ \&\&\ rg\ -n\ \'ANNRPT-AMOUNT-SPEC-01\|success-rate\|no\ product\ implementation\'\ artifacts/ANNRPT-RESIDUAL-01/summary.md\ docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md"}
+diff --git a/artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002422_lint.log b/artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002422_lint.log
+new file mode 100644
+index 0000000..e69de29
+diff --git a/artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002422_test.log b/artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002422_test.log
+new file mode 100644
+index 0000000..e69de29
+diff --git a/artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002454_test.log b/artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002454_test.log
+new file mode 100644
+index 0000000..d06d980
+--- /dev/null
++++ b/artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002454_test.log
+@@ -0,0 +1,10 @@
++artifacts/ANNRPT-RESIDUAL-01/summary.md:7:- `rg -n 'T_AnnuityTask|T_GovPayment|T_CaseReceipt|ANNRPT-AMOUNT-SPEC-01|success-rate' docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md`
++artifacts/ANNRPT-RESIDUAL-01/summary.md:12:- Identified grouped amount reporting and monitoring success-rate semantics as the remaining residual buckets.
++artifacts/ANNRPT-RESIDUAL-01/summary.md:13:- Recommended `ANNRPT-AMOUNT-SPEC-01` as the next prerequisite slice.
++docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:126:### Residual bucket B — monitoring success-rate semantics
++docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:141:- `ANNRPT-AMOUNT-SPEC-01`
++docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:154:- monitoring success-rate implementation
++docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:163:- If later success-rate semantics require new state derivation beyond current carriers, that must be assessed as a separate follow-up story
++docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:169:- Folding grouped payment summaries and success-rate semantics into one next slice
++docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:180:- no product implementation
++docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:182:- no chart/export/success-rate implementation
+diff --git a/artifacts/ANNRPT-QA-RESIDUAL-01/results.jsonl b/artifacts/ANNRPT-QA-RESIDUAL-01/results.jsonl
+new file mode 100644
+index 0000000..ff04007
+--- /dev/null
++++ b/artifacts/ANNRPT-QA-RESIDUAL-01/results.jsonl
+@@ -0,0 +1,3 @@
++{"ts":"20260405T002422","step":"lint","rc":0,"log":"artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002422_lint.log"}
++{"ts":"20260405T002422","step":"test","rc":0,"log":"artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002422_test.log"}
++{"ts":"20260405T002454","step":"test","rc":0,"log":"artifacts/ANNRPT-QA-RESIDUAL-01/outputs/20260405T002454_test.log"}
+diff --git a/artifacts/ANNRPT-QA-RESIDUAL-01/summary.md b/artifacts/ANNRPT-QA-RESIDUAL-01/summary.md
+new file mode 100644
+index 0000000..0c39ae0
+--- /dev/null
++++ b/artifacts/ANNRPT-QA-RESIDUAL-01/summary.md
+@@ -0,0 +1,14 @@
++# Summary
++
++## Commands
++- `test -f tasks/postenhancement/backend/ANNRPT-QA-RESIDUAL-01.md`
++- `test -f artifacts/ANNRPT-RESIDUAL-01/summary.md`
++- `rg -n 'ANNRPT-AMOUNT-SPEC-01|success-rate|no product implementation' artifacts/ANNRPT-RESIDUAL-01/summary.md docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md`
++
++## Results
++- Audited the `RPT-ANN` residual mapping wave.
++- Confirmed this wave only froze residual buckets and next-slice recommendation.
++- Confirmed no annuity FE/BE product implementation or close update was absorbed.
++
++## Notes
++- QA close is limited to evidence and scope compliance for the doc-only residual wave.
+diff --git a/artifacts/ANNRPT-RESIDUAL-01/commands.jsonl b/artifacts/ANNRPT-RESIDUAL-01/commands.jsonl
+new file mode 100644
+index 0000000..5f2645b
+--- /dev/null
++++ b/artifacts/ANNRPT-RESIDUAL-01/commands.jsonl
+@@ -0,0 +1,2 @@
++{"ts":"20260405T002422","step":"lint","cmd":"test -f docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md"}
++{"ts":"20260405T002422","step":"test","cmd":"/bin/zsh -lc test\ -f\ docs/superpowers/plans/2026-04-05-annuity-report-residual.md\ \&\&\ test\ -f\ tasks/postenhancement/backend/ANNRPT-RESIDUAL-01.md\ \&\&\ rg\ -n\ \'T_AnnuityTask\|T_GovPayment\|T_CaseReceipt\|ANNRPT-AMOUNT-SPEC-01\|success-rate\'\ docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md"}
+diff --git a/artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_lint.log b/artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_lint.log
+new file mode 100644
+index 0000000..e69de29
+diff --git a/artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_test.log b/artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_test.log
+new file mode 100644
+index 0000000..80f8a82
+--- /dev/null
++++ b/artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_test.log
+@@ -0,0 +1,11 @@
++19:- 基于 `T_GovPayment` 与 `T_CaseReceipt` 的支付 / 收款视角
++100:- 当前 first-round 主要以 `T_AnnuityTask` 为 carrier
++102:  - `T_AnnuityTask`
++103:  - `T_GovPayment`
++104:  - `T_CaseReceipt`
++126:### Residual bucket B — monitoring success-rate semantics
++141:- `ANNRPT-AMOUNT-SPEC-01`
++154:- monitoring success-rate implementation
++163:- If later success-rate semantics require new state derivation beyond current carriers, that must be assessed as a separate follow-up story
++169:- Folding grouped payment summaries and success-rate semantics into one next slice
++182:- no chart/export/success-rate implementation
+diff --git a/artifacts/ANNRPT-RESIDUAL-01/results.jsonl b/artifacts/ANNRPT-RESIDUAL-01/results.jsonl
+new file mode 100644
+index 0000000..337edeb
+--- /dev/null
++++ b/artifacts/ANNRPT-RESIDUAL-01/results.jsonl
+@@ -0,0 +1,2 @@
++{"ts":"20260405T002422","step":"lint","rc":0,"log":"artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_lint.log"}
++{"ts":"20260405T002422","step":"test","rc":0,"log":"artifacts/ANNRPT-RESIDUAL-01/outputs/20260405T002422_test.log"}
+diff --git a/artifacts/ANNRPT-RESIDUAL-01/summary.md b/artifacts/ANNRPT-RESIDUAL-01/summary.md
+new file mode 100644
+index 0000000..522b970
+--- /dev/null
++++ b/artifacts/ANNRPT-RESIDUAL-01/summary.md
+@@ -0,0 +1,17 @@
++# Summary
++
++## Commands
++- `test -f docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md`
++- `test -f docs/superpowers/plans/2026-04-05-annuity-report-residual.md`
++- `test -f tasks/postenhancement/backend/ANNRPT-RESIDUAL-01.md`
++- `rg -n 'T_AnnuityTask|T_GovPayment|T_CaseReceipt|ANNRPT-AMOUNT-SPEC-01|success-rate' docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md`
++
++## Results
++- Froze `RPT-ANN` residual capability map after the first-round annuity-task report slice.
++- Separated the current implemented task-summary slice from spec-level annuity payable / paid / received reporting.
++- Identified grouped amount reporting and monitoring success-rate semantics as the remaining residual buckets.
++- Recommended `ANNRPT-AMOUNT-SPEC-01` as the next prerequisite slice.
++
++## Notes
++- This wave does not implement any annuity-report product behavior.
++- `PayList` and `GovPayment` operational pages are not treated as automatic proof of `RPT-ANN` closure.
+diff --git a/docs/superpowers/plans/2026-04-05-annuity-report-residual.md b/docs/superpowers/plans/2026-04-05-annuity-report-residual.md
+new file mode 100644
+index 0000000..9830d54
+--- /dev/null
++++ b/docs/superpowers/plans/2026-04-05-annuity-report-residual.md
+@@ -0,0 +1,48 @@
++# ANNRPT-RESIDUAL-01 Plan
++
++## Story Shape Classification
++
++- `shared_file_density`: `low`
++- `prereq_dependency_density`: `low`
++- `be_fe_coupling`: `residual decomposition after implemented first-round slice`
++- `evidence_cost`: `medium`
++
++## chosen_runbook
++
++- `P0-single-lane-story`
++
++## Batch Manifest
++
++| Task ID | Owner | Allowlist | Dependency Notes | Exact Closure Slice | Explicit Non-closure |
++|---|---|---|---|---|---|
++| `ANNRPT-RESIDUAL-01` | main thread | `docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md`, `docs/superpowers/plans/2026-04-05-annuity-report-residual.md`, `tasks/postenhancement/backend/ANNRPT-RESIDUAL-01.md`, `tasks/postenhancement/backend/ANNRPT-QA-RESIDUAL-01.md` | Depends on current `RPT-ANN` product evidence and existing `ANNRPT-*` artifacts | Freeze `RPT-ANN` residual capability map and recommend one next implementation/prerequisite slice | No product implementation, no re-close of first-round annuity report, no chart/export/success-rate implementation |
++| `ANNRPT-QA-RESIDUAL-01` | main thread | `artifacts/ANNRPT-RESIDUAL-01/**`, `artifacts/ANNRPT-QA-RESIDUAL-01/**`, `tasks/postenhancement/backend/ANNRPT-QA-RESIDUAL-01.md` | Runs after residual mapping closure | Audit evidence and close summary for the annuity-report residual map | No product-code changes |
++
++## First Follow-up Recommendation
++
++- `ANNRPT-AMOUNT-SPEC-01`
++  - freeze grouped client/country/year payable / official-paid / client-received semantics
++  - no success-rate semantics in the same slice
++
++## Serialized Shared-file Decisions
++
++- This wave is doc-only; no FE/BE product shared files are touched
++- The next implementation/prerequisite slice should serialize:
++  - `backend/app/modules/annuity/api.py`
++  - `backend/app/modules/annuity/service.py`
++  - `backend/app/modules/annuity/schemas.py`
++  - `frontend/src/api/annuity.ts`
++  - `frontend/src/api/annuity.types.ts`
++  - `frontend/src/modules/annuity/pages/AnnuityTaskList.vue`
++
++## Verification
++
++- `./scripts/task_validate.sh ANNRPT-RESIDUAL-01`
++- `./scripts/task_validate.sh ANNRPT-QA-RESIDUAL-01`
++
++## Done Definition
++
++- first-round implemented slice is explicitly separated from residual spec gap
++- residual buckets are explicit
++- one first residual prerequisite/implementation slice is recommended
++- required artifacts exist and both task gates pass
+diff --git a/docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md b/docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md
+new file mode 100644
+index 0000000..198021f
+--- /dev/null
++++ b/docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md
+@@ -0,0 +1,187 @@
++# RPT-ANN Residual Design
++
++## Story Shape Classification
++
++- `shared_file_density`: `low`
++- `prereq_dependency_density`: `low`
++- `be_fe_coupling`: `residual decomposition after implemented first-round slice`
++- `evidence_cost`: `medium`
++
++## chosen_runbook
++
++- `P0-single-lane-story`
++
++## Problem Statement
++
++`RPT-ANN` 当前不能再诚实地描述为“未实现”，但也不能直接判定为 full-spec 闭合。现有仓库已经具备第一轮年费统计报表产品切片：`GET /annuity/tasks` 提供 report-style summary，`AnnuityTaskList.vue` 提供筛选、summary cards、分布统计和明细列表。但对照 `FPMS SPEC 2.0` `9.4.3`，当前 family 仍缺少：
++
++- 按国别 / 客户 / 年份的年费应缴 / 实缴统计
++- 基于 `T_GovPayment` 与 `T_CaseReceipt` 的支付 / 收款视角
++- 年费监视项目成功率语义
++
++因此下一步不应重做已完成的 first-round annuity task report，而应先冻结 residual map。
++
++## Assumptions
++
++- `ANNRPT-BE-01` / `ANNRPT-FE-01` / `ANNRPT-QA-01` 的 first-round closure 继续有效
++- `RPT-ANN` 的 first-round 权威产品切片固定为：
++  - `frontend/src/modules/annuity/pages/AnnuityTaskList.vue`
++  - `backend/app/modules/annuity/api.py`
++  - `backend/app/modules/annuity/service.py`
++  - `frontend/src/api/annuity.ts`
++  - `frontend/src/api/annuity.types.ts`
++- `PayList.vue`、`PayListDetail.vue`、`GovPaymentCreate.vue` 是相关年费支付能力，但不自动等于 `RPT-ANN` full-family closure authority
++- 关闭标准仍固定为：
++  - 只有真实产品行为存在，才允许新增 residual capability 计入 closure
++
++## Scope
++
++- 对 `RPT-ANN` 做 strict residual capability map
++- 明确 first-round already closed slice
++- 明确相对 `FPMS SPEC 2.0 9.4.3` 仍缺的 grouped dimensions / metrics / source semantics
++- 推荐一个最小 residual implementation slice
++
++## Explicit Non-scope
++
++- 不重做 `ANNRPT-BE-01`
++- 不重做 `ANNRPT-FE-01`
++- 不做任何年费统计产品实现补丁
++- 不做图表 / 导出 / 预测分析
++
++## Current Implemented Slice
++
++### Existing product evidence
++
++- `frontend/src/modules/annuity/pages/AnnuityTaskList.vue`
++- `backend/app/modules/annuity/api.py`
++- `backend/app/modules/annuity/service.py`
++- `frontend/src/api/annuity.ts`
++- `frontend/src/api/annuity.types.ts`
++- `artifacts/ANNRPT-BE-01/**`
++- `artifacts/ANNRPT-FE-01/**`
++- `artifacts/ANNRPT-QA-01/**`
++
++### Already closed under first-round interpretation
++
++- approved report filters:
++  - `client_id`
++  - `case_id`
++  - `country`
++  - `annuity_year`
++  - `task_status`
++  - `payment_status` as minimal/no-op-compatible field
++  - `date_range`
++  - `notice_status`
++- summary cards:
++  - `total_task_count`
++  - `open_task_count`
++  - `done_task_count`
++  - `overdue_task_count`
++- distributions:
++  - `status_counts`
++  - `year_counts`
++- existing detail list retained as the detail portion of the report
++
++## Residual Spec Gap vs `FPMS SPEC 2.0`
++
++### Spec-required examples not yet closed
++
++- 按国别 / 客户 / 年份统计年费应缴 / 实缴情况
++- 年费监视项目成功率（监视案件中按时缴费比例）
++
++### Residual dimensions not yet represented as summary output
++
++- `Country` grouped payment statistics
++- `Client` grouped payment statistics
++- `Year` grouped payable / paid / received amounts
++
++### Residual source semantics not yet closed
++
++- 当前 first-round 主要以 `T_AnnuityTask` 为 carrier
++- spec `9.4.3` 明确推荐主数据来源：
++  - `T_AnnuityTask`
++  - `T_GovPayment`
++  - `T_CaseReceipt`
++- 因此当前 family 仍缺：
++  - 年费应缴金额 authority
++  - 官方实缴金额 authority
++  - 客户实收金额 authority
++  - “成功率” 的分子 / 分母 / 是否按时口径
++
++### Residual metrics not yet represented as summary output
++
++- grouped payable totals
++- grouped official paid totals
++- grouped client received totals
++- monitoring success rate
++
++## Residual Decomposition Recommendation
++
++### Residual bucket A — grouped annuity payable / paid summaries
++
++- by client totals
++- by country totals
++- by year totals
++
++### Residual bucket B — monitoring success-rate semantics
++
++- numerator / denominator
++- on-time definition
++- abandoned / terminated inclusion rules
++
++### Residual bucket C — payment-status truth semantics
++
++- relationship between:
++  - `AnnuityTask.status`
++  - `GovPayment.status / paid_date / paid_amount`
++  - `CaseReceipt.received_amt`
++
++## Recommended First Residual Slice
++
++- `ANNRPT-AMOUNT-SPEC-01`
++- exact closure candidate:
++  - freeze `payable / official-paid / client-received` source semantics
++  - decide whether grouped client/country/year amount summaries can directly enter implementation
++
++### Why this is recommended first
++
++- It directly addresses the main spec gap in `9.4.3`
++- It is narrower and less ambiguous than “success rate”
++- It avoids mixing grouped financial amounts and monitoring-success semantics into one first residual slice
++
++## Residuals Explicitly Deferred
++
++- monitoring success-rate implementation
++- chart / export
++- predictive payment forecasting
++- cross-page pay-list analytics shell
++
++## SQLite / Phase Compatibility Assessment
++
++- This residual mapping story is doc-only and compatible
++- The recommended first residual slice appears achievable without schema change
++- If later success-rate semantics require new state derivation beyond current carriers, that must be assessed as a separate follow-up story
++
++## Risks / Blockers
++
++- Treating `AnnuityTaskList.vue` status/year summary as proof that `RPT-ANN` already matches spec `9.4.3`
++- Treating `PayList` or `GovPayment` operational pages as automatic proof of annuity-report closure
++- Folding grouped payment summaries and success-rate semantics into one next slice
++
++## Exact Closure Slice Candidates
++
++### Preferred
++
++- `ANNRPT-RESIDUAL-01`
++  - freeze residual annuity-report map and first residual implementation recommendation
++
++### Explicit non-closure
++
++- no product implementation
++- no re-close of first-round `ANNRPT-*`
++- no chart/export/success-rate implementation
++
++## Design Conclusion
++
++- `可在当前约束下拆成可执行原子任务`
++- The atomic task should be a doc-only residual mapping story before any new annuity-report implementation slice.
+diff --git a/tasks/postenhancement/backend/ANNRPT-QA-RESIDUAL-01.md b/tasks/postenhancement/backend/ANNRPT-QA-RESIDUAL-01.md
+new file mode 100644
+index 0000000..5742eb0
+--- /dev/null
++++ b/tasks/postenhancement/backend/ANNRPT-QA-RESIDUAL-01.md
+@@ -0,0 +1,5 @@
++# ANNRPT-QA-RESIDUAL-01
++
++- exact closure slice: audit evidence and close summary for the `RPT-ANN` residual mapping wave
++- explicit non-closure: no product-code changes, no chart/export work, no success-rate implementation, no close-decision update
++- remaining follow-up task ids: `None`

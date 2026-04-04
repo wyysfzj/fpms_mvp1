@@ -1,0 +1,10 @@
+artifacts/ANNRPT-RESIDUAL-01/summary.md:7:- `rg -n 'T_AnnuityTask|T_GovPayment|T_CaseReceipt|ANNRPT-AMOUNT-SPEC-01|success-rate' docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md`
+artifacts/ANNRPT-RESIDUAL-01/summary.md:12:- Identified grouped amount reporting and monitoring success-rate semantics as the remaining residual buckets.
+artifacts/ANNRPT-RESIDUAL-01/summary.md:13:- Recommended `ANNRPT-AMOUNT-SPEC-01` as the next prerequisite slice.
+docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:126:### Residual bucket B — monitoring success-rate semantics
+docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:141:- `ANNRPT-AMOUNT-SPEC-01`
+docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:154:- monitoring success-rate implementation
+docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:163:- If later success-rate semantics require new state derivation beyond current carriers, that must be assessed as a separate follow-up story
+docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:169:- Folding grouped payment summaries and success-rate semantics into one next slice
+docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:180:- no product implementation
+docs/superpowers/specs/2026-04-05-annuity-report-residual-design.md:182:- no chart/export/success-rate implementation

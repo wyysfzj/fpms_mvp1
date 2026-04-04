@@ -1,0 +1,11 @@
+19:- 基于 `T_GovPayment` 与 `T_CaseReceipt` 的支付 / 收款视角
+100:- 当前 first-round 主要以 `T_AnnuityTask` 为 carrier
+102:  - `T_AnnuityTask`
+103:  - `T_GovPayment`
+104:  - `T_CaseReceipt`
+126:### Residual bucket B — monitoring success-rate semantics
+141:- `ANNRPT-AMOUNT-SPEC-01`
+154:- monitoring success-rate implementation
+163:- If later success-rate semantics require new state derivation beyond current carriers, that must be assessed as a separate follow-up story
+169:- Folding grouped payment summaries and success-rate semantics into one next slice
+182:- no chart/export/success-rate implementation
