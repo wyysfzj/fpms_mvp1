@@ -1,0 +1,7 @@
+## master
+ M frontend/src/api/cases.ts
+ M frontend/src/api/cases.types.ts
+?? docs/superpowers/plans/2026-04-04-docwiz-step5-template-source-prereq.md
+?? docs/superpowers/specs/2026-04-04-docwiz-step5-template-source-prereq-design.md
+?? tasks/postenhancement/backend/DOCWIZ-QA-STEP5-PREREQ-01.md
+?? tasks/postenhancement/backend/DOCWIZ-STEP5-PREREQ-01.md

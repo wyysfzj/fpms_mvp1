@@ -1,0 +1,2 @@
+{"ts":"20260404T175610","step":"lint","cmd":"./scripts/task_validate.sh DOCWIZ-STEP5-PREREQ-01"}
+{"ts":"20260404T175610","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/DOCWIZ-STEP5-PREREQ-01/summary.md\ \&\&\ test\ -f\ artifacts/DOCWIZ-STEP5-PREREQ-01/git/diff.patch"}

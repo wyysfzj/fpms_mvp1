@@ -1,0 +1,30 @@
+diff --git a/frontend/src/api/cases.ts b/frontend/src/api/cases.ts
+index 1457770..7e04afe 100644
+--- a/frontend/src/api/cases.ts
++++ b/frontend/src/api/cases.ts
+@@ -439,6 +439,13 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
+             prio_no: trimToUndefined(priority.prio_no),
+             prio_date: trimToUndefined(priority.prio_date),
+         })),
++        agent_splits: data.agent_splits?.map((agentSplit) => ({
++            agent_id: trimToUndefined(agentSplit.agent_id),
++            role: trimToUndefined(agentSplit.role),
++            share_ratio: agentSplit.share_ratio === null || agentSplit.share_ratio === undefined
++                ? null
++                : agentSplit.share_ratio,
++        })),
+         bio_deposits: data.bio_deposits
+             ?.map((bioDeposit) => ({
+                 seq: bioDeposit.seq,
+diff --git a/frontend/src/api/cases.types.ts b/frontend/src/api/cases.types.ts
+index 12c767d..49175dd 100644
+--- a/frontend/src/api/cases.types.ts
++++ b/frontend/src/api/cases.types.ts
+@@ -213,6 +213,7 @@ export interface CaseCreatePayload {
+     applicant_kind?: string
+     applicants?: CaseApplicant[]
+     priorities?: CasePriority[]
++    agent_splits?: CaseAgentSplit[]
+ }
+ 
+ export interface CaseUpdatePayload {
