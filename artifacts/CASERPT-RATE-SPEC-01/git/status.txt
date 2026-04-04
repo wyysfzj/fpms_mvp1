@@ -1,0 +1,5 @@
+## master
+?? docs/superpowers/plans/2026-04-04-case-report-grant-rate.md
+?? docs/superpowers/specs/2026-04-04-case-report-grant-rate-design.md
+?? tasks/postenhancement/backend/CASERPT-QA-RATE-SPEC-01.md
+?? tasks/postenhancement/backend/CASERPT-RATE-SPEC-01.md

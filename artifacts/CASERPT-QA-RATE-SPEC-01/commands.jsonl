@@ -1,0 +1,2 @@
+{"ts":"20260404T210322","step":"lint","cmd":"/bin/zsh -lc test\ -f\ tasks/postenhancement/backend/CASERPT-QA-RATE-SPEC-01.md\ \&\&\ test\ -d\ artifacts/CASERPT-RATE-SPEC-01"}
+{"ts":"20260404T210323","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/CASERPT-RATE-SPEC-01/results.jsonl"}

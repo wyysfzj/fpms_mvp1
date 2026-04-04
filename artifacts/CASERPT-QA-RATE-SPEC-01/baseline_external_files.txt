@@ -1,0 +1,2 @@
+Pre-existing dirty files outside this task's claimed closure were present at task start:
+- `tasks/postenhancement/backend/CASERPT-QA-RATE-SPEC-01.md`
