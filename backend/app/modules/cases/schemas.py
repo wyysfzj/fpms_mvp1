@@ -328,6 +328,8 @@ class CaseReportSummaryResponse(BaseModel):
     total_case_count: int = 0
     status_counts: list[CaseReportCountResponse] = Field(default_factory=list)
     case_type_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+    country_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+    agent_counts: list[CaseReportCountResponse] = Field(default_factory=list)
 
 
 class CaseListReportResponse(BaseModel):

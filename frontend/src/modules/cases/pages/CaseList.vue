@@ -167,6 +167,14 @@
         <span class="summary-label">类型分布</span>
         <span class="summary-value">{{ summary.case_type_counts.length }} 类</span>
       </div>
+      <div class="summary-card">
+        <span class="summary-label">国别分布</span>
+        <span class="summary-value">{{ summary.country_counts.length }} 类</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">代理人分布</span>
+        <span class="summary-value">{{ summary.agent_counts.length }} 人</span>
+      </div>
     </div>
 
     <div class="distribution-grid">
@@ -197,6 +205,34 @@
           </div>
         </div>
         <div v-else class="distribution-empty">暂无类型统计</div>
+      </div>
+      <div class="distribution-card">
+        <div class="distribution-title">按国别统计</div>
+        <div v-if="summary.country_counts.length" class="distribution-list">
+          <div
+            v-for="item in summary.country_counts"
+            :key="`country-${item.key}`"
+            class="distribution-item"
+          >
+            <span>{{ countryLabel(item.key) }}</span>
+            <span class="distribution-count">{{ item.count }} 件</span>
+          </div>
+        </div>
+        <div v-else class="distribution-empty">暂无国别统计</div>
+      </div>
+      <div class="distribution-card">
+        <div class="distribution-title">按代理人统计</div>
+        <div v-if="summary.agent_counts.length" class="distribution-list">
+          <div
+            v-for="item in summary.agent_counts"
+            :key="`agent-${item.key}`"
+            class="distribution-item"
+          >
+            <span>{{ agentLabel(item.key) }}</span>
+            <span class="distribution-count">{{ item.count }} 件</span>
+          </div>
+        </div>
+        <div v-else class="distribution-empty">暂无代理人统计</div>
       </div>
     </div>
 
@@ -316,6 +352,8 @@ const summary = ref<CaseListResponse['summary']>({
   total_case_count: 0,
   status_counts: [],
   case_type_counts: [],
+  country_counts: [],
+  agent_counts: [],
 })
 
 // Client options for selector
@@ -456,6 +494,14 @@ function caseTypeLabel(value?: string) {
   }
 }
 
+function countryLabel(value?: string) {
+  return value || '未填写'
+}
+
+function agentLabel(value?: string) {
+  return value || '未分配'
+}
+
 // Watch for pagination and filter changes
 watch([page, pageSize], () => {
   fetchCases()
@@ -487,7 +533,7 @@ onMounted(() => {
 
 .report-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }

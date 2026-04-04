@@ -99,6 +99,8 @@ interface BackendCaseListResponse {
         total_case_count?: number
         status_counts?: Array<{ key: string; count: number }>
         case_type_counts?: Array<{ key: string; count: number }>
+        country_counts?: Array<{ key: string; count: number }>
+        agent_counts?: Array<{ key: string; count: number }>
     }
 }
 
@@ -379,6 +381,8 @@ export async function getCases(params: CaseListParams = {}): Promise<CaseListRes
             total_case_count: response.data.summary?.total_case_count || 0,
             status_counts: response.data.summary?.status_counts || [],
             case_type_counts: response.data.summary?.case_type_counts || [],
+            country_counts: response.data.summary?.country_counts || [],
+            agent_counts: response.data.summary?.agent_counts || [],
         },
     }
 }
@@ -438,6 +442,13 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
             country_code: trimToUndefined(priority.country_code),
             prio_no: trimToUndefined(priority.prio_no),
             prio_date: trimToUndefined(priority.prio_date),
+        })),
+        agent_splits: data.agent_splits?.map((agentSplit) => ({
+            agent_id: trimToUndefined(agentSplit.agent_id),
+            role: trimToUndefined(agentSplit.role),
+            share_ratio: agentSplit.share_ratio === null || agentSplit.share_ratio === undefined
+                ? null
+                : agentSplit.share_ratio,
         })),
         bio_deposits: data.bio_deposits
             ?.map((bioDeposit) => ({

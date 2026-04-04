@@ -141,6 +141,8 @@ export interface CaseListSummary {
     total_case_count: number
     status_counts: CaseReportCount[]
     case_type_counts: CaseReportCount[]
+    country_counts: CaseReportCount[]
+    agent_counts: CaseReportCount[]
 }
 
 export interface CaseListResponse {
@@ -213,6 +215,7 @@ export interface CaseCreatePayload {
     applicant_kind?: string
     applicants?: CaseApplicant[]
     priorities?: CasePriority[]
+    agent_splits?: CaseAgentSplit[]
 }
 
 export interface CaseUpdatePayload {

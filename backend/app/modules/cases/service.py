@@ -519,6 +519,26 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
         .order_by(Case.case_type.asc())
         .all()
     )
+    country_counts: dict[str, int] = {}
+    agent_counts: dict[str, int] = {}
+    cases = query.with_entities(
+        Case.from_country,
+        Case.to_country,
+        Case.primary_agent_id,
+        Case.second_agent_id,
+    ).all()
+    for from_country, to_country, primary_agent_id, second_agent_id in cases:
+        country_key = (to_country or from_country or "").strip() or "未填写"
+        country_counts[country_key] = country_counts.get(country_key, 0) + 1
+
+        seen_agents: set[str] = set()
+        for agent_id in (primary_agent_id, second_agent_id):
+            normalized = (agent_id or "").strip()
+            if not normalized or normalized in seen_agents:
+                continue
+            seen_agents.add(normalized)
+            agent_counts[normalized] = agent_counts.get(normalized, 0) + 1
+
     return CaseReportSummaryResponse(
         total_case_count=query.count(),
         status_counts=[
@@ -528,6 +548,14 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
         case_type_counts=[
             CaseReportCountResponse(key=case_type_key, count=count)
             for case_type_key, count in case_type_rows
+        ],
+        country_counts=[
+            CaseReportCountResponse(key=country_key, count=count)
+            for country_key, count in sorted(country_counts.items(), key=lambda item: item[0])
+        ],
+        agent_counts=[
+            CaseReportCountResponse(key=agent_key, count=count)
+            for agent_key, count in sorted(agent_counts.items(), key=lambda item: item[0])
         ],
     )
 

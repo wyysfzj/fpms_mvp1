@@ -207,3 +207,62 @@ def test_get_cases_supports_case_report_filters(
     date_payload = date_filtered.json()
     assert date_payload["total"] == 2
     assert {item["id"] for item in date_payload["items"]} == {c2["id"], c3["id"]}
+
+
+def test_get_cases_returns_country_and_agent_grouped_summaries(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    client_a = _create_client(client, auth_headers, name_prefix="CASE-RPT-CLI-D")
+    agent_a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    agent_b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="NOT_FILED",
+        country="CN",
+        primary_agent_id=agent_a,
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="SEARCH",
+        patent_category="INV",
+        status="PENDING",
+        country="US",
+        primary_agent_id=agent_a,
+        second_agent_id=agent_b,
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="DES",
+        status="GRANTED",
+        second_agent_id=agent_b,
+    )
+
+    resp = client.get(
+        "/api/v1/cases",
+        params={"client_id": client_a, "page": 1, "page_size": 20},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    summary = payload["summary"]
+    assert {item["key"]: item["count"] for item in summary["country_counts"]} == {
+        "CN": 1,
+        "US": 1,
+        "未填写": 1,
+    }
+    assert {item["key"]: item["count"] for item in summary["agent_counts"]} == {
+        agent_a: 2,
+        agent_b: 2,
+    }
