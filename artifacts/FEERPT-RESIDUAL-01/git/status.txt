@@ -1,0 +1,5 @@
+## master
+?? docs/superpowers/plans/2026-04-04-fee-report-residual.md
+?? docs/superpowers/specs/2026-04-04-fee-report-residual-design.md
+?? tasks/postenhancement/backend/FEERPT-QA-RESIDUAL-01.md
+?? tasks/postenhancement/backend/FEERPT-RESIDUAL-01.md

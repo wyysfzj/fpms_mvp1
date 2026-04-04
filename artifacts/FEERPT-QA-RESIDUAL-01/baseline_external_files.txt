@@ -1,0 +1,2 @@
+Pre-existing dirty files outside this task's claimed closure were present at task start:
+- `tasks/postenhancement/backend/FEERPT-QA-RESIDUAL-01.md`

@@ -1,0 +1,2 @@
+{"ts":"20260404T212514","step":"lint","cmd":"/bin/zsh -lc test\ -f\ tasks/postenhancement/backend/FEERPT-QA-RESIDUAL-01.md\ \&\&\ test\ -d\ artifacts/FEERPT-RESIDUAL-01"}
+{"ts":"20260404T212514","step":"test","cmd":"/bin/zsh -lc test\ -f\ artifacts/FEERPT-RESIDUAL-01/results.jsonl"}
