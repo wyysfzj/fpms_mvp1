@@ -33,6 +33,7 @@ from app.modules.documents.schemas import (
     DocumentEnvelopePreviewOut,
     DocumentMailingBatchIn,
     DocumentUpdateIn,
+    DocumentWizardAttachmentFinalRowIn,
     DocumentWizardAttachmentPreviewIn,
     DocumentWizardBatchCreateIn,
     DocumentWizardBatchRowIn,
@@ -46,6 +47,7 @@ from app.modules.tasks.models import Task, TaskTemplate
 from app.modules.tasks.service import _create_task_log
 from app.modules.tasks.task_generation_service import TaskGenerationService
 from app.modules.templates.models import Template
+from app.modules.templates.render import TemplateRenderer
 
 
 def _apply_template_defaults(
@@ -385,12 +387,17 @@ def create_document_wizard_batch(
     created_rows: list[tuple[int, Document]] = []
     task_rows_by_row_index: dict[int, list[DocumentWizardTaskFinalRowIn]] = {}
     fee_rows_by_row_index: dict[int, DocumentWizardFeeFinalRowIn] = {}
+    attachment_rows_by_row_index: dict[int, list[DocumentWizardAttachmentFinalRowIn]] = {}
     if data.task_rows:
         task_rows_by_row_index = _group_document_wizard_task_rows(
             data.task_rows, row_count=len(rows)
         )
     if data.fee_rows:
         fee_rows_by_row_index = _group_document_wizard_fee_rows(data.fee_rows, row_count=len(rows))
+    if data.attachment_rows:
+        attachment_rows_by_row_index = _group_document_wizard_attachment_rows(
+            data.attachment_rows, row_count=len(rows)
+        )
     try:
         for idx, row in enumerate(rows, start=1):
             payload = _build_document_wizard_payload(data.defaults, row, template)
@@ -425,6 +432,14 @@ def create_document_wizard_batch(
                 create_fee_draft_from_wizard_row(db, document, explicit_fee_row)
             else:
                 maybe_create_fee_draft(db, document, template)
+            explicit_attachment_rows = attachment_rows_by_row_index.get(idx, [])
+            if explicit_attachment_rows:
+                _create_document_wizard_attachments_from_rows(
+                    db,
+                    document=document,
+                    doc_template=template,
+                    row_attachment_rows=explicit_attachment_rows,
+                )
             TaskGenerationService().generate_from_document(db, document)
             created_rows.append((idx, document))
 
@@ -803,6 +818,79 @@ def _group_document_wizard_fee_rows(
         raise_business_error(
             "DOCUMENT_WIZARD_BATCH_INVALID",
             "Document wizard batch contains invalid fee rows",
+            details={"row_errors": row_errors},
+            status_code=400,
+        )
+
+    return grouped
+
+
+def _group_document_wizard_attachment_rows(
+    attachment_rows: list[DocumentWizardAttachmentFinalRowIn],
+    *,
+    row_count: int,
+) -> dict[int, list[DocumentWizardAttachmentFinalRowIn]]:
+    row_errors: list[dict[str, object]] = []
+    grouped: dict[int, list[DocumentWizardAttachmentFinalRowIn]] = {}
+    seen_keys: set[tuple[int, str, str]] = set()
+
+    for idx, attachment_row in enumerate(attachment_rows, start=1):
+        if attachment_row.row_index < 1 or attachment_row.row_index > row_count:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "row_index",
+                    "code": "ROW_INDEX_OUT_OF_RANGE",
+                    "message": "Attachment row row_index is out of range",
+                    "value": attachment_row.row_index,
+                }
+            )
+            continue
+
+        template_code = _normalize_text(attachment_row.template_code)
+        if not template_code:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "template_code",
+                    "code": "TEMPLATE_CODE_REQUIRED",
+                    "message": "template_code is required",
+                }
+            )
+            continue
+
+        output_file_name = Path(_normalize_text(attachment_row.output_file_name) or "").name
+        if not output_file_name:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "output_file_name",
+                    "code": "OUTPUT_FILE_NAME_REQUIRED",
+                    "message": "output_file_name is required",
+                }
+            )
+            continue
+
+        key = (attachment_row.row_index, template_code.lower(), output_file_name.lower())
+        if key in seen_keys:
+            row_errors.append(
+                {
+                    "row_index": idx,
+                    "field": "output_file_name",
+                    "code": "DUPLICATE_ATTACHMENT_OUTPUT",
+                    "message": "Duplicate attachment output for the same row",
+                    "output_file_name": output_file_name,
+                }
+            )
+            continue
+
+        seen_keys.add(key)
+        grouped.setdefault(attachment_row.row_index, []).append(attachment_row)
+
+    if row_errors:
+        raise_business_error(
+            "DOCUMENT_WIZARD_BATCH_INVALID",
+            "Document wizard batch contains invalid attachment rows",
             details={"row_errors": row_errors},
             status_code=400,
         )
@@ -1400,6 +1488,7 @@ def persist_generated_attachment(
     content_bytes: bytes,
     storage_dir: str,
     mime_type: str | None = None,
+    commit: bool = True,
 ) -> DocAttachment:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
@@ -1430,8 +1519,11 @@ def persist_generated_attachment(
         file_size=len(content_bytes),
     )
     db.add(attachment)
-    db.commit()
-    db.refresh(attachment)
+    if commit:
+        db.commit()
+        db.refresh(attachment)
+    else:
+        db.flush()
     return attachment
 
 
@@ -1493,6 +1585,133 @@ def build_document_template_render_context(
             "template_code": template_code,
         },
     }
+
+
+def _create_document_wizard_attachments_from_rows(
+    db: Session,
+    *,
+    document: Document,
+    doc_template: DocTemplate,
+    row_attachment_rows: list[DocumentWizardAttachmentFinalRowIn],
+) -> None:
+    resolved_template, template_path = resolve_document_template_render_source(
+        db, doc_template=doc_template
+    )
+    renderer = TemplateRenderer()
+    base_context = build_document_template_render_context(db, document=document)
+
+    for attachment_row in row_attachment_rows:
+        if _normalize_text(attachment_row.case_id) != document.case_id:
+            raise_business_error(
+                "DOCUMENT_WIZARD_BATCH_INVALID",
+                "Document wizard batch contains invalid attachment rows",
+                details={
+                    "row_errors": [
+                        {
+                            "row_index": attachment_row.row_index,
+                            "field": "case_id",
+                            "code": "CASE_ID_MISMATCH",
+                            "message": "Attachment row case_id does not match document row case_id",
+                            "case_id": attachment_row.case_id,
+                            "document_case_id": document.case_id,
+                        }
+                    ]
+                },
+                status_code=400,
+            )
+
+        if _normalize_text(attachment_row.template_code) != _normalize_text(doc_template.code):
+            raise_business_error(
+                "DOCUMENT_WIZARD_BATCH_INVALID",
+                "Document wizard batch contains invalid attachment rows",
+                details={
+                    "row_errors": [
+                        {
+                            "row_index": attachment_row.row_index,
+                            "field": "template_code",
+                            "code": "TEMPLATE_CODE_MISMATCH",
+                            "message": "Attachment row template_code does not match batch doc template",
+                            "template_code": attachment_row.template_code,
+                            "expected_template_code": doc_template.code,
+                        }
+                    ]
+                },
+                status_code=400,
+            )
+
+        if _normalize_text(attachment_row.candidate_source_kind) != "DOC_TEMPLATE":
+            raise_business_error(
+                "DOCUMENT_WIZARD_BATCH_INVALID",
+                "Document wizard batch contains invalid attachment rows",
+                details={
+                    "row_errors": [
+                        {
+                            "row_index": attachment_row.row_index,
+                            "field": "candidate_source_kind",
+                            "code": "UNSUPPORTED_ATTACHMENT_SOURCE",
+                            "message": "Only DOC_TEMPLATE attachment rows are supported",
+                            "candidate_source_kind": attachment_row.candidate_source_kind,
+                        }
+                    ]
+                },
+                status_code=400,
+            )
+
+        if _normalize_text(attachment_row.output_format).upper() != "DOCX":
+            raise_business_error(
+                "DOCUMENT_WIZARD_BATCH_INVALID",
+                "Document wizard batch contains invalid attachment rows",
+                details={
+                    "row_errors": [
+                        {
+                            "row_index": attachment_row.row_index,
+                            "field": "output_format",
+                            "code": "UNSUPPORTED_ATTACHMENT_FORMAT",
+                            "message": "Only DOCX attachment output is supported",
+                            "output_format": attachment_row.output_format,
+                        }
+                    ]
+                },
+                status_code=400,
+            )
+
+        render_context = {
+            **base_context,
+            "attachment": {
+                "template_id": resolved_template.id,
+                "template_code": attachment_row.template_code,
+                "output_name": attachment_row.output_name,
+                "output_file_name": attachment_row.output_file_name,
+                "remark": attachment_row.remark,
+            },
+        }
+        try:
+            rendered_bytes = renderer.render_template_docx_bytes(
+                template_path=template_path,
+                context=render_context,
+            )
+        except Exception as exc:
+            raise_business_error(
+                "DOCUMENT_TEMPLATE_RENDER_FAILED",
+                "Document template render failed",
+                details={
+                    "document_id": document.id,
+                    "template_code": attachment_row.template_code,
+                    "output_file_name": attachment_row.output_file_name,
+                    "error": str(exc),
+                },
+                status_code=409,
+            )
+
+        persist_generated_attachment(
+            db,
+            document_id=document.id,
+            file_name=attachment_row.output_file_name,
+            content_bytes=rendered_bytes,
+            storage_dir=str(_backend_storage_dir()),
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            commit=False,
+        )
 
 
 def get_attachment_download(

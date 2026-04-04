@@ -179,6 +179,7 @@ export interface DocumentWizardBatchCreatePayload {
     rows: DocumentWizardBatchRowDraft[]
     task_rows?: DocumentWizardTaskFinalRowDraft[]
     fee_rows?: DocumentWizardFeeFinalRowDraft[]
+    attachment_rows?: DocumentWizardAttachmentFinalRowDraft[]
 }
 
 export interface DocumentWizardBatchCreatedRow {
@@ -261,6 +262,17 @@ export interface DocumentWizardAttachmentPreviewItem {
 export interface DocumentWizardAttachmentPreviewResult {
     total_candidates: number
     items: DocumentWizardAttachmentPreviewItem[]
+}
+
+export interface DocumentWizardAttachmentFinalRowDraft {
+    row_index: number
+    case_id: string
+    template_code: string
+    output_name?: string | null
+    output_file_name: string
+    output_format: string
+    candidate_source_kind: string
+    remark?: string | null
 }
 
 export interface DocumentWizardFeeFinalRowDraft {

@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+import app.modules.documents.service as document_service
+from app.modules.documents.models import DocAttachment
 from app.modules.fees.models import FeeDraft, FeeItem
 from app.modules.tasks.models import Task
+from app.modules.templates.models import Template
+from app.modules.templates.render import TemplateRenderer
 
 BASE = "/api/v1/documents/wizard/batch-create"
 CASE_BASE = "/api/v1/cases"
@@ -106,6 +111,30 @@ def _preview_fee_candidates(
 ) -> dict:
     resp = client.post(
         "/api/v1/documents/wizard/fee-preview",
+        headers=auth_headers,
+        json={
+            "defaults": {
+                "doc_template_id": template_id,
+                "direction": "IN",
+                "doc_date": "2026-01-15",
+            },
+            "rows": [{"case_id": case_id, "title": title}],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _preview_attachment_candidates(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    *,
+    template_id: str,
+    case_id: str,
+    title: str,
+) -> dict:
+    resp = client.post(
+        "/api/v1/documents/wizard/attachment-preview",
         headers=auth_headers,
         json={
             "defaults": {
@@ -310,6 +339,103 @@ def test_batch_create_documents_uses_step4_fee_rows(
         assert item.remark == "手动调整"
 
 
+def test_batch_create_documents_uses_step5_attachment_rows(
+    client: TestClient,
+    auth_headers: dict,
+    session_factory: sessionmaker,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_one = _create_case(client, auth_headers)
+    template = _get_template(client, auth_headers, "CLIENT_IN")
+
+    template_source_file = tmp_path / "wizard-step5-template.docx"
+    template_source_file.write_bytes(b"fake-template-source")
+
+    with session_factory() as db:
+        db.add(
+            Template(
+                id=str(uuid4()),
+                name=template["code"],
+                group="DOC_TEMPLATE",
+                language="zh-CN",
+                file_path=str(template_source_file),
+                enabled=True,
+            )
+        )
+        db.commit()
+
+    monkeypatch.setattr(document_service, "_backend_storage_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        TemplateRenderer,
+        "render_template_docx_bytes",
+        lambda self, *, template_path, context: (
+            b"rendered-step5-docx"
+            if template_path == str(template_source_file)
+            and context["document"]["title"] == "附件最终提交文书"
+            else b"unexpected-render"
+        ),
+    )
+
+    preview = _preview_attachment_candidates(
+        client,
+        auth_headers,
+        template_id=template["id"],
+        case_id=case_one["id"],
+        title="附件预览文书",
+    )
+    assert preview["total_candidates"] == 1
+    preview_item = preview["items"][0]
+
+    resp = client.post(
+        BASE,
+        headers=auth_headers,
+        json={
+            "defaults": {
+                "doc_template_id": template["id"],
+                "direction": "IN",
+                "doc_date": "2026-01-15",
+            },
+            "rows": [{"case_id": case_one["id"], "title": "附件最终提交文书"}],
+            "attachment_rows": [
+                {
+                    "row_index": preview_item["row_index"],
+                    "case_id": case_one["id"],
+                    "template_code": preview_item["template_code"],
+                    "output_name": "授权通知书终稿",
+                    "output_file_name": "授权通知书终稿.docx",
+                    "output_format": preview_item["output_format"],
+                    "candidate_source_kind": preview_item["candidate_source_kind"],
+                    "remark": "最终附件",
+                }
+            ],
+        },
+    )
+
+    assert resp.status_code == 201, resp.text
+    payload = resp.json()
+    assert payload["created"] == 1
+    document_id = payload["items"][0]["document"]["id"]
+
+    with session_factory() as db:
+        attachments = (
+            db.execute(select(DocAttachment).where(DocAttachment.document_id == document_id))
+            .scalars()
+            .all()
+        )
+        assert len(attachments) == 1
+        attachment = attachments[0]
+        assert attachment.file_name == "授权通知书终稿.docx"
+        assert (
+            attachment.mime_type
+            == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        assert attachment.file_path.startswith(f"attachments/{document_id}/")
+        stored_path = tmp_path / attachment.file_path
+        assert stored_path.exists()
+        assert stored_path.read_bytes() == b"rendered-step5-docx"
+
+
 def test_batch_create_documents_rejects_invalid_row(client: TestClient, auth_headers: dict) -> None:
     case_one = _create_case(client, auth_headers)
     template = _get_template(client, auth_headers, "CLIENT_IN")
@@ -402,6 +528,42 @@ def test_batch_create_documents_rejects_invalid_step4_fee_row(
                             "remark": "手动调整",
                         }
                     ],
+                }
+            ],
+        },
+    )
+
+    assert resp.status_code == 400, resp.text
+    payload = resp.json()
+    assert payload["error"]["code"] == "DOCUMENT_WIZARD_BATCH_INVALID"
+    assert payload["error"]["details"]["row_errors"]
+
+
+def test_batch_create_documents_rejects_invalid_step5_attachment_row(
+    client: TestClient, auth_headers: dict
+) -> None:
+    case_one = _create_case(client, auth_headers)
+    template = _get_template(client, auth_headers, "CLIENT_IN")
+
+    resp = client.post(
+        BASE,
+        headers=auth_headers,
+        json={
+            "defaults": {
+                "doc_template_id": template["id"],
+                "direction": "IN",
+                "doc_date": "2026-01-15",
+            },
+            "rows": [{"case_id": case_one["id"], "title": "附件最终提交文书"}],
+            "attachment_rows": [
+                {
+                    "row_index": 2,
+                    "case_id": case_one["id"],
+                    "template_code": template["code"],
+                    "output_name": "无效附件",
+                    "output_file_name": "无效附件.docx",
+                    "output_format": "DOCX",
+                    "candidate_source_kind": "DOC_TEMPLATE",
                 }
             ],
         },

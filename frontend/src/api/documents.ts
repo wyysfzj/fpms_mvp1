@@ -178,6 +178,16 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
                     ...(trimToUndefined(item.remark ?? undefined) ? { remark: trimToUndefined(item.remark ?? undefined) } : {}),
                 })),
             })) || [],
+        attachment_rows: data.attachment_rows?.map((row) => ({
+                row_index: row.row_index,
+                case_id: row.case_id,
+                template_code: row.template_code,
+                ...(trimToUndefined(row.output_name ?? undefined) ? { output_name: trimToUndefined(row.output_name ?? undefined) } : {}),
+                output_file_name: row.output_file_name,
+                output_format: row.output_format,
+                candidate_source_kind: row.candidate_source_kind,
+                ...(trimToUndefined(row.remark ?? undefined) ? { remark: trimToUndefined(row.remark ?? undefined) } : {}),
+            })) || [],
     }
 }
 

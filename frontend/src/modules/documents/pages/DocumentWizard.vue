@@ -610,7 +610,7 @@
 
       <div v-else class="wizard-step">
         <el-alert
-          title="当前步骤会根据第二步的文书草案预览附件与模板候选。你可以调整允许编辑的字段，但这些修改目前只保存在页面内存中。"
+          title="当前步骤会根据第二步的文书草案预览附件与模板候选。你可以调整允许编辑的字段；预览阶段不会立即写入真实附件，完成向导后会统一生成。"
           type="info"
           :closable="false"
           show-icon
@@ -628,7 +628,7 @@
           <div class="step-panel-header">
             <div>
               <div class="section-title">附件候选预览</div>
-              <div class="section-hint">仅显示当前草案中适用模板生成的文书。当前不会写入真实附件。</div>
+              <div class="section-hint">仅显示当前草案中适用模板生成的文书。完成向导时会按当前设置统一生成。</div>
             </div>
             <div class="step-panel-actions">
               <el-button :loading="step5Loading" @click="reloadStep5Preview">重新生成预览</el-button>
@@ -684,7 +684,7 @@
               </div>
               <div class="step3-meta-item">
                 <div class="step2-field-label">预览文件名</div>
-                <div class="step3-meta-value">{{ row.output_file_name }}</div>
+                <div class="step3-meta-value">{{ getStep5OutputFileName(row) }}</div>
               </div>
             </div>
 
@@ -738,9 +738,11 @@
       <el-button
         v-else
         type="primary"
-        @click="returnToStep2"
+        :loading="submitLoading"
+        :disabled="!canSubmitStep2"
+        @click="submitStep2Batch"
       >
-        返回第二步提交
+        完成向导并提交
       </el-button>
     </div>
   </div>
@@ -763,6 +765,7 @@ import {
 import type { ApiError } from '../../../api/types'
 import type {
   DocTemplate,
+  DocumentWizardAttachmentFinalRowDraft,
   DocumentWizardAttachmentPreviewItem,
   DocumentWizardBatchCreatePayload,
   DocumentWizardBatchRowError,
@@ -940,11 +943,6 @@ async function goNext() {
   if (documentWizardState.activeStep < TOTAL_STEPS) {
     documentWizardState.activeStep += 1
   }
-}
-
-function returnToStep2(): void {
-  documentWizardState.activeStep = 2
-  submitError.value = null
 }
 
 function handleReturn() {
@@ -1263,6 +1261,7 @@ function buildFinalSubmitPayload(): DocumentWizardBatchCreatePayload {
     ...buildStep2Payload(),
     task_rows: buildStep3TaskRows(),
     fee_rows: buildStep4FeeRows(),
+    attachment_rows: buildStep5AttachmentRows(),
   }
 }
 
@@ -1283,6 +1282,31 @@ function buildStep4FeeRows(): DocumentWizardFeeFinalRowDraft[] {
         amount: item.amount,
         remark: item.remark,
       })),
+    }))
+}
+
+function getStep5OutputFileName(row: Step5PreviewRowView): string {
+  const normalizedOutputName = row.output_name?.trim()
+  if (!normalizedOutputName) {
+    return row.output_file_name
+  }
+  return normalizedOutputName.endsWith('.docx')
+    ? normalizedOutputName
+    : `${normalizedOutputName}.docx`
+}
+
+function buildStep5AttachmentRows(): DocumentWizardAttachmentFinalRowDraft[] {
+  return step5PreviewRows.value
+    .filter((row) => row.generate_this_candidate)
+    .map((row) => ({
+      row_index: row.row_index,
+      case_id: row.case_id,
+      template_code: row.template_code,
+      output_name: row.output_name?.trim() || undefined,
+      output_file_name: getStep5OutputFileName(row),
+      output_format: row.output_format,
+      candidate_source_kind: row.candidate_source_kind,
+      remark: row.remark?.trim() || undefined,
     }))
 }
 

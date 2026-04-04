@@ -81,11 +81,23 @@ class DocumentWizardFeeFinalRowIn(BaseModel):
     fee_items: list[DocumentWizardFeeFinalFeeItemIn] = Field(default_factory=list)
 
 
+class DocumentWizardAttachmentFinalRowIn(BaseModel):
+    row_index: int = Field(..., ge=1)
+    case_id: str = Field(..., min_length=1, max_length=36)
+    template_code: str = Field(..., min_length=1, max_length=64)
+    output_name: str | None = None
+    output_file_name: str = Field(..., min_length=1, max_length=256)
+    output_format: str = Field(default="DOCX", max_length=16)
+    candidate_source_kind: str = Field(default="DOC_TEMPLATE", max_length=32)
+    remark: str | None = None
+
+
 class DocumentWizardBatchCreateIn(BaseModel):
     defaults: DocumentWizardBatchDefaultsIn
     rows: list[DocumentWizardBatchRowIn] = Field(..., min_length=1)
     task_rows: list[DocumentWizardTaskFinalRowIn] = Field(default_factory=list)
     fee_rows: list[DocumentWizardFeeFinalRowIn] = Field(default_factory=list)
+    attachment_rows: list[DocumentWizardAttachmentFinalRowIn] = Field(default_factory=list)
 
 
 class DocumentWizardFeePreviewIn(BaseModel):
