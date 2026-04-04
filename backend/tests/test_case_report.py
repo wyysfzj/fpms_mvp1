@@ -266,3 +266,98 @@ def test_get_cases_returns_country_and_agent_grouped_summaries(
         agent_a: 2,
         agent_b: 2,
     }
+
+
+def test_get_cases_returns_grant_rate_metrics(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    client_a = _create_client(client, auth_headers, name_prefix="CASE-RPT-CLI-E")
+
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="GRANTED",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="TERMINATED",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="INVALIDATED",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="EXPIRED",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="REJECTED",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="WITHDRAWN",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="ABANDONED",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="PENDING",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="OA1",
+    )
+
+    resp = client.get(
+        "/api/v1/cases",
+        params={"client_id": client_a, "page": 1, "page_size": 30},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    summary = payload["summary"]
+    assert summary["granted_count"] == 4
+    assert summary["terminated_count"] == 1
+    assert summary["invalidated_count"] == 1
+    assert summary["in_prosecution_count"] == 2
+    assert summary["grant_rate"] == 4 / 7

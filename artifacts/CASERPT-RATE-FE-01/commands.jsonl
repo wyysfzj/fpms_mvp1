@@ -1,0 +1,2 @@
+{"ts":"20260404T211426","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/cases.ts\ src/api/cases.types.ts\ src/modules/cases/pages/CaseList.vue"}
+{"ts":"20260404T211441","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}

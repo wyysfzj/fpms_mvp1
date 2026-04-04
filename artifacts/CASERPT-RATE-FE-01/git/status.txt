@@ -1,0 +1,12 @@
+## master
+ M backend/app/modules/cases/schemas.py
+ M backend/app/modules/cases/service.py
+ M backend/tests/test_case_report.py
+ M frontend/src/api/cases.ts
+ M frontend/src/api/cases.types.ts
+ M frontend/src/modules/cases/pages/CaseList.vue
+?? docs/superpowers/plans/2026-04-04-case-report-grant-rate-implementation.md
+?? docs/superpowers/specs/2026-04-04-case-report-grant-rate-implementation-design.md
+?? tasks/postenhancement/backend/CASERPT-RATE-BE-01.md
+?? tasks/postenhancement/backend/CASERPT-RATE-QA-01.md
+?? tasks/postenhancement/frontend/CASERPT-RATE-FE-01.md

@@ -143,6 +143,11 @@ export interface CaseListSummary {
     case_type_counts: CaseReportCount[]
     country_counts: CaseReportCount[]
     agent_counts: CaseReportCount[]
+    granted_count: number
+    grant_rate: number | null
+    terminated_count: number
+    invalidated_count: number
+    in_prosecution_count: number
 }
 
 export interface CaseListResponse {

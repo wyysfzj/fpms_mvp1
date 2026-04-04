@@ -330,6 +330,11 @@ class CaseReportSummaryResponse(BaseModel):
     case_type_counts: list[CaseReportCountResponse] = Field(default_factory=list)
     country_counts: list[CaseReportCountResponse] = Field(default_factory=list)
     agent_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+    granted_count: int = 0
+    grant_rate: float | None = None
+    terminated_count: int = 0
+    invalidated_count: int = 0
+    in_prosecution_count: int = 0
 
 
 class CaseListReportResponse(BaseModel):

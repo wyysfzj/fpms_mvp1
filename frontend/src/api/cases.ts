@@ -101,6 +101,11 @@ interface BackendCaseListResponse {
         case_type_counts?: Array<{ key: string; count: number }>
         country_counts?: Array<{ key: string; count: number }>
         agent_counts?: Array<{ key: string; count: number }>
+        granted_count?: number
+        grant_rate?: number | null
+        terminated_count?: number
+        invalidated_count?: number
+        in_prosecution_count?: number
     }
 }
 
@@ -383,6 +388,11 @@ export async function getCases(params: CaseListParams = {}): Promise<CaseListRes
             case_type_counts: response.data.summary?.case_type_counts || [],
             country_counts: response.data.summary?.country_counts || [],
             agent_counts: response.data.summary?.agent_counts || [],
+            granted_count: response.data.summary?.granted_count || 0,
+            grant_rate: response.data.summary?.grant_rate ?? null,
+            terminated_count: response.data.summary?.terminated_count || 0,
+            invalidated_count: response.data.summary?.invalidated_count || 0,
+            in_prosecution_count: response.data.summary?.in_prosecution_count || 0,
         },
     }
 }

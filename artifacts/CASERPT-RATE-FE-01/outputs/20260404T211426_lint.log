@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/api/cases.ts src/api/cases.types.ts src/modules/cases/pages/CaseList.vue
+

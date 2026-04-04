@@ -175,6 +175,26 @@
         <span class="summary-label">代理人分布</span>
         <span class="summary-value">{{ summary.agent_counts.length }} 人</span>
       </div>
+      <div class="summary-card">
+        <span class="summary-label">授权数量</span>
+        <span class="summary-value">{{ summary.granted_count }} 件</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">授权率</span>
+        <span class="summary-value">{{ formatGrantRate(summary.grant_rate) }}</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">终止数量</span>
+        <span class="summary-value">{{ summary.terminated_count }} 件</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">无效数量</span>
+        <span class="summary-value">{{ summary.invalidated_count }} 件</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">审中数量</span>
+        <span class="summary-value">{{ summary.in_prosecution_count }} 件</span>
+      </div>
     </div>
 
     <div class="distribution-grid">
@@ -354,6 +374,11 @@ const summary = ref<CaseListResponse['summary']>({
   case_type_counts: [],
   country_counts: [],
   agent_counts: [],
+  granted_count: 0,
+  grant_rate: null,
+  terminated_count: 0,
+  invalidated_count: 0,
+  in_prosecution_count: 0,
 })
 
 // Client options for selector
@@ -424,6 +449,11 @@ async function fetchCases() {
 function formatDate(dateStr: string): string {
   if (!dateStr) return '-'
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
+}
+
+function formatGrantRate(value: number | null): string {
+  if (value == null) return '暂无'
+  return `${(value * 100).toFixed(1)}%`
 }
 
 function handleView(row: Case) {

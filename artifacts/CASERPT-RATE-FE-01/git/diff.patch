@@ -1,0 +1,286 @@
+diff --git a/backend/app/modules/cases/schemas.py b/backend/app/modules/cases/schemas.py
+index d092641..a311851 100644
+--- a/backend/app/modules/cases/schemas.py
++++ b/backend/app/modules/cases/schemas.py
+@@ -330,6 +330,11 @@ class CaseReportSummaryResponse(BaseModel):
+     case_type_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+     country_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+     agent_counts: list[CaseReportCountResponse] = Field(default_factory=list)
++    granted_count: int = 0
++    grant_rate: float | None = None
++    terminated_count: int = 0
++    invalidated_count: int = 0
++    in_prosecution_count: int = 0
+ 
+ 
+ class CaseListReportResponse(BaseModel):
+diff --git a/backend/app/modules/cases/service.py b/backend/app/modules/cases/service.py
+index e911e86..99ab591 100644
+--- a/backend/app/modules/cases/service.py
++++ b/backend/app/modules/cases/service.py
+@@ -60,6 +60,17 @@ _STATUSES_REQUIRING_APPLICATION_FIELDS = {
+     status.value for status in CaseStatus if status != CaseStatus.NOT_FILED
+ }
+ _CASE_FEE_STATUSES = {"DRAFT", "BILLED", "PAID"}
++_CASE_GRANTED_LINEAGE_STATUSES = {
++    CaseStatus.GRANTED.value,
++    CaseStatus.TERMINATED.value,
++    CaseStatus.INVALIDATED.value,
++    CaseStatus.EXPIRED.value,
++}
++_CASE_GRANTED_RATE_DENOMINATOR_STATUSES = _CASE_GRANTED_LINEAGE_STATUSES | {
++    CaseStatus.REJECTED.value,
++    CaseStatus.WITHDRAWN.value,
++    CaseStatus.ABANDONED.value,
++}
+ 
+ 
+ def _normalize_required_text(value: str | None, field_name: str) -> str:
+@@ -513,6 +524,11 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
+         .order_by(Case.status.asc())
+         .all()
+     )
++    status_counts_map = {
++        normalized_status: count
++        for status_key, count in status_rows
++        if (normalized_status := (status_key or "").strip())
++    }
+     case_type_rows = (
+         query.with_entities(Case.case_type, func.count(Case.id))
+         .group_by(Case.case_type)
+@@ -539,6 +555,21 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
+             seen_agents.add(normalized)
+             agent_counts[normalized] = agent_counts.get(normalized, 0) + 1
+ 
++    granted_count = sum(
++        status_counts_map.get(status_key, 0) for status_key in _CASE_GRANTED_LINEAGE_STATUSES
++    )
++    grant_rate_denominator = sum(
++        status_counts_map.get(status_key, 0)
++        for status_key in _CASE_GRANTED_RATE_DENOMINATOR_STATUSES
++    )
++    terminated_count = status_counts_map.get(CaseStatus.TERMINATED.value, 0)
++    invalidated_count = status_counts_map.get(CaseStatus.INVALIDATED.value, 0)
++    in_prosecution_count = sum(
++        count
++        for status_key, count in status_counts_map.items()
++        if status_key not in _CASE_GRANTED_RATE_DENOMINATOR_STATUSES
++    )
++
+     return CaseReportSummaryResponse(
+         total_case_count=query.count(),
+         status_counts=[
+@@ -557,6 +588,11 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
+             CaseReportCountResponse(key=agent_key, count=count)
+             for agent_key, count in sorted(agent_counts.items(), key=lambda item: item[0])
+         ],
++        granted_count=granted_count,
++        grant_rate=(granted_count / grant_rate_denominator if grant_rate_denominator > 0 else None),
++        terminated_count=terminated_count,
++        invalidated_count=invalidated_count,
++        in_prosecution_count=in_prosecution_count,
+     )
+ 
+ 
+diff --git a/backend/tests/test_case_report.py b/backend/tests/test_case_report.py
+index ba8ec64..ef946b7 100644
+--- a/backend/tests/test_case_report.py
++++ b/backend/tests/test_case_report.py
+@@ -266,3 +266,98 @@ def test_get_cases_returns_country_and_agent_grouped_summaries(
+         agent_a: 2,
+         agent_b: 2,
+     }
++
++
++def test_get_cases_returns_grant_rate_metrics(
++    client: TestClient,
++    auth_headers: dict[str, str],
++) -> None:
++    client_a = _create_client(client, auth_headers, name_prefix="CASE-RPT-CLI-E")
++
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="GRANTED",
++    )
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="TERMINATED",
++    )
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="INVALIDATED",
++    )
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="EXPIRED",
++    )
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="REJECTED",
++    )
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="WITHDRAWN",
++    )
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="ABANDONED",
++    )
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="PENDING",
++    )
++    _create_case(
++        client,
++        auth_headers,
++        client_id=client_a,
++        case_type="NORMAL",
++        patent_category="INV",
++        status="OA1",
++    )
++
++    resp = client.get(
++        "/api/v1/cases",
++        params={"client_id": client_a, "page": 1, "page_size": 30},
++        headers=auth_headers,
++    )
++    assert resp.status_code == 200, resp.text
++    payload = resp.json()
++
++    summary = payload["summary"]
++    assert summary["granted_count"] == 4
++    assert summary["terminated_count"] == 1
++    assert summary["invalidated_count"] == 1
++    assert summary["in_prosecution_count"] == 2
++    assert summary["grant_rate"] == 4 / 7
+diff --git a/frontend/src/api/cases.ts b/frontend/src/api/cases.ts
+index 9ebea53..2886780 100644
+--- a/frontend/src/api/cases.ts
++++ b/frontend/src/api/cases.ts
+@@ -101,6 +101,11 @@ interface BackendCaseListResponse {
+         case_type_counts?: Array<{ key: string; count: number }>
+         country_counts?: Array<{ key: string; count: number }>
+         agent_counts?: Array<{ key: string; count: number }>
++        granted_count?: number
++        grant_rate?: number | null
++        terminated_count?: number
++        invalidated_count?: number
++        in_prosecution_count?: number
+     }
+ }
+ 
+@@ -383,6 +388,11 @@ export async function getCases(params: CaseListParams = {}): Promise<CaseListRes
+             case_type_counts: response.data.summary?.case_type_counts || [],
+             country_counts: response.data.summary?.country_counts || [],
+             agent_counts: response.data.summary?.agent_counts || [],
++            granted_count: response.data.summary?.granted_count || 0,
++            grant_rate: response.data.summary?.grant_rate ?? null,
++            terminated_count: response.data.summary?.terminated_count || 0,
++            invalidated_count: response.data.summary?.invalidated_count || 0,
++            in_prosecution_count: response.data.summary?.in_prosecution_count || 0,
+         },
+     }
+ }
+diff --git a/frontend/src/api/cases.types.ts b/frontend/src/api/cases.types.ts
+index 2d99629..734bbf8 100644
+--- a/frontend/src/api/cases.types.ts
++++ b/frontend/src/api/cases.types.ts
+@@ -143,6 +143,11 @@ export interface CaseListSummary {
+     case_type_counts: CaseReportCount[]
+     country_counts: CaseReportCount[]
+     agent_counts: CaseReportCount[]
++    granted_count: number
++    grant_rate: number | null
++    terminated_count: number
++    invalidated_count: number
++    in_prosecution_count: number
+ }
+ 
+ export interface CaseListResponse {
+diff --git a/frontend/src/modules/cases/pages/CaseList.vue b/frontend/src/modules/cases/pages/CaseList.vue
+index 373c03e..2cce375 100644
+--- a/frontend/src/modules/cases/pages/CaseList.vue
++++ b/frontend/src/modules/cases/pages/CaseList.vue
+@@ -175,6 +175,26 @@
+         <span class="summary-label">代理人分布</span>
+         <span class="summary-value">{{ summary.agent_counts.length }} 人</span>
+       </div>
++      <div class="summary-card">
++        <span class="summary-label">授权数量</span>
++        <span class="summary-value">{{ summary.granted_count }} 件</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">授权率</span>
++        <span class="summary-value">{{ formatGrantRate(summary.grant_rate) }}</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">终止数量</span>
++        <span class="summary-value">{{ summary.terminated_count }} 件</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">无效数量</span>
++        <span class="summary-value">{{ summary.invalidated_count }} 件</span>
++      </div>
++      <div class="summary-card">
++        <span class="summary-label">审中数量</span>
++        <span class="summary-value">{{ summary.in_prosecution_count }} 件</span>
++      </div>
+     </div>
+ 
+     <div class="distribution-grid">
+@@ -354,6 +374,11 @@ const summary = ref<CaseListResponse['summary']>({
+   case_type_counts: [],
+   country_counts: [],
+   agent_counts: [],
++  granted_count: 0,
++  grant_rate: null,
++  terminated_count: 0,
++  invalidated_count: 0,
++  in_prosecution_count: 0,
+ })
+ 
+ // Client options for selector
+@@ -426,6 +451,11 @@ function formatDate(dateStr: string): string {
+   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
+ }
+ 
++function formatGrantRate(value: number | null): string {
++  if (value == null) return '暂无'
++  return `${(value * 100).toFixed(1)}%`
++}
++
+ function handleView(row: Case) {
+   router.push(`/cases/${row.id}`)
+ }

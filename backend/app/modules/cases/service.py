@@ -60,6 +60,17 @@ _STATUSES_REQUIRING_APPLICATION_FIELDS = {
     status.value for status in CaseStatus if status != CaseStatus.NOT_FILED
 }
 _CASE_FEE_STATUSES = {"DRAFT", "BILLED", "PAID"}
+_CASE_GRANTED_LINEAGE_STATUSES = {
+    CaseStatus.GRANTED.value,
+    CaseStatus.TERMINATED.value,
+    CaseStatus.INVALIDATED.value,
+    CaseStatus.EXPIRED.value,
+}
+_CASE_GRANTED_RATE_DENOMINATOR_STATUSES = _CASE_GRANTED_LINEAGE_STATUSES | {
+    CaseStatus.REJECTED.value,
+    CaseStatus.WITHDRAWN.value,
+    CaseStatus.ABANDONED.value,
+}
 
 
 def _normalize_required_text(value: str | None, field_name: str) -> str:
@@ -513,6 +524,11 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
         .order_by(Case.status.asc())
         .all()
     )
+    status_counts_map = {
+        normalized_status: count
+        for status_key, count in status_rows
+        if (normalized_status := (status_key or "").strip())
+    }
     case_type_rows = (
         query.with_entities(Case.case_type, func.count(Case.id))
         .group_by(Case.case_type)
@@ -539,6 +555,21 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
             seen_agents.add(normalized)
             agent_counts[normalized] = agent_counts.get(normalized, 0) + 1
 
+    granted_count = sum(
+        status_counts_map.get(status_key, 0) for status_key in _CASE_GRANTED_LINEAGE_STATUSES
+    )
+    grant_rate_denominator = sum(
+        status_counts_map.get(status_key, 0)
+        for status_key in _CASE_GRANTED_RATE_DENOMINATOR_STATUSES
+    )
+    terminated_count = status_counts_map.get(CaseStatus.TERMINATED.value, 0)
+    invalidated_count = status_counts_map.get(CaseStatus.INVALIDATED.value, 0)
+    in_prosecution_count = sum(
+        count
+        for status_key, count in status_counts_map.items()
+        if status_key not in _CASE_GRANTED_RATE_DENOMINATOR_STATUSES
+    )
+
     return CaseReportSummaryResponse(
         total_case_count=query.count(),
         status_counts=[
@@ -557,6 +588,11 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
             CaseReportCountResponse(key=agent_key, count=count)
             for agent_key, count in sorted(agent_counts.items(), key=lambda item: item[0])
         ],
+        granted_count=granted_count,
+        grant_rate=(granted_count / grant_rate_denominator if grant_rate_denominator > 0 else None),
+        terminated_count=terminated_count,
+        invalidated_count=invalidated_count,
+        in_prosecution_count=in_prosecution_count,
     )
 
 
