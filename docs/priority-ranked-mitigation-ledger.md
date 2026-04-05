@@ -4,12 +4,11 @@ This ledger is derived from [FPMS_SPEC2_2nd_Review_REFRESH.md](/Users/cfcc/Works
 
 ## 1. Mitigation Summary
 
-Current non-`Closed` items: `2`
+Current non-`Closed` items: `1`
 
 - `Still Missing`
   - `None`
 - `Partially Closed`
-  - `#15 授权费管理`
   - `#19 中间文件专项查询`
 - `Blocked by Prerequisite`
   - `None`
@@ -17,17 +16,6 @@ Current non-`Closed` items: `2`
   - `None`
 
 ## 2. Priority-ranked Mitigation Ledger
-
-### `#15 授权费管理`
-- `Current Status`: `Partially Closed`
-- `Recommended Interpretation`: first-round workflow exists; residual workflow breadth remains
-- `Why This Interpretation Is Correct`: carrier/worklist/state/draft-generation exist, but full lifecycle breadth is not proven closed
-- `Exact Closure Slice`: residual workflow mapping after current post-draft state
-- `Explicit Non-closure`: no carrier/state-machine rewrite
-- `Likely Ownership`: `shared`
-- `Prerequisite Needed?`: `No`
-- `Suggested Story Shape`: `frontend-heavy`
-- `Recommended Next Action`: `write spec`
 
 ### `#19 中间文件专项查询`
 - `Current Status`: `Partially Closed`
@@ -41,26 +29,6 @@ Current non-`Closed` items: `2`
 - `Recommended Next Action`: `write spec`
 
 ## 3. Next-story Candidates
-
-### For `#15 授权费管理`
-
-#### Candidate 1
-- `Story ID`: `GF-RESIDUAL-SPEC-01`
-- `Title`: 授权费管理 residual workflow spec
-- `Exact Closure Slice`: define closed vs residual workflow map
-- `Explicit Non-closure`: no prerequisite rewrite
-- `Likely Ownership`: `shared`
-- `Suggested Story Shape`: `frontend-heavy`
-- `Recommended Next Action`: `write spec`
-
-#### Candidate 2
-- `Story ID`: `GF-POSTDRAFT-01`
-- `Title`: 授权费 post-draft residual transition
-- `Exact Closure Slice`: one post-draft workflow rule
-- `Explicit Non-closure`: do not touch carrier/worklist
-- `Likely Ownership`: `backend`
-- `Suggested Story Shape`: `single-lane`
-- `Recommended Next Action`: `implement after spec`
 
 ### For `#19 中间文件专项查询`
 

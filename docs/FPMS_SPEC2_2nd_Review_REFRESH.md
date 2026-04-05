@@ -480,7 +480,7 @@ Each review item was re-evaluated against:
 - **Current Implementation Evidence**:
   - Backend:
     - [grant_fees/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/grant_fees/api.py)
-      - list/state/advance/generate-draft
+      - list/state/advance/batch-instruction/generate-notices/generate-draft
     - [grant_fees/service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/grant_fees/service.py)
   - Frontend:
     - [GrantFeeTaskList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue)
@@ -490,14 +490,13 @@ Each review item was re-evaluated against:
     - `test_grant_fee_worklist_api.py`
     - `test_grant_fee_state_machine_api.py`
     - `test_grant_fee_draft_linkage_api.py`
-- **Committed-state Conclusion**: Partially Closed
-- **Workspace-state Conclusion**: Partially Closed
-- **Status**: `Partially Closed`
-- **Why**: carrier, worklist, state machine, draft-generation slice exist, but old review item was broader than the first-round implemented workflow.
-- **Residual Gap**:
-  - broader lifecycle completeness
-  - residual downstream workflow/reporting/detail semantics
-- **Risk**: `Medium`
+    - `test_grant_fee_notice_document_api.py`
+- **Committed-state Conclusion**: Closed
+- **Workspace-state Conclusion**: Closed
+- **Status**: `Closed`
+- **Why**: committed product behavior now covers the strict spec core of Module 4 §5.7.2–5.7.3: worklist, batch PAY/ABANDON instruction, real `GRANT_FEE_NOTICE` document generation with attachment archival and task write-back, plus grant-fee draft generation.
+- **Residual Gap**: None inside the approved `#15` interpretation.
+- **Risk**: `Low`
 
 ### 4.16 P2 #16 费用综合查询
 - **Original Review Claim**: Missing dual-table query + UI
@@ -707,6 +706,7 @@ Each review item was re-evaluated against:
 | `#5` | Missing | Closed | `CaseAgentSplit` carrier + commission semantics + case-side FE exposure now close the functional item |
 | `#8` | Missing | Closed | real 5-step wizard path and Step3/4/5 final-submit behavior now exist |
 | `#13` | Missing | Closed | family ledger exists and all named report-family residual slices are now implemented |
+| `#15` | Missing | Closed | batch instruction, real notice generation, and grant-fee draft generation now close §5.7.2–5.7.3 |
 | `#19` | Missing | Partially Closed | first-round search exists, full spec parity not yet |
 | `#20` | Missing | Closed | missing list-page print entry added |
 
@@ -716,6 +716,6 @@ Each review item was re-evaluated against:
 |---|---|---|---|
 | `#13` | Closed | Closed | strict family ledger exists and no named report-family residual remains |
 | `#8` | Closed | Closed | committed product implementation now closes strict spec parity for the 5-step wizard |
-| `#15` | Partially Closed | Partially Closed | first-round workflow present, but not full spec breadth |
+| `#15` | Closed | Closed | committed product behavior now closes the strict Module 4 §5.7.2–5.7.3 workflow |
 | `#19` | Partially Closed | Partially Closed | residual `DocType` semantics still open |
 | `#5` | Closed | Closed | committed COMMSPLIT chain now closes carrier + semantics + FE exposure |
