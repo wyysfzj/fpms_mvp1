@@ -1,0 +1,4 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/api/grantFees.ts src/api/grantFees.types.ts src/modules/grantFees/pages/GrantFeeTaskList.vue
+

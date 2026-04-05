@@ -1,0 +1,2 @@
+{"ts":"20260405T013851","step":"lint","cmd":"test -f tasks/postenhancement/backend/GF-POSTDRAFT-QA-01.md"}
+{"ts":"20260405T013851","step":"test","cmd":"/bin/zsh -lc $'rg -n "ца\207шо░хо\214ц\210\220|mark_done|no backend code changes|no bill linkage" frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue artifacts/GF-POSTDRAFT-FE-01/summary.md tasks/postenhancement/backend/GF-POSTDRAFT-QA-01.md'"}

@@ -1,0 +1,6 @@
+artifacts/GF-POSTDRAFT-FE-01/summary.md:7:  - exposed a real row-level `标记完成` action for `DRAFT_GENERATED` rows on `GrantFeeTaskList.vue`
+artifacts/GF-POSTDRAFT-FE-01/summary.md:10:  - no backend code changes
+artifacts/GF-POSTDRAFT-FE-01/summary.md:11:  - no bill linkage
+frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue:193:                标记完成
+frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue:353:    await applyGrantFeeTaskAction(row.task_id, 'mark_done')
+frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue:354:    ElMessage.success('授权费任务已标记完成')

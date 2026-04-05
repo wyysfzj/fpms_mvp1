@@ -1,0 +1,2 @@
+{"ts":"20260405T013851","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ typecheck"}
+{"ts":"20260405T013851","step":"lint","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/grantFees.ts\ src/api/grantFees.types.ts\ src/modules/grantFees/pages/GrantFeeTaskList.vue"}

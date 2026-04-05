@@ -6,6 +6,8 @@ import type {
     GrantFeeTaskListItem,
     GrantFeeTaskListParams,
     GrantFeeTaskListResponse,
+    GrantFeeTaskStateAction,
+    GrantFeeTaskStateResult,
     GrantFeeTaskStatus,
 } from './grantFees.types'
 
@@ -41,6 +43,18 @@ interface BackendGrantFeeDraftGenerateResponse {
     amount: GrantFeeMoney
     item_count: number
     reused: boolean
+}
+
+interface BackendGrantFeeTaskStateResponse {
+    task_id: string
+    case_id: string
+    state: string
+    client_instruction: string
+    notify_count: number
+    draft_generated: boolean
+    notice_sent: boolean
+    is_overdue: boolean
+    allowed_actions: string[]
 }
 
 function normalizeBoolean(input: boolean | undefined): boolean | undefined {
@@ -94,6 +108,38 @@ function mapGrantFeeDraftGenerateResult(
     }
 }
 
+function normalizeAction(input: string): GrantFeeTaskStateAction {
+    const normalized = (input || '').trim()
+    const valid: GrantFeeTaskStateAction[] = [
+        'mark_waiting_client',
+        'record_pay_instruction',
+        'record_abandon_instruction',
+        'mark_draft_generated',
+        'mark_done',
+    ]
+    return valid.includes(normalized as GrantFeeTaskStateAction)
+        ? (normalized as GrantFeeTaskStateAction)
+        : 'mark_done'
+}
+
+function mapGrantFeeTaskStateResult(
+    input: BackendGrantFeeTaskStateResponse,
+): GrantFeeTaskStateResult {
+    return {
+        task_id: input.task_id,
+        case_id: input.case_id,
+        state: normalizeStatus(input.state),
+        client_instruction: normalizeInstruction(input.client_instruction),
+        notify_count: Number(input.notify_count || 0),
+        draft_generated: Boolean(input.draft_generated),
+        notice_sent: Boolean(input.notice_sent),
+        is_overdue: Boolean(input.is_overdue),
+        allowed_actions: Array.isArray(input.allowed_actions)
+            ? input.allowed_actions.map(normalizeAction)
+            : [],
+    }
+}
+
 /**
  * Get paginated grant-fee task list
  */
@@ -138,4 +184,17 @@ export async function getGrantFeeTasks(
 export async function generateGrantFeeDraft(taskId: string): Promise<GrantFeeDraftGenerateResult> {
     const response = await http.post<BackendGrantFeeDraftGenerateResponse>(`/grant-fee-tasks/${taskId}/generate-draft`)
     return mapGrantFeeDraftGenerateResult(response.data)
+}
+
+/**
+ * Apply a grant-fee task state action
+ */
+export async function applyGrantFeeTaskAction(
+    taskId: string,
+    action: GrantFeeTaskStateAction,
+): Promise<GrantFeeTaskStateResult> {
+    const response = await http.put<BackendGrantFeeTaskStateResponse>(`/grant-fee-tasks/${taskId}/state`, {
+        action,
+    })
+    return mapGrantFeeTaskStateResult(response.data)
 }

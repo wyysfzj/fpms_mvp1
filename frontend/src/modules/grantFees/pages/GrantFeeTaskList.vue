@@ -8,14 +8,14 @@
       <div class="page-header-right">
         <el-space wrap>
           <el-button disabled type="primary">状态操作（预留）</el-button>
-          <el-button disabled>草单联动（预留）</el-button>
+          <el-button disabled>账单与文书联动（预留）</el-button>
         </el-space>
       </div>
     </div>
 
     <el-alert
       class="page-note"
-      title="当前页面支持查看、筛选与单行草单生成，其他联动暂未开放。"
+      title="当前页面支持查看、筛选、单行生成草单和草单后完成，其他联动暂未开放。"
       type="info"
       show-icon
       :closable="false"
@@ -173,15 +173,26 @@
         </el-table-column>
         <el-table-column label="动作入口" min-width="180" fixed="right">
           <template #default="{ row }">
-            <el-button
-              size="small"
-              type="primary"
-              :loading="generatingTaskId === row.task_id"
-              :disabled="!canGenerateDraft(row)"
-              @click="handleGenerateDraft(row)"
-            >
-              生成草单
-            </el-button>
+            <el-space wrap>
+              <el-button
+                size="small"
+                type="primary"
+                :loading="generatingTaskId === row.task_id"
+                :disabled="!canGenerateDraft(row)"
+                @click="handleGenerateDraft(row)"
+              >
+                生成草单
+              </el-button>
+              <el-button
+                size="small"
+                type="success"
+                :loading="completingTaskId === row.task_id"
+                :disabled="!canMarkDone(row)"
+                @click="handleMarkDone(row)"
+              >
+                标记完成
+              </el-button>
+            </el-space>
           </template>
         </el-table-column>
       </el-table>
@@ -194,7 +205,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { generateGrantFeeDraft, getGrantFeeTasks } from '../../../api/grantFees'
+import { applyGrantFeeTaskAction, generateGrantFeeDraft, getGrantFeeTasks } from '../../../api/grantFees'
 import type {
   GrantFeeTaskClientInstruction,
   GrantFeeTaskListItem,
@@ -211,6 +222,7 @@ const tasks = ref<GrantFeeTaskListItem[]>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const generatingTaskId = ref<string | null>(null)
+const completingTaskId = ref<string | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -281,6 +293,10 @@ function canGenerateDraft(row: GrantFeeTaskListItem): boolean {
   return row.status === 'READY_TO_DRAFT' && !row.draft_generated && generatingTaskId.value !== row.task_id
 }
 
+function canMarkDone(row: GrantFeeTaskListItem): boolean {
+  return row.status === 'DRAFT_GENERATED' && completingTaskId.value !== row.task_id
+}
+
 function buildParams() {
   const [date_from, date_to] = filters.date_range
   return {
@@ -327,6 +343,20 @@ async function handleGenerateDraft(row: GrantFeeTaskListItem) {
     ElMessage.error(message)
   } finally {
     generatingTaskId.value = null
+  }
+}
+
+async function handleMarkDone(row: GrantFeeTaskListItem) {
+  completingTaskId.value = row.task_id
+  error.value = null
+  try {
+    await applyGrantFeeTaskAction(row.task_id, 'mark_done')
+    ElMessage.success('授权费任务已标记完成')
+    await fetchTasks()
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    completingTaskId.value = null
   }
 }
 

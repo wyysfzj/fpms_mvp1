@@ -1,0 +1,424 @@
+diff --git a/docs/superpowers/plans/2026-04-05-grant-fee-postdraft.md b/docs/superpowers/plans/2026-04-05-grant-fee-postdraft.md
+new file mode 100644
+index 0000000..b236454
+--- /dev/null
++++ b/docs/superpowers/plans/2026-04-05-grant-fee-postdraft.md
+@@ -0,0 +1,33 @@
++# GF-POSTDRAFT-01 Plan
++
++## Story Shape Classification
++
++- `shared_file_density`: `medium`
++- `prereq_dependency_density`: `low`
++- `be_fe_coupling`: `frontend wiring on top of existing backend state action`
++- `evidence_cost`: `medium`
++
++## chosen_runbook
++
++- `P0-frontend-heavy-story`
++
++## Batch Manifest
++
++| Task ID | Owner | Allowlist | Dependency Notes | Exact Closure Slice | Explicit Non-closure |
++|---|---|---|---|---|---|
++| `GF-POSTDRAFT-FE-01` | main thread | `frontend/src/api/grantFees.ts`, `frontend/src/api/grantFees.types.ts`, `frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue`, `docs/superpowers/specs/2026-04-05-grant-fee-postdraft-design.md`, `docs/superpowers/plans/2026-04-05-grant-fee-postdraft.md`, `tasks/postenhancement/frontend/GF-POSTDRAFT-FE-01.md` | Depends on existing backend `mark_done` authority and `GF-RESIDUAL-SPEC-01` being PASS | Make post-draft `mark_done` reachable from the current grant-fee worklist page | No backend changes, no bill/document/detail workflow |
++| `GF-POSTDRAFT-QA-01` | main thread | `artifacts/GF-POSTDRAFT-FE-01/**`, `artifacts/GF-POSTDRAFT-QA-01/**`, `tasks/postenhancement/backend/GF-POSTDRAFT-QA-01.md` | Runs after FE wiring is complete | Audit evidence and exact close summary for the post-draft FE wave | No product-code changes |
++
++## Verification
++
++- `cd frontend && npm run lint -- src/api/grantFees.ts src/api/grantFees.types.ts src/modules/grantFees/pages/GrantFeeTaskList.vue`
++- `cd frontend && npm run typecheck`
++- `./scripts/task_validate.sh GF-POSTDRAFT-FE-01`
++- `./scripts/task_validate.sh GF-POSTDRAFT-QA-01`
++
++## Done Definition
++
++- `DRAFT_GENERATED` rows expose a real `标记完成` action
++- completion success refreshes the current worklist state
++- no backend code is changed
++- required artifacts exist and both task gates pass
+diff --git a/docs/superpowers/specs/2026-04-05-grant-fee-postdraft-design.md b/docs/superpowers/specs/2026-04-05-grant-fee-postdraft-design.md
+new file mode 100644
+index 0000000..5e8332c
+--- /dev/null
++++ b/docs/superpowers/specs/2026-04-05-grant-fee-postdraft-design.md
+@@ -0,0 +1,65 @@
++# Grant Fee Post-draft Workflow Design
++
++## Story Shape Classification
++
++- `shared_file_density`: `medium`
++- `prereq_dependency_density`: `low`
++- `be_fe_coupling`: `frontend wiring on top of existing backend state action`
++- `evidence_cost`: `medium`
++
++## chosen_runbook
++
++- `P0-frontend-heavy-story`
++
++## Problem Statement
++
++`GF-RESIDUAL-SPEC-01` 已经明确 `#15` 的第一条 residual follow-up 应是 post-draft workflow rule。当前 backend 已存在 `PUT /grant-fee-tasks/{task_id}/state` 和 `mark_done` action，状态机测试也已经覆盖 `DRAFT_GENERATED -> DONE`。真正缺的是可到达的产品行为：`GrantFeeTaskList.vue` 仍只支持单行生成草单，没有任何 post-draft 完成入口，因此用户无法把已生成草单的授权费任务在前端真实完成。
++
++## Assumptions
++
++- backend authority 已存在且继续有效：
++  - `mark_done` remains manual-only
++  - no downstream bill/document proof is required in this slice
++- in-scope status path fixed to:
++  - `DRAFT_GENERATED -> DONE`
++- current worklist page authority remains:
++  - `frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue`
++
++## Scope
++
++- frontend API layer:
++  - add one state-action client for grant-fee tasks
++- frontend page:
++  - expose one row-level `标记完成` action for `DRAFT_GENERATED`
++  - refresh row/list state after success
++  - keep all user-facing text in Simplified Chinese
++- qa:
++  - verify exact post-draft closure and evidence
++
++## Explicit Non-scope
++
++- no backend code changes
++- no bill linkage
++- no document/reminder linkage
++- no detail/edit drawer or page
++- no batch action shell
++
++## Exact Closure Slice
++
++- make the existing post-draft `mark_done` state action reachable from the current grant-fee worklist page for rows in `DRAFT_GENERATED`
++
++## Shared-file Decisions
++
++- serialized frontend ownership:
++  - `frontend/src/api/grantFees.ts`
++  - `frontend/src/api/grantFees.types.ts`
++  - `frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue`
++
++## Verification
++
++- `cd frontend && npm run lint -- src/api/grantFees.ts src/api/grantFees.types.ts src/modules/grantFees/pages/GrantFeeTaskList.vue`
++- `cd frontend && npm run typecheck`
++
++## Design Conclusion
++
++- `可在当前约束下拆成可执行原子任务`
+diff --git a/frontend/src/api/grantFees.ts b/frontend/src/api/grantFees.ts
+index 620e012..a93b538 100644
+--- a/frontend/src/api/grantFees.ts
++++ b/frontend/src/api/grantFees.ts
+@@ -6,6 +6,8 @@ import type {
+     GrantFeeTaskListItem,
+     GrantFeeTaskListParams,
+     GrantFeeTaskListResponse,
++    GrantFeeTaskStateAction,
++    GrantFeeTaskStateResult,
+     GrantFeeTaskStatus,
+ } from './grantFees.types'
+ 
+@@ -43,6 +45,18 @@ interface BackendGrantFeeDraftGenerateResponse {
+     reused: boolean
+ }
+ 
++interface BackendGrantFeeTaskStateResponse {
++    task_id: string
++    case_id: string
++    state: string
++    client_instruction: string
++    notify_count: number
++    draft_generated: boolean
++    notice_sent: boolean
++    is_overdue: boolean
++    allowed_actions: string[]
++}
++
+ function normalizeBoolean(input: boolean | undefined): boolean | undefined {
+     return input === undefined ? undefined : Boolean(input)
+ }
+@@ -94,6 +108,38 @@ function mapGrantFeeDraftGenerateResult(
+     }
+ }
+ 
++function normalizeAction(input: string): GrantFeeTaskStateAction {
++    const normalized = (input || '').trim()
++    const valid: GrantFeeTaskStateAction[] = [
++        'mark_waiting_client',
++        'record_pay_instruction',
++        'record_abandon_instruction',
++        'mark_draft_generated',
++        'mark_done',
++    ]
++    return valid.includes(normalized as GrantFeeTaskStateAction)
++        ? (normalized as GrantFeeTaskStateAction)
++        : 'mark_done'
++}
++
++function mapGrantFeeTaskStateResult(
++    input: BackendGrantFeeTaskStateResponse,
++): GrantFeeTaskStateResult {
++    return {
++        task_id: input.task_id,
++        case_id: input.case_id,
++        state: normalizeStatus(input.state),
++        client_instruction: normalizeInstruction(input.client_instruction),
++        notify_count: Number(input.notify_count || 0),
++        draft_generated: Boolean(input.draft_generated),
++        notice_sent: Boolean(input.notice_sent),
++        is_overdue: Boolean(input.is_overdue),
++        allowed_actions: Array.isArray(input.allowed_actions)
++            ? input.allowed_actions.map(normalizeAction)
++            : [],
++    }
++}
++
+ /**
+  * Get paginated grant-fee task list
+  */
+@@ -139,3 +185,16 @@ export async function generateGrantFeeDraft(taskId: string): Promise<GrantFeeDra
+     const response = await http.post<BackendGrantFeeDraftGenerateResponse>(`/grant-fee-tasks/${taskId}/generate-draft`)
+     return mapGrantFeeDraftGenerateResult(response.data)
+ }
++
++/**
++ * Apply a grant-fee task state action
++ */
++export async function applyGrantFeeTaskAction(
++    taskId: string,
++    action: GrantFeeTaskStateAction,
++): Promise<GrantFeeTaskStateResult> {
++    const response = await http.put<BackendGrantFeeTaskStateResponse>(`/grant-fee-tasks/${taskId}/state`, {
++        action,
++    })
++    return mapGrantFeeTaskStateResult(response.data)
++}
+diff --git a/frontend/src/api/grantFees.types.ts b/frontend/src/api/grantFees.types.ts
+index 3d7fe92..bff2467 100644
+--- a/frontend/src/api/grantFees.types.ts
++++ b/frontend/src/api/grantFees.types.ts
+@@ -6,6 +6,12 @@ export type GrantFeeMoney = number | string
+ 
+ export type GrantFeeTaskStatus = 'OPEN' | 'WAITING_CLIENT' | 'READY_TO_DRAFT' | 'DRAFT_GENERATED' | 'DONE'
+ export type GrantFeeTaskClientInstruction = 'NONE' | 'PAY' | 'ABANDON'
++export type GrantFeeTaskStateAction =
++    | 'mark_waiting_client'
++    | 'record_pay_instruction'
++    | 'record_abandon_instruction'
++    | 'mark_draft_generated'
++    | 'mark_done'
+ 
+ export interface GrantFeeTaskListItem {
+     task_id: string
+@@ -41,6 +47,18 @@ export interface GrantFeeDraftGenerateResult {
+     reused: boolean
+ }
+ 
++export interface GrantFeeTaskStateResult {
++    task_id: string
++    case_id: string
++    state: GrantFeeTaskStatus
++    client_instruction: GrantFeeTaskClientInstruction
++    notify_count: number
++    draft_generated: boolean
++    notice_sent: boolean
++    is_overdue: boolean
++    allowed_actions: GrantFeeTaskStateAction[]
++}
++
+ export interface GrantFeeTaskListParams {
+     status?: GrantFeeTaskStatus
+     client_instruction?: GrantFeeTaskClientInstruction
+diff --git a/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue b/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue
+index 0c97a42..c97d4f5 100644
+--- a/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue
++++ b/frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue
+@@ -8,14 +8,14 @@
+       <div class="page-header-right">
+         <el-space wrap>
+           <el-button disabled type="primary">状态操作（预留）</el-button>
+-          <el-button disabled>草单联动（预留）</el-button>
++          <el-button disabled>账单与文书联动（预留）</el-button>
+         </el-space>
+       </div>
+     </div>
+ 
+     <el-alert
+       class="page-note"
+-      title="当前页面支持查看、筛选与单行草单生成，其他联动暂未开放。"
++      title="当前页面支持查看、筛选、单行生成草单和草单后完成，其他联动暂未开放。"
+       type="info"
+       show-icon
+       :closable="false"
+@@ -173,15 +173,26 @@
+         </el-table-column>
+         <el-table-column label="动作入口" min-width="180" fixed="right">
+           <template #default="{ row }">
+-            <el-button
+-              size="small"
+-              type="primary"
+-              :loading="generatingTaskId === row.task_id"
+-              :disabled="!canGenerateDraft(row)"
+-              @click="handleGenerateDraft(row)"
+-            >
+-              生成草单
+-            </el-button>
++            <el-space wrap>
++              <el-button
++                size="small"
++                type="primary"
++                :loading="generatingTaskId === row.task_id"
++                :disabled="!canGenerateDraft(row)"
++                @click="handleGenerateDraft(row)"
++              >
++                生成草单
++              </el-button>
++              <el-button
++                size="small"
++                type="success"
++                :loading="completingTaskId === row.task_id"
++                :disabled="!canMarkDone(row)"
++                @click="handleMarkDone(row)"
++              >
++                标记完成
++              </el-button>
++            </el-space>
+           </template>
+         </el-table-column>
+       </el-table>
+@@ -194,7 +205,7 @@
+ <script setup lang="ts">
+ import { computed, onMounted, reactive, ref, watch } from 'vue'
+ import { ElMessage } from 'element-plus'
+-import { generateGrantFeeDraft, getGrantFeeTasks } from '../../../api/grantFees'
++import { applyGrantFeeTaskAction, generateGrantFeeDraft, getGrantFeeTasks } from '../../../api/grantFees'
+ import type {
+   GrantFeeTaskClientInstruction,
+   GrantFeeTaskListItem,
+@@ -211,6 +222,7 @@ const tasks = ref<GrantFeeTaskListItem[]>([])
+ const loading = ref(false)
+ const error = ref<ApiError | null>(null)
+ const generatingTaskId = ref<string | null>(null)
++const completingTaskId = ref<string | null>(null)
+ const page = ref(1)
+ const pageSize = ref(20)
+ const total = ref(0)
+@@ -281,6 +293,10 @@ function canGenerateDraft(row: GrantFeeTaskListItem): boolean {
+   return row.status === 'READY_TO_DRAFT' && !row.draft_generated && generatingTaskId.value !== row.task_id
+ }
+ 
++function canMarkDone(row: GrantFeeTaskListItem): boolean {
++  return row.status === 'DRAFT_GENERATED' && completingTaskId.value !== row.task_id
++}
++
+ function buildParams() {
+   const [date_from, date_to] = filters.date_range
+   return {
+@@ -330,6 +346,20 @@ async function handleGenerateDraft(row: GrantFeeTaskListItem) {
+   }
+ }
+ 
++async function handleMarkDone(row: GrantFeeTaskListItem) {
++  completingTaskId.value = row.task_id
++  error.value = null
++  try {
++    await applyGrantFeeTaskAction(row.task_id, 'mark_done')
++    ElMessage.success('授权费任务已标记完成')
++    await fetchTasks()
++  } catch (err) {
++    error.value = err as ApiError
++  } finally {
++    completingTaskId.value = null
++  }
++}
++
+ function applyFilters() {
+   page.value = 1
+   void fetchTasks()
+diff --git a/tasks/postenhancement/backend/GF-POSTDRAFT-QA-01.md b/tasks/postenhancement/backend/GF-POSTDRAFT-QA-01.md
+new file mode 100644
+index 0000000..b51fa7b
+--- /dev/null
++++ b/tasks/postenhancement/backend/GF-POSTDRAFT-QA-01.md
+@@ -0,0 +1,31 @@
++# GF-POSTDRAFT-QA-01 — 授权费 post-draft FE wave audit
++
++- Source: `docs/superpowers/plans/2026-04-05-grant-fee-postdraft.md`
++- Type: `qa close audit`
++- Execution mode: Atomic (single-task, single-owner)
++
++## Task Definition
++
++- Goal: 审计 `GF-POSTDRAFT-FE-01` 的 evidence 与输出，确认授权费任务看板已具备最小 post-draft 完成入口，并生成 close summary。
++- Exact closure slice:
++  - 审计 `GF-POSTDRAFT-FE-01` 的 evidence 与 diff
++  - 生成 `artifacts/GF-POSTDRAFT-QA-01/**`
++- Explicit non-closure:
++  - 不做任何产品代码实现
++  - 不扩展到 bill/document/detail residual
++- Remaining follow-up task ids:
++  - `None`
++- Allowlist:
++  - `tasks/postenhancement/backend/GF-POSTDRAFT-QA-01.md`
++  - `artifacts/GF-POSTDRAFT-FE-01/**`
++  - `artifacts/GF-POSTDRAFT-QA-01/**`
++- Verification:
++  - `./scripts/task_validate.sh GF-POSTDRAFT-FE-01`
++  - `./scripts/task_validate.sh GF-POSTDRAFT-QA-01`
++
++## Execution Checklist
++
++- [ ] Confirm `DRAFT_GENERATED` rows can trigger real completion
++- [ ] Confirm no backend code was changed
++- [ ] Confirm bill/document/detail residuals remain deferred
++- [ ] Record exact closure / non-closure in summary
+diff --git a/tasks/postenhancement/frontend/GF-POSTDRAFT-FE-01.md b/tasks/postenhancement/frontend/GF-POSTDRAFT-FE-01.md
+new file mode 100644
+index 0000000..585b6d7
+--- /dev/null
++++ b/tasks/postenhancement/frontend/GF-POSTDRAFT-FE-01.md
+@@ -0,0 +1,41 @@
++# GF-POSTDRAFT-FE-01 — 授权费 post-draft 完成入口
++
++- Source: `docs/superpowers/plans/2026-04-05-grant-fee-postdraft.md`
++- Type: `frontend page capability`
++- Execution mode: Atomic (single-task, single-owner)
++
++## Task Definition
++
++- Goal: 在现有授权费任务看板中，为 `DRAFT_GENERATED` 行接入真实的 `mark_done` 完成入口，让 post-draft workflow 形成最小可达产品路径。
++- Exact closure slice:
++  - 更新 `frontend/src/api/grantFees.ts`
++  - 更新 `frontend/src/api/grantFees.types.ts`
++  - 更新 `frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue`
++  - 更新 `docs/superpowers/specs/2026-04-05-grant-fee-postdraft-design.md`
++  - 更新 `docs/superpowers/plans/2026-04-05-grant-fee-postdraft.md`
++- Explicit non-closure:
++  - 不做任何 backend 代码修改
++  - 不做 bill linkage
++  - 不做 document/reminder linkage
++  - 不做 detail/edit 或 batch action
++- Remaining follow-up task ids:
++  - `GF-POSTDRAFT-QA-01`
++- Allowlist:
++  - `frontend/src/api/grantFees.ts`
++  - `frontend/src/api/grantFees.types.ts`
++  - `frontend/src/modules/grantFees/pages/GrantFeeTaskList.vue`
++  - `docs/superpowers/specs/2026-04-05-grant-fee-postdraft-design.md`
++  - `docs/superpowers/plans/2026-04-05-grant-fee-postdraft.md`
++  - `tasks/postenhancement/frontend/GF-POSTDRAFT-FE-01.md`
++  - `tasks/postenhancement/backend/GF-POSTDRAFT-QA-01.md`
++- Verification:
++  - `cd frontend && npm run lint -- src/api/grantFees.ts src/api/grantFees.types.ts src/modules/grantFees/pages/GrantFeeTaskList.vue`
++  - `cd frontend && npm run typecheck`
++  - `./scripts/task_validate.sh GF-POSTDRAFT-FE-01`
++
++## Execution Checklist
++
++- [ ] Add grant-fee state action client for `mark_done`
++- [ ] Render row-level `标记完成` for `DRAFT_GENERATED`
++- [ ] Refresh current list after successful completion
++- [ ] Keep non-post-draft actions deferred

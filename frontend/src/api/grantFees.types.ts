@@ -6,6 +6,12 @@ export type GrantFeeMoney = number | string
 
 export type GrantFeeTaskStatus = 'OPEN' | 'WAITING_CLIENT' | 'READY_TO_DRAFT' | 'DRAFT_GENERATED' | 'DONE'
 export type GrantFeeTaskClientInstruction = 'NONE' | 'PAY' | 'ABANDON'
+export type GrantFeeTaskStateAction =
+    | 'mark_waiting_client'
+    | 'record_pay_instruction'
+    | 'record_abandon_instruction'
+    | 'mark_draft_generated'
+    | 'mark_done'
 
 export interface GrantFeeTaskListItem {
     task_id: string
@@ -39,6 +45,18 @@ export interface GrantFeeDraftGenerateResult {
     amount: GrantFeeMoney
     item_count: number
     reused: boolean
+}
+
+export interface GrantFeeTaskStateResult {
+    task_id: string
+    case_id: string
+    state: GrantFeeTaskStatus
+    client_instruction: GrantFeeTaskClientInstruction
+    notify_count: number
+    draft_generated: boolean
+    notice_sent: boolean
+    is_overdue: boolean
+    allowed_actions: GrantFeeTaskStateAction[]
 }
 
 export interface GrantFeeTaskListParams {
