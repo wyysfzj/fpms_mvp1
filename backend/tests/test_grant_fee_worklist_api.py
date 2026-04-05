@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from app.modules.fees.models import T_GrantFeeTask
+from app.modules.billing.models import Bill, BillItem
+from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
 
 WORKLIST_BASE = "/api/v1/grant-fee-tasks/list"
 
@@ -15,7 +17,22 @@ def _unique_case_no() -> str:
     return f"GFWL-{uuid4().hex[:8].upper()}"
 
 
-def _create_case(client: TestClient, auth_headers: dict[str, str]) -> str:
+def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
+    response = client.post(
+        "/api/v1/clients",
+        json={
+            "name_cn": f"授权费客户-{uuid4().hex[:8].upper()}",
+            "default_currency": "CNY",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def _create_case(
+    client: TestClient, auth_headers: dict[str, str], *, client_id: str | None = None
+) -> str:
     response = client.post(
         "/api/v1/cases",
         json={
@@ -24,6 +41,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> str:
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": "Grant Fee Worklist Case",
+            **({"client_id": client_id} if client_id else {}),
         },
         headers=auth_headers,
     )
@@ -78,7 +96,85 @@ def _assert_item_shape(item: dict) -> None:
         "draft_generated",
         "notice_sent",
         "is_overdue",
+        "billed",
+        "linked_bill_id",
+        "linked_bill_no",
     }
+
+
+def _link_task_to_bill(
+    session_factory: sessionmaker,
+    *,
+    task_id: str,
+    case_id: str,
+    client_id: str,
+    currency: str,
+    bill_no: str,
+) -> tuple[str, str]:
+    with session_factory() as db:
+        draft = FeeDraft(
+            id=str(uuid4()),
+            case_id=case_id,
+            client_id=client_id,
+            draft_type="GRANT_FEE",
+            currency=currency,
+            status="OPEN",
+            total_gov=Decimal("100.00"),
+            total_service=Decimal("50.00"),
+            total_misc=Decimal("0.00"),
+            amount=Decimal("150.00"),
+        )
+        db.add(draft)
+        db.flush()
+
+        db.add(
+            FeeItem(
+                id=str(uuid4()),
+                draft_id=draft.id,
+                case_id=case_id,
+                fee_code="GRANT_FEE_SERVICE",
+                fee_name="Grant fee service fee",
+                fee_type="SERVICE",
+                quantity=Decimal("1"),
+                unit_price=Decimal("50.00"),
+                amount=Decimal("50.00"),
+                remark=f"GRANT_FEE_TASK:{task_id}",
+            )
+        )
+
+        bill = Bill(
+            id=str(uuid4()),
+            bill_no=bill_no,
+            client_id=client_id,
+            currency=currency,
+            direction="AR",
+            status="UNSETTLED",
+            amount=Decimal("150.00"),
+            balance=Decimal("150.00"),
+            total_gov=Decimal("100.00"),
+            total_service=Decimal("50.00"),
+            total_misc=Decimal("0.00"),
+        )
+        db.add(bill)
+        db.flush()
+
+        db.add(
+            BillItem(
+                id=str(uuid4()),
+                bill_id=bill.id,
+                case_id=case_id,
+                draft_id=draft.id,
+                fee_item_id=None,
+                fee_code="GRANT_FEE_SERVICE",
+                fee_name="Grant fee service fee",
+                fee_type="SERVICE",
+                year_no=None,
+                amount=Decimal("50.00"),
+            )
+        )
+
+        db.commit()
+        return bill.id, draft.id
 
 
 def test_grant_fee_worklist_requires_read_permission(
@@ -297,3 +393,69 @@ def test_grant_fee_worklist_filters_by_overdue_and_case_and_date_range(
     range_payload = range_resp.json()
     assert range_payload["total"] == 1
     assert range_payload["items"][0]["task_id"] == other_task_id
+
+
+def test_grant_fee_worklist_projects_bill_visibility_from_existing_lineage(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    client_id = _create_client(client, auth_headers)
+    case_id = _create_case(client, auth_headers, client_id=client_id)
+
+    billed_task_id = _insert_task(
+        session_factory,
+        case_id=case_id,
+        due_date=date(2026, 6, 1),
+        client_instruction="PAY",
+        notify_count=3,
+        draft_generated=True,
+        notice_sent=True,
+        gov_fee_amt="100.00",
+        service_fee_amt="50.00",
+        currency="CNY",
+    )
+    unbilled_task_id = _insert_task(
+        session_factory,
+        case_id=case_id,
+        due_date=date(2026, 6, 2),
+        client_instruction="PAY",
+        notify_count=3,
+        draft_generated=True,
+        notice_sent=True,
+        gov_fee_amt="80.00",
+        service_fee_amt="20.00",
+        currency="CNY",
+    )
+
+    bill_id, _draft_id = _link_task_to_bill(
+        session_factory,
+        task_id=billed_task_id,
+        case_id=case_id,
+        client_id=client_id,
+        currency="CNY",
+        bill_no=f"BILL-{uuid4().hex[:8].upper()}",
+    )
+
+    response = client.get(
+        WORKLIST_BASE,
+        headers=auth_headers,
+        params={"status": "DRAFT_GENERATED", "case_id": case_id, "page": 1, "page_size": 20},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["total"] == 2
+    item_map = {item["task_id"]: item for item in payload["items"]}
+
+    billed_item = item_map[billed_task_id]
+    _assert_item_shape(billed_item)
+    assert billed_item["billed"] is True
+    assert billed_item["linked_bill_id"] == bill_id
+    assert billed_item["linked_bill_no"].startswith("BILL-")
+
+    unbilled_item = item_map[unbilled_task_id]
+    _assert_item_shape(unbilled_item)
+    assert unbilled_item["billed"] is False
+    assert unbilled_item["linked_bill_id"] is None
+    assert unbilled_item["linked_bill_no"] is None

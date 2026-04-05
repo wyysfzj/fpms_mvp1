@@ -23,6 +23,9 @@ interface BackendGrantFeeTaskListItem {
     draft_generated: boolean
     notice_sent: boolean
     is_overdue: boolean
+    billed?: boolean
+    linked_bill_id?: string | null
+    linked_bill_no?: string | null
 }
 
 interface BackendGrantFeeTaskListResponse {
@@ -88,6 +91,9 @@ function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListIt
         draft_generated: Boolean(input.draft_generated),
         notice_sent: Boolean(input.notice_sent),
         is_overdue: Boolean(input.is_overdue),
+        billed: Boolean(input.billed),
+        linked_bill_id: input.linked_bill_id || undefined,
+        linked_bill_no: input.linked_bill_no || undefined,
     }
 }
 

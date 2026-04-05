@@ -164,6 +164,18 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="账单" min-width="180">
+          <template #default="{ row }">
+            <template v-if="row.billed && row.linked_bill_id">
+              <router-link class="bill-link" :to="`/billing/bills/${row.linked_bill_id}`">
+                {{ row.linked_bill_no || row.linked_bill_id }}
+              </router-link>
+            </template>
+            <el-tag v-else :type="row.draft_generated ? 'warning' : 'info'" size="small">
+              {{ row.draft_generated ? '未开账单' : '待生成草单' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="是否逾期" width="110">
           <template #default="{ row }">
             <el-tag :type="row.is_overdue ? 'danger' : 'success'" size="small">
@@ -469,7 +481,16 @@ onMounted(() => {
   text-decoration: none;
 }
 
+.bill-link {
+  color: #2563eb;
+  text-decoration: none;
+}
+
 .case-link:hover {
+  text-decoration: underline;
+}
+
+.bill-link:hover {
   text-decoration: underline;
 }
 

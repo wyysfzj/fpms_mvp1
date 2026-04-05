@@ -25,6 +25,9 @@ export interface GrantFeeTaskListItem {
     draft_generated: boolean
     notice_sent: boolean
     is_overdue: boolean
+    billed: boolean
+    linked_bill_id?: string
+    linked_bill_no?: string
 }
 
 export interface GrantFeeTaskListResponse {

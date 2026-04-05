@@ -8,6 +8,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
+from app.modules.billing.models import Bill, BillItem
 from app.modules.cases.models import Case
 from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
 from app.modules.fees.service import recalc_fee_draft_totals
@@ -91,6 +92,7 @@ def list_grant_fee_tasks(
     stmt = stmt.order_by(T_GrantFeeTask.due_date.asc(), T_GrantFeeTask.id.asc())
 
     tasks = list(db.execute(stmt).scalars().all())
+    bill_visibility_map = _build_grant_fee_bill_visibility_map(db, tasks=tasks)
     projected_items = []
     status_filter = str(filters.get("status") or "").strip().upper()
 
@@ -98,7 +100,16 @@ def list_grant_fee_tasks(
         status = derive_grant_fee_task_state(task)
         if status_filter and status != status_filter:
             continue
-        projected_items.append(_serialize_grant_fee_task_list_item(task, state=status))
+        projected_items.append(
+            _serialize_grant_fee_task_list_item(
+                task,
+                state=status,
+                bill_visibility=bill_visibility_map.get(
+                    task.id,
+                    {"billed": False, "linked_bill_id": None, "linked_bill_no": None},
+                ),
+            )
+        )
 
     total = len(projected_items)
     safe_page = max(int(page or 1), 1)
@@ -114,9 +125,13 @@ def list_grant_fee_tasks(
 
 
 def _load_grant_fee_task(db: Session, *, task_id: str) -> T_GrantFeeTask:
-    task = db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.id == task_id)).scalar_one_or_none()
+    task = db.execute(
+        select(T_GrantFeeTask).where(T_GrantFeeTask.id == task_id)
+    ).scalar_one_or_none()
     if task is None:
-        raise_business_error("GRANT_FEE_TASK_NOT_FOUND", "Grant fee task not found", status_code=404)
+        raise_business_error(
+            "GRANT_FEE_TASK_NOT_FOUND", "Grant fee task not found", status_code=404
+        )
     return task
 
 
@@ -321,7 +336,9 @@ def generate_grant_fee_draft(
     recalc_fee_draft_totals(db, draft_id=draft.id)
     draft = db.get(FeeDraft, draft.id)
     if draft is None:
-        raise_business_error("GRANT_FEE_DRAFT_GENERATION_FAILED", "Draft generation failed", status_code=500)
+        raise_business_error(
+            "GRANT_FEE_DRAFT_GENERATION_FAILED", "Draft generation failed", status_code=500
+        )
 
     task.draft_generated = True
     db.commit()
@@ -351,7 +368,75 @@ def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict
     }
 
 
-def _serialize_grant_fee_task_list_item(task: T_GrantFeeTask, *, state: str) -> dict[str, Any]:
+def _build_grant_fee_bill_visibility_map(
+    db: Session,
+    *,
+    tasks: list[T_GrantFeeTask],
+) -> dict[str, dict[str, Any]]:
+    task_ids = [str(task.id) for task in tasks if str(task.id or "").strip()]
+    if not task_ids:
+        return {}
+
+    markers = {_draft_marker(task_id): task_id for task_id in task_ids}
+    fee_item_rows = list(
+        db.execute(
+            select(FeeItem.remark, FeeItem.draft_id)
+            .where(FeeItem.remark.in_(list(markers)), FeeItem.draft_id.is_not(None))
+            .order_by(FeeItem.draft_id.asc())
+        ).all()
+    )
+
+    task_to_draft_ids: dict[str, list[str]] = {}
+    for remark, draft_id in fee_item_rows:
+        if not remark or not draft_id:
+            continue
+        task_id = markers.get(str(remark))
+        if not task_id:
+            continue
+        draft_ids = task_to_draft_ids.setdefault(task_id, [])
+        if draft_id not in draft_ids:
+            draft_ids.append(draft_id)
+
+    all_draft_ids = sorted(
+        {draft_id for draft_ids in task_to_draft_ids.values() for draft_id in draft_ids}
+    )
+    if not all_draft_ids:
+        return {}
+
+    bill_rows = list(
+        db.execute(
+            select(BillItem.draft_id, Bill.id, Bill.bill_no)
+            .join(Bill, Bill.id == BillItem.bill_id)
+            .where(BillItem.draft_id.in_(all_draft_ids))
+            .order_by(Bill.created_at.asc(), Bill.id.asc(), BillItem.id.asc())
+        ).all()
+    )
+
+    draft_to_bill: dict[str, dict[str, Any]] = {}
+    for draft_id, bill_id, bill_no in bill_rows:
+        if draft_id and draft_id not in draft_to_bill:
+            draft_to_bill[draft_id] = {
+                "billed": True,
+                "linked_bill_id": bill_id,
+                "linked_bill_no": bill_no or bill_id,
+            }
+
+    visibility_map: dict[str, dict[str, Any]] = {}
+    for task_id, draft_ids in task_to_draft_ids.items():
+        for draft_id in draft_ids:
+            bill_visibility = draft_to_bill.get(draft_id)
+            if bill_visibility:
+                visibility_map[task_id] = bill_visibility
+                break
+    return visibility_map
+
+
+def _serialize_grant_fee_task_list_item(
+    task: T_GrantFeeTask,
+    *,
+    state: str,
+    bill_visibility: dict[str, Any],
+) -> dict[str, Any]:
     return {
         "task_id": task.id,
         "case_id": task.case_id,
@@ -364,6 +449,9 @@ def _serialize_grant_fee_task_list_item(task: T_GrantFeeTask, *, state: str) -> 
         "draft_generated": bool(task.draft_generated),
         "notice_sent": bool(task.notice_sent),
         "is_overdue": bool(task.is_overdue),
+        "billed": bool(bill_visibility.get("billed")),
+        "linked_bill_id": bill_visibility.get("linked_bill_id"),
+        "linked_bill_no": bill_visibility.get("linked_bill_no"),
     }
 
 
