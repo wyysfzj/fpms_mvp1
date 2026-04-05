@@ -77,6 +77,13 @@ def _normalize_optional_int(value: Any, field_name: str) -> int | None:
         )
 
 
+def _normalize_optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def _normalize_pending_mode(value: Any) -> str:
     if value is None:
         return "all"
@@ -459,6 +466,97 @@ def _build_annuity_success_metrics(db: Session, tasks: list[AnnuityTask]) -> dic
     }
 
 
+def _build_annuity_payment_truth(
+    db: Session, tasks: list[AnnuityTask]
+) -> tuple[dict[str, int], dict[tuple[str, int], dict[str, bool]]]:
+    if not tasks:
+        return (
+            {
+                "official_paid_task_count": 0,
+                "client_received_task_count": 0,
+                "collected_not_paid_task_count": 0,
+                "outstanding_task_count": 0,
+            },
+            {},
+        )
+
+    case_ids = sorted({task.case_id for task in tasks})
+    official_required_by_case_year: dict[tuple[str, int], Decimal] = defaultdict(lambda: _ZERO)
+    client_required_by_case_year: dict[tuple[str, int], Decimal] = defaultdict(lambda: _ZERO)
+
+    for task in tasks:
+        key = (task.case_id, task.year_no)
+        official_required_by_case_year[key] += _coerce_decimal(task.gov_fee_amt)
+        client_required_by_case_year[key] += _coerce_decimal(task.gov_fee_amt) + _coerce_decimal(
+            task.service_fee_amt
+        )
+
+    official_paid_by_case_year: dict[tuple[str, int], Decimal] = defaultdict(lambda: _ZERO)
+    gov_payments = db.execute(
+        select(GovPayment.case_id, FeeItem.year_no, GovPayment.paid_amount)
+        .join(FeeItem, FeeItem.id == GovPayment.fee_item_id)
+        .where(GovPayment.case_id.in_(case_ids))
+        .where(FeeItem.year_no.is_not(None))
+        .where(GovPayment.paid_date.is_not(None))
+        .where(func.upper(GovPayment.status).in_(("PAID", "RECORDED")))
+    ).all()
+    for row in gov_payments:
+        if row.year_no is None:
+            continue
+        official_paid_by_case_year[(row.case_id, int(row.year_no))] += _coerce_decimal(
+            row.paid_amount
+        )
+
+    client_received_by_case_year: dict[tuple[str, int], Decimal] = defaultdict(lambda: _ZERO)
+    case_receipts = db.execute(
+        select(CaseReceipt.case_id, CaseReceipt.year_no, CaseReceipt.received_amt)
+        .where(CaseReceipt.case_id.in_(case_ids))
+        .where(CaseReceipt.year_no.is_not(None))
+    ).all()
+    for row in case_receipts:
+        if row.year_no is None:
+            continue
+        client_received_by_case_year[(row.case_id, int(row.year_no))] += _coerce_decimal(
+            row.received_amt
+        )
+
+    truth_map: dict[tuple[str, int], dict[str, bool]] = {}
+    summary = {
+        "official_paid_task_count": 0,
+        "client_received_task_count": 0,
+        "collected_not_paid_task_count": 0,
+        "outstanding_task_count": 0,
+    }
+
+    for task in tasks:
+        key = (task.case_id, task.year_no)
+        official_paid = (
+            official_paid_by_case_year[key] >= official_required_by_case_year[key] > _ZERO
+        )
+        client_received = (
+            client_received_by_case_year[key] >= client_required_by_case_year[key] > _ZERO
+        )
+        collected_not_paid = client_received and not official_paid
+        outstanding = not client_received and not official_paid
+        truth = {
+            "official_paid": official_paid,
+            "client_received": client_received,
+            "collected_not_paid": collected_not_paid,
+            "outstanding": outstanding,
+        }
+        truth_map[key] = truth
+        if official_paid:
+            summary["official_paid_task_count"] += 1
+        if client_received:
+            summary["client_received_task_count"] += 1
+        if collected_not_paid:
+            summary["collected_not_paid_task_count"] += 1
+        if outstanding:
+            summary["outstanding_task_count"] += 1
+
+    return summary, truth_map
+
+
 def list_annuity_tasks_report(
     db: Session,
     *,
@@ -487,6 +585,15 @@ def list_annuity_tasks_report(
 
     status_values = _normalize_statuses(filters.get("task_status", filters.get("status")))
     report_year = _normalize_optional_int(filters.get("annuity_year"), "annuity_year")
+    payment_status = _normalize_optional_text(filters.get("payment_status"))
+    if payment_status is not None:
+        payment_status = payment_status.upper()
+        if payment_status not in {"PAID", "UNPAID"}:
+            raise_business_error(
+                "ANNUITY_PAYMENT_STATUS_INVALID",
+                "payment_status must be PAID or UNPAID",
+                status_code=400,
+            )
     pending_mode = _normalize_pending_mode(
         filters.get("pending_mode", filters.get("pending_filter", filters.get("pending")))
     )
@@ -529,10 +636,20 @@ def list_annuity_tasks_report(
         AnnuityTask.id.asc(),
     )
     all_items = db.execute(ordered_stmt).scalars().all()
+    if payment_status is not None:
+        _payment_summary, payment_truth = _build_annuity_payment_truth(db, all_items)
+        expect_paid = payment_status == "PAID"
+        all_items = [
+            task
+            for task in all_items
+            if payment_truth.get((task.case_id, task.year_no), {}).get("official_paid", False)
+            == expect_paid
+        ]
     total = len(all_items)
     offset = (page - 1) * page_size
     items = all_items[offset : offset + page_size]
     summary = summarize_annuity_tasks(all_items)
+    summary.update(_build_annuity_payment_truth(db, all_items)[0])
     summary.update(_build_annuity_success_metrics(db, all_items))
     summary.update(_build_annuity_grouped_amounts(db, all_items))
     return items, total, summary

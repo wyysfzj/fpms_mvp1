@@ -229,6 +229,62 @@
         </div>
         <el-empty v-else description="暂无代理人服务费汇总数据" :image-size="72" />
       </section>
+
+      <section class="grouped-summary-card">
+        <div class="grouped-summary-header">
+          <h3>按年份汇总</h3>
+          <span>{{ summary.year_amounts.length }} 组</span>
+        </div>
+        <div v-if="summary.year_amounts.length" class="grouped-summary-list">
+          <div
+            v-for="item in summary.year_amounts"
+            :key="`year-${item.key}`"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-main">
+              <span class="grouped-summary-title">{{ item.label }}</span>
+              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
+            </div>
+            <div class="grouped-summary-amounts">
+              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
+              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
+              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
+              <span class="grouped-summary-breakdown">
+                类型分布 {{ formatDraftTypeBreakdown(item.draft_type_amounts) }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <el-empty v-else description="暂无按年份汇总数据" :image-size="72" />
+      </section>
+
+      <section class="grouped-summary-card">
+        <div class="grouped-summary-header">
+          <h3>按月份汇总</h3>
+          <span>{{ summary.month_amounts.length }} 组</span>
+        </div>
+        <div v-if="summary.month_amounts.length" class="grouped-summary-list">
+          <div
+            v-for="item in summary.month_amounts"
+            :key="`month-${item.key}`"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-main">
+              <span class="grouped-summary-title">{{ item.label }}</span>
+              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
+            </div>
+            <div class="grouped-summary-amounts">
+              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
+              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
+              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
+              <span class="grouped-summary-breakdown">
+                类型分布 {{ formatDraftTypeBreakdown(item.draft_type_amounts) }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <el-empty v-else description="暂无按月份汇总数据" :image-size="72" />
+      </section>
     </div>
 
     <div v-if="error" class="page-error">
@@ -363,6 +419,8 @@ const summary = ref<FeeDraftReportSummary>({
   case_type_amounts: [],
   country_amounts: [],
   agent_service_amounts: [],
+  year_amounts: [],
+  month_amounts: [],
 })
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 const summaryCurrency = computed(() => filters.currency || drafts.value[0]?.currency || 'CNY')
@@ -421,6 +479,8 @@ async function fetchDrafts() {
       case_type_amounts: [],
       country_amounts: [],
       agent_service_amounts: [],
+      year_amounts: [],
+      month_amounts: [],
     }
   } finally {
     loading.value = false
@@ -442,6 +502,15 @@ function formatAmount(amount: FeeMoney, currency?: string): string {
     style: 'currency',
     currency: curr,
   }).format(numericAmount)
+}
+
+function formatDraftTypeBreakdown(
+  rows: Array<{ label: string; income_amount: FeeMoney }>,
+): string {
+  if (!rows.length) return '暂无'
+  return rows
+    .map((row) => `${row.label} ${formatAmount(row.income_amount, summaryCurrency.value)}`)
+    .join('，')
 }
 
 function getShortId(id: string | null | undefined): string {
@@ -572,6 +641,12 @@ onMounted(() => {
   flex-direction: column;
   gap: 4px;
   font-size: 13px;
+}
+
+.grouped-summary-breakdown {
+  color: var(--text-sub);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .summary-card {

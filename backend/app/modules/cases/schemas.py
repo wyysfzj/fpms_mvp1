@@ -324,12 +324,33 @@ class CaseReportCountResponse(BaseModel):
     count: int = 0
 
 
+class CaseClientReportCountResponse(BaseModel):
+    key: str
+    label: str
+    count: int = 0
+    case_type_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+
+
+class CaseTrendReportCountResponse(BaseModel):
+    key: str
+    label: str
+    new_case_count: int = 0
+    granted_count: int = 0
+    terminated_count: int = 0
+    invalidated_count: int = 0
+    withdrawn_count: int = 0
+    abandoned_count: int = 0
+
+
 class CaseReportSummaryResponse(BaseModel):
     total_case_count: int = 0
     status_counts: list[CaseReportCountResponse] = Field(default_factory=list)
     case_type_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+    client_counts: list[CaseClientReportCountResponse] = Field(default_factory=list)
     country_counts: list[CaseReportCountResponse] = Field(default_factory=list)
     agent_counts: list[CaseReportCountResponse] = Field(default_factory=list)
+    year_trends: list[CaseTrendReportCountResponse] = Field(default_factory=list)
+    month_trends: list[CaseTrendReportCountResponse] = Field(default_factory=list)
     granted_count: int = 0
     grant_rate: float | None = None
     terminated_count: int = 0

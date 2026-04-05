@@ -356,7 +356,9 @@ def test_get_annuity_tasks_supports_report_filters(
     )
     assert payment_status_filtered.status_code == 200, payment_status_filtered.text
     payment_status_payload = payment_status_filtered.json()
-    assert payment_status_payload["total"] == baseline_total
+    assert payment_status_payload["total"] == 0
+    assert payment_status_payload["summary"]["official_paid_task_count"] == 0
+    assert payment_status_payload["summary"]["client_received_task_count"] == 0
 
     year_filtered = client.get(
         "/api/v1/annuity/tasks",
@@ -634,3 +636,133 @@ def test_get_annuity_tasks_returns_success_rate_metrics(
     assert summary["on_time_paid_count"] == 1
     assert summary["late_paid_count"] == 1
     assert summary["success_rate"] == 1 / 3
+
+
+def test_get_annuity_tasks_applies_payment_status_truth_and_summary(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    today = date.today()
+    client_id = _create_client(client, auth_headers, name_prefix="ANN-PAY-CLI")
+    case_a = _create_case(client, auth_headers, client_id=client_id, case_no_prefix="ANN-PAY-A")
+    case_b = _create_case(client, auth_headers, client_id=client_id, case_no_prefix="ANN-PAY-B")
+    case_c = _create_case(client, auth_headers, client_id=client_id, case_no_prefix="ANN-PAY-C")
+    case_d = _create_case(client, auth_headers, client_id=client_id, case_no_prefix="ANN-PAY-D")
+
+    task_paid = _insert_annuity_task(
+        session_factory,
+        case_id=case_a["id"],
+        client_id=client_id,
+        year_no=401,
+        due_date=today + timedelta(days=30),
+        status="OPEN",
+        gov_fee_amt=Decimal("100.00"),
+        service_fee_amt=Decimal("50.00"),
+    )
+    task_collected_only = _insert_annuity_task(
+        session_factory,
+        case_id=case_b["id"],
+        client_id=client_id,
+        year_no=402,
+        due_date=today + timedelta(days=40),
+        status="OPEN",
+        gov_fee_amt=Decimal("120.00"),
+        service_fee_amt=Decimal("30.00"),
+    )
+    task_unpaid = _insert_annuity_task(
+        session_factory,
+        case_id=case_c["id"],
+        client_id=client_id,
+        year_no=403,
+        due_date=today + timedelta(days=50),
+        status="OPEN",
+        gov_fee_amt=Decimal("80.00"),
+        service_fee_amt=Decimal("20.00"),
+    )
+    task_official_only = _insert_annuity_task(
+        session_factory,
+        case_id=case_d["id"],
+        client_id=client_id,
+        year_no=404,
+        due_date=today + timedelta(days=60),
+        status="OPEN",
+        gov_fee_amt=Decimal("90.00"),
+        service_fee_amt=Decimal("10.00"),
+    )
+
+    paid_item_id = _insert_fee_item_with_draft(
+        session_factory,
+        case_id=case_a["id"],
+        client_id=client_id,
+        year_no=401,
+        amount=Decimal("100.00"),
+    )
+    official_only_item_id = _insert_fee_item_with_draft(
+        session_factory,
+        case_id=case_d["id"],
+        client_id=client_id,
+        year_no=404,
+        amount=Decimal("90.00"),
+    )
+    pay_list_id = _insert_pay_list(
+        session_factory,
+        client_id=client_id,
+        total_amount=Decimal("190.00"),
+    )
+    _insert_gov_payment(
+        session_factory,
+        pay_list_id=pay_list_id,
+        case_id=case_a["id"],
+        paid_amount=Decimal("100.00"),
+        paid_date=today + timedelta(days=5),
+        fee_item_id=paid_item_id,
+    )
+    _insert_gov_payment(
+        session_factory,
+        pay_list_id=pay_list_id,
+        case_id=case_d["id"],
+        paid_amount=Decimal("90.00"),
+        paid_date=today + timedelta(days=6),
+        fee_item_id=official_only_item_id,
+    )
+    _insert_case_receipt(
+        session_factory,
+        case_id=case_a["id"],
+        year_no=401,
+        received_amt=Decimal("150.00"),
+    )
+    _insert_case_receipt(
+        session_factory,
+        case_id=case_b["id"],
+        year_no=402,
+        received_amt=Decimal("150.00"),
+    )
+
+    paid_resp = client.get(
+        "/api/v1/annuity/tasks",
+        headers=auth_headers,
+        params={"client_id": client_id, "payment_status": "PAID", "page": 1, "page_size": 20},
+    )
+    assert paid_resp.status_code == 200, paid_resp.text
+    paid_payload = paid_resp.json()
+    assert {item["id"] for item in paid_payload["items"]} == {task_paid, task_official_only}
+    paid_summary = paid_payload["summary"]
+    assert paid_summary["official_paid_task_count"] == 2
+    assert paid_summary["client_received_task_count"] == 1
+    assert paid_summary["collected_not_paid_task_count"] == 0
+    assert paid_summary["outstanding_task_count"] == 0
+
+    unpaid_resp = client.get(
+        "/api/v1/annuity/tasks",
+        headers=auth_headers,
+        params={"client_id": client_id, "payment_status": "UNPAID", "page": 1, "page_size": 20},
+    )
+    assert unpaid_resp.status_code == 200, unpaid_resp.text
+    unpaid_payload = unpaid_resp.json()
+    assert {item["id"] for item in unpaid_payload["items"]} == {task_collected_only, task_unpaid}
+    unpaid_summary = unpaid_payload["summary"]
+    assert unpaid_summary["official_paid_task_count"] == 0
+    assert unpaid_summary["client_received_task_count"] == 1
+    assert unpaid_summary["collected_not_paid_task_count"] == 1
+    assert unpaid_summary["outstanding_task_count"] == 1

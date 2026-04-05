@@ -48,6 +48,10 @@ interface BackendAnnuityTaskReportSummary {
     open_task_count: number
     done_task_count: number
     overdue_task_count: number
+    official_paid_task_count: number
+    client_received_task_count: number
+    collected_not_paid_task_count: number
+    outstanding_task_count: number
     monitored_task_count: number
     on_time_paid_count: number
     late_paid_count: number
@@ -165,6 +169,10 @@ function mapReportSummary(input: BackendAnnuityTaskReportSummary): AnnuityTaskRe
         open_task_count: Number(input.open_task_count || 0),
         done_task_count: Number(input.done_task_count || 0),
         overdue_task_count: Number(input.overdue_task_count || 0),
+        official_paid_task_count: Number(input.official_paid_task_count || 0),
+        client_received_task_count: Number(input.client_received_task_count || 0),
+        collected_not_paid_task_count: Number(input.collected_not_paid_task_count || 0),
+        outstanding_task_count: Number(input.outstanding_task_count || 0),
         monitored_task_count: Number(input.monitored_task_count || 0),
         on_time_paid_count: Number(input.on_time_paid_count || 0),
         late_paid_count: Number(input.late_paid_count || 0),

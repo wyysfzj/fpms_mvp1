@@ -131,6 +131,22 @@
         <span class="summary-value">{{ summary.overdue_task_count }} 条</span>
       </div>
       <div class="summary-card">
+        <span class="summary-label">官费已缴任务</span>
+        <span class="summary-value">{{ summary.official_paid_task_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">客户已收任务</span>
+        <span class="summary-value">{{ summary.client_received_task_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">已收未缴</span>
+        <span class="summary-value">{{ summary.collected_not_paid_task_count }} 条</span>
+      </div>
+      <div class="summary-card">
+        <span class="summary-label">未收未缴</span>
+        <span class="summary-value">{{ summary.outstanding_task_count }} 条</span>
+      </div>
+      <div class="summary-card">
         <span class="summary-label">监视任务</span>
         <span class="summary-value">{{ summary.monitored_task_count }} 条</span>
       </div>
@@ -510,6 +526,10 @@ const summary = ref<AnnuityTaskReportSummary>({
   open_task_count: 0,
   done_task_count: 0,
   overdue_task_count: 0,
+  official_paid_task_count: 0,
+  client_received_task_count: 0,
+  collected_not_paid_task_count: 0,
+  outstanding_task_count: 0,
   monitored_task_count: 0,
   on_time_paid_count: 0,
   late_paid_count: 0,
@@ -583,6 +603,10 @@ async function fetchTasks() {
       open_task_count: 0,
       done_task_count: 0,
       overdue_task_count: 0,
+      official_paid_task_count: 0,
+      client_received_task_count: 0,
+      collected_not_paid_task_count: 0,
+      outstanding_task_count: 0,
       monitored_task_count: 0,
       on_time_paid_count: 0,
       late_paid_count: 0,

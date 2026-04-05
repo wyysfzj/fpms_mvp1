@@ -48,6 +48,10 @@ class AnnuityTaskReportSummaryResponse(BaseModel):
     open_task_count: int = 0
     done_task_count: int = 0
     overdue_task_count: int = 0
+    official_paid_task_count: int = 0
+    client_received_task_count: int = 0
+    collected_not_paid_task_count: int = 0
+    outstanding_task_count: int = 0
     monitored_task_count: int = 0
     on_time_paid_count: int = 0
     late_paid_count: int = 0

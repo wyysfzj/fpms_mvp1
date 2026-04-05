@@ -137,12 +137,33 @@ export interface CaseReportCount {
     count: number
 }
 
+export interface CaseClientReportCount {
+    key: string
+    label: string
+    count: number
+    case_type_counts: CaseReportCount[]
+}
+
+export interface CaseTrendReportCount {
+    key: string
+    label: string
+    new_case_count: number
+    granted_count: number
+    terminated_count: number
+    invalidated_count: number
+    withdrawn_count: number
+    abandoned_count: number
+}
+
 export interface CaseListSummary {
     total_case_count: number
     status_counts: CaseReportCount[]
     case_type_counts: CaseReportCount[]
+    client_counts: CaseClientReportCount[]
     country_counts: CaseReportCount[]
     agent_counts: CaseReportCount[]
+    year_trends: CaseTrendReportCount[]
+    month_trends: CaseTrendReportCount[]
     granted_count: number
     grant_rate: number | null
     terminated_count: number

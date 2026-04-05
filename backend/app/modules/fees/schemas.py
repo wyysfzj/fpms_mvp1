@@ -66,6 +66,8 @@ class FeeDraftReportSummaryResponse(BaseModel):
     case_type_amounts: list["FeeDraftGroupedAmountResponse"] = []
     country_amounts: list["FeeDraftGroupedAmountResponse"] = []
     agent_service_amounts: list["FeeDraftAgentServiceAmountResponse"] = []
+    year_amounts: list["FeeDraftTrendAmountResponse"] = []
+    month_amounts: list["FeeDraftTrendAmountResponse"] = []
 
 
 class FeeDraftGroupedAmountResponse(BaseModel):
@@ -82,6 +84,16 @@ class FeeDraftAgentServiceAmountResponse(BaseModel):
     label: str
     draft_count: int = 0
     service_fee_amount: Decimal = Decimal("0")
+
+
+class FeeDraftTrendAmountResponse(BaseModel):
+    key: str
+    label: str
+    draft_count: int = 0
+    service_fee_amount: Decimal = Decimal("0")
+    government_fee_amount: Decimal = Decimal("0")
+    income_amount: Decimal = Decimal("0")
+    draft_type_amounts: list[FeeDraftGroupedAmountResponse] = []
 
 
 class FeeDraftReportListResponse(BaseModel):

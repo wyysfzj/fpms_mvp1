@@ -46,6 +46,10 @@ export interface AnnuityTaskReportSummary {
     open_task_count: number
     done_task_count: number
     overdue_task_count: number
+    official_paid_task_count: number
+    client_received_task_count: number
+    collected_not_paid_task_count: number
+    outstanding_task_count: number
     monitored_task_count: number
     on_time_paid_count: number
     late_paid_count: number

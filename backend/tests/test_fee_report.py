@@ -720,3 +720,85 @@ def test_fee_drafts_report_returns_balance_metrics_from_bill_lineage(
     assert Decimal(str(summary["unpaid_balance_amount"])) == Decimal("420.00")
     assert summary["partially_received_bill_count"] == 1
     assert manual_bill["amount"] == "999.00"
+
+
+def test_fee_drafts_report_returns_year_and_month_trend_summaries(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+) -> None:
+    client_a = _create_client(client, auth_headers, name_prefix="FEE-RPT-TREND-A")
+    case_a = _create_case(
+        client, auth_headers, client_id=client_a["id"], case_tag="FEE-TREND-CASE-A"
+    )
+    case_b = _create_case(
+        client, auth_headers, client_id=client_a["id"], case_tag="FEE-TREND-CASE-B"
+    )
+    case_c = _create_case(
+        client, auth_headers, client_id=client_a["id"], case_tag="FEE-TREND-CASE-C"
+    )
+
+    _insert_fee_draft(
+        session_factory,
+        case_id=case_a["id"],
+        client_id=client_a["id"],
+        draft_type="APPLY_FEE",
+        currency="CNY",
+        status="OPEN",
+        created_at=datetime(2025, 12, 15, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "50.00"), ("GOV", "20.00")],
+    )
+    _insert_fee_draft(
+        session_factory,
+        case_id=case_b["id"],
+        client_id=client_a["id"],
+        draft_type="ANNUITY_FEE",
+        currency="CNY",
+        status="OPEN",
+        created_at=datetime(2026, 3, 10, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "100.00"), ("GOV", "30.00")],
+    )
+    _insert_fee_draft(
+        session_factory,
+        case_id=case_c["id"],
+        client_id=client_a["id"],
+        draft_type="ANNUITY_FEE",
+        currency="CNY",
+        status="LOCKED",
+        created_at=datetime(2026, 4, 20, 9, 0, tzinfo=timezone.utc),
+        lines=[("SERVICE", "80.00"), ("GOV", "10.00"), ("MISC", "10.00")],
+    )
+
+    resp = client.get(
+        FEE_DRAFTS_URL,
+        params={
+            "client_id": client_a["id"],
+            "currency": "CNY",
+            "date_from": "2025-12-01",
+            "date_to": "2026-04-30",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    summary = resp.json()["summary"]
+
+    year_amounts = {item["key"]: item for item in summary["year_amounts"]}
+    assert year_amounts["2025"]["draft_count"] == 1
+    assert Decimal(str(year_amounts["2025"]["income_amount"])) == Decimal("70.00")
+    assert {
+        item["key"]: item["income_amount"] for item in year_amounts["2025"]["draft_type_amounts"]
+    } == {"APPLY_FEE": "70.00"}
+    assert year_amounts["2026"]["draft_count"] == 2
+    assert Decimal(str(year_amounts["2026"]["income_amount"])) == Decimal("230.00")
+    assert {
+        item["key"]: item["income_amount"] for item in year_amounts["2026"]["draft_type_amounts"]
+    } == {"ANNUITY_FEE": "230.00"}
+
+    month_amounts = {item["key"]: item for item in summary["month_amounts"]}
+    assert Decimal(str(month_amounts["2025-12"]["income_amount"])) == Decimal("70.00")
+    assert Decimal(str(month_amounts["2026-03"]["income_amount"])) == Decimal("130.00")
+    assert Decimal(str(month_amounts["2026-04"]["income_amount"])) == Decimal("100.00")
+    assert {
+        item["key"]: item["income_amount"]
+        for item in month_amounts["2026-03"]["draft_type_amounts"]
+    } == {"ANNUITY_FEE": "130.00"}

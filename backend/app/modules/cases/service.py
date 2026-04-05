@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import and_, func, or_, select
@@ -25,11 +26,13 @@ from app.modules.cases.schemas import (
     CaseApplicantIn,
     CaseBatchFilingActionOut,
     CaseBatchFilingCandidateItem,
+    CaseClientReportCountResponse,
     CaseCreate,
     CaseListItem,
     CaseListReportResponse,
     CaseReportCountResponse,
     CaseReportSummaryResponse,
+    CaseTrendReportCountResponse,
     CaseUpdateFull,
     CaseUpdateLimited,
 )
@@ -535,15 +538,46 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
         .order_by(Case.case_type.asc())
         .all()
     )
+    client_counts: dict[str, dict[str, Any]] = {}
     country_counts: dict[str, int] = {}
     agent_counts: dict[str, int] = {}
-    cases = query.with_entities(
-        Case.from_country,
-        Case.to_country,
-        Case.primary_agent_id,
-        Case.second_agent_id,
-    ).all()
-    for from_country, to_country, primary_agent_id, second_agent_id in cases:
+    year_trends: dict[str, dict[str, int | str]] = {}
+    month_trends: dict[str, dict[str, int | str]] = {}
+    cases = (
+        query.with_entities(
+            Case.client_id,
+            Client.name_cn,
+            Client.name_en,
+            Case.case_type,
+            Case.from_country,
+            Case.to_country,
+            Case.primary_agent_id,
+            Case.second_agent_id,
+        )
+        .outerjoin(Client, Client.id == Case.client_id)
+        .all()
+    )
+    for (
+        client_id,
+        client_name_cn,
+        client_name_en,
+        case_type,
+        from_country,
+        to_country,
+        primary_agent_id,
+        second_agent_id,
+    ) in cases:
+        client_key = (client_id or "").strip() or "UNASSIGNED"
+        client_label = (client_name_cn or client_name_en or client_id or "").strip() or "未分配客户"
+        client_bucket = client_counts.setdefault(
+            client_key,
+            {"key": client_key, "label": client_label, "count": 0, "case_type_counts": {}},
+        )
+        client_bucket["count"] += 1
+        case_type_key = (case_type or "").strip() or "UNSPECIFIED"
+        case_type_counts = client_bucket["case_type_counts"]
+        case_type_counts[case_type_key] = case_type_counts.get(case_type_key, 0) + 1
+
         country_key = (to_country or from_country or "").strip() or "未填写"
         country_counts[country_key] = country_counts.get(country_key, 0) + 1
 
@@ -554,6 +588,39 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
                 continue
             seen_agents.add(normalized)
             agent_counts[normalized] = agent_counts.get(normalized, 0) + 1
+
+    trend_cases = (
+        query.with_entities(
+            Case.id,
+            Case.filing_date,
+            Case.grant_date,
+            Case.terminated_date,
+            Case.invalidated_date,
+            Case.withdrawn_date,
+            Case.abandoned_date,
+        )
+        .distinct()
+        .all()
+    )
+    for (
+        _case_id,
+        filing_date,
+        grant_date,
+        terminated_date,
+        invalidated_date,
+        withdrawn_date,
+        abandoned_date,
+    ) in trend_cases:
+        _accumulate_case_trend_bucket(
+            year_trends,
+            month_trends,
+            filing_date=filing_date,
+            grant_date=grant_date,
+            terminated_date=terminated_date,
+            invalidated_date=invalidated_date,
+            withdrawn_date=withdrawn_date,
+            abandoned_date=abandoned_date,
+        )
 
     granted_count = sum(
         status_counts_map.get(status_key, 0) for status_key in _CASE_GRANTED_LINEAGE_STATUSES
@@ -580,6 +647,22 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
             CaseReportCountResponse(key=case_type_key, count=count)
             for case_type_key, count in case_type_rows
         ],
+        client_counts=[
+            CaseClientReportCountResponse(
+                key=str(client_bucket["key"]),
+                label=str(client_bucket["label"]),
+                count=int(client_bucket["count"]),
+                case_type_counts=[
+                    CaseReportCountResponse(key=case_type_key, count=count)
+                    for case_type_key, count in sorted(
+                        client_bucket["case_type_counts"].items(), key=lambda item: item[0]
+                    )
+                ],
+            )
+            for client_bucket in sorted(
+                client_counts.values(), key=lambda item: (-int(item["count"]), str(item["label"]))
+            )
+        ],
         country_counts=[
             CaseReportCountResponse(key=country_key, count=count)
             for country_key, count in sorted(country_counts.items(), key=lambda item: item[0])
@@ -588,12 +671,84 @@ def _build_case_report_summary(query) -> CaseReportSummaryResponse:
             CaseReportCountResponse(key=agent_key, count=count)
             for agent_key, count in sorted(agent_counts.items(), key=lambda item: item[0])
         ],
+        year_trends=_build_case_trend_response(year_trends),
+        month_trends=_build_case_trend_response(month_trends),
         granted_count=granted_count,
         grant_rate=(granted_count / grant_rate_denominator if grant_rate_denominator > 0 else None),
         terminated_count=terminated_count,
         invalidated_count=invalidated_count,
         in_prosecution_count=in_prosecution_count,
     )
+
+
+def _empty_case_trend_bucket(*, key: str, label: str) -> dict[str, int | str]:
+    return {
+        "key": key,
+        "label": label,
+        "new_case_count": 0,
+        "granted_count": 0,
+        "terminated_count": 0,
+        "invalidated_count": 0,
+        "withdrawn_count": 0,
+        "abandoned_count": 0,
+    }
+
+
+def _increment_case_trend(
+    buckets: dict[str, dict[str, int | str]],
+    *,
+    event_date: date | None,
+    metric: str,
+    use_month: bool,
+) -> None:
+    if event_date is None:
+        return
+    key = event_date.strftime("%Y-%m") if use_month else str(event_date.year)
+    label = key
+    bucket = buckets.setdefault(key, _empty_case_trend_bucket(key=key, label=label))
+    bucket[metric] = int(bucket[metric]) + 1
+
+
+def _accumulate_case_trend_bucket(
+    year_trends: dict[str, dict[str, int | str]],
+    month_trends: dict[str, dict[str, int | str]],
+    *,
+    filing_date: date | None,
+    grant_date: date | None,
+    terminated_date: date | None,
+    invalidated_date: date | None,
+    withdrawn_date: date | None,
+    abandoned_date: date | None,
+) -> None:
+    metrics = [
+        ("new_case_count", filing_date),
+        ("granted_count", grant_date),
+        ("terminated_count", terminated_date),
+        ("invalidated_count", invalidated_date),
+        ("withdrawn_count", withdrawn_date),
+        ("abandoned_count", abandoned_date),
+    ]
+    for metric, event_date in metrics:
+        _increment_case_trend(year_trends, event_date=event_date, metric=metric, use_month=False)
+        _increment_case_trend(month_trends, event_date=event_date, metric=metric, use_month=True)
+
+
+def _build_case_trend_response(
+    buckets: dict[str, dict[str, int | str]],
+) -> list[CaseTrendReportCountResponse]:
+    return [
+        CaseTrendReportCountResponse(
+            key=str(bucket["key"]),
+            label=str(bucket["label"]),
+            new_case_count=int(bucket["new_case_count"]),
+            granted_count=int(bucket["granted_count"]),
+            terminated_count=int(bucket["terminated_count"]),
+            invalidated_count=int(bucket["invalidated_count"]),
+            withdrawn_count=int(bucket["withdrawn_count"]),
+            abandoned_count=int(bucket["abandoned_count"]),
+        )
+        for bucket in (buckets[key] for key in sorted(buckets))
+    ]
 
 
 def validate_case_status_transition(current_status: str | None, target_status: str | None) -> None:

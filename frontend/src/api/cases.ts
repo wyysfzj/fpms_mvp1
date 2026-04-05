@@ -99,8 +99,34 @@ interface BackendCaseListResponse {
         total_case_count?: number
         status_counts?: Array<{ key: string; count: number }>
         case_type_counts?: Array<{ key: string; count: number }>
+        client_counts?: Array<{
+            key: string
+            label: string
+            count: number
+            case_type_counts?: Array<{ key: string; count: number }>
+        }>
         country_counts?: Array<{ key: string; count: number }>
         agent_counts?: Array<{ key: string; count: number }>
+        year_trends?: Array<{
+            key: string
+            label: string
+            new_case_count: number
+            granted_count: number
+            terminated_count: number
+            invalidated_count: number
+            withdrawn_count: number
+            abandoned_count: number
+        }>
+        month_trends?: Array<{
+            key: string
+            label: string
+            new_case_count: number
+            granted_count: number
+            terminated_count: number
+            invalidated_count: number
+            withdrawn_count: number
+            abandoned_count: number
+        }>
         granted_count?: number
         grant_rate?: number | null
         terminated_count?: number
@@ -386,8 +412,16 @@ export async function getCases(params: CaseListParams = {}): Promise<CaseListRes
             total_case_count: response.data.summary?.total_case_count || 0,
             status_counts: response.data.summary?.status_counts || [],
             case_type_counts: response.data.summary?.case_type_counts || [],
+            client_counts: (response.data.summary?.client_counts || []).map(item => ({
+                key: item.key,
+                label: item.label,
+                count: item.count,
+                case_type_counts: item.case_type_counts || [],
+            })),
             country_counts: response.data.summary?.country_counts || [],
             agent_counts: response.data.summary?.agent_counts || [],
+            year_trends: response.data.summary?.year_trends || [],
+            month_trends: response.data.summary?.month_trends || [],
             granted_count: response.data.summary?.granted_count || 0,
             grant_rate: response.data.summary?.grant_rate ?? null,
             terminated_count: response.data.summary?.terminated_count || 0,

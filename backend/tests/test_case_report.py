@@ -5,9 +5,17 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.db.session import get_db
+
 
 def _uid(prefix: str) -> str:
     return f"{prefix}-{uuid4().hex[:8].upper()}"
+
+
+def _db_session(client: TestClient):
+    db_gen = client.app.dependency_overrides[get_db]()
+    db = next(db_gen)
+    return db, db_gen
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str], *, name_prefix: str) -> str:
@@ -61,6 +69,33 @@ def _create_case(
     resp = client.post("/api/v1/cases", json=payload, headers=auth_headers)
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+def _set_case_terminal_dates(
+    client: TestClient,
+    *,
+    case_id: str,
+    filing_date: str | None = None,
+    grant_date: str | None = None,
+    terminated_date: str | None = None,
+    invalidated_date: str | None = None,
+    withdrawn_date: str | None = None,
+    abandoned_date: str | None = None,
+) -> None:
+    db, db_gen = _db_session(client)
+    try:
+        from app.modules.cases.models import Case
+
+        case = db.query(Case).filter(Case.id == case_id).one()
+        case.filing_date = date.fromisoformat(filing_date) if filing_date else case.filing_date
+        case.grant_date = date.fromisoformat(grant_date) if grant_date else case.grant_date
+        case.terminated_date = date.fromisoformat(terminated_date) if terminated_date else None
+        case.invalidated_date = date.fromisoformat(invalidated_date) if invalidated_date else None
+        case.withdrawn_date = date.fromisoformat(withdrawn_date) if withdrawn_date else None
+        case.abandoned_date = date.fromisoformat(abandoned_date) if abandoned_date else None
+        db.commit()
+    finally:
+        db_gen.close()
 
 
 def test_get_cases_returns_case_report_summary_and_preserves_list_contract(
@@ -268,6 +303,59 @@ def test_get_cases_returns_country_and_agent_grouped_summaries(
     }
 
 
+def test_get_cases_returns_client_grouped_summaries_with_case_type_breakdown(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    client_a = _create_client(client, auth_headers, name_prefix="CASE-RPT-CLI-F")
+    client_b = _create_client(client, auth_headers, name_prefix="CASE-RPT-CLI-G")
+
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="NOT_FILED",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="SEARCH",
+        patent_category="INV",
+        status="PENDING",
+    )
+    _create_case(
+        client,
+        auth_headers,
+        client_id=client_b,
+        case_type="NORMAL",
+        patent_category="DES",
+        status="GRANTED",
+    )
+
+    resp = client.get(
+        "/api/v1/cases",
+        params={"page": 1, "page_size": 20},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+
+    summary = payload["summary"]
+    client_counts = {item["key"]: item for item in summary["client_counts"]}
+    assert client_counts[client_a]["count"] == 2
+    assert {item["key"]: item["count"] for item in client_counts[client_a]["case_type_counts"]} == {
+        "NORMAL": 1,
+        "SEARCH": 1,
+    }
+    assert client_counts[client_b]["count"] == 1
+    assert {item["key"]: item["count"] for item in client_counts[client_b]["case_type_counts"]} == {
+        "NORMAL": 1,
+    }
+
+
 def test_get_cases_returns_grant_rate_metrics(
     client: TestClient,
     auth_headers: dict[str, str],
@@ -361,3 +449,130 @@ def test_get_cases_returns_grant_rate_metrics(
     assert summary["invalidated_count"] == 1
     assert summary["in_prosecution_count"] == 2
     assert summary["grant_rate"] == 4 / 7
+
+
+def test_get_cases_returns_year_and_month_trend_metrics(
+    client: TestClient,
+    auth_headers: dict[str, str],
+) -> None:
+    client_a = _create_client(client, auth_headers, name_prefix="CASE-RPT-CLI-TREND")
+
+    pending_case = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="PENDING",
+        app_no="CASE-RPT-TREND-000",
+    )
+    _set_case_terminal_dates(client, case_id=pending_case["id"], filing_date="2026-01-10")
+
+    granted_case = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="GRANTED",
+        app_no="CASE-RPT-TREND-001",
+    )
+    _set_case_terminal_dates(
+        client,
+        case_id=granted_case["id"],
+        filing_date="2025-01-10",
+        grant_date="2026-02-12",
+    )
+
+    terminated_case = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="TERMINATED",
+    )
+    _set_case_terminal_dates(client, case_id=terminated_case["id"], terminated_date="2026-03-05")
+
+    invalidated_case = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="INVALIDATED",
+    )
+    _set_case_terminal_dates(client, case_id=invalidated_case["id"], invalidated_date="2026-03-20")
+
+    withdrawn_case = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="WITHDRAWN",
+    )
+    _set_case_terminal_dates(client, case_id=withdrawn_case["id"], withdrawn_date="2026-02-28")
+
+    abandoned_case = _create_case(
+        client,
+        auth_headers,
+        client_id=client_a,
+        case_type="NORMAL",
+        patent_category="INV",
+        status="ABANDONED",
+    )
+    _set_case_terminal_dates(client, case_id=abandoned_case["id"], abandoned_date="2026-01-30")
+
+    resp = client.get(
+        "/api/v1/cases",
+        params={"client_id": client_a, "page": 1, "page_size": 50},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    summary = payload["summary"]
+
+    year_trends = {item["key"]: item for item in summary["year_trends"]}
+    assert year_trends["2026"] == {
+        "key": "2026",
+        "label": "2026",
+        "new_case_count": 1,
+        "granted_count": 1,
+        "terminated_count": 1,
+        "invalidated_count": 1,
+        "withdrawn_count": 1,
+        "abandoned_count": 1,
+    }
+
+    month_trends = {item["key"]: item for item in summary["month_trends"]}
+    assert month_trends["2026-01"] == {
+        "key": "2026-01",
+        "label": "2026-01",
+        "new_case_count": 1,
+        "granted_count": 0,
+        "terminated_count": 0,
+        "invalidated_count": 0,
+        "withdrawn_count": 0,
+        "abandoned_count": 1,
+    }
+    assert month_trends["2026-02"] == {
+        "key": "2026-02",
+        "label": "2026-02",
+        "new_case_count": 0,
+        "granted_count": 1,
+        "terminated_count": 0,
+        "invalidated_count": 0,
+        "withdrawn_count": 1,
+        "abandoned_count": 0,
+    }
+    assert month_trends["2026-03"] == {
+        "key": "2026-03",
+        "label": "2026-03",
+        "new_case_count": 0,
+        "granted_count": 0,
+        "terminated_count": 1,
+        "invalidated_count": 1,
+        "withdrawn_count": 0,
+        "abandoned_count": 0,
+    }

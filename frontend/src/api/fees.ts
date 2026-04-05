@@ -72,6 +72,8 @@ interface BackendFeeDraftReportSummary {
     case_type_amounts?: BackendFeeDraftGroupedAmount[]
     country_amounts?: BackendFeeDraftGroupedAmount[]
     agent_service_amounts?: BackendFeeDraftAgentServiceAmount[]
+    year_amounts?: BackendFeeDraftTrendAmount[]
+    month_amounts?: BackendFeeDraftTrendAmount[]
 }
 
 interface BackendFeeDraftGroupedAmount {
@@ -88,6 +90,16 @@ interface BackendFeeDraftAgentServiceAmount {
     label: string
     draft_count: number
     service_fee_amount: string | number
+}
+
+interface BackendFeeDraftTrendAmount {
+    key: string
+    label: string
+    draft_count: number
+    service_fee_amount: string | number
+    government_fee_amount: string | number
+    income_amount: string | number
+    draft_type_amounts?: BackendFeeDraftGroupedAmount[]
 }
 
 interface BackendFeeDraftListResponse extends Pagination<BackendFeeDraftListItem> {
@@ -190,6 +202,8 @@ function mapFeeDraftReportSummary(input: BackendFeeDraftReportSummary): FeeDraft
         case_type_amounts: (input.case_type_amounts || []).map(mapFeeDraftGroupedAmount),
         country_amounts: (input.country_amounts || []).map(mapFeeDraftGroupedAmount),
         agent_service_amounts: (input.agent_service_amounts || []).map(mapFeeDraftAgentServiceAmount),
+        year_amounts: (input.year_amounts || []).map(mapFeeDraftTrendAmount),
+        month_amounts: (input.month_amounts || []).map(mapFeeDraftTrendAmount),
     }
 }
 
@@ -210,6 +224,18 @@ function mapFeeDraftAgentServiceAmount(input: BackendFeeDraftAgentServiceAmount)
         label: input.label,
         draft_count: Number(input.draft_count || 0),
         service_fee_amount: Number(input.service_fee_amount || 0),
+    }
+}
+
+function mapFeeDraftTrendAmount(input: BackendFeeDraftTrendAmount) {
+    return {
+        key: input.key,
+        label: input.label,
+        draft_count: Number(input.draft_count || 0),
+        service_fee_amount: Number(input.service_fee_amount || 0),
+        government_fee_amount: Number(input.government_fee_amount || 0),
+        income_amount: Number(input.income_amount || 0),
+        draft_type_amounts: (input.draft_type_amounts || []).map(mapFeeDraftGroupedAmount),
     }
 }
 

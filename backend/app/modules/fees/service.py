@@ -167,6 +167,27 @@ def _agent_service_amount_payload(
     return sorted(rows, key=lambda row: (-int(row["draft_count"]), str(row["label"])))
 
 
+def _trend_amount_payload(
+    grouped_amounts: dict[str, dict[str, Any]],
+    *,
+    sort_key,
+) -> list[dict[str, Any]]:
+    rows = []
+    for values in grouped_amounts.values():
+        rows.append(
+            {
+                "key": str(values["key"]),
+                "label": str(values["label"]),
+                "draft_count": int(values["draft_count"]),
+                "service_fee_amount": _quantize_money(Decimal(values["service_fee_amount"])),
+                "government_fee_amount": _quantize_money(Decimal(values["government_fee_amount"])),
+                "income_amount": _quantize_money(Decimal(values["income_amount"])),
+                "draft_type_amounts": _grouped_amount_payload(values["draft_type_amounts"]),
+            }
+        )
+    return sorted(rows, key=sort_key)
+
+
 def _draft_report_bill_balance_summary(
     db: Session,
     *,
@@ -309,6 +330,8 @@ def _draft_report_amount_summary(
     case_type_amounts: dict[str, dict[str, Decimal | int | str]] = {}
     country_amounts: dict[str, dict[str, Decimal | int | str]] = {}
     agent_service_amounts: dict[str, dict[str, Decimal | int | str]] = {}
+    year_amounts: dict[str, dict[str, Any]] = {}
+    month_amounts: dict[str, dict[str, Any]] = {}
 
     for draft in drafts:
         case = case_map.get(draft.case_id)
@@ -366,6 +389,36 @@ def _draft_report_amount_summary(
                 service_amount=service_amount,
             )
 
+        created_at = draft.created_at
+        year_key = str(created_at.year)
+        month_key = created_at.strftime("%Y-%m")
+        for bucket_key, bucket_label, bucket_map in (
+            (year_key, f"{created_at.year} 年", year_amounts),
+            (month_key, month_key, month_amounts),
+        ):
+            bucket = bucket_map.setdefault(
+                bucket_key,
+                {
+                    "key": bucket_key,
+                    "label": bucket_label,
+                    "draft_count": 0,
+                    "service_fee_amount": Decimal("0"),
+                    "government_fee_amount": Decimal("0"),
+                    "income_amount": Decimal("0"),
+                    "draft_type_amounts": {},
+                },
+            )
+            bucket["draft_count"] += 1
+            bucket["service_fee_amount"] += Decimal(draft.total_service or 0)
+            bucket["government_fee_amount"] += Decimal(draft.total_gov or 0)
+            bucket["income_amount"] += Decimal(draft.amount or 0)
+            _accumulate_grouped_amount(
+                bucket["draft_type_amounts"],
+                key=draft.draft_type,
+                label=draft.draft_type,
+                draft=draft,
+            )
+
     return {
         "total_draft_count": len(drafts),
         "service_fee_amount": _quantize_money(
@@ -385,6 +438,8 @@ def _draft_report_amount_summary(
         "case_type_amounts": _grouped_amount_payload(case_type_amounts),
         "country_amounts": _grouped_amount_payload(country_amounts),
         "agent_service_amounts": _agent_service_amount_payload(agent_service_amounts),
+        "year_amounts": _trend_amount_payload(year_amounts, sort_key=lambda row: row["key"]),
+        "month_amounts": _trend_amount_payload(month_amounts, sort_key=lambda row: row["key"]),
     }
 
 
