@@ -1,0 +1,11 @@
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:19:- `BillItem.draft_id`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:20:- `BillDetail.source_draft_ids / primary_draft_id`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:32:  - `BillItem.draft_id`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:33:  - `BillDetail.source_draft_ids`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:63:  - `BillItem.draft_id`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:64:  - `BillDetail.source_draft_ids`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:82:  - `BillItem.draft_id -> FeeDraft.id`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:110:- `GF-BILL-VIS-01`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:152:- no state-machine expansion
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:153:- no receipt/payment semantics
+tasks/postenhancement/backend/GF-BILL-SPEC-01.md:16:  - 不做 receipt/payment semantics

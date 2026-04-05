@@ -1,0 +1,6 @@
+tasks/postenhancement/backend/GF-QA-BILL-SPEC-01.md:29:- [ ] Confirm no state-machine expansion was absorbed
+tasks/postenhancement/backend/GF-QA-BILL-SPEC-01.md:30:- [ ] Confirm first follow-up story is explicit
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:16:`GF-RESIDUAL-SPEC-01` 已明确 `GF-BILL` 是 `#15 授权费管理` 的下一类 residual，但当前 repo 只有通用 billing 链路：
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:54:- 不更新 `#15` close decision
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:110:- `GF-BILL-VIS-01`
+docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md:152:- no state-machine expansion

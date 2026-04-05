@@ -1,0 +1,2 @@
+{"ts":"20260405T112159","step":"lint","cmd":"test -f docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md"}
+{"ts":"20260405T112159","step":"test","cmd":"/bin/zsh -lc rg\ -n\ \"GF-BILL-VIS-01\|BillItem\\.draft_id\|source_draft_ids\|no\ state-machine\ expansion\|receipt/payment\ semantics\"\ docs/superpowers/specs/2026-04-05-grant-fee-bill-linkage-design.md\ tasks/postenhancement/backend/GF-BILL-SPEC-01.md"}
