@@ -3,6 +3,8 @@ import type {
     GrantFeeTaskBatchInstructionAction,
     GrantFeeTaskBatchInstructionPayload,
     GrantFeeTaskBatchInstructionResult,
+    GrantFeeTaskBatchNoticeGeneratePayload,
+    GrantFeeTaskBatchNoticeGenerateResult,
     GrantFeeMoney,
     GrantFeeDraftGenerateResult,
     GrantFeeTaskClientInstruction,
@@ -68,6 +70,22 @@ interface BackendGrantFeeTaskBatchInstructionResponse {
     success_count: number
     failure_count: number
     updated_task_ids: string[]
+}
+
+interface BackendGrantFeeTaskBatchNoticeGenerateItemResponse {
+    task_id: string
+    case_id: string
+    document_id: string
+    attachment_id: string
+    file_name: string
+    notify_count: number
+}
+
+interface BackendGrantFeeTaskBatchNoticeGenerateResponse {
+    success_count: number
+    failure_count: number
+    generated_document_ids: string[]
+    items: BackendGrantFeeTaskBatchNoticeGenerateItemResponse[]
 }
 
 function normalizeBoolean(input: boolean | undefined): boolean | undefined {
@@ -234,6 +252,37 @@ export async function applyGrantFeeBatchInstruction(
         failure_count: Number(response.data.failure_count || 0),
         updated_task_ids: Array.isArray(response.data.updated_task_ids)
             ? response.data.updated_task_ids
+            : [],
+    }
+}
+
+/**
+ * Batch generate real grant-fee notice documents
+ */
+export async function generateGrantFeeNoticeDocuments(
+    payload: GrantFeeTaskBatchNoticeGeneratePayload,
+): Promise<GrantFeeTaskBatchNoticeGenerateResult> {
+    const response = await http.post<BackendGrantFeeTaskBatchNoticeGenerateResponse>(
+        '/grant-fee-tasks/generate-notices',
+        {
+            task_ids: payload.task_ids,
+        },
+    )
+    return {
+        success_count: Number(response.data.success_count || 0),
+        failure_count: Number(response.data.failure_count || 0),
+        generated_document_ids: Array.isArray(response.data.generated_document_ids)
+            ? response.data.generated_document_ids
+            : [],
+        items: Array.isArray(response.data.items)
+            ? response.data.items.map((item) => ({
+                task_id: item.task_id,
+                case_id: item.case_id,
+                document_id: item.document_id,
+                attachment_id: item.attachment_id,
+                file_name: item.file_name,
+                notify_count: Number(item.notify_count || 0),
+            }))
             : [],
     }
 }

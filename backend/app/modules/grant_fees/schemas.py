@@ -71,6 +71,26 @@ class GrantFeeTaskBatchInstructionOut(BaseModel):
     updated_task_ids: list[str] = Field(default_factory=list)
 
 
+class GrantFeeTaskBatchNoticeGenerateIn(BaseModel):
+    task_ids: list[str] = Field(..., min_length=1)
+
+
+class GrantFeeTaskBatchNoticeGenerateItemOut(BaseModel):
+    task_id: str
+    case_id: str
+    document_id: str
+    attachment_id: str
+    file_name: str
+    notify_count: int
+
+
+class GrantFeeTaskBatchNoticeGenerateOut(BaseModel):
+    success_count: int
+    failure_count: int
+    generated_document_ids: list[str] = Field(default_factory=list)
+    items: list[GrantFeeTaskBatchNoticeGenerateItemOut] = Field(default_factory=list)
+
+
 class GrantFeeDraftGenerateOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

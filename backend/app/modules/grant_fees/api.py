@@ -12,6 +12,8 @@ from app.modules.grant_fees.schemas import (
     GrantFeeDraftGenerateOut,
     GrantFeeTaskBatchInstructionIn,
     GrantFeeTaskBatchInstructionOut,
+    GrantFeeTaskBatchNoticeGenerateIn,
+    GrantFeeTaskBatchNoticeGenerateOut,
     GrantFeeTaskListResponse,
     GrantFeeTaskModuleOut,
     GrantFeeTaskStateActionIn,
@@ -21,6 +23,7 @@ from app.modules.grant_fees.service import (
     apply_grant_fee_batch_instruction,
     apply_grant_fee_task_action,
     generate_grant_fee_draft,
+    generate_grant_fee_notice_documents,
     get_grant_fee_module_contract,
     get_grant_fee_task_state,
     list_grant_fee_tasks,
@@ -110,6 +113,19 @@ def post_grant_fee_task_batch_instruction_endpoint(
 ) -> GrantFeeTaskBatchInstructionOut:
     return GrantFeeTaskBatchInstructionOut.model_validate(
         apply_grant_fee_batch_instruction(db, task_ids=payload.task_ids, action=payload.action)
+    )
+
+
+@router.post(
+    "/grant-fee-tasks/generate-notices", summary="Batch generate grant fee notice documents"
+)
+def post_grant_fee_task_batch_notice_generation_endpoint(
+    payload: GrantFeeTaskBatchNoticeGenerateIn,
+    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
+    db: Session = Depends(get_db),
+) -> GrantFeeTaskBatchNoticeGenerateOut:
+    return GrantFeeTaskBatchNoticeGenerateOut.model_validate(
+        generate_grant_fee_notice_documents(db, task_ids=payload.task_ids)
     )
 
 

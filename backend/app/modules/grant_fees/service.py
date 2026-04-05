@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from datetime import date
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -7,11 +9,19 @@ from uuid import uuid4
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import raise_business_error
+from app.core.errors import BusinessError, raise_business_error
 from app.modules.billing.models import Bill, BillItem
 from app.modules.cases.models import Case
+from app.modules.documents.models import DocTemplate, Document
+from app.modules.documents.service import (
+    _backend_storage_dir,
+    build_document_template_render_context,
+    persist_generated_attachment,
+    resolve_document_template_render_source,
+)
 from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
 from app.modules.fees.service import recalc_fee_draft_totals
+from app.modules.templates.render import TemplateRenderer
 
 GRANT_FEE_TASK_PERMISSION_CODES = ("GrantFeeTask.Read", "GrantFeeTask.Write")
 GRANT_FEE_TASK_STATES = ("OPEN", "WAITING_CLIENT", "READY_TO_DRAFT", "DRAFT_GENERATED", "DONE")
@@ -27,6 +37,8 @@ GRANT_FEE_DRAFT_TYPE = "GRANT_FEE"
 GRANT_FEE_DRAFT_MARKER_PREFIX = "GRANT_FEE_TASK:"
 GRANT_FEE_GOV_FEE_CODE = "GRANT_FEE_GOV"
 GRANT_FEE_SERVICE_FEE_CODE = "GRANT_FEE_SERVICE"
+GRANT_FEE_NOTICE_TEMPLATE_CODE = "GRANT_FEE_NOTICE"
+DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 _STATE_ALLOWED_ACTIONS = {
     "OPEN": ("mark_waiting_client",),
@@ -45,6 +57,7 @@ _ACTION_NEXT_STATE = {
 }
 
 _BATCH_ALLOWED_ACTIONS = ("record_pay_instruction", "record_abandon_instruction")
+_NOTICE_ALLOWED_STATES = ("OPEN", "WAITING_CLIENT")
 
 
 def get_grant_fee_module_contract() -> dict[str, object]:
@@ -302,6 +315,92 @@ def apply_grant_fee_batch_instruction(
     }
 
 
+def generate_grant_fee_notice_documents(
+    db: Session,
+    *,
+    task_ids: list[str],
+) -> dict[str, Any]:
+    unique_task_ids = list(
+        dict.fromkeys(
+            str(task_id or "").strip() for task_id in task_ids if str(task_id or "").strip()
+        )
+    )
+    if not unique_task_ids:
+        raise_business_error(
+            "GRANT_FEE_NOTICE_SELECTION_REQUIRED",
+            "task_ids must not be empty",
+            status_code=400,
+        )
+
+    tasks = list(
+        db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.id.in_(unique_task_ids)))
+        .scalars()
+        .all()
+    )
+    task_by_id = {task.id: task for task in tasks}
+    missing_task_ids = [task_id for task_id in unique_task_ids if task_id not in task_by_id]
+    if missing_task_ids:
+        raise_business_error(
+            "GRANT_FEE_TASK_NOT_FOUND",
+            "One or more grant fee tasks do not exist",
+            details={"task_ids": missing_task_ids},
+            status_code=404,
+        )
+
+    doc_template = db.execute(
+        select(DocTemplate).where(
+            DocTemplate.code == GRANT_FEE_NOTICE_TEMPLATE_CODE,
+            DocTemplate.enabled.is_(True),
+        )
+    ).scalar_one_or_none()
+    if doc_template is None:
+        raise_business_error(
+            "GRANT_FEE_NOTICE_TEMPLATE_NOT_FOUND",
+            "Grant fee notice template is not configured",
+            details={"template_code": GRANT_FEE_NOTICE_TEMPLATE_CODE},
+            status_code=409,
+        )
+
+    try:
+        _, template_path = resolve_document_template_render_source(db, doc_template=doc_template)
+        renderer = TemplateRenderer()
+        created_items: list[dict[str, Any]] = []
+
+        for task_id in unique_task_ids:
+            task = task_by_id[task_id]
+            state = derive_grant_fee_task_state(task)
+            _validate_grant_fee_notice_task(task, state=state)
+            created_items.append(
+                _generate_grant_fee_notice_document(
+                    db,
+                    task=task,
+                    doc_template=doc_template,
+                    template_path=template_path,
+                    renderer=renderer,
+                )
+            )
+
+        db.commit()
+    except BusinessError:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise_business_error(
+            "GRANT_FEE_NOTICE_GENERATION_FAILED",
+            "Grant fee notice generation failed",
+            details={"error": str(exc)},
+            status_code=409,
+        )
+
+    return {
+        "success_count": len(created_items),
+        "failure_count": 0,
+        "generated_document_ids": [item["document_id"] for item in created_items],
+        "items": created_items,
+    }
+
+
 def generate_grant_fee_draft(
     db: Session,
     *,
@@ -555,3 +654,108 @@ def _serialize_grant_fee_draft_generation_result(
         "item_count": item_count,
         "reused": reused,
     }
+
+
+def _validate_grant_fee_notice_task(task: T_GrantFeeTask, *, state: str) -> None:
+    if state not in _NOTICE_ALLOWED_STATES or task.draft_generated:
+        raise_business_error(
+            "GRANT_FEE_NOTICE_STATE_INVALID",
+            "Grant fee task is not eligible for notice generation",
+            details={
+                "task_id": task.id,
+                "state": state,
+                "required_states": list(_NOTICE_ALLOWED_STATES),
+                "draft_generated": bool(task.draft_generated),
+            },
+            status_code=400,
+        )
+
+    instruction = (task.client_instruction or "NONE").strip().upper() or "NONE"
+    if instruction != "NONE":
+        raise_business_error(
+            "GRANT_FEE_NOTICE_STATE_INVALID",
+            "Grant fee task already has client instruction",
+            details={
+                "task_id": task.id,
+                "client_instruction": instruction,
+                "required_instruction": "NONE",
+            },
+            status_code=400,
+        )
+
+
+def _generate_grant_fee_notice_document(
+    db: Session,
+    *,
+    task: T_GrantFeeTask,
+    doc_template: DocTemplate,
+    template_path: str,
+    renderer: TemplateRenderer,
+) -> dict[str, Any]:
+    next_notify_count = int(task.notify_count or 0) + 1
+    document = Document(
+        id=str(uuid4()),
+        case_id=task.case_id,
+        doc_template_id=doc_template.id,
+        direction="OUT",
+        doc_date=date.today(),
+        title="授权费通知函",
+        extra_data=json.dumps({"grant_fee_task_id": task.id}, ensure_ascii=False),
+    )
+    db.add(document)
+    db.flush()
+
+    render_context = {
+        **build_document_template_render_context(db, document=document),
+        "grant_fee_task": {
+            "id": task.id,
+            "case_id": task.case_id,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "gov_fee_amt": str(Decimal(task.gov_fee_amt or 0)),
+            "service_fee_amt": str(Decimal(task.service_fee_amt or 0)),
+            "currency": task.currency,
+            "client_instruction": (task.client_instruction or "NONE").strip().upper() or "NONE",
+            "notify_count": next_notify_count,
+            "notice_sent": True,
+            "is_overdue": bool(task.is_overdue),
+        },
+    }
+    try:
+        rendered_bytes = renderer.render_template_docx_bytes(
+            template_path=template_path,
+            context=render_context,
+        )
+    except Exception as exc:
+        raise_business_error(
+            "GRANT_FEE_NOTICE_RENDER_FAILED",
+            "Grant fee notice render failed",
+            details={"task_id": task.id, "error": str(exc)},
+            status_code=409,
+        )
+
+    attachment = persist_generated_attachment(
+        db,
+        document_id=document.id,
+        file_name=_grant_fee_notice_file_name(task),
+        content_bytes=rendered_bytes,
+        storage_dir=str(_backend_storage_dir()),
+        mime_type=DOCX_MIME_TYPE,
+        commit=False,
+    )
+
+    task.notice_sent = True
+    task.notify_count = next_notify_count
+    db.flush()
+    return {
+        "task_id": task.id,
+        "case_id": task.case_id,
+        "document_id": document.id,
+        "attachment_id": attachment.id,
+        "file_name": attachment.file_name,
+        "notify_count": int(task.notify_count or 0),
+    }
+
+
+def _grant_fee_notice_file_name(task: T_GrantFeeTask) -> str:
+    suffix = (str(task.case_id or "").strip() or str(task.id or "").strip() or "task")[:24]
+    return f"授权费通知函-{suffix}.docx"

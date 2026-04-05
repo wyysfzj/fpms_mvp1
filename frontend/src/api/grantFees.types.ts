@@ -17,6 +17,26 @@ export type GrantFeeTaskBatchInstructionAction =
     | 'record_pay_instruction'
     | 'record_abandon_instruction'
 
+export interface GrantFeeTaskBatchNoticeGeneratePayload {
+    task_ids: string[]
+}
+
+export interface GrantFeeTaskBatchNoticeGenerateItem {
+    task_id: string
+    case_id: string
+    document_id: string
+    attachment_id: string
+    file_name: string
+    notify_count: number
+}
+
+export interface GrantFeeTaskBatchNoticeGenerateResult {
+    success_count: number
+    failure_count: number
+    generated_document_ids: string[]
+    items: GrantFeeTaskBatchNoticeGenerateItem[]
+}
+
 export interface GrantFeeTaskListItem {
     task_id: string
     case_id: string

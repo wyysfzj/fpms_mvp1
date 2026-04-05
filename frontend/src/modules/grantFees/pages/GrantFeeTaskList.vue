@@ -8,9 +8,17 @@
       <div class="page-header-right">
         <el-space wrap>
           <el-button
+            type="success"
+            :loading="batchNoticeLoading"
+            :disabled="!selectedTaskIds.length || batchActionLoading !== null || batchNoticeLoading"
+            @click="handleBatchNoticeGeneration"
+          >
+            批量生成通知函
+          </el-button>
+          <el-button
             type="primary"
             :loading="batchActionLoading === 'record_pay_instruction'"
-            :disabled="!selectedTaskIds.length || batchActionLoading !== null"
+            :disabled="!selectedTaskIds.length || batchActionLoading !== null || batchNoticeLoading"
             @click="handleBatchInstruction('record_pay_instruction')"
           >
             批量标记支付
@@ -18,19 +26,19 @@
           <el-button
             type="warning"
             :loading="batchActionLoading === 'record_abandon_instruction'"
-            :disabled="!selectedTaskIds.length || batchActionLoading !== null"
+            :disabled="!selectedTaskIds.length || batchActionLoading !== null || batchNoticeLoading"
             @click="handleBatchInstruction('record_abandon_instruction')"
           >
             批量标记放弃
           </el-button>
-          <el-button disabled>账单与文书联动（预留）</el-button>
+          <el-button disabled>账单联动（后续）</el-button>
         </el-space>
       </div>
     </div>
 
     <el-alert
       class="page-note"
-      title="当前页面支持查看、筛选、单行生成草单和草单后完成。通知列仅表示内部通知状态 carrier，不等价于真实文书或提醒任务。"
+      title="当前页面支持查看、筛选、批量客户指示、批量生成通知函、单行生成草单和草单后完成。生成通知函会创建真实文书并回写内部通知状态。"
       type="info"
       show-icon
       :closable="false"
@@ -113,7 +121,7 @@
       </div>
       <div class="summary-card">
         <span class="summary-label">页面说明</span>
-        <span class="summary-value summary-note">查看、筛选、批量指示、单行生成</span>
+        <span class="summary-value summary-note">查看、筛选、批量指示、批量通知、单行生成</span>
       </div>
     </div>
 
@@ -247,6 +255,7 @@ import {
   applyGrantFeeBatchInstruction,
   applyGrantFeeTaskAction,
   generateGrantFeeDraft,
+  generateGrantFeeNoticeDocuments,
   getGrantFeeTasks,
 } from '../../../api/grantFees'
 import type {
@@ -268,6 +277,7 @@ const error = ref<ApiError | null>(null)
 const generatingTaskId = ref<string | null>(null)
 const completingTaskId = ref<string | null>(null)
 const batchActionLoading = ref<GrantFeeTaskBatchInstructionAction | null>(null)
+const batchNoticeLoading = ref(false)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -449,6 +459,41 @@ async function handleBatchInstruction(action: GrantFeeTaskBatchInstructionAction
     error.value = err as ApiError
   } finally {
     batchActionLoading.value = null
+  }
+}
+
+async function handleBatchNoticeGeneration() {
+  if (!selectedTaskIds.value.length) {
+    ElMessage.warning('请先勾选至少一条授权费任务。')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确认基于已选 ${selectedTaskIds.value.length} 条授权费任务生成真实通知函吗？`,
+      '确认批量生成通知函',
+      {
+        type: 'warning',
+        confirmButtonText: '确认生成',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+
+  batchNoticeLoading.value = true
+  error.value = null
+  try {
+    const result = await generateGrantFeeNoticeDocuments({
+      task_ids: selectedTaskIds.value,
+    })
+    ElMessage.success(`已生成 ${result.success_count} 份授权费通知函`)
+    await fetchTasks()
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    batchNoticeLoading.value = false
   }
 }
 
