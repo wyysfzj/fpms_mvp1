@@ -19,6 +19,11 @@ class GrantFeeTaskStateActionIn(BaseModel):
     action: str = Field(..., min_length=1, max_length=32)
 
 
+class GrantFeeTaskBatchInstructionIn(BaseModel):
+    task_ids: list[str] = Field(..., min_length=1)
+    action: str = Field(..., min_length=1, max_length=32)
+
+
 class GrantFeeTaskStateOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -58,6 +63,12 @@ class GrantFeeTaskListResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class GrantFeeTaskBatchInstructionOut(BaseModel):
+    success_count: int
+    failure_count: int
+    updated_task_ids: list[str] = Field(default_factory=list)
 
 
 class GrantFeeDraftGenerateOut(BaseModel):

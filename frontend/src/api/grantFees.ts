@@ -1,5 +1,8 @@
 import { http } from './http'
 import type {
+    GrantFeeTaskBatchInstructionAction,
+    GrantFeeTaskBatchInstructionPayload,
+    GrantFeeTaskBatchInstructionResult,
     GrantFeeMoney,
     GrantFeeDraftGenerateResult,
     GrantFeeTaskClientInstruction,
@@ -59,6 +62,12 @@ interface BackendGrantFeeTaskStateResponse {
     notice_sent: boolean
     is_overdue: boolean
     allowed_actions: string[]
+}
+
+interface BackendGrantFeeTaskBatchInstructionResponse {
+    success_count: number
+    failure_count: number
+    updated_task_ids: string[]
 }
 
 function normalizeBoolean(input: boolean | undefined): boolean | undefined {
@@ -205,4 +214,26 @@ export async function applyGrantFeeTaskAction(
         action,
     })
     return mapGrantFeeTaskStateResult(response.data)
+}
+
+/**
+ * Apply a batch grant-fee client instruction
+ */
+export async function applyGrantFeeBatchInstruction(
+    payload: GrantFeeTaskBatchInstructionPayload,
+): Promise<GrantFeeTaskBatchInstructionResult> {
+    const response = await http.post<BackendGrantFeeTaskBatchInstructionResponse>(
+        '/grant-fee-tasks/batch-instruction',
+        {
+            task_ids: payload.task_ids,
+            action: payload.action as GrantFeeTaskBatchInstructionAction,
+        },
+    )
+    return {
+        success_count: Number(response.data.success_count || 0),
+        failure_count: Number(response.data.failure_count || 0),
+        updated_task_ids: Array.isArray(response.data.updated_task_ids)
+            ? response.data.updated_task_ids
+            : [],
+    }
 }

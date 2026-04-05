@@ -7,7 +7,22 @@
       </div>
       <div class="page-header-right">
         <el-space wrap>
-          <el-button disabled type="primary">状态操作（预留）</el-button>
+          <el-button
+            type="primary"
+            :loading="batchActionLoading === 'record_pay_instruction'"
+            :disabled="!selectedTaskIds.length || batchActionLoading !== null"
+            @click="handleBatchInstruction('record_pay_instruction')"
+          >
+            批量标记支付
+          </el-button>
+          <el-button
+            type="warning"
+            :loading="batchActionLoading === 'record_abandon_instruction'"
+            :disabled="!selectedTaskIds.length || batchActionLoading !== null"
+            @click="handleBatchInstruction('record_abandon_instruction')"
+          >
+            批量标记放弃
+          </el-button>
           <el-button disabled>账单与文书联动（预留）</el-button>
         </el-space>
       </div>
@@ -98,7 +113,7 @@
       </div>
       <div class="summary-card">
         <span class="summary-label">页面说明</span>
-        <span class="summary-value summary-note">查看、筛选、单行生成</span>
+        <span class="summary-value summary-note">查看、筛选、批量指示、单行生成</span>
       </div>
     </div>
 
@@ -113,7 +128,15 @@
     </div>
 
     <div v-else class="page-table">
-      <el-table :data="tasks" aria-label="授权费任务列表" stripe size="small" class="compact-table">
+      <el-table
+        :data="tasks"
+        aria-label="授权费任务列表"
+        stripe
+        size="small"
+        class="compact-table"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="task_id" label="任务编号" min-width="180" />
         <el-table-column label="案件" min-width="180">
           <template #default="{ row }">
@@ -219,9 +242,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { applyGrantFeeTaskAction, generateGrantFeeDraft, getGrantFeeTasks } from '../../../api/grantFees'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  applyGrantFeeBatchInstruction,
+  applyGrantFeeTaskAction,
+  generateGrantFeeDraft,
+  getGrantFeeTasks,
+} from '../../../api/grantFees'
 import type {
+  GrantFeeTaskBatchInstructionAction,
   GrantFeeTaskClientInstruction,
   GrantFeeTaskListItem,
   GrantFeeTaskListResponse,
@@ -238,9 +267,11 @@ const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const generatingTaskId = ref<string | null>(null)
 const completingTaskId = ref<string | null>(null)
+const batchActionLoading = ref<GrantFeeTaskBatchInstructionAction | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const selectedTaskIds = ref<string[]>([])
 const filters = reactive<{
   status: '' | GrantFeeTaskStatus
   client_instruction: '' | GrantFeeTaskClientInstruction
@@ -334,11 +365,16 @@ async function fetchTasks() {
     const response: GrantFeeTaskListResponse = await getGrantFeeTasks(buildParams())
     tasks.value = response.items
     total.value = response.total
+    selectedTaskIds.value = []
   } catch (err) {
     error.value = err as ApiError
   } finally {
     loading.value = false
   }
+}
+
+function handleSelectionChange(rows: GrantFeeTaskListItem[]) {
+  selectedTaskIds.value = rows.map((row) => row.task_id)
 }
 
 async function handleGenerateDraft(row: GrantFeeTaskListItem) {
@@ -372,6 +408,47 @@ async function handleMarkDone(row: GrantFeeTaskListItem) {
     error.value = err as ApiError
   } finally {
     completingTaskId.value = null
+  }
+}
+
+function batchInstructionText(action: GrantFeeTaskBatchInstructionAction): string {
+  return action === 'record_pay_instruction' ? '支付' : '放弃'
+}
+
+async function handleBatchInstruction(action: GrantFeeTaskBatchInstructionAction) {
+  if (!selectedTaskIds.value.length) {
+    ElMessage.warning('请先勾选至少一条授权费任务。')
+    return
+  }
+
+  const actionText = batchInstructionText(action)
+  try {
+    await ElMessageBox.confirm(
+      `确认将已选 ${selectedTaskIds.value.length} 条授权费任务批量标记为${actionText}吗？`,
+      '确认批量客户指示',
+      {
+        type: 'warning',
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+
+  batchActionLoading.value = action
+  error.value = null
+  try {
+    const result = await applyGrantFeeBatchInstruction({
+      task_ids: selectedTaskIds.value,
+      action,
+    })
+    ElMessage.success(`已批量更新 ${result.success_count} 条授权费任务为${actionText}`)
+    await fetchTasks()
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    batchActionLoading.value = null
   }
 }
 

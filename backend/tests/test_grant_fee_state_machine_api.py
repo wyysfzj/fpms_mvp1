@@ -231,3 +231,131 @@ def test_grant_fee_state_machine_returns_not_found_for_missing_task(
     )
     assert missing_update_resp.status_code == 404, missing_update_resp.text
     assert missing_update_resp.json()["error"]["code"] == "GRANT_FEE_TASK_NOT_FOUND"
+
+
+def test_grant_fee_batch_instruction_updates_waiting_client_tasks(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    case_id = _create_case(client, auth_headers)
+    task_a = _insert_task(
+        session_factory,
+        case_id=case_id,
+        notify_count=1,
+        notice_sent=True,
+        client_instruction="NONE",
+    )
+    task_b = _insert_task(
+        session_factory,
+        case_id=case_id,
+        notify_count=1,
+        notice_sent=True,
+        client_instruction="NONE",
+    )
+
+    resp = client.post(
+        f"{STATE_BASE}/batch-instruction",
+        headers=auth_headers,
+        json={"task_ids": [task_a, task_b, task_a], "action": "record_pay_instruction"},
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload == {
+        "success_count": 2,
+        "failure_count": 0,
+        "updated_task_ids": [task_a, task_b],
+    }
+
+    with session_factory() as db:
+        task_rows = (
+            db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.id.in_([task_a, task_b])))
+            .scalars()
+            .all()
+        )
+
+    assert {task.id: task.client_instruction for task in task_rows} == {
+        task_a: "PAY",
+        task_b: "PAY",
+    }
+    assert {task.id: task.notify_count for task in task_rows} == {task_a: 2, task_b: 2}
+
+
+def test_grant_fee_batch_instruction_rejects_non_waiting_tasks(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    case_id = _create_case(client, auth_headers)
+    waiting_task_id = _insert_task(
+        session_factory,
+        case_id=case_id,
+        notify_count=1,
+        notice_sent=True,
+        client_instruction="NONE",
+    )
+    open_task_id = _insert_task(session_factory, case_id=case_id)
+
+    resp = client.post(
+        f"{STATE_BASE}/batch-instruction",
+        headers=auth_headers,
+        json={"task_ids": [waiting_task_id, open_task_id], "action": "record_abandon_instruction"},
+    )
+    assert resp.status_code == 400, resp.text
+    body = resp.json()
+    assert body["error"]["code"] == "GRANT_FEE_BATCH_STATE_INVALID"
+    assert body["error"]["details"]["required_state"] == "WAITING_CLIENT"
+
+
+def test_grant_fee_batch_instruction_returns_not_found_for_missing_task(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    case_id = _create_case(client, auth_headers)
+    task_id = _insert_task(
+        session_factory,
+        case_id=case_id,
+        notify_count=1,
+        notice_sent=True,
+        client_instruction="NONE",
+    )
+
+    resp = client.post(
+        f"{STATE_BASE}/batch-instruction",
+        headers=auth_headers,
+        json={"task_ids": [task_id, "missing-task"], "action": "record_pay_instruction"},
+    )
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["error"]["code"] == "GRANT_FEE_TASK_NOT_FOUND"
+
+
+def test_grant_fee_batch_instruction_requires_write_permission(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+    session_factory: sessionmaker,
+) -> None:
+    case_id = _create_case(client, auth_headers)
+    task_id = _insert_task(
+        session_factory,
+        case_id=case_id,
+        notify_count=1,
+        notice_sent=True,
+        client_instruction="NONE",
+    )
+
+    import app.api.deps as deps
+
+    def _no_perms(_db, _user_id) -> set[str]:
+        return set()
+
+    monkeypatch.setattr(deps, "get_user_permissions", _no_perms)
+
+    resp = client.post(
+        f"{STATE_BASE}/batch-instruction",
+        headers=auth_headers,
+        json={"task_ids": [task_id], "action": "record_pay_instruction"},
+    )
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["error"]["details"]["required_perm"] == "GrantFeeTask.Write"

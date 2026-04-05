@@ -44,6 +44,8 @@ _ACTION_NEXT_STATE = {
     "mark_done": "DONE",
 }
 
+_BATCH_ALLOWED_ACTIONS = ("record_pay_instruction", "record_abandon_instruction")
+
 
 def get_grant_fee_module_contract() -> dict[str, object]:
     return {
@@ -139,6 +141,25 @@ def _normalize_action(action: Any) -> str:
     return str(action or "").strip()
 
 
+def _apply_grant_fee_task_mutation(task: T_GrantFeeTask, *, normalized_action: str) -> None:
+    if normalized_action == "mark_waiting_client":
+        task.notice_sent = True
+        task.client_instruction = "NONE"
+        task.notify_count = 1
+        task.draft_generated = False
+    elif normalized_action == "record_pay_instruction":
+        task.client_instruction = "PAY"
+        task.notify_count = 2
+    elif normalized_action == "record_abandon_instruction":
+        task.client_instruction = "ABANDON"
+        task.notify_count = 4
+    elif normalized_action == "mark_draft_generated":
+        task.draft_generated = True
+        task.notify_count = 3
+    elif normalized_action == "mark_done":
+        task.notify_count = 4
+
+
 def _draft_marker(task_id: str) -> str:
     return f"{GRANT_FEE_DRAFT_MARKER_PREFIX}{task_id}"
 
@@ -206,26 +227,79 @@ def apply_grant_fee_task_action(
             status_code=400,
         )
 
-    if normalized_action == "mark_waiting_client":
-        task.notice_sent = True
-        task.client_instruction = "NONE"
-        task.notify_count = 1
-        task.draft_generated = False
-    elif normalized_action == "record_pay_instruction":
-        task.client_instruction = "PAY"
-        task.notify_count = 2
-    elif normalized_action == "record_abandon_instruction":
-        task.client_instruction = "ABANDON"
-        task.notify_count = 4
-    elif normalized_action == "mark_draft_generated":
-        task.draft_generated = True
-        task.notify_count = 3
-    elif normalized_action == "mark_done":
-        task.notify_count = 4
+    _apply_grant_fee_task_mutation(task, normalized_action=normalized_action)
 
     db.commit()
     db.refresh(task)
     return _serialize_grant_fee_task_state(task, state=derive_grant_fee_task_state(task))
+
+
+def apply_grant_fee_batch_instruction(
+    db: Session,
+    *,
+    task_ids: list[str],
+    action: str,
+) -> dict[str, Any]:
+    normalized_action = _normalize_action(action)
+    if normalized_action not in _BATCH_ALLOWED_ACTIONS:
+        raise_business_error(
+            "GRANT_FEE_BATCH_ACTION_INVALID",
+            "Invalid grant fee batch action",
+            details={"action": normalized_action, "allowed_actions": list(_BATCH_ALLOWED_ACTIONS)},
+            status_code=400,
+        )
+
+    unique_task_ids = list(
+        dict.fromkeys(
+            str(task_id or "").strip() for task_id in task_ids if str(task_id or "").strip()
+        )
+    )
+    if not unique_task_ids:
+        raise_business_error(
+            "GRANT_FEE_BATCH_SELECTION_REQUIRED",
+            "task_ids must not be empty",
+            status_code=400,
+        )
+
+    tasks = list(
+        db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.id.in_(unique_task_ids)))
+        .scalars()
+        .all()
+    )
+    task_by_id = {task.id: task for task in tasks}
+    missing_task_ids = [task_id for task_id in unique_task_ids if task_id not in task_by_id]
+    if missing_task_ids:
+        raise_business_error(
+            "GRANT_FEE_TASK_NOT_FOUND",
+            "One or more grant fee tasks do not exist",
+            details={"task_ids": missing_task_ids},
+            status_code=404,
+        )
+
+    invalid_tasks: list[dict[str, str]] = []
+    for task_id in unique_task_ids:
+        task = task_by_id[task_id]
+        state = derive_grant_fee_task_state(task)
+        if state != "WAITING_CLIENT":
+            invalid_tasks.append({"task_id": task_id, "state": state})
+
+    if invalid_tasks:
+        raise_business_error(
+            "GRANT_FEE_BATCH_STATE_INVALID",
+            "One or more selected grant fee tasks are not waiting for client instruction",
+            details={"invalid_tasks": invalid_tasks, "required_state": "WAITING_CLIENT"},
+            status_code=400,
+        )
+
+    for task_id in unique_task_ids:
+        _apply_grant_fee_task_mutation(task_by_id[task_id], normalized_action=normalized_action)
+
+    db.commit()
+    return {
+        "success_count": len(unique_task_ids),
+        "failure_count": 0,
+        "updated_task_ids": unique_task_ids,
+    }
 
 
 def generate_grant_fee_draft(

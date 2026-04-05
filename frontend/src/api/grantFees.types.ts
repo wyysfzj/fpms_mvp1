@@ -13,6 +13,10 @@ export type GrantFeeTaskStateAction =
     | 'mark_draft_generated'
     | 'mark_done'
 
+export type GrantFeeTaskBatchInstructionAction =
+    | 'record_pay_instruction'
+    | 'record_abandon_instruction'
+
 export interface GrantFeeTaskListItem {
     task_id: string
     case_id: string
@@ -61,6 +65,17 @@ export interface GrantFeeTaskStateResult {
     notice_sent: boolean
     is_overdue: boolean
     allowed_actions: GrantFeeTaskStateAction[]
+}
+
+export interface GrantFeeTaskBatchInstructionPayload {
+    task_ids: string[]
+    action: GrantFeeTaskBatchInstructionAction
+}
+
+export interface GrantFeeTaskBatchInstructionResult {
+    success_count: number
+    failure_count: number
+    updated_task_ids: string[]
 }
 
 export interface GrantFeeTaskListParams {

@@ -10,12 +10,15 @@ from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.grant_fees.schemas import (
     GrantFeeDraftGenerateOut,
+    GrantFeeTaskBatchInstructionIn,
+    GrantFeeTaskBatchInstructionOut,
     GrantFeeTaskListResponse,
     GrantFeeTaskModuleOut,
     GrantFeeTaskStateActionIn,
     GrantFeeTaskStateOut,
 )
 from app.modules.grant_fees.service import (
+    apply_grant_fee_batch_instruction,
     apply_grant_fee_task_action,
     generate_grant_fee_draft,
     get_grant_fee_module_contract,
@@ -94,6 +97,19 @@ def put_grant_fee_task_state_endpoint(
 ) -> GrantFeeTaskStateOut:
     return GrantFeeTaskStateOut.model_validate(
         apply_grant_fee_task_action(db, task_id=task_id, action=payload.action)
+    )
+
+
+@router.post(
+    "/grant-fee-tasks/batch-instruction", summary="Batch apply grant fee client instruction"
+)
+def post_grant_fee_task_batch_instruction_endpoint(
+    payload: GrantFeeTaskBatchInstructionIn,
+    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
+    db: Session = Depends(get_db),
+) -> GrantFeeTaskBatchInstructionOut:
+    return GrantFeeTaskBatchInstructionOut.model_validate(
+        apply_grant_fee_batch_instruction(db, task_ids=payload.task_ids, action=payload.action)
     )
 
 
