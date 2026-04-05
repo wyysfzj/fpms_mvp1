@@ -15,7 +15,7 @@
 
     <el-alert
       class="page-note"
-      title="当前页面支持查看、筛选、单行生成草单和草单后完成，其他联动暂未开放。"
+      title="当前页面支持查看、筛选、单行生成草单和草单后完成。通知列仅表示内部通知状态 carrier，不等价于真实文书或提醒任务。"
       type="info"
       show-icon
       :closable="false"
@@ -159,9 +159,12 @@
         </el-table-column>
         <el-table-column label="通知" width="110">
           <template #default="{ row }">
-            <el-tag :type="row.notice_sent ? 'success' : 'warning'" size="small">
-              {{ row.notice_sent ? '已通知' : '待通知' }}
-            </el-tag>
+            <div class="notice-cell">
+              <el-tag :type="row.notice_sent ? 'success' : 'warning'" size="small">
+                {{ row.notice_sent ? '内部已通知' : '内部待通知' }}
+              </el-tag>
+              <span class="notice-count">次数 {{ row.notify_count }}</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="账单" min-width="180">
@@ -492,6 +495,18 @@ onMounted(() => {
 
 .bill-link:hover {
   text-decoration: underline;
+}
+
+.notice-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notice-count {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 @media (max-width: 960px) {

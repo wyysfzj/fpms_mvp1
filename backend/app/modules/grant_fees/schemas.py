@@ -46,6 +46,7 @@ class GrantFeeTaskListItemResponse(BaseModel):
     currency: str
     draft_generated: bool
     notice_sent: bool
+    notify_count: int
     is_overdue: bool
     billed: bool = False
     linked_bill_id: str | None = None

@@ -448,6 +448,7 @@ def _serialize_grant_fee_task_list_item(
         "currency": task.currency,
         "draft_generated": bool(task.draft_generated),
         "notice_sent": bool(task.notice_sent),
+        "notify_count": int(task.notify_count or 0),
         "is_overdue": bool(task.is_overdue),
         "billed": bool(bill_visibility.get("billed")),
         "linked_bill_id": bill_visibility.get("linked_bill_id"),

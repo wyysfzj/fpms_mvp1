@@ -95,6 +95,7 @@ def _assert_item_shape(item: dict) -> None:
         "currency",
         "draft_generated",
         "notice_sent",
+        "notify_count",
         "is_overdue",
         "billed",
         "linked_bill_id",
@@ -307,6 +308,7 @@ def test_grant_fee_worklist_lists_tasks_with_projection_and_pagination(
     assert filtered_item["status"] == "READY_TO_DRAFT"
     assert filtered_item["client_instruction"] == "PAY"
     assert filtered_item["draft_generated"] is False
+    assert filtered_item["notify_count"] == 2
     assert filtered_item["is_overdue"] is False
 
     draft_resp = client.get(
@@ -366,6 +368,7 @@ def test_grant_fee_worklist_filters_by_overdue_and_case_and_date_range(
     overdue_payload = overdue_resp.json()
     assert overdue_payload["total"] == 1
     assert overdue_payload["items"][0]["task_id"] == overdue_task_id
+    assert overdue_payload["items"][0]["notify_count"] == 1
     assert overdue_payload["items"][0]["is_overdue"] is True
 
     case_resp = client.get(
