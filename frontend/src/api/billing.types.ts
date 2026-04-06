@@ -289,6 +289,75 @@ export interface FeeUnifiedQueryParams {
 
 export type FeeUnifiedQueryResponse = Pagination<FeeUnifiedQueryItem>
 
+export interface FeeOverviewGovPaymentItem {
+    gov_payment_id: number
+    pay_list_id: number
+    case_id: string
+    case_no?: string | null
+    app_no?: string | null
+    patent_no?: string | null
+    fee_item_id?: string | null
+    fee_code?: string | null
+    fee_name?: string | null
+    year_no?: number | null
+    planned_amt: number
+    paid_amt: number
+    currency: string
+    list_no?: string | null
+    voucher_no?: string | null
+    invoice_no?: string | null
+    planned_pay_date?: string | null
+    paid_date?: string | null
+}
+
+export interface FeeOverviewGovPaymentParams {
+    page?: number
+    page_size?: number
+    case_no?: string
+    app_no?: string
+    patent_no?: string
+    client_id?: string
+    applicant_name?: string
+    paid_date_range?: [string, string] | []
+}
+
+export type FeeOverviewGovPaymentResponse = Pagination<FeeOverviewGovPaymentItem>
+
+export interface FeeOverviewCaseReceiptItem {
+    receipt_id: string
+    case_id: string
+    case_no?: string | null
+    app_no?: string | null
+    patent_no?: string | null
+    fee_code?: string | null
+    fee_name?: string | null
+    year_no?: number | null
+    fee_type?: string | null
+    receivable_amt: number
+    received_amt: number
+    currency: string
+    is_arrears?: boolean | null
+    is_prepayment?: boolean | null
+    is_commissionable?: boolean | null
+    receipt_date?: string | null
+    due_date?: string | null
+    invoice_no?: string | null
+}
+
+export interface FeeOverviewCaseReceiptParams {
+    page?: number
+    page_size?: number
+    case_no?: string
+    app_no?: string
+    patent_no?: string
+    client_id?: string
+    applicant_name?: string
+    fee_type?: string
+    receipt_date_range?: [string, string] | []
+}
+
+export type FeeOverviewCaseReceiptResponse = Pagination<FeeOverviewCaseReceiptItem>
+
 // Case Receipts Summary
 export interface CaseReceiptsSummary {
     case_id: string

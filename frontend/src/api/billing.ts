@@ -19,6 +19,12 @@ import type {
     OffsetCreatePayload,
     OffsetListItem,
     FeeUnifiedQueryItem,
+    FeeOverviewCaseReceiptItem,
+    FeeOverviewCaseReceiptParams,
+    FeeOverviewCaseReceiptResponse,
+    FeeOverviewGovPaymentItem,
+    FeeOverviewGovPaymentParams,
+    FeeOverviewGovPaymentResponse,
     FeeUnifiedQueryParams,
     FeeUnifiedQueryResponse,
     PaymentCreatePayload,
@@ -165,6 +171,48 @@ interface BackendOffset {
     created_at?: string | null
 }
 
+interface BackendFeeOverviewGovPaymentItem {
+    gov_payment_id: number
+    pay_list_id: number
+    case_id: string
+    case_no?: string | null
+    app_no?: string | null
+    patent_no?: string | null
+    fee_item_id?: string | null
+    fee_code?: string | null
+    fee_name?: string | null
+    year_no?: number | null
+    planned_amt?: number | string | null
+    paid_amt?: number | string | null
+    currency?: string | null
+    list_no?: string | null
+    voucher_no?: string | null
+    invoice_no?: string | null
+    planned_pay_date?: string | null
+    paid_date?: string | null
+}
+
+interface BackendFeeOverviewCaseReceiptItem {
+    receipt_id: string
+    case_id: string
+    case_no?: string | null
+    app_no?: string | null
+    patent_no?: string | null
+    fee_code?: string | null
+    fee_name?: string | null
+    year_no?: number | null
+    fee_type?: string | null
+    receivable_amt?: number | string | null
+    received_amt?: number | string | null
+    currency?: string | null
+    is_arrears?: boolean | null
+    is_prepayment?: boolean | null
+    is_commissionable?: boolean | null
+    receipt_date?: string | null
+    due_date?: string | null
+    invoice_no?: string | null
+}
+
 function asNumber(input: number | string | null | undefined): number {
     if (input === null || input === undefined || input === '') return 0
     const parsed = Number(input)
@@ -252,6 +300,52 @@ function mapBadDebtRecovery(input: BackendBadDebtRecovery): BillBadDebtRecovery 
         recovery_amount: asNumber(input.recovery_amount),
         recovery_date: input.recovery_date || undefined,
         remark: input.remark || undefined,
+    }
+}
+
+function mapFeeOverviewGovPaymentItem(input: BackendFeeOverviewGovPaymentItem): FeeOverviewGovPaymentItem {
+    return {
+        gov_payment_id: input.gov_payment_id,
+        pay_list_id: input.pay_list_id,
+        case_id: input.case_id,
+        case_no: input.case_no || undefined,
+        app_no: input.app_no || undefined,
+        patent_no: input.patent_no || undefined,
+        fee_item_id: input.fee_item_id || undefined,
+        fee_code: input.fee_code || undefined,
+        fee_name: input.fee_name || undefined,
+        year_no: input.year_no ?? undefined,
+        planned_amt: asNumber(input.planned_amt),
+        paid_amt: asNumber(input.paid_amt),
+        currency: input.currency || 'CNY',
+        list_no: input.list_no || undefined,
+        voucher_no: input.voucher_no || undefined,
+        invoice_no: input.invoice_no || undefined,
+        planned_pay_date: input.planned_pay_date || undefined,
+        paid_date: input.paid_date || undefined,
+    }
+}
+
+function mapFeeOverviewCaseReceiptItem(input: BackendFeeOverviewCaseReceiptItem): FeeOverviewCaseReceiptItem {
+    return {
+        receipt_id: input.receipt_id,
+        case_id: input.case_id,
+        case_no: input.case_no || undefined,
+        app_no: input.app_no || undefined,
+        patent_no: input.patent_no || undefined,
+        fee_code: input.fee_code || undefined,
+        fee_name: input.fee_name || undefined,
+        year_no: input.year_no ?? undefined,
+        fee_type: input.fee_type || undefined,
+        receivable_amt: asNumber(input.receivable_amt),
+        received_amt: asNumber(input.received_amt),
+        currency: input.currency || 'CNY',
+        is_arrears: input.is_arrears ?? undefined,
+        is_prepayment: input.is_prepayment ?? undefined,
+        is_commissionable: input.is_commissionable ?? undefined,
+        receipt_date: input.receipt_date || undefined,
+        due_date: input.due_date || undefined,
+        invoice_no: input.invoice_no || undefined,
     }
 }
 
@@ -583,6 +677,82 @@ export async function getFeeUnifiedQuery(
     return {
         ...response.data,
         items: response.data.items.map(mapFeeUnifiedQueryItem),
+    }
+}
+
+export async function getFeeOverviewGovPayments(
+    params: FeeOverviewGovPaymentParams = {}
+): Promise<FeeOverviewGovPaymentResponse> {
+    const {
+        page = 1,
+        page_size = 20,
+        case_no,
+        app_no,
+        patent_no,
+        client_id,
+        applicant_name,
+        paid_date_range,
+    } = params
+
+    const response = await http.get<Pagination<BackendFeeOverviewGovPaymentItem>>(
+        '/fee-overview/gov-payments',
+        {
+            params: {
+                page,
+                page_size,
+                case_no,
+                app_no,
+                patent_no,
+                client_id,
+                applicant_name,
+                paid_date_from: paid_date_range?.[0],
+                paid_date_to: paid_date_range?.[1],
+            },
+        }
+    )
+
+    return {
+        ...response.data,
+        items: response.data.items.map(mapFeeOverviewGovPaymentItem),
+    }
+}
+
+export async function getFeeOverviewCaseReceipts(
+    params: FeeOverviewCaseReceiptParams = {}
+): Promise<FeeOverviewCaseReceiptResponse> {
+    const {
+        page = 1,
+        page_size = 20,
+        case_no,
+        app_no,
+        patent_no,
+        client_id,
+        applicant_name,
+        fee_type,
+        receipt_date_range,
+    } = params
+
+    const response = await http.get<Pagination<BackendFeeOverviewCaseReceiptItem>>(
+        '/fee-overview/case-receipts',
+        {
+            params: {
+                page,
+                page_size,
+                case_no,
+                app_no,
+                patent_no,
+                client_id,
+                applicant_name,
+                fee_type,
+                receipt_date_from: receipt_date_range?.[0],
+                receipt_date_to: receipt_date_range?.[1],
+            },
+        }
+    )
+
+    return {
+        ...response.data,
+        items: response.data.items.map(mapFeeOverviewCaseReceiptItem),
     }
 }
 

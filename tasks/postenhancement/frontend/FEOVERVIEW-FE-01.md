@@ -1,0 +1,3 @@
+- exact closure slice: replace the legacy fee unified query page with the truthful `SPEC 5.11` two-pane frontend user path backed by the dedicated upper/lower endpoints
+- explicit non-closure: no backend changes, no export/print, no close-decision update, no unsupported upper-pane `fee_type` filter
+- remaining follow-up task ids: `FEOVERVIEW-QA-01`

@@ -1,0 +1,3 @@
+- exact closure slice: audit evidence, gates, and scope compliance for the fee-overview frontend slice
+- explicit non-closure: no product-code changes, no close-decision update
+- remaining follow-up task ids: `None`
