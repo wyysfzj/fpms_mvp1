@@ -298,6 +298,38 @@ class FeeOverviewGovPaymentListResponse(BaseModel):
     total: int
 
 
+class FeeOverviewCaseReceiptItemResponse(BaseModel):
+    """Lower-pane row for the SPEC 5.11 CaseReceipt overview."""
+
+    receipt_id: str
+    case_id: str
+    case_no: str | None = None
+    app_no: str | None = None
+    patent_no: str | None = None
+    fee_code: str | None = None
+    fee_name: str | None = None
+    year_no: int | None = None
+    fee_type: str | None = None
+    receivable_amt: Decimal = Field(Decimal("0"), ge=0)
+    received_amt: Decimal = Field(Decimal("0"), ge=0)
+    currency: str
+    is_arrears: bool | None = None
+    is_prepayment: bool | None = None
+    is_commissionable: bool | None = None
+    receipt_date: date | None = None
+    due_date: date | None = None
+    invoice_no: str | None = None
+
+
+class FeeOverviewCaseReceiptListResponse(BaseModel):
+    """Paginated lower-pane response for the SPEC 5.11 CaseReceipt overview."""
+
+    items: list[FeeOverviewCaseReceiptItemResponse]
+    page: int
+    page_size: int
+    total: int
+
+
 class OffsetCreateSchema(BaseModel):
     """Schema for creating offsets."""
 

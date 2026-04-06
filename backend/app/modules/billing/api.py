@@ -32,6 +32,7 @@ from app.modules.billing.schemas import (
     CaseReceiptCreate,
     CaseReceiptResponse,
     CaseReceiptUpdate,
+    FeeOverviewCaseReceiptListResponse,
     FeeOverviewGovPaymentListResponse,
     FeeUnifiedQueryListResponse,
     OffsetCreateSchema,
@@ -50,6 +51,7 @@ from app.modules.billing.service import (
     generate_bill_from_drafts,
     list_bills,
     list_case_receipts,
+    list_fee_overview_case_receipts,
     list_fee_overview_gov_payments,
     list_fee_unified_queries,
     list_payments,
@@ -514,6 +516,48 @@ def get_payments(
             pay_date_from=pay_date_from,
             pay_date_to=pay_date_to,
             has_unapplied_only=has_unapplied_only,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get(
+    "/fee-overview/case-receipts",
+    response_model=FeeOverviewCaseReceiptListResponse,
+    summary="费用情况查询一览-个案收款情况",
+)
+def get_fee_overview_case_receipts(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    case_no: str | None = Query(default=None),
+    app_no: str | None = Query(default=None),
+    patent_no: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    applicant_name: str | None = Query(default=None),
+    fee_type: str | None = Query(default=None),
+    receipt_date_from: date | None = Query(default=None),
+    receipt_date_to: date | None = Query(default=None),
+    _perm: None = Depends(require_perm("CaseReceipt.Read")),
+    db: Session = Depends(get_db),
+) -> FeeOverviewCaseReceiptListResponse:
+    """
+    Get the dedicated lower-pane CaseReceipt overview for SPEC 5.11.
+
+    **Auth**: Bearer JWT
+    **Permission**: CaseReceipt.Read
+    """
+    return FeeOverviewCaseReceiptListResponse(
+        **list_fee_overview_case_receipts(
+            db,
+            case_no=case_no,
+            app_no=app_no,
+            patent_no=patent_no,
+            client_id=client_id,
+            applicant_name=applicant_name,
+            fee_type=fee_type,
+            receipt_date_from=receipt_date_from,
+            receipt_date_to=receipt_date_to,
             page=page,
             page_size=page_size,
         )

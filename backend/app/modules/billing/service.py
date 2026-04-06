@@ -942,6 +942,128 @@ def list_fee_overview_gov_payments(
     }
 
 
+def _normalize_fee_overview_lower_date_range(
+    *,
+    receipt_date_from: date | None,
+    receipt_date_to: date | None,
+) -> None:
+    if receipt_date_from and receipt_date_to and receipt_date_from > receipt_date_to:
+        raise_business_error(
+            "FEE_OVERVIEW_DATE_RANGE_INVALID",
+            "receipt_date_from must be <= receipt_date_to",
+            status_code=400,
+        )
+
+
+def list_fee_overview_case_receipts(
+    db: Session,
+    *,
+    case_no: str | None = None,
+    app_no: str | None = None,
+    patent_no: str | None = None,
+    client_id: str | None = None,
+    applicant_name: str | None = None,
+    fee_type: str | None = None,
+    receipt_date_from: date | None = None,
+    receipt_date_to: date | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, object]:
+    _normalize_fee_overview_lower_date_range(
+        receipt_date_from=receipt_date_from,
+        receipt_date_to=receipt_date_to,
+    )
+
+    stmt = (
+        select(
+            CaseReceipt.id.label("receipt_id"),
+            CaseReceipt.case_id.label("case_id"),
+            Case.case_no.label("case_no"),
+            Case.app_no.label("app_no"),
+            Case.patent_no.label("patent_no"),
+            CaseReceipt.fee_code.label("fee_code"),
+            CaseReceipt.fee_name.label("fee_name"),
+            CaseReceipt.year_no.label("year_no"),
+            CaseReceipt.fee_type.label("fee_type"),
+            CaseReceipt.receivable_amt.label("receivable_amt"),
+            CaseReceipt.received_amt.label("received_amt"),
+            CaseReceipt.currency.label("currency"),
+            CaseReceipt.is_arrears.label("is_arrears"),
+            CaseReceipt.is_prepayment.label("is_prepayment"),
+            CaseReceipt.is_commissionable.label("is_commissionable"),
+            CaseReceipt.last_receipt_date.label("receipt_date"),
+            CaseReceipt.due_date.label("due_date"),
+            CaseReceipt.invoice_no.label("invoice_no"),
+        )
+        .join(Case, Case.id == CaseReceipt.case_id)
+    )
+
+    if client_id:
+        stmt = stmt.where(Case.client_id == client_id)
+    if case_no:
+        stmt = stmt.where(Case.case_no == case_no)
+    if app_no:
+        stmt = stmt.where(Case.app_no == app_no)
+    if patent_no:
+        stmt = stmt.where(Case.patent_no == patent_no)
+    if fee_type:
+        stmt = stmt.where(func.upper(func.coalesce(CaseReceipt.fee_type, "")) == fee_type.strip().upper())
+    if receipt_date_from:
+        stmt = stmt.where(CaseReceipt.last_receipt_date >= receipt_date_from)
+    if receipt_date_to:
+        stmt = stmt.where(CaseReceipt.last_receipt_date <= receipt_date_to)
+
+    normalized_applicant_name = _normalize_text_filter(applicant_name)
+    if normalized_applicant_name:
+        applicant_expr_cn = func.upper(func.coalesce(T_CaseApplicant.name_cn, ""))
+        applicant_expr_en = func.upper(func.coalesce(T_CaseApplicant.name_en, ""))
+        applicant_case_ids = select(T_CaseApplicant.case_id).where(
+            (applicant_expr_cn.contains(normalized_applicant_name))
+            | (applicant_expr_en.contains(normalized_applicant_name))
+        )
+        stmt = stmt.where(Case.id.in_(applicant_case_ids))
+
+    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+    rows = db.execute(
+        stmt.order_by(
+            CaseReceipt.last_receipt_date.desc(),
+            CaseReceipt.created_at.desc(),
+            CaseReceipt.id.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+
+    return {
+        "items": [
+            {
+                "receipt_id": row.receipt_id,
+                "case_id": row.case_id,
+                "case_no": row.case_no,
+                "app_no": row.app_no,
+                "patent_no": row.patent_no,
+                "fee_code": row.fee_code,
+                "fee_name": row.fee_name,
+                "year_no": row.year_no,
+                "fee_type": row.fee_type,
+                "receivable_amt": row.receivable_amt or Decimal("0"),
+                "received_amt": row.received_amt or Decimal("0"),
+                "currency": row.currency,
+                "is_arrears": row.is_arrears,
+                "is_prepayment": row.is_prepayment,
+                "is_commissionable": row.is_commissionable,
+                "receipt_date": row.receipt_date,
+                "due_date": row.due_date,
+                "invoice_no": row.invoice_no,
+            }
+            for row in rows
+        ],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+    }
+
+
 def _get_bill_for_bad_debt_action(db: Session, bill_id: str) -> Bill:
     bill = db.query(Bill).filter(Bill.id == bill_id).first()
     if not bill:
