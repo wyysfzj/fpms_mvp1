@@ -118,6 +118,48 @@ def list_tasks(
     return items, total
 
 
+def list_tasks_for_export(
+    db: Session,
+    *,
+    filters: dict[str, Any],
+    actor_id: str | None,
+    as_role: TaskTodayAs | None,
+) -> list[Task]:
+    stmt = select(Task)
+
+    status = filters.get("status")
+    case_id = filters.get("case_id")
+    worker_id = filters.get("worker_id")
+    supervisor_id = filters.get("supervisor_id")
+    due_from: date | None = filters.get("due_from")
+    due_to: date | None = filters.get("due_to")
+    client_id = filters.get("client_id")
+
+    if as_role == TaskTodayAs.WORKER and actor_id:
+        stmt = stmt.where(Task.worker_id == actor_id)
+    elif as_role == TaskTodayAs.SUPERVISOR and actor_id:
+        stmt = stmt.where(Task.supervisor_id == actor_id)
+
+    if status:
+        stmt = stmt.where(Task.status == status)
+    if case_id:
+        stmt = stmt.where(Task.case_id == case_id)
+    if worker_id:
+        stmt = stmt.where(Task.worker_id == worker_id)
+    if supervisor_id:
+        stmt = stmt.where(Task.supervisor_id == supervisor_id)
+    if due_from:
+        stmt = stmt.where(Task.due_date >= due_from)
+    if due_to:
+        stmt = stmt.where(Task.due_date <= due_to)
+    if client_id:
+        stmt = stmt.join(Case, Task.case_id == Case.id).where(Case.client_id == client_id)
+
+    return list(
+        db.execute(stmt.order_by(Task.due_date.asc(), Task.created_at.desc())).scalars().all()
+    )
+
+
 def get_task(db: Session, *, task_id: str) -> Task:
     task = db.execute(select(Task).where(Task.id == task_id)).scalar_one_or_none()
     if not task:
@@ -462,6 +504,79 @@ def list_special_search_tasks(
         )
         items.append(item)
     return items, total
+
+
+def list_special_search_tasks_for_output(
+    db: Session,
+    *,
+    filters: dict[str, Any],
+) -> list[dict[str, Any]]:
+    today = date.today()
+    stmt = (
+        select(
+            TaskTemplate.code.label("task_code"),
+            Task.id.label("task_id"),
+            Task.case_id.label("case_id"),
+            Case.case_no.label("case_no"),
+            Client.name_cn.label("client_name"),
+            Task.title.label("title"),
+            Task.status.label("status"),
+            Task.due_date.label("due_date"),
+            literal(None).label("remark"),
+        )
+        .join(TaskTemplate, Task.task_template_id == TaskTemplate.id)
+        .join(Case, Task.case_id == Case.id)
+        .outerjoin(Client, Case.client_id == Client.id)
+        .where(TaskTemplate.code.in_(SPECIAL_SEARCH_TASK_CODES))
+    )
+
+    task_code = filters.get("task_code")
+    status = filters.get("status")
+    case_no = filters.get("case_no")
+    client_name = filters.get("client_name")
+    due_date_from: date | None = filters.get("due_date_from")
+    due_date_to: date | None = filters.get("due_date_to")
+    is_overdue = filters.get("is_overdue")
+
+    if task_code:
+        stmt = stmt.where(TaskTemplate.code == task_code)
+    if status:
+        stmt = stmt.where(Task.status == status)
+    if case_no:
+        stmt = stmt.where(func.lower(Case.case_no).like(f"%{case_no.strip().lower()}%"))
+    if client_name:
+        stmt = stmt.where(
+            func.lower(func.coalesce(Client.name_cn, "")).like(f"%{client_name.strip().lower()}%")
+        )
+    if due_date_from:
+        stmt = stmt.where(Task.due_date >= due_date_from)
+    if due_date_to:
+        stmt = stmt.where(Task.due_date <= due_date_to)
+    if is_overdue is True:
+        stmt = stmt.where(Task.due_date < today, Task.status != TaskStatus.DONE.value)
+    elif is_overdue is False:
+        stmt = stmt.where(
+            or_(
+                Task.due_date.is_(None),
+                Task.due_date >= today,
+                Task.status == TaskStatus.DONE.value,
+            )
+        )
+
+    rows = db.execute(
+        stmt.order_by(Task.due_date.asc(), Task.created_at.desc(), Task.id.asc())
+    ).all()
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row._mapping)
+        due_date = item.get("due_date")
+        status_value = item.get("status")
+        item["title"] = item.get("title") or ""
+        item["is_overdue"] = bool(
+            due_date is not None and due_date < today and status_value != TaskStatus.DONE.value
+        )
+        items.append(item)
+    return items
 
 
 # ---------------------------------------------------------------------------

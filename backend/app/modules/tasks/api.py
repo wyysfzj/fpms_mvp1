@@ -4,6 +4,7 @@ from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
@@ -15,7 +16,17 @@ from app.modules.cases.models import Case
 from app.modules.masterdata.clients.models import Client
 from app.modules.tasks.doc_render_task_sheet_context import TaskSheetContextBuilder
 from app.modules.tasks.enums import TaskTodayAs
+from app.modules.tasks.export_excel import (
+    TASK_LIST_EXPORT_MIME_TYPE,
+    build_task_list_export_xlsx,
+    build_task_special_search_export_xlsx,
+)
 from app.modules.tasks.models import Task
+from app.modules.tasks.print_html import (
+    TASK_LIST_PRINT_MIME_TYPE,
+    build_task_list_print_html,
+    build_task_special_search_print_html,
+)
 from app.modules.tasks.schemas import (
     TaskActionIn,
     TaskActionOut,
@@ -38,7 +49,13 @@ from app.modules.tasks.service import create_task as create_task_service
 from app.modules.tasks.service import create_task_template as create_task_template_service
 from app.modules.tasks.service import delete_task as delete_task_service
 from app.modules.tasks.service import get_task as get_task_service
-from app.modules.tasks.service import list_special_search_tasks, list_tasks, list_tasks_today
+from app.modules.tasks.service import (
+    list_special_search_tasks,
+    list_special_search_tasks_for_output,
+    list_tasks,
+    list_tasks_for_export,
+    list_tasks_today,
+)
 from app.modules.tasks.service import list_task_logs as list_task_logs_service
 from app.modules.tasks.service import list_task_templates as list_task_templates_service
 from app.modules.tasks.service import reopen_task as reopen_task_service
@@ -192,6 +209,115 @@ def get_tasks(
     return {"items": items, "page": page, "page_size": page_size, "total": total}
 
 
+@router.get(
+    "/tasks/export",
+    summary="Export task list to Excel",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {TASK_LIST_EXPORT_MIME_TYPE: {}},
+            "description": "Task list Excel export generated",
+        }
+    },
+)
+def export_tasks(
+    status: str | None = Query(default=None),
+    as_role: TaskTodayAs | None = Query(default=None, alias="as"),
+    due_from: date | None = Query(default=None),
+    due_to: date | None = Query(default=None),
+    worker_id: str | None = Query(default=None),
+    supervisor_id: str | None = Query(default=None),
+    case_id: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    _perm: None = Depends(require_perm("Task.Read")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> Response:
+    filters = {
+        "status": status,
+        "case_id": case_id,
+        "worker_id": worker_id,
+        "supervisor_id": supervisor_id,
+        "due_from": due_from,
+        "due_to": due_to,
+        "client_id": client_id,
+    }
+    tasks = list_tasks_for_export(
+        db,
+        filters=filters,
+        actor_id=current_user.id,
+        as_role=as_role,
+    )
+    items = _build_task_list_items(db, tasks)
+    if as_role == TaskTodayAs.WORKER:
+        export_title = "我的时限任务清单"
+        filename_prefix = "my-task-list"
+    elif as_role == TaskTodayAs.SUPERVISOR:
+        export_title = "监督时限任务清单"
+        filename_prefix = "supervisor-task-list"
+    else:
+        export_title = "时限任务清单"
+        filename_prefix = "task-list"
+    content = build_task_list_export_xlsx(title=export_title, items=items)
+    return Response(
+        content=content,
+        media_type=TASK_LIST_EXPORT_MIME_TYPE,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename_prefix}.xlsx"',
+        },
+    )
+
+
+@router.get(
+    "/tasks/print",
+    summary="Print task list",
+    response_class=HTMLResponse,
+    responses={
+        200: {
+            "content": {"text/html": {}},
+            "description": "Printable task list HTML generated",
+        }
+    },
+)
+def print_tasks(
+    status: str | None = Query(default=None),
+    as_role: TaskTodayAs | None = Query(default=None, alias="as"),
+    due_from: date | None = Query(default=None),
+    due_to: date | None = Query(default=None),
+    worker_id: str | None = Query(default=None),
+    supervisor_id: str | None = Query(default=None),
+    case_id: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    _perm: None = Depends(require_perm("Task.Read")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    filters = {
+        "status": status,
+        "case_id": case_id,
+        "worker_id": worker_id,
+        "supervisor_id": supervisor_id,
+        "due_from": due_from,
+        "due_to": due_to,
+        "client_id": client_id,
+    }
+    tasks = list_tasks_for_export(
+        db,
+        filters=filters,
+        actor_id=current_user.id,
+        as_role=as_role,
+    )
+    items = _build_task_list_items(db, tasks)
+    if as_role == TaskTodayAs.WORKER:
+        print_title = "我的时限任务清单"
+    elif as_role == TaskTodayAs.SUPERVISOR:
+        print_title = "监督时限任务清单"
+    else:
+        print_title = "时限任务清单"
+    html = build_task_list_print_html(title=print_title, items=items)
+    return HTMLResponse(content=html, media_type=TASK_LIST_PRINT_MIME_TYPE)
+
+
 @router.get("/tasks/today", summary="List today's tasks for the current user")
 def get_tasks_today(
     as_role: TaskTodayAs = Query(default=TaskTodayAs.WORKER, alias="as"),
@@ -268,6 +394,92 @@ def get_special_search_tasks(
         for item in tasks
     ]
     return TaskSpecialSearchOut(items=items, page=page, page_size=page_size, total=total)
+
+
+@router.get(
+    "/tasks/special/search/export",
+    summary="Export special-search task list to Excel",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {TASK_LIST_EXPORT_MIME_TYPE: {}},
+            "description": "Special-search Excel export generated",
+        }
+    },
+)
+def export_special_search_tasks(
+    task_code: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
+    client_name: str | None = Query(default=None),
+    due_date_from: date | None = Query(default=None),
+    due_date_to: date | None = Query(default=None),
+    is_overdue: bool | None = Query(default=None),
+    _perm: None = Depends(require_perm("Task.Read")),
+    db: Session = Depends(get_db),
+) -> Response:
+    filters = {
+        "task_code": task_code,
+        "status": status,
+        "case_no": case_no,
+        "client_name": client_name,
+        "due_date_from": due_date_from,
+        "due_date_to": due_date_to,
+        "is_overdue": is_overdue,
+    }
+    raw_items = list_special_search_tasks_for_output(db, filters=filters)
+    items = [TaskSpecialSearchItemOut.model_validate(item) for item in raw_items]
+    content = build_task_special_search_export_xlsx(
+        title="专项期限检索清单",
+        items=items,
+    )
+    return Response(
+        content=content,
+        media_type=TASK_LIST_EXPORT_MIME_TYPE,
+        headers={
+            "Content-Disposition": 'attachment; filename="special-task-search.xlsx"',
+        },
+    )
+
+
+@router.get(
+    "/tasks/special/search/print",
+    summary="Print special-search task list",
+    response_class=HTMLResponse,
+    responses={
+        200: {
+            "content": {"text/html": {}},
+            "description": "Printable special-search HTML generated",
+        }
+    },
+)
+def print_special_search_tasks(
+    task_code: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
+    client_name: str | None = Query(default=None),
+    due_date_from: date | None = Query(default=None),
+    due_date_to: date | None = Query(default=None),
+    is_overdue: bool | None = Query(default=None),
+    _perm: None = Depends(require_perm("Task.Read")),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    filters = {
+        "task_code": task_code,
+        "status": status,
+        "case_no": case_no,
+        "client_name": client_name,
+        "due_date_from": due_date_from,
+        "due_date_to": due_date_to,
+        "is_overdue": is_overdue,
+    }
+    raw_items = list_special_search_tasks_for_output(db, filters=filters)
+    items = [TaskSpecialSearchItemOut.model_validate(item) for item in raw_items]
+    html = build_task_special_search_print_html(
+        title="专项期限检索清单",
+        items=items,
+    )
+    return HTMLResponse(content=html, media_type=TASK_LIST_PRINT_MIME_TYPE)
 
 
 @router.post(

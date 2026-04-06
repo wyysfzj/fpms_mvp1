@@ -6,6 +6,8 @@
         <span class="page-count">{{ total }} 条</span>
       </div>
       <div class="page-header-right">
+        <el-button :loading="exporting" @click="handleExport">导出清单</el-button>
+        <el-button :loading="printing" @click="handlePrint">打印清单</el-button>
         <router-link to="/tasks/new">
           <el-button type="primary">{{ ZH.taskList.newTask }}</el-button>
         </router-link>
@@ -167,7 +169,15 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getTasks, closeTask, reopenTask, cancelTask, deleteTask } from '../../../api/tasks'
+import {
+  cancelTask,
+  closeTask,
+  deleteTask,
+  exportTaskList,
+  getTasks,
+  printTaskList,
+  reopenTask,
+} from '../../../api/tasks'
 import { getClients } from '../../../api/clients'
 import type { Client } from '../../../api/clients.types'
 import type { Task } from '../../../api/tasks.types'
@@ -190,6 +200,8 @@ const filterClientId = ref('')
 const viewMode = ref<'all' | 'worker' | 'supervisor'>('all')
 const clientOptions = ref<Client[]>([])
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+const exporting = ref(false)
+const printing = ref(false)
 const viewOptions = [
   { label: '全部任务', value: 'all' },
   { label: '我的任务', value: 'worker' },
@@ -208,13 +220,7 @@ async function fetchTasks() {
   loading.value = true
   error.value = null
   try {
-    const result = await getTasks({
-      page: page.value,
-      page_size: pageSize.value,
-      status: filterStatus.value || undefined,
-      client_id: filterClientId.value || undefined,
-      as: viewMode.value === 'all' ? undefined : viewMode.value,
-    })
+    const result = await getTasks(buildListParams())
     tasks.value = result.items
     total.value = result.total
   } catch (err) {
@@ -222,6 +228,16 @@ async function fetchTasks() {
   } finally {
     loading.value = false
   }
+}
+
+function buildListParams() {
+  return {
+    page: page.value,
+    page_size: pageSize.value,
+    status: filterStatus.value || undefined,
+    client_id: filterClientId.value || undefined,
+    as: viewMode.value === 'all' ? undefined : viewMode.value,
+  } as const
 }
 
 function formatDate(dateStr?: string): string {
@@ -366,6 +382,62 @@ async function executeAction(
   } finally {
     actionLoading.value = false
     actionTaskId.value = null
+  }
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+function buildExportFileName() {
+  if (viewMode.value === 'worker') return '我的时限任务清单.xlsx'
+  if (viewMode.value === 'supervisor') return '监督时限任务清单.xlsx'
+  return '时限任务清单.xlsx'
+}
+
+async function handleExport() {
+  exporting.value = true
+  error.value = null
+  try {
+    const blob = await exportTaskList(buildListParams())
+    downloadBlob(blob, buildExportFileName())
+    ElMessage.success('时限任务清单已开始导出。')
+  } catch (err) {
+    error.value = err as ApiError
+    ElMessage.error('导出失败，请稍后重试。')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function handlePrint() {
+  printing.value = true
+  error.value = null
+  try {
+    const html = await printTaskList(buildListParams())
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer')
+    if (!printWindow) {
+      ElMessage.error('浏览器拦截了打印窗口，请允许弹窗后重试。')
+      return
+    }
+    printWindow.document.open()
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
+    ElMessage.success('时限任务清单已打开打印预览。')
+  } catch (err) {
+    error.value = err as ApiError
+    ElMessage.error('打印失败，请稍后重试。')
+  } finally {
+    printing.value = false
   }
 }
 

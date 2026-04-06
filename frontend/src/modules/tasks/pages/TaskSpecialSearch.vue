@@ -6,6 +6,8 @@
         <span class="page-count" aria-live="polite">{{ total }} 条</span>
       </div>
       <div class="page-header-right">
+        <el-button :loading="exporting" @click="handleExport">导出清单</el-button>
+        <el-button :loading="printing" @click="handlePrint">打印清单</el-button>
         <router-link to="/tasks">
           <el-button>返回任务列表</el-button>
         </router-link>
@@ -197,7 +199,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
-import { searchSpecialTasks } from '../../../api/tasks'
+import { ElMessage } from 'element-plus'
+import { exportSpecialTasks, printSpecialTasks, searchSpecialTasks } from '../../../api/tasks'
 import type { ApiError } from '../../../api/types'
 import type { TaskSpecialSearchItem } from '../../../api/tasks.types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -212,6 +215,8 @@ const error = ref<ApiError | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const exporting = ref(false)
+const printing = ref(false)
 
 const filters = reactive({
   task_code: null as string | null,
@@ -268,6 +273,47 @@ async function fetchSpecialSearch() {
     error.value = err as ApiError
   } finally {
     loading.value = false
+  }
+}
+
+async function handleExport() {
+  exporting.value = true
+  try {
+    const blob = await exportSpecialTasks(buildParams())
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'special-task-search.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('专项检索清单导出成功')
+  } catch {
+    ElMessage.error('专项检索清单导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+async function handlePrint() {
+  printing.value = true
+  try {
+    const html = await printSpecialTasks(buildParams())
+    const popup = window.open('', '_blank', 'noopener,noreferrer')
+    if (!popup) {
+      throw new Error('popup_blocked')
+    }
+    popup.document.open()
+    popup.document.write(html)
+    popup.document.close()
+    popup.focus()
+    popup.print()
+    ElMessage.success('专项检索清单打印页已打开')
+  } catch {
+    ElMessage.error('专项检索清单打印失败')
+  } finally {
+    printing.value = false
   }
 }
 

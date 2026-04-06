@@ -132,6 +132,22 @@ export async function getTasks(params: TaskListParams = {}): Promise<Pagination<
     }
 }
 
+export async function exportTaskList(params: TaskListParams = {}): Promise<Blob> {
+    const response = await http.get('/tasks/export', {
+        params,
+        responseType: 'blob',
+    })
+    return response.data as Blob
+}
+
+export async function printTaskList(params: TaskListParams = {}): Promise<string> {
+    const response = await http.get('/tasks/print', {
+        params,
+        responseType: 'text',
+    })
+    return response.data as string
+}
+
 /**
  * Create a new task
  */
@@ -192,6 +208,22 @@ export async function searchSpecialTasks(
         params,
     })
     return response.data
+}
+
+export async function exportSpecialTasks(params: TaskSpecialSearchParams = {}): Promise<Blob> {
+    const response = await http.get('/tasks/special/search/export', {
+        params,
+        responseType: 'blob',
+    })
+    return response.data as Blob
+}
+
+export async function printSpecialTasks(params: TaskSpecialSearchParams = {}): Promise<string> {
+    const response = await http.get('/tasks/special/search/print', {
+        params,
+        responseType: 'text',
+    })
+    return response.data as string
 }
 
 // ── Task Template CRUD ─────────────────────────────
