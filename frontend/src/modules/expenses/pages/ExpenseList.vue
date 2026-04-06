@@ -77,6 +77,52 @@
       </div>
     </div>
 
+    <div v-if="stats && (caseStats.length || clientStats.length)" class="grouped-summary-grid">
+      <section class="grouped-summary-card">
+        <div class="grouped-summary-header">
+          <h3>每案总支出</h3>
+          <span>{{ caseStats.length }} 组</span>
+        </div>
+        <div v-if="caseStats.length" class="grouped-summary-list">
+          <div
+            v-for="item in caseStats"
+            :key="item.key"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-main">
+              <span class="grouped-summary-title">{{ item.label }}</span>
+              <span class="grouped-summary-sub">支出 {{ item.expense_count }} 笔</span>
+            </div>
+            <div class="grouped-summary-amounts mono-num">
+              {{ formatAmount(item.total_amount, 'CNY') }}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grouped-summary-card">
+        <div class="grouped-summary-header">
+          <h3>每客户支出</h3>
+          <span>{{ clientStats.length }} 组</span>
+        </div>
+        <div v-if="clientStats.length" class="grouped-summary-list">
+          <div
+            v-for="item in clientStats"
+            :key="item.key"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-main">
+              <span class="grouped-summary-title">{{ item.label }}</span>
+              <span class="grouped-summary-sub">支出 {{ item.expense_count }} 笔</span>
+            </div>
+            <div class="grouped-summary-amounts mono-num">
+              {{ formatAmount(item.total_amount, 'CNY') }}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div v-if="error" class="page-error" role="alert" aria-live="assertive">
       <ApiErrorBanner :error="error" @dismiss="error = null" />
     </div>
@@ -154,6 +200,7 @@ import { getExpenses, mapExpenseError } from '../../../api/expenses'
 import type {
   ExpenseApiError,
   ExpenseCategory,
+  ExpenseGroupedStat,
   ExpenseItem,
   ExpenseStats,
 } from '../../../api/expenses.types'
@@ -171,6 +218,13 @@ interface CategoryStatView {
   category: string
   label: string
   count: number
+}
+
+interface GroupedStatView {
+  key: string
+  label: string
+  expense_count: number
+  total_amount: number
 }
 
 const CATEGORY_TEXT: Record<string, string> = {
@@ -219,6 +273,18 @@ const categoryStats = computed<CategoryStatView[]>(() => {
     }))
     .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
 })
+
+function mapGroupedStats(rows: ExpenseGroupedStat[] | undefined): GroupedStatView[] {
+  return (rows || []).map((row) => ({
+    key: row.key,
+    label: row.label,
+    expense_count: row.expense_count,
+    total_amount: row.total_amount,
+  }))
+}
+
+const caseStats = computed<GroupedStatView[]>(() => mapGroupedStats(stats.value?.case_amounts))
+const clientStats = computed<GroupedStatView[]>(() => mapGroupedStats(stats.value?.client_amounts))
 
 function getCategoryText(category: string): string {
   return CATEGORY_TEXT[category] || category
@@ -341,6 +407,72 @@ onMounted(() => {
 .stat-value {
   margin-top: 6px;
   font-size: 18px;
+  font-weight: 600;
+}
+
+.grouped-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.grouped-summary-card {
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-1);
+  padding: 16px;
+}
+
+.grouped-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.grouped-summary-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.grouped-summary-header span {
+  color: var(--text-sub);
+  font-size: 12px;
+}
+
+.grouped-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grouped-summary-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-0);
+}
+
+.grouped-summary-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.grouped-summary-title {
+  font-weight: 600;
+}
+
+.grouped-summary-sub {
+  color: var(--text-sub);
+  font-size: 12px;
+}
+
+.grouped-summary-amounts {
+  align-self: center;
   font-weight: 600;
 }
 

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import raise_business_error
 from app.modules.cases.models import Case
 from app.modules.expenses.models import Expense
+from app.modules.masterdata.clients.models import Client
 
 _ALLOWED_CATEGORIES = {"SEARCH_DB", "TRANSLATION", "TRANSPORT", "OTHER"}
 _DEFAULT_CURRENCY = "CNY"
@@ -179,11 +180,92 @@ def list_expenses(
         sum_by_category[category_key] = normalized_amount
         sum_total += normalized_amount
 
+    stats_rows = db.execute(
+        select(
+            Expense.case_id,
+            Expense.client_id,
+            Expense.amount,
+            Case.case_no,
+            Case.client_id,
+        )
+        .select_from(Expense)
+        .outerjoin(Case, Case.id == Expense.case_id)
+        .where(*filters)
+    ).all()
+
+    client_ids = {
+        str(expense_client_id or case_client_id)
+        for _, expense_client_id, _, _, case_client_id in stats_rows
+        if expense_client_id or case_client_id
+    }
+    client_name_map: dict[str, str] = {}
+    if client_ids:
+        clients = db.execute(
+            select(Client.id, Client.name_cn).where(Client.id.in_(client_ids))
+        ).all()
+        client_name_map = {str(client_id): str(name_cn) for client_id, name_cn in clients}
+
+    case_amounts_map: dict[str, dict[str, Any]] = {}
+    client_amounts_map: dict[str, dict[str, Any]] = {}
+    for case_id_value, expense_client_id, amount_value, case_no_value, case_client_id in stats_rows:
+        amount_decimal = _quantize_money(_to_decimal(amount_value, "amount"))
+
+        case_key = (str(case_id_value) if case_id_value else "").strip() or "UNASSIGNED"
+        case_label = (
+            (str(case_no_value) if case_no_value else "").strip()
+            or (str(case_id_value) if case_id_value else "").strip()
+            or "未关联案件"
+        )
+        case_row = case_amounts_map.setdefault(
+            case_key,
+            {
+                "key": case_key,
+                "label": case_label,
+                "expense_count": 0,
+                "total_amount": Decimal("0.00"),
+            },
+        )
+        case_row["expense_count"] += 1
+        case_row["total_amount"] = _quantize_money(case_row["total_amount"] + amount_decimal)
+
+        resolved_client_id = (
+            (str(expense_client_id) if expense_client_id else "").strip()
+            or (str(case_client_id) if case_client_id else "").strip()
+        )
+        client_key = resolved_client_id or "UNASSIGNED"
+        client_label = (
+            client_name_map.get(resolved_client_id)
+            if resolved_client_id
+            else None
+        ) or resolved_client_id or "未分配客户"
+        client_row = client_amounts_map.setdefault(
+            client_key,
+            {
+                "key": client_key,
+                "label": client_label,
+                "expense_count": 0,
+                "total_amount": Decimal("0.00"),
+            },
+        )
+        client_row["expense_count"] += 1
+        client_row["total_amount"] = _quantize_money(client_row["total_amount"] + amount_decimal)
+
+    case_amounts = sorted(
+        case_amounts_map.values(),
+        key=lambda item: (str(item["label"]), str(item["key"])),
+    )
+    client_amounts = sorted(
+        client_amounts_map.values(),
+        key=lambda item: (str(item["label"]), str(item["key"])),
+    )
+
     stats: dict[str, Any] = {
         "count_by_category": count_by_category,
         "sum_by_category": sum_by_category,
         "count_total": total,
         "sum_total": _quantize_money(sum_total),
+        "case_amounts": case_amounts,
+        "client_amounts": client_amounts,
     }
     return items, total, stats
 

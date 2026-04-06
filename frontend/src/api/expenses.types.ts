@@ -16,11 +16,20 @@ export interface ExpenseItem {
     updated_at: string
 }
 
+export interface ExpenseGroupedStat {
+    key: string
+    label: string
+    expense_count: number
+    total_amount: number
+}
+
 export interface ExpenseStats {
     count_by_category: Record<string, number>
     sum_by_category: Record<string, number>
     count_total: number
     sum_total: number
+    case_amounts?: ExpenseGroupedStat[]
+    client_amounts?: ExpenseGroupedStat[]
 }
 
 export interface ExpenseListResponse extends Pagination<ExpenseItem> {
