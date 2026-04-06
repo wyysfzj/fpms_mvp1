@@ -9,11 +9,12 @@ export interface Document {
     case_id?: string
     case_no?: string
     template_code?: string
+    ref_no?: string
     client_id?: string
     client_name?: string
     doc_template_id?: string | null
     doc_date?: string
-    doc_type?: string
+    doc_type?: 'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT'
     description?: string
     outgoing_reg_no?: string | null
     forward_date?: string | null
@@ -30,6 +31,7 @@ export interface DocumentListParams {
     page_size?: number
     q?: string
     doc_name?: string
+    doc_type?: Array<'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT'>
     case_no?: string
     template_code?: string
     direction?: 'IN' | 'OUT'
@@ -117,7 +119,7 @@ export interface DocumentCreatePayload {
     case_id: string
     doc_template_id?: string | null
     doc_date: string
-    doc_type?: string
+    doc_type?: 'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT'
     description?: string
     reply_to_id?: string | null
 }
@@ -128,7 +130,7 @@ export interface DocumentUpdatePayload {
     case_id?: string
     doc_template_id?: string | null
     doc_date?: string
-    doc_type?: string
+    doc_type?: 'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT'
     description?: string
     reply_to_id?: string | null
     need_reply?: boolean | null

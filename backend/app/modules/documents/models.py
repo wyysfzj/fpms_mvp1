@@ -57,6 +57,7 @@ class Document(UUIDPrimaryKeyMixin, AuditMixin, Base):
     doc_template_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("t_doc_template.id"), nullable=True
     )
+    doc_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     direction: Mapped[str] = mapped_column(String(8), nullable=False, server_default=text("'IN'"))
     doc_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -60,6 +60,13 @@ export const DOCUMENT_DIRECTION_TEXT: Record<string, string> = {
   OUT: '发文',
 }
 
+export const DOCUMENT_DOC_TYPE_TEXT: Record<string, string> = {
+  OFFICIAL_IN: '官方来文',
+  OFFICIAL_OUT: '官方去文',
+  CLIENT_IN: '客户来文',
+  CLIENT_OUT: '致函客户',
+}
+
 export const PAYMENT_METHOD_TEXT: Record<string, string> = {
   CASH: '现金',
   BANK_TRANSFER: '银行转账',
@@ -97,6 +104,11 @@ export function getTaskPriorityText(priority?: string): string {
 export function getDocumentDirectionText(direction?: string): string {
   if (!direction) return '-'
   return DOCUMENT_DIRECTION_TEXT[direction] || direction
+}
+
+export function getDocumentDocTypeText(docType?: string | null): string {
+  if (!docType) return '-'
+  return DOCUMENT_DOC_TYPE_TEXT[docType] || docType
 }
 
 export function getPaymentMethodText(method?: string): string {

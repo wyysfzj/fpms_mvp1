@@ -29,7 +29,7 @@
       <!-- Relation Chain -->
       <RelationChainCard
         :case-ref="doc.case_id ? { id: doc.case_id, no: doc.case_no } : undefined"
-        :document="{ id: doc.id, refNo: doc.doc_type }"
+        :document="{ id: doc.id, refNo: doc.ref_no || doc.id }"
       />
 
       <!-- Document Header Card -->
@@ -45,7 +45,7 @@
             </template>
             <template v-if="doc.doc_type">
               <span class="meta-divider">|</span>
-              <span>{{ doc.doc_type }}</span>
+              <span>{{ getDocumentDocTypeText(doc.doc_type) }}</span>
             </template>
           </div>
           <div class="case-title">
@@ -82,6 +82,14 @@
               <div class="info-item">
                 <span class="info-label">{{ ZH.docDetail.direction }}</span>
                 <span class="info-value">{{ getDocumentDirectionText(doc.direction) }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">文件类型</span>
+                <span class="info-value">{{ getDocumentDocTypeText(doc.doc_type) }}</span>
+              </div>
+              <div v-if="doc.ref_no" class="info-item">
+                <span class="info-label">文号</span>
+                <span class="info-value">{{ doc.ref_no }}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">{{ ZH.docDetail.created }}</span>
@@ -161,7 +169,7 @@ import AttachmentList from '../components/AttachmentList.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
 import { usePageContext } from '../../../stores/pageContext'
 import { ZH } from '../../../constants/labels.zh'
-import { getDocumentDirectionText } from '../../../constants/displayText'
+import { getDocumentDirectionText, getDocumentDocTypeText } from '../../../constants/displayText'
 
 const route = useRoute()
 const router = useRouter()
@@ -208,7 +216,11 @@ async function fetchDocument() {
     docTemplate.value = doc.value.doc_template_id
       ? await getDocTemplate(doc.value.doc_template_id)
       : null
-    pageContext.setBreadcrumb(['案件管理', '文档详情', doc.value.doc_type || doc.value.id])
+    pageContext.setBreadcrumb([
+      '案件管理',
+      '文档详情',
+      doc.value.doc_type ? getDocumentDocTypeText(doc.value.doc_type) : doc.value.id,
+    ])
   } catch (err) {
     error.value = err as ApiError
   } finally {

@@ -4,12 +4,12 @@ This ledger is derived from [FPMS_SPEC2_2nd_Review_REFRESH.md](/Users/cfcc/Works
 
 ## 1. Mitigation Summary
 
-Current non-`Closed` items: `1`
+Current non-`Closed` items: `0`
 
 - `Still Missing`
   - `None`
 - `Partially Closed`
-  - `#19 中间文件专项查询`
+  - `None`
 - `Blocked by Prerequisite`
   - `None`
 - `Needs Reclassification`
@@ -17,42 +17,14 @@ Current non-`Closed` items: `1`
 
 ## 2. Priority-ranked Mitigation Ledger
 
-### `#19 中间文件专项查询`
-- `Current Status`: `Partially Closed`
-- `Recommended Interpretation`: first-round query closed except `DocType` semantics
-- `Why This Interpretation Is Correct`: current query covers multiple approved filters but not full spec parity
-- `Exact Closure Slice`: explicit `DocType` carrier/filter decision
-- `Explicit Non-closure`: no dispatch/reply/reporting/full-text
-- `Likely Ownership`: `backend`
-- `Prerequisite Needed?`: `Potentially`
-- `Suggested Story Shape`: `single-lane`
-- `Recommended Next Action`: `write spec`
+### `None`
+- No remaining non-`Closed` item.
 
 ## 3. Next-story Candidates
 
-### For `#19 中间文件专项查询`
-
-#### Candidate 1
-- `Story ID`: `DOCSEARCH-DOCTYPE-SPEC-01`
-- `Title`: 中间文件专项查询 `DocType` residual spec
-- `Exact Closure Slice`: decide whether `DocType` needs independent carrier/filter
-- `Explicit Non-closure`: no dispatch/reply/reporting/full-text
-- `Likely Ownership`: `backend`
-- `Suggested Story Shape`: `single-lane`
-- `Recommended Next Action`: `write spec`
-
-#### Candidate 2
-- `Story ID`: `DOCSEARCH-DOCTYPE-PRE-01`
-- `Title`: `DocType` carrier prerequisite
-- `Exact Closure Slice`: one carrier / mapping prerequisite
-- `Explicit Non-closure`: do not add FE page/reporting
-- `Likely Ownership`: `prereq-heavy`
-- `Suggested Story Shape`: `prereq-heavy`
-- `Recommended Next Action`: `split prerequisite if needed`
+### No open candidate remains
 
 ## 4. Recommended Priority Queue
 
-1. `GF-RESIDUAL-SPEC-01`
-   - Existing workflow should be clarified before any further implementation.
-2. `DOCSEARCH-DOCTYPE-SPEC-01`
-   - Small residual gap, but contract semantics are important.
+1. `None`
+   - All previously non-closed priority-ranked items are now closed in the current workspace-state.

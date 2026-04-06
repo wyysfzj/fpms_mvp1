@@ -12,7 +12,7 @@ from app.api.deps import require_perm
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.modules.cases.models import Case
-from app.modules.documents.enums import DocumentDirection
+from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.fee_linking_service import maybe_create_fee_draft
 from app.modules.documents.models import DocTemplate
 from app.modules.documents.schemas import (
@@ -82,6 +82,7 @@ def _build_document_out(
         case_id=document.case_id,
         case_no=case_no,
         doc_template_id=document.doc_template_id,
+        doc_type=document.doc_type,
         direction=document.direction,
         doc_date=document.doc_date,
         title=document.title,
@@ -217,6 +218,7 @@ def update_doc_template_endpoint(
 def get_documents(
     q: str | None = Query(default=None),
     doc_name: str | None = Query(default=None),
+    doc_type: list[DocumentDocType] | None = Query(default=None),
     direction: DocumentDirection | None = Query(default=None),
     template_code: str | None = Query(default=None),
     doc_template_id: str | None = Query(default=None),
@@ -254,6 +256,7 @@ def get_documents(
         db,
         q=q,
         doc_name=doc_name,
+        doc_types=doc_type,
         direction=direction,
         template_code=template_code,
         doc_template_id=doc_template_id,
@@ -292,6 +295,7 @@ def get_documents(
             template_code=template_code_map.get(document.doc_template_id)
             if document.doc_template_id
             else None,
+            doc_type=document.doc_type,
             direction=document.direction,
             doc_date=document.doc_date,
             title=document.title,

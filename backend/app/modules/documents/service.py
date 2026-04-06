@@ -12,7 +12,7 @@ from app.core.errors import raise_business_error
 from app.core.storage import ensure_dir, safe_join
 from app.modules.cases.models import Case, T_CaseApplicant
 from app.modules.cases.service import validate_case_status_transition
-from app.modules.documents.enums import DocumentDirection
+from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.fee_linking_service import (
     create_fee_draft_from_wizard_row,
     maybe_create_fee_draft,
@@ -269,6 +269,7 @@ def _create_document_record(
         id=str(uuid4()),
         case_id=data.case_id,
         doc_template_id=data.doc_template_id,
+        doc_type=data.doc_type,
         direction=data.direction,
         doc_date=data.doc_date,
         title=data.title,
@@ -294,6 +295,7 @@ def list_documents(
     q: str | None = None,
     doc_name: str | None = None,
     direction: DocumentDirection | None = None,
+    doc_types: list[DocumentDocType] | None = None,
     template_code: str | None = None,
     doc_template_id: str | None = None,
     case_no: str | None = None,
@@ -323,6 +325,8 @@ def list_documents(
 
     if direction:
         stmt = stmt.where(Document.direction == direction)
+    if doc_types:
+        stmt = stmt.where(Document.doc_type.in_([doc_type.value for doc_type in doc_types]))
     if template_code:
         stmt = stmt.join(DocTemplate, Document.doc_template_id == DocTemplate.id)
         stmt = stmt.where(func.lower(DocTemplate.code) == template_code.lower())

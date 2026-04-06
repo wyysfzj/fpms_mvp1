@@ -18,8 +18,8 @@ This refresh is based on the **current workspace state**, not only committed his
 
 | Status | Count | Notes |
 |---|---:|---|
-| Closed | 17 | Fully closed in current workspace-state |
-| Partially Closed | 2 | Implemented slices exist, but residual gap remains |
+| Closed | 19 | Fully closed in current workspace-state |
+| Partially Closed | 0 | No item currently retains an approved residual gap |
 | Still Missing | 0 | No item currently lacks sufficient implementation evidence for its core slice |
 | Blocked by Prerequisite | 0 | No item currently requires a fresh prerequisite before any further interpretation |
 | Needs Reclassification | 0 | No item currently requires framing-only reclassification without product follow-through |
@@ -40,10 +40,7 @@ This refresh is based on the **current workspace state**, not only committed his
 
 1. Update the review baseline using this refresh.
 2. Update `P2 #13 所有统计报表` from `Partially Closed` to `Closed` based on completed report-family residual implementation.
-3. Prioritize:
-   1. `P2 #15 授权费管理 residual workflow`
-   2. `P2 #19 中间文件专项查询 residual DocType gap`
-   3. `P2 #15 授权费管理 residual workflow`
+3. No priority-ranked missing-feature residual remains in the current workspace-state refresh.
 
 ## 2. Current-state Audit Basis
 
@@ -576,14 +573,12 @@ Each review item was re-evaluated against:
     - [DocumentList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/documents/pages/DocumentList.vue)
   - Supporting contract freeze:
     - [2026-04-01-document-specific-search-design.md](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/docs/superpowers/specs/2026-04-01-document-specific-search-design.md)
-- **Committed-state Conclusion**: Partially Closed
-- **Workspace-state Conclusion**: Partially Closed
-- **Status**: `Partially Closed`
-- **Why**: first-round `template_code / doc_name / case_no / need_reply / replied / date / direction` search is closed, but `DocType` independent carrier/filter remains explicitly deferred.
-- **Residual Gap**:
-  - full spec 9.3.2 parity
-  - independent `DocType` semantics
-- **Risk**: `Medium`
+- **Committed-state Conclusion**: Closed
+- **Workspace-state Conclusion**: Closed
+- **Status**: `Closed`
+- **Why**: `T_Document.DocType` carrier, create/edit/detail/list contract, and list-page `DocType` multi-select query are now implemented in both BE and FE.
+- **Residual Gap**: no dispatch/reply/reporting/export/full-text closure implied.
+- **Risk**: `Low`
 
 ### 4.20 P2 #20 账单打印前端按钮
 - **Original Review Claim**: Backend renderer exists, need frontend button
@@ -637,8 +632,7 @@ Each review item was re-evaluated against:
 
 | Item | Title | Implemented Slice | Residual Gap |
 |---|---|---|---|
-| `#15` | 授权费管理 | carrier + worklist + state + draft generation | broader workflow residual |
-| `#19` | 中间文件专项查询 | first-round document-specific search | `DocType` residual semantics |
+| `None` | — | — | — |
 
 ### 5.4 Blocked by Prerequisite
 
@@ -707,7 +701,7 @@ Each review item was re-evaluated against:
 | `#8` | Missing | Closed | real 5-step wizard path and Step3/4/5 final-submit behavior now exist |
 | `#13` | Missing | Closed | family ledger exists and all named report-family residual slices are now implemented |
 | `#15` | Missing | Closed | batch instruction, real notice generation, and grant-fee draft generation now close §5.7.2–5.7.3 |
-| `#19` | Missing | Partially Closed | first-round search exists, full spec parity not yet |
+| `#19` | Missing | Closed | independent `DocType` carrier/filter path now closes the remaining query semantics gap |
 | `#20` | Missing | Closed | missing list-page print entry added |
 
 ## Appendix B. Notes on Committed-state vs Workspace-state
@@ -717,5 +711,5 @@ Each review item was re-evaluated against:
 | `#13` | Closed | Closed | strict family ledger exists and no named report-family residual remains |
 | `#8` | Closed | Closed | committed product implementation now closes strict spec parity for the 5-step wizard |
 | `#15` | Closed | Closed | committed product behavior now closes the strict Module 4 §5.7.2–5.7.3 workflow |
-| `#19` | Partially Closed | Partially Closed | residual `DocType` semantics still open |
+| `#19` | Closed | Closed | committed product implementation now closes the independent `DocType` carrier/filter path |
 | `#5` | Closed | Closed | committed COMMSPLIT chain now closes carrier + semantics + FE exposure |

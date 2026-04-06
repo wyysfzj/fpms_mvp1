@@ -196,7 +196,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="doc_date" label="文档日期" width="120" />
-        <el-table-column prop="doc_type" label="文号" min-width="160" />
+        <el-table-column prop="ref_no" label="文号" min-width="160" />
         <el-table-column label="当前寄出编号" min-width="180">
           <template #default="{ row }">
             {{ row.outgoing_reg_no || '-' }}

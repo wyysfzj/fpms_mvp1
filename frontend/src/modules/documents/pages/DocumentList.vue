@@ -58,6 +58,24 @@
     </el-row>
     <el-row :gutter="16" style="margin-bottom: 16px">
       <el-col :span="6">
+        <el-select
+          v-model="filterDocTypes"
+          placeholder="全部文件类型"
+          clearable
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          @change="onFilterChange"
+        >
+          <el-option
+            v-for="option in docTypeOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+      </el-col>
+      <el-col :span="6">
         <el-date-picker
           v-model="filterDateRange"
           type="daterange"
@@ -152,6 +170,11 @@
             {{ row.template_code || '-' }}
           </template>
         </el-table-column>
+        <el-table-column label="文件类型" width="120">
+          <template #default="{ row }">
+            {{ getDocumentDocTypeText(row.doc_type) }}
+          </template>
+        </el-table-column>
         <el-table-column :label="ZH.docList.date" width="120">
           <template #default="{ row }">
             <span class="doc-date">{{ formatDate(row.doc_date) }}</span>
@@ -201,7 +224,7 @@ import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
 import { ZH } from '../../../constants/labels.zh'
-import { getDocumentDirectionText } from '../../../constants/displayText'
+import { getDocumentDirectionText, getDocumentDocTypeText } from '../../../constants/displayText'
 
 const documents = ref<Document[]>([])
 const router = useRouter()
@@ -215,10 +238,17 @@ const filterCaseNo = ref('')
 const filterDirection = ref<'' | 'IN' | 'OUT'>('')
 const filterClientId = ref('')
 const filterTemplateCode = ref('')
+const filterDocTypes = ref<Array<'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT'>>([])
 const filterDateRange = ref<string[]>([])
 const filterReplyState = ref<'' | 'PENDING' | 'DONE' | 'NONE'>('')
 const clientOptions = ref<Client[]>([])
 const templateOptions = ref<DocTemplate[]>([])
+const docTypeOptions = [
+  { label: '官方来文', value: 'OFFICIAL_IN' },
+  { label: '官方去文', value: 'OFFICIAL_OUT' },
+  { label: '客户来文', value: 'CLIENT_IN' },
+  { label: '致函客户', value: 'CLIENT_OUT' },
+] as const
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 
 function onFilterChange() {
@@ -243,6 +273,7 @@ async function fetchDocuments() {
       page: page.value,
       page_size: pageSize.value,
       doc_name: filterDocName.value.trim() || undefined,
+      doc_type: filterDocTypes.value.length ? [...filterDocTypes.value] : undefined,
       case_no: filterCaseNo.value.trim() || undefined,
       template_code: filterTemplateCode.value || undefined,
       direction: filterDirection.value || undefined,
@@ -303,6 +334,7 @@ function resetFilters() {
   filterDirection.value = ''
   filterClientId.value = ''
   filterTemplateCode.value = ''
+  filterDocTypes.value = []
   filterDateRange.value = []
   filterReplyState.value = ''
   onFilterChange()

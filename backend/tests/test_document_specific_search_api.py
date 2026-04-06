@@ -69,6 +69,7 @@ def _create_document(
     *,
     case_id: str,
     template_id: str,
+    doc_type: str,
     direction: str,
     doc_date: str,
     title: str,
@@ -79,6 +80,7 @@ def _create_document(
         json={
             "case_id": case_id,
             "doc_template_id": template_id,
+            "doc_type": doc_type,
             "direction": direction,
             "doc_date": doc_date,
             "title": title,
@@ -108,6 +110,7 @@ def test_document_specific_search_filters_by_case_no_template_code_and_doc_name(
         auth_headers,
         case_id=target_case["id"],
         template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
         direction="IN",
         doc_date="2026-02-01",
         title=f"审查意见通知书-{tag}",
@@ -117,6 +120,7 @@ def test_document_specific_search_filters_by_case_no_template_code_and_doc_name(
         auth_headers,
         case_id=target_case["id"],
         template_id=client_in["id"],
+        doc_type="CLIENT_IN",
         direction="IN",
         doc_date="2026-02-02",
         title=f"客户来文-{tag}",
@@ -126,6 +130,7 @@ def test_document_specific_search_filters_by_case_no_template_code_and_doc_name(
         auth_headers,
         case_id=other_case["id"],
         template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
         direction="IN",
         doc_date="2026-02-03",
         title=f"审查意见通知书-其他-{tag}",
@@ -164,6 +169,7 @@ def test_document_specific_search_filters_need_reply_and_replied(
         auth_headers,
         case_id=case_row["id"],
         template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
         direction="IN",
         doc_date="2026-03-01",
         title=f"待回复来文-{tag}",
@@ -173,6 +179,7 @@ def test_document_specific_search_filters_need_reply_and_replied(
         auth_headers,
         case_id=case_row["id"],
         template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
         direction="IN",
         doc_date="2026-03-02",
         title=f"已回复来文-{tag}",
@@ -205,3 +212,96 @@ def test_document_specific_search_filters_need_reply_and_replied(
         assert item["need_reply"] is True
         assert item["reply_date"] is None
         assert item["template_code"] == "OA_IN"
+
+
+def test_document_specific_search_filters_by_independent_doctype_multi_select(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    tag = uuid4().hex[:8]
+    client_row = _create_client(client, auth_headers, name=f"文档类型客户-{tag}")
+    case_row = _create_case(client, auth_headers, client_id=client_row["id"], case_no=f"DT-{tag}")
+    oa_in = _get_template_by_code(client, auth_headers, "OA_IN")
+    client_in = _get_template_by_code(client, auth_headers, "CLIENT_IN")
+
+    official_in_doc = _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
+        direction="IN",
+        doc_date="2026-03-11",
+        title=f"官方来文-{tag}",
+    )
+    _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=client_in["id"],
+        doc_type="OFFICIAL_OUT",
+        direction="OUT",
+        doc_date="2026-03-12",
+        title=f"官方去文-{tag}",
+    )
+    client_in_doc = _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=client_in["id"],
+        doc_type="CLIENT_IN",
+        direction="IN",
+        doc_date="2026-03-13",
+        title=f"客户来文-{tag}",
+    )
+
+    resp = client.get(
+        DOC_BASE,
+        headers=auth_headers,
+        params=[("doc_type", "OFFICIAL_IN"), ("doc_type", "CLIENT_IN")],
+    )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    ids = [item["id"] for item in payload["items"]]
+    assert official_in_doc["id"] in ids
+    assert client_in_doc["id"] in ids
+    for item in payload["items"]:
+        if item["id"] in {official_in_doc["id"], client_in_doc["id"]}:
+            assert item["doc_type"] in {"OFFICIAL_IN", "CLIENT_IN"}
+
+
+def test_document_create_and_update_persist_independent_doctype(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    tag = uuid4().hex[:8]
+    client_row = _create_client(client, auth_headers, name=f"独立类型客户-{tag}")
+    case_row = _create_case(client, auth_headers, client_id=client_row["id"], case_no=f"KEEP-{tag}")
+    template = _get_template_by_code(client, auth_headers, "OA_IN")
+
+    create_resp = client.post(
+        DOC_BASE,
+        headers=auth_headers,
+        json={
+            "case_id": case_row["id"],
+            "doc_template_id": template["id"],
+            "doc_type": "OFFICIAL_IN",
+            "direction": "IN",
+            "doc_date": "2026-03-20",
+            "title": f"独立类型文件-{tag}",
+            "ref_no": "REF-KEEP-001",
+        },
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    created = create_resp.json()
+    assert created["doc_type"] == "OFFICIAL_IN"
+    assert created["ref_no"] == "REF-KEEP-001"
+
+    update_resp = client.put(
+        f"{DOC_BASE}/{created['id']}",
+        headers=auth_headers,
+        json={"doc_type": "CLIENT_OUT", "ref_no": "REF-KEEP-002"},
+    )
+    assert update_resp.status_code == 200, update_resp.text
+    updated = update_resp.json()
+    assert updated["doc_type"] == "CLIENT_OUT"
+    assert updated["ref_no"] == "REF-KEEP-002"

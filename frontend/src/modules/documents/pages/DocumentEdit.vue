@@ -49,7 +49,12 @@
             </el-col>
             <el-col :span="12">
               <el-form-item label="文档类型" prop="doc_type" :error="fieldErrors.get('doc_type')?.join(', ')">
-                <el-input v-model="form.doc_type" placeholder="例如：审查意见通知书、答复文件" />
+                <el-select v-model="form.doc_type" placeholder="请选择文件类型" style="width: 100%">
+                  <el-option label="官方来文" value="OFFICIAL_IN" />
+                  <el-option label="官方去文" value="OFFICIAL_OUT" />
+                  <el-option label="客户来文" value="CLIENT_IN" />
+                  <el-option label="致函客户" value="CLIENT_OUT" />
+                </el-select>
               </el-form-item>
             </el-col>
           </el-row>
@@ -164,7 +169,7 @@ const form = reactive<DocumentUpdatePayload>({
   case_id: '',
   doc_template_id: null,
   doc_date: '',
-  doc_type: '',
+  doc_type: undefined,
   description: '',
 })
 const filteredTemplates = computed(() =>
@@ -181,6 +186,9 @@ const rules: FormRules = {
   ],
   direction: [
     { required: true, message: '方向为必填项', trigger: 'change' },
+  ],
+  doc_type: [
+    { required: true, message: '文件类型为必填项', trigger: 'change' },
   ],
 }
 
@@ -201,7 +209,7 @@ async function fetchDocument() {
     form.case_id = docData.value.case_id || ''
     form.doc_template_id = docData.value.doc_template_id || null
     form.doc_date = docData.value.doc_date || ''
-    form.doc_type = docData.value.doc_type || ''
+    form.doc_type = docData.value.doc_type || undefined
     form.description = docData.value.description || ''
   } catch (err) {
     error.value = err as ApiError

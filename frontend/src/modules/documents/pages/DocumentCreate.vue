@@ -135,7 +135,12 @@
             </el-col>
             <el-col :span="12">
               <el-form-item label="文件类型" prop="doc_type" :error="fieldErrors.get('doc_type')?.join(', ')">
-                <el-input v-model="form.doc_type" placeholder="例如：审查意见通知书、答复文件" />
+                <el-select v-model="form.doc_type" placeholder="请选择文件类型" style="width: 100%">
+                  <el-option label="官方来文" value="OFFICIAL_IN" />
+                  <el-option label="官方去文" value="OFFICIAL_OUT" />
+                  <el-option label="客户来文" value="CLIENT_IN" />
+                  <el-option label="致函客户" value="CLIENT_OUT" />
+                </el-select>
               </el-form-item>
             </el-col>
           </el-row>
@@ -203,7 +208,7 @@ const form = reactive<DocumentCreatePayload>({
   direction: 'IN',
   case_id: '',
   doc_date: new Date().toISOString().split('T')[0],
-  doc_type: '',
+  doc_type: undefined,
   description: '',
   doc_template_id: null as string | null,
   reply_to_id: null as string | null,
@@ -310,6 +315,9 @@ const rules: FormRules = {
   ],
   doc_date: [
     { required: true, message: '文件日期为必填项', trigger: 'change' },
+  ],
+  doc_type: [
+    { required: true, message: '文件类型为必填项', trigger: 'change' },
   ],
 }
 

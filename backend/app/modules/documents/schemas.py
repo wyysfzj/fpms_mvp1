@@ -6,7 +6,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.pagination import PageResult
-from app.modules.documents.enums import DocumentDirection
+from app.modules.documents.enums import DocumentDirection, DocumentDocType
 
 
 class DocAttachmentOut(BaseModel):
@@ -21,6 +21,7 @@ class DocAttachmentOut(BaseModel):
 class DocumentCreateIn(BaseModel):
     case_id: str
     doc_template_id: str | None = None
+    doc_type: DocumentDocType | None = None
     direction: DocumentDirection
     doc_date: date
     title: str
@@ -184,6 +185,7 @@ class DocumentWizardAttachmentPreviewOut(BaseModel):
 class DocumentUpdateIn(BaseModel):
     case_id: str | None = None
     doc_template_id: str | None = None
+    doc_type: DocumentDocType | None = None
     direction: DocumentDirection | None = None
     doc_date: date | None = None
     title: str | None = None
@@ -200,6 +202,7 @@ class DocumentOut(BaseModel):
     case_no: str | None = None
     doc_template_id: str | None
     template_code: str | None = None
+    doc_type: DocumentDocType | None = None
     direction: DocumentDirection
     doc_date: date | None
     title: str | None

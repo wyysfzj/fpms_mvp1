@@ -43,6 +43,7 @@ interface BackendDocument {
     doc_template_id?: string | null
     template_code?: string | null
     direction: 'IN' | 'OUT'
+    doc_type?: 'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT' | null
     doc_date?: string | null
     title?: string | null
     ref_no?: string | null
@@ -76,10 +77,11 @@ function mapDocument(input: BackendDocument): Document {
         client_name: input.client_name || undefined,
         doc_template_id: input.doc_template_id,
         template_code: input.template_code || undefined,
+        ref_no: input.ref_no || undefined,
         direction: input.direction,
         doc_date: input.doc_date || undefined,
         title: input.title || 'Untitled Document',
-        doc_type: input.ref_no || undefined,
+        doc_type: input.doc_type || undefined,
         description: input.extra_data || undefined,
         created_at: input.created_at,
         updated_at: input.updated_at,
@@ -97,10 +99,10 @@ function toCreatePayload(data: DocumentCreatePayload): Record<string, unknown> {
     return {
         case_id: String(data.case_id),
         doc_template_id: data.doc_template_id ?? null,
+        doc_type: data.doc_type ?? null,
         direction: data.direction,
         doc_date: data.doc_date,
         title: data.title,
-        ref_no: data.doc_type || null,
         extra_data: data.description || null,
         reply_to_id: data.reply_to_id || null,
     }
@@ -111,10 +113,10 @@ function toUpdatePayload(data: DocumentUpdatePayload): Record<string, unknown> {
 
     if (data.case_id !== undefined) payload.case_id = data.case_id || null
     if (data.doc_template_id !== undefined) payload.doc_template_id = data.doc_template_id
+    if (data.doc_type !== undefined) payload.doc_type = data.doc_type || null
     if (data.direction !== undefined) payload.direction = data.direction
     if (data.doc_date !== undefined) payload.doc_date = data.doc_date || null
     if (data.title !== undefined) payload.title = data.title || null
-    if (data.doc_type !== undefined) payload.ref_no = data.doc_type || null
     if (data.description !== undefined) payload.extra_data = data.description || null
     if (data.reply_to_id !== undefined) payload.reply_to_id = data.reply_to_id || null
     if (data.need_reply !== undefined) payload.need_reply = data.need_reply
@@ -200,6 +202,7 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
         page_size = 20,
         q,
         doc_name,
+        doc_type,
         case_no,
         template_code,
         direction,
@@ -211,23 +214,27 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
         date_from,
         date_to,
     } = params
+    const query = new URLSearchParams()
+    query.set('page', String(page))
+    query.set('page_size', String(page_size))
+    if (q) query.set('q', q)
+    if (doc_name) query.set('doc_name', doc_name)
+    if (case_no) query.set('case_no', case_no)
+    if (template_code) query.set('template_code', template_code)
+    if (direction) query.set('direction', direction)
+    if (doc_template_id) query.set('doc_template_id', doc_template_id)
+    if (case_id) query.set('case_id', case_id)
+    if (client_id) query.set('client_id', client_id)
+    if (need_reply !== undefined) query.set('need_reply', String(need_reply))
+    if (replied !== undefined) query.set('replied', String(replied))
+    if (date_from) query.set('date_from', date_from)
+    if (date_to) query.set('date_to', date_to)
+    for (const value of doc_type || []) {
+        query.append('doc_type', value)
+    }
+
     const response = await http.get<Pagination<BackendDocument>>('/documents', {
-        params: {
-            page,
-            page_size,
-            ...(q ? { q } : {}),
-            ...(doc_name ? { doc_name } : {}),
-            ...(case_no ? { case_no } : {}),
-            ...(template_code ? { template_code } : {}),
-            ...(direction ? { direction } : {}),
-            ...(doc_template_id ? { doc_template_id } : {}),
-            ...(case_id ? { case_id } : {}),
-            ...(client_id ? { client_id } : {}),
-            ...(need_reply !== undefined ? { need_reply } : {}),
-            ...(replied !== undefined ? { replied } : {}),
-            ...(date_from ? { date_from } : {}),
-            ...(date_to ? { date_to } : {}),
-        }
+        params: query,
     })
 
     return {
