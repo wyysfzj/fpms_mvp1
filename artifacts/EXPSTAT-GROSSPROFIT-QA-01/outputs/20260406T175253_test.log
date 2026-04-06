@@ -1,0 +1,7 @@
+Task Gate PASS
+Task Gate PASS
+artifacts/EXPSTAT-GROSSPROFIT-FE-01/summary.md:6:  - adapt frontend expense stats contract for `gross_profit_amounts`
+artifacts/EXPSTAT-GROSSPROFIT-FE-01/summary.md:9:  - no client/department/worker gross-profit UI
+artifacts/EXPSTAT-GROSSPROFIT-BE-01/summary.md:5:  - add case-level `gross_profit_amounts` to `GET /expenses?include_stats=true`
+artifacts/EXPSTAT-GROSSPROFIT-BE-01/summary.md:6:  - compute rows from `CaseReceipt.received_amt - Expense.amount`
+artifacts/EXPSTAT-GROSSPROFIT-BE-01/summary.md:11:  - no client/department/worker gross-profit

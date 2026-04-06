@@ -5,6 +5,7 @@ import type {
     ExpenseApiError,
     ExpenseErrorCategory,
     ExpenseCreatePayload,
+    ExpenseGrossProfitStat,
     ExpenseGroupedStat,
     ExpenseItem,
     ExpenseListParams,
@@ -34,6 +35,7 @@ interface BackendExpenseStats {
     sum_total: number | string
     case_amounts?: BackendExpenseGroupedStat[]
     client_amounts?: BackendExpenseGroupedStat[]
+    gross_profit_amounts?: BackendExpenseGrossProfitStat[]
 }
 
 interface BackendExpenseGroupedStat {
@@ -41,6 +43,15 @@ interface BackendExpenseGroupedStat {
     label: string
     expense_count: number | string
     total_amount: number | string
+}
+
+interface BackendExpenseGrossProfitStat {
+    key: string
+    label: string
+    currency: string
+    expense_total: number | string
+    received_total: number | string
+    gross_profit_total: number | string
 }
 
 interface BackendExpenseListResponse {
@@ -100,6 +111,18 @@ function mapExpenseStats(input: BackendExpenseStats): ExpenseStats {
             total_amount: asNumber(row.total_amount),
         }))
 
+    const mapGrossProfitStats = (
+        rows: BackendExpenseGrossProfitStat[] | undefined,
+    ): ExpenseGrossProfitStat[] =>
+        (rows || []).map((row) => ({
+            key: row.key,
+            label: row.label,
+            currency: row.currency,
+            expense_total: asNumber(row.expense_total),
+            received_total: asNumber(row.received_total),
+            gross_profit_total: asNumber(row.gross_profit_total),
+        }))
+
     return {
         count_by_category,
         sum_by_category,
@@ -107,6 +130,7 @@ function mapExpenseStats(input: BackendExpenseStats): ExpenseStats {
         sum_total: asNumber(input.sum_total),
         case_amounts: mapGroupedStats(input.case_amounts),
         client_amounts: mapGroupedStats(input.client_amounts),
+        gross_profit_amounts: mapGrossProfitStats(input.gross_profit_amounts),
     }
 }
 

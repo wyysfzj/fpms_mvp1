@@ -1,0 +1,197 @@
+diff --git a/frontend/src/api/expenses.ts b/frontend/src/api/expenses.ts
+index 2a51a7d..1c544ec 100644
+--- a/frontend/src/api/expenses.ts
++++ b/frontend/src/api/expenses.ts
+@@ -5,6 +5,7 @@ import type {
+     ExpenseApiError,
+     ExpenseErrorCategory,
+     ExpenseCreatePayload,
++    ExpenseGrossProfitStat,
+     ExpenseGroupedStat,
+     ExpenseItem,
+     ExpenseListParams,
+@@ -34,6 +35,7 @@ interface BackendExpenseStats {
+     sum_total: number | string
+     case_amounts?: BackendExpenseGroupedStat[]
+     client_amounts?: BackendExpenseGroupedStat[]
++    gross_profit_amounts?: BackendExpenseGrossProfitStat[]
+ }
+ 
+ interface BackendExpenseGroupedStat {
+@@ -43,6 +45,15 @@ interface BackendExpenseGroupedStat {
+     total_amount: number | string
+ }
+ 
++interface BackendExpenseGrossProfitStat {
++    key: string
++    label: string
++    currency: string
++    expense_total: number | string
++    received_total: number | string
++    gross_profit_total: number | string
++}
++
+ interface BackendExpenseListResponse {
+     items: BackendExpenseItem[]
+     page: number
+@@ -100,6 +111,18 @@ function mapExpenseStats(input: BackendExpenseStats): ExpenseStats {
+             total_amount: asNumber(row.total_amount),
+         }))
+ 
++    const mapGrossProfitStats = (
++        rows: BackendExpenseGrossProfitStat[] | undefined,
++    ): ExpenseGrossProfitStat[] =>
++        (rows || []).map((row) => ({
++            key: row.key,
++            label: row.label,
++            currency: row.currency,
++            expense_total: asNumber(row.expense_total),
++            received_total: asNumber(row.received_total),
++            gross_profit_total: asNumber(row.gross_profit_total),
++        }))
++
+     return {
+         count_by_category,
+         sum_by_category,
+@@ -107,6 +130,7 @@ function mapExpenseStats(input: BackendExpenseStats): ExpenseStats {
+         sum_total: asNumber(input.sum_total),
+         case_amounts: mapGroupedStats(input.case_amounts),
+         client_amounts: mapGroupedStats(input.client_amounts),
++        gross_profit_amounts: mapGrossProfitStats(input.gross_profit_amounts),
+     }
+ }
+ 
+diff --git a/frontend/src/api/expenses.types.ts b/frontend/src/api/expenses.types.ts
+index ebb0a9d..461ab85 100644
+--- a/frontend/src/api/expenses.types.ts
++++ b/frontend/src/api/expenses.types.ts
+@@ -23,6 +23,15 @@ export interface ExpenseGroupedStat {
+     total_amount: number
+ }
+ 
++export interface ExpenseGrossProfitStat {
++    key: string
++    label: string
++    currency: string
++    expense_total: number
++    received_total: number
++    gross_profit_total: number
++}
++
+ export interface ExpenseStats {
+     count_by_category: Record<string, number>
+     sum_by_category: Record<string, number>
+@@ -30,6 +39,7 @@ export interface ExpenseStats {
+     sum_total: number
+     case_amounts?: ExpenseGroupedStat[]
+     client_amounts?: ExpenseGroupedStat[]
++    gross_profit_amounts?: ExpenseGrossProfitStat[]
+ }
+ 
+ export interface ExpenseListResponse extends Pagination<ExpenseItem> {
+diff --git a/frontend/src/modules/expenses/pages/ExpenseList.vue b/frontend/src/modules/expenses/pages/ExpenseList.vue
+index e29a95f..9e4a7b7 100644
+--- a/frontend/src/modules/expenses/pages/ExpenseList.vue
++++ b/frontend/src/modules/expenses/pages/ExpenseList.vue
+@@ -123,6 +123,30 @@
+       </section>
+     </div>
+ 
++    <section v-if="grossProfitStats.length" class="grouped-summary-card gross-profit-card">
++      <div class="grouped-summary-header">
++        <h3>案件毛利分析</h3>
++        <span>{{ grossProfitStats.length }} 组</span>
++      </div>
++      <div class="grouped-summary-list">
++        <div
++          v-for="item in grossProfitStats"
++          :key="`${item.key}-${item.currency}`"
++          class="grouped-summary-item grouped-summary-item-column"
++        >
++          <div class="grouped-summary-main">
++            <span class="grouped-summary-title">{{ item.label }}</span>
++            <span class="grouped-summary-sub">币种 {{ item.currency }}</span>
++          </div>
++          <div class="gross-profit-breakdown mono-num">
++            <span>收款 {{ formatAmount(item.received_total, item.currency) }}</span>
++            <span>支出 {{ formatAmount(item.expense_total, item.currency) }}</span>
++            <strong>毛利 {{ formatAmount(item.gross_profit_total, item.currency) }}</strong>
++          </div>
++        </div>
++      </div>
++    </section>
++
+     <div v-if="error" class="page-error" role="alert" aria-live="assertive">
+       <ApiErrorBanner :error="error" @dismiss="error = null" />
+     </div>
+@@ -200,6 +224,7 @@ import { getExpenses, mapExpenseError } from '../../../api/expenses'
+ import type {
+   ExpenseApiError,
+   ExpenseCategory,
++  ExpenseGrossProfitStat,
+   ExpenseGroupedStat,
+   ExpenseItem,
+   ExpenseStats,
+@@ -227,6 +252,15 @@ interface GroupedStatView {
+   total_amount: number
+ }
+ 
++interface GrossProfitStatView {
++  key: string
++  label: string
++  currency: string
++  expense_total: number
++  received_total: number
++  gross_profit_total: number
++}
++
+ const CATEGORY_TEXT: Record<string, string> = {
+   SEARCH_DB: '检索费',
+   TRANSLATION: '翻译费',
+@@ -285,6 +319,16 @@ function mapGroupedStats(rows: ExpenseGroupedStat[] | undefined): GroupedStatVie
+ 
+ const caseStats = computed<GroupedStatView[]>(() => mapGroupedStats(stats.value?.case_amounts))
+ const clientStats = computed<GroupedStatView[]>(() => mapGroupedStats(stats.value?.client_amounts))
++const grossProfitStats = computed<GrossProfitStatView[]>(() =>
++  (stats.value?.gross_profit_amounts || []).map((row: ExpenseGrossProfitStat) => ({
++    key: row.key,
++    label: row.label,
++    currency: row.currency,
++    expense_total: row.expense_total,
++    received_total: row.received_total,
++    gross_profit_total: row.gross_profit_total,
++  })),
++)
+ 
+ function getCategoryText(category: string): string {
+   return CATEGORY_TEXT[category] || category
+@@ -456,6 +500,12 @@ onMounted(() => {
+   background: var(--surface-0);
+ }
+ 
++.grouped-summary-item-column {
++  flex-direction: column;
++  align-items: flex-start;
++  gap: 8px;
++}
++
+ .grouped-summary-main {
+   display: flex;
+   flex-direction: column;
+@@ -476,6 +526,16 @@ onMounted(() => {
+   font-weight: 600;
+ }
+ 
++.gross-profit-card {
++  margin-bottom: 16px;
++}
++
++.gross-profit-breakdown {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 12px;
++}
++
+ .mono-num {
+   font-family: var(--font-mono);
+ }

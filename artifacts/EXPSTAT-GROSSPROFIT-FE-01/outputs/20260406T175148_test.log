@@ -1,0 +1,8 @@
+
+> fpms-spa@0.1.0 lint
+> eslint . --max-warnings 0 src/api/expenses.ts src/api/expenses.types.ts src/modules/expenses/pages/ExpenseList.vue
+
+
+> fpms-spa@0.1.0 typecheck
+> vue-tsc --noEmit
+

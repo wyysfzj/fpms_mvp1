@@ -123,6 +123,30 @@
       </section>
     </div>
 
+    <section v-if="grossProfitStats.length" class="grouped-summary-card gross-profit-card">
+      <div class="grouped-summary-header">
+        <h3>案件毛利分析</h3>
+        <span>{{ grossProfitStats.length }} 组</span>
+      </div>
+      <div class="grouped-summary-list">
+        <div
+          v-for="item in grossProfitStats"
+          :key="`${item.key}-${item.currency}`"
+          class="grouped-summary-item grouped-summary-item-column"
+        >
+          <div class="grouped-summary-main">
+            <span class="grouped-summary-title">{{ item.label }}</span>
+            <span class="grouped-summary-sub">币种 {{ item.currency }}</span>
+          </div>
+          <div class="gross-profit-breakdown mono-num">
+            <span>收款 {{ formatAmount(item.received_total, item.currency) }}</span>
+            <span>支出 {{ formatAmount(item.expense_total, item.currency) }}</span>
+            <strong>毛利 {{ formatAmount(item.gross_profit_total, item.currency) }}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div v-if="error" class="page-error" role="alert" aria-live="assertive">
       <ApiErrorBanner :error="error" @dismiss="error = null" />
     </div>
@@ -200,6 +224,7 @@ import { getExpenses, mapExpenseError } from '../../../api/expenses'
 import type {
   ExpenseApiError,
   ExpenseCategory,
+  ExpenseGrossProfitStat,
   ExpenseGroupedStat,
   ExpenseItem,
   ExpenseStats,
@@ -225,6 +250,15 @@ interface GroupedStatView {
   label: string
   expense_count: number
   total_amount: number
+}
+
+interface GrossProfitStatView {
+  key: string
+  label: string
+  currency: string
+  expense_total: number
+  received_total: number
+  gross_profit_total: number
 }
 
 const CATEGORY_TEXT: Record<string, string> = {
@@ -285,6 +319,16 @@ function mapGroupedStats(rows: ExpenseGroupedStat[] | undefined): GroupedStatVie
 
 const caseStats = computed<GroupedStatView[]>(() => mapGroupedStats(stats.value?.case_amounts))
 const clientStats = computed<GroupedStatView[]>(() => mapGroupedStats(stats.value?.client_amounts))
+const grossProfitStats = computed<GrossProfitStatView[]>(() =>
+  (stats.value?.gross_profit_amounts || []).map((row: ExpenseGrossProfitStat) => ({
+    key: row.key,
+    label: row.label,
+    currency: row.currency,
+    expense_total: row.expense_total,
+    received_total: row.received_total,
+    gross_profit_total: row.gross_profit_total,
+  })),
+)
 
 function getCategoryText(category: string): string {
   return CATEGORY_TEXT[category] || category
@@ -456,6 +500,12 @@ onMounted(() => {
   background: var(--surface-0);
 }
 
+.grouped-summary-item-column {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .grouped-summary-main {
   display: flex;
   flex-direction: column;
@@ -474,6 +524,16 @@ onMounted(() => {
 .grouped-summary-amounts {
   align-self: center;
   font-weight: 600;
+}
+
+.gross-profit-card {
+  margin-bottom: 16px;
+}
+
+.gross-profit-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .mono-num {

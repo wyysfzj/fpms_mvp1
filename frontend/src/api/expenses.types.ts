@@ -23,6 +23,15 @@ export interface ExpenseGroupedStat {
     total_amount: number
 }
 
+export interface ExpenseGrossProfitStat {
+    key: string
+    label: string
+    currency: string
+    expense_total: number
+    received_total: number
+    gross_profit_total: number
+}
+
 export interface ExpenseStats {
     count_by_category: Record<string, number>
     sum_by_category: Record<string, number>
@@ -30,6 +39,7 @@ export interface ExpenseStats {
     sum_total: number
     case_amounts?: ExpenseGroupedStat[]
     client_amounts?: ExpenseGroupedStat[]
+    gross_profit_amounts?: ExpenseGrossProfitStat[]
 }
 
 export interface ExpenseListResponse extends Pagination<ExpenseItem> {

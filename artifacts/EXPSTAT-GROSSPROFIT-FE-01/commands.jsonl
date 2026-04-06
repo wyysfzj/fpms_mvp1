@@ -1,0 +1,2 @@
+{"ts":"20260406T175148","step":"lint","cmd":"test -f frontend/src/api/expenses.ts -a -f frontend/src/api/expenses.types.ts -a -f frontend/src/modules/expenses/pages/ExpenseList.vue"}
+{"ts":"20260406T175148","step":"test","cmd":"/bin/zsh -lc cd\ frontend\ \&\&\ npm\ run\ lint\ --\ src/api/expenses.ts\ src/api/expenses.types.ts\ src/modules/expenses/pages/ExpenseList.vue\ \&\&\ npm\ run\ typecheck"}

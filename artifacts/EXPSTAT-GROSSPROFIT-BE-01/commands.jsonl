@@ -1,0 +1,2 @@
+{"ts":"20260406T175148","step":"lint","cmd":"test -f backend/app/modules/expenses/api.py -a -f backend/app/modules/expenses/service.py -a -f backend/tests/test_expense_stats_api.py"}
+{"ts":"20260406T175148","step":"test","cmd":"/bin/zsh -lc python3\ -m\ ruff\ check\ backend/app/modules/expenses/api.py\ backend/app/modules/expenses/service.py\ backend/tests/test_expense_stats_api.py\ \&\&\ cd\ backend\ \&\&\ pytest\ -q\ tests/test_expense_stats_api.py"}
