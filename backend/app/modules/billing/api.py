@@ -32,6 +32,7 @@ from app.modules.billing.schemas import (
     CaseReceiptCreate,
     CaseReceiptResponse,
     CaseReceiptUpdate,
+    FeeOverviewGovPaymentListResponse,
     FeeUnifiedQueryListResponse,
     OffsetCreateSchema,
     OffsetListItemResponse,
@@ -49,6 +50,7 @@ from app.modules.billing.service import (
     generate_bill_from_drafts,
     list_bills,
     list_case_receipts,
+    list_fee_overview_gov_payments,
     list_fee_unified_queries,
     list_payments,
     load_bill_bad_debt_chain,
@@ -512,6 +514,46 @@ def get_payments(
             pay_date_from=pay_date_from,
             pay_date_to=pay_date_to,
             has_unapplied_only=has_unapplied_only,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get(
+    "/fee-overview/gov-payments",
+    response_model=FeeOverviewGovPaymentListResponse,
+    summary="费用情况查询一览-官费缴费情况",
+)
+def get_fee_overview_gov_payments(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    case_no: str | None = Query(default=None),
+    app_no: str | None = Query(default=None),
+    patent_no: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    applicant_name: str | None = Query(default=None),
+    paid_date_from: date | None = Query(default=None),
+    paid_date_to: date | None = Query(default=None),
+    _perm: None = Depends(require_perm("PayList.Read")),
+    db: Session = Depends(get_db),
+) -> FeeOverviewGovPaymentListResponse:
+    """
+    Get the dedicated upper-pane GovPayment overview for SPEC 5.11.
+
+    **Auth**: Bearer JWT
+    **Permission**: PayList.Read
+    """
+    return FeeOverviewGovPaymentListResponse(
+        **list_fee_overview_gov_payments(
+            db,
+            case_no=case_no,
+            app_no=app_no,
+            patent_no=patent_no,
+            client_id=client_id,
+            applicant_name=applicant_name,
+            paid_date_from=paid_date_from,
+            paid_date_to=paid_date_to,
             page=page,
             page_size=page_size,
         )

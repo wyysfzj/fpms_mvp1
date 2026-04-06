@@ -5,10 +5,11 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
+from app.modules.annuity.models import GovPayment, PayList
 from app.modules.billing.models import (
     BadDebtRecovery,
     BadDebtVoucher,
@@ -31,6 +32,7 @@ from app.modules.billing.schemas import (
     OffsetCreateSchema,
     PaymentSchema,
 )
+from app.modules.cases.models import Case, T_CaseApplicant
 from app.modules.commission.service import (
     apply_commission_for_bill,
     recompute_commission_settleable,
@@ -814,6 +816,125 @@ def list_fee_unified_queries(
                 "remark": row["remark"],
             }
             for row in items
+        ],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+    }
+
+
+def _normalize_fee_overview_upper_date_range(
+    *,
+    paid_date_from: date | None,
+    paid_date_to: date | None,
+) -> None:
+    if paid_date_from and paid_date_to and paid_date_from > paid_date_to:
+        raise_business_error(
+            "FEE_OVERVIEW_DATE_RANGE_INVALID",
+            "paid_date_from must be <= paid_date_to",
+            status_code=400,
+        )
+
+
+def list_fee_overview_gov_payments(
+    db: Session,
+    *,
+    case_no: str | None = None,
+    app_no: str | None = None,
+    patent_no: str | None = None,
+    client_id: str | None = None,
+    applicant_name: str | None = None,
+    paid_date_from: date | None = None,
+    paid_date_to: date | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, object]:
+    _normalize_fee_overview_upper_date_range(
+        paid_date_from=paid_date_from,
+        paid_date_to=paid_date_to,
+    )
+
+    stmt = (
+        select(
+            GovPayment.id.label("gov_payment_id"),
+            GovPayment.pay_list_id.label("pay_list_id"),
+            GovPayment.case_id.label("case_id"),
+            Case.case_no.label("case_no"),
+            Case.app_no.label("app_no"),
+            Case.patent_no.label("patent_no"),
+            GovPayment.fee_item_id.label("fee_item_id"),
+            FeeItem.fee_code.label("fee_code"),
+            FeeItem.fee_name.label("fee_name"),
+            FeeItem.year_no.label("year_no"),
+            FeeItem.amount.label("planned_amt"),
+            GovPayment.paid_amount.label("paid_amt"),
+            GovPayment.currency.label("currency"),
+            PayList.pay_list_no.label("list_no"),
+            PayList.planned_pay_date.label("planned_pay_date"),
+            GovPayment.paid_date.label("paid_date"),
+        )
+        .join(PayList, PayList.id == GovPayment.pay_list_id)
+        .join(Case, Case.id == GovPayment.case_id)
+        .outerjoin(FeeItem, FeeItem.id == GovPayment.fee_item_id)
+    )
+
+    if client_id:
+        stmt = stmt.where(PayList.client_id == client_id)
+    if case_no:
+        stmt = stmt.where(Case.case_no == case_no)
+    if app_no:
+        stmt = stmt.where(Case.app_no == app_no)
+    if patent_no:
+        stmt = stmt.where(Case.patent_no == patent_no)
+    if paid_date_from:
+        stmt = stmt.where(GovPayment.paid_date >= paid_date_from)
+    if paid_date_to:
+        stmt = stmt.where(GovPayment.paid_date <= paid_date_to)
+
+    normalized_applicant_name = _normalize_text_filter(applicant_name)
+    if normalized_applicant_name:
+        applicant_expr_cn = func.upper(func.coalesce(T_CaseApplicant.name_cn, ""))
+        applicant_expr_en = func.upper(func.coalesce(T_CaseApplicant.name_en, ""))
+        applicant_case_ids = select(T_CaseApplicant.case_id).where(
+            (applicant_expr_cn.contains(normalized_applicant_name))
+            | (applicant_expr_en.contains(normalized_applicant_name))
+        )
+        stmt = stmt.where(Case.id.in_(applicant_case_ids))
+
+    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+
+    rows = db.execute(
+        stmt.order_by(
+            GovPayment.paid_date.desc(),
+            GovPayment.id.desc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+
+    return {
+        "items": [
+            {
+                "gov_payment_id": row.gov_payment_id,
+                "pay_list_id": row.pay_list_id,
+                "case_id": row.case_id,
+                "case_no": row.case_no,
+                "app_no": row.app_no,
+                "patent_no": row.patent_no,
+                "fee_item_id": row.fee_item_id,
+                "fee_code": row.fee_code,
+                "fee_name": row.fee_name,
+                "year_no": row.year_no,
+                "planned_amt": row.planned_amt or Decimal("0"),
+                "paid_amt": row.paid_amt or Decimal("0"),
+                "currency": row.currency,
+                "list_no": row.list_no,
+                "voucher_no": None,
+                "invoice_no": None,
+                "planned_pay_date": row.planned_pay_date,
+                "paid_date": row.paid_date,
+            }
+            for row in rows
         ],
         "page": page,
         "page_size": page_size,

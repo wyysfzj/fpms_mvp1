@@ -266,6 +266,38 @@ class FeeUnifiedQueryListResponse(BaseModel):
     total: int
 
 
+class FeeOverviewGovPaymentItemResponse(BaseModel):
+    """Upper-pane row for the SPEC 5.11 GovPayment overview."""
+
+    gov_payment_id: int
+    pay_list_id: int
+    case_id: str
+    case_no: str | None = None
+    app_no: str | None = None
+    patent_no: str | None = None
+    fee_item_id: str | None = None
+    fee_code: str | None = None
+    fee_name: str | None = None
+    year_no: int | None = None
+    planned_amt: Decimal = Field(Decimal("0"), ge=0)
+    paid_amt: Decimal = Field(Decimal("0"), ge=0)
+    currency: str
+    list_no: str | None = None
+    voucher_no: str | None = None
+    invoice_no: str | None = None
+    planned_pay_date: date | None = None
+    paid_date: date | None = None
+
+
+class FeeOverviewGovPaymentListResponse(BaseModel):
+    """Paginated upper-pane response for the SPEC 5.11 GovPayment overview."""
+
+    items: list[FeeOverviewGovPaymentItemResponse]
+    page: int
+    page_size: int
+    total: int
+
+
 class OffsetCreateSchema(BaseModel):
     """Schema for creating offsets."""
 
