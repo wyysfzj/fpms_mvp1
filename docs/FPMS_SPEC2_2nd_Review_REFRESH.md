@@ -501,15 +501,24 @@ Each review item was re-evaluated against:
   - Module 4 `费用情况查询一览`
 - **Current Implementation Evidence**:
   - Backend:
-    - [billing/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/billing/api.py) `/fee-unified-query`
+    - [billing/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/billing/api.py)
+      - `/fee-overview/gov-payments`
+      - `/fee-overview/case-receipts`
+    - [billing/service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/billing/service.py)
+    - [billing/schemas.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/billing/schemas.py)
   - Frontend:
     - [FeeUnifiedQuery.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/billing/pages/FeeUnifiedQuery.vue)
+    - [billing.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/billing.ts)
+    - [billing.types.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/billing.types.ts)
     - [router/index.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/router/index.ts)
+  - Tests:
+    - `test_fee_overview_upper_api.py`
+    - `test_fee_overview_lower_api.py`
 - **Committed-state Conclusion**: Closed
 - **Workspace-state Conclusion**: Closed
 - **Status**: `Closed`
-- **Why**: first-round unified fee query contract + page exist.
-- **Residual Gap**: summary/export/reporting deferred, but old review item itself is closed under approved interpretation.
+- **Why**: committed product behavior now covers the strict first-round spec core of Module 4 §5.11: a truthful dual-pane `费用情况查询一览` page, a `T_GovPayment` upper pane endpoint, a `T_CaseReceipt` lower pane endpoint, and a truthful upper-pane `fee_type` filter wired from `FeeDraft.draft_type`.
+- **Residual Gap**: None inside the approved `#16` interpretation.
 - **Risk**: `Low`
 
 ### 4.17 P2 #17 专项检索
