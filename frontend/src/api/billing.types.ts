@@ -318,6 +318,7 @@ export interface FeeOverviewGovPaymentParams {
     patent_no?: string
     client_id?: string
     applicant_name?: string
+    fee_type?: string
     paid_date_range?: [string, string] | []
 }
 

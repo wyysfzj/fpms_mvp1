@@ -82,6 +82,22 @@
                 @keyup.enter="applyUpperFilters"
               />
             </el-form-item>
+            <el-form-item label="费用类型">
+              <el-select
+                v-model="upperFilters.fee_type"
+                clearable
+                class="filter-input"
+                placeholder="全部费用类型"
+              >
+                <el-option label="申请费" value="APPLY_FEE" />
+                <el-option label="审查意见费" value="OA_FEE" />
+                <el-option label="授权费" value="GRANT_FEE" />
+                <el-option label="年费" value="ANNUITY_FEE" />
+                <el-option label="无效/诉讼费" value="INVALID_FEE" />
+                <el-option label="顾问费" value="CONSULT_FEE" />
+                <el-option label="检索费" value="SEARCH_FEE" />
+              </el-select>
+            </el-form-item>
             <el-form-item label="缴费日期">
               <el-date-picker
                 v-model="upperFilters.paid_date_range"
@@ -391,6 +407,7 @@ const upperFilters = reactive({
   patent_no: '',
   client_id: '',
   applicant_name: '',
+  fee_type: '',
   paid_date_range: [] as [string, string] | [],
 })
 
@@ -441,6 +458,7 @@ function buildUpperParams() {
     patent_no: upperFilters.patent_no || undefined,
     client_id: upperFilters.client_id || undefined,
     applicant_name: upperFilters.applicant_name || undefined,
+    fee_type: upperFilters.fee_type || undefined,
     paid_date_range: upperFilters.paid_date_range,
   }
 }
@@ -517,6 +535,7 @@ function resetUpperFilters() {
   upperFilters.patent_no = ''
   upperFilters.client_id = ''
   upperFilters.applicant_name = ''
+  upperFilters.fee_type = ''
   upperFilters.paid_date_range = []
   upperError.value = null
   if (upperPage.value === 1) {

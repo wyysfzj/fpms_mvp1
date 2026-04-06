@@ -844,6 +844,7 @@ def list_fee_overview_gov_payments(
     patent_no: str | None = None,
     client_id: str | None = None,
     applicant_name: str | None = None,
+    fee_type: str | None = None,
     paid_date_from: date | None = None,
     paid_date_to: date | None = None,
     page: int = 1,
@@ -876,6 +877,7 @@ def list_fee_overview_gov_payments(
         .join(PayList, PayList.id == GovPayment.pay_list_id)
         .join(Case, Case.id == GovPayment.case_id)
         .outerjoin(FeeItem, FeeItem.id == GovPayment.fee_item_id)
+        .outerjoin(FeeDraft, FeeDraft.id == FeeItem.draft_id)
     )
 
     if client_id:
@@ -886,6 +888,8 @@ def list_fee_overview_gov_payments(
         stmt = stmt.where(Case.app_no == app_no)
     if patent_no:
         stmt = stmt.where(Case.patent_no == patent_no)
+    if fee_type:
+        stmt = stmt.where(func.upper(func.coalesce(FeeDraft.draft_type, "")) == fee_type.strip().upper())
     if paid_date_from:
         stmt = stmt.where(GovPayment.paid_date >= paid_date_from)
     if paid_date_to:

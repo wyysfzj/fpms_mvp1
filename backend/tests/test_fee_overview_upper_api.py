@@ -247,6 +247,42 @@ def test_fee_overview_upper_filters_by_case_applicant_and_date(
     assert date_items[0]["case_id"] == seeded["case_b_id"]
 
 
+def test_fee_overview_upper_filters_by_fee_type_authority(
+    client,
+    auth_headers,
+    session_factory,
+) -> None:
+    seeded = _seed_fee_overview_upper_rows(session_factory)
+
+    annuity_resp = client.get(
+        "/api/v1/fee-overview/gov-payments",
+        params={"fee_type": "ANNUITY_FEE", "case_no": seeded["case_a_no"]},
+        headers=auth_headers,
+    )
+    assert annuity_resp.status_code == 200, annuity_resp.text
+    annuity_items = annuity_resp.json()["items"]
+    assert len(annuity_items) == 1
+    assert annuity_items[0]["case_id"] == seeded["case_a_id"]
+
+    grant_resp = client.get(
+        "/api/v1/fee-overview/gov-payments",
+        params={"fee_type": "GRANT_FEE", "case_no": seeded["case_b_no"]},
+        headers=auth_headers,
+    )
+    assert grant_resp.status_code == 200, grant_resp.text
+    grant_items = grant_resp.json()["items"]
+    assert len(grant_items) == 1
+    assert grant_items[0]["case_id"] == seeded["case_b_id"]
+
+    mismatch_resp = client.get(
+        "/api/v1/fee-overview/gov-payments",
+        params={"fee_type": "GRANT_FEE", "case_no": seeded["case_a_no"]},
+        headers=auth_headers,
+    )
+    assert mismatch_resp.status_code == 200, mismatch_resp.text
+    assert mismatch_resp.json()["total"] == 0
+
+
 def test_fee_overview_upper_rejects_inverted_date_range(
     client,
     auth_headers,

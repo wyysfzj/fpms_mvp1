@@ -691,6 +691,7 @@ export async function getFeeOverviewGovPayments(
         patent_no,
         client_id,
         applicant_name,
+        fee_type,
         paid_date_range,
     } = params
 
@@ -705,6 +706,7 @@ export async function getFeeOverviewGovPayments(
                 patent_no,
                 client_id,
                 applicant_name,
+                fee_type,
                 paid_date_from: paid_date_range?.[0],
                 paid_date_to: paid_date_range?.[1],
             },
