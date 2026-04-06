@@ -1,0 +1,6 @@
+Task Gate PASS
+8:    - `FEOVERVIEW-UPPER-BE-01`
+9:    - `FEOVERVIEW-LOWER-BE-01`
+10:    - `FEOVERVIEW-FE-01`
+13:  - no product implementation
+19:  - `./scripts/evidence_run.sh FEOVERVIEW-SPEC-01 test /bin/zsh -lc "rg -n 'P0-prereq-heavy-story|upper pane|lower pane|current unified query|FEOVERVIEW-UPPER-BE-01|FEOVERVIEW-FE-01' docs/superpowers/specs/2026-04-06-fee-overview-design.md docs/superpowers/plans/2026-04-06-fee-overview.md tasks/postenhancement/backend/FEOVERVIEW-SPEC-01.md"`

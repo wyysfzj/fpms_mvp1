@@ -1,0 +1,3 @@
+{"ts":"20260406T175810","step":"lint","cmd":"test -f tasks/postenhancement/backend/FEOVERVIEW-QA-PLAN-01.md -a -f artifacts/FEOVERVIEW-SPEC-01/results.jsonl"}
+{"ts":"20260406T175849","step":"test","cmd":"/bin/zsh -lc ./scripts/task_validate.sh\ FEOVERVIEW-SPEC-01\ \&\&\ rg\ -n\ \'no\ product\ implementation\|FEOVERVIEW-UPPER-BE-01\|FEOVERVIEW-LOWER-BE-01\|FEOVERVIEW-FE-01\'\ artifacts/FEOVERVIEW-SPEC-01/summary.md"}
+{"ts":"20260406T175849","step":"lint","cmd":"test -f tasks/postenhancement/backend/FEOVERVIEW-QA-PLAN-01.md -a -f artifacts/FEOVERVIEW-SPEC-01/summary.md -a -f artifacts/FEOVERVIEW-SPEC-01/results.jsonl"}

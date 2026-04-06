@@ -1,0 +1,17 @@
+docs/superpowers/plans/2026-04-06-fee-overview.md:15:- `P0-prereq-heavy-story`
+docs/superpowers/plans/2026-04-06-fee-overview.md:27:  - freeze `SPEC 5.11` pane authority and reject reinterpretation of the current unified query as a near-equivalent implementation
+docs/superpowers/plans/2026-04-06-fee-overview.md:28:  - define follow-up implementation graph for upper/lower pane and shared frontend page
+docs/superpowers/plans/2026-04-06-fee-overview.md:41:  - `./scripts/evidence_run.sh FEOVERVIEW-SPEC-01 test /bin/zsh -lc "rg -n 'P0-prereq-heavy-story|upper pane|lower pane|current unified query|FEOVERVIEW-UPPER-BE-01|FEOVERVIEW-FE-01' docs/superpowers/specs/2026-04-06-fee-overview-design.md docs/superpowers/plans/2026-04-06-fee-overview.md tasks/postenhancement/backend/FEOVERVIEW-SPEC-01.md"`
+docs/superpowers/plans/2026-04-06-fee-overview.md:46:  - `FEOVERVIEW-UPPER-BE-01`
+docs/superpowers/plans/2026-04-06-fee-overview.md:48:  - `FEOVERVIEW-FE-01`
+docs/superpowers/plans/2026-04-06-fee-overview.md:63:  - `./scripts/evidence_run.sh FEOVERVIEW-QA-PLAN-01 test /bin/zsh -lc "./scripts/task_validate.sh FEOVERVIEW-SPEC-01 && rg -n 'no product implementation|FEOVERVIEW-UPPER-BE-01|FEOVERVIEW-LOWER-BE-01|FEOVERVIEW-FE-01' artifacts/FEOVERVIEW-SPEC-01/summary.md"`
+docs/superpowers/plans/2026-04-06-fee-overview.md:72:- `FEOVERVIEW-UPPER-BE-01`
+tasks/postenhancement/backend/FEOVERVIEW-SPEC-01.md:3:- exact closure slice: freeze `SPEC 5.11` two-pane authority, reject reinterpretation of the current unified query as near-equivalent closure, and define the follow-up implementation graph
+tasks/postenhancement/backend/FEOVERVIEW-SPEC-01.md:5:- remaining follow-up task ids: `FEOVERVIEW-UPPER-BE-01`, `FEOVERVIEW-LOWER-BE-01`, `FEOVERVIEW-FE-01`, `FEOVERVIEW-QA-01`
+docs/superpowers/specs/2026-04-06-fee-overview-design.md:19:- `P0-prereq-heavy-story`
+docs/superpowers/specs/2026-04-06-fee-overview-design.md:90:- upper pane:
+docs/superpowers/specs/2026-04-06-fee-overview-design.md:92:- lower pane:
+docs/superpowers/specs/2026-04-06-fee-overview-design.md:95:The current unified query projection must **not** be stretched into the authority for either pane.
+docs/superpowers/specs/2026-04-06-fee-overview-design.md:136:- current unified query must not be reclassified as `almost closed`
+docs/superpowers/specs/2026-04-06-fee-overview-design.md:140:  - `FEOVERVIEW-UPPER-BE-01`
+docs/superpowers/specs/2026-04-06-fee-overview-design.md:142:  - `FEOVERVIEW-FE-01`
