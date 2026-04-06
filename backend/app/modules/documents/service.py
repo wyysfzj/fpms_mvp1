@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import raise_business_error
@@ -303,6 +303,7 @@ def list_documents(
     client_id: str | None = None,
     need_reply: bool | None = None,
     replied: bool | None = None,
+    has_attachment: bool | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     page: int = 1,
@@ -349,6 +350,14 @@ def list_documents(
         stmt = stmt.where(Document.reply_date.is_not(None))
     elif replied is False:
         stmt = stmt.where(Document.reply_date.is_(None))
+    if has_attachment is True:
+        stmt = stmt.where(
+            exists(select(1).where(DocAttachment.document_id == Document.id))
+        )
+    elif has_attachment is False:
+        stmt = stmt.where(
+            ~exists(select(1).where(DocAttachment.document_id == Document.id))
+        )
     if date_from:
         stmt = stmt.where(Document.doc_date >= date_from)
     if date_to:

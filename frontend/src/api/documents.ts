@@ -211,6 +211,7 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
         client_id,
         need_reply,
         replied,
+        has_attachment,
         date_from,
         date_to,
     } = params
@@ -227,6 +228,7 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
     if (client_id) query.set('client_id', client_id)
     if (need_reply !== undefined) query.set('need_reply', String(need_reply))
     if (replied !== undefined) query.set('replied', String(replied))
+    if (has_attachment !== undefined) query.set('has_attachment', String(has_attachment))
     if (date_from) query.set('date_from', date_from)
     if (date_to) query.set('date_to', date_to)
     for (const value of doc_type || []) {

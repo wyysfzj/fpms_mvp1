@@ -40,6 +40,7 @@ export interface DocumentListParams {
     client_id?: string
     need_reply?: boolean
     replied?: boolean
+    has_attachment?: boolean
     date_from?: string
     date_to?: string
 }

@@ -90,6 +90,22 @@ def _create_document(
     return resp.json()
 
 
+def _add_attachment(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    *,
+    document_id: str,
+    file_name: str,
+) -> dict:
+    resp = client.post(
+        f"{DOC_BASE}/{document_id}/attachments",
+        headers=auth_headers,
+        files={"file": (file_name, b"attachment-bytes", "text/plain")},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 def test_document_specific_search_filters_by_case_no_template_code_and_doc_name(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
@@ -268,6 +284,143 @@ def test_document_specific_search_filters_by_independent_doctype_multi_select(
     for item in payload["items"]:
         if item["id"] in {official_in_doc["id"], client_in_doc["id"]}:
             assert item["doc_type"] in {"OFFICIAL_IN", "CLIENT_IN"}
+
+
+def test_document_specific_search_filters_by_has_attachment_true(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    tag = uuid4().hex[:8]
+    client_row = _create_client(client, auth_headers, name=f"附件过滤客户-{tag}")
+    case_row = _create_case(client, auth_headers, client_id=client_row["id"], case_no=f"ATT-{tag}")
+    oa_in = _get_template_by_code(client, auth_headers, "OA_IN")
+
+    attached_doc = _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
+        direction="IN",
+        doc_date="2026-03-21",
+        title=f"有附件来文-{tag}",
+    )
+    _add_attachment(
+        client,
+        auth_headers,
+        document_id=attached_doc["id"],
+        file_name=f"attached-{tag}.txt",
+    )
+    _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
+        direction="IN",
+        doc_date="2026-03-22",
+        title=f"无附件来文-{tag}",
+    )
+
+    resp = client.get(
+        DOC_BASE,
+        headers=auth_headers,
+        params={"case_no": case_row["case_no"], "has_attachment": True},
+    )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["total"] == 1
+    assert [item["id"] for item in payload["items"]] == [attached_doc["id"]]
+
+
+def test_document_specific_search_filters_by_has_attachment_false(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    tag = uuid4().hex[:8]
+    client_row = _create_client(client, auth_headers, name=f"无附件过滤客户-{tag}")
+    case_row = _create_case(client, auth_headers, client_id=client_row["id"], case_no=f"ATTN-{tag}")
+    oa_in = _get_template_by_code(client, auth_headers, "OA_IN")
+
+    attached_doc = _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
+        direction="IN",
+        doc_date="2026-03-23",
+        title=f"有附件来文-否-{tag}",
+    )
+    _add_attachment(
+        client,
+        auth_headers,
+        document_id=attached_doc["id"],
+        file_name=f"attached-no-{tag}.txt",
+    )
+    unattached_doc = _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
+        direction="IN",
+        doc_date="2026-03-24",
+        title=f"无附件来文-否-{tag}",
+    )
+
+    resp = client.get(
+        DOC_BASE,
+        headers=auth_headers,
+        params={"case_no": case_row["case_no"], "has_attachment": False},
+    )
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["total"] == 1
+    assert [item["id"] for item in payload["items"]] == [unattached_doc["id"]]
+
+
+def test_document_specific_search_without_has_attachment_keeps_all_matching_rows(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    tag = uuid4().hex[:8]
+    client_row = _create_client(client, auth_headers, name=f"附件省略客户-{tag}")
+    case_row = _create_case(client, auth_headers, client_id=client_row["id"], case_no=f"ATTO-{tag}")
+    oa_in = _get_template_by_code(client, auth_headers, "OA_IN")
+
+    attached_doc = _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
+        direction="IN",
+        doc_date="2026-03-25",
+        title=f"有附件来文-省略-{tag}",
+    )
+    _add_attachment(
+        client,
+        auth_headers,
+        document_id=attached_doc["id"],
+        file_name=f"attached-omit-{tag}.txt",
+    )
+    unattached_doc = _create_document(
+        client,
+        auth_headers,
+        case_id=case_row["id"],
+        template_id=oa_in["id"],
+        doc_type="OFFICIAL_IN",
+        direction="IN",
+        doc_date="2026-03-26",
+        title=f"无附件来文-省略-{tag}",
+    )
+
+    resp = client.get(DOC_BASE, headers=auth_headers, params={"case_no": case_row["case_no"]})
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert payload["total"] == 2
+    assert {item["id"] for item in payload["items"]} == {attached_doc["id"], unattached_doc["id"]}
 
 
 def test_document_create_and_update_persist_independent_doctype(

@@ -76,6 +76,18 @@
         </el-select>
       </el-col>
       <el-col :span="6">
+        <el-select
+          v-model="filterHasAttachment"
+          placeholder="全部附件状态"
+          clearable
+          @change="onFilterChange"
+        >
+          <el-option label="全部附件状态" value="" />
+          <el-option label="有附件" :value="true" />
+          <el-option label="无附件" :value="false" />
+        </el-select>
+      </el-col>
+      <el-col :span="6">
         <el-date-picker
           v-model="filterDateRange"
           type="daterange"
@@ -239,6 +251,7 @@ const filterDirection = ref<'' | 'IN' | 'OUT'>('')
 const filterClientId = ref('')
 const filterTemplateCode = ref('')
 const filterDocTypes = ref<Array<'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT'>>([])
+const filterHasAttachment = ref<'' | boolean>('')
 const filterDateRange = ref<string[]>([])
 const filterReplyState = ref<'' | 'PENDING' | 'DONE' | 'NONE'>('')
 const clientOptions = ref<Client[]>([])
@@ -278,6 +291,7 @@ async function fetchDocuments() {
       template_code: filterTemplateCode.value || undefined,
       direction: filterDirection.value || undefined,
       client_id: filterClientId.value || undefined,
+      has_attachment: filterHasAttachment.value === '' ? undefined : filterHasAttachment.value,
       need_reply,
       replied,
       date_from: date_from || undefined,
@@ -335,6 +349,7 @@ function resetFilters() {
   filterClientId.value = ''
   filterTemplateCode.value = ''
   filterDocTypes.value = []
+  filterHasAttachment.value = ''
   filterDateRange.value = []
   filterReplyState.value = ''
   onFilterChange()
