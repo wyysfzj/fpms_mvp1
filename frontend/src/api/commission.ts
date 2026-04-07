@@ -347,3 +347,13 @@ export async function getCommissionSettlementReport(
     )
     return mapCommissionSettlementReport(response.data)
 }
+
+export async function exportCommissionSettlementReport(
+    params: CommissionSettlementReportParams = {},
+): Promise<Blob> {
+    const response = await http.get('/commission/reports/settlement/export', {
+        params,
+        responseType: 'blob',
+    })
+    return response.data as Blob
+}

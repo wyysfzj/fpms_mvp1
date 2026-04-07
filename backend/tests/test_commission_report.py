@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from io import BytesIO
 from uuid import uuid4
+from zipfile import ZipFile
 
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from app.modules.auth.models import T_Role
 from app.modules.cases.models import Case
 from app.modules.commission.models import Commission, CommissionSettleLine, CommissionSettlement
+from app.modules.rbac.models import T_RolePerm
 
 
 def _uid(prefix: str) -> str:
@@ -189,3 +193,124 @@ def test_settlement_report_returns_summary_and_grouped_totals(
     with session_factory() as db:
         rows = db.execute(select(CommissionSettlement.id)).scalars().all()
         assert len(rows) == 3
+
+
+def test_settlement_report_export_returns_excel_payload(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+) -> None:
+    case_a = _create_case(session_factory, case_no="CASE-EXPORT-A")
+    case_b = _create_case(session_factory, case_no="CASE-EXPORT-B")
+
+    _create_report_row(
+        session_factory,
+        settlement_no="SETTLE-EXP-001",
+        settlement_agent_id="AGENT-EXP-A",
+        settlement_status="SETTLED",
+        commission_case_id=case_a,
+        commission_agent_id="AGENT-EXP-A",
+        line_amount="88.00",
+        line_status="SETTLED",
+        created_at=datetime(2026, 3, 9, 9, 0, 0),
+    )
+    _create_report_row(
+        session_factory,
+        settlement_no="SETTLE-EXP-002",
+        settlement_agent_id="AGENT-EXP-B",
+        settlement_status="SETTLED",
+        commission_case_id=case_b,
+        commission_agent_id="AGENT-EXP-B",
+        line_amount="18.50",
+        line_status="SETTLED",
+        created_at=datetime(2026, 3, 10, 9, 0, 0),
+    )
+
+    response = client.get(
+        "/api/v1/commission/reports/settlement/export",
+        headers=auth_headers,
+        params={
+            "settlement_status": "SETTLED",
+            "line_status": "SETTLED",
+            "date_from": "2026-03-01",
+            "date_to": "2026-03-31",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert (
+        response.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert "attachment; filename=\"commission-settlement-report.xlsx\"" in response.headers.get(
+        "content-disposition", ""
+    )
+
+    archive = ZipFile(BytesIO(response.content))
+    sheet_xml = archive.read("xl/worksheets/sheet1.xml").decode("utf-8")
+    assert "提成结算报表" in sheet_xml
+    assert "AGENT-EXP-A" in sheet_xml
+    assert "SETTLE-EXP-001" in sheet_xml
+    assert case_a in sheet_xml
+
+
+def test_settlement_report_export_requires_report_permission(
+    client,
+    auth_headers,
+    session_factory: sessionmaker,
+) -> None:
+    case_a = _create_case(session_factory, case_no="CASE-EXPORT-PERM")
+    _create_report_row(
+        session_factory,
+        settlement_no="SETTLE-EXP-PERM",
+        settlement_agent_id="AGENT-PERM",
+        settlement_status="SETTLED",
+        commission_case_id=case_a,
+        commission_agent_id="AGENT-PERM",
+        line_amount="10.00",
+        line_status="SETTLED",
+        created_at=datetime(2026, 3, 9, 9, 0, 0),
+    )
+
+    with session_factory() as db:
+        admin_role = db.query(T_Role).filter(T_Role.code == "Admin").first()
+        assert admin_role is not None
+        binding = (
+            db.query(T_RolePerm)
+            .filter(
+                T_RolePerm.role_id == admin_role.id,
+                T_RolePerm.perm_code == "CommissionReport.Read",
+            )
+            .first()
+        )
+        assert binding is not None
+        db.delete(binding)
+        db.commit()
+
+    try:
+        response = client.get(
+            "/api/v1/commission/reports/settlement/export",
+            headers=auth_headers,
+        )
+        assert response.status_code == 403, response.text
+    finally:
+        with session_factory() as db:
+            admin_role = db.query(T_Role).filter(T_Role.code == "Admin").first()
+            assert admin_role is not None
+            restored = (
+                db.query(T_RolePerm)
+                .filter(
+                    T_RolePerm.role_id == admin_role.id,
+                    T_RolePerm.perm_code == "CommissionReport.Read",
+                )
+                .first()
+            )
+            if not restored:
+                db.add(
+                    T_RolePerm(
+                        id=str(uuid4()),
+                        role_id=admin_role.id,
+                        perm_code="CommissionReport.Read",
+                    )
+                )
+                db.commit()

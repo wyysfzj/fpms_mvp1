@@ -181,6 +181,7 @@
         </el-col>
         <el-col :xs="24" :sm="8" :md="4" :lg="3" class="filter-actions">
           <el-button type="primary" aria-label="查询提成报表" :loading="reportLoading" @click="queryReport">查询报表</el-button>
+          <el-button aria-label="导出提成报表" :loading="exporting" @click="handleExportReport">导出报表</el-button>
           <el-button aria-label="重置报表筛选" @click="resetReportFilters">重置</el-button>
         </el-col>
       </el-row>
@@ -368,6 +369,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import {
   createCommissionSettlement,
+  exportCommissionSettlementReport,
   generateCommissionSettlementLines,
   getCommissionSettlementReport,
 } from '../../../api/commission'
@@ -407,6 +409,7 @@ const lastGenerate = ref<CommissionSettlementGenerateLinesResult | null>(null)
 const recentSettlements = ref<CommissionSettlement[]>([])
 
 const reportLoading = ref(false)
+const exporting = ref(false)
 const report = ref<CommissionSettlementReportResult | null>(null)
 const reportFilters = reactive({
   agent_id: '',
@@ -612,6 +615,17 @@ function buildReportParams(): CommissionSettlementReportParams {
   }
 }
 
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+
 function useSettlement(id: number) {
   generateForm.settlement_id = id
 }
@@ -676,6 +690,20 @@ async function queryReport() {
     ElMessage.error(mapReportError(err))
   } finally {
     reportLoading.value = false
+  }
+}
+
+async function handleExportReport() {
+  exporting.value = true
+  try {
+    const blob = await exportCommissionSettlementReport(buildReportParams())
+    downloadBlob(blob, '提成结算报表.xlsx')
+    ElMessage.success('提成结算报表已开始导出。')
+  } catch (err) {
+    error.value = toApiError(err)
+    ElMessage.error(mapReportError(err))
+  } finally {
+    exporting.value = false
   }
 }
 

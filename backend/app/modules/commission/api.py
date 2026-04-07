@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_perm
 from app.core.errors import raise_business_error
 from app.db.session import get_db
+from app.modules.commission.export_excel import (
+    COMMISSION_REPORT_EXPORT_MIME_TYPE,
+    build_commission_settlement_report_xlsx,
+)
 from app.modules.commission.models import Commission, CommissionRule, CommissionSettlement
 from app.modules.commission.service import (
     create_commission_rule,
@@ -280,6 +284,48 @@ def get_commission_reports_settlement(
         date_from=date_from,
         date_to=date_to,
         time_field=time_field,
+    )
+
+
+@router.get(
+    "/commission/reports/settlement/export",
+    summary="Export commission settlement report to Excel",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {COMMISSION_REPORT_EXPORT_MIME_TYPE: {}},
+            "description": "Commission settlement report Excel export generated",
+        }
+    },
+)
+def export_commission_reports_settlement(
+    agent_id: str | None = Query(default=None),
+    case_id: str | None = Query(default=None),
+    currency: str | None = Query(default=None),
+    settlement_status: str | None = Query(default=None),
+    line_status: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    time_field: str = Query(default="line_created_at"),
+    _perm: None = Depends(require_perm("CommissionReport.Read")),
+    db: Session = Depends(get_db),
+) -> Response:
+    report = get_commission_settlement_report(
+        db,
+        agent_id=agent_id,
+        case_id=case_id,
+        currency=currency,
+        settlement_status=settlement_status,
+        line_status=line_status,
+        date_from=date_from,
+        date_to=date_to,
+        time_field=time_field,
+    )
+    content = build_commission_settlement_report_xlsx(report=report)
+    return Response(
+        content=content,
+        media_type=COMMISSION_REPORT_EXPORT_MIME_TYPE,
+        headers={"Content-Disposition": 'attachment; filename="commission-settlement-report.xlsx"'},
     )
 
 

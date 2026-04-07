@@ -48,7 +48,6 @@ Current high-confidence residuals:
 1. Document specific search is missing `has_attachment` filtering.
 2. Task list / task special search lack the list-level export/print closure required by `4.9 / FR-DL-09`.
 3. Expense management statistics do not yet reach the `5.10.2` aggregation scope.
-4. Commission settlement report exists, but export closure for `FR-COM-07` is not present.
 
 No additional item currently requires `Needs Reclassification`.
 
@@ -223,7 +222,7 @@ Evidence:
 
 ### 3.6 Module 6: Commission Management
 
-Status: `Partially Implemented`
+Status: `Closed`
 
 Closed slices:
 - commission rule maintenance
@@ -232,24 +231,24 @@ Closed slices:
 - wait-pay and force-settle semantics
 - settlement batch creation
 - settlement report query and grouped totals
+- settlement report export closure
 
 Evidence:
 - [CommissionRuleList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/commission/pages/CommissionRuleList.vue)
 - [CommissionList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/commission/pages/CommissionList.vue)
 - [CommissionSettlement.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/commission/pages/CommissionSettlement.vue)
+- [commission.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/commission.ts)
 - [api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/api.py)
 - [service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/service.py)
+- [export_excel.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/export_excel.py)
 - [test_commission_e2e.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_commission_e2e.py)
 - [test_commission_report.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_commission_report.py)
 
-Residual gap:
-- `FR-COM-07` requires report export.
-- Current implementation exposes report query/statistics, but no export API or export UI path was found.
-
-Gap evidence:
-- [CommissionSettlement.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/commission/pages/CommissionSettlement.vue)
-- [api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/api.py)
-- [service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/service.py)
+Notes:
+- `FR-COM-07` 现在已具备真实导出闭环：
+  - backend `GET /api/v1/commission/reports/settlement/export`
+  - frontend `导出报表` 用户路径
+  - targeted export tests
 
 ### 3.7 Module 7: Consulting / Search Projects
 
