@@ -1,6 +1,7 @@
 # FPMS SPEC 2.0 Final Audit Ledger
 
 Date: 2026-04-06  
+Truth Refresh: 2026-04-07  
 Scope rule: exclude document-generation capability itself
 
 ## 1. Audit Method Freeze
@@ -45,9 +46,7 @@ Adjacent but independently verifiable business behavior is still in scope:
 The repo is close to full `SPEC 2.0` coverage, but excluding document generation itself, there are still a small number of real residual gaps.
 
 Current high-confidence residuals:
-1. Document specific search is missing `has_attachment` filtering.
-2. Task list / task special search lack the list-level export/print closure required by `4.9 / FR-DL-09`.
-3. Expense management statistics do not yet reach the `5.10.2` aggregation scope.
+1. Expense management statistics still do not fully reach the remaining `5.10.2` aggregation scope.
 
 No additional item currently requires `Needs Reclassification`.
 
@@ -72,7 +71,7 @@ Notes:
 
 ### 3.2 Module 2: Documents & Correspondence
 
-Status: `Partially Implemented`
+Status: `Closed`
 
 Closed slices:
 - document wizard main flow
@@ -97,14 +96,15 @@ Evidence:
 - [test_doc_dispatch_handoff.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_doc_dispatch_handoff.py)
 - [test_doc_dispatch_envelope.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_doc_dispatch_envelope.py)
 
-Residual gap:
-- `3.8.1` requires `是否有附件` search filtering.
-- Current implementation has no `has_attachment` filter in frontend or backend query contract.
+Additional close evidence:
+- [documents.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/documents.ts)
+- [documents.types.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/documents.types.ts)
 
-Gap evidence:
-- [DocumentList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/documents/pages/DocumentList.vue)
-- [api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/documents/api.py)
-- [test_document_specific_search_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_document_specific_search_api.py)
+Notes:
+- `3.8.1` 的 `是否有附件` 查询条件现在已具备真实闭环：
+  - backend `GET /api/v1/documents?...&has_attachment=true|false`
+  - frontend `中间文件专项查询` 页面附件状态筛选
+  - targeted tests 覆盖 `true / false / omitted`
 
 Excluded by scope:
 - wizard attachment generation and generated document output
@@ -112,7 +112,7 @@ Excluded by scope:
 
 ### 3.3 Module 3: Deadline & Docket
 
-Status: `Partially Implemented`
+Status: `Closed`
 
 Closed slices:
 - task template maintenance
@@ -129,19 +129,19 @@ Evidence:
 - [service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/tasks/service.py)
 - [test_task_special_search_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_task_special_search_api.py)
 
-Residual gap:
-- `4.9 / FR-DL-09` requires list-level export/print for:
-  - my tasks
-  - supervisor tasks
-  - apply-fee special search results
-  - exam-request special search results
-- Current implementation only exposes single-task print.
+Additional close evidence:
+- [tasks.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/tasks.ts)
+- [test_task_list_export_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_task_list_export_api.py)
+- [test_task_list_print_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_task_list_print_api.py)
+- [test_task_special_search_exportprint_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_task_special_search_exportprint_api.py)
 
-Gap evidence:
-- [api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/tasks/api.py)
-- [schemas.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/tasks/schemas.py)
-- [TaskList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/tasks/pages/TaskList.vue)
-- [TaskSpecialSearch.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/tasks/pages/TaskSpecialSearch.vue)
+Notes:
+- `4.9 / FR-DL-09` 现在已具备真实列表级导出/打印闭环：
+  - `GET /api/v1/tasks/export`
+  - `GET /api/v1/tasks/print`
+  - `GET /api/v1/tasks/special/search/export`
+  - `GET /api/v1/tasks/special/search/print`
+  - frontend 我的任务 / 监督任务 / 专项检索结果真实入口
 
 Excluded by scope:
 - task sheet document generation itself
@@ -177,14 +177,21 @@ Residual gap A:
   - per-case expense total
   - per-client / per-department expense totals
   - profitability-ready aggregation
-- Current expense stats only cover:
-  - total count
-  - total amount
-  - counts and sums by category
+- Current product now truthfully covers:
+  - per-case expense totals
+  - per-client expense totals
+  - first-round case-level same-currency gross-profit aggregation
+- Remaining truthful residuals are:
+  - worker-level filtering is still not closed
+  - per-department expense totals are still not closed
+  - broader gross-profit/deeper aggregation semantics are not fully closed beyond the approved first-round case-level slice
 
 Gap evidence:
 - [ExpenseList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/expenses/pages/ExpenseList.vue)
 - [service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/expenses/service.py)
+- [expenses.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/expenses.ts)
+- [expenses.types.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/expenses.types.ts)
+- [test_expense_stats_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_expense_stats_api.py)
 
 Residual gap B:
 - `5.11` dual-pane fee overview is now closed in current workspace-state:
@@ -283,20 +290,12 @@ Evidence:
 - [SystemParams.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/system/pages/SystemParams.vue)
 
 Residuals carried from other modules:
-- document search missing `has_attachment`
-- task list / special-search export-print
 - expense statistics depth gap
-- fee overview structural gap
-- commission report export gap
 
 ## 4. Remaining Gap List (excluding document generation)
 
 High-confidence real residuals:
-1. Document search lacks `是否有附件` filter.
-2. Deadline/task list and special-search list export/print closure is missing.
-3. Expense statistics do not yet provide per-case / per-client / per-department aggregation.
-4. Fee overview does not yet match the spec’s double-pane GovPayment + CaseReceipt structure.
-5. Commission settlement report lacks export closure.
+1. Expense statistics do not yet fully close the remaining worker / department / broader aggregation scope under `5.10.2`.
 
 ## 5. Excluded by Scope
 
@@ -315,6 +314,4 @@ None currently identified.
 The workspace is close to full `SPEC 2.0` parity, but excluding document generation itself, it is not yet honest to claim “everything else is fully complete”.
 
 The remaining non-document-generation gaps are concentrated in:
-- search semantics
-- report/export completeness
 - statistics depth
