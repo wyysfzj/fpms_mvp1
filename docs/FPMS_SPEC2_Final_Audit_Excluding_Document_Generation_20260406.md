@@ -182,9 +182,11 @@ Residual gap A:
   - per-client expense totals
   - first-round case-level same-currency gross-profit aggregation
 - Remaining truthful residuals are:
-  - worker-level filtering is still not closed
-  - per-department expense totals are still not closed
-  - broader gross-profit/deeper aggregation semantics are not fully closed beyond the approved first-round case-level slice
+  - worker-level filtering is carrier-blocked under current schema
+  - per-department expense totals are carrier-blocked under current schema
+- Current truthful state:
+  - there is no immediate implementation lane left on current schema
+  - further progress requires future carrier/schema authority before new product slices can exist
 
 Gap evidence:
 - [ExpenseList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/expenses/pages/ExpenseList.vue)
@@ -290,12 +292,12 @@ Evidence:
 - [SystemParams.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/system/pages/SystemParams.vue)
 
 Residuals carried from other modules:
-- expense statistics depth gap
+- expense statistics carrier-blocked gap
 
 ## 4. Remaining Gap List (excluding document generation)
 
 High-confidence real residuals:
-1. Expense statistics do not yet fully close the remaining worker / department / broader aggregation scope under `5.10.2`.
+1. Expense statistics still retain worker / department residuals under `5.10.2`, but they are now explicitly carrier-blocked rather than implementation-ready.
 
 ## 5. Excluded by Scope
 
@@ -314,4 +316,4 @@ None currently identified.
 The workspace is close to full `SPEC 2.0` parity, but excluding document generation itself, it is not yet honest to claim “everything else is fully complete”.
 
 The remaining non-document-generation gaps are concentrated in:
-- statistics depth
+- carrier-blocked statistics semantics
