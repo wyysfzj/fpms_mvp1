@@ -18,6 +18,7 @@ interface BackendExpenseItem {
     id: number
     expense_no: string | null
     case_id: string | null
+    worker_id: string | null
     category: string
     expense_date: string | null
     amount: number | string
@@ -83,6 +84,7 @@ function mapExpenseItem(input: BackendExpenseItem): ExpenseItem {
         id: input.id,
         expense_no: input.expense_no,
         case_id: input.case_id,
+        worker_id: input.worker_id,
         category: input.category,
         expense_date: input.expense_date,
         amount: asNumber(input.amount),
@@ -191,6 +193,9 @@ function buildExpenseListQuery(params: ExpenseListParams): Record<string, unknow
     const caseId = params.case_id?.trim()
     if (caseId) query.case_id = caseId
 
+    const workerId = params.worker_id?.trim()
+    if (workerId) query.worker_id = workerId
+
     const category = params.category?.trim()
     if (category) query.category = category
 
@@ -215,6 +220,7 @@ function buildExpenseListQuery(params: ExpenseListParams): Record<string, unknow
 function toCreatePayload(payload: ExpenseCreatePayload): Record<string, unknown> {
     return {
         case_id: payload.case_id.trim(),
+        ...(payload.worker_id?.trim() ? { worker_id: payload.worker_id.trim() } : {}),
         category: payload.category,
         expense_date: payload.expense_date,
         amount: payload.amount,

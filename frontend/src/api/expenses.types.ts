@@ -6,6 +6,7 @@ export interface ExpenseItem {
     id: number
     expense_no: string | null
     case_id: string | null
+    worker_id: string | null
     category: ExpenseCategory | string
     expense_date: string | null
     amount: number
@@ -48,6 +49,7 @@ export interface ExpenseListResponse extends Pagination<ExpenseItem> {
 
 export interface ExpenseListParams {
     case_id?: string
+    worker_id?: string
     category?: ExpenseCategory | string
     date_from?: string
     date_to?: string
@@ -61,6 +63,7 @@ export interface ExpenseListParams {
 
 export interface ExpenseCreatePayload {
     case_id: string
+    worker_id?: string
     category: ExpenseCategory
     expense_date: string
     amount: number

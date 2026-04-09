@@ -19,6 +19,9 @@ class Expense(Base):
     client_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("t_client.id", ondelete="SET NULL"), nullable=True
     )
+    worker_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_user.id", ondelete="SET NULL"), nullable=True
+    )
     expense_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
     category: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=text("'OTHER'")

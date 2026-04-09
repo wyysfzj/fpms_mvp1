@@ -23,6 +23,15 @@
         />
       </el-col>
       <el-col :xs="24" :sm="12" :md="6" :lg="5">
+        <el-input
+          v-model.trim="filterWorkerId"
+          aria-label="经手人筛选"
+          placeholder="经手人用户ID"
+          clearable
+          @keyup.enter="handleSearch"
+        />
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="6" :lg="5">
         <el-select
           v-model="filterCategory"
           aria-label="支出类别筛选"
@@ -38,7 +47,7 @@
           />
         </el-select>
       </el-col>
-      <el-col :xs="24" :sm="24" :md="8" :lg="7">
+      <el-col :xs="24" :sm="24" :md="7" :lg="6">
         <el-date-picker
           v-model="filterDateRange"
           aria-label="支出日期范围筛选"
@@ -52,7 +61,7 @@
           clearable
         />
       </el-col>
-      <el-col :xs="24" :sm="24" :md="3" :lg="6" class="filter-actions">
+      <el-col :xs="24" :sm="24" :md="5" :lg="8" class="filter-actions">
         <el-button type="primary" aria-label="查询支出记录" @click="handleSearch">查询</el-button>
         <el-button aria-label="重置支出筛选" @click="handleReset">重置</el-button>
       </el-col>
@@ -175,6 +184,11 @@
             <span class="mono-num">{{ row.case_id || '—' }}</span>
           </template>
         </el-table-column>
+        <el-table-column prop="worker_id" label="经手人" min-width="180">
+          <template #default="{ row }">
+            <span class="mono-num">{{ row.worker_id || '—' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="category" label="类别" width="140">
           <template #default="{ row }">
             <el-tag size="small" type="info">{{ getCategoryText(row.category) }}</el-tag>
@@ -291,6 +305,7 @@ const total = ref(0)
 const stats = ref<ExpenseStats | null>(null)
 
 const filterCaseId = ref(typeof route.query.case_id === 'string' ? route.query.case_id : '')
+const filterWorkerId = ref(typeof route.query.worker_id === 'string' ? route.query.worker_id : '')
 const filterCategory = ref<ExpenseCategory | ''>('')
 const filterDateRange = ref<string[]>([])
 
@@ -365,6 +380,7 @@ function handleSearch() {
 
 function handleReset() {
   filterCaseId.value = ''
+  filterWorkerId.value = ''
   filterCategory.value = ''
   filterDateRange.value = []
   handleSearch()
@@ -388,6 +404,7 @@ async function fetchExpenses() {
     const [dateFrom, dateTo] = filterDateRange.value
     const result = await getExpenses({
       case_id: filterCaseId.value || undefined,
+      worker_id: filterWorkerId.value || undefined,
       category: filterCategory.value || undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,

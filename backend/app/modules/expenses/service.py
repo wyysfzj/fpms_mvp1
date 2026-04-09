@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
+from app.modules.auth.models import T_User
 from app.modules.billing.models import CaseReceipt
 from app.modules.cases.models import Case
 from app.modules.expenses.models import Expense
@@ -59,6 +60,7 @@ def _quantize_money(value: Decimal) -> Decimal:
 def _build_expense_filters(
     *,
     case_id: str | None = None,
+    worker_id: str | None = None,
     category: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -78,6 +80,10 @@ def _build_expense_filters(
     normalized_case_id = _normalize_optional_text(case_id)
     if normalized_case_id:
         filters.append(Expense.case_id == normalized_case_id)
+
+    normalized_worker_id = _normalize_optional_text(worker_id)
+    if normalized_worker_id:
+        filters.append(Expense.worker_id == normalized_worker_id)
 
     normalized_category = _normalize_optional_text(category)
     if normalized_category:
@@ -123,6 +129,7 @@ def list_expenses(
     db: Session,
     *,
     case_id: str | None = None,
+    worker_id: str | None = None,
     category: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -135,6 +142,7 @@ def list_expenses(
 ) -> tuple[list[Expense], int, dict[str, Any] | None]:
     filters = _build_expense_filters(
         case_id=case_id,
+        worker_id=worker_id,
         category=category,
         date_from=date_from,
         date_to=date_to,
@@ -354,6 +362,7 @@ def create_expense(
     db: Session,
     *,
     case_id: str | None,
+    worker_id: str | None = None,
     category: str | None,
     expense_date: date | None,
     amount: Decimal | int | float | str | None,
@@ -412,13 +421,26 @@ def create_expense(
 
     normalized_currency = (_normalize_optional_text(currency) or _DEFAULT_CURRENCY).upper()
     normalized_client_id = _normalize_optional_text(client_id)
+    normalized_worker_id = _normalize_optional_text(worker_id)
     normalized_vendor_name = _normalize_optional_text(vendor_name)
     normalized_remark = _normalize_optional_text(remark)
     normalized_expense_no = _normalize_optional_text(expense_no)
 
+    if normalized_worker_id:
+        worker_exists = db.execute(
+            select(T_User.id).where(T_User.id == normalized_worker_id)
+        ).scalar_one_or_none()
+        if not worker_exists:
+            raise_business_error(
+                "WORKER_NOT_FOUND",
+                "Worker not found",
+                status_code=404,
+            )
+
     expense = Expense(
         case_id=normalized_case_id,
         client_id=normalized_client_id,
+        worker_id=normalized_worker_id,
         expense_no=normalized_expense_no,
         category=normalized_category,
         vendor_name=normalized_vendor_name,

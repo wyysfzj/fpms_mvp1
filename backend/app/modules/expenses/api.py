@@ -8,8 +8,9 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
 from app.db.session import get_db
+from app.modules.auth.models import T_User
 from app.modules.expenses.service import create_expense, list_expenses
 
 router = APIRouter()
@@ -17,6 +18,7 @@ router = APIRouter()
 
 class ExpenseCreateIn(BaseModel):
     case_id: str
+    worker_id: str | None = None
     category: str
     expense_date: date
     amount: Decimal
@@ -32,6 +34,7 @@ class ExpenseOut(BaseModel):
     id: int
     expense_no: str | None
     case_id: str | None
+    worker_id: str | None
     category: str
     expense_date: date | None
     amount: Decimal
@@ -48,6 +51,7 @@ class ExpenseOut(BaseModel):
 )
 def get_expenses(
     case_id: str | None = Query(default=None),
+    worker_id: str | None = Query(default=None),
     category: str | None = Query(default=None),
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
@@ -63,6 +67,7 @@ def get_expenses(
     items, total, stats = list_expenses(
         db,
         case_id=case_id,
+        worker_id=worker_id,
         category=category,
         date_from=date_from,
         date_to=date_to,
@@ -80,6 +85,7 @@ def get_expenses(
                 "id": expense.id,
                 "expense_no": expense.expense_no,
                 "case_id": expense.case_id,
+                "worker_id": expense.worker_id,
                 "category": expense.category,
                 "expense_date": expense.expense_date,
                 "amount": expense.amount,
@@ -109,11 +115,13 @@ def get_expenses(
 def post_expense(
     payload: ExpenseCreateIn,
     _perm: None = Depends(require_perm("Expense.Create")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     expense = create_expense(
         db,
         case_id=payload.case_id,
+        worker_id=payload.worker_id,
         category=payload.category,
         expense_date=payload.expense_date,
         amount=payload.amount,
@@ -123,11 +131,13 @@ def post_expense(
         currency=payload.currency,
         tax_amount=payload.tax_amount,
         remark=payload.remark,
+        actor_id=current_user.id,
     )
     return {
         "id": expense.id,
         "expense_no": expense.expense_no,
         "case_id": expense.case_id,
+        "worker_id": expense.worker_id,
         "category": expense.category,
         "expense_date": expense.expense_date,
         "amount": expense.amount,
