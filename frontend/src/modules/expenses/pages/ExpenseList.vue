@@ -26,7 +26,7 @@
         <el-input
           v-model.trim="filterDepartmentId"
           aria-label="部门筛选"
-          placeholder="部门ID"
+          placeholder="部门编号"
           clearable
           @keyup.enter="handleSearch"
         />
@@ -35,7 +35,7 @@
         <el-input
           v-model.trim="filterWorkerId"
           aria-label="经手人筛选"
-          placeholder="经手人用户ID"
+          placeholder="经手人编号"
           clearable
           @keyup.enter="handleSearch"
         />

@@ -139,13 +139,13 @@
 
           <el-col :xs="24" :md="12">
             <el-form-item
-              label="部门ID（可选）"
+              label="部门编号（可选）"
               prop="department_id"
               :error="fieldErrors.get('department_id')?.join('，')"
             >
               <el-input
                 v-model.trim="form.department_id"
-                placeholder="请输入部门ID"
+                placeholder="请输入部门编号"
               />
               <div class="field-hint">留空则本条支出暂不参与部门统计。</div>
             </el-form-item>
@@ -155,13 +155,13 @@
         <el-row :gutter="16">
           <el-col :xs="24" :md="12">
             <el-form-item
-              label="经手人用户ID（可选）"
+              label="经手人编号（可选）"
               prop="worker_id"
               :error="fieldErrors.get('worker_id')?.join('，')"
             >
               <el-input
                 v-model.trim="form.worker_id"
-                placeholder="请输入经手人用户ID"
+                placeholder="请输入经手人编号"
               />
               <div class="field-hint">留空则本条支出暂不参与经手人统计。</div>
             </el-form-item>

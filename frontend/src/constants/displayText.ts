@@ -34,6 +34,38 @@ export const FEE_DRAFT_STATUS_TEXT: Record<string, string> = {
   LOCKED: '已锁定',
 }
 
+export const FEE_DRAFT_TYPE_TEXT: Record<string, string> = {
+  APPLY_FEE: '申请费',
+  OA_FEE: '审查意见费',
+  GRANT_FEE: '授权费',
+  ANNUITY_FEE: '年费',
+  INVALID_FEE: '无效费',
+  CONSULT_FEE: '顾问费',
+  SEARCH_FEE: '检索费',
+}
+
+export const CASE_TYPE_TEXT: Record<string, string> = {
+  NORMAL: '普通',
+  PCT_INTL: 'PCT国际',
+  PCT_NATL: 'PCT国内',
+  PRIORITY: '优先权',
+  CONSULTING: '顾问项目',
+  SEARCH: '检索项目',
+}
+
+export const FEE_TYPE_TEXT: Record<string, string> = {
+  GOV: '官费',
+  SERVICE: '服务费',
+  MISC: '其他',
+  APPLY_FEE: '申请费',
+  OA_FEE: '审查意见费',
+  GRANT_FEE: '授权费',
+  ANNUITY_FEE: '年费',
+  INVALID_FEE: '无效费',
+  CONSULT_FEE: '顾问费',
+  SEARCH_FEE: '检索费',
+}
+
 export const TASK_STATUS_TEXT: Record<string, string> = {
   OPEN: '待处理',
   PENDING: '待处理',
@@ -87,6 +119,24 @@ export function getBillStatusText(status?: string): string {
 export function getFeeDraftStatusText(status?: string): string {
   if (!status) return '-'
   return FEE_DRAFT_STATUS_TEXT[status] || status
+}
+
+export function getFeeDraftTypeText(type?: string | null): string {
+  if (!type) return '-'
+  const key = type.toUpperCase()
+  return FEE_DRAFT_TYPE_TEXT[key] || type
+}
+
+export function getCaseTypeText(type?: string | null): string {
+  if (!type) return '-'
+  const key = type.toUpperCase()
+  return CASE_TYPE_TEXT[key] || type
+}
+
+export function getFeeTypeText(type?: string | null): string {
+  if (!type) return '-'
+  const key = type.toUpperCase()
+  return FEE_TYPE_TEXT[key] || type
 }
 
 export function getTaskStatusText(status?: string): string {

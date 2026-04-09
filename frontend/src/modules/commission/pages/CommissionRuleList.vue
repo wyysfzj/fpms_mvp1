@@ -57,16 +57,16 @@
 
     <div v-else class="page-table">
       <el-table :data="rules" aria-label="提成规则列表" stripe size="small" class="compact-table">
-        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="rule_name" label="规则名称" min-width="180" />
         <el-table-column prop="case_type" label="案件类型" min-width="120">
           <template #default="{ row }">
-            {{ row.case_type || '—' }}
+            {{ getCaseTypeText(row.case_type) }}
           </template>
         </el-table-column>
         <el-table-column prop="fee_type" label="费用类型" min-width="120">
           <template #default="{ row }">
-            {{ row.fee_type || '—' }}
+            {{ getFeeTypeText(row.fee_type) }}
           </template>
         </el-table-column>
         <el-table-column prop="s1_rate" label="S1 比例" width="110" align="right">
@@ -258,6 +258,7 @@ import type {
   CommissionRuleUpdatePayload,
 } from '../../../api/commission.types'
 import type { ApiError } from '../../../api/types'
+import { getCaseTypeText, getFeeTypeText } from '../../../constants/displayText'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'

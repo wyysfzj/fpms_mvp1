@@ -9,11 +9,15 @@
       <p>暂无费用记录</p>
     </div>
     <el-table v-else :data="items" stripe style="width: 100%">
-      <el-table-column prop="draft_type" label="草稿类型" width="120" />
+      <el-table-column label="草稿类型" width="120">
+        <template #default="{ row }">
+          {{ getFeeDraftTypeText(row.draft_type) }}
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.status === 'LOCKED' ? 'danger' : 'success'" size="small">
-            {{ row.status }}
+            {{ getFeeDraftStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -32,6 +36,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getFeeDrafts } from '../../../api/fees'
 import type { FeeDraftListItem } from '../../../api/fees.types'
+import { getFeeDraftStatusText, getFeeDraftTypeText } from '../../../constants/displayText'
 
 const props = defineProps<{
   caseId: string

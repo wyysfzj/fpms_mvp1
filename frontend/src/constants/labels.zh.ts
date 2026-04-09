@@ -91,6 +91,9 @@ export const ZH = {
         total: '共 {n} 条',
         goBack: '返回',
         noContent: '暂无内容',
+        recordId: '编号',
+        userRecordId: '用户编号',
+        departmentRecordId: '部门编号',
     },
     detail: {
         back: '返回',
