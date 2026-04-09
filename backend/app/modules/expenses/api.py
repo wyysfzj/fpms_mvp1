@@ -18,6 +18,7 @@ router = APIRouter()
 
 class ExpenseCreateIn(BaseModel):
     case_id: str
+    department_id: str | None = None
     worker_id: str | None = None
     category: str
     expense_date: date
@@ -34,6 +35,7 @@ class ExpenseOut(BaseModel):
     id: int
     expense_no: str | None
     case_id: str | None
+    department_id: str | None
     worker_id: str | None
     category: str
     expense_date: date | None
@@ -51,6 +53,7 @@ class ExpenseOut(BaseModel):
 )
 def get_expenses(
     case_id: str | None = Query(default=None),
+    department_id: str | None = Query(default=None),
     worker_id: str | None = Query(default=None),
     category: str | None = Query(default=None),
     date_from: date | None = Query(default=None),
@@ -67,6 +70,7 @@ def get_expenses(
     items, total, stats = list_expenses(
         db,
         case_id=case_id,
+        department_id=department_id,
         worker_id=worker_id,
         category=category,
         date_from=date_from,
@@ -85,6 +89,7 @@ def get_expenses(
                 "id": expense.id,
                 "expense_no": expense.expense_no,
                 "case_id": expense.case_id,
+                "department_id": expense.department_id,
                 "worker_id": expense.worker_id,
                 "category": expense.category,
                 "expense_date": expense.expense_date,
@@ -121,6 +126,7 @@ def post_expense(
     expense = create_expense(
         db,
         case_id=payload.case_id,
+        department_id=payload.department_id,
         worker_id=payload.worker_id,
         category=payload.category,
         expense_date=payload.expense_date,
@@ -137,6 +143,7 @@ def post_expense(
         "id": expense.id,
         "expense_no": expense.expense_no,
         "case_id": expense.case_id,
+        "department_id": expense.department_id,
         "worker_id": expense.worker_id,
         "category": expense.category,
         "expense_date": expense.expense_date,

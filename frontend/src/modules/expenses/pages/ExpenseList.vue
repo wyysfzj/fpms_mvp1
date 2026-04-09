@@ -24,6 +24,15 @@
       </el-col>
       <el-col :xs="24" :sm="12" :md="6" :lg="5">
         <el-input
+          v-model.trim="filterDepartmentId"
+          aria-label="部门筛选"
+          placeholder="部门ID"
+          clearable
+          @keyup.enter="handleSearch"
+        />
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="6" :lg="5">
+        <el-input
           v-model.trim="filterWorkerId"
           aria-label="经手人筛选"
           placeholder="经手人用户ID"
@@ -31,7 +40,7 @@
           @keyup.enter="handleSearch"
         />
       </el-col>
-      <el-col :xs="24" :sm="12" :md="6" :lg="5">
+      <el-col :xs="24" :sm="12" :md="5" :lg="4">
         <el-select
           v-model="filterCategory"
           aria-label="支出类别筛选"
@@ -47,7 +56,7 @@
           />
         </el-select>
       </el-col>
-      <el-col :xs="24" :sm="24" :md="7" :lg="6">
+      <el-col :xs="24" :sm="24" :md="7" :lg="5">
         <el-date-picker
           v-model="filterDateRange"
           aria-label="支出日期范围筛选"
@@ -61,7 +70,7 @@
           clearable
         />
       </el-col>
-      <el-col :xs="24" :sm="24" :md="5" :lg="8" class="filter-actions">
+      <el-col :xs="24" :sm="24" :md="24" :lg="4" class="filter-actions">
         <el-button type="primary" aria-label="查询支出记录" @click="handleSearch">查询</el-button>
         <el-button aria-label="重置支出筛选" @click="handleReset">重置</el-button>
       </el-col>
@@ -86,7 +95,7 @@
       </div>
     </div>
 
-    <div v-if="stats && (caseStats.length || clientStats.length)" class="grouped-summary-grid">
+    <div v-if="stats && (caseStats.length || clientStats.length || departmentStats.length)" class="grouped-summary-grid">
       <section class="grouped-summary-card">
         <div class="grouped-summary-header">
           <h3>每案总支出</h3>
@@ -117,6 +126,28 @@
         <div v-if="clientStats.length" class="grouped-summary-list">
           <div
             v-for="item in clientStats"
+            :key="item.key"
+            class="grouped-summary-item"
+          >
+            <div class="grouped-summary-main">
+              <span class="grouped-summary-title">{{ item.label }}</span>
+              <span class="grouped-summary-sub">支出 {{ item.expense_count }} 笔</span>
+            </div>
+            <div class="grouped-summary-amounts mono-num">
+              {{ formatAmount(item.total_amount, 'CNY') }}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="grouped-summary-card">
+        <div class="grouped-summary-header">
+          <h3>每部门支出</h3>
+          <span>{{ departmentStats.length }} 组</span>
+        </div>
+        <div v-if="departmentStats.length" class="grouped-summary-list">
+          <div
+            v-for="item in departmentStats"
             :key="item.key"
             class="grouped-summary-item"
           >
@@ -187,6 +218,11 @@
         <el-table-column prop="worker_id" label="经手人" min-width="180">
           <template #default="{ row }">
             <span class="mono-num">{{ row.worker_id || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="department_id" label="部门" min-width="180">
+          <template #default="{ row }">
+            <span class="mono-num">{{ row.department_id || '—' }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="category" label="类别" width="140">
@@ -305,6 +341,9 @@ const total = ref(0)
 const stats = ref<ExpenseStats | null>(null)
 
 const filterCaseId = ref(typeof route.query.case_id === 'string' ? route.query.case_id : '')
+const filterDepartmentId = ref(
+  typeof route.query.department_id === 'string' ? route.query.department_id : '',
+)
 const filterWorkerId = ref(typeof route.query.worker_id === 'string' ? route.query.worker_id : '')
 const filterCategory = ref<ExpenseCategory | ''>('')
 const filterDateRange = ref<string[]>([])
@@ -334,6 +373,9 @@ function mapGroupedStats(rows: ExpenseGroupedStat[] | undefined): GroupedStatVie
 
 const caseStats = computed<GroupedStatView[]>(() => mapGroupedStats(stats.value?.case_amounts))
 const clientStats = computed<GroupedStatView[]>(() => mapGroupedStats(stats.value?.client_amounts))
+const departmentStats = computed<GroupedStatView[]>(() =>
+  mapGroupedStats(stats.value?.department_amounts),
+)
 const grossProfitStats = computed<GrossProfitStatView[]>(() =>
   (stats.value?.gross_profit_amounts || []).map((row: ExpenseGrossProfitStat) => ({
     key: row.key,
@@ -380,6 +422,7 @@ function handleSearch() {
 
 function handleReset() {
   filterCaseId.value = ''
+  filterDepartmentId.value = ''
   filterWorkerId.value = ''
   filterCategory.value = ''
   filterDateRange.value = []
@@ -404,6 +447,7 @@ async function fetchExpenses() {
     const [dateFrom, dateTo] = filterDateRange.value
     const result = await getExpenses({
       case_id: filterCaseId.value || undefined,
+      department_id: filterDepartmentId.value || undefined,
       worker_id: filterWorkerId.value || undefined,
       category: filterCategory.value || undefined,
       date_from: dateFrom || undefined,

@@ -444,10 +444,18 @@ Each review item was re-evaluated against:
   - commission settlement report:
     - [commission/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/commission/api.py)
     - [CommissionSettlement.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/commission/pages/CommissionSettlement.vue)
+  - expense statistics and master-data carrier closure:
+    - [expenses/service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/expenses/service.py)
+    - [ExpenseCreate.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/expenses/pages/ExpenseCreate.vue)
+    - [ExpenseList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/expenses/pages/ExpenseList.vue)
+    - [departments/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/masterdata/departments/api.py)
+    - [DepartmentList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/masterdata/departments/pages/DepartmentList.vue)
+    - [test_expense_stats_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_expense_stats_api.py)
+    - [test_department_master_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_department_master_api.py)
 - **Committed-state Conclusion**: Closed
 - **Workspace-state Conclusion**: Closed
 - **Status**: `Closed`
-- **Why**: strict report-family ledger exists, and all named residuals that kept `RPT-CASE` / `RPT-FEE` / `RPT-ANN` open have now landed as real product behavior on the existing case, fee, and annuity report pages. The final `RPT-CASE` trend blocker is no longer prerequisite-blocked because terminal-event date carriers and year/month trend reporting are both implemented.
+- **Why**: strict report-family ledger exists, and all named residuals that kept `RPT-CASE` / `RPT-FEE` / `RPT-ANN` open have now landed as real product behavior on the existing case, fee, annuity, commission, and expense report paths. Expense statistics no longer retain worker/department carrier gaps because both lanes now have real schema-backed backend and frontend behavior.
 - **Residual Gap**: `None`
 - **Risk**: `Low`
 

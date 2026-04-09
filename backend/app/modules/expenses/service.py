@@ -13,6 +13,7 @@ from app.modules.billing.models import CaseReceipt
 from app.modules.cases.models import Case
 from app.modules.expenses.models import Expense
 from app.modules.masterdata.clients.models import Client
+from app.modules.masterdata.departments.models import Department
 
 _ALLOWED_CATEGORIES = {"SEARCH_DB", "TRANSLATION", "TRANSPORT", "OTHER"}
 _DEFAULT_CURRENCY = "CNY"
@@ -60,6 +61,7 @@ def _quantize_money(value: Decimal) -> Decimal:
 def _build_expense_filters(
     *,
     case_id: str | None = None,
+    department_id: str | None = None,
     worker_id: str | None = None,
     category: str | None = None,
     date_from: date | None = None,
@@ -80,6 +82,10 @@ def _build_expense_filters(
     normalized_case_id = _normalize_optional_text(case_id)
     if normalized_case_id:
         filters.append(Expense.case_id == normalized_case_id)
+
+    normalized_department_id = _normalize_optional_text(department_id)
+    if normalized_department_id:
+        filters.append(Expense.department_id == normalized_department_id)
 
     normalized_worker_id = _normalize_optional_text(worker_id)
     if normalized_worker_id:
@@ -129,6 +135,7 @@ def list_expenses(
     db: Session,
     *,
     case_id: str | None = None,
+    department_id: str | None = None,
     worker_id: str | None = None,
     category: str | None = None,
     date_from: date | None = None,
@@ -142,6 +149,7 @@ def list_expenses(
 ) -> tuple[list[Expense], int, dict[str, Any] | None]:
     filters = _build_expense_filters(
         case_id=case_id,
+        department_id=department_id,
         worker_id=worker_id,
         category=category,
         date_from=date_from,
@@ -197,6 +205,7 @@ def list_expenses(
             Expense.currency,
             Case.case_no,
             Case.client_id,
+            Expense.department_id,
         )
         .select_from(Expense)
         .outerjoin(Case, Case.id == Expense.case_id)
@@ -205,7 +214,7 @@ def list_expenses(
 
     client_ids = {
         str(expense_client_id or case_client_id)
-        for _, expense_client_id, _, _, _, case_client_id in stats_rows
+        for _, expense_client_id, _, _, _, case_client_id, _ in stats_rows
         if expense_client_id or case_client_id
     }
     client_name_map: dict[str, str] = {}
@@ -215,8 +224,24 @@ def list_expenses(
         ).all()
         client_name_map = {str(client_id): str(name_cn) for client_id, name_cn in clients}
 
+    department_ids = {
+        str(department_id_value)
+        for *_, department_id_value in stats_rows
+        if department_id_value
+    }
+    department_name_map: dict[str, str] = {}
+    if department_ids:
+        departments = db.execute(
+            select(Department.id, Department.name_cn).where(Department.id.in_(department_ids))
+        ).all()
+        department_name_map = {
+            str(department_id_value): str(name_cn)
+            for department_id_value, name_cn in departments
+        }
+
     case_amounts_map: dict[str, dict[str, Any]] = {}
     client_amounts_map: dict[str, dict[str, Any]] = {}
+    department_amounts_map: dict[str, dict[str, Any]] = {}
     for (
         case_id_value,
         expense_client_id,
@@ -224,6 +249,7 @@ def list_expenses(
         _expense_currency,
         case_no_value,
         case_client_id,
+        department_id_value,
     ) in stats_rows:
         amount_decimal = _quantize_money(_to_decimal(amount_value, "amount"))
 
@@ -267,12 +293,37 @@ def list_expenses(
         client_row["expense_count"] += 1
         client_row["total_amount"] = _quantize_money(client_row["total_amount"] + amount_decimal)
 
+        resolved_department_id = (str(department_id_value) if department_id_value else "").strip()
+        department_key = resolved_department_id or "UNASSIGNED"
+        department_label = (
+            department_name_map.get(resolved_department_id)
+            if resolved_department_id
+            else None
+        ) or resolved_department_id or "未分配部门"
+        department_row = department_amounts_map.setdefault(
+            department_key,
+            {
+                "key": department_key,
+                "label": department_label,
+                "expense_count": 0,
+                "total_amount": Decimal("0.00"),
+            },
+        )
+        department_row["expense_count"] += 1
+        department_row["total_amount"] = _quantize_money(
+            department_row["total_amount"] + amount_decimal
+        )
+
     case_amounts = sorted(
         case_amounts_map.values(),
         key=lambda item: (str(item["label"]), str(item["key"])),
     )
     client_amounts = sorted(
         client_amounts_map.values(),
+        key=lambda item: (str(item["label"]), str(item["key"])),
+    )
+    department_amounts = sorted(
+        department_amounts_map.values(),
         key=lambda item: (str(item["label"]), str(item["key"])),
     )
 
@@ -298,6 +349,7 @@ def list_expenses(
         expense_currency,
         case_no_value,
         _case_client_id,
+        _department_id_value,
     ) in stats_rows:
         if not case_id_value:
             continue
@@ -353,6 +405,7 @@ def list_expenses(
         "sum_total": _quantize_money(sum_total),
         "case_amounts": case_amounts,
         "client_amounts": client_amounts,
+        "department_amounts": department_amounts,
         "gross_profit_amounts": gross_profit_amounts,
     }
     return items, total, stats
@@ -362,6 +415,7 @@ def create_expense(
     db: Session,
     *,
     case_id: str | None,
+    department_id: str | None = None,
     worker_id: str | None = None,
     category: str | None,
     expense_date: date | None,
@@ -421,10 +475,22 @@ def create_expense(
 
     normalized_currency = (_normalize_optional_text(currency) or _DEFAULT_CURRENCY).upper()
     normalized_client_id = _normalize_optional_text(client_id)
+    normalized_department_id = _normalize_optional_text(department_id)
     normalized_worker_id = _normalize_optional_text(worker_id)
     normalized_vendor_name = _normalize_optional_text(vendor_name)
     normalized_remark = _normalize_optional_text(remark)
     normalized_expense_no = _normalize_optional_text(expense_no)
+
+    if normalized_department_id:
+        department_exists = db.execute(
+            select(Department.id).where(Department.id == normalized_department_id)
+        ).scalar_one_or_none()
+        if not department_exists:
+            raise_business_error(
+                "DEPARTMENT_NOT_FOUND",
+                "Department not found",
+                status_code=404,
+            )
 
     if normalized_worker_id:
         worker_exists = db.execute(
@@ -440,6 +506,7 @@ def create_expense(
     expense = Expense(
         case_id=normalized_case_id,
         client_id=normalized_client_id,
+        department_id=normalized_department_id,
         worker_id=normalized_worker_id,
         expense_no=normalized_expense_no,
         category=normalized_category,

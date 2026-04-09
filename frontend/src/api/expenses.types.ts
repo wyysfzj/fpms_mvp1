@@ -6,6 +6,7 @@ export interface ExpenseItem {
     id: number
     expense_no: string | null
     case_id: string | null
+    department_id: string | null
     worker_id: string | null
     category: ExpenseCategory | string
     expense_date: string | null
@@ -40,6 +41,7 @@ export interface ExpenseStats {
     sum_total: number
     case_amounts?: ExpenseGroupedStat[]
     client_amounts?: ExpenseGroupedStat[]
+    department_amounts?: ExpenseGroupedStat[]
     gross_profit_amounts?: ExpenseGrossProfitStat[]
 }
 
@@ -49,6 +51,7 @@ export interface ExpenseListResponse extends Pagination<ExpenseItem> {
 
 export interface ExpenseListParams {
     case_id?: string
+    department_id?: string
     worker_id?: string
     category?: ExpenseCategory | string
     date_from?: string
@@ -63,6 +66,7 @@ export interface ExpenseListParams {
 
 export interface ExpenseCreatePayload {
     case_id: string
+    department_id?: string
     worker_id?: string
     category: ExpenseCategory
     expense_date: string

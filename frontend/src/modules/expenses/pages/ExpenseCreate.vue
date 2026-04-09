@@ -139,6 +139,22 @@
 
           <el-col :xs="24" :md="12">
             <el-form-item
+              label="部门ID（可选）"
+              prop="department_id"
+              :error="fieldErrors.get('department_id')?.join('，')"
+            >
+              <el-input
+                v-model.trim="form.department_id"
+                placeholder="请输入部门ID"
+              />
+              <div class="field-hint">留空则本条支出暂不参与部门统计。</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="12">
+            <el-form-item
               label="经手人用户ID（可选）"
               prop="worker_id"
               :error="fieldErrors.get('worker_id')?.join('，')"
@@ -233,6 +249,7 @@ const form = reactive({
   currency: 'CNY',
   tax_amount: undefined as number | undefined,
   expense_no: '',
+  department_id: '',
   worker_id: '',
   vendor_name: '',
   remark: '',
@@ -277,6 +294,7 @@ async function handleSubmit() {
   try {
     const created = await createExpense({
       case_id: form.case_id,
+      ...(form.department_id ? { department_id: form.department_id } : {}),
       ...(form.worker_id ? { worker_id: form.worker_id } : {}),
       category: form.category,
       expense_date: form.expense_date,

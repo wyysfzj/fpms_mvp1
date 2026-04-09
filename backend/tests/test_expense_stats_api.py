@@ -12,6 +12,7 @@ from app.modules.billing.models import CaseReceipt
 from app.modules.cases.models import Case
 from app.modules.expenses.models import Expense
 from app.modules.masterdata.clients.models import Client
+from app.modules.masterdata.departments.models import Department
 
 
 def test_expense_stats_include_case_and_client_groupings(
@@ -413,3 +414,144 @@ def test_create_expense_rejects_unknown_worker(
 
     assert response.status_code == 404, response.text
     assert response.json()["error"]["code"] == "WORKER_NOT_FOUND"
+
+
+def test_expense_stats_support_department_filter_and_grouping(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    suffix = uuid4().hex[:8].upper()
+    case_id = str(uuid4())
+    client_id = str(uuid4())
+    department_a_id = str(uuid4())
+    department_b_id = str(uuid4())
+
+    with session_factory() as db:
+        db.add_all(
+            [
+                Department(
+                    id=department_a_id,
+                    department_code=f"DEPT-A-{suffix}",
+                    name_cn="部门甲",
+                    is_active=True,
+                ),
+                Department(
+                    id=department_b_id,
+                    department_code=f"DEPT-B-{suffix}",
+                    name_cn="部门乙",
+                    is_active=True,
+                ),
+                Client(
+                    id=client_id,
+                    client_code=f"CLIENT-D-{suffix}",
+                    name_cn="部门客户",
+                    client_type="CLIENT",
+                    default_currency="CNY",
+                    is_active=True,
+                ),
+            ]
+        )
+        db.commit()
+        db.add(
+            Case(
+                id=case_id,
+                case_no=f"CASE-D-{suffix}",
+                client_id=client_id,
+                title_cn="部门案件",
+            )
+        )
+        db.commit()
+
+    create_response = client.post(
+        "/api/v1/expenses",
+        headers=auth_headers,
+        json={
+            "case_id": case_id,
+            "department_id": department_a_id,
+            "category": "TRANSLATION",
+            "expense_date": "2026-04-09",
+            "amount": 88,
+            "currency": "CNY",
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    created = create_response.json()
+    assert created["department_id"] == department_a_id
+
+    with session_factory() as db:
+        db.add(
+            Expense(
+                case_id=case_id,
+                client_id=client_id,
+                department_id=department_b_id,
+                expense_no=f"EXP-D2-{suffix}",
+                category="OTHER",
+                expense_date=date(2026, 4, 10),
+                currency="CNY",
+                amount=Decimal("12.00"),
+                status="DRAFT",
+            )
+        )
+        db.commit()
+
+    filter_response = client.get(
+        "/api/v1/expenses",
+        headers=auth_headers,
+        params={"include_stats": True, "department_id": department_a_id},
+    )
+
+    assert filter_response.status_code == 200, filter_response.text
+    payload = filter_response.json()
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["department_id"] == department_a_id
+    assert payload["stats"]["count_total"] == 1
+    assert payload["stats"]["department_amounts"][0]["label"] == "部门甲"
+    assert Decimal(payload["stats"]["department_amounts"][0]["total_amount"]) == Decimal("88.00")
+
+
+def test_create_expense_rejects_unknown_department(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    suffix = uuid4().hex[:8].upper()
+    case_id = str(uuid4())
+    client_id = str(uuid4())
+
+    with session_factory() as db:
+        db.add(
+            Client(
+                id=client_id,
+                client_code=f"CLIENT-DEPTMISS-{suffix}",
+                name_cn="缺失部门客户",
+                client_type="CLIENT",
+                default_currency="CNY",
+                is_active=True,
+            )
+        )
+        db.commit()
+        db.add(
+            Case(
+                id=case_id,
+                case_no=f"CASE-DEPTMISS-{suffix}",
+                client_id=client_id,
+                title_cn="缺失部门案件",
+            )
+        )
+        db.commit()
+
+    response = client.post(
+        "/api/v1/expenses",
+        headers=auth_headers,
+        json={
+            "case_id": case_id,
+            "department_id": str(uuid4()),
+            "category": "TRANSPORT",
+            "expense_date": "2026-04-09",
+            "amount": 20,
+        },
+    )
+
+    assert response.status_code == 404, response.text
+    assert response.json()["error"]["code"] == "DEPARTMENT_NOT_FOUND"

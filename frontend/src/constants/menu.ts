@@ -95,6 +95,13 @@ export const MENU_GROUPS: MenuGroup[] = [
         label: '系统设置',
         children: [
             { key: 'settings', label: '系统配置', icon: '⚙️', route: '/system/params', requiredPerms: [Perms.SETTINGS_READ] },
+            {
+                key: 'settings_masterdata_departments',
+                label: '部门主数据',
+                icon: '🏢',
+                route: '/settings/masterdata/departments',
+                requiredPerms: ['Department.Read'],
+            },
             { key: 'task_templates', label: '任务模板', icon: '📋', route: '/system/task-templates', requiredPerms: [Perms.SETTINGS_READ] },
             { key: 'doc_templates', label: '文件模板', icon: '📄', route: '/system/doc-templates', requiredPerms: [Perms.SETTINGS_READ] },
         ],

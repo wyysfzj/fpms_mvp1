@@ -17,6 +17,7 @@ from app.modules.grant_fees.api import router as grant_fees_router
 from app.modules.masterdata.applicants.api import router as applicants_router
 from app.modules.masterdata.clients.api import router as clients_router
 from app.modules.masterdata.countries.api import router as countries_router
+from app.modules.masterdata.departments.api import router as departments_router
 from app.modules.system.api import router as system_router
 from app.modules.tasks.api import router as tasks_router
 from app.modules.templates.api import router as templates_router
@@ -29,6 +30,7 @@ api_router.include_router(templates_router, tags=["Templates"])
 api_router.include_router(applicants_router, tags=["Applicants"])
 api_router.include_router(clients_router, tags=["Clients"])
 api_router.include_router(countries_router, tags=["Countries"])
+api_router.include_router(departments_router, tags=["Departments"])
 api_router.include_router(case_router, tags=["Cases"])
 api_router.include_router(documents_router, tags=["Documents"])
 api_router.include_router(tasks_router, tags=["Tasks"])

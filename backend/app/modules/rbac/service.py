@@ -44,6 +44,8 @@ ROLE_PERMISSIONS = {
         "Client.Read",
         "ConsultingCase.Create",
         "ConsultingFeeDraft.Create",
+        "Department.Read",
+        "Department.Write",
         "Doc.Attach",
         "Doc.Create",
         "Doc.Edit",

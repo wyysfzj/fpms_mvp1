@@ -19,6 +19,9 @@ class Expense(Base):
     client_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("t_client.id", ondelete="SET NULL"), nullable=True
     )
+    department_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_department.id", ondelete="SET NULL"), nullable=True
+    )
     worker_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("t_user.id", ondelete="SET NULL"), nullable=True
     )

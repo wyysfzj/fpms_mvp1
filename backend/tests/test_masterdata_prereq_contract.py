@@ -92,7 +92,14 @@ def test_masterdata_permission_namespaces_are_frozen(session_factory) -> None:
             ).all()
         }
 
-    assert {"Applicant.Read", "Applicant.Write", "Country.Read", "Country.Write"}.issubset(
+    assert {
+        "Applicant.Read",
+        "Applicant.Write",
+        "Country.Read",
+        "Country.Write",
+        "Department.Read",
+        "Department.Write",
+    }.issubset(
         perm_codes
     )
     assert "Applicant.Create" not in perm_codes
@@ -101,3 +108,6 @@ def test_masterdata_permission_namespaces_are_frozen(session_factory) -> None:
     assert "Country.Create" not in perm_codes
     assert "Country.Edit" not in perm_codes
     assert "Country.Action" not in perm_codes
+    assert "Department.Create" not in perm_codes
+    assert "Department.Edit" not in perm_codes
+    assert "Department.Action" not in perm_codes

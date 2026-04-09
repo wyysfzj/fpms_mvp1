@@ -1,7 +1,7 @@
 # FPMS SPEC 2.0 Final Audit Ledger
 
 Date: 2026-04-06  
-Truth Refresh: 2026-04-07  
+Truth Refresh: 2026-04-09  
 Scope rule: exclude document-generation capability itself
 
 ## 1. Audit Method Freeze
@@ -43,10 +43,10 @@ Adjacent but independently verifiable business behavior is still in scope:
 
 ## 2. Overall Conclusion
 
-The repo is close to full `SPEC 2.0` coverage, but excluding document generation itself, there are still a small number of real residual gaps.
+The repo now reaches full `SPEC 2.0` coverage except for document-generation-only closures that were intentionally excluded from this ledger.
 
 Current high-confidence residuals:
-1. Expense management statistics still do not fully reach the remaining `5.10.2` aggregation scope.
+- None.
 
 No additional item currently requires `Needs Reclassification`.
 
@@ -148,7 +148,7 @@ Excluded by scope:
 
 ### 3.4 Module 4: Fee Management
 
-Status: `Partially Implemented`
+Status: `Closed`
 
 Closed slices:
 - fee rate maintenance
@@ -157,6 +157,12 @@ Closed slices:
 - annuity management
 - case receipt registration
 - expense creation/listing
+- expense statistics:
+  - per-case totals
+  - per-client totals
+  - per-department totals
+  - worker-level filtering
+  - first-round case-level same-currency gross-profit aggregation
 - fee reports already implemented in current workspace
 
 Evidence:
@@ -167,41 +173,19 @@ Evidence:
 - [AnnuityTaskList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/annuity/pages/AnnuityTaskList.vue)
 - [ExpenseCreate.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/expenses/pages/ExpenseCreate.vue)
 - [ExpenseList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/expenses/pages/ExpenseList.vue)
+- [departments/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/masterdata/departments/api.py)
+- [DepartmentList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/masterdata/departments/pages/DepartmentList.vue)
 - [api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/fees/api.py)
 - [api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/annuity/api.py)
 - [api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/grant_fees/api.py)
 - [api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/expenses/api.py)
-
-Residual gap A:
-- `5.10.2` requires:
-  - per-case expense total
-  - per-client / per-department expense totals
-  - profitability-ready aggregation
-- Current product now truthfully covers:
-  - per-case expense totals
-  - per-client expense totals
-  - first-round case-level same-currency gross-profit aggregation
-- Remaining truthful residuals are:
-  - worker-level filtering is carrier-blocked under current schema
-  - per-department expense totals are carrier-blocked under current schema
-- Current truthful state:
-  - there is no immediate implementation lane left on current schema
-  - further progress requires future carrier/schema authority before new product slices can exist
-
-Gap evidence:
-- [ExpenseList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/expenses/pages/ExpenseList.vue)
 - [service.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/expenses/service.py)
 - [expenses.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/expenses.ts)
 - [expenses.types.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/expenses.types.ts)
 - [test_expense_stats_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_expense_stats_api.py)
+- [test_department_master_api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/tests/test_department_master_api.py)
 
-Residual gap B:
-- `5.11` dual-pane fee overview is now closed in current workspace-state:
-  - upper pane `T_GovPayment`
-  - lower pane `T_CaseReceipt`
-  - truthful upper-pane `fee_type` filter
-
-Close evidence:
+Additional close evidence for `5.11` dual-pane fee overview:
 - [FeeUnifiedQuery.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/billing/pages/FeeUnifiedQuery.vue)
 - [billing.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/billing.ts)
 - [billing.types.ts](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/api/billing.types.ts)
@@ -273,10 +257,7 @@ Evidence:
 
 ### 3.8 Module 8: Settings, Search & Reports Overview
 
-Status: `Partially Implemented`
-
-Reason:
-- The module-level residuals are inherited from the still-open search/report slices above.
+Status: `Closed`
 
 Closed slices:
 - master data pages
@@ -290,14 +271,13 @@ Evidence:
 - [DocTemplateList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/system/pages/DocTemplateList.vue)
 - [TaskTemplateList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/system/pages/TaskTemplateList.vue)
 - [SystemParams.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/system/pages/SystemParams.vue)
-
-Residuals carried from other modules:
-- expense statistics carrier-blocked gap
+- [DepartmentList.vue](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/frontend/src/modules/masterdata/departments/pages/DepartmentList.vue)
+- [departments/api.py](/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/app/modules/masterdata/departments/api.py)
 
 ## 4. Remaining Gap List (excluding document generation)
 
 High-confidence real residuals:
-1. Expense statistics still retain worker / department residuals under `5.10.2`, but they are now explicitly carrier-blocked rather than implementation-ready.
+- None.
 
 ## 5. Excluded by Scope
 
@@ -313,7 +293,4 @@ None currently identified.
 
 ## 7. Final Judgment
 
-The workspace is close to full `SPEC 2.0` parity, but excluding document generation itself, it is not yet honest to claim “everything else is fully complete”.
-
-The remaining non-document-generation gaps are concentrated in:
-- carrier-blocked statistics semantics
+Excluding document-generation-only closures, it is now honest to claim the workspace has reached full `SPEC 2.0` parity.

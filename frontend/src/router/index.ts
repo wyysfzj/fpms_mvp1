@@ -35,6 +35,11 @@ const routes = [
         name: 'settings_masterdata_countries',
         component: () => import('../modules/settings/pages/CountryList.vue'),
       },
+      {
+        path: 'settings/masterdata/departments',
+        name: 'settings_masterdata_departments',
+        component: () => import('../modules/masterdata/departments/pages/DepartmentList.vue'),
+      },
 
       // Documents
       { path: 'documents', name: 'documents', component: () => import('../modules/documents/pages/DocumentList.vue') },

@@ -18,6 +18,7 @@ interface BackendExpenseItem {
     id: number
     expense_no: string | null
     case_id: string | null
+    department_id: string | null
     worker_id: string | null
     category: string
     expense_date: string | null
@@ -36,6 +37,7 @@ interface BackendExpenseStats {
     sum_total: number | string
     case_amounts?: BackendExpenseGroupedStat[]
     client_amounts?: BackendExpenseGroupedStat[]
+    department_amounts?: BackendExpenseGroupedStat[]
     gross_profit_amounts?: BackendExpenseGrossProfitStat[]
 }
 
@@ -84,6 +86,7 @@ function mapExpenseItem(input: BackendExpenseItem): ExpenseItem {
         id: input.id,
         expense_no: input.expense_no,
         case_id: input.case_id,
+        department_id: input.department_id,
         worker_id: input.worker_id,
         category: input.category,
         expense_date: input.expense_date,
@@ -132,6 +135,7 @@ function mapExpenseStats(input: BackendExpenseStats): ExpenseStats {
         sum_total: asNumber(input.sum_total),
         case_amounts: mapGroupedStats(input.case_amounts),
         client_amounts: mapGroupedStats(input.client_amounts),
+        department_amounts: mapGroupedStats(input.department_amounts),
         gross_profit_amounts: mapGrossProfitStats(input.gross_profit_amounts),
     }
 }
@@ -151,6 +155,10 @@ function resolveExpenseErrorMessage(error: ApiError, action: ExpenseApiAction): 
 
     if (code === 'CASE_NOT_FOUND') {
         return '关联案件或项目不存在，请确认后重试。'
+    }
+
+    if (code === 'DEPARTMENT_NOT_FOUND') {
+        return '关联部门不存在，请确认后重试。'
     }
 
     if (code === 'EXPENSE_INVALID') {
@@ -193,6 +201,9 @@ function buildExpenseListQuery(params: ExpenseListParams): Record<string, unknow
     const caseId = params.case_id?.trim()
     if (caseId) query.case_id = caseId
 
+    const departmentId = params.department_id?.trim()
+    if (departmentId) query.department_id = departmentId
+
     const workerId = params.worker_id?.trim()
     if (workerId) query.worker_id = workerId
 
@@ -220,6 +231,7 @@ function buildExpenseListQuery(params: ExpenseListParams): Record<string, unknow
 function toCreatePayload(payload: ExpenseCreatePayload): Record<string, unknown> {
     return {
         case_id: payload.case_id.trim(),
+        ...(payload.department_id?.trim() ? { department_id: payload.department_id.trim() } : {}),
         ...(payload.worker_id?.trim() ? { worker_id: payload.worker_id.trim() } : {}),
         category: payload.category,
         expense_date: payload.expense_date,
