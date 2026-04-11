@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_perm
+from app.core.security import get_password_hash
 from app.db.session import get_db
 from app.modules.auth.models import T_Role, T_User, T_UserRole
 from app.modules.rbac.service import seed_default_roles_perms
@@ -76,7 +77,7 @@ def create_admin_user(
                 detail=f"roles not found: {', '.join(missing)}",
             )
 
-    password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+    password_hash = get_password_hash(password)
     user = T_User(
         id=str(uuid4()),
         username=username,
