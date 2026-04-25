@@ -17,6 +17,14 @@ const routes = [
       { path: 'cases/:id/edit', name: 'case_edit', component: () => import('../modules/cases/pages/CaseEdit.vue') },
       { path: 'cases/:id', name: 'case_detail', component: () => import('../modules/cases/pages/CaseDetail.vue') },
 
+      // Reports
+      { path: 'reports', name: 'reports_home', component: () => import('../modules/reports/pages/ReportHome.vue') },
+      { path: 'reports/cases', name: 'case_report', component: () => import('../modules/reports/pages/CaseReport.vue') },
+      { path: 'reports/bills', name: 'bill_report', component: () => import('../modules/reports/pages/BillReport.vue') },
+      { path: 'reports/fee-drafts', name: 'fee_draft_report', component: () => import('../modules/reports/pages/FeeDraftReport.vue') },
+      { path: 'reports/annuity-tasks', name: 'annuity_report', component: () => import('../modules/reports/pages/AnnuityReport.vue') },
+      { path: 'reports/expenses', name: 'expense_report', component: () => import('../modules/reports/pages/ExpenseReport.vue') },
+
       // Clients
       { path: 'clients', name: 'clients', component: () => import('../modules/clients/pages/ClientList.vue') },
       { path: 'clients/new', name: 'client_new', component: () => import('../modules/clients/pages/ClientForm.vue') },

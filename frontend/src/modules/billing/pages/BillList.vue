@@ -9,6 +9,9 @@
         <router-link to="/billing/bills/new">
           <el-button type="primary">{{ ZH.billList.newBill }}</el-button>
         </router-link>
+        <router-link to="/reports/bills">
+          <el-button>账单统计</el-button>
+        </router-link>
       </div>
     </div>
 
@@ -112,68 +115,6 @@
         <el-button @click="resetFilters">重置</el-button>
       </el-form-item>
     </el-form>
-
-    <div class="report-summary">
-      <div class="summary-card">
-        <span class="summary-label">应收账单数</span>
-        <span class="summary-value">{{ summary.receivable_bill_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">应收余额</span>
-        <span class="summary-value mono-num">
-          {{ formatAmount(summary.receivable_amount, summaryCurrency) }}
-        </span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">逾期账单数</span>
-        <span class="summary-value">{{ summary.overdue_bill_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">逾期余额</span>
-        <span class="summary-value mono-num">
-          {{ formatAmount(summary.overdue_amount, summaryCurrency) }}
-        </span>
-      </div>
-    </div>
-
-    <div class="aging-summary">
-      <div
-        v-for="bucket in summary.aging_buckets"
-        :key="bucket.bucket"
-        class="aging-summary-card"
-      >
-        <span class="aging-summary-label">{{ agingBucketLabel(bucket.bucket) }}</span>
-        <span class="aging-summary-count">{{ bucket.bill_count }} 条</span>
-        <span class="aging-summary-amount mono-num">
-          {{ formatAmount(bucket.amount, summaryCurrency) }}
-        </span>
-      </div>
-    </div>
-
-    <div class="bad-debt-summary">
-      <div class="bad-debt-summary-card">
-        <span class="bad-debt-summary-label">坏账账单数</span>
-        <span class="bad-debt-summary-value">{{ summary.bad_debt_bill_count }} 条</span>
-      </div>
-      <div class="bad-debt-summary-card">
-        <span class="bad-debt-summary-label">坏账金额</span>
-        <span class="bad-debt-summary-value mono-num">
-          {{ formatAmount(summary.bad_debt_amount, summaryCurrency) }}
-        </span>
-      </div>
-      <div class="bad-debt-summary-card">
-        <span class="bad-debt-summary-label">累计回收金额</span>
-        <span class="bad-debt-summary-value mono-num">
-          {{ formatAmount(summary.total_recovered_amount, summaryCurrency) }}
-        </span>
-      </div>
-      <div class="bad-debt-summary-card">
-        <span class="bad-debt-summary-label">剩余坏账余额</span>
-        <span class="bad-debt-summary-value mono-num">
-          {{ formatAmount(summary.remaining_bad_debt_balance, summaryCurrency) }}
-        </span>
-      </div>
-    </div>
 
     <!-- Error State -->
     <div v-if="error" class="page-error">
@@ -287,7 +228,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getBills, printBill } from '../../../api/billing'
-import type { BillListItem, BillStatus, BillListResponse } from '../../../api/billing.types'
+import type { BillListItem, BillStatus } from '../../../api/billing.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
@@ -315,19 +256,7 @@ const filters = ref({
   is_bad_debt: '' as '' | 'true' | 'false',
   bad_debt_status: '',
 })
-const summary = ref<BillListResponse['summary']>({
-  receivable_bill_count: 0,
-  receivable_amount: 0,
-  overdue_bill_count: 0,
-  overdue_amount: 0,
-  bad_debt_bill_count: 0,
-  bad_debt_amount: 0,
-  total_recovered_amount: 0,
-  remaining_bad_debt_balance: 0,
-  aging_buckets: [],
-})
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
-const summaryCurrency = computed(() => bills.value[0]?.currency || 'CNY')
 
 function applyFilters() {
   page.value = 1
@@ -370,7 +299,6 @@ async function fetchBills() {
     })
     bills.value = result.items
     total.value = result.total
-    summary.value = result.summary
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -517,56 +445,4 @@ watch([page, pageSize], () => {
   color: var(--color-success);
 }
 
-.report-summary,
-.aging-summary,
-.bad-debt-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.summary-card,
-.aging-summary-card,
-.bad-debt-summary-card {
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 10px;
-  background: var(--el-bg-color);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.summary-label,
-.aging-summary-label,
-.bad-debt-summary-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.summary-value,
-.aging-summary-count,
-.aging-summary-amount,
-.bad-debt-summary-value {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-@media (max-width: 1200px) {
-  .report-summary,
-  .aging-summary,
-  .bad-debt-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .report-summary,
-  .aging-summary,
-  .bad-debt-summary {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

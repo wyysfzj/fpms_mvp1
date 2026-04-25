@@ -55,6 +55,52 @@ export const MENU_GROUPS: MenuGroup[] = [
         ],
     },
     {
+        key: 'reports',
+        label: '统计报表',
+        children: [
+            {
+                key: 'reports_home',
+                label: '报表总览',
+                icon: '📊',
+                route: '/reports',
+                requiredPerms: [
+                    Perms.CASES_READ,
+                    Perms.BILLING_READ,
+                    Perms.FEES_READ,
+                    Perms.PAY_LIST_READ,
+                    Perms.COMMISSION_REPORT_READ,
+                ],
+            },
+            { key: 'case_report', label: '案件统计', icon: '📈', route: '/reports/cases', requiredPerms: [Perms.CASES_READ] },
+            { key: 'annuity_report', label: '年费任务统计', icon: '⏱️', route: '/reports/annuity-tasks', requiredPerms: [Perms.TASKS_WRITE] },
+            { key: 'bill_report', label: '账单统计', icon: '🧾', route: '/reports/bills', requiredPerms: [Perms.BILLING_READ] },
+            { key: 'report_payments', label: '预收款管理报表', icon: '💳', route: '/billing/payments', requiredPerms: [Perms.BILLING_READ] },
+            { key: 'fee_draft_report', label: '费用草稿统计', icon: '💰', route: '/reports/fee-drafts', requiredPerms: [Perms.FEES_READ] },
+            { key: 'expense_report', label: '支出统计', icon: '📉', route: '/reports/expenses', requiredPerms: [Perms.FEES_WRITE] },
+            {
+                key: 'report_fee_unified_query',
+                label: '费用情况一览',
+                icon: '🔍',
+                route: '/billing/fee-unified-query',
+                requiredPerms: [Perms.PAY_LIST_READ, 'CaseReceipt.Read'],
+            },
+            {
+                key: 'report_commission_settlements',
+                label: '提成结算报表',
+                icon: '🧮',
+                route: '/commission/settlements',
+                requiredPerms: [Perms.COMMISSION_SETTLEMENT_CREATE, Perms.COMMISSION_REPORT_READ],
+            },
+            {
+                key: 'report_consulting_profitability',
+                label: '顾问收益视图',
+                icon: '📉',
+                route: '/consulting/profitability',
+                requiredPerms: [Perms.BILLING_WRITE, Perms.FEES_WRITE],
+            },
+        ],
+    },
+    {
         key: 'finance',
         label: '财务',
         children: [

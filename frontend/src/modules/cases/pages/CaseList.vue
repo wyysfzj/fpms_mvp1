@@ -16,6 +16,9 @@
         <router-link to="/cases/new">
           <el-button type="primary">{{ ZH.caseList.newCase }}</el-button>
         </router-link>
+        <router-link to="/reports/cases">
+          <el-button>案件统计</el-button>
+        </router-link>
       </div>
     </div>
 
@@ -154,170 +157,6 @@
       </el-row>
     </el-card>
 
-    <div class="report-summary">
-      <div class="summary-card">
-        <span class="summary-label">案件总数</span>
-        <span class="summary-value">{{ summary.total_case_count }} 件</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">状态分布</span>
-        <span class="summary-value">{{ summary.status_counts.length }} 类</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">类型分布</span>
-        <span class="summary-value">{{ summary.case_type_counts.length }} 类</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">客户分布</span>
-        <span class="summary-value">{{ summary.client_counts.length }} 户</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">国别分布</span>
-        <span class="summary-value">{{ summary.country_counts.length }} 类</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">代理人分布</span>
-        <span class="summary-value">{{ summary.agent_counts.length }} 人</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">授权数量</span>
-        <span class="summary-value">{{ summary.granted_count }} 件</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">授权率</span>
-        <span class="summary-value">{{ formatGrantRate(summary.grant_rate) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">终止数量</span>
-        <span class="summary-value">{{ summary.terminated_count }} 件</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">无效数量</span>
-        <span class="summary-value">{{ summary.invalidated_count }} 件</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">审中数量</span>
-        <span class="summary-value">{{ summary.in_prosecution_count }} 件</span>
-      </div>
-    </div>
-
-    <div class="distribution-grid">
-      <div class="distribution-card">
-        <div class="distribution-title">按状态统计</div>
-        <div v-if="summary.status_counts.length" class="distribution-list">
-          <div
-            v-for="item in summary.status_counts"
-            :key="`status-${item.key}`"
-            class="distribution-item"
-          >
-            <span>{{ statusOptions[item.key] || item.key }}</span>
-            <span class="distribution-count">{{ item.count }} 件</span>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无状态统计</div>
-      </div>
-      <div class="distribution-card">
-        <div class="distribution-title">按案件类型统计</div>
-        <div v-if="summary.case_type_counts.length" class="distribution-list">
-          <div
-            v-for="item in summary.case_type_counts"
-            :key="`type-${item.key}`"
-            class="distribution-item"
-          >
-            <span>{{ caseTypeLabel(item.key) }}</span>
-            <span class="distribution-count">{{ item.count }} 件</span>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无类型统计</div>
-      </div>
-      <div class="distribution-card">
-        <div class="distribution-title">按客户统计</div>
-        <div v-if="summary.client_counts.length" class="distribution-list">
-          <div
-            v-for="item in summary.client_counts"
-            :key="`client-${item.key}`"
-            class="distribution-item distribution-item-stacked"
-          >
-            <div class="distribution-client-row">
-              <span>{{ item.label }}</span>
-              <span class="distribution-count">{{ item.count }} 件</span>
-            </div>
-            <div class="distribution-subline">
-              {{ clientCaseTypeSummary(item.case_type_counts) }}
-            </div>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无客户统计</div>
-      </div>
-      <div class="distribution-card">
-        <div class="distribution-title">按国别统计</div>
-        <div v-if="summary.country_counts.length" class="distribution-list">
-          <div
-            v-for="item in summary.country_counts"
-            :key="`country-${item.key}`"
-            class="distribution-item"
-          >
-            <span>{{ countryLabel(item.key) }}</span>
-            <span class="distribution-count">{{ item.count }} 件</span>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无国别统计</div>
-      </div>
-      <div class="distribution-card">
-        <div class="distribution-title">按代理人统计</div>
-        <div v-if="summary.agent_counts.length" class="distribution-list">
-          <div
-            v-for="item in summary.agent_counts"
-            :key="`agent-${item.key}`"
-            class="distribution-item"
-          >
-            <span>{{ agentLabel(item.key) }}</span>
-            <span class="distribution-count">{{ item.count }} 件</span>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无代理人统计</div>
-      </div>
-    </div>
-
-    <div class="distribution-grid">
-      <div class="distribution-card">
-        <div class="distribution-title">按年份趋势</div>
-        <div v-if="summary.year_trends.length" class="distribution-list">
-          <div
-            v-for="item in summary.year_trends"
-            :key="`year-trend-${item.key}`"
-            class="distribution-item distribution-item-stacked"
-          >
-            <div class="distribution-client-row">
-              <span>{{ item.label }}</span>
-            </div>
-            <div class="distribution-subline">
-              {{ formatTrendSummary(item) }}
-            </div>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无年份趋势</div>
-      </div>
-      <div class="distribution-card">
-        <div class="distribution-title">按月份趋势</div>
-        <div v-if="summary.month_trends.length" class="distribution-list">
-          <div
-            v-for="item in summary.month_trends"
-            :key="`month-trend-${item.key}`"
-            class="distribution-item distribution-item-stacked"
-          >
-            <div class="distribution-client-row">
-              <span>{{ item.label }}</span>
-            </div>
-            <div class="distribution-subline">
-              {{ formatTrendSummary(item) }}
-            </div>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无月份趋势</div>
-      </div>
-    </div>
-
     <!-- Filter subtitle -->
     <div v-if="stepFilter && stepLabel" class="page-filter-subtitle muted" style="margin-bottom: 12px;">
       共 {{ total }} 件，均处于{{ stepNoText }}
@@ -395,7 +234,7 @@ import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { getCases } from '../../../api/cases'
 import { getClients } from '../../../api/clients'
-import type { Case, CaseListResponse } from '../../../api/cases.types'
+import type { Case } from '../../../api/cases.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
@@ -430,22 +269,6 @@ const filters = reactive({
   patent_no: '',
   fee_status: '',
 })
-const summary = ref<CaseListResponse['summary']>({
-  total_case_count: 0,
-  status_counts: [],
-  case_type_counts: [],
-  client_counts: [],
-  country_counts: [],
-  agent_counts: [],
-  year_trends: [],
-  month_trends: [],
-  granted_count: 0,
-  grant_rate: null,
-  terminated_count: 0,
-  invalidated_count: 0,
-  in_prosecution_count: 0,
-})
-
 // Client options for selector
 const clientOptions = ref<Array<{ id: string; name: string }>>([])
 
@@ -498,7 +321,6 @@ async function fetchCases() {
       ...filters,
     })
     cases.value = result.items
-    summary.value = result.summary
     if (stepFilter.value) {
       total.value = displayCases.value.length
     } else {
@@ -514,11 +336,6 @@ async function fetchCases() {
 function formatDate(dateStr: string): string {
   if (!dateStr) return '-'
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
-}
-
-function formatGrantRate(value: number | null): string {
-  if (value == null) return '暂无'
-  return `${(value * 100).toFixed(1)}%`
 }
 
 function handleView(row: Case) {
@@ -570,56 +387,6 @@ function handleResetFilters() {
   fetchCases()
 }
 
-function caseTypeLabel(value?: string) {
-  switch (value) {
-    case 'NORMAL':
-      return '普通申请'
-    case 'PCT_INTL':
-      return 'PCT国际'
-    case 'PCT_NATL':
-      return 'PCT国内'
-    case 'PRIORITY':
-      return '优先权'
-    case 'SEARCH':
-      return '检索'
-    case 'CONSULTING':
-      return '咨询'
-    default:
-      return value || '未分类'
-  }
-}
-
-function countryLabel(value?: string) {
-  return value || '未填写'
-}
-
-function clientCaseTypeSummary(items: Array<{ key: string; count: number }>) {
-  if (!items.length) return '暂无类型分布'
-  return items.map(item => `${caseTypeLabel(item.key)} ${item.count} 件`).join(' · ')
-}
-
-function agentLabel(value?: string) {
-  return value || '未分配'
-}
-
-function formatTrendSummary(item: {
-  new_case_count: number
-  granted_count: number
-  terminated_count: number
-  invalidated_count: number
-  withdrawn_count: number
-  abandoned_count: number
-}) {
-  return [
-    `新案 ${item.new_case_count} 件`,
-    `授权 ${item.granted_count} 件`,
-    `终止 ${item.terminated_count} 件`,
-    `无效 ${item.invalidated_count} 件`,
-    `撤回 ${item.withdrawn_count} 件`,
-    `放弃 ${item.abandoned_count} 件`,
-  ].join(' · ')
-}
-
 // Watch for pagination and filter changes
 watch([page, pageSize], () => {
   fetchCases()
@@ -649,86 +416,4 @@ onMounted(() => {
   padding-bottom: 2px;
 }
 
-.report-summary {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.summary-card,
-.distribution-card {
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--el-bg-color);
-  padding: 14px 16px;
-}
-
-.summary-label,
-.distribution-title {
-  font-size: 12px;
-  color: var(--text-sub);
-}
-
-.summary-value {
-  display: block;
-  margin-top: 6px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.distribution-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.distribution-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.distribution-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-}
-
-.distribution-item-stacked {
-  display: block;
-}
-
-.distribution-client-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.distribution-subline {
-  margin-top: 4px;
-  color: var(--text-sub);
-  font-size: 12px;
-}
-
-.distribution-count {
-  font-weight: 600;
-}
-
-.distribution-empty {
-  margin-top: 10px;
-  color: var(--text-sub);
-  font-size: 13px;
-}
-
-@media (max-width: 960px) {
-  .report-summary,
-  .distribution-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

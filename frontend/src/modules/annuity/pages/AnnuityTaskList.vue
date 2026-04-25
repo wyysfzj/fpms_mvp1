@@ -5,6 +5,11 @@
         <h1 class="page-title">年费任务列表</h1>
         <span class="page-count" aria-live="polite">{{ total }} 条</span>
       </div>
+      <div class="page-header-right">
+        <router-link to="/reports/annuity-tasks">
+          <el-button>年费任务统计</el-button>
+        </router-link>
+      </div>
     </div>
 
     <el-form class="filter-form" :inline="true">
@@ -112,157 +117,6 @@
         <el-button @click="resetFilters">重置</el-button>
       </el-form-item>
     </el-form>
-
-    <div class="report-summary">
-      <div class="summary-card">
-        <span class="summary-label">任务总数</span>
-        <span class="summary-value">{{ summary.total_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">待处理任务</span>
-        <span class="summary-value">{{ summary.open_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">已完成任务</span>
-        <span class="summary-value">{{ summary.done_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">逾期任务</span>
-        <span class="summary-value">{{ summary.overdue_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">官费已缴任务</span>
-        <span class="summary-value">{{ summary.official_paid_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">客户已收任务</span>
-        <span class="summary-value">{{ summary.client_received_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">已收未缴</span>
-        <span class="summary-value">{{ summary.collected_not_paid_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">未收未缴</span>
-        <span class="summary-value">{{ summary.outstanding_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">监视任务</span>
-        <span class="summary-value">{{ summary.monitored_task_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">按时缴费</span>
-        <span class="summary-value">{{ summary.on_time_paid_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">逾期缴费</span>
-        <span class="summary-value">{{ summary.late_paid_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">监视成功率</span>
-        <span class="summary-value">{{ formatSuccessRate(summary.success_rate) }}</span>
-      </div>
-    </div>
-
-    <div class="distribution-summary">
-      <div class="distribution-card">
-        <div class="distribution-title">状态分布</div>
-        <div class="distribution-tags">
-          <el-tag
-            v-for="item in summary.status_counts"
-            :key="`status-${item.key}`"
-            size="small"
-            effect="plain"
-          >
-            {{ taskStatusText(item.key) }} {{ item.count }}
-          </el-tag>
-        </div>
-      </div>
-      <div class="distribution-card">
-        <div class="distribution-title">年度分布</div>
-        <div class="distribution-tags">
-          <el-tag
-            v-for="item in summary.year_counts"
-            :key="`year-${item.key}`"
-            size="small"
-            effect="plain"
-          >
-            第 {{ item.key }} 年 {{ item.count }}
-          </el-tag>
-        </div>
-      </div>
-    </div>
-
-    <div class="grouped-summary-grid">
-      <div class="distribution-card">
-        <div class="distribution-header">
-          <div class="distribution-title">按客户金额汇总</div>
-          <span>{{ summary.client_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.client_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.client_amounts"
-            :key="`client-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-name">{{ item.label }}</div>
-            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
-            <div class="grouped-summary-amounts">
-              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
-              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
-              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无客户金额汇总</div>
-      </div>
-
-      <div class="distribution-card">
-        <div class="distribution-header">
-          <div class="distribution-title">按国家金额汇总</div>
-          <span>{{ summary.country_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.country_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.country_amounts"
-            :key="`country-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-name">{{ item.label }}</div>
-            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
-            <div class="grouped-summary-amounts">
-              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
-              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
-              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无国家金额汇总</div>
-      </div>
-
-      <div class="distribution-card">
-        <div class="distribution-header">
-          <div class="distribution-title">按年度金额汇总</div>
-          <span>{{ summary.year_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.year_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.year_amounts"
-            :key="`year-amount-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-name">{{ item.label }}</div>
-            <div class="grouped-summary-meta">任务 {{ item.task_count }} 条</div>
-            <div class="grouped-summary-amounts">
-              <span>应缴 {{ formatMoney(item.payable_amount) }}</span>
-              <span>官费实缴 {{ formatMoney(item.official_paid_amount) }}</span>
-              <span>客户实收 {{ formatMoney(item.client_received_amount) }}</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="distribution-empty">暂无年度金额汇总</div>
-      </div>
-    </div>
 
     <div class="batch-action-bar">
       <span class="batch-action-text">已选择 {{ selectedTaskIds.length }} 项</span>
@@ -484,7 +338,6 @@ import type {
   AnnuityGenerateDraftResult,
   AnnuityPendingMode,
   AnnuityTask,
-  AnnuityTaskReportSummary,
 } from '../../../api/annuity.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -520,25 +373,6 @@ const filters = reactive<{
   pending_mode: '',
   notice_status: '',
   date_range: [],
-})
-const summary = ref<AnnuityTaskReportSummary>({
-  total_task_count: 0,
-  open_task_count: 0,
-  done_task_count: 0,
-  overdue_task_count: 0,
-  official_paid_task_count: 0,
-  client_received_task_count: 0,
-  collected_not_paid_task_count: 0,
-  outstanding_task_count: 0,
-  monitored_task_count: 0,
-  on_time_paid_count: 0,
-  late_paid_count: 0,
-  success_rate: null,
-  status_counts: [],
-  year_counts: [],
-  client_amounts: [],
-  country_amounts: [],
-  year_amounts: [],
 })
 const instructionDialogVisible = ref(false)
 const activeTask = ref<AnnuityTask | null>(null)
@@ -592,31 +426,11 @@ async function fetchTasks() {
     })
     tasks.value = result.items
     total.value = result.total
-    summary.value = result.summary
     selectedTaskIds.value = []
   } catch (err) {
     error.value = err as ApiError
     tasks.value = []
     total.value = 0
-    summary.value = {
-      total_task_count: 0,
-      open_task_count: 0,
-      done_task_count: 0,
-      overdue_task_count: 0,
-      official_paid_task_count: 0,
-      client_received_task_count: 0,
-      collected_not_paid_task_count: 0,
-      outstanding_task_count: 0,
-      monitored_task_count: 0,
-      on_time_paid_count: 0,
-      late_paid_count: 0,
-      success_rate: null,
-      status_counts: [],
-      year_counts: [],
-      client_amounts: [],
-      country_amounts: [],
-      year_amounts: [],
-    }
   } finally {
     loading.value = false
   }
@@ -753,11 +567,6 @@ function formatMoney(amount: number, currency = 'CNY'): string {
   }).format(amount || 0)
 }
 
-function formatSuccessRate(value: number | null): string {
-  if (value === null) return '暂无'
-  return `${(value * 100).toFixed(1)}%`
-}
-
 async function handleBatchGenerateDrafts() {
   if (selectedTaskIds.value.length === 0) {
     ElMessage.warning('请先选择至少一条任务。')
@@ -838,110 +647,6 @@ onMounted(() => {
 
 .filter-range {
   width: 260px;
-}
-
-.report-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.summary-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: var(--surface-raised);
-}
-
-.summary-label {
-  color: var(--text-sub);
-  font-size: 13px;
-}
-
-.summary-value {
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.distribution-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.distribution-card {
-  padding: 16px;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: var(--surface-raised);
-}
-
-.distribution-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-  color: var(--text-sub);
-  font-size: 13px;
-}
-
-.distribution-title {
-  font-size: 13px;
-  color: var(--text-sub);
-}
-
-.distribution-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.grouped-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.grouped-summary-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.grouped-summary-item {
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--el-fill-color-extra-light);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.grouped-summary-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.grouped-summary-meta,
-.distribution-empty {
-  font-size: 13px;
-  color: var(--text-sub);
-}
-
-.grouped-summary-amounts {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
 }
 
 .batch-action-text {

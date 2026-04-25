@@ -9,6 +9,9 @@
         <router-link to="/fees/drafts/new">
           <el-button type="primary">{{ ZH.feeList.newDraft }}</el-button>
         </router-link>
+        <router-link to="/reports/fee-drafts">
+          <el-button>草稿统计</el-button>
+        </router-link>
       </div>
     </div>
 
@@ -96,197 +99,6 @@
       </el-form-item>
     </el-form>
 
-    <div class="report-summary">
-      <div class="summary-card">
-        <span class="summary-label">草稿数量</span>
-        <span class="summary-value">{{ summary.total_draft_count }} 条</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">服务费总额</span>
-        <span class="summary-value amount">{{ formatAmount(summary.service_fee_amount, summaryCurrency) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">官费总额</span>
-        <span class="summary-value amount">{{ formatAmount(summary.government_fee_amount, summaryCurrency) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">草稿总收入</span>
-        <span class="summary-value amount">{{ formatAmount(summary.income_amount, summaryCurrency) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">已开账单金额</span>
-        <span class="summary-value amount">{{ formatAmount(summary.billed_amount, summaryCurrency) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">已收金额</span>
-        <span class="summary-value amount">{{ formatAmount(summary.received_amount, summaryCurrency) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">未收余额</span>
-        <span class="summary-value amount">{{ formatAmount(summary.unpaid_balance_amount, summaryCurrency) }}</span>
-      </div>
-      <div class="summary-card">
-        <span class="summary-label">部分收款账单数</span>
-        <span class="summary-value">{{ summary.partially_received_bill_count }} 张</span>
-      </div>
-    </div>
-
-    <div class="grouped-summary-grid">
-      <section class="grouped-summary-card">
-        <div class="grouped-summary-header">
-          <h3>按客户汇总</h3>
-          <span>{{ summary.client_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.client_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.client_amounts"
-            :key="`client-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-main">
-              <span class="grouped-summary-title">{{ item.label }}</span>
-              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
-            </div>
-            <div class="grouped-summary-amounts">
-              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
-              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
-              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
-            </div>
-          </div>
-        </div>
-        <el-empty v-else description="暂无客户汇总数据" :image-size="72" />
-      </section>
-
-      <section class="grouped-summary-card">
-        <div class="grouped-summary-header">
-          <h3>按案件类型汇总</h3>
-          <span>{{ summary.case_type_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.case_type_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.case_type_amounts"
-            :key="`case-type-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-main">
-              <span class="grouped-summary-title">{{ item.label }}</span>
-              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
-            </div>
-            <div class="grouped-summary-amounts">
-              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
-              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
-              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
-            </div>
-          </div>
-        </div>
-        <el-empty v-else description="暂无案件类型汇总数据" :image-size="72" />
-      </section>
-
-      <section class="grouped-summary-card">
-        <div class="grouped-summary-header">
-          <h3>按国家汇总</h3>
-          <span>{{ summary.country_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.country_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.country_amounts"
-            :key="`country-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-main">
-              <span class="grouped-summary-title">{{ item.label }}</span>
-              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
-            </div>
-            <div class="grouped-summary-amounts">
-              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
-              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
-              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
-            </div>
-          </div>
-        </div>
-        <el-empty v-else description="暂无国家汇总数据" :image-size="72" />
-      </section>
-
-      <section class="grouped-summary-card">
-        <div class="grouped-summary-header">
-          <h3>按代理人服务费汇总</h3>
-          <span>{{ summary.agent_service_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.agent_service_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.agent_service_amounts"
-            :key="`agent-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-main">
-              <span class="grouped-summary-title">{{ item.label }}</span>
-              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
-            </div>
-            <div class="grouped-summary-amounts">
-              <span class="amount">服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
-            </div>
-          </div>
-        </div>
-        <el-empty v-else description="暂无代理人服务费汇总数据" :image-size="72" />
-      </section>
-
-      <section class="grouped-summary-card">
-        <div class="grouped-summary-header">
-          <h3>按年份汇总</h3>
-          <span>{{ summary.year_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.year_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.year_amounts"
-            :key="`year-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-main">
-              <span class="grouped-summary-title">{{ item.label }}</span>
-              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
-            </div>
-            <div class="grouped-summary-amounts">
-              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
-              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
-              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
-              <span class="grouped-summary-breakdown">
-                类型分布 {{ formatDraftTypeBreakdown(item.draft_type_amounts) }}
-              </span>
-            </div>
-          </div>
-        </div>
-        <el-empty v-else description="暂无按年份汇总数据" :image-size="72" />
-      </section>
-
-      <section class="grouped-summary-card">
-        <div class="grouped-summary-header">
-          <h3>按月份汇总</h3>
-          <span>{{ summary.month_amounts.length }} 组</span>
-        </div>
-        <div v-if="summary.month_amounts.length" class="grouped-summary-list">
-          <div
-            v-for="item in summary.month_amounts"
-            :key="`month-${item.key}`"
-            class="grouped-summary-item"
-          >
-            <div class="grouped-summary-main">
-              <span class="grouped-summary-title">{{ item.label }}</span>
-              <span class="grouped-summary-sub">草稿 {{ item.draft_count }} 条</span>
-            </div>
-            <div class="grouped-summary-amounts">
-              <span>服务费 {{ formatAmount(item.service_fee_amount, summaryCurrency) }}</span>
-              <span>官费 {{ formatAmount(item.government_fee_amount, summaryCurrency) }}</span>
-              <span class="amount">收入 {{ formatAmount(item.income_amount, summaryCurrency) }}</span>
-              <span class="grouped-summary-breakdown">
-                类型分布 {{ formatDraftTypeBreakdown(item.draft_type_amounts) }}
-              </span>
-            </div>
-          </div>
-        </div>
-        <el-empty v-else description="暂无按月份汇总数据" :image-size="72" />
-      </section>
-    </div>
-
     <div v-if="error" class="page-error">
       <ApiErrorBanner :error="error" @dismiss="error = null" />
     </div>
@@ -372,7 +184,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getFeeDrafts } from '../../../api/fees'
-import type { FeeDraftListItem, FeeDraftReportSummary, FeeDraftStatus, FeeMoney } from '../../../api/fees.types'
+import type { FeeDraftListItem, FeeDraftStatus, FeeMoney } from '../../../api/fees.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
@@ -406,24 +218,7 @@ const filters = reactive<{
   bill_status: '',
   date_range: [],
 })
-const summary = ref<FeeDraftReportSummary>({
-  total_draft_count: 0,
-  service_fee_amount: 0,
-  government_fee_amount: 0,
-  income_amount: 0,
-  billed_amount: 0,
-  received_amount: 0,
-  unpaid_balance_amount: 0,
-  partially_received_bill_count: 0,
-  client_amounts: [],
-  case_type_amounts: [],
-  country_amounts: [],
-  agent_service_amounts: [],
-  year_amounts: [],
-  month_amounts: [],
-})
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
-const summaryCurrency = computed(() => filters.currency || drafts.value[0]?.currency || 'CNY')
 
 function applyFilters() {
   page.value = 1
@@ -461,27 +256,10 @@ async function fetchDrafts() {
     })
     drafts.value = result.items
     total.value = result.total
-    summary.value = result.summary
   } catch (err) {
     error.value = err as ApiError
     drafts.value = []
     total.value = 0
-    summary.value = {
-      total_draft_count: 0,
-      service_fee_amount: 0,
-      government_fee_amount: 0,
-      income_amount: 0,
-      billed_amount: 0,
-      received_amount: 0,
-      unpaid_balance_amount: 0,
-      partially_received_bill_count: 0,
-      client_amounts: [],
-      case_type_amounts: [],
-      country_amounts: [],
-      agent_service_amounts: [],
-      year_amounts: [],
-      month_amounts: [],
-    }
   } finally {
     loading.value = false
   }
@@ -502,15 +280,6 @@ function formatAmount(amount: FeeMoney, currency?: string): string {
     style: 'currency',
     currency: curr,
   }).format(numericAmount)
-}
-
-function formatDraftTypeBreakdown(
-  rows: Array<{ label: string; income_amount: FeeMoney }>,
-): string {
-  if (!rows.length) return '暂无'
-  return rows
-    .map((row) => `${row.label} ${formatAmount(row.income_amount, summaryCurrency.value)}`)
-    .join('，')
 }
 
 function getShortId(id: string | null | undefined): string {
@@ -565,108 +334,6 @@ onMounted(() => {
 
 .filter-range {
   width: 260px;
-}
-
-.report-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.grouped-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.grouped-summary-card {
-  padding: 16px;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: var(--surface-raised);
-}
-
-.grouped-summary-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.grouped-summary-header h3 {
-  margin: 0;
-  font-size: 15px;
-}
-
-.grouped-summary-header span {
-  color: var(--text-sub);
-  font-size: 12px;
-}
-
-.grouped-summary-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.grouped-summary-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--surface-default);
-}
-
-.grouped-summary-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.grouped-summary-title {
-  font-weight: 600;
-}
-
-.grouped-summary-sub {
-  color: var(--text-sub);
-  font-size: 12px;
-}
-
-.grouped-summary-amounts {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
-
-.grouped-summary-breakdown {
-  color: var(--text-sub);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.summary-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: var(--surface-raised);
-}
-
-.summary-label {
-  color: var(--text-sub);
-  font-size: 13px;
-}
-
-.summary-value {
-  font-size: 20px;
-  font-weight: 600;
 }
 
 .id-value {
