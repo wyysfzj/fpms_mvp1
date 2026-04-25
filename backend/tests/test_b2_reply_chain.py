@@ -35,14 +35,36 @@ def _unique_case_no() -> str:
     return f"B2-{uuid.uuid4().hex[:8].upper()}"
 
 
+def _create_applicant(client: TestClient, auth_headers: dict) -> dict:
+    suffix = uuid.uuid4().hex[:8].upper()
+    payload = {
+        "code": f"B2-AP-{suffix}",
+        "name_cn": f"B2测试申请人-{suffix}",
+        "applicant_type": "ENTITY",
+        "is_active": True,
+    }
+    resp = client.post("/api/v1/applicants", json=payload, headers=auth_headers)
+    assert resp.status_code == 201, f"Applicant creation failed: {resp.text}"
+    return resp.json()
+
+
 def _create_case(client: TestClient, auth_headers: dict, **overrides) -> dict:
     """Create a test case, return response JSON."""
+    applicant = _create_applicant(client, auth_headers)
     payload = {
         "case_no": _unique_case_no(),
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
         "title_cn": "B2 Test Case",
+        "applicants": [
+            {
+                "seq": 1,
+                "is_first": True,
+                "applicant_id": applicant["id"],
+                "name_cn": applicant["name_cn"],
+            }
+        ],
         **overrides,
     }
     resp = client.post(CASE_BASE, json=payload, headers=auth_headers)
@@ -341,6 +363,64 @@ def test_reply_to_nonexistent_document_404(client: TestClient, auth_headers: dic
     )
 
 
+def test_reply_to_other_case_is_rejected(client: TestClient, auth_headers: dict) -> None:
+    """ReplyTo must not point to a document from another case."""
+    source_case = _create_case(client, auth_headers)
+    target_case = _create_case(client, auth_headers)
+    source_doc = _create_document(client, auth_headers, source_case["id"], direction="IN")
+
+    resp = client.post(
+        DOC_BASE,
+        headers=auth_headers,
+        json={
+            "case_id": target_case["id"],
+            "direction": "OUT",
+            "doc_date": "2026-01-20",
+            "title": "Wrong case reply",
+            "reply_to_id": source_doc["id"],
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "REPLY_TO_CASE_MISMATCH"
+
+
+def test_reply_to_template_mismatch_is_rejected(client: TestClient, auth_headers: dict) -> None:
+    """Reply template with reply_to_template_code only accepts matching source template."""
+    case = _create_case(client, auth_headers)
+    client_in = _get_doc_template_by_code(client, auth_headers, "CLIENT_IN")
+    client_doc = _create_document(
+        client,
+        auth_headers,
+        case["id"],
+        direction="IN",
+        doc_template_id=client_in["id"],
+        title="Client incoming",
+    )
+    reply_template = _create_doc_template(
+        client,
+        auth_headers,
+        code=f"OA-OUT-MISMATCH-{uuid.uuid4().hex[:6].upper()}",
+        name="OA 回复模板匹配校验",
+        direction="OUT",
+        reply_to_template_code="OA_IN",
+    )
+
+    resp = client.post(
+        DOC_BASE,
+        headers=auth_headers,
+        json={
+            "case_id": case["id"],
+            "direction": "OUT",
+            "doc_date": "2026-01-20",
+            "title": "Wrong template reply",
+            "doc_template_id": reply_template["id"],
+            "reply_to_id": client_doc["id"],
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "REPLY_TO_TEMPLATE_MISMATCH"
+
+
 # ---------------------------------------------------------------------------
 # 6. DocTemplate cascade — status_effect
 # ---------------------------------------------------------------------------
@@ -387,6 +467,12 @@ def test_doc_template_cascade_rejects_illegal_status_regression(
             "status": "GRANTED",
             "app_no": "CN202510123456.7",
             "filing_date": "2025-01-15",
+            "pub_no": "CN123456789A",
+            "pub_date": "2025-07-15",
+            "grant_no": "ZL202510123456.7",
+            "grant_date": "2026-01-15",
+            "first_annuity_year": 1,
+            "valid_until": "2045-01-15",
         },
     )
     assert promote_resp.status_code == 200, promote_resp.text
@@ -575,9 +661,7 @@ def test_document_list_includes_reply_fields(client: TestClient, auth_headers: d
         assert "reply_date" in item, "List item must include reply_date"
 
 
-def test_document_list_can_filter_by_reply_state(
-    client: TestClient, auth_headers: dict
-) -> None:
+def test_document_list_can_filter_by_reply_state(client: TestClient, auth_headers: dict) -> None:
     """GET /documents supports need_reply/replied filters for Batch 2 query scope."""
     case = _create_case(client, auth_headers)
     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")

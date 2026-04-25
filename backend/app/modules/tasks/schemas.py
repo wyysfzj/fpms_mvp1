@@ -15,6 +15,11 @@ class TaskCreateIn(BaseModel):
     base_date: date | None = None
     due_date: date
     internal_due_date: date | None = None
+    remind1: date | None = None
+    remind2: date | None = None
+    remind3: date | None = None
+    daily_remind_from: date | None = None
+    daily_remind: bool = False
     worker_id: str | None = None
     supervisor_id: str | None = None
     remark: str | None = None
@@ -44,6 +49,11 @@ class TaskOut(BaseModel):
     base_date: date | None = None
     due_date: date
     internal_due_date: date | None = None
+    remind1: date | None = None
+    remind2: date | None = None
+    remind3: date | None = None
+    daily_remind_from: date | None = None
+    daily_remind: bool = False
     worker_id: str | None = None
     supervisor_id: str | None = None
     remark: str | None = None
@@ -65,6 +75,11 @@ class TaskListItemOut(BaseModel):
     title: str
     due_date: date
     internal_due_date: date | None = None
+    remind1: date | None = None
+    remind2: date | None = None
+    remind3: date | None = None
+    daily_remind_from: date | None = None
+    daily_remind: bool = False
     worker_id: str | None = None
     supervisor_id: str | None = None
     remark: str | None = None

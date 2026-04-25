@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import calendar
+import json
 from datetime import date, timedelta
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from app.core.errors import raise_business_error
 from app.modules.cases.models import Case
 from app.modules.documents.models import DocTemplate
 from app.modules.tasks.enums import TaskDeadlineBase, TaskRemindBase
@@ -65,7 +67,7 @@ class TaskGenerationService:
                 remind2=remind2,
                 remind3=remind3,
                 daily_remind_from=daily_remind_from,
-                daily_remind=bool(getattr(template, "daily_remind", False)),
+                daily_remind=getattr(template, "daily_remind", False) is True,
                 status="OPEN",
             )
             db.add(task)
@@ -86,7 +88,8 @@ class TaskGenerationService:
     def _is_incoming(self, document) -> bool:
         direction = getattr(document, "direction", None)
         if direction:
-            return str(direction).upper() == "IN"
+            direction_value = getattr(direction, "value", direction)
+            return str(direction_value).upper() == "IN"
         return False
 
     def _get_document_type(self, db: Session, document) -> str | None:
@@ -126,8 +129,15 @@ class TaskGenerationService:
     def _resolve_deadline_base_date(self, document, case, template) -> date:
         doc_date = getattr(document, "doc_date", None)
         template_base = getattr(template, "deadline_base", None)
-        if template_base is None:
+        if template_base is None or not isinstance(template_base, (TaskDeadlineBase, str)):
             return doc_date
+        try:
+            template_base = TaskDeadlineBase(template_base)
+        except ValueError:
+            template_code = getattr(template, "code", "?")
+            raise RuntimeError(
+                f"TaskTemplate '{template_code}' has unsupported deadline_base={template_base}"
+            ) from None
 
         template_code = getattr(template, "code", "?")
         if template_base == TaskDeadlineBase.RECEIVE_DATE:
@@ -170,6 +180,10 @@ class TaskGenerationService:
 
     def _compute_due_date(self, document, case, template) -> date:
         """Compute due date from the template deadline base plus add_days/add_months."""
+        official_due_date = self._resolve_official_due_date(document)
+        if official_due_date is not None:
+            return official_due_date
+
         base = self._resolve_deadline_base_date(document, case, template)
         if base is None:
             raise RuntimeError(
@@ -190,10 +204,48 @@ class TaskGenerationService:
             result = result + timedelta(days=add_days)
         return result
 
+    def _resolve_official_due_date(self, document) -> date | None:
+        raw_extra_data = getattr(document, "extra_data", None)
+        if not raw_extra_data:
+            return None
+
+        try:
+            extra_data = json.loads(raw_extra_data)
+        except (TypeError, json.JSONDecodeError):
+            return None
+
+        if not isinstance(extra_data, dict) or "OfficialDueDate" not in extra_data:
+            return None
+
+        raw_due_date = extra_data.get("OfficialDueDate")
+        if not isinstance(raw_due_date, str) or not raw_due_date.strip():
+            raise_business_error(
+                "DOCUMENT_OFFICIAL_DUE_DATE_INVALID",
+                "OfficialDueDate must be an ISO date string",
+                status_code=400,
+            )
+
+        try:
+            return date.fromisoformat(raw_due_date.strip())
+        except ValueError:
+            raise_business_error(
+                "DOCUMENT_OFFICIAL_DUE_DATE_INVALID",
+                "OfficialDueDate must be an ISO date string",
+                status_code=400,
+            )
+
     def _resolve_remind_base_date(self, due_date: date, internal_due_date: date | None, template):
         remind_base = getattr(template, "remind_base", None)
         template_code = getattr(template, "code", "?")
-        if remind_base is None or remind_base == TaskRemindBase.DEADLINE:
+        if remind_base is None or not isinstance(remind_base, (TaskRemindBase, str)):
+            return due_date
+        try:
+            remind_base = TaskRemindBase(remind_base)
+        except ValueError:
+            raise RuntimeError(
+                f"TaskTemplate '{template_code}' has unsupported remind_base={remind_base}"
+            ) from None
+        if remind_base == TaskRemindBase.DEADLINE:
             return due_date
         if remind_base == TaskRemindBase.INNER:
             if internal_due_date is None:
@@ -209,7 +261,7 @@ class TaskGenerationService:
         remind_base_date = self._resolve_remind_base_date(due_date, internal_due_date, template)
 
         def _offset(base: date, days) -> date | None:
-            if days is None:
+            if days is None or not isinstance(days, int):
                 return None
             return base - timedelta(days=days)
 
@@ -217,7 +269,7 @@ class TaskGenerationService:
         remind2 = _offset(remind_base_date, getattr(template, "remind_2_offset_days", None))
         remind3 = _offset(remind_base_date, getattr(template, "remind_3_offset_days", None))
 
-        if getattr(template, "daily_remind", False):
+        if getattr(template, "daily_remind", False) is True:
             candidates = [d for d in (remind1, remind2, remind3) if d is not None]
             daily_remind_from = min(candidates) if candidates else remind_base_date
         else:

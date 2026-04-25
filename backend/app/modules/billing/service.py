@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -889,7 +889,9 @@ def list_fee_overview_gov_payments(
     if patent_no:
         stmt = stmt.where(Case.patent_no == patent_no)
     if fee_type:
-        stmt = stmt.where(func.upper(func.coalesce(FeeDraft.draft_type, "")) == fee_type.strip().upper())
+        stmt = stmt.where(
+            func.upper(func.coalesce(FeeDraft.draft_type, "")) == fee_type.strip().upper()
+        )
     if paid_date_from:
         stmt = stmt.where(GovPayment.paid_date >= paid_date_from)
     if paid_date_to:
@@ -978,29 +980,26 @@ def list_fee_overview_case_receipts(
         receipt_date_to=receipt_date_to,
     )
 
-    stmt = (
-        select(
-            CaseReceipt.id.label("receipt_id"),
-            CaseReceipt.case_id.label("case_id"),
-            Case.case_no.label("case_no"),
-            Case.app_no.label("app_no"),
-            Case.patent_no.label("patent_no"),
-            CaseReceipt.fee_code.label("fee_code"),
-            CaseReceipt.fee_name.label("fee_name"),
-            CaseReceipt.year_no.label("year_no"),
-            CaseReceipt.fee_type.label("fee_type"),
-            CaseReceipt.receivable_amt.label("receivable_amt"),
-            CaseReceipt.received_amt.label("received_amt"),
-            CaseReceipt.currency.label("currency"),
-            CaseReceipt.is_arrears.label("is_arrears"),
-            CaseReceipt.is_prepayment.label("is_prepayment"),
-            CaseReceipt.is_commissionable.label("is_commissionable"),
-            CaseReceipt.last_receipt_date.label("receipt_date"),
-            CaseReceipt.due_date.label("due_date"),
-            CaseReceipt.invoice_no.label("invoice_no"),
-        )
-        .join(Case, Case.id == CaseReceipt.case_id)
-    )
+    stmt = select(
+        CaseReceipt.id.label("receipt_id"),
+        CaseReceipt.case_id.label("case_id"),
+        Case.case_no.label("case_no"),
+        Case.app_no.label("app_no"),
+        Case.patent_no.label("patent_no"),
+        CaseReceipt.fee_code.label("fee_code"),
+        CaseReceipt.fee_name.label("fee_name"),
+        CaseReceipt.year_no.label("year_no"),
+        CaseReceipt.fee_type.label("fee_type"),
+        CaseReceipt.receivable_amt.label("receivable_amt"),
+        CaseReceipt.received_amt.label("received_amt"),
+        CaseReceipt.currency.label("currency"),
+        CaseReceipt.is_arrears.label("is_arrears"),
+        CaseReceipt.is_prepayment.label("is_prepayment"),
+        CaseReceipt.is_commissionable.label("is_commissionable"),
+        CaseReceipt.last_receipt_date.label("receipt_date"),
+        CaseReceipt.due_date.label("due_date"),
+        CaseReceipt.invoice_no.label("invoice_no"),
+    ).join(Case, Case.id == CaseReceipt.case_id)
 
     if client_id:
         stmt = stmt.where(Case.client_id == client_id)
@@ -1011,7 +1010,9 @@ def list_fee_overview_case_receipts(
     if patent_no:
         stmt = stmt.where(Case.patent_no == patent_no)
     if fee_type:
-        stmt = stmt.where(func.upper(func.coalesce(CaseReceipt.fee_type, "")) == fee_type.strip().upper())
+        stmt = stmt.where(
+            func.upper(func.coalesce(CaseReceipt.fee_type, "")) == fee_type.strip().upper()
+        )
     if receipt_date_from:
         stmt = stmt.where(CaseReceipt.last_receipt_date >= receipt_date_from)
     if receipt_date_to:
@@ -1401,6 +1402,21 @@ def _allocate_offset_to_receipts(
     if total_amount <= Decimal("0"):
         return
 
+    receivable_by_key: dict[tuple[str, str | None], Decimal] = {}
+    for item in items:
+        if not item.case_id:
+            continue
+        key = (item.case_id, item.fee_type)
+        receivable_by_key[key] = receivable_by_key.get(key, Decimal("0")) + Decimal(
+            item.amount or 0
+        )
+    receipt_cache: dict[tuple[str, str | None], CaseReceipt] = {
+        (receipt.case_id, receipt.fee_type): receipt
+        for receipt in db.query(CaseReceipt)
+        .filter(CaseReceipt.case_id.in_({case_id for case_id, _fee_type in receivable_by_key}))
+        .all()
+    }
+
     remaining = offset_amt
     for index, item in enumerate(items):
         if index == len(items) - 1:
@@ -1411,27 +1427,26 @@ def _allocate_offset_to_receipts(
         if share <= Decimal("0"):
             continue
 
-        receipt = (
-            db.query(CaseReceipt)
-            .filter(CaseReceipt.case_id == item.case_id, CaseReceipt.fee_type == item.fee_type)
-            .first()
-        )
+        key = (item.case_id, item.fee_type)
+        receipt = receipt_cache.get(key)
+        receivable_amt = receivable_by_key.get(key, Decimal(item.amount or 0))
         if receipt:
+            receipt.receivable_amt = max(Decimal(receipt.receivable_amt or 0), receivable_amt)
             receipt.received_amt = receipt.received_amt + share
             if offset_date:
                 receipt.last_receipt_date = offset_date
         else:
-            db.add(
-                CaseReceipt(
-                    id=str(uuid4()),
-                    case_id=item.case_id,
-                    fee_type=item.fee_type,
-                    currency=bill.currency,
-                    receivable_amt=item.amount,
-                    received_amt=share,
-                    last_receipt_date=offset_date,
-                )
+            receipt = CaseReceipt(
+                id=str(uuid4()),
+                case_id=item.case_id,
+                fee_type=item.fee_type,
+                currency=bill.currency,
+                receivable_amt=receivable_amt,
+                received_amt=share,
+                last_receipt_date=offset_date,
             )
+            db.add(receipt)
+            receipt_cache[key] = receipt
 
 
 def _validate_bill_items(
@@ -1611,6 +1626,26 @@ def process_payment(db: Session, data: PaymentSchema) -> Payment:
             "Payment amount cannot be negative",
             status_code=400,
         )
+    if data.pay_date is not None and data.pay_date > date.today() + timedelta(days=365):
+        raise_business_error(
+            "PAYMENT_DATE_INVALID",
+            "Payment date is too far in the future",
+            status_code=400,
+            details={"pay_date": data.pay_date.isoformat()},
+        )
+    if data.pay_no:
+        existing = (
+            db.query(Payment)
+            .filter(Payment.client_id == data.client_id, Payment.pay_no == data.pay_no)
+            .first()
+        )
+        if existing:
+            raise_business_error(
+                "PAYMENT_PAY_NO_DUPLICATE",
+                "Payment number already exists for this client",
+                status_code=400,
+                details={"client_id": data.client_id, "pay_no": data.pay_no},
+            )
 
     payment = Payment(
         id=str(uuid4()),

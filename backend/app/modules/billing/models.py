@@ -81,9 +81,7 @@ class BadDebtVoucher(UUIDPrimaryKeyMixin, AuditMixin, Base):
     bill_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_bill.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    status: Mapped[str] = mapped_column(
-        String(24), nullable=False, server_default=text("'OPEN'")
-    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'OPEN'"))
     bad_debt_amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )

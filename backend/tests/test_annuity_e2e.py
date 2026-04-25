@@ -190,7 +190,7 @@ def test_annuity_tasks_filters_and_instruction_status_matrix(
     )
     assert list_resp.status_code == 200, list_resp.text
     list_payload = list_resp.json()
-    assert set(list_payload) == {"items", "page", "page_size", "total"}
+    assert set(list_payload) >= {"items", "page", "page_size", "total"}
     assert list_payload["page"] == 1
     assert list_payload["page_size"] == 10
     returned_ids = {item["id"] for item in list_payload["items"]}

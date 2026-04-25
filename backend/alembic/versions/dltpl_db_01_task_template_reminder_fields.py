@@ -44,7 +44,9 @@ def _fk_key(fk: dict) -> tuple[tuple[str, ...], str | None, tuple[str, ...]]:
     )
 
 
-def _spec_key(columns: list[str], referred_table: str, referred_columns: list[str]) -> tuple[
+def _spec_key(
+    columns: list[str], referred_table: str, referred_columns: list[str]
+) -> tuple[
     tuple[str, ...],
     str,
     tuple[str, ...],

@@ -1,0 +1,29 @@
+{
+  "name": "fpms-playwright-skeleton",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FPMS Playwright skeleton generated from structured FPMS test assets.",
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep @P0",
+    "test:w0": "playwright test src/tests/wave-w0.setup.spec.ts",
+    "test:a": "playwright test src/tests/wave-a.case-creation.spec.ts",
+    "test:b": "playwright test src/tests/wave-b.oa.spec.ts",
+    "test:c": "playwright test src/tests/wave-c.pct-national.spec.ts",
+    "test:g0": "playwright test src/tests/wave-g0.grant.spec.ts",
+    "test:d": "playwright test src/tests/wave-d.annuity.spec.ts",
+    "test:e": "playwright test src/tests/wave-e.invalid-litigation.spec.ts",
+    "test:f": "playwright test src/tests/wave-f.prepayment.spec.ts",
+    "test:g": "playwright test src/tests/wave-g.dunning-bad-debt.spec.ts",
+    "test:h": "playwright test src/tests/wave-h.consulting-search.spec.ts",
+    "test:x": "playwright test src/tests/wave-x.search-report-audit.spec.ts",
+    "test:boundary": "playwright test src/tests/boundary.matrix.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "yaml": "^2.5.0",
+    "dotenv": "^16.4.0"
+  }
+}

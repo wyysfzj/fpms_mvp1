@@ -16,7 +16,7 @@
           text
           type="primary"
           :disabled="!payList"
-          @click="goToRegister"
+          @click="goToFirstRegistrable"
         >
           去登记缴费
         </el-button>
@@ -146,6 +146,18 @@
                   {{ row.remark || '—' }}
                 </template>
               </el-table-column>
+              <el-table-column label="操作" width="120" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    text
+                    type="primary"
+                    :disabled="!canRegisterPayment(row)"
+                    @click="goToRegister(row)"
+                  >
+                    登记缴费
+                  </el-button>
+                </template>
+              </el-table-column>
             </el-table>
           </el-card>
         </el-col>
@@ -165,7 +177,7 @@
                 :closable="false"
                 description="进入官方缴费登记页，可带入当前官费清单编号。"
               />
-              <el-button type="primary" plain @click="goToRegister">
+              <el-button type="primary" plain @click="goToFirstRegistrable">
                 前往官方缴费登记
               </el-button>
 
@@ -246,6 +258,7 @@ import {
   markPayListPaid,
 } from '../../../api/govPayments'
 import type {
+  GovPaymentInfo,
   GovPaymentsApiError,
   PayListDetailResult,
 } from '../../../api/govPayments.types'
@@ -295,15 +308,36 @@ const canAddManualRow = computed(() => {
   return status === 'DRAFT' && detail.value?.gov_payments.length === 0
 })
 
+const firstRegistrablePayment = computed(() => {
+  return detail.value?.gov_payments.find(canRegisterPayment) ?? null
+})
+
 function goBack() {
   router.push('/fee-management/pay-lists')
 }
 
-function goToRegister() {
-  if (!payList.value) return
+function canRegisterPayment(row: GovPaymentInfo): boolean {
+  if (!row.fee_item_id) return false
+  const status = (row.status || '').toUpperCase()
+  return status !== 'PAID' && status !== 'RECORDED'
+}
+
+function goToFirstRegistrable() {
+  if (!firstRegistrablePayment.value) {
+    ElMessage.warning('当前清单没有可登记缴费的费用项。')
+    return
+  }
+  goToRegister(firstRegistrablePayment.value)
+}
+
+function goToRegister(row: GovPaymentInfo) {
+  if (!payList.value || !row.fee_item_id) return
   router.push({
     path: '/fee-management/gov-payments/new',
-    query: { pay_list_id: String(payList.value.id) },
+    query: {
+      pay_list_id: String(payList.value.id),
+      fee_item_id: row.fee_item_id,
+    },
   })
 }
 

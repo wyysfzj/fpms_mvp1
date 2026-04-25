@@ -39,8 +39,7 @@ def _sheet_xml(rows: list[list[object]]) -> bytes:
     row_xml_parts: list[str] = []
     for row_no, row in enumerate(rows, start=1):
         cells = "".join(
-            _cell_xml(row_no, column_no, value)
-            for column_no, value in enumerate(row, start=1)
+            _cell_xml(row_no, column_no, value) for column_no, value in enumerate(row, start=1)
         )
         row_xml_parts.append(f'<row r="{row_no}">{cells}</row>')
 
@@ -76,16 +75,24 @@ def build_commission_settlement_report_xlsx(*, report: dict[str, object]) -> byt
     ]
 
     for item in by_agent:
-        rows.append([item.get("agent_id", ""), item.get("line_count", 0), item.get("total_amount", "0.00")])
+        rows.append(
+            [item.get("agent_id", ""), item.get("line_count", 0), item.get("total_amount", "0.00")]
+        )
 
     rows.extend([[], ["按案件统计"], ["案件编号", "明细数", "总额"]])
     for item in by_case:
-        rows.append([item.get("case_id", ""), item.get("line_count", 0), item.get("total_amount", "0.00")])
+        rows.append(
+            [item.get("case_id", ""), item.get("line_count", 0), item.get("total_amount", "0.00")]
+        )
 
     rows.extend([[], ["按时间统计"], ["时间分桶", "明细数", "总额"]])
     for item in by_time:
         rows.append(
-            [item.get("time_bucket", ""), item.get("line_count", 0), item.get("total_amount", "0.00")]
+            [
+                item.get("time_bucket", ""),
+                item.get("line_count", 0),
+                item.get("total_amount", "0.00"),
+            ]
         )
 
     rows.extend(

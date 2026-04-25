@@ -28,22 +28,33 @@
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item
-                label="账单编号"
+                label="账单编号（收款对象）"
                 prop="bill_id"
                 :error="fieldErrors.get('bill_id')?.join(', ')"
               >
-                <el-input
-                  v-model.trim="form.bill_id"
-                  placeholder="请输入账单编号"
-                />
+                <el-select
+                  v-model="form.bill_id"
+                  filterable
+                  clearable
+                  :loading="billOptionsLoading"
+                  class="full-width"
+                  placeholder="请选择账单"
+                >
+                  <el-option
+                    v-for="bill in billOptions"
+                    :key="bill.id"
+                    :label="formatBillOption(bill)"
+                    :value="bill.id"
+                  />
+                </el-select>
                 <div class="field-hint">
-                  <router-link to="/billing/bills">查看账单列表</router-link> 以获取正确编号
+                  <router-link to="/billing/bills">查看账单列表</router-link> 以确认客户、币种和应收余额
                 </div>
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item
-                label="金额"
+                label="回款金额"
                 prop="amount"
                 :error="fieldErrors.get('amount')?.join(', ')"
               >
@@ -75,7 +86,7 @@
             </el-col>
             <el-col :span="12">
               <el-form-item
-                label="付款日期"
+                label="收款日期"
                 prop="payment_date"
                 :error="fieldErrors.get('payment_date')?.join(', ')"
               >
@@ -92,14 +103,17 @@
           </el-row>
 
           <el-form-item
-            label="交易参考号"
+            label="收款编号 / 交易参考号"
             prop="reference"
             :error="fieldErrors.get('reference')?.join(', ')"
           >
             <el-input
               v-model.trim="form.reference"
-              placeholder="请输入交易参考号（可选）"
+              placeholder="例如 PAY-202604-001，可选"
             />
+            <div class="field-hint">
+              该值会作为后端回款编号或交易参考号保存，便于后续核销时识别。
+            </div>
           </el-form-item>
 
           <el-form-item label="备注" prop="notes">
@@ -128,12 +142,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { onMounted, ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { createPayment } from '../../../api/billing'
-import type { PaymentMethod } from '../../../api/billing.types'
+import { createPayment, getBills } from '../../../api/billing'
+import type { BillListItem, PaymentMethod } from '../../../api/billing.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -145,6 +159,8 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const error = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
+const billOptionsLoading = ref(false)
+const billOptions = ref<BillListItem[]>([])
 
 // Pre-fill bill_id from query param if provided
 const initialBillId = (route.query.bill_id as string) || ''
@@ -160,7 +176,7 @@ const form = reactive({
 
 const rules: FormRules = {
   bill_id: [
-    { required: true, message: '账单编号为必填项', trigger: 'blur' },
+    { required: true, message: '请选择账单', trigger: 'change' },
   ],
   amount: [
     { required: true, message: '金额为必填项', trigger: 'blur' },
@@ -176,6 +192,27 @@ const rules: FormRules = {
 
 function goBack() {
   router.push('/billing/payments')
+}
+
+function formatBillOption(bill: BillListItem): string {
+  const clientText = bill.client_name || bill.client_id || '未关联客户'
+  const balanceText = bill.balance.toLocaleString('zh-CN', {
+    style: 'currency',
+    currency: bill.currency || 'CNY',
+  })
+  return `${bill.bill_no} · ${clientText} · 余额 ${balanceText}`
+}
+
+async function fetchBillOptions() {
+  billOptionsLoading.value = true
+  try {
+    const result = await getBills({ page: 1, page_size: 100 })
+    billOptions.value = result.items
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    billOptionsLoading.value = false
+  }
 }
 
 async function handleSubmit() {
@@ -210,6 +247,10 @@ async function handleSubmit() {
     saving.value = false
   }
 }
+
+onMounted(() => {
+  fetchBillOptions()
+})
 </script>
 
 <style scoped>

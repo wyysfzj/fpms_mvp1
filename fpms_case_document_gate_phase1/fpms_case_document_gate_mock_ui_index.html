@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FPMS 案卷主线 + 文件门禁原型</title>
+<link rel="stylesheet" href="mock-ui/assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="#s01">01 案件工作台总览</a>
+<a href="#s02">02 新建案卷 - 收案文件</a>
+<a href="#s03">03 新建案卷 - 文件核验清单</a>
+<a href="#s04">04 新建案卷 - 事件提交预览</a>
+<a href="#s05">05 案件详情 - 工作流与文件材料区</a>
+<a href="#s06">06 案件详情 - 卷宗事件账本</a>
+<a href="#s07">07 案件递交 - 最终材料门禁</a>
+<a href="#s08">08 案内登记来文 - 影响预览</a>
+<a href="#s09">09 待归档文件 - 辅助队列</a>
+<a href="#s10">10 状态规则矩阵 - 试跑器</a></nav>
+    <div class="principle"><b>核心定位</b>文件不是另一个主流程，而是案卷动作的输入、证据、门禁和审计线索。</div>
+  </aside>
+  <main class="main">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">第一阶段设计包</div>
+        <h1>案卷主线 + 文件门禁</h1>
+        <p>本版把文件驱动落到文书事件、门禁快照、影响计划和效果账本，避免只在案件工作流上贴一层附件检查。</p>
+      </div>
+      <a class="btn primary" href="FPMS_案卷主线_文件门禁增强方案_Phase1.md">查看方案</a>
+    </section>
+    <div class="index-grid">
+      <div><section id="s01" class="screen-card">
+  <h2>01 案件工作台总览<span class="badge">原型 01</span></h2>
+  <p>把文件风险、文书事件待确认、最终材料缺口并入案件工作台。</p>
+  <a href="mock-ui/pages/01_01_case_dashboard.html"><img src="mock-ui/screens/01_01_case_dashboard.png" alt="01 案件工作台总览"></a>
+</section>
+
+<section id="s02" class="screen-card">
+  <h2>02 新建案卷 - 收案文件<span class="badge">原型 02</span></h2>
+  <p>新案从客户邮件、委托文件和申请材料开始，先落文件包和文件状态。</p>
+  <a href="mock-ui/pages/02_02_new_case_intake_files.html"><img src="mock-ui/screens/02_02_new_case_intake_files.png" alt="02 新建案卷 - 收案文件"></a>
+</section>
+
+<section id="s03" class="screen-card">
+  <h2>03 新建案卷 - 文件核验清单<span class="badge">原型 03</span></h2>
+  <p>材料清单细化到要求项、文件角色、文件状态和后续动作。</p>
+  <a href="mock-ui/pages/03_03_new_case_document_checklist.html"><img src="mock-ui/screens/03_03_new_case_document_checklist.png" alt="03 新建案卷 - 文件核验清单"></a>
+</section>
+
+<section id="s04" class="screen-card">
+  <h2>04 新建案卷 - 事件提交预览<span class="badge">原型 04</span></h2>
+  <p>把建案动作表达为一个可审计的客户收案文书事件。</p>
+  <a href="mock-ui/pages/04_04_new_case_creation_preview.html"><img src="mock-ui/screens/04_04_new_case_creation_preview.png" alt="04 新建案卷 - 事件提交预览"></a>
+</section>
+
+<section id="s05" class="screen-card">
+  <h2>05 案件详情 - 工作流与文件材料区<span class="badge">原型 05</span></h2>
+  <p>案件详情页同时展示流程阶段、文件要求、门禁结果和可推进动作。</p>
+  <a href="mock-ui/pages/05_05_case_workflow_document_dock.html"><img src="mock-ui/screens/05_05_case_workflow_document_dock.png" alt="05 案件详情 - 工作流与文件材料区"></a>
+</section>
+
+<section id="s06" class="screen-card">
+  <h2>06 案件详情 - 卷宗事件账本<span class="badge">原型 06</span></h2>
+  <p>用卷宗事件账本替代普通附件表，支持审计和回放。</p>
+  <a href="mock-ui/pages/06_06_case_dossier_timeline.html"><img src="mock-ui/screens/06_06_case_dossier_timeline.png" alt="06 案件详情 - 卷宗事件账本"></a>
+</section>
+
+<section id="s07" class="screen-card">
+  <h2>07 案件递交 - 最终材料门禁<span class="badge">原型 07</span></h2>
+  <p>批量递交保留，但按最终材料门禁自动分组通过、警告和阻止。</p>
+  <a href="mock-ui/pages/07_07_batch_filing_material_gate.html"><img src="mock-ui/screens/07_07_batch_filing_material_gate.png" alt="07 案件递交 - 最终材料门禁"></a>
+</section>
+
+<section id="s08" class="screen-card">
+  <h2>08 案内登记来文 - 影响预览<span class="badge">原型 08</span></h2>
+  <p>中间文件登记从案卷进入，来源文件和影响预览成为提交门禁。</p>
+  <a href="mock-ui/pages/08_08_case_document_registration.html"><img src="mock-ui/screens/08_08_case_document_registration.png" alt="08 案内登记来文 - 影响预览"></a>
+</section>
+
+<section id="s09" class="screen-card">
+  <h2>09 待归档文件 - 辅助队列<span class="badge">原型 09</span></h2>
+  <p>未归档文件包按建议动作跳转到新建案卷、案内登记来文或补充材料。</p>
+  <a href="mock-ui/pages/09_09_unfiled_file_tray.html"><img src="mock-ui/screens/09_09_unfiled_file_tray.png" alt="09 待归档文件 - 辅助队列"></a>
+</section>
+
+<section id="s10" class="screen-card">
+  <h2>10 状态规则矩阵 - 试跑器<span class="badge">原型 10</span></h2>
+  <p>状态规则矩阵增加试跑器，避免一行规则同时承担太多副作用。</p>
+  <a href="mock-ui/pages/10_10_doc_status_rule_matrix.html"><img src="mock-ui/screens/10_10_doc_status_rule_matrix.png" alt="10 状态规则矩阵 - 试跑器"></a>
+</section></div>
+      <aside class="toc">
+        <h3>页面目录</h3>
+        <a href="#s01">01 案件工作台总览</a>
+<a href="#s02">02 新建案卷 - 收案文件</a>
+<a href="#s03">03 新建案卷 - 文件核验清单</a>
+<a href="#s04">04 新建案卷 - 事件提交预览</a>
+<a href="#s05">05 案件详情 - 工作流与文件材料区</a>
+<a href="#s06">06 案件详情 - 卷宗事件账本</a>
+<a href="#s07">07 案件递交 - 最终材料门禁</a>
+<a href="#s08">08 案内登记来文 - 影响预览</a>
+<a href="#s09">09 待归档文件 - 辅助队列</a>
+<a href="#s10">10 状态规则矩阵 - 试跑器</a>
+        <div class="note">
+          <h3>推荐评审顺序</h3>
+          02 → 03 → 04 → 05 → 08 → 06 → 07 → 09 → 10。先看收案如何形成文件资产，再看文书事件如何驱动状态、任务和费用。
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</body>
+</html>

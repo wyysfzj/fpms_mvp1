@@ -29,8 +29,12 @@ class CommissionRule(Base):
     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     flow_dir: Mapped[str | None] = mapped_column(String(32), nullable=True)
     patent_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
+    s1_rate: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), nullable=False, server_default=text("0")
+    )
+    s2_rate: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), nullable=False, server_default=text("0")
+    )
     s1_fixed_amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
@@ -65,13 +69,19 @@ class Commission(Base):
         Integer, ForeignKey("t_commission_rule.id", ondelete="SET NULL"), nullable=True
     )
     fee_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    base_fee: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
-    s1_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
+    base_fee: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, server_default=text("0")
+    )
+    s1_rate: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), nullable=False, server_default=text("0")
+    )
     s1_amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
     s1_done: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
-    s2_rate: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, server_default=text("0"))
+    s2_rate: Mapped[Decimal] = mapped_column(
+        Numeric(8, 4), nullable=False, server_default=text("0")
+    )
     s2_amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
@@ -122,9 +132,7 @@ class CommissionSettleLine(Base):
     __tablename__ = "t_commission_settle_line"
     __table_args__ = (
         UniqueConstraint("settlement_id", "line_no", name="uq_t_comm_settle_line_no"),
-        UniqueConstraint(
-            "settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"
-        ),
+        UniqueConstraint("settlement_id", "commission_id", name="uq_t_comm_settle_line_commission"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

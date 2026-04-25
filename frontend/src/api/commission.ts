@@ -16,6 +16,7 @@ import type {
 interface BackendCommissionRecord {
     id: number
     case_id: string
+    case_no?: string | null
     agent_id?: string | null
     rule_id?: number | null
     fee_type?: string | null
@@ -148,6 +149,7 @@ function mapCommissionRecord(input: BackendCommissionRecord): CommissionRecord {
     return {
         id: input.id,
         case_id: input.case_id,
+        case_no: input.case_no ?? undefined,
         agent_id: input.agent_id ?? undefined,
         rule_id: input.rule_id ?? undefined,
         fee_type: input.fee_type ?? undefined,

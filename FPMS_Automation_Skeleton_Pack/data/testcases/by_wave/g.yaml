@@ -1,0 +1,280 @@
+wave: G
+wave_title: G 催款与坏账
+context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+cases:
+- id: TC-G-001
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Happy
+  topic: G1 逾期识别
+  stage_code: G1
+  stage_name: 逾期识别
+  coverage_ids:
+  - FR-BL-07
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-07
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 存在多张 AR 账单，其中包括未到期、已结清、坏账和逾期未结账单。
+  steps_summary: 按 ToDate 执行逾期识别或打开逾期报表。
+  expected: 仅 Direction=AR、Status=UNSETTLED/PARTIALLY_SETTLED、IsBadDebt=false、DueDate<=ToDate、Balance>0 的账单被识别为逾期。
+  automation_recommendation: 查询/服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G-002
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Happy
+  topic: G2 生成催款单快照
+  stage_code: G2
+  stage_name: 生成催款单快照
+  coverage_ids:
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 客户存在多张逾期账单。
+  steps_summary: 以客户+截止日生成 T_Dunning/T_DunningLine。
+  expected: 催款单头和明细创建成功；OutstandingAmt 记录生成时快照，不受后续收款回写影响；TotalAmt 为各行合计。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G-003
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Unhappy
+  topic: G2 催款范围过滤
+  stage_code: G2
+  stage_name: 催款范围过滤
+  coverage_ids:
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 客户同时存在已结清、未到期、坏账和 AP 账单。
+  steps_summary: 生成催款单。
+  expected: 已结清、未到期、坏账、AP 账单不应进入催款明细。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-G-004
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P1
+  categories:
+  - Happy
+  topic: G3 生成催款函
+  stage_code: G3
+  stage_name: 生成催款函
+  coverage_ids:
+  - FR-BL-08
+  - FR-WD-06
+  requirement_ids:
+  - FR-BL-08
+  - FR-WD-06
+  validation_ids: []
+  preconditions: 催款单已创建；存在 DUNNING_LETTER 模板。
+  steps_summary: 从催款单生成催款函 Word/PDF 或 Email 并发送。
+  expected: 催款函生成成功；可作为 T_Document 存档；T_Dunning.Status/SentDate 更新。
+  automation_recommendation: UI+文件输出。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G-005
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Happy
+  topic: G4 催款后部分付款
+  stage_code: G4
+  stage_name: 催款后部分付款
+  coverage_ids:
+  - FR-BL-05
+  - FR-BL-08
+  - FR-FE-07
+  requirement_ids:
+  - FR-BL-05
+  - FR-BL-08
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 逾期账单已被催款。
+  steps_summary: 登记客户部分付款并冲销到账单。
+  expected: 账单余额减少、状态更新为 PARTIALLY_SETTLED；CaseReceipt 更新已收金额；历史 DunningLine 快照不变。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G-006
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P1
+  categories:
+  - Happy
+  topic: G5 多轮催款
+  stage_code: G5
+  stage_name: 多轮催款
+  coverage_ids:
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 账单仍有未结余额，已存在第一轮催款单。
+  steps_summary: 再次生成第二轮/第三轮催款单。
+  expected: 新一轮 Dunning/DunningLine 创建成功；OutstandingAmt 反映当轮余额；旧催款数据不被覆盖。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G-007
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Happy
+  topic: G6 标记坏账
+  stage_code: G6
+  stage_name: 标记坏账
+  coverage_ids:
+  - FR-BL-07
+  requirement_ids:
+  - FR-BL-07
+  validation_ids: []
+  preconditions: 存在长期逾期且无回收希望的应收账单。
+  steps_summary: 对账单执行“标记坏账”，填写 BadDebtDate、BadDebtReason。
+  expected: Bill.IsBadDebt=true，Status=BAD_DEBT；在普通应收统计与坏账统计中区分显示。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G-008
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P1
+  categories:
+  - Happy
+  topic: G7 坏账后收回
+  stage_code: G7
+  stage_name: 坏账后收回
+  coverage_ids:
+  - FR-BL-05
+  - FR-BL-07
+  - FR-FE-07
+  requirement_ids:
+  - FR-BL-05
+  - FR-BL-07
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 账单已是 BAD_DEBT。
+  steps_summary: 登记客户付款并冲销到坏账账单。
+  expected: 系统仍允许登记收款和 Offset；Bill.Balance 下降；CaseReceipt 记录坏账后回收金额；账单可按策略继续保持 BAD_DEBT 或转状态。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G-009
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P2
+  categories:
+  - Happy
+  - Unhappy
+  topic: G7 坏账恢复策略
+  stage_code: G7
+  stage_name: 坏账恢复策略
+  coverage_ids:
+  - FR-BL-07
+  requirement_ids:
+  - FR-BL-07
+  validation_ids: []
+  preconditions: 存在 BAD_DEBT 账单。
+  steps_summary: 执行“从坏账恢复”或在完全收回后检查系统状态。
+  expected: 如系统支持恢复，IsBadDebt 恢复为 false，状态改为 UNSETTLED/PARTIALLY_SETTLED/SETTLED；若不支持则明确只保留 BAD_DEBT 但余额更新。
+  automation_recommendation: 需按实现策略人工确认。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p2
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-G-010
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P1
+  categories:
+  - Happy
+  topic: G8 对提成的间接影响
+  stage_code: G8
+  stage_name: 对提成的间接影响
+  coverage_ids:
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: 存在 WaitPay=true 的提成记录，对应账单长期逾期后部分回收或坏账后回收。
+  steps_summary: 观察回款前后 Commission 可结算状态。
+  expected: 只有通过 Offset/CaseReceipt 确认归属的回款才提升 PaidRatio；催款和坏账标签本身不直接改变 BaseFee，但会影响可结算性。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p1
+  - happy
+  status: skeleton_ready

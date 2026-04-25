@@ -1,0 +1,20 @@
+- id: DS-COM-001
+  scope: NORMAL/IN_IN/INVENTION
+  base_mode: BY_SERVICE_FEE
+  ratio: S1=30%, S2=20%
+  note: WaitPay=true
+- id: DS-COM-002
+  scope: OA
+  base_mode: BY_SERVICE_FEE
+  ratio: S1=20%, S2=0~10%
+  note: 按阶段追加
+- id: DS-COM-003
+  scope: GRANT
+  base_mode: BY_SERVICE_FEE
+  ratio: S1=0, S2=20%
+  note: 授权节点可结算
+- id: DS-COM-004
+  scope: CONSULTING/SEARCH
+  base_mode: FIXED or BY_SERVICE_FEE
+  ratio: S1=40%, S2=0 或 30/10
+  note: 顾问规则

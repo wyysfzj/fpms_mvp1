@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10 状态规则矩阵 - 试跑器</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="active">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>规则管理拆成匹配规则和效果项；管理员维护，普通用户只看到提交前试跑结果。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">系统设置</div>
+          <h1>状态规则矩阵与试跑器</h1>
+          <p>文书事件先匹配规则，再展开状态效果、任务效果、费用效果和文件效果；每个效果都有幂等键。</p>
+        </div>
+        <button class="btn primary">新建规则</button>
+      </section>
+      <section class="card">
+        <h2>规则列表</h2>
+        <table class="data-table">
+          <thead><tr><th>规则</th><th>文书事件</th><th>状态效果</th><th>任务效果</th><th>费用效果</th><th>确认</th></tr></thead>
+          <tbody>
+            <tr><td>RULE-OA-NOTICE-01</td><td>OA_NOTICE</td><td>申请状态 → 一通</td><td>OA 答复时限</td><td>无</td><td>否</td></tr>
+            <tr><td>RULE-GRANT-NOTICE-01</td><td>GRANT_NOTICE</td><td>申请状态 → 待授权缴费</td><td>授权费时限</td><td>授权费草单</td><td>否</td></tr>
+            <tr><td>RULE-CERT-CLIENT-01</td><td>PATENT_CERTIFICATE</td><td>客户状态 → 领证</td><td>证书转达</td><td>不重复</td><td>是</td></tr>
+            <tr><td>RULE-RIGHT-TERM-01</td><td>RIGHT_TERMINATION_NOTICE</td><td>权利状态 → 终止</td><td>恢复决策</td><td>无</td><td>是</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="grid two">
+        <div class="card">
+          <h2>规则试跑</h2>
+          <table class="data-table compact"><tbody>
+            <tr><th>输入文件</th><td>专利证书.pdf</td></tr>
+            <tr><th>当前状态</th><td>申请状态：授权；客户状态：授权；权利状态：有效</td></tr>
+            <tr><th>匹配规则</th><td>RULE-CERT-CLIENT-01</td></tr>
+          </tbody></table>
+        </div>
+        <div class="card">
+          <h2>试跑结果</h2>
+          <div class="impact-list">
+            <span>申请状态保持授权</span>
+            <span>客户状态变为领证</span>
+            <span>生成证书转达任务</span>
+            <span>不生成授权费草单</span>
+            <span class="warn-text">需要人工确认</span>
+          </div>
+        </div>
+      </section>
+    </main>
+</div>
+</body>
+</html>

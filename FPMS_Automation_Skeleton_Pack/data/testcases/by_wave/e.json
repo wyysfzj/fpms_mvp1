@@ -1,0 +1,503 @@
+{
+  "wave": "E",
+  "wave_title": "E 无效/诉讼",
+  "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+  "cases": [
+    {
+      "id": "TC-E-001",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E1 无效案立案",
+      "stage_code": "E1",
+      "stage_name": "无效案立案",
+      "coverage_ids": [
+        "FR-CM-01",
+        "FR-CM-05",
+        "V-INV-01",
+        "V-INV-02",
+        "V-INV-03"
+      ],
+      "requirement_ids": [
+        "FR-CM-01",
+        "FR-CM-05"
+      ],
+      "validation_ids": [
+        "V-INV-01",
+        "V-INV-02",
+        "V-INV-03"
+      ],
+      "preconditions": "DS-U-FM-01；原案 CASE-E-${RUN_ID}-ORIG 已授权。",
+      "steps_summary": "创建 CaseType=INVALIDATION 案卷，填写 OriginalCaseID、InvalidClientID、InvalidRole、InvalidPatentee、InvalidRequester。",
+      "expected": "无效案保存成功；Status=INVALID_INIT；OriginalCaseID 指向原案；报表可识别我方角色。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [
+        "DS-U-FM-01"
+      ],
+      "dynamic_refs": [
+        "CASE-E-${RUN_ID}-ORIG"
+      ],
+      "tags": [
+        "wave_e",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-002",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Unhappy"
+      ],
+      "topic": "E1 无效案必填缺失",
+      "stage_code": "E1",
+      "stage_name": "无效案必填缺失",
+      "coverage_ids": [
+        "FR-CM-05",
+        "V-INV-01",
+        "V-INV-02"
+      ],
+      "requirement_ids": [
+        "FR-CM-05"
+      ],
+      "validation_ids": [
+        "V-INV-01",
+        "V-INV-02"
+      ],
+      "preconditions": "准备新建 INVALIDATION 案卷。",
+      "steps_summary": "缺少 InvalidClientID、InvalidRole 或 Patentee/Requester 之一保存。",
+      "expected": "系统阻止保存并给出缺失项提示。",
+      "automation_recommendation": "服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p0",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-003",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E1 诉讼案立案",
+      "stage_code": "E1",
+      "stage_name": "诉讼案立案",
+      "coverage_ids": [
+        "FR-CM-01"
+      ],
+      "requirement_ids": [
+        "FR-CM-01"
+      ],
+      "validation_ids": [],
+      "preconditions": "DS-U-FM-01；原案或争议对象存在。",
+      "steps_summary": "创建 CaseType=LITIGATION 案卷，填写 LitigationType、CourtName、Plaintiff、Defendant、LitigationRole。",
+      "expected": "诉讼案保存成功；Status=LIT_INIT 或配置默认状态；后续可登记立案/开庭/判决文书。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [
+        "DS-U-FM-01"
+      ],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-004",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E2 请求书/起诉状 + 初始草单",
+      "stage_code": "E2",
+      "stage_name": "请求书/起诉状 + 初始草单",
+      "coverage_ids": [
+        "FR-WD-02",
+        "FR-WD-05",
+        "FR-CM-04"
+      ],
+      "requirement_ids": [
+        "FR-WD-02",
+        "FR-WD-05",
+        "FR-CM-04"
+      ],
+      "validation_ids": [],
+      "preconditions": "INVALIDATION/LITIGATION 案已创建；配置 INVALID_REQUEST 或 LITIGATION_COMPLAINT 模板和费用类型。",
+      "steps_summary": "录入 OFFICIAL_OUT 请求书/起诉状，必要时在 Step4 生成 INVALID_FEE/LITIGATION_FEE 草单。",
+      "expected": "文档保存成功；案件状态变为 INVALID_FILED 或 LIT_FILED；初始费用草单按模板生成。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-005",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E3 受理/答辩/开庭通知 → 任务",
+      "stage_code": "E3",
+      "stage_name": "受理/答辩/开庭通知 → 任务",
+      "coverage_ids": [
+        "FR-WD-04",
+        "FR-DL-02"
+      ],
+      "requirement_ids": [
+        "FR-WD-04",
+        "FR-DL-02"
+      ],
+      "validation_ids": [],
+      "preconditions": "已 filed 的无效/诉讼案件。",
+      "steps_summary": "录入 OFFICIAL_IN 受理通知、答辩通知、举证通知或开庭通知。",
+      "expected": "相应 T_Document 创建成功；NeedReply=true 的文档生成答辩/举证/开庭准备任务；案件状态更新为 INVALID_ACCEPTED/INVALID_IN_HEARING 或 LIT_ACCEPTED/LIT_HEARING。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-006",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E4 答辩/证据/意见去文 → 核销",
+      "stage_code": "E4",
+      "stage_name": "答辩/证据/意见去文 → 核销",
+      "coverage_ids": [
+        "FR-WD-04",
+        "FR-DL-04",
+        "FR-DL-10"
+      ],
+      "requirement_ids": [
+        "FR-WD-04",
+        "FR-DL-04",
+        "FR-DL-10"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在 OPEN 的 INVALID_DEFENSE_LIMIT 或相关诉讼任务。",
+      "steps_summary": "录入 OFFICIAL_OUT 答辩状、证据提交、书面意见文书，ReplyToID 指向对应通知。",
+      "expected": "去文保存成功；对应任务被 DONE；TaskLog 写 MARK_DONE；必要时补充 INVALID_FEE/LITIGATION_FEE 草单。",
+      "automation_recommendation": "API+DB+UI。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-007",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Unhappy"
+      ],
+      "topic": "E4 ReplyTo 非法",
+      "stage_code": "E4",
+      "stage_name": "ReplyTo 非法",
+      "coverage_ids": [
+        "FR-WD-04"
+      ],
+      "requirement_ids": [
+        "FR-WD-04"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在他案通知或不匹配模板。",
+      "steps_summary": "将答辩文书的 ReplyToID 指向错误案件或错误模板类型。",
+      "expected": "系统阻断或过滤非法 ReplyToID；不应误核销他案任务。",
+      "automation_recommendation": "服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p0",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-008",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E5 无效决定-全部无效",
+      "stage_code": "E5",
+      "stage_name": "无效决定-全部无效",
+      "coverage_ids": [
+        "FR-CM-04",
+        "FR-WD-03"
+      ],
+      "requirement_ids": [
+        "FR-CM-04",
+        "FR-WD-03"
+      ],
+      "validation_ids": [],
+      "preconditions": "无效案已进入审理中；原案为 GRANTED。",
+      "steps_summary": "录入 INVALID_DECISION，DecisionResult=全部无效，且根据我方角色设置结果。",
+      "expected": "无效案状态更新为 INVALID_WON/INVALID_LOST（依角色）；原案状态更新为 INVALIDATED 或 TERMINATED（按规则）；DecisionResult 等保存在 ExtraData。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-009",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E5 无效决定-部分无效",
+      "stage_code": "E5",
+      "stage_name": "无效决定-部分无效",
+      "coverage_ids": [
+        "FR-CM-04"
+      ],
+      "requirement_ids": [
+        "FR-CM-04"
+      ],
+      "validation_ids": [],
+      "preconditions": "无效案已审理中；原案为 GRANTED。",
+      "steps_summary": "录入 INVALID_DECISION，DecisionResult=部分无效，填写 AffectedClaims。",
+      "expected": "无效案状态为 INVALID_PARTIAL；原案状态为 INVALIDATED_PARTIAL；受影响权利要求可追踪。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-010",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E5 诉讼判决",
+      "stage_code": "E5",
+      "stage_name": "诉讼判决",
+      "coverage_ids": [
+        "FR-CM-04"
+      ],
+      "requirement_ids": [
+        "FR-CM-04"
+      ],
+      "validation_ids": [],
+      "preconditions": "诉讼案已开庭。",
+      "steps_summary": "录入 LITIGATION_JUDGMENT，分别测试胜诉/败诉/和解。",
+      "expected": "诉讼案状态更新为 LIT_WON/LIT_LOST/LIT_SETTLED；如判决不影响原专利状态，则原案保持不变。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-011",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E6 费用闭环",
+      "stage_code": "E6",
+      "stage_name": "费用闭环",
+      "coverage_ids": [
+        "FR-FE-02",
+        "FR-FE-04",
+        "FR-BL-02",
+        "FR-BL-05",
+        "FR-FE-07"
+      ],
+      "requirement_ids": [
+        "FR-FE-02",
+        "FR-FE-04",
+        "FR-BL-02",
+        "FR-BL-05",
+        "FR-FE-07"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在 INVALID_FEE/LITIGATION_FEE 草单，含 GOV/SERVICE/MISC 项。",
+      "steps_summary": "从草单生成官费清单（如有 GOV）、账单、收款和冲销。",
+      "expected": "无效/诉讼费用全链路闭环；BillItem、GovPayment、CaseReceipt 都能按 CaseID/阶段追踪。",
+      "automation_recommendation": "API+DB+UI。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-012",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "E7 提成",
+      "stage_code": "E7",
+      "stage_name": "提成",
+      "coverage_ids": [
+        "FR-COM-01",
+        "FR-COM-02",
+        "FR-COM-04",
+        "FR-COM-06"
+      ],
+      "requirement_ids": [
+        "FR-COM-01",
+        "FR-COM-02",
+        "FR-COM-04",
+        "FR-COM-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "无效/诉讼账单含 SERVICE 项且规则已配置。",
+      "steps_summary": "触发提成计算并查看是否进入结算候选。",
+      "expected": "BaseFee 来源于无效/诉讼服务费；阶段说明写入 Remark；满足 WaitPay/状态条件时进入可结算列表。",
+      "automation_recommendation": "服务层+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-013",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Unhappy"
+      ],
+      "topic": "原案引用异常",
+      "stage_code": null,
+      "stage_name": "原案引用异常",
+      "coverage_ids": [
+        "FR-CM-05"
+      ],
+      "requirement_ids": [
+        "FR-CM-05"
+      ],
+      "validation_ids": [],
+      "preconditions": "尝试创建无效案时 OriginalCaseID 不存在或原案并非适格状态。",
+      "steps_summary": "保存无效/诉讼案。",
+      "expected": "系统阻断或给出强警告；避免对不存在或不适格原案建立派生案。",
+      "automation_recommendation": "服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p1",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-E-014",
+      "wave": "E",
+      "wave_title": "E 无效/诉讼",
+      "context": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "priority": "P2",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "多阶段费用与提成累积",
+      "stage_code": null,
+      "stage_name": "多阶段费用与提成累积",
+      "coverage_ids": [
+        "FR-COM-02",
+        "FR-COM-03"
+      ],
+      "requirement_ids": [
+        "FR-COM-02",
+        "FR-COM-03"
+      ],
+      "validation_ids": [],
+      "preconditions": "同一无效/诉讼案已存在初始服务费提成记录。",
+      "steps_summary": "再次录入答辩/开庭/上诉阶段文书并生成追加服务费账单。",
+      "expected": "Commission 可按累加或多记录模式继续增加 BaseFee；各阶段可追溯，不与前阶段记录混淆。",
+      "automation_recommendation": "服务层+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_e",
+        "p2",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    }
+  ]
+}

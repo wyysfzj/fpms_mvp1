@@ -8,9 +8,19 @@
     <!-- Header with Add Button -->
     <div class="items-header">
       <h3 class="panel-heading">费用明细</h3>
-      <el-button v-if="!readonly" size="small" type="primary" @click="openAddDialog">
-        + 添加明细
-      </el-button>
+      <div class="items-actions">
+        <el-button
+          size="small"
+          type="success"
+          :disabled="selectedGovItems.length === 0"
+          @click="openPayListDialog"
+        >
+          生成官费清单
+        </el-button>
+        <el-button v-if="!readonly" size="small" type="primary" @click="openAddDialog">
+          + 添加明细
+        </el-button>
+      </div>
     </div>
 
     <!-- Loading -->
@@ -32,7 +42,16 @@
         class="compact-table items-table"
         show-summary
         :summary-method="getSummaries"
+        @selection-change="handleSelectionChange"
       >
+        <el-table-column type="selection" width="48" :selectable="isGovItem" />
+        <el-table-column label="费用类型" width="100">
+          <template #default="{ row }">
+            <el-tag :type="isGovItem(row) ? 'success' : 'info'" size="small">
+              {{ feeTypeText(row.fee_type) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200" />
         <el-table-column label="数量" width="80" align="right">
           <template #default="{ row }">
@@ -113,15 +132,53 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="payListDialogVisible"
+      title="生成官费清单"
+      width="480px"
+    >
+      <div v-if="payListError" class="dialog-error">
+        <ApiErrorBanner :error="payListError" @dismiss="payListError = null" />
+      </div>
+      <el-form label-position="top">
+        <el-form-item label="已选官费明细">
+          <div class="field-hint">共 {{ selectedGovItems.length }} 条，合计 {{ formatAmount(selectedGovTotal) }}</div>
+        </el-form-item>
+        <el-form-item label="计划缴费日期">
+          <el-date-picker
+            v-model="payListForm.planned_pay_date"
+            type="date"
+            placeholder="请选择计划缴费日期"
+            value-format="YYYY-MM-DD"
+            format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model.trim="payListForm.remark" placeholder="可填写说明（可选）" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="payListDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creatingPayList" @click="handleCreatePayList">
+          创建官费清单
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getFeeDraftItems, createFeeItem, updateFeeItem, deleteFeeItem } from '../../../api/fees'
+import { createPayListFromFeeItems, mapGovPaymentsError } from '../../../api/govPayments'
 import type { FeeItem, FeeItemCreatePayload } from '../../../api/fees.types'
+import type { GovPaymentsApiError } from '../../../api/govPayments.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -131,6 +188,8 @@ const props = defineProps<{
   currency?: string
   readonly?: boolean
 }>()
+
+const router = useRouter()
 
 const emit = defineEmits<{
   change: []
@@ -147,11 +206,20 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const dialogError = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
+const selectedItems = ref<FeeItem[]>([])
+const payListDialogVisible = ref(false)
+const creatingPayList = ref(false)
+const payListError = ref<GovPaymentsApiError | null>(null)
 
 const form = reactive<FeeItemCreatePayload>({
   description: '',
   quantity: 1,
   unit_price: 0,
+})
+
+const payListForm = reactive({
+  planned_pay_date: '',
+  remark: '',
 })
 
 const rules: FormRules = {
@@ -168,6 +236,11 @@ const rules: FormRules = {
 
 const totalAmount = computed(() => {
   return items.value.reduce((sum, item) => sum + Number(item.amount), 0)
+})
+
+const selectedGovItems = computed(() => selectedItems.value.filter(isGovItem))
+const selectedGovTotal = computed(() => {
+  return selectedGovItems.value.reduce((sum, item) => sum + Number(item.amount || 0), 0)
 })
 
 async function fetchItems() {
@@ -189,6 +262,63 @@ function formatAmount(value: number): string {
     style: 'currency',
     currency: curr,
   }).format(value)
+}
+
+function feeTypeText(feeType?: string | null): string {
+  switch ((feeType || '').toUpperCase()) {
+    case 'GOV':
+      return '官费'
+    case 'SERVICE':
+      return '服务费'
+    case 'MISC':
+      return '杂费'
+    default:
+      return feeType || '未知'
+  }
+}
+
+function isGovItem(item: FeeItem): boolean {
+  return (item.fee_type || '').toUpperCase() === 'GOV'
+}
+
+function handleSelectionChange(selection: FeeItem[]) {
+  selectedItems.value = selection
+}
+
+function openPayListDialog() {
+  if (selectedGovItems.value.length === 0) {
+    ElMessage.warning('请先选择官费明细。')
+    return
+  }
+  payListError.value = null
+  payListDialogVisible.value = true
+}
+
+async function handleCreatePayList() {
+  if (selectedGovItems.value.length === 0) {
+    ElMessage.warning('请先选择官费明细。')
+    return
+  }
+  creatingPayList.value = true
+  payListError.value = null
+  try {
+    const response = await createPayListFromFeeItems({
+      fee_item_ids: selectedGovItems.value.map(item => item.id),
+      planned_pay_date: payListForm.planned_pay_date || undefined,
+      remark: payListForm.remark || undefined,
+    })
+    if (!response.pay_list) {
+      ElMessage.warning('未创建官费清单，请检查失败明细。')
+      return
+    }
+    ElMessage.success('官费清单创建成功')
+    payListDialogVisible.value = false
+    router.push(`/fee-management/pay-lists/${response.pay_list.id}`)
+  } catch (err) {
+    payListError.value = mapGovPaymentsError(err)
+  } finally {
+    creatingPayList.value = false
+  }
 }
 
 function getSummaries({ columns }: { columns: { property?: string; label?: string }[] }): string[] {
@@ -312,6 +442,12 @@ defineExpose({
   margin-bottom: 16px;
 }
 
+.items-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .items-header .panel-heading {
   margin: 0;
 }
@@ -344,5 +480,10 @@ defineExpose({
 
 .dialog-error {
   margin-bottom: 16px;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-sub);
 }
 </style>

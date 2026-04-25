@@ -117,7 +117,11 @@ def update_department(
             department_code=updates["department_code"],
             exclude_department_id=department_id,
         )
-    if "name_cn" in updates and updates["name_cn"] is not None and updates["name_cn"] != department.name_cn:
+    if (
+        "name_cn" in updates
+        and updates["name_cn"] is not None
+        and updates["name_cn"] != department.name_cn
+    ):
         assert_department_name_unique(
             db,
             name_cn=updates["name_cn"],

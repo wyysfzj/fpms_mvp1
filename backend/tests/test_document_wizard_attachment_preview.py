@@ -17,7 +17,24 @@ def _unique_case_no() -> str:
     return f"WZA-{uuid4().hex[:8].upper()}"
 
 
+def _create_applicant(client: TestClient, auth_headers: dict[str, str]) -> dict:
+    suffix = uuid4().hex[:8].upper()
+    resp = client.post(
+        "/api/v1/applicants",
+        headers=auth_headers,
+        json={
+            "code": f"WZA-AP-{suffix}",
+            "name_cn": f"Wizard附件预览申请人-{suffix}",
+            "applicant_type": "ENTITY",
+            "is_active": True,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 def _create_case(client: TestClient, auth_headers: dict[str, str], *, title: str) -> dict:
+    applicant = _create_applicant(client, auth_headers)
     resp = client.post(
         CASE_BASE,
         headers=auth_headers,
@@ -27,6 +44,14 @@ def _create_case(client: TestClient, auth_headers: dict[str, str], *, title: str
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": title,
+            "applicants": [
+                {
+                    "seq": 1,
+                    "is_first": True,
+                    "applicant_id": applicant["id"],
+                    "name_cn": applicant["name_cn"],
+                }
+            ],
         },
     )
     assert resp.status_code == 201, resp.text
@@ -79,6 +104,10 @@ def test_document_wizard_attachment_preview_success(
     case_one = _create_case(client, auth_headers, title="附件预览案件一")
     case_two = _create_case(client, auth_headers, title="附件预览案件二")
     template = _create_template(client, auth_headers, direction="IN")
+    with session_factory() as db:
+        attachment_ids_before = {
+            attachment.id for attachment in db.execute(select(DocAttachment)).scalars().all()
+        }
 
     payload = _preview_attachment_candidates(
         client,
@@ -114,8 +143,10 @@ def test_document_wizard_attachment_preview_success(
     assert second_item["document_title"] == "OA 答复"
 
     with session_factory() as db:
-        attachments = db.execute(select(DocAttachment)).scalars().all()
-        assert attachments == []
+        attachment_ids_after = {
+            attachment.id for attachment in db.execute(select(DocAttachment)).scalars().all()
+        }
+        assert attachment_ids_after == attachment_ids_before
 
 
 def test_document_wizard_attachment_preview_returns_empty_for_inapplicable_template(
@@ -125,6 +156,10 @@ def test_document_wizard_attachment_preview_returns_empty_for_inapplicable_templ
 ) -> None:
     case = _create_case(client, auth_headers, title="空状态案件")
     template = _create_template(client, auth_headers, direction="OUT")
+    with session_factory() as db:
+        attachment_ids_before = {
+            attachment.id for attachment in db.execute(select(DocAttachment)).scalars().all()
+        }
 
     payload = _preview_attachment_candidates(
         client,
@@ -137,5 +172,7 @@ def test_document_wizard_attachment_preview_returns_empty_for_inapplicable_templ
     assert payload["items"] == []
 
     with session_factory() as db:
-        attachments = db.execute(select(DocAttachment)).scalars().all()
-        assert attachments == []
+        attachment_ids_after = {
+            attachment.id for attachment in db.execute(select(DocAttachment)).scalars().all()
+        }
+        assert attachment_ids_after == attachment_ids_before

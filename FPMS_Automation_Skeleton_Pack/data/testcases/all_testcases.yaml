@@ -1,0 +1,4690 @@
+testcases:
+- id: TC-W0-001
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P0
+  categories:
+  - Happy
+  topic: 主数据-客户
+  stage_code: null
+  stage_name: 主数据-客户
+  coverage_ids:
+  - FR-CM-03
+  - FR-WD-09
+  - FR-WD-10
+  requirement_ids:
+  - FR-CM-03
+  - FR-WD-09
+  - FR-WD-10
+  validation_ids: []
+  preconditions: 使用 DS-U-ADM 登录；准备 DS-CL-001 基本信息、两条地址、一条联系人。
+  steps_summary: 进入“设置→客户维护”，创建客户、默认文件地址、默认账单地址和联系人；保存后再打开编辑页校验。
+  expected: 客户、地址、联系人均保存成功；默认地址标记唯一；搜索可按名称命中；后续案卷和账单下拉中可选。
+  automation_recommendation: API+UI；断言 T_Client/T_ClientAddress/T_ClientContact 被创建，默认地址唯一。
+  data_refs:
+  - DS-CL-001
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-W0-002
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Unhappy
+  - Boundary
+  topic: 主数据-客户地址
+  stage_code: null
+  stage_name: 主数据-客户地址
+  coverage_ids:
+  - FR-WD-10
+  - V-C-06
+  requirement_ids:
+  - FR-WD-10
+  validation_ids:
+  - V-C-06
+  preconditions: DS-U-ADM；客户 DS-CL-004 含一条停用地址和一条有效地址。
+  steps_summary: 将停用地址设为默认账单地址并尝试在案卷中选择；再切换为有效地址重试。
+  expected: 停用地址不能被设为有效默认收件地址或在案卷中被使用；切换为有效地址后可正常引用。
+  automation_recommendation: UI+DB；验证停用标志在地址选择器中过滤或阻断。
+  data_refs:
+  - DS-CL-004
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - unhappy
+  - boundary
+  status: skeleton_ready
+- id: TC-W0-003
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 主数据-申请人
+  stage_code: null
+  stage_name: 主数据-申请人
+  coverage_ids:
+  - FR-CM-03
+  requirement_ids:
+  - FR-CM-03
+  validation_ids: []
+  preconditions: DS-U-ADM；准备法人申请人 DS-AP-001 和自然人 DS-AP-002。
+  steps_summary: 创建申请人主数据并填写名称、国籍、地址、IsLegalEntity、HasGeneralPower、IsJobInvention 等字段；保存并搜索。
+  expected: 申请人保存成功；能按名称模糊搜索；HasGeneralPower/IsLegalEntity 在案卷引用时可被带出。
+  automation_recommendation: API+UI；后续案卷测试复用。
+  data_refs:
+  - DS-AP-001
+  - DS-AP-002
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-004
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P2
+  categories:
+  - Happy
+  topic: 主数据-申请人合并
+  stage_code: null
+  stage_name: 主数据-申请人合并
+  coverage_ids:
+  - FR-CM-03
+  requirement_ids:
+  - FR-CM-03
+  validation_ids: []
+  preconditions: DS-U-ADM；创建两条近似重复的申请人记录。
+  steps_summary: 在“申请人维护”执行合并；保留主记录，确认关联地址/标记字段。
+  expected: 重复记录被合并；主记录保留，关联引用不丢失，旧记录不可再被新案选用。
+  automation_recommendation: 建议人工+后台脚本校验引用完整性。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-W0-005
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 主数据-国家地区
+  stage_code: null
+  stage_name: 主数据-国家地区
+  coverage_ids:
+  - FR-CM-01
+  - FR-FE-01
+  - FR-CS-01
+  requirement_ids:
+  - FR-CM-01
+  - FR-FE-01
+  - FR-CS-01
+  validation_ids: []
+  preconditions: DS-U-ADM；准备 CN/US/JP/HK/EP 数据。
+  steps_summary: 维护国家代码、默认币种、IsDomestic、DefaultLanguage、PCT 成员标志；保存后在案卷/费率/报表处引用。
+  expected: 国家配置可被案卷、费率、年费和报表使用；Domestic/PCT member 标志在规则分支中可识别。
+  automation_recommendation: API+UI；验证 T_Country 可被下拉引用。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-006
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P2
+  categories:
+  - Happy
+  topic: 主数据-菌种保藏单位
+  stage_code: null
+  stage_name: 主数据-菌种保藏单位
+  coverage_ids:
+  - FR-CM-05
+  requirement_ids:
+  - FR-CM-05
+  validation_ids: []
+  preconditions: DS-U-ADM；准备 DS-BIO-UNIT-001。
+  steps_summary: 维护菌种保藏单位编码、中英文名、地址、联系人；保存后在案卷扩展页引用。
+  expected: 菌种保藏单位保存成功；在案卷“菌种保藏”标签页可搜索选择。
+  automation_recommendation: UI+API。
+  data_refs:
+  - DS-BIO-UNIT-001
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-W0-007
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P0
+  categories:
+  - Happy
+  topic: 业务参数-费率固定金额
+  stage_code: null
+  stage_name: 业务参数-费率固定金额
+  coverage_ids:
+  - FR-FE-01
+  - FR-FE-03
+  requirement_ids:
+  - FR-FE-01
+  - FR-FE-03
+  validation_ids: []
+  preconditions: DS-U-FI-01；准备 CN_APPL_BASE、CN_APPL_SERVICE_BASE。
+  steps_summary: 在费率维护中创建 Group=APPLY 的 FIXED 费率，设置 FeeType、DefaultCurrency、DefaultAmount、AllowReduction/AllowDiscount。
+  expected: 费率创建成功，可按 Group/Country/CaseType 查询到；后续草单生成时可被命中。
+  automation_recommendation: API+UI；断言 T_FeeRate 基本字段。
+  data_refs:
+  - DS-U-FI-01
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-W0-008
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 业务参数-费率分档
+  stage_code: null
+  stage_name: 业务参数-费率分档
+  coverage_ids:
+  - FR-FE-01
+  - FR-FE-03
+  requirement_ids:
+  - FR-FE-01
+  - FR-FE-03
+  validation_ids: []
+  preconditions: DS-U-FI-01；准备 BY_YEAR、BY_CLAIMS、BY_PAGES、COMPOSITE 四类 CalcParams。
+  steps_summary: 创建年费分档、超项费、超页费和复合计算费率；保存后执行计算预览或在草单生成中调用。
+  expected: 系统能保存 CalcMode/CalcParams；不同模式能被后续草单正确调用。
+  automation_recommendation: 优先 API/服务层自动化；对 CalcParams 做 schema 断言。
+  data_refs:
+  - DS-U-FI-01
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-009
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Unhappy
+  topic: 业务参数-时限模板合法配置
+  stage_code: null
+  stage_name: 业务参数-时限模板合法配置
+  coverage_ids:
+  - FR-DL-01
+  - V-TM-01
+  - V-TM-02
+  - V-TM-03
+  - V-TM-04
+  requirement_ids:
+  - FR-DL-01
+  validation_ids:
+  - V-TM-01
+  - V-TM-02
+  - V-TM-03
+  - V-TM-04
+  preconditions: DS-U-ADM；准备模板代码 APPLY_FEE_LIMIT、OA_REPLY_LIMIT。
+  steps_summary: 创建有效模板；再分别尝试 Code 重复、AddYears/AddMonths/AddDays 全为 0、DailyRemind=true 但无 InnerOffset/Remind、DeadlineBase=CUSTOM
+    但调用端不传 BaseDate。
+  expected: 有效模板可保存；重复 Code 被拒；无增量模板被拒；DailyRemind 配置不足被拒；调用端缺 BaseDate 时任务生成失败并给出明确错误。
+  automation_recommendation: API+UI；模板校验优先服务层自动化。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-W0-010
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P0
+  categories:
+  - Happy
+  topic: 业务参数-文档模板配置
+  stage_code: null
+  stage_name: 业务参数-文档模板配置
+  coverage_ids:
+  - FR-WD-01
+  - FR-WD-03
+  - V-TPL-01
+  - V-TPL-02
+  - V-TPL-03
+  - V-TPL-04
+  - V-TPL-05
+  requirement_ids:
+  - FR-WD-01
+  - FR-WD-03
+  validation_ids:
+  - V-TPL-01
+  - V-TPL-02
+  - V-TPL-03
+  - V-TPL-04
+  - V-TPL-05
+  preconditions: DS-U-ADM；准备 OA_NOTICE、OA_REPLY、GRANT_NOTICE、ANNUITY_NOTICE 模板与对应 TaskTemplate/FeeRate。
+  steps_summary: 创建 DocTemplate，设置 DocType、StatusEffect、StatusRestore、DeadlineTemplateCode、FeeDraftType、FeeItemList、InputFieldList、PlainTemplateID_CN/EN。
+  expected: 模板保存成功；字段映射有效；后续向导中默认值、状态联动、任务和草单生成均可被带出。
+  automation_recommendation: UI+API；校验模板定义对象存在。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-W0-011
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Unhappy
+  topic: 业务参数-文档模板非法配置
+  stage_code: null
+  stage_name: 业务参数-文档模板非法配置
+  coverage_ids:
+  - FR-WD-03
+  - V-TPL-01
+  - V-TPL-02
+  - V-TPL-03
+  - V-TPL-04
+  - V-TPL-05
+  requirement_ids:
+  - FR-WD-03
+  validation_ids:
+  - V-TPL-01
+  - V-TPL-02
+  - V-TPL-03
+  - V-TPL-04
+  - V-TPL-05
+  preconditions: DS-U-ADM；准备不存在的 DeadlineTemplateCode、FeeCode、InputField 字段名。
+  steps_summary: 分别尝试保存：重复 TemplateCode；不存在的 DeadlineTemplateCode；只配置 StatusRestore 未说明回复逻辑；FeeItemList 引用不存在费率；InputFieldList
+    引用不存在字段。
+  expected: 系统逐项阻止保存并提示具体错误点。
+  automation_recommendation: 服务层自动化最佳；UI 断言错误提示。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-W0-012
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 文档模板与信头
+  stage_code: null
+  stage_name: 文档模板与信头
+  coverage_ids:
+  - FR-WD-09
+  - FR-WD-10
+  - FR-BL-04
+  requirement_ids:
+  - FR-WD-09
+  - FR-WD-10
+  - FR-BL-04
+  validation_ids: []
+  preconditions: DS-U-ADM；准备中文/英文 Word 模板与 CN/EN 信头。
+  steps_summary: 上传 T_Template，配置 Group/Language/FilePath/Enabled；创建两套 T_LetterHead 并关联到模板。
+  expected: 模板和信头均可保存；不同语言模板输出时能正确带出对应抬头。
+  automation_recommendation: 可用文件存在性检查+模板渲染 smoke。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-013
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 系统参数
+  stage_code: null
+  stage_name: 系统参数
+  coverage_ids:
+  - FR-BL-09
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-BL-09
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: DS-U-ADM；准备催款间隔、默认 WaitPay 阈值、退款策略等参数。
+  steps_summary: 维护 T_SystemParam（若实现）；分别设置催款间隔、预收款负账单策略、WaitPay 阈值、ForceSettle 默认策略。
+  expected: 参数保存成功；相关流程读取到新值，且更新后对新交易生效。
+  automation_recommendation: API/配置读取自动化。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-014
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P0
+  categories:
+  - Happy
+  - Unhappy
+  topic: 权限矩阵
+  stage_code: null
+  stage_name: 权限矩阵
+  coverage_ids:
+  - FR-CM-06
+  - FR-DL-06
+  - FR-BL-06
+  requirement_ids:
+  - FR-CM-06
+  - FR-DL-06
+  - FR-BL-06
+  validation_ids: []
+  preconditions: 准备 DS-U-ADM / DS-U-FM-01 / DS-U-AG-01 / DS-U-LMT-01 / DS-U-FI-01。
+  steps_summary: 分别以各角色登录，验证菜单、按钮和高危操作权限：案卷完整编辑、受限编辑、时限取消、反冲销、已缴费修改、坏账标记。
+  expected: Admin 拥有全权限；Formalities 具备流程维护权限；Limited Editor 仅见补充信息入口；Finance 无法修改非法业务字段；高危操作仅授权用户可执行。
+  automation_recommendation: UI+权限接口自动化。
+  data_refs:
+  - DS-U-ADM
+  - DS-U-AG-01
+  - DS-U-FI-01
+  - DS-U-FM-01
+  - DS-U-LMT-01
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p0
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-A-001
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: A1 新案立案-最小必填
+  stage_code: A1
+  stage_name: 新案立案-最小必填
+  coverage_ids:
+  - FR-CM-01
+  - FR-CM-02
+  - V-A-01
+  - V-C-01
+  - V-C-02
+  requirement_ids:
+  - FR-CM-01
+  - FR-CM-02
+  validation_ids:
+  - V-A-01
+  - V-C-01
+  - V-C-02
+  preconditions: DS-U-FM-01；客户 DS-CL-001；申请人 DS-AP-001；国家 DS-CN；动态案号 CASE-A-${RUN_ID}-001。
+  steps_summary: 进入新案页面，填写 CaseNo、CaseType=NORMAL、PatentCategory=INVENTION、FlowDir=IN_IN、FromCountry=CN、Title_CN、RecvDate、ClientID、1
+    个申请人并设为主申请人，保存。
+  expected: 案卷保存成功；Status 默认 NOT_FILED；T_Case/T_CaseApplicant 创建成功；CreatedBy/CreatedAt 写入；案卷可在高级查询中被检索到。
+  automation_recommendation: UI+API+DB；此案作为场景 A 后续用例的基准案。
+  data_refs:
+  - DS-AP-001
+  - DS-CL-001
+  - DS-CN
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-001
+  tags:
+  - wave_a
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-A-002
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: A1 新案立案-完整字段
+  stage_code: A1
+  stage_name: 新案立案-完整字段
+  coverage_ids:
+  - FR-CM-02
+  - FR-CM-03
+  - FR-CM-05
+  - V-C-04
+  - V-P-01
+  - V-P-02
+  - V-P-03
+  requirement_ids:
+  - FR-CM-02
+  - FR-CM-03
+  - FR-CM-05
+  validation_ids:
+  - V-C-04
+  - V-P-01
+  - V-P-02
+  - V-P-03
+  preconditions: DS-U-FM-01；使用 DS-CL-001、DS-AP-001、DS-AP-003、DS-BIO-UNIT-001；案号 CASE-A-${RUN_ID}-002。
+  steps_summary: 创建一件国内发明案，录入中英文名称、客户/申请人/发明人、文件地址/账单地址、2 条优先权、1 条菌种保藏、规格字段、FeeReduction、DiscountRate、NoPower/NoPrioText/RequireHK
+    等控制标记后保存。
+  expected: 保存成功；PrioDate 自动取最早优先权日；GeneralPowerUsed 对有通用委托书的申请人自动勾选或建议勾选；菌种和规格信息持久化；审计字段更新。
+  automation_recommendation: UI+DB；建议检查子表 T_Priority/T_BioDeposit/T_CaseInventor。
+  data_refs:
+  - DS-AP-001
+  - DS-AP-003
+  - DS-BIO-UNIT-001
+  - DS-CL-001
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-002
+  tags:
+  - wave_a
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-A-003
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  topic: A1 案卷号唯一
+  stage_code: A1
+  stage_name: 案卷号唯一
+  coverage_ids:
+  - FR-CM-01
+  - FR-CM-02
+  - V-A-01
+  requirement_ids:
+  - FR-CM-01
+  - FR-CM-02
+  validation_ids:
+  - V-A-01
+  preconditions: 系统中已存在 CASE-A-${RUN_ID}-001。
+  steps_summary: 再次创建新案并使用同一 CaseNo 保存。
+  expected: 保存被拒绝；提示 CaseNo 已存在；数据库不新增重复 T_Case 记录。
+  automation_recommendation: API+UI；唯一索引/服务校验双断言。
+  data_refs: []
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-001
+  tags:
+  - wave_a
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-A-004
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Unhappy
+  topic: A1 案件类型组合非法
+  stage_code: A1
+  stage_name: 案件类型组合非法
+  coverage_ids:
+  - FR-CM-01
+  - V-A-02
+  requirement_ids:
+  - FR-CM-01
+  validation_ids:
+  - V-A-02
+  preconditions: DS-U-FM-01；配置中存在禁止的 CaseType+PatentCategory 组合。
+  steps_summary: 创建新案时选择被配置禁止的组合并保存。
+  expected: 系统阻止保存并说明非法组合。
+  automation_recommendation: 规则引擎/配置驱动自动化。
+  data_refs:
+  - DS-U-FM-01
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-A-005
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  topic: A1 涉外必填项
+  stage_code: A1
+  stage_name: 涉外必填项
+  coverage_ids:
+  - FR-CM-02
+  - FR-CM-03
+  - V-A-03
+  - V-B-01
+  - V-B-02
+  requirement_ids:
+  - FR-CM-02
+  - FR-CM-03
+  validation_ids:
+  - V-A-03
+  - V-B-01
+  - V-B-02
+  preconditions: DS-U-FM-01；客户 DS-CL-003；外方代理 DS-CL-002；案号 CASE-A-${RUN_ID}-003。
+  steps_summary: 创建 FlowDir=IN_OUT 或 OUT_IN 的案件，先不填 ToCountry/ForeignAgentID 保存；再填入一个非“代理所”类型客户作为 ForeignAgent 保存；最后改为合法代理所重试。
+  expected: 缺 ToCountry 或 ForeignAgent 时保存被拒；选择非代理所时系统给出警告或阻断；改为合法代理所后保存成功。
+  automation_recommendation: UI+服务层自动化。
+  data_refs:
+  - DS-CL-002
+  - DS-CL-003
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-003
+  tags:
+  - wave_a
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-A-006
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  - Boundary
+  topic: A1 申请人列表规则
+  stage_code: A1
+  stage_name: 申请人列表规则
+  coverage_ids:
+  - FR-CM-02
+  - V-C-01
+  - V-C-02
+  - V-C-03
+  requirement_ids:
+  - FR-CM-02
+  validation_ids:
+  - V-C-01
+  - V-C-02
+  - V-C-03
+  preconditions: DS-U-FM-01；准备法人申请人 DS-AP-001、自然人 DS-AP-002。
+  steps_summary: 分别测试：无申请人保存；两个申请人都标为主申请人；主申请人为自然人但 ApplicantKind=LEGAL_PERSON；再将 ApplicantKind 调整为 NATURAL_PERSON。
+  expected: 无申请人被拒；多个主申请人被拒；ApplicantKind 与第一申请人类型不一致时触发阻断或强确认；一致后保存成功。
+  automation_recommendation: UI+规则自动化；若系统支持强制确认，需覆盖确认/取消两条分支。
+  data_refs:
+  - DS-AP-001
+  - DS-AP-002
+  - DS-U-FM-01
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p0
+  - unhappy
+  - boundary
+  status: skeleton_ready
+- id: TC-A-007
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: A1 发明人与地址
+  stage_code: A1
+  stage_name: 发明人与地址
+  coverage_ids:
+  - FR-CM-03
+  - V-C-05
+  - V-C-06
+  - V-C-07
+  requirement_ids:
+  - FR-CM-03
+  validation_ids:
+  - V-C-05
+  - V-C-06
+  - V-C-07
+  preconditions: DS-U-FM-01；客户 DS-CL-001 含有效默认地址，DS-CL-004 含停用地址。
+  steps_summary: 创建案卷时先不填发明人、地址保存；再在需要发明人的国家配置下测试无发明人提示；切换到停用地址保存；最后改回有效地址。
+  expected: 在无强校验国家下发明人可为空；强校验国家下提示或阻断；停用地址不能提交；如文档/账单地址均为空则系统给出警告或阻断。
+  automation_recommendation: UI 自动化为主。
+  data_refs:
+  - DS-CL-001
+  - DS-CL-004
+  - DS-U-FM-01
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p1
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-A-008
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  - Boundary
+  topic: A1 日期与编号一致性
+  stage_code: A1
+  stage_name: 日期与编号一致性
+  coverage_ids:
+  - FR-CM-02
+  - V-D-01
+  - V-D-02
+  - V-D-03
+  - V-D-04
+  - V-A-04
+  requirement_ids:
+  - FR-CM-02
+  validation_ids:
+  - V-D-01
+  - V-D-02
+  - V-D-03
+  - V-D-04
+  - V-A-04
+  preconditions: DS-U-FM-01；CASE-A-${RUN_ID}-004；优先权日=2026-03-15。
+  steps_summary: 分别测试：Status=PUBLISHED 但无 PubDate/PubNo；Status=GRANTED 但缺 GrantDate/GrantNo/FirstAnnuityYear/ValidUntil；FilingDate
+    早于优先权日；FilingDate=优先权日；AppNo 使用非法格式。
+  expected: 缺公开/授权必要字段时被拒；FilingDate<PrioDate 被拒；FilingDate=PrioDate 可通过；非法 AppNo 格式被拒或报错。
+  automation_recommendation: 服务层规则自动化建议覆盖。
+  data_refs:
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-004
+  tags:
+  - wave_a
+  - p0
+  - unhappy
+  - boundary
+  status: skeleton_ready
+- id: TC-A-009
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Boundary
+  topic: A1 规格/费减/折扣边界
+  stage_code: A1
+  stage_name: 规格/费减/折扣边界
+  coverage_ids:
+  - FR-CM-02
+  - V-E-01
+  - V-E-02
+  requirement_ids:
+  - FR-CM-02
+  validation_ids:
+  - V-E-01
+  - V-E-02
+  preconditions: DS-U-FM-01；CASE-A-${RUN_ID}-005。
+  steps_summary: 录入 SpecPages/DrawPages/ClaimCount/ClaimPages/ManuscriptWords=0 保存；再测试大数值、FeeReduction=0/1、DiscountRate=0/1、FeeReduction<0、FeeReduction>1、DiscountRate<0、DiscountRate>1。
+  expected: 非负整数和 0 边界可保存；超大值不溢出；费减/折扣在 0..1 范围内可保存；越界时被阻止；ApplicantKind 与费减政策不合理时给警告或阻断。
+  automation_recommendation: 服务层+UI；边界可批量参数化。
+  data_refs:
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-005
+  tags:
+  - wave_a
+  - p1
+  - boundary
+  status: skeleton_ready
+- id: TC-A-010
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  - Unhappy
+  topic: A1 限制修改视图
+  stage_code: A1
+  stage_name: 限制修改视图
+  coverage_ids:
+  - FR-CM-06
+  requirement_ids:
+  - FR-CM-06
+  validation_ids: []
+  preconditions: DS-U-LMT-01 仅有 CaseEditLimited；已有 CASE-A-${RUN_ID}-001。
+  steps_summary: 以受限代理人打开案卷详情，确认仅看到“补充信息”入口；修改 Title_CN、规格字段、发明人列表、备注并保存；尝试修改 CaseNo/Status/FilingDate/AppNo/ClientID。
+  expected: 白名单字段可保存并更新 UpdatedBy/UpdatedAt；黑名单字段只读或无法提交；保存不触发状态变更、时限生成、费用草单生成。
+  automation_recommendation: UI+DB；重点断言无副作用。
+  data_refs:
+  - DS-U-LMT-01
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-001
+  tags:
+  - wave_a
+  - p0
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-A-011
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: A2 批量递交成功
+  stage_code: A2
+  stage_name: 批量递交成功
+  coverage_ids:
+  - FR-CM-07
+  - FR-CM-04
+  - V-BF-01
+  - V-BF-02
+  requirement_ids:
+  - FR-CM-07
+  - FR-CM-04
+  validation_ids:
+  - V-BF-01
+  - V-BF-02
+  preconditions: 准备 3 件 Status=NOT_FILED 的国内新案；其中 1 件为发明案，1 件为实用新型；GenerateList=true。
+  steps_summary: 进入案件递交批处理，按 CaseType/FlowDir/RecvDate 筛选并勾选 3 案，设置 SubmittedDate=2026-04-05，ApplyExamNow=true，执行批处理。
+  expected: 所选案件 Status 由 NOT_FILED 变为 WAITING_RECEIPT；发明案 HasExamRequest=true（如业务限定仅发明有效）；生成递交清单文档并登记 T_Document/T_DocAttachment；后续申请费任务可被触发。
+  automation_recommendation: UI+批处理服务+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-A-012
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  - Boundary
+  topic: A2 批量递交校验
+  stage_code: A2
+  stage_name: 批量递交校验
+  coverage_ids:
+  - FR-CM-07
+  - V-BF-01
+  - V-BF-02
+  requirement_ids:
+  - FR-CM-07
+  validation_ids:
+  - V-BF-01
+  - V-BF-02
+  preconditions: 存在未递交案件，但本次不勾选任何行；另准备 SubmittedDate<RecvDate 和 SubmittedDate=RecvDate 场景。
+  steps_summary: 执行批处理时先不勾选记录；再对勾选记录输入早于 RecvDate 的 SubmittedDate；最后改为等于 RecvDate。
+  expected: 未勾选时不能执行；SubmittedDate<RecvDate 时阻断或强警告；SubmittedDate=RecvDate 可通过。
+  automation_recommendation: 服务层参数化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p0
+  - unhappy
+  - boundary
+  status: skeleton_ready
+- id: TC-A-013
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: A3 申请费时限自动生成
+  stage_code: A3
+  stage_name: 申请费时限自动生成
+  coverage_ids:
+  - FR-DL-02
+  - FR-DL-03
+  - FR-DL-10
+  requirement_ids:
+  - FR-DL-02
+  - FR-DL-03
+  - FR-DL-10
+  validation_ids: []
+  preconditions: CASE-A-${RUN_ID}-001 已完成递交；系统存在 APPLY_FEE_LIMIT 模板。
+  steps_summary: 触发新案递交后的任务生成；查看 T_Task 和首页/我的任务视图。
+  expected: 生成 APPLY_FEE_LIMIT 任务，带有 BaseDate、Deadline、InnerDeadline、Remind1/2/3、WorkerID、SupervisorID、Status=OPEN；写入 TaskLog(CREATE)。
+  automation_recommendation: API+DB+UI；验证任务在正确用户视图中出现。
+  data_refs: []
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-001
+  tags:
+  - wave_a
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-A-014
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: A3 时限基准与提醒
+  stage_code: A3
+  stage_name: 时限基准与提醒
+  coverage_ids:
+  - FR-DL-01
+  - FR-DL-02
+  - V-TM-03
+  - V-TM-04
+  requirement_ids:
+  - FR-DL-01
+  - FR-DL-02
+  validation_ids:
+  - V-TM-03
+  - V-TM-04
+  preconditions: 配置 APPLY_FEE_LIMIT 使用 CASE_EVENT 或 FILING_DATE 两种模板版本。
+  steps_summary: 分别以 FilingDate 和 SubmittedDate 为基准生成任务；验证 DailyRemind 开启时 DailyRemindFrom 的取值；检查提醒日是否基于 INNER/DEADLINE 正确回推。
+  expected: 不同 BaseDateSource 下 Deadline/InnerDeadline 计算正确；DailyRemindFrom 落在 InnerDeadline 或 Deadline；提醒日不晚于 Deadline。
+  automation_recommendation: 服务层自动化，适合参数化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-A-015
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: A4 申请费草单生成
+  stage_code: A4
+  stage_name: 申请费草单生成
+  coverage_ids:
+  - FR-FE-02
+  - FR-FE-03
+  - V-FD-01
+  - V-FD-02
+  - V-FI-01
+  - V-FI-03
+  - V-FI-05
+  requirement_ids:
+  - FR-FE-02
+  - FR-FE-03
+  validation_ids:
+  - V-FD-01
+  - V-FD-02
+  - V-FI-01
+  - V-FI-03
+  - V-FI-05
+  preconditions: CASE-A-${RUN_ID}-001 为国内发明案，ClaimCount=12，FeeReduction=0.15；费率已配置 APPLY 基础官费、超项费、服务费。
+  steps_summary: 从申请费任务或费用界面生成 APPLY_FEE 草单，检查系统按 FIXED + BY_CLAIMS 生成 FeeItem；必要时调整服务费折扣。
+  expected: 生成 1 张 APPLY_FEE 草单；至少 1 条 FeeItem；官费项目按费减计算，超项费按超出 10 项部分计算；服务费可按折扣计算；TotalGov/TotalService/TotalAmt 正确。
+  automation_recommendation: 服务层/DB 自动化优先。
+  data_refs: []
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-001
+  tags:
+  - wave_a
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-A-016
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Unhappy
+  - Boundary
+  topic: A4 草单/明细非法数据
+  stage_code: A4
+  stage_name: 草单/明细非法数据
+  coverage_ids:
+  - FR-FE-02
+  - FR-FE-03
+  - V-FD-01
+  - V-FD-02
+  - V-FI-01
+  - V-FI-02
+  - V-FI-03
+  requirement_ids:
+  - FR-FE-02
+  - FR-FE-03
+  validation_ids:
+  - V-FD-01
+  - V-FD-02
+  - V-FI-01
+  - V-FI-02
+  - V-FI-03
+  preconditions: 存在一张 OPEN 草单。
+  steps_summary: 删除全部明细后保存；清空币种保存；创建一条 FeeCode/FeeName 同时为空的明细；录入负数 Quantity/Amount；设置与 FeeRate 不一致的 FeeType。
+  expected: 系统逐项阻止保存并提示错误；Amount=0 的异常行得到提醒；币种变更时要求重算 LocalAmount。
+  automation_recommendation: 服务层自动化为主。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p1
+  - unhappy
+  - boundary
+  status: skeleton_ready
+- id: TC-A-017
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: A5 官费清单与缴费
+  stage_code: A5
+  stage_name: 官费清单与缴费
+  coverage_ids:
+  - FR-FE-04
+  - V-PL-01
+  - V-PL-02
+  - V-PL-03
+  - V-GP-01
+  - V-GP-02
+  requirement_ids:
+  - FR-FE-04
+  validation_ids:
+  - V-PL-01
+  - V-PL-02
+  - V-PL-03
+  - V-GP-01
+  - V-GP-02
+  preconditions: 存在 APPLY_FEE 草单，含 GOV 项；Finance 用户登录。
+  steps_summary: 从草单生成 PayList(Type=APPLY)，设置 PlannedPayDate；导出清单；登记 GovPayment 的 PaidAmt/PaidDate/InvoiceNo，更新 PayList 为
+    PAID。
+  expected: PayList 和 GovPayment 创建成功；Status 从 DRAFT/EXPORTED 变为 PAID；PaidAmt 缺省取 PlannedAmt；PaidDate 与 ActualPayDate 合理一致；已缴记录可用于费用查询。
+  automation_recommendation: API+UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-A-018
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Unhappy
+  topic: A5 官费清单校验
+  stage_code: A5
+  stage_name: 官费清单校验
+  coverage_ids:
+  - FR-FE-04
+  - V-PL-01
+  - V-PL-02
+  - V-PL-03
+  - V-GP-03
+  requirement_ids:
+  - FR-FE-04
+  validation_ids:
+  - V-PL-01
+  - V-PL-02
+  - V-PL-03
+  - V-GP-03
+  preconditions: 存在未支付 PayList。
+  steps_summary: 将 PlannedPayDate 设为明显异常旧日期；在 Status≠PAID 时填写 ActualPayDate/InvoiceNo；在已存在 PaidAmt/PaidDate 的 GovPayment 上尝试用普通财务账号直接修改。
+  expected: 异常计划日期触发警告；Status≠PAID 不允许填写实际缴费字段；已缴记录的修改需高权限并记录日志。
+  automation_recommendation: UI+权限自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-A-019
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: A6 申请费账单生成
+  stage_code: A6
+  stage_name: 申请费账单生成
+  coverage_ids:
+  - FR-BL-01
+  - FR-BL-02
+  - V-BL-01
+  - V-BL-02
+  - V-BL-03
+  - V-BL-04
+  requirement_ids:
+  - FR-BL-01
+  - FR-BL-02
+  validation_ids:
+  - V-BL-01
+  - V-BL-02
+  - V-BL-03
+  - V-BL-04
+  preconditions: 存在同一客户下 1~2 张 APPLY_FEE 草单；Finance 登录。
+  steps_summary: 选择草单生成 AR 账单，设置 BillDate、DueDate、Currency、DiscountRate，保存后查看 Bill 和 BillItem。
+  expected: 生成 1 张 AR 账单；BillItem 与 FeeDraft/FeeItem 绑定；TotalGov/TotalService/TotalMisc/Amount/Balance 正确；Status=UNSETTLED。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-A-020
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Unhappy
+  topic: A6 账单生成非法组合
+  stage_code: A6
+  stage_name: 账单生成非法组合
+  coverage_ids:
+  - FR-BL-02
+  - FR-BL-03
+  - V-BL-01
+  - V-BL-02
+  - V-BL-03
+  - V-BL-04
+  requirement_ids:
+  - FR-BL-02
+  - FR-BL-03
+  validation_ids:
+  - V-BL-01
+  - V-BL-02
+  - V-BL-03
+  - V-BL-04
+  preconditions: 准备不同 ClientID 的草单、不同币种草单和空草单。
+  steps_summary: 尝试生成单一账单覆盖不同客户草单；尝试对混合币种草单不提供汇率直接生成；尝试生成无明细账单；尝试创建负数 AR 账单。
+  expected: 系统拒绝跨客户单账单；缺汇率时拒绝生成；无明细被拒；负数 AR 提示应改用调整账单。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-A-021
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: A7 客户付款与冲销
+  stage_code: A7
+  stage_name: 客户付款与冲销
+  coverage_ids:
+  - FR-BL-05
+  - FR-FE-07
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  - V-OF-01
+  - V-OF-02
+  - V-CR-01
+  - V-CR-03
+  requirement_ids:
+  - FR-BL-05
+  - FR-FE-07
+  validation_ids:
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  - V-OF-01
+  - V-OF-02
+  - V-CR-01
+  - V-CR-03
+  preconditions: 存在未结申请费账单；Finance 登录。
+  steps_summary: 登记 Payment 和默认 PaymentLine；在收款与冲销界面将付款全额或部分分配到该账单；保存后查看 Bill、PaymentLine、Offset、CaseReceipt。
+  expected: Payment/PaymentLine/Offset 创建成功；账单 Balance 正确减少，状态变为 PARTIALLY_SETTLED 或 SETTLED；CaseReceipt 记录 ReceivableAmt/ReceivedAmt/IsArrears；相关查询可见。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-A-022
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Unhappy
+  - Boundary
+  topic: A7 收款和冲销校验
+  stage_code: A7
+  stage_name: 收款和冲销校验
+  coverage_ids:
+  - FR-BL-05
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  - V-OF-01
+  - V-OF-02
+  - V-CR-02
+  requirement_ids:
+  - FR-BL-05
+  validation_ids:
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  - V-OF-01
+  - V-OF-02
+  - V-CR-02
+  preconditions: 存在未结账单；同一客户已有 PayNo=PAY-${RUN_ID}-001。
+  steps_summary: 分别测试：Amount<0；PayDate 明显晚于当前日期；同一 Client+PayNo 重复；单笔 OffsetAmt 超过 PaymentLine.BalanceAmt；对同一 Bill 的分配总额超过
+    Bill.Balance；ReceivedAmt>ReceivableAmt。
+  expected: 非法金额、日期、重复 PayNo 被拒；超额冲销被拒；ReceivedAmt>ReceivableAmt 被识别为预收并提示确认。
+  automation_recommendation: 服务层自动化建议。
+  data_refs: []
+  dynamic_refs:
+  - PAY-${RUN_ID}-001
+  tags:
+  - wave_a
+  - p1
+  - unhappy
+  - boundary
+  status: skeleton_ready
+- id: TC-A-023
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: A8 提成生成与可结算入口
+  stage_code: A8
+  stage_name: 提成生成与可结算入口
+  coverage_ids:
+  - FR-COM-01
+  - FR-COM-02
+  - FR-COM-03
+  - FR-COM-04
+  requirement_ids:
+  - FR-COM-01
+  - FR-COM-02
+  - FR-COM-03
+  - FR-COM-04
+  validation_ids: []
+  preconditions: 申请费账单已生成且含 SERVICE 项；存在 NORMAL 规则和主/协办代理。
+  steps_summary: 在账单生成或收款后触发提成逻辑，检查 T_Commission 是否按规则创建或更新，并按 70/30 分摊给主协办代理。
+  expected: 为每位代理生成/更新 Commission；BaseFee 来源于服务费；S1/S2 金额按规则和分摊比例计算；WaitPay/ForceSettle 初值正确。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-A-024
+  wave: A
+  wave_title: A 新案申请
+  context: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成
+  priority: P1
+  categories:
+  - Boundary
+  topic: A8 WaitPay 阈值
+  stage_code: A8
+  stage_name: WaitPay 阈值
+  coverage_ids:
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: 存在 WaitPay=true 的提成规则；同一案已产生部分收款。
+  steps_summary: 将已收比例分别控制在 0%、50%、90%、100%，检查 S1/S2 可结算性；再将 ForceSettle=true 重试。
+  expected: 未达阈值前提成不可结算；达到阈值后进入可结算列表；ForceSettle 可绕过收款比例限制。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_a
+  - p1
+  - boundary
+  status: skeleton_ready
+- id: TC-B-001
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: B1 OA来文登记
+  stage_code: B1
+  stage_name: OA来文登记
+  coverage_ids:
+  - FR-WD-01
+  - FR-WD-02
+  - FR-WD-03
+  - FR-WD-04
+  requirement_ids:
+  - FR-WD-01
+  - FR-WD-02
+  - FR-WD-03
+  - FR-WD-04
+  validation_ids: []
+  preconditions: 现有一件 Status=SUB_EXAM 的案件 CASE-B-${RUN_ID}-001；配置 OA_NOTICE 模板。
+  steps_summary: 在中间文件向导 Step1 选案并选择 OFFICIAL_IN + OA_NOTICE；Step2 填写 DocName、DispatchDate、ReceiveDate、IncomingRegNo、Summary、NeedReply=true
+    并保存到草稿。
+  expected: 文档草稿创建成功；默认带出 DocName/NotifyAgent/NeedReply；StatusEffect 准备将案卷置为 OA1；必要字段可编辑。
+  automation_recommendation: UI 自动化。
+  data_refs: []
+  dynamic_refs:
+  - CASE-B-${RUN_ID}-001
+  tags:
+  - wave_b
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-B-002
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: B1 官方绝限覆盖
+  stage_code: B1
+  stage_name: 官方绝限覆盖
+  coverage_ids:
+  - FR-WD-04
+  - FR-DL-02
+  requirement_ids:
+  - FR-WD-04
+  - FR-DL-02
+  validation_ids: []
+  preconditions: CASE-B-${RUN_ID}-001；OA_NOTICE 模板配置 DeadlineTemplateCode=OA_REPLY_LIMIT；ExtraData 包含 OfficialDueDate。
+  steps_summary: 录入 OA 来文时填写 OfficialDueDate；进入 Step3 查看任务计算结果。
+  expected: 若官方绝限存在，任务 Deadline 以 OfficialDueDate 为准；BaseDate 仍保留 DispatchDate 供内部限和提醒计算；InnerDeadline/Remind* 正确。
+  automation_recommendation: 服务层+UI。
+  data_refs: []
+  dynamic_refs:
+  - CASE-B-${RUN_ID}-001
+  tags:
+  - wave_b
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-B-003
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  topic: B1 文档行校验
+  stage_code: B1
+  stage_name: 文档行校验
+  coverage_ids:
+  - FR-WD-02
+  - V-DOC-01
+  - V-DOC-02
+  - V-DOC-03
+  - V-DOC-04
+  - V-DOC-05
+  requirement_ids:
+  - FR-WD-02
+  validation_ids:
+  - V-DOC-01
+  - V-DOC-02
+  - V-DOC-03
+  - V-DOC-04
+  - V-DOC-05
+  preconditions: CASE-B-${RUN_ID}-001；OA_NOTICE 模板存在。
+  steps_summary: 分别测试：DocName 为空；DispatchDate 缺失或明显异常；NeedReply=true 且 Deadline 无法自动算出但为空；挂号号超长；必填 InputField 缺失。
+  expected: 系统逐项阻止继续完成向导，并提示具体字段错误。
+  automation_recommendation: 服务层校验自动化。
+  data_refs: []
+  dynamic_refs:
+  - CASE-B-${RUN_ID}-001
+  tags:
+  - wave_b
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-B-004
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: B2 OA答复任务生成
+  stage_code: B2
+  stage_name: OA答复任务生成
+  coverage_ids:
+  - FR-DL-02
+  - FR-DL-03
+  - FR-DL-10
+  requirement_ids:
+  - FR-DL-02
+  - FR-DL-03
+  - FR-DL-10
+  validation_ids: []
+  preconditions: 完成 TC-B-001；存在 OA_REPLY_LIMIT 模板。
+  steps_summary: 完成向导 Step3 并提交；查看 T_Task、TaskLog、我的任务/监督任务视图。
+  expected: 系统为该 OA 来文创建 OA_REPLY_LIMIT 任务；WorkerID 和 SupervisorID 按规则带出；TaskLog 记录 CREATE。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-B-005
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P2
+  categories:
+  - Happy
+  topic: B3 内部准备任务
+  stage_code: B3
+  stage_name: 内部准备任务
+  coverage_ids:
+  - FR-CS-02
+  - FR-DL-06
+  requirement_ids:
+  - FR-CS-02
+  - FR-DL-06
+  validation_ids: []
+  preconditions: CASE-B-${RUN_ID}-001；Agent/Formalities 可手工建任务。
+  steps_summary: 在案卷或时限模块手工增加“内部答复准备”任务，设 BaseDate/Deadline/Worker/Supervisor；保存后修改备注和责任人。
+  expected: 内部任务保存成功；责任人变更写 CHANGE_WORKER/CHANGE_SUPERVISOR 日志；不影响官方答复任务本身。
+  automation_recommendation: API+UI。
+  data_refs: []
+  dynamic_refs:
+  - CASE-B-${RUN_ID}-001
+  tags:
+  - wave_b
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-B-006
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: B4 OA答复去文
+  stage_code: B4
+  stage_name: OA答复去文
+  coverage_ids:
+  - FR-WD-02
+  - FR-WD-03
+  - FR-WD-06
+  requirement_ids:
+  - FR-WD-02
+  - FR-WD-03
+  - FR-WD-06
+  validation_ids: []
+  preconditions: 已有未完成 OA_NOTICE 文档和 OA_REPLY_LIMIT 任务；OA_REPLY 模板已配置 StatusRestore=SUB_EXAM。
+  steps_summary: 通过向导或主界面录入 OFFICIAL_OUT + OA_REPLY，填写 ReplyToID 指向对应 OA_NOTICE，上传答复附件或模板生成 docx。
+  expected: 答复文档保存成功；ReplyToID 关联正确；附件被存档；如模板配置，案件状态准备恢复到 SUB_EXAM。
+  automation_recommendation: UI+附件存储断言。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-B-007
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  topic: B4 ReplyTo 约束
+  stage_code: B4
+  stage_name: ReplyTo 约束
+  coverage_ids:
+  - FR-WD-03
+  - FR-WD-04
+  requirement_ids:
+  - FR-WD-03
+  - FR-WD-04
+  validation_ids: []
+  preconditions: 存在本案 OA_NOTICE、他案 OA_NOTICE 和非可回复文档。
+  steps_summary: 录入 OA_REPLY 时分别将 ReplyToID 指向他案文档、非 OA_NOTICE 文档或已完成无须回复文档。
+  expected: 系统应只允许选择同案且符合 ReplyToTemplateCode 的文档；非法 ReplyToID 被过滤或阻断。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-B-008
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: B5 自动核销任务与状态恢复
+  stage_code: B5
+  stage_name: 自动核销任务与状态恢复
+  coverage_ids:
+  - FR-DL-04
+  - FR-DL-10
+  - FR-CM-04
+  requirement_ids:
+  - FR-DL-04
+  - FR-DL-10
+  - FR-CM-04
+  validation_ids: []
+  preconditions: TC-B-006 成功；对应 OA_REPLY_LIMIT 任务仍为 OPEN。
+  steps_summary: 提交 OA_REPLY 后检查任务、TaskLog 和案卷状态。
+  expected: 系统根据 ReplyToID 找到 OA_REPLY_LIMIT 任务并标记 DONE，DoneDate=ReplyDate；写入 MARK_DONE 日志；Case.Status 从 OA1/OA2 恢复为 SUB_EXAM。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-B-009
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: B6 OA费用草单
+  stage_code: B6
+  stage_name: OA费用草单
+  coverage_ids:
+  - FR-WD-05
+  - FR-FE-02
+  - FR-FE-03
+  requirement_ids:
+  - FR-WD-05
+  - FR-FE-02
+  - FR-FE-03
+  validation_ids: []
+  preconditions: OA_REPLY 模板配置 FeeDraftType=OA_FEE，存在 OA 服务费和可选官方费费率。
+  steps_summary: 完成向导 Step4 或从费用界面生成 OA_FEE 草单，检查 FeeItem。
+  expected: 生成 OA_FEE 草单；SERVICE 项来自 OA 服务费；如配置 GOV 项也同步生成；Total* 汇总正确。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-B-010
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P2
+  categories:
+  - Happy
+  topic: B7 OA官方费清单
+  stage_code: B7
+  stage_name: OA官方费清单
+  coverage_ids:
+  - FR-FE-04
+  requirement_ids:
+  - FR-FE-04
+  validation_ids: []
+  preconditions: 存在 OA_FEE 草单且含 GOV 项。
+  steps_summary: 生成 PayList(Type=INTERMEDIATE/OA) 并登记 GovPayment。
+  expected: 仅 GOV 项进入官费清单；PaidDate/PaidAmt 可查询；不影响 SERVICE 项账单逻辑。
+  automation_recommendation: API+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-B-011
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: B8 OA账单与收款
+  stage_code: B8
+  stage_name: OA账单与收款
+  coverage_ids:
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  requirement_ids:
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 存在 OA_FEE 草单；Finance 登录。
+  steps_summary: 从草单生成 OA 应收账单；登记客户付款并冲销；检查 CaseReceipt。
+  expected: 账单生成成功；付款后 Balance 正确减少；CaseReceipt 记录本次 OA 服务费/官费收款；费用情况查询能看到。
+  automation_recommendation: API+UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-B-012
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: B9 OA服务费计入提成
+  stage_code: B9
+  stage_name: OA服务费计入提成
+  coverage_ids:
+  - FR-COM-02
+  - FR-COM-03
+  - FR-COM-04
+  requirement_ids:
+  - FR-COM-02
+  - FR-COM-03
+  - FR-COM-04
+  validation_ids: []
+  preconditions: 同案已经存在 A 场景申请费提成；本次 OA 账单含 SERVICE 项。
+  steps_summary: 触发提成计算，查看 Commission 是累加 BaseFee 还是新增阶段记录（按规则实现）。
+  expected: OA 服务费进入 Commission 管道；BaseFee/S1/S2 被新增或累加且可追溯阶段来源 Remark=OA 阶段；多代理人分摊正确。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-B-013
+  wave: B
+  wave_title: B OA/补正
+  context: E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: 主界面修改 NeedReply/Deadline
+  stage_code: null
+  stage_name: 主界面修改 NeedReply/Deadline
+  coverage_ids:
+  - FR-WD-04
+  - FR-DL-06
+  requirement_ids:
+  - FR-WD-04
+  - FR-DL-06
+  validation_ids: []
+  preconditions: 已存在一条 NeedReply=true 且已有 T_Task 的 OA 来文。
+  steps_summary: 在文档主界面将 NeedReply 改为 false 或修改 Deadline；保存时选择“更新任务”或“取消任务”（如实现该交互）。
+  expected: 若改为 false，系统同步取消或关闭对应任务并记录日志；若只修改 Deadline，任务日期同步更新且保留审计痕迹。
+  automation_recommendation: UI+服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_b
+  - p1
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-C-001
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C0 PCT国际案立案
+  stage_code: C0
+  stage_name: PCT国际案立案
+  coverage_ids:
+  - FR-CM-01
+  - FR-CM-05
+  - V-PCT-01
+  requirement_ids:
+  - FR-CM-01
+  - FR-CM-05
+  validation_ids:
+  - V-PCT-01
+  preconditions: DS-U-FM-01；客户 DS-CL-003；申请人 DS-AP-003；案号 CASE-C-${RUN_ID}-INTL。
+  steps_summary: 创建 CaseType=PCT_INTL 案，填写 IntlAppNo、IntlAppDate、RO、ISA、IntlPubNo/Date、IntlPubLang、NeedIPER 等。
+  expected: 案卷保存成功；PCT 国际字段持久化；状态为 PCT_INTL_EXAM 或配置默认状态；后续可登记国际阶段来文。
+  automation_recommendation: UI+DB。
+  data_refs:
+  - DS-AP-003
+  - DS-CL-003
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-C-${RUN_ID}-INTL
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-002
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Unhappy
+  topic: C0 PCT国际必填缺失
+  stage_code: C0
+  stage_name: PCT国际必填缺失
+  coverage_ids:
+  - FR-CM-05
+  - V-PCT-01
+  requirement_ids:
+  - FR-CM-05
+  validation_ids:
+  - V-PCT-01
+  preconditions: DS-U-FM-01；PCT_INTL 新案。
+  steps_summary: 不填写 IntlAppNo 或 IntlAppDate 直接保存。
+  expected: 保存被拒并提示缺少国际申请号/日。
+  automation_recommendation: 服务层自动化。
+  data_refs:
+  - DS-U-FM-01
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-C-003
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: C1 NeedIPER 提醒
+  stage_code: C1
+  stage_name: NeedIPER 提醒
+  coverage_ids:
+  - FR-CM-05
+  - V-PCT-03
+  - FR-DL-02
+  requirement_ids:
+  - FR-CM-05
+  - FR-DL-02
+  validation_ids:
+  - V-PCT-03
+  preconditions: 已有 PCT_INTL 案，NeedIPER=true。
+  steps_summary: 保存时暂不填 IPERDate；触发相关提醒/查询逻辑；之后补录 IPERDate。
+  expected: 系统允许保存或强提示，但会在时限/提醒中标识需补录 IPERDate；补录后提醒消失，UpdatedAt 更新。
+  automation_recommendation: 人工+服务层校验。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-C-004
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P1
+  categories:
+  - Happy
+  topic: C1 国际阶段来文登记
+  stage_code: C1
+  stage_name: 国际阶段来文登记
+  coverage_ids:
+  - FR-WD-01
+  - FR-WD-02
+  - FR-WD-06
+  requirement_ids:
+  - FR-WD-01
+  - FR-WD-02
+  - FR-WD-06
+  validation_ids: []
+  preconditions: 已有 PCT_INTL 案；配置受理通知/检索报告/书面意见/IPER 模板。
+  steps_summary: 分别录入 OFFICIAL_IN 文档：RO 受理通知、国际检索报告、书面意见、IPER；上传附件。
+  expected: 每类来文均能登记并归档；必要字段进入 ExtraData；附件可预览下载。
+  automation_recommendation: UI+附件存储。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-C-005
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C2 国家阶段计划初始化
+  stage_code: C2
+  stage_name: 国家阶段计划初始化
+  coverage_ids:
+  - FR-DL-02
+  - FR-CM-05
+  requirement_ids:
+  - FR-DL-02
+  - FR-CM-05
+  validation_ids: []
+  preconditions: 已有 PCT_INTL 案；目标国家=CN/US/JP。
+  steps_summary: 执行国家阶段计划初始化，生成每国一条计划数据和进入期限基础信息。
+  expected: 系统生成 3 条国家阶段计划记录，状态为 PLANNED/OPEN（按实现）；每条记录含国家、预计进入期限、是否已建子案标记。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-006
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C3 进入时限任务生成
+  stage_code: C3
+  stage_name: 进入时限任务生成
+  coverage_ids:
+  - FR-DL-02
+  - FR-DL-03
+  requirement_ids:
+  - FR-DL-02
+  - FR-DL-03
+  validation_ids: []
+  preconditions: 已有国家阶段计划；配置 PCT_NATIONAL_ENTRY_LIMIT。
+  steps_summary: 生成各国进入时限任务并检查 Worker/Supervisor/提醒日。
+  expected: 每个目标国家生成 1 条进入任务；任务与计划和母案正确关联；我的任务/监督任务可见。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-007
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C4 客户 ENTER/ABANDON 指示
+  stage_code: C4
+  stage_name: 客户 ENTER/ABANDON 指示
+  coverage_ids:
+  - FR-CM-05
+  - FR-DL-07
+  requirement_ids:
+  - FR-CM-05
+  - FR-DL-07
+  validation_ids: []
+  preconditions: 存在 CN/US/JP 进入计划。
+  steps_summary: 在国家阶段计划中将 CN、US 标记为 ENTER，JP 标记为 ABANDON；保存并查看计划状态。
+  expected: 计划状态正确变更；ABANDON 国家不再要求创建国家案；ENTER 国家保留待建子案动作。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-008
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C5 创建国家阶段案卷
+  stage_code: C5
+  stage_name: 创建国家阶段案卷
+  coverage_ids:
+  - FR-CM-01
+  - FR-CM-05
+  requirement_ids:
+  - FR-CM-01
+  - FR-CM-05
+  validation_ids: []
+  preconditions: CN 计划状态=ENTER；母案含申请人/发明人/优先权/PCT 信息。
+  steps_summary: 基于 ENTER 计划创建 CaseType=PCT_NATIONAL 子案。
+  expected: 系统为 CN 创建新案卷；复制申请人、发明人、优先权、PCT 信息；Status=NOT_FILED；国家计划状态变为 CASE_CREATED 且记录 NationalCaseID。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-009
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Unhappy
+  topic: C5 国家阶段必填缺失
+  stage_code: C5
+  stage_name: 国家阶段必填缺失
+  coverage_ids:
+  - FR-CM-05
+  - V-PCT-02
+  requirement_ids:
+  - FR-CM-05
+  validation_ids:
+  - V-PCT-02
+  preconditions: 创建或编辑 PCT_NATIONAL 子案。
+  steps_summary: 不填写 PCT_NationalEntryDate 保存。
+  expected: 保存被拒并提示国家阶段进入日必填。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-C-010
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P1
+  categories:
+  - Unhappy
+  topic: C5 重复创建国家案
+  stage_code: C5
+  stage_name: 重复创建国家案
+  coverage_ids:
+  - FR-CM-05
+  requirement_ids:
+  - FR-CM-05
+  validation_ids: []
+  preconditions: 同一母案、同一国家计划已创建 NationalCaseID。
+  steps_summary: 再次对同一国家执行“创建国家案”。
+  expected: 系统阻止重复创建，或提示已有 NationalCaseID 并跳转现有子案。
+  automation_recommendation: API+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-C-011
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P1
+  categories:
+  - Happy
+  topic: C5 进入任务核销
+  stage_code: C5
+  stage_name: 进入任务核销
+  coverage_ids:
+  - FR-DL-04
+  - FR-DL-10
+  requirement_ids:
+  - FR-DL-04
+  - FR-DL-10
+  validation_ids: []
+  preconditions: CN 国家子案已创建；对应进入任务仍 OPEN。
+  steps_summary: 完成进入操作后核销 PCT_NATIONAL_ENTRY_LIMIT 任务。
+  expected: 任务状态变为 DONE，DoneDate 记录；TaskLog 写 MARK_DONE；计划状态保持 CASE_CREATED/ENTERED。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-C-012
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P2
+  categories:
+  - Happy
+  topic: C6 国家案对接主流水线
+  stage_code: C6
+  stage_name: 国家案对接主流水线
+  coverage_ids:
+  - FR-CM-07
+  - FR-WD-04
+  - FR-FE-04
+  - FR-BL-05
+  - FR-COM-02
+  requirement_ids:
+  - FR-CM-07
+  - FR-WD-04
+  - FR-FE-04
+  - FR-BL-05
+  - FR-COM-02
+  validation_ids: []
+  preconditions: 已有 PCT_NATIONAL 子案。
+  steps_summary: 对该子案执行递交、申请费、OA、授权或年费等任一后续流程 smoke。
+  expected: 国家阶段子案完全复用 A/B/G0/D/E/F/G/H 流水线；下游模块不依赖母案特殊分支。
+  automation_recommendation: 建议接口级烟测。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-G0-001
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: L5 授权通知录入
+  stage_code: L5
+  stage_name: 授权通知录入
+  coverage_ids:
+  - FR-WD-03
+  - FR-CM-04
+  - V-D-01
+  requirement_ids:
+  - FR-WD-03
+  - FR-CM-04
+  validation_ids:
+  - V-D-01
+  preconditions: 一件 NORMAL/PCT_NATIONAL 案状态在 SUB_EXAM 或 OA2；配置 GRANT_NOTICE 模板。
+  steps_summary: 录入 OFFICIAL_IN + GRANT_NOTICE，填写 IssueDate、GrantDate、GrantNo、FirstAnnuityYear、ValidUntil、Summary。
+  expected: 文档保存成功；T_Case.Status 更新为 GRANTED；Grant 相关字段回写；文档可在中间文件列表中查询。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G0-002
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  topic: GRANT_NOTICE 必填字段缺失
+  stage_code: null
+  stage_name: GRANT_NOTICE 必填字段缺失
+  coverage_ids:
+  - FR-WD-03
+  - V-D-01
+  - V-DOC-05
+  requirement_ids:
+  - FR-WD-03
+  validation_ids:
+  - V-D-01
+  - V-DOC-05
+  preconditions: 存在待授权案件。
+  steps_summary: 录入 GRANT_NOTICE 时缺少 GrantDate、GrantNo、FirstAnnuityYear 或 ValidUntil 任一字段保存。
+  expected: 系统阻止保存并指出缺失字段；案卷状态不应进入 GRANTED。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-G0-003
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: 授权费时限任务生成
+  stage_code: null
+  stage_name: 授权费时限任务生成
+  coverage_ids:
+  - FR-DL-02
+  - FR-DL-03
+  requirement_ids:
+  - FR-DL-02
+  - FR-DL-03
+  validation_ids: []
+  preconditions: TC-G0-001 成功；存在 GRANT_CERT_FEE_LIMIT 模板。
+  steps_summary: 录入授权通知后检查是否生成授权费时限任务。
+  expected: 系统创建 GRANT_CERT_FEE_LIMIT 任务，含 Deadline/InnerDeadline/Remind*、WorkerID、SupervisorID；任务在首页/我的任务出现。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G0-004
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: GrantFeeTask 提取
+  stage_code: null
+  stage_name: GrantFeeTask 提取
+  coverage_ids:
+  - FR-FE-05
+  requirement_ids:
+  - FR-FE-05
+  validation_ids: []
+  preconditions: 已授权案件，存在 T_GrantFeeTask 机制。
+  steps_summary: 打开授权费管理列表，按授权日期/客户过滤，查看 GovFeeAmt、ServiceFeeAmt、ClientInstruction、NotifyCount。
+  expected: 新授权案件出现在授权费列表；字段完整；默认 ClientInstruction=NONE、DraftGenerated=false、NoticeSent=false。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G0-005
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: 授权费通知函
+  stage_code: null
+  stage_name: 授权费通知函
+  coverage_ids:
+  - FR-FE-05
+  - FR-WD-06
+  requirement_ids:
+  - FR-FE-05
+  - FR-WD-06
+  validation_ids: []
+  preconditions: GrantFeeTask.ClientInstruction=NONE。
+  steps_summary: 执行“生成授权费通知函”。
+  expected: 生成 T_Document(TemplateCode=GRANT_FEE_NOTICE) 和附件；GrantFeeTask.NoticeSent=true，NotifyCount+1。
+  automation_recommendation: UI+DB+附件。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G0-006
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: 授权费草单生成
+  stage_code: null
+  stage_name: 授权费草单生成
+  coverage_ids:
+  - FR-FE-02
+  - FR-FE-05
+  - V-GF-02
+  requirement_ids:
+  - FR-FE-02
+  - FR-FE-05
+  validation_ids:
+  - V-GF-02
+  preconditions: GrantFeeTask.ClientInstruction=PAY；费率已配置登记费/证书费/印花税。
+  steps_summary: 执行“生成授权费草单”。
+  expected: 生成 T_FeeDraft(Type=GRANT_FEE) 和多条 FeeItem；DraftGenerated=true；TotalGov/TotalService/TotalAmt 正确。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G0-007
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  topic: 授权费费率缺失/重复
+  stage_code: null
+  stage_name: 授权费费率缺失/重复
+  coverage_ids:
+  - FR-FE-05
+  - V-GF-01
+  - V-GF-02
+  requirement_ids:
+  - FR-FE-05
+  validation_ids:
+  - V-GF-01
+  - V-GF-02
+  preconditions: GrantFeeTask.ClientInstruction=PAY；去掉一项 GRANT 费率或预先造一张 GRANT_FEE 草单。
+  steps_summary: 尝试生成授权费草单。
+  expected: 缺关键费率时系统阻断；同案同类型草单已存在时系统提示避免重复或阻断。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-G0-008
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: 授权费清单/账单/收款闭环
+  stage_code: null
+  stage_name: 授权费清单/账单/收款闭环
+  coverage_ids:
+  - FR-FE-04
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  requirement_ids:
+  - FR-FE-04
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 存在 GRANT_FEE 草单。
+  steps_summary: 将 GOV 项生成 PayList(Type=GRANT) 并登记缴费；从草单生成账单；客户付款并冲销。
+  expected: 授权费官费清单、账单、收款和 CaseReceipt 全链路成功；费用查询能看见官方缴费与客户收款两部分。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G0-009
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: 年费初始化触发
+  stage_code: null
+  stage_name: 年费初始化触发
+  coverage_ids:
+  - FR-FE-06
+  requirement_ids:
+  - FR-FE-06
+  validation_ids: []
+  preconditions: TC-G0-001 成功；IsFeeMonitor=true。
+  steps_summary: 授权完成后检查是否创建 AnnuityTask 初始记录。
+  expected: 按 FirstAnnuityYear 和 ValidUntil 生成年费任务或具备后续滚动生成条件；未监视案件不应初始化年费任务。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G0-010
+  wave: G0
+  wave_title: G0 授权阶段
+  context: 授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: 授权服务费提成
+  stage_code: null
+  stage_name: 授权服务费提成
+  coverage_ids:
+  - FR-COM-02
+  - FR-COM-04
+  - FR-COM-06
+  requirement_ids:
+  - FR-COM-02
+  - FR-COM-04
+  - FR-COM-06
+  validation_ids: []
+  preconditions: 授权费账单含 SERVICE 项；存在授权阶段提成规则。
+  steps_summary: 触发提成计算并查看是否进入 S2 可结算判断。
+  expected: 授权阶段服务费进入 Commission；可作为 S2 结算关键节点；满足状态+回款阈值后进入可结算列表。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-D-001
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P0
+  categories:
+  - Happy
+  topic: D0/D1 年费任务初始化
+  stage_code: null
+  stage_name: D0/D1 年费任务初始化
+  coverage_ids:
+  - FR-FE-06
+  requirement_ids:
+  - FR-FE-06
+  validation_ids: []
+  preconditions: 已授权案件，IsFeeMonitor=true，FirstAnnuityYear=1，ValidUntil=2046-04-05。
+  steps_summary: 执行授权后的年费初始化或定时任务。
+  expected: 系统生成 T_AnnuityTask 多年度记录或首批滚动记录；YearNo、DueDate、Currency、ClientInstruction、DraftGenerated、NoticeSent、IsOverdue
+    初始化正确。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-D-002
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: D1 滚动生成去重
+  stage_code: D1
+  stage_name: 滚动生成去重
+  coverage_ids:
+  - FR-FE-06
+  requirement_ids:
+  - FR-FE-06
+  validation_ids: []
+  preconditions: 已有部分年份 AnnuityTask。
+  steps_summary: 再次执行滚动生成作业。
+  expected: 仅创建缺失年度；已有年度不重复创建。
+  automation_recommendation: 批任务自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p1
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-D-003
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P0
+  categories:
+  - Happy
+  topic: D2 即将到期检索
+  stage_code: D2
+  stage_name: 即将到期检索
+  coverage_ids:
+  - FR-FE-06
+  - FR-DL-07
+  requirement_ids:
+  - FR-FE-06
+  - FR-DL-07
+  validation_ids: []
+  preconditions: 存在多个国家、多个客户的年费任务。
+  steps_summary: 按未来 3 个月/6 个月/1 年、Country、Client、Instruction、NoticeSent 等筛选。
+  expected: 列表返回正确任务集合，排序合理，可导出。
+  automation_recommendation: UI+查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-D-004
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P0
+  categories:
+  - Happy
+  topic: D3 年费通知函
+  stage_code: D3
+  stage_name: 年费通知函
+  coverage_ids:
+  - FR-FE-06
+  - FR-WD-06
+  requirement_ids:
+  - FR-FE-06
+  - FR-WD-06
+  validation_ids: []
+  preconditions: ClientInstruction=NONE 的年费任务。
+  steps_summary: 执行“生成年费通知函”。
+  expected: 生成 T_Document(ANNUITY_NOTICE) 和附件；NoticeSent=true；NotifyCount+1。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-D-005
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P0
+  categories:
+  - Happy
+  topic: D4 PAY 生成年费草单
+  stage_code: D4
+  stage_name: PAY 生成年费草单
+  coverage_ids:
+  - FR-FE-02
+  - FR-FE-03
+  - FR-FE-06
+  - V-FI-04
+  requirement_ids:
+  - FR-FE-02
+  - FR-FE-03
+  - FR-FE-06
+  validation_ids:
+  - V-FI-04
+  preconditions: 年费任务 YearNo=1，ClientInstruction=PAY。
+  steps_summary: 执行“生成年费草单”。
+  expected: 生成 T_FeeDraft(Type=ANNUITY_FEE) 和 YearNo=1 的 FeeItem；YearNo 不小于 FirstAnnuityYear；DraftGenerated=true。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-D-006
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: D4 同时缴下一年度
+  stage_code: D4
+  stage_name: 同时缴下一年度
+  coverage_ids:
+  - FR-FE-06
+  requirement_ids:
+  - FR-FE-06
+  validation_ids: []
+  preconditions: YearNo=N 的年费任务，勾选 PayNextYear。
+  steps_summary: 执行草单生成。
+  expected: 同一草单可同时包含 YearNo=N 和 N+1 两个年度明细；金额分别正确。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-D-007
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: D3/D4 ABANDON 处理
+  stage_code: null
+  stage_name: D3/D4 ABANDON 处理
+  coverage_ids:
+  - FR-FE-06
+  - FR-CM-04
+  requirement_ids:
+  - FR-FE-06
+  - FR-CM-04
+  validation_ids: []
+  preconditions: 年费任务 ClientInstruction 可设为 ABANDON。
+  steps_summary: 将当前年度设为 ABANDON，并检查是否批量影响后续年度；再尝试为 ABANDON 年度生成草单。
+  expected: ABANDON 年度不应生成草单；按策略可联动未来年度也置为 ABANDON；专利后续可能终止或停止监视。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p1
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-D-008
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P0
+  categories:
+  - Unhappy
+  topic: D4 年度边界非法
+  stage_code: D4
+  stage_name: 年度边界非法
+  coverage_ids:
+  - FR-FE-03
+  - V-FI-04
+  requirement_ids:
+  - FR-FE-03
+  validation_ids:
+  - V-FI-04
+  preconditions: 存在 FirstAnnuityYear=3 的案件。
+  steps_summary: 尝试为 YearNo=2 创建 ANNUITY_FEE 明细或手工改 YearNo<FirstAnnuityYear。
+  expected: 系统阻止保存并提示年度非法。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-D-009
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P0
+  categories:
+  - Happy
+  topic: D5 年费官费清单与缴费
+  stage_code: D5
+  stage_name: 年费官费清单与缴费
+  coverage_ids:
+  - FR-FE-04
+  - FR-FE-06
+  requirement_ids:
+  - FR-FE-04
+  - FR-FE-06
+  validation_ids: []
+  preconditions: 存在含 GOV 项的 ANNUITY_FEE 草单。
+  steps_summary: 生成 PayList(Type=ANNUITY)，登记 GovPayment 实缴信息。
+  expected: 年费官费清单生成成功；PaidDate/PaidAmt/InvoiceNo 可查询到；不同 YearNo 明细不混淆。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-D-010
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P0
+  categories:
+  - Happy
+  topic: D6 年费账单与收款
+  stage_code: D6
+  stage_name: 年费账单与收款
+  coverage_ids:
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  requirement_ids:
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 存在 ANNUITY_FEE 草单。
+  steps_summary: 生成账单、登记客户付款、冲销到账单并查看 CaseReceipt。
+  expected: 账单、收款、CaseReceipt 成功闭环；YearNo 在 BillItem/CaseReceipt 中可追踪。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-D-011
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: D7 逾期/终止/恢复
+  stage_code: D7
+  stage_name: 逾期/终止/恢复
+  coverage_ids:
+  - FR-FE-06
+  - FR-CM-04
+  requirement_ids:
+  - FR-FE-06
+  - FR-CM-04
+  validation_ids: []
+  preconditions: 存在逾期未缴的年费任务。
+  steps_summary: 触发逾期识别；标记专利终止或停止监视；后续补缴/恢复时重新启用相关任务或状态。
+  expected: IsOverdue 正确置位；终止后不再继续常规通知；恢复后可重新纳入后续年份管理（如业务允许）。
+  automation_recommendation: 需要人工验证业务策略。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p1
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-D-012
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P2
+  categories:
+  - Happy
+  topic: D8 年费服务费提成
+  stage_code: D8
+  stage_name: 年费服务费提成
+  coverage_ids:
+  - FR-COM-02
+  - FR-COM-04
+  requirement_ids:
+  - FR-COM-02
+  - FR-COM-04
+  validation_ids: []
+  preconditions: 年费草单/账单包含 SERVICE 项，且规则允许计入提成。
+  steps_summary: 触发提成计算。
+  expected: 年费服务费按规则进入 BaseFee；如系统配置不计入，则明确不生成提成。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-D-013
+  wave: D
+  wave_title: D 年费周期
+  context: E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款
+  priority: P1
+  categories:
+  - Boundary
+  topic: IsFeeMonitor=false
+  stage_code: null
+  stage_name: IsFeeMonitor=false
+  coverage_ids:
+  - FR-CM-02
+  - V-E-03
+  - FR-FE-06
+  requirement_ids:
+  - FR-CM-02
+  - FR-FE-06
+  validation_ids:
+  - V-E-03
+  preconditions: 已授权案件但 IsFeeMonitor=false。
+  steps_summary: 执行年费初始化与定期提取。
+  expected: 默认不生成或不展示该案年费任务；除非后续手工启用监视。
+  automation_recommendation: API+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_d
+  - p1
+  - boundary
+  status: skeleton_ready
+- id: TC-E-001
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: E1 无效案立案
+  stage_code: E1
+  stage_name: 无效案立案
+  coverage_ids:
+  - FR-CM-01
+  - FR-CM-05
+  - V-INV-01
+  - V-INV-02
+  - V-INV-03
+  requirement_ids:
+  - FR-CM-01
+  - FR-CM-05
+  validation_ids:
+  - V-INV-01
+  - V-INV-02
+  - V-INV-03
+  preconditions: DS-U-FM-01；原案 CASE-E-${RUN_ID}-ORIG 已授权。
+  steps_summary: 创建 CaseType=INVALIDATION 案卷，填写 OriginalCaseID、InvalidClientID、InvalidRole、InvalidPatentee、InvalidRequester。
+  expected: 无效案保存成功；Status=INVALID_INIT；OriginalCaseID 指向原案；报表可识别我方角色。
+  automation_recommendation: UI+DB。
+  data_refs:
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-E-${RUN_ID}-ORIG
+  tags:
+  - wave_e
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-E-002
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  topic: E1 无效案必填缺失
+  stage_code: E1
+  stage_name: 无效案必填缺失
+  coverage_ids:
+  - FR-CM-05
+  - V-INV-01
+  - V-INV-02
+  requirement_ids:
+  - FR-CM-05
+  validation_ids:
+  - V-INV-01
+  - V-INV-02
+  preconditions: 准备新建 INVALIDATION 案卷。
+  steps_summary: 缺少 InvalidClientID、InvalidRole 或 Patentee/Requester 之一保存。
+  expected: 系统阻止保存并给出缺失项提示。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-E-003
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: E1 诉讼案立案
+  stage_code: E1
+  stage_name: 诉讼案立案
+  coverage_ids:
+  - FR-CM-01
+  requirement_ids:
+  - FR-CM-01
+  validation_ids: []
+  preconditions: DS-U-FM-01；原案或争议对象存在。
+  steps_summary: 创建 CaseType=LITIGATION 案卷，填写 LitigationType、CourtName、Plaintiff、Defendant、LitigationRole。
+  expected: 诉讼案保存成功；Status=LIT_INIT 或配置默认状态；后续可登记立案/开庭/判决文书。
+  automation_recommendation: UI+DB。
+  data_refs:
+  - DS-U-FM-01
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-E-004
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: E2 请求书/起诉状 + 初始草单
+  stage_code: E2
+  stage_name: 请求书/起诉状 + 初始草单
+  coverage_ids:
+  - FR-WD-02
+  - FR-WD-05
+  - FR-CM-04
+  requirement_ids:
+  - FR-WD-02
+  - FR-WD-05
+  - FR-CM-04
+  validation_ids: []
+  preconditions: INVALIDATION/LITIGATION 案已创建；配置 INVALID_REQUEST 或 LITIGATION_COMPLAINT 模板和费用类型。
+  steps_summary: 录入 OFFICIAL_OUT 请求书/起诉状，必要时在 Step4 生成 INVALID_FEE/LITIGATION_FEE 草单。
+  expected: 文档保存成功；案件状态变为 INVALID_FILED 或 LIT_FILED；初始费用草单按模板生成。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-E-005
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: E3 受理/答辩/开庭通知 → 任务
+  stage_code: E3
+  stage_name: 受理/答辩/开庭通知 → 任务
+  coverage_ids:
+  - FR-WD-04
+  - FR-DL-02
+  requirement_ids:
+  - FR-WD-04
+  - FR-DL-02
+  validation_ids: []
+  preconditions: 已 filed 的无效/诉讼案件。
+  steps_summary: 录入 OFFICIAL_IN 受理通知、答辩通知、举证通知或开庭通知。
+  expected: 相应 T_Document 创建成功；NeedReply=true 的文档生成答辩/举证/开庭准备任务；案件状态更新为 INVALID_ACCEPTED/INVALID_IN_HEARING 或 LIT_ACCEPTED/LIT_HEARING。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-E-006
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: E4 答辩/证据/意见去文 → 核销
+  stage_code: E4
+  stage_name: 答辩/证据/意见去文 → 核销
+  coverage_ids:
+  - FR-WD-04
+  - FR-DL-04
+  - FR-DL-10
+  requirement_ids:
+  - FR-WD-04
+  - FR-DL-04
+  - FR-DL-10
+  validation_ids: []
+  preconditions: 存在 OPEN 的 INVALID_DEFENSE_LIMIT 或相关诉讼任务。
+  steps_summary: 录入 OFFICIAL_OUT 答辩状、证据提交、书面意见文书，ReplyToID 指向对应通知。
+  expected: 去文保存成功；对应任务被 DONE；TaskLog 写 MARK_DONE；必要时补充 INVALID_FEE/LITIGATION_FEE 草单。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-E-007
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P0
+  categories:
+  - Unhappy
+  topic: E4 ReplyTo 非法
+  stage_code: E4
+  stage_name: ReplyTo 非法
+  coverage_ids:
+  - FR-WD-04
+  requirement_ids:
+  - FR-WD-04
+  validation_ids: []
+  preconditions: 存在他案通知或不匹配模板。
+  steps_summary: 将答辩文书的 ReplyToID 指向错误案件或错误模板类型。
+  expected: 系统阻断或过滤非法 ReplyToID；不应误核销他案任务。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-E-008
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: E5 无效决定-全部无效
+  stage_code: E5
+  stage_name: 无效决定-全部无效
+  coverage_ids:
+  - FR-CM-04
+  - FR-WD-03
+  requirement_ids:
+  - FR-CM-04
+  - FR-WD-03
+  validation_ids: []
+  preconditions: 无效案已进入审理中；原案为 GRANTED。
+  steps_summary: 录入 INVALID_DECISION，DecisionResult=全部无效，且根据我方角色设置结果。
+  expected: 无效案状态更新为 INVALID_WON/INVALID_LOST（依角色）；原案状态更新为 INVALIDATED 或 TERMINATED（按规则）；DecisionResult 等保存在 ExtraData。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-E-009
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: E5 无效决定-部分无效
+  stage_code: E5
+  stage_name: 无效决定-部分无效
+  coverage_ids:
+  - FR-CM-04
+  requirement_ids:
+  - FR-CM-04
+  validation_ids: []
+  preconditions: 无效案已审理中；原案为 GRANTED。
+  steps_summary: 录入 INVALID_DECISION，DecisionResult=部分无效，填写 AffectedClaims。
+  expected: 无效案状态为 INVALID_PARTIAL；原案状态为 INVALIDATED_PARTIAL；受影响权利要求可追踪。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-E-010
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: E5 诉讼判决
+  stage_code: E5
+  stage_name: 诉讼判决
+  coverage_ids:
+  - FR-CM-04
+  requirement_ids:
+  - FR-CM-04
+  validation_ids: []
+  preconditions: 诉讼案已开庭。
+  steps_summary: 录入 LITIGATION_JUDGMENT，分别测试胜诉/败诉/和解。
+  expected: 诉讼案状态更新为 LIT_WON/LIT_LOST/LIT_SETTLED；如判决不影响原专利状态，则原案保持不变。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-E-011
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: E6 费用闭环
+  stage_code: E6
+  stage_name: 费用闭环
+  coverage_ids:
+  - FR-FE-02
+  - FR-FE-04
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  requirement_ids:
+  - FR-FE-02
+  - FR-FE-04
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 存在 INVALID_FEE/LITIGATION_FEE 草单，含 GOV/SERVICE/MISC 项。
+  steps_summary: 从草单生成官费清单（如有 GOV）、账单、收款和冲销。
+  expected: 无效/诉讼费用全链路闭环；BillItem、GovPayment、CaseReceipt 都能按 CaseID/阶段追踪。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-E-012
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: E7 提成
+  stage_code: E7
+  stage_name: 提成
+  coverage_ids:
+  - FR-COM-01
+  - FR-COM-02
+  - FR-COM-04
+  - FR-COM-06
+  requirement_ids:
+  - FR-COM-01
+  - FR-COM-02
+  - FR-COM-04
+  - FR-COM-06
+  validation_ids: []
+  preconditions: 无效/诉讼账单含 SERVICE 项且规则已配置。
+  steps_summary: 触发提成计算并查看是否进入结算候选。
+  expected: BaseFee 来源于无效/诉讼服务费；阶段说明写入 Remark；满足 WaitPay/状态条件时进入可结算列表。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-E-013
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P1
+  categories:
+  - Unhappy
+  topic: 原案引用异常
+  stage_code: null
+  stage_name: 原案引用异常
+  coverage_ids:
+  - FR-CM-05
+  requirement_ids:
+  - FR-CM-05
+  validation_ids: []
+  preconditions: 尝试创建无效案时 OriginalCaseID 不存在或原案并非适格状态。
+  steps_summary: 保存无效/诉讼案。
+  expected: 系统阻断或给出强警告；避免对不存在或不适格原案建立派生案。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-E-014
+  wave: E
+  wave_title: E 无效/诉讼
+  context: E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成
+  priority: P2
+  categories:
+  - Happy
+  topic: 多阶段费用与提成累积
+  stage_code: null
+  stage_name: 多阶段费用与提成累积
+  coverage_ids:
+  - FR-COM-02
+  - FR-COM-03
+  requirement_ids:
+  - FR-COM-02
+  - FR-COM-03
+  validation_ids: []
+  preconditions: 同一无效/诉讼案已存在初始服务费提成记录。
+  steps_summary: 再次录入答辩/开庭/上诉阶段文书并生成追加服务费账单。
+  expected: Commission 可按累加或多记录模式继续增加 BaseFee；各阶段可追溯，不与前阶段记录混淆。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_e
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-F-001
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Happy
+  topic: F1 录入通用预收款
+  stage_code: F1
+  stage_name: 录入通用预收款
+  coverage_ids:
+  - FR-BL-09
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  requirement_ids:
+  - FR-BL-09
+  validation_ids:
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  preconditions: Finance 登录；客户 DS-CL-001。
+  steps_summary: 登记 Payment，Remark=预收款，创建默认 PaymentLine(CaseID=NULL)。
+  expected: Payment 保存成功；PaymentLine.RawAmount=Amount、AllocatedAmt=0、BalanceAmt=Amount；在预收款报表可见。
+  automation_recommendation: API+DB+UI。
+  data_refs:
+  - DS-CL-001
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-F-002
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Unhappy
+  topic: F1 预收款输入非法
+  stage_code: F1
+  stage_name: 预收款输入非法
+  coverage_ids:
+  - FR-BL-09
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  requirement_ids:
+  - FR-BL-09
+  validation_ids:
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  preconditions: 同一客户已存在 PayNo=PRE-${RUN_ID}-001。
+  steps_summary: 分别测试 Amount<0、PayDate 明显超当前、重复 PayNo。
+  expected: 系统逐项阻止保存。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs:
+  - PRE-${RUN_ID}-001
+  tags:
+  - wave_f
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-F-003
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  topic: F2 预收款池查询
+  stage_code: F2
+  stage_name: 预收款池查询
+  coverage_ids:
+  - FR-BL-09
+  requirement_ids:
+  - FR-BL-09
+  validation_ids: []
+  preconditions: 存在多条未分配 PaymentLine。
+  steps_summary: 进入预收款池或报表查看客户预收余额。
+  expected: 按客户展示 PayNo/PayDate/原金额/BalanceAmt/Remark；客户总预收余额汇总正确。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-F-004
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  topic: F3 案卷级预挂
+  stage_code: F3
+  stage_name: 案卷级预挂
+  coverage_ids:
+  - FR-BL-09
+  requirement_ids:
+  - FR-BL-09
+  validation_ids: []
+  preconditions: 存在未分配 PaymentLine 和目标案 CASE-A-${RUN_ID}-001。
+  steps_summary: 将 PaymentLine 预挂到某案或创建 CaseID 已知的 PaymentLine。
+  expected: 后续冲销时默认优先显示该案相关账单；但仍可在权限允许下调整分配目标。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-001
+  tags:
+  - wave_f
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-F-005
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Happy
+  topic: F4 用预收抵扣后续账单-全额
+  stage_code: F4
+  stage_name: 用预收抵扣后续账单-全额
+  coverage_ids:
+  - FR-BL-05
+  - FR-BL-09
+  - V-OF-01
+  - V-OF-02
+  requirement_ids:
+  - FR-BL-05
+  - FR-BL-09
+  validation_ids:
+  - V-OF-01
+  - V-OF-02
+  preconditions: 存在预收款 PaymentLine 和后续新案/年费/顾问账单。
+  steps_summary: 在冲销界面使用预收款全额抵扣单张账单。
+  expected: Bill.Balance 降为 0、Status=SETTLED；PaymentLine.AllocatedAmt 增加、BalanceAmt 减少；生成 Offset。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-F-006
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Happy
+  topic: F6 预收跨多案多账单分摊
+  stage_code: F6
+  stage_name: 预收跨多案多账单分摊
+  coverage_ids:
+  - FR-BL-05
+  - FR-BL-09
+  requirement_ids:
+  - FR-BL-05
+  - FR-BL-09
+  validation_ids: []
+  preconditions: 单条预收款金额足以覆盖多张账单。
+  steps_summary: 将同一 PaymentLine 分配到不同案、不同类型的多张账单。
+  expected: 系统允许多次/多目标消耗；每张账单余额正确变化；PaymentLine 剩余金额正确。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-F-007
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Unhappy
+  topic: F4/F6 超额分配
+  stage_code: null
+  stage_name: F4/F6 超额分配
+  coverage_ids:
+  - FR-BL-05
+  - V-OF-01
+  - V-OF-02
+  requirement_ids:
+  - FR-BL-05
+  validation_ids:
+  - V-OF-01
+  - V-OF-02
+  preconditions: 存在 BalanceAmt=1000 的 PaymentLine 和 Balance=600 的账单。
+  steps_summary: 尝试一次分配 1200 或对某账单分配 700。
+  expected: 系统分别因超过 PaymentLine.BalanceAmt 或 Bill.Balance 而拒绝。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-F-008
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  topic: F5 转化为案卷实收
+  stage_code: F5
+  stage_name: 转化为案卷实收
+  coverage_ids:
+  - FR-FE-07
+  - FR-BL-09
+  - V-CR-02
+  requirement_ids:
+  - FR-FE-07
+  - FR-BL-09
+  validation_ids:
+  - V-CR-02
+  preconditions: 预收款已冲销到具体账单。
+  steps_summary: 检查 T_CaseReceipt 的 ReceivableAmt/ReceivedAmt/IsPrepayment/IsArrears 变化。
+  expected: 预收在未分配前不提高 PaidRatio；一旦通过 Offset 绑定到具体案/费用项，CaseReceipt 更新为已收，并可用于提成 PaidRatio。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-F-009
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: F7 剩余预收处理
+  stage_code: F7
+  stage_name: 剩余预收处理
+  coverage_ids:
+  - FR-BL-09
+  requirement_ids:
+  - FR-BL-09
+  validation_ids: []
+  preconditions: 客户预收余额 > 当前所有账单总额。
+  steps_summary: 测试余额留存、退款或通过负账单/调整账单处理。
+  expected: 余额可继续留存并在预收报表中显示；退款/调整遵循系统参数策略；不会把未分配余额当作已收服务费。
+  automation_recommendation: 需要人工确认财务策略。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-F-010
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  topic: F8 与提成关系
+  stage_code: F8
+  stage_name: 与提成关系
+  coverage_ids:
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: 存在 WaitPay=true 的提成记录，客户有大额未分配预收。
+  steps_summary: 先仅录入预收不分配；再将其分配到服务费账单。
+  expected: 未分配预收不改变 Commission 可结算性；完成 Offset 且 CaseReceipt 更新后，PaidRatio 提升，可结算性随之变化。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G-001
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Happy
+  topic: G1 逾期识别
+  stage_code: G1
+  stage_name: 逾期识别
+  coverage_ids:
+  - FR-BL-07
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-07
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 存在多张 AR 账单，其中包括未到期、已结清、坏账和逾期未结账单。
+  steps_summary: 按 ToDate 执行逾期识别或打开逾期报表。
+  expected: 仅 Direction=AR、Status=UNSETTLED/PARTIALLY_SETTLED、IsBadDebt=false、DueDate<=ToDate、Balance>0 的账单被识别为逾期。
+  automation_recommendation: 查询/服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G-002
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Happy
+  topic: G2 生成催款单快照
+  stage_code: G2
+  stage_name: 生成催款单快照
+  coverage_ids:
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 客户存在多张逾期账单。
+  steps_summary: 以客户+截止日生成 T_Dunning/T_DunningLine。
+  expected: 催款单头和明细创建成功；OutstandingAmt 记录生成时快照，不受后续收款回写影响；TotalAmt 为各行合计。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G-003
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Unhappy
+  topic: G2 催款范围过滤
+  stage_code: G2
+  stage_name: 催款范围过滤
+  coverage_ids:
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 客户同时存在已结清、未到期、坏账和 AP 账单。
+  steps_summary: 生成催款单。
+  expected: 已结清、未到期、坏账、AP 账单不应进入催款明细。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-G-004
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P1
+  categories:
+  - Happy
+  topic: G3 生成催款函
+  stage_code: G3
+  stage_name: 生成催款函
+  coverage_ids:
+  - FR-BL-08
+  - FR-WD-06
+  requirement_ids:
+  - FR-BL-08
+  - FR-WD-06
+  validation_ids: []
+  preconditions: 催款单已创建；存在 DUNNING_LETTER 模板。
+  steps_summary: 从催款单生成催款函 Word/PDF 或 Email 并发送。
+  expected: 催款函生成成功；可作为 T_Document 存档；T_Dunning.Status/SentDate 更新。
+  automation_recommendation: UI+文件输出。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G-005
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Happy
+  topic: G4 催款后部分付款
+  stage_code: G4
+  stage_name: 催款后部分付款
+  coverage_ids:
+  - FR-BL-05
+  - FR-BL-08
+  - FR-FE-07
+  requirement_ids:
+  - FR-BL-05
+  - FR-BL-08
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 逾期账单已被催款。
+  steps_summary: 登记客户部分付款并冲销到账单。
+  expected: 账单余额减少、状态更新为 PARTIALLY_SETTLED；CaseReceipt 更新已收金额；历史 DunningLine 快照不变。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G-006
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P1
+  categories:
+  - Happy
+  topic: G5 多轮催款
+  stage_code: G5
+  stage_name: 多轮催款
+  coverage_ids:
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 账单仍有未结余额，已存在第一轮催款单。
+  steps_summary: 再次生成第二轮/第三轮催款单。
+  expected: 新一轮 Dunning/DunningLine 创建成功；OutstandingAmt 反映当轮余额；旧催款数据不被覆盖。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G-007
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P0
+  categories:
+  - Happy
+  topic: G6 标记坏账
+  stage_code: G6
+  stage_name: 标记坏账
+  coverage_ids:
+  - FR-BL-07
+  requirement_ids:
+  - FR-BL-07
+  validation_ids: []
+  preconditions: 存在长期逾期且无回收希望的应收账单。
+  steps_summary: 对账单执行“标记坏账”，填写 BadDebtDate、BadDebtReason。
+  expected: Bill.IsBadDebt=true，Status=BAD_DEBT；在普通应收统计与坏账统计中区分显示。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-G-008
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P1
+  categories:
+  - Happy
+  topic: G7 坏账后收回
+  stage_code: G7
+  stage_name: 坏账后收回
+  coverage_ids:
+  - FR-BL-05
+  - FR-BL-07
+  - FR-FE-07
+  requirement_ids:
+  - FR-BL-05
+  - FR-BL-07
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 账单已是 BAD_DEBT。
+  steps_summary: 登记客户付款并冲销到坏账账单。
+  expected: 系统仍允许登记收款和 Offset；Bill.Balance 下降；CaseReceipt 记录坏账后回收金额；账单可按策略继续保持 BAD_DEBT 或转状态。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-G-009
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P2
+  categories:
+  - Happy
+  - Unhappy
+  topic: G7 坏账恢复策略
+  stage_code: G7
+  stage_name: 坏账恢复策略
+  coverage_ids:
+  - FR-BL-07
+  requirement_ids:
+  - FR-BL-07
+  validation_ids: []
+  preconditions: 存在 BAD_DEBT 账单。
+  steps_summary: 执行“从坏账恢复”或在完全收回后检查系统状态。
+  expected: 如系统支持恢复，IsBadDebt 恢复为 false，状态改为 UNSETTLED/PARTIALLY_SETTLED/SETTLED；若不支持则明确只保留 BAD_DEBT 但余额更新。
+  automation_recommendation: 需按实现策略人工确认。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p2
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-G-010
+  wave: G
+  wave_title: G 催款与坏账
+  context: E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收
+  priority: P1
+  categories:
+  - Happy
+  topic: G8 对提成的间接影响
+  stage_code: G8
+  stage_name: 对提成的间接影响
+  coverage_ids:
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: 存在 WaitPay=true 的提成记录，对应账单长期逾期后部分回收或坏账后回收。
+  steps_summary: 观察回款前后 Commission 可结算状态。
+  expected: 只有通过 Offset/CaseReceipt 确认归属的回款才提升 PaidRatio；催款和坏账标签本身不直接改变 BaseFee，但会影响可结算性。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_g
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-H-001
+  wave: H
+  wave_title: H 顾问/检索
+  context: E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: H1 项目立案
+  stage_code: H1
+  stage_name: 项目立案
+  coverage_ids:
+  - FR-CS-01
+  requirement_ids:
+  - FR-CS-01
+  validation_ids: []
+  preconditions: DS-U-FM-01；客户 DS-CL-001；案号 CASE-H-${RUN_ID}-001。
+  steps_summary: 创建 CaseType=CONSULTING 或 SEARCH 案卷，填写项目范围、负责人、预计工时、状态 NOT_STARTED 或 IN_PROGRESS。
+  expected: 项目案卷保存成功；顾问专属字段持久化；可在高级案件查询中被检出。
+  automation_recommendation: UI+DB。
+  data_refs:
+  - DS-CL-001
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-H-${RUN_ID}-001
+  tags:
+  - wave_h
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-H-002
+  wave: H
+  wave_title: H 顾问/检索
+  context: E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: H2 内部任务
+  stage_code: H2
+  stage_name: 内部任务
+  coverage_ids:
+  - FR-CS-02
+  - FR-DL-06
+  requirement_ids:
+  - FR-CS-02
+  - FR-DL-06
+  validation_ids: []
+  preconditions: 顾问案已创建。
+  steps_summary: 创建项目内部任务，例如 CONSULT_SCOPING、SEARCH_EXECUTION、ANALYSIS_REPORT；调整责任人并核销。
+  expected: 任务可正常创建、编辑、DONE；不依赖官方来文；日志完整。
+  automation_recommendation: API+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_h
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-H-003
+  wave: H
+  wave_title: H 顾问/检索
+  context: E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: H3 项目支出
+  stage_code: H3
+  stage_name: 项目支出
+  coverage_ids:
+  - FR-CS-03
+  - FR-FE-08
+  - V-EX-01
+  - V-EX-02
+  requirement_ids:
+  - FR-CS-03
+  - FR-FE-08
+  validation_ids:
+  - V-EX-01
+  - V-EX-02
+  preconditions: 顾问案已创建。
+  steps_summary: 录入 SEARCH_DB、TRANSLATION、TRANSPORT 等支出；测试 Quantity*UnitPrice 与 Total 不一致的手工总额。
+  expected: 非负校验生效；Total 不一致时系统提示确认是否采用手工总额；支出可按案件/时间/类别查询。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_h
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-H-004
+  wave: H
+  wave_title: H 顾问/检索
+  context: E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: H4 固定报价草单
+  stage_code: H4
+  stage_name: 固定报价草单
+  coverage_ids:
+  - FR-CS-04
+  - FR-FE-02
+  - FR-FE-03
+  requirement_ids:
+  - FR-CS-04
+  - FR-FE-02
+  - FR-FE-03
+  validation_ids: []
+  preconditions: 顾问案配置固定报价。
+  steps_summary: 生成 CONSULT_FEE 或 SEARCH_FEE 草单，添加固定报价服务费明细。
+  expected: 草单生成成功；TotalService 正确；TotalGov 一般为 0；状态为 OPEN。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_h
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-H-005
+  wave: H
+  wave_title: H 顾问/检索
+  context: E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: H4 工时/混合报价草单
+  stage_code: H4
+  stage_name: 工时/混合报价草单
+  coverage_ids:
+  - FR-CS-04
+  - FR-FE-02
+  - FR-FE-03
+  requirement_ids:
+  - FR-CS-04
+  - FR-FE-02
+  - FR-FE-03
+  validation_ids: []
+  preconditions: 顾问案配置按工时或混合模式。
+  steps_summary: 创建多条服务费明细：高级顾问工时、检索分析人工时、可转嫁杂费。
+  expected: 数量、单价、金额和杂费汇总正确；可同时包含 SERVICE 与 MISC。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_h
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-H-006
+  wave: H
+  wave_title: H 顾问/检索
+  context: E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成
+  priority: P0
+  categories:
+  - Happy
+  topic: H5 账单/收款/CaseReceipt
+  stage_code: H5
+  stage_name: 账单/收款/CaseReceipt
+  coverage_ids:
+  - FR-CS-05
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  requirement_ids:
+  - FR-CS-05
+  - FR-BL-02
+  - FR-BL-05
+  - FR-FE-07
+  validation_ids: []
+  preconditions: 存在 CONSULT_FEE/SEARCH_FEE 草单。
+  steps_summary: 从草单生成账单；客户付款并冲销；查看 CaseReceipt。
+  expected: 项目账单和收款闭环成功；CaseReceipt 记录项目实收；费用报表可见。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_h
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-H-007
+  wave: H
+  wave_title: H 顾问/检索
+  context: E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  topic: H6 顾问提成
+  stage_code: H6
+  stage_name: 顾问提成
+  coverage_ids:
+  - FR-CS-06
+  - FR-COM-01
+  - FR-COM-02
+  - FR-COM-06
+  requirement_ids:
+  - FR-CS-06
+  - FR-COM-01
+  - FR-COM-02
+  - FR-COM-06
+  validation_ids: []
+  preconditions: 顾问案账单含 SERVICE 项；存在 CONSULTING/SEARCH 提成规则。
+  steps_summary: 触发提成计算并查看结算候选。
+  expected: 根据顾问/检索规则创建 Commission；可为一次性提成或 S1/S2 两阶段；满足条件可进入结算批次。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_h
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-H-008
+  wave: H
+  wave_title: H 顾问/检索
+  context: E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: 状态关闭
+  stage_code: null
+  stage_name: 状态关闭
+  coverage_ids:
+  - FR-CS-01
+  - FR-CS-05
+  - FR-CS-06
+  requirement_ids:
+  - FR-CS-01
+  - FR-CS-05
+  - FR-CS-06
+  validation_ids: []
+  preconditions: 顾问案存在未完成任务、未结账单或未结算提成。
+  steps_summary: 先尝试将项目状态设为 CLOSED；再在任务完成、账单结清、提成结算后重试。
+  expected: 业务未完成时不应关闭或需强警告；全部闭环后状态可变为 CLOSED。
+  automation_recommendation: 人工+服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_h
+  - p1
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-X-001
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P0
+  categories:
+  - Happy
+  topic: 高级案件查询-基本维度
+  stage_code: null
+  stage_name: 高级案件查询-基本维度
+  coverage_ids:
+  - FR-CM-01
+  requirement_ids:
+  - FR-CM-01
+  validation_ids: []
+  preconditions: 系统中存在 NORMAL/PCT/INVALIDATION/CONSULTING 等多类案件。
+  steps_summary: 按 CaseNo、AppNo、CaseType、PatentCategory、FlowDir、Status、RecvDate/FilingDate/GrantDate 等组合查询。
+  expected: 结果集准确，字段列完整，可跳转案卷详情。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-X-002
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 高级案件查询-控制标记与费用维度
+  stage_code: null
+  stage_name: 高级案件查询-控制标记与费用维度
+  coverage_ids:
+  - FR-DL-07
+  - FR-FE-09
+  requirement_ids:
+  - FR-DL-07
+  - FR-FE-09
+  validation_ids: []
+  preconditions: 系统中存在有/无费减、有/无年费监视、有/无未结账单的案件。
+  steps_summary: 按 IsFeeMonitor、ApplicantKind、HasExamRequest、NoPower、NoPrioText、FeeReduction、未结账单、年费欠款等维度查询。
+  expected: 联查条件生效，结果准确。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-003
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 中间文件查询与清单导出
+  stage_code: null
+  stage_name: 中间文件查询与清单导出
+  coverage_ids:
+  - FR-WD-07
+  requirement_ids:
+  - FR-WD-07
+  validation_ids: []
+  preconditions: 存在多种 DocType 和模板的文档。
+  steps_summary: 按 DocType、TemplateCode、CaseNo、Client、DispatchDate、NeedReply/ReplyDate 查询并导出清单/证书清单。
+  expected: 查询结果正确；导出文件内容与过滤条件一致。
+  automation_recommendation: UI+文件对比。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-004
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 费用情况查询双表
+  stage_code: null
+  stage_name: 费用情况查询双表
+  coverage_ids:
+  - FR-FE-09
+  requirement_ids:
+  - FR-FE-09
+  validation_ids: []
+  preconditions: 存在 GovPayment 和 CaseReceipt 数据。
+  steps_summary: 进入费用情况查询，按 CaseNo/AppNo/Client/日期范围检索。
+  expected: 上半表显示官费缴费一览，下半表显示个案收款一览；字段与金额对应正确。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-005
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 申请费时限检索
+  stage_code: null
+  stage_name: 申请费时限检索
+  coverage_ids:
+  - FR-DL-07
+  requirement_ids:
+  - FR-DL-07
+  validation_ids: []
+  preconditions: 存在 OPEN 的 APPLY_FEE_LIMIT 任务，部分已有草单或清单。
+  steps_summary: 按 Deadline 区间、CaseType、Client、Agent 查询申请费时限。
+  expected: 仅未完成申请费时限返回；可看到是否已有草单/官费清单等辅助字段。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-006
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 实审请求时限检索
+  stage_code: null
+  stage_name: 实审请求时限检索
+  coverage_ids:
+  - FR-DL-07
+  requirement_ids:
+  - FR-DL-07
+  validation_ids: []
+  preconditions: 存在 EXAM_REQUEST_LIMIT 任务，部分案件 HasExamRequest=true。
+  steps_summary: 按 Deadline 区间和 HasExamRequest=false 条件查询。
+  expected: 仅尚未提实审且任务未完成的案件被返回。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-007
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 案件统计报表
+  stage_code: null
+  stage_name: 案件统计报表
+  coverage_ids:
+  - FR-CM-04
+  requirement_ids:
+  - FR-CM-04
+  validation_ids: []
+  preconditions: 系统中有多客户、多国别、多代理人、多状态案件。
+  steps_summary: 生成按客户/国别/代理人/年度的案件统计报表。
+  expected: 新案数、授权数、终止/无效数、在审数量等指标正确。
+  automation_recommendation: 报表校验脚本。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-008
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 费用与收入报表
+  stage_code: null
+  stage_name: 费用与收入报表
+  coverage_ids:
+  - FR-FE-09
+  - FR-BL-01
+  requirement_ids:
+  - FR-FE-09
+  - FR-BL-01
+  validation_ids: []
+  preconditions: 存在多类型账单和回款。
+  steps_summary: 生成按客户、案件类型、国别、时间段的费用与收入报表。
+  expected: 服务费、官费、未收金额汇总正确；可选仅已收/部分收口径也正确。
+  automation_recommendation: 报表校验脚本。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-009
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 年费统计报表
+  stage_code: null
+  stage_name: 年费统计报表
+  coverage_ids:
+  - FR-FE-06
+  requirement_ids:
+  - FR-FE-06
+  validation_ids: []
+  preconditions: 存在多年度 T_AnnuityTask、GovPayment、CaseReceipt。
+  steps_summary: 生成按国别/客户/年份的年费统计报表。
+  expected: 应缴/实缴/客户实收/放弃终止等指标正确。
+  automation_recommendation: 报表校验。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-010
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 应收/逾期/坏账报表
+  stage_code: null
+  stage_name: 应收/逾期/坏账报表
+  coverage_ids:
+  - FR-BL-07
+  - FR-BL-08
+  requirement_ids:
+  - FR-BL-07
+  - FR-BL-08
+  validation_ids: []
+  preconditions: 存在 UNSETTLED/PARTIALLY_SETTLED/BAD_DEBT 账单和催款批次。
+  steps_summary: 生成应收账款、逾期账款、坏账和催款效果报表。
+  expected: 账龄区间、坏账金额、催款后 30/60/90 天回款量正确。
+  automation_recommendation: 报表校验。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-011
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 提成报表
+  stage_code: null
+  stage_name: 提成报表
+  coverage_ids:
+  - FR-COM-07
+  requirement_ids:
+  - FR-COM-07
+  validation_ids: []
+  preconditions: 存在多代理人、多案件、多结算批次提成数据。
+  steps_summary: 生成按代理人/案件/时间区间的提成报表。
+  expected: BaseFee、S1_Amt、S2_Amt、SettleNo、SettleDate 等字段准确可导出。
+  automation_recommendation: 报表校验。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-012
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P0
+  categories:
+  - Happy
+  topic: 任务操作日志
+  stage_code: null
+  stage_name: 任务操作日志
+  coverage_ids:
+  - FR-DL-10
+  requirement_ids:
+  - FR-DL-10
+  validation_ids: []
+  preconditions: 准备一条手工任务或官方任务。
+  steps_summary: 依次执行 CREATE、UPDATE、CHANGE_WORKER、CHANGE_SUPERVISOR、MARK_DONE、UNMARK_DONE、CANCEL、RESTORE。
+  expected: T_TaskLog 记录 8 类动作，OldValue/NewValue/ActionBy/ActionAt 完整。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-X-013
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: 反冲销
+  stage_code: null
+  stage_name: 反冲销
+  coverage_ids:
+  - FR-BL-06
+  requirement_ids:
+  - FR-BL-06
+  validation_ids: []
+  preconditions: 存在 1 条可反冲销 Offset 和 1 条超过允许窗口的 Offset。
+  steps_summary: 对两条 Offset 分别执行反冲销。
+  expected: 可反冲销记录被标记 IsReversed=true，并回滚 Bill/PaymentLine 余额；超窗口记录被阻止。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  - unhappy
+  status: skeleton_ready
+- id: TC-X-014
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 手工 AP 账单
+  stage_code: null
+  stage_name: 手工 AP 账单
+  coverage_ids:
+  - FR-BL-03
+  - V-BL-05
+  - V-BL-07
+  requirement_ids:
+  - FR-BL-03
+  validation_ids:
+  - V-BL-05
+  - V-BL-07
+  preconditions: Finance 登录；准备外所/供应商客户。
+  steps_summary: 手工创建 Direction=AP 的账单并录入 1~2 条明细。
+  expected: AP 账单保存成功，Amount=明细 LocalAmount 合计；在客户应收统计中不计入 AR。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-015
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 非案件账单
+  stage_code: null
+  stage_name: 非案件账单
+  coverage_ids:
+  - FR-BL-03
+  - V-BL-06
+  - V-BL-07
+  requirement_ids:
+  - FR-BL-03
+  validation_ids:
+  - V-BL-06
+  - V-BL-07
+  preconditions: Finance 登录。
+  steps_summary: 创建手工账单时让 BillItem.CaseID 为空并保存。
+  expected: 账单保存成功；明细被标记为非案件账单；不进入案件维度统计或需单独分类。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-016
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 账单打印/导出
+  stage_code: null
+  stage_name: 账单打印/导出
+  coverage_ids:
+  - FR-BL-04
+  requirement_ids:
+  - FR-BL-04
+  validation_ids: []
+  preconditions: 存在已保存账单和中英模板。
+  steps_summary: 分别导出中文、英文和 Excel 账单。
+  expected: 模板带出 BillNo、ClientName、费用明细和汇总金额；导出文件可下载；必要时可归档到电子文档。
+  automation_recommendation: 文件渲染 smoke。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-017
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 我的任务与监督任务视图
+  stage_code: null
+  stage_name: 我的任务与监督任务视图
+  coverage_ids:
+  - FR-DL-04
+  - FR-DL-05
+  - FR-DL-08
+  - FR-DL-09
+  requirement_ids:
+  - FR-DL-04
+  - FR-DL-05
+  - FR-DL-08
+  - FR-DL-09
+  validation_ids: []
+  preconditions: 存在当前用户的 Worker 任务和 Supervisor 任务。
+  steps_summary: 进入我的任务、监督任务和首页提醒，按内限/绝限、状态、逾期、类型过滤并导出。
+  expected: 两类视图只显示与当前用户相关任务；排序、筛选、导出和首页提醒正确。
+  automation_recommendation: UI 自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-018
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 邮寄信息登记
+  stage_code: null
+  stage_name: 邮寄信息登记
+  coverage_ids:
+  - FR-WD-08
+  requirement_ids:
+  - FR-WD-08
+  validation_ids: []
+  preconditions: 存在多条 OFFICIAL_OUT/CLIENT_OUT 文档。
+  steps_summary: 查询待寄出文档，在第一条填写挂号号并执行“复制到全部”，再保存。
+  expected: OutgoingRegNo 和可选 ForwardDate 批量更新成功；复制逻辑正确。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-019
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 文件交接单
+  stage_code: null
+  stage_name: 文件交接单
+  coverage_ids:
+  - FR-WD-09
+  requirement_ids:
+  - FR-WD-09
+  validation_ids: []
+  preconditions: 同一客户同一日期存在多份去文。
+  steps_summary: 选择客户+日期生成 Dispatch 单，确认明细后保存并导出 Word。
+  expected: T_DocDispatch/T_DocDispatchLine 创建成功；导出的交接单列出所有文档与挂号号。
+  automation_recommendation: UI+DB+文件。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-020
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: 信封打印地址优先级
+  stage_code: null
+  stage_name: 信封打印地址优先级
+  coverage_ids:
+  - FR-WD-10
+  requirement_ids:
+  - FR-WD-10
+  validation_ids: []
+  preconditions: 分别准备 Case.DocAddressID、客户默认地址、申请人地址、无地址四类案件。
+  steps_summary: 输入 CaseNo/AppNo 打印信封。
+  expected: 系统按 Case.DocAddressID→客户默认文件地址→第一申请人地址→手工指定 的优先级选地址；缺失时要求人工指定。
+  automation_recommendation: UI 自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-X-021
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 附件查看/删除权限
+  stage_code: null
+  stage_name: 附件查看/删除权限
+  coverage_ids:
+  - FR-WD-06
+  requirement_ids:
+  - FR-WD-06
+  validation_ids: []
+  preconditions: 存在带多附件的文档；准备 Formalities、Agent、无删除权限用户。
+  steps_summary: 查看附件列表并尝试下载/删除。
+  expected: 有权用户可查看和删除；无权用户只能查看不能删除；删除后附件记录和物理文件状态一致。
+  automation_recommendation: UI+存储断言。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-022
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P0
+  categories:
+  - Happy
+  topic: NORMAL/PCT_NATIONAL 状态机
+  stage_code: null
+  stage_name: NORMAL/PCT_NATIONAL 状态机
+  coverage_ids:
+  - FR-CM-04
+  requirement_ids:
+  - FR-CM-04
+  validation_ids: []
+  preconditions: 准备普通案子案。
+  steps_summary: 依次触发 NOT_FILED→WAITING_RECEIPT→SUB_EXAM/OA1→GRANTED→TERMINATED/INVALIDATED 等关键状态事件。
+  expected: 状态迁移符合状态总表；关键字段同步更新；非法缺字段时不允许进入下一状态。
+  automation_recommendation: 服务层状态机自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-X-023
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: PCT_INTL / INVALIDATION / LITIGATION / CONSULTING 状态机
+  stage_code: null
+  stage_name: PCT_INTL / INVALIDATION / LITIGATION / CONSULTING 状态机
+  coverage_ids:
+  - FR-CM-04
+  - FR-CS-01
+  requirement_ids:
+  - FR-CM-04
+  - FR-CS-01
+  validation_ids: []
+  preconditions: 准备 PCT_INTL、INVALIDATION、LITIGATION、CONSULTING/SEARCH 四类案件。
+  steps_summary: 依状态总表分别触发关键事件：PCT 受理/国际公开/国家进入；无效 filed/accepted/hearing/decision；诉讼 filed/accepted/hearing/judgment；顾问 not_started/in_progress/completed/closed。
+  expected: 每类案卷均按各自状态机迁移，且互不混淆。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-024
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P0
+  categories:
+  - Unhappy
+  topic: 非法直接跳状态
+  stage_code: null
+  stage_name: 非法直接跳状态
+  coverage_ids:
+  - FR-CM-04
+  requirement_ids:
+  - FR-CM-04
+  validation_ids: []
+  preconditions: 准备处于早期状态的各类案件。
+  steps_summary: 尝试手工或接口将 NOT_FILED 直接改为 GRANTED、将 PCT_INTL 直接改为 GRANTED、将顾问案未完成直接 CLOSED。
+  expected: 系统阻断非法跳转或要求满足前置条件；审计日志记录拒绝/异常。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-X-025
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 个案收款手工登记
+  stage_code: null
+  stage_name: 个案收款手工登记
+  coverage_ids:
+  - FR-FE-07
+  - V-CR-01
+  - V-CR-02
+  - V-CR-03
+  requirement_ids:
+  - FR-FE-07
+  validation_ids:
+  - V-CR-01
+  - V-CR-02
+  - V-CR-03
+  preconditions: 存在一个无账单或历史迁移案件。
+  steps_summary: 从个案收款菜单逐案登记 ReceivableAmt/ReceivedAmt/FeeCode/FeeType/ReceiptDate/InvoiceNo。
+  expected: CaseReceipt 保存成功；Received<Receivable 时标记欠款；Received>Receivable 时识别预收并确认。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-026
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  topic: 费率导入导出
+  stage_code: null
+  stage_name: 费率导入导出
+  coverage_ids:
+  - FR-FE-01
+  requirement_ids:
+  - FR-FE-01
+  validation_ids: []
+  preconditions: 准备费率 Excel 或 CSV。
+  steps_summary: 批量导入标准费率，再导出比对。
+  expected: 导入成功且字段映射正确；导出结果与数据库一致。
+  automation_recommendation: 适合脚本化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-X-027
+  wave: X
+  wave_title: X 查询/报表/审计
+  context: 跨模块查询、报表、手工账单、日志、权限、状态机回归
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: 手工任务日期与状态校验
+  stage_code: null
+  stage_name: 手工任务日期与状态校验
+  coverage_ids:
+  - FR-DL-06
+  - V-TASK-01
+  - V-TASK-02
+  - V-TASK-03
+  - V-TASK-04
+  - V-TASK-05
+  requirement_ids:
+  - FR-DL-06
+  validation_ids:
+  - V-TASK-01
+  - V-TASK-02
+  - V-TASK-03
+  - V-TASK-04
+  - V-TASK-05
+  preconditions: 任意案件；有任务维护权限的用户。
+  steps_summary: 手工创建/编辑任务，分别测试 Deadline<BaseDate、InnerDeadline>Deadline、Remind>Deadline、Status=DONE 但 DoneDate 为空、Status=OPEN
+    但 DoneDate 非空；再输入合法组合保存。
+  expected: 非法组合均被拒绝；合法组合可保存；状态与完成日的一致性得到保证。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_x
+  - p1
+  - happy
+  - unhappy
+  status: skeleton_ready

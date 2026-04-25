@@ -77,9 +77,7 @@ def _seed_special_task_data(session_factory: sessionmaker) -> tuple[str, str, st
         ):
             db.add(TaskTemplate(id=str(uuid4()), code="APPLY_FEE_LIMIT", name="申请费时限"))
         if (
-            db.query(TaskTemplate)
-            .filter(TaskTemplate.code == "EXAM_REQUEST_LIMIT")
-            .one_or_none()
+            db.query(TaskTemplate).filter(TaskTemplate.code == "EXAM_REQUEST_LIMIT").one_or_none()
             is None
         ):
             db.add(TaskTemplate(id=str(uuid4()), code="EXAM_REQUEST_LIMIT", name="实审请求时限"))

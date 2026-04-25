@@ -98,7 +98,7 @@
                   />
                 </el-select>
                 <div v-if="!form.case_id" class="field-hint">
-                  请先填写案件编号
+                  请先选择案件
                 </div>
               </el-form-item>
             </el-col>
@@ -123,13 +123,23 @@
                 </div>
               </el-form-item>
               <el-form-item v-else label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
-                <el-input
-                  v-model.trim="form.case_id"
-                  placeholder="请输入案件编号"
+                <el-select
+                  v-model="form.case_id"
+                  filterable
+                  clearable
+                  :loading="caseOptionsLoading"
+                  placeholder="请选择案件"
                   class="full-width"
-                />
+                >
+                  <el-option
+                    v-for="caseItem in caseOptions"
+                    :key="caseItem.id"
+                    :label="formatCaseOption(caseItem)"
+                    :value="caseItem.id"
+                  />
+                </el-select>
                 <div class="field-hint">
-                  <router-link to="/cases">查看案件列表</router-link> 以获取正确编号
+                  <router-link to="/cases">查看案件列表</router-link> 以确认案卷号
                 </div>
               </el-form-item>
             </el-col>
@@ -183,7 +193,8 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { getCase } from '../../../api/cases'
+import { getCase, getCases } from '../../../api/cases'
+import type { Case } from '../../../api/cases.types'
 import { createDocument, getDocTemplates, getDocuments } from '../../../api/documents'
 import type { DocumentCreatePayload } from '../../../api/documents.types'
 import type { DocTemplate, Document as Doc } from '../../../api/documents.types'
@@ -202,6 +213,8 @@ const fieldErrors = ref<Map<string, string[]>>(new Map())
 const lockedCaseNo = ref('')
 const hasLockedCaseContext = ref(false)
 const caseContextReady = ref(false)
+const caseOptionsLoading = ref(false)
+const caseOptions = ref<Case[]>([])
 
 const form = reactive<DocumentCreatePayload>({
   title: '',
@@ -223,7 +236,7 @@ const filteredTemplates = computed(() =>
   docTemplates.value.filter(t => t.direction === form.direction)
 )
 const activeError = computed(() => caseContextError.value ?? error.value)
-const isCaseContextUnavailable = computed(() => !caseContextReady.value)
+const isCaseContextUnavailable = computed(() => hasLockedCaseContext.value && !caseContextReady.value)
 
 function getQueryParam(value: unknown): string {
   if (Array.isArray(value)) {
@@ -245,6 +258,7 @@ function onTemplateChange(templateId: string | null) {
 }
 
 watch(() => form.case_id, async (newCaseId) => {
+  form.reply_to_id = null
   if (!newCaseId) {
     caseDocuments.value = []
     return
@@ -263,12 +277,8 @@ async function initializeCaseContext() {
 
   if (!routeCaseId) {
     hasLockedCaseContext.value = false
-    caseContextReady.value = false
-    caseContextError.value = {
-      status: 400,
-      code: 'CASE_CONTEXT_REQUIRED',
-      message: '未找到关联案件，请从案件详情页重新进入往来文件登记。',
-    }
+    caseContextReady.value = true
+    caseContextError.value = null
     return
   }
 
@@ -292,8 +302,29 @@ async function initializeCaseContext() {
   }
 }
 
+function formatCaseOption(caseItem: Case): string {
+  const title = caseItem.title ? ` · ${caseItem.title}` : ''
+  const client = caseItem.client_name ? ` · ${caseItem.client_name}` : ''
+  return `${caseItem.case_no}${title}${client}`
+}
+
+async function fetchCaseOptions(): Promise<void> {
+  caseOptionsLoading.value = true
+  try {
+    const result = await getCases({ page: 1, page_size: 100 })
+    caseOptions.value = result.items
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    caseOptionsLoading.value = false
+  }
+}
+
 onMounted(async () => {
   await initializeCaseContext()
+  if (!hasLockedCaseContext.value) {
+    await fetchCaseOptions()
+  }
 
   try {
     const result = await getDocTemplates({ enabled: true, page_size: 100 })
@@ -311,7 +342,7 @@ const rules: FormRules = {
     { required: true, message: '方向为必填项', trigger: 'change' },
   ],
   case_id: [
-    { required: true, message: '案件编号为必填项', trigger: 'blur' },
+    { required: true, message: '请选择案件', trigger: 'change' },
   ],
   doc_date: [
     { required: true, message: '文件日期为必填项', trigger: 'change' },

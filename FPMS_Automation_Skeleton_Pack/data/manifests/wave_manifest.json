@@ -1,0 +1,114 @@
+{
+  "waves": [
+    {
+      "wave": "W0",
+      "title": "W0 基础配置",
+      "description": "执行前置：主数据、参数、模板、权限",
+      "case_count": 14,
+      "happy_count": 11,
+      "unhappy_count": 4,
+      "boundary_count": 1,
+      "actual_case_count": 14
+    },
+    {
+      "wave": "A",
+      "title": "A 新案申请",
+      "description": "E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成",
+      "case_count": 24,
+      "happy_count": 12,
+      "unhappy_count": 12,
+      "boundary_count": 8,
+      "actual_case_count": 24
+    },
+    {
+      "wave": "B",
+      "title": "B OA/补正",
+      "description": "E2E 场景 B：OA 来文 → 答复时限 → OA 回复 → 账单/收款 → 提成",
+      "case_count": 13,
+      "happy_count": 11,
+      "unhappy_count": 3,
+      "boundary_count": 1,
+      "actual_case_count": 13
+    },
+    {
+      "wave": "C",
+      "title": "C PCT→国家阶段",
+      "description": "E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线",
+      "case_count": 12,
+      "happy_count": 9,
+      "unhappy_count": 3,
+      "boundary_count": 1,
+      "actual_case_count": 12
+    },
+    {
+      "wave": "G0",
+      "title": "G0 授权阶段",
+      "description": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "case_count": 10,
+      "happy_count": 8,
+      "unhappy_count": 2,
+      "boundary_count": 0,
+      "actual_case_count": 10
+    },
+    {
+      "wave": "D",
+      "title": "D 年费周期",
+      "description": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "case_count": 13,
+      "happy_count": 11,
+      "unhappy_count": 4,
+      "boundary_count": 2,
+      "actual_case_count": 13
+    },
+    {
+      "wave": "E",
+      "title": "E 无效/诉讼",
+      "description": "E2E 场景 E：立案 → 请求/受理/答辩/裁决 → 费用 → 提成",
+      "case_count": 14,
+      "happy_count": 11,
+      "unhappy_count": 3,
+      "boundary_count": 0,
+      "actual_case_count": 14
+    },
+    {
+      "wave": "F",
+      "title": "F 预收款",
+      "description": "E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响",
+      "case_count": 10,
+      "happy_count": 8,
+      "unhappy_count": 2,
+      "boundary_count": 1,
+      "actual_case_count": 10
+    },
+    {
+      "wave": "G",
+      "title": "G 催款与坏账",
+      "description": "E2E 场景 G：逾期 → 催款单/函 → 回款 → 坏账/回收",
+      "case_count": 10,
+      "happy_count": 9,
+      "unhappy_count": 2,
+      "boundary_count": 0,
+      "actual_case_count": 10
+    },
+    {
+      "wave": "H",
+      "title": "H 顾问/检索",
+      "description": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "case_count": 8,
+      "happy_count": 8,
+      "unhappy_count": 1,
+      "boundary_count": 1,
+      "actual_case_count": 8
+    },
+    {
+      "wave": "X",
+      "title": "X 查询/报表/审计",
+      "description": "跨模块查询、报表、手工账单、日志、权限、状态机回归",
+      "case_count": 27,
+      "happy_count": 26,
+      "unhappy_count": 3,
+      "boundary_count": 1,
+      "actual_case_count": 27
+    }
+  ]
+}

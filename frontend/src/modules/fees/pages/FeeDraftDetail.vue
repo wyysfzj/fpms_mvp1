@@ -154,6 +154,9 @@
                   <router-link :to="`/fees/drafts/new`">
                     <el-button size="small">{{ ZH.feeDetail.newDraft }}</el-button>
                   </router-link>
+                  <router-link :to="`/fees/drafts/new?case_id=${draft.case_id}&draft_type=APPLY_FEE`">
+                    <el-button size="small" type="primary">生成申请费草稿</el-button>
+                  </router-link>
                   <router-link :to="`/cases/${draft.case_id}`">
                     <el-button size="small">{{ ZH.feeDetail.openCase }}</el-button>
                   </router-link>

@@ -13,6 +13,8 @@ __pycache__/
 node_modules/
 dist/
 .vite/
+playwright-report/
+test-results/
 
 # DB
 *.db
@@ -25,3 +27,7 @@ dist/
 # Artifacts
 artifacts/
 .worktrees/
+backend/storage/attachments/**
+
+# Local packages / exported archives
+*.zip

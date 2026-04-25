@@ -504,15 +504,15 @@ def _calculate_stage_amounts(
 
 
 def _load_case_agent_splits(db: Session, *, case_id: str) -> list[tuple[str, Decimal]]:
-    rows = (
-        db.execute(
-            select(T_CaseAgentSplit.agent_id, T_CaseAgentSplit.share_ratio)
-            .where(T_CaseAgentSplit.case_id == case_id)
-            .order_by(T_CaseAgentSplit.created_at.asc(), T_CaseAgentSplit.id.asc())
-        )
-        .all()
-    )
-    return [(agent_id, _to_decimal(share_ratio, field_name="case_agent_split.share_ratio")) for agent_id, share_ratio in rows]
+    rows = db.execute(
+        select(T_CaseAgentSplit.agent_id, T_CaseAgentSplit.share_ratio)
+        .where(T_CaseAgentSplit.case_id == case_id)
+        .order_by(T_CaseAgentSplit.created_at.asc(), T_CaseAgentSplit.id.asc())
+    ).all()
+    return [
+        (agent_id, _to_decimal(share_ratio, field_name="case_agent_split.share_ratio"))
+        for agent_id, share_ratio in rows
+    ]
 
 
 def _split_money_by_ratios(base_amount: Decimal, ratios: list[Decimal]) -> list[Decimal]:
@@ -621,6 +621,8 @@ def apply_commission_for_bill(
             s2_rate = _validate_rate(rule.s2_rate, "s2_rate")
             s1_fixed_amount = _validate_non_negative(rule.s1_fixed_amount, "s1_fixed_amount")
             s2_fixed_amount = _validate_non_negative(rule.s2_fixed_amount, "s2_fixed_amount")
+            initial_settleable = bool(rule.force_settle) or not bool(rule.wait_pay)
+            initial_settleable_date = ref_date if initial_settleable else None
             for allocation, split_base_fee in zip(target_allocations, split_amounts, strict=True):
                 agent_id = allocation["agent_id"]
                 s1_amount, s2_amount = _calculate_stage_amounts(
@@ -652,6 +654,8 @@ def apply_commission_for_bill(
                         wait_pay=rule.wait_pay,
                         force_settle=rule.force_settle,
                         status="OPEN",
+                        is_settleable=initial_settleable,
+                        settleable_date=initial_settleable_date,
                         created_by=actor_id,
                         updated_by=actor_id,
                     )
@@ -691,6 +695,8 @@ def apply_commission_for_bill(
                 existing.s2_amount = s2_amount
                 existing.wait_pay = rule.wait_pay
                 existing.force_settle = rule.force_settle
+                existing.is_settleable = initial_settleable
+                existing.settleable_date = initial_settleable_date
                 if not existing.status:
                     existing.status = "OPEN"
                 existing.updated_by = actor_id

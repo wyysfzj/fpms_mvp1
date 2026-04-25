@@ -195,7 +195,7 @@ class PaymentSchema(BaseModel):
     """Schema for recording payments."""
 
     client_id: str = Field(..., min_length=1)
-    amount: Decimal = Field(..., ge=0)
+    amount: Decimal
     pay_no: str | None = Field(None, max_length=64)
     pay_date: date | None = None
     currency: str = Field("CNY", max_length=8)
@@ -335,7 +335,7 @@ class OffsetCreateSchema(BaseModel):
 
     payment_line_id: str = Field(..., min_length=1)
     bill_id: str = Field(..., min_length=1)
-    offset_amt: Decimal = Field(..., gt=0)
+    offset_amt: Decimal
     offset_date: date | None = None
 
 
@@ -462,7 +462,7 @@ class CaseReceiptListItem(BaseModel):
 class BillManualItemSchema(BaseModel):
     description: str = Field(..., max_length=256)
     quantity: int = Field(1, gt=0)
-    unit_price: Decimal = Field(..., ge=0)
+    unit_price: Decimal
     fee_type: str | None = Field(None, max_length=16)
     year_no: int | None = None
 

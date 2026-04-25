@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 新建案卷 - 收案文件</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="active">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>先记录收案文件包，再拆分真实文件；建案只是文件包归入案卷的一个动作。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">新建案卷 · 第 1 步</div>
+          <h1>收案文件包</h1>
+          <p>一封客户邮件或一个上传批次先作为文件包保存；文件识别和案卷归属可以在同一向导内完成。</p>
+        </div>
+        <button class="btn primary">继续核验材料</button>
+      </section>
+      <section class="grid two">
+        <div class="card">
+          <h2>收案来源</h2>
+          <div class="form-grid">
+            <label>来源类型<input value="客户邮件"></label>
+            <label>收件日期<input value="2026-04-21"></label>
+            <label>客户<input value="ABC科技有限公司"></label>
+            <label>客户案号<input value="ABC-2026-001"></label>
+            <label class="wide">主题<input value="高效电池管理方法新申请委托"></label>
+            <label class="wide">处理备注<input value="客户要求尽快递交，委托书后补。"></label>
+          </div>
+        </div>
+        <div class="card drop-card">
+          <h2>上传申请文件</h2>
+          <div class="drop-zone">
+            <b>拖拽邮件、压缩包或单个文件到这里</b>
+            <span>支持 PDF、DOCX、XML、EML、ZIP；系统先保存为不可变文件资产。</span>
+            <button class="btn primary">选择文件</button>
+          </div>
+          <table class="data-table compact">
+            <thead><tr><th>文件名</th><th>类型建议</th><th>文件状态</th><th>使用角色</th></tr></thead>
+            <tbody>
+              <tr><td>客户委托邮件.eml</td><td>客户指示</td><td><span class="tag ok">已识别</span></td><td>来源证据</td></tr>
+              <tr><td>说明书.docx</td><td>说明书</td><td><span class="tag ok">已识别</span></td><td>收案稿</td></tr>
+              <tr><td>权利要求书.docx</td><td>权利要求书</td><td><span class="tag ok">已识别</span></td><td>收案稿</td></tr>
+              <tr><td>摘要.docx</td><td>摘要</td><td><span class="tag ok">已识别</span></td><td>收案稿</td></tr>
+              <tr><td>附图.pdf</td><td>附图</td><td><span class="tag ok">已识别</span></td><td>收案稿</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="notice warn"><b>材料完整度 5/7</b><span>缺委托书、费用减缴证明。允许建案，但递交前必须重新检查最终递交材料。</span></section>
+    </main>
+</div>
+</body>
+</html>

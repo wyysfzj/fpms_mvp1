@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.modules.cases.models import Case
+from app.modules.masterdata.applicants.models import Applicant
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str], *, name_cn: str) -> str:
@@ -23,11 +24,28 @@ def _create_client(client: TestClient, auth_headers: dict[str, str], *, name_cn:
     return response.json()["id"]
 
 
+def _seed_applicant(session_factory, *, name_cn: str = "批件递交申请人") -> str:
+    applicant_id = str(uuid4())
+    with session_factory() as db:
+        db.add(
+            Applicant(
+                id=applicant_id,
+                code=f"CASEBF-ACT-AP-{uuid4().hex[:8]}",
+                name_cn=f"{name_cn}-{uuid4().hex[:8]}",
+                applicant_type="ENTITY",
+                is_active=True,
+            )
+        )
+        db.commit()
+    return applicant_id
+
+
 def _create_case(
     client: TestClient,
     auth_headers: dict[str, str],
     *,
     client_id: str,
+    applicant_id: str,
     case_no_prefix: str,
     recv_date: str,
     has_exam_request: bool | None = None,
@@ -41,6 +59,14 @@ def _create_case(
         "title_cn": f"{case_no_prefix} 标题",
         "status": "NOT_FILED",
         "recv_date": recv_date,
+        "applicants": [
+            {
+                "seq": 1,
+                "is_first": True,
+                "applicant_id": applicant_id,
+                "name_cn": "批件递交申请人",
+            }
+        ],
     }
     if has_exam_request is not None:
         payload["has_exam_request"] = has_exam_request
@@ -55,13 +81,20 @@ def test_batch_filing_action_updates_status_submitted_date_and_exam_request(
     session_factory,
 ) -> None:
     client_id = _create_client(client, auth_headers, name_cn="批件递交动作客户")
+    applicant_id = _seed_applicant(session_factory)
     case_a = _create_case(
-        client, auth_headers, client_id=client_id, case_no_prefix="CASEBF-A1", recv_date="2026-03-01"
+        client,
+        auth_headers,
+        client_id=client_id,
+        applicant_id=applicant_id,
+        case_no_prefix="CASEBF-A1",
+        recv_date="2026-03-01",
     )
     case_b = _create_case(
         client,
         auth_headers,
         client_id=client_id,
+        applicant_id=applicant_id,
         case_no_prefix="CASEBF-A2",
         recv_date="2026-03-05",
         has_exam_request=False,
@@ -96,11 +129,17 @@ def test_batch_filing_action_updates_status_submitted_date_and_exam_request(
 
 
 def test_batch_filing_action_rejects_submitted_date_before_recv_date(
-    client: TestClient, auth_headers: dict[str, str]
+    client: TestClient, auth_headers: dict[str, str], session_factory
 ) -> None:
     client_id = _create_client(client, auth_headers, name_cn="批件递交校验客户")
+    applicant_id = _seed_applicant(session_factory)
     case_data = _create_case(
-        client, auth_headers, client_id=client_id, case_no_prefix="CASEBF-V1", recv_date="2026-03-20"
+        client,
+        auth_headers,
+        client_id=client_id,
+        applicant_id=applicant_id,
+        case_no_prefix="CASEBF-V1",
+        recv_date="2026-03-20",
     )
 
     response = client.post(

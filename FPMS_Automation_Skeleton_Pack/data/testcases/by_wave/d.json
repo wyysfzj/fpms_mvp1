@@ -1,0 +1,462 @@
+{
+  "wave": "D",
+  "wave_title": "D 年费周期",
+  "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+  "cases": [
+    {
+      "id": "TC-D-001",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "D0/D1 年费任务初始化",
+      "stage_code": null,
+      "stage_name": "D0/D1 年费任务初始化",
+      "coverage_ids": [
+        "FR-FE-06"
+      ],
+      "requirement_ids": [
+        "FR-FE-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "已授权案件，IsFeeMonitor=true，FirstAnnuityYear=1，ValidUntil=2046-04-05。",
+      "steps_summary": "执行授权后的年费初始化或定时任务。",
+      "expected": "系统生成 T_AnnuityTask 多年度记录或首批滚动记录；YearNo、DueDate、Currency、ClientInstruction、DraftGenerated、NoticeSent、IsOverdue 初始化正确。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-002",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P1",
+      "categories": [
+        "Happy",
+        "Unhappy"
+      ],
+      "topic": "D1 滚动生成去重",
+      "stage_code": "D1",
+      "stage_name": "滚动生成去重",
+      "coverage_ids": [
+        "FR-FE-06"
+      ],
+      "requirement_ids": [
+        "FR-FE-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "已有部分年份 AnnuityTask。",
+      "steps_summary": "再次执行滚动生成作业。",
+      "expected": "仅创建缺失年度；已有年度不重复创建。",
+      "automation_recommendation": "批任务自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p1",
+        "happy",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-003",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "D2 即将到期检索",
+      "stage_code": "D2",
+      "stage_name": "即将到期检索",
+      "coverage_ids": [
+        "FR-FE-06",
+        "FR-DL-07"
+      ],
+      "requirement_ids": [
+        "FR-FE-06",
+        "FR-DL-07"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在多个国家、多个客户的年费任务。",
+      "steps_summary": "按未来 3 个月/6 个月/1 年、Country、Client、Instruction、NoticeSent 等筛选。",
+      "expected": "列表返回正确任务集合，排序合理，可导出。",
+      "automation_recommendation": "UI+查询自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-004",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "D3 年费通知函",
+      "stage_code": "D3",
+      "stage_name": "年费通知函",
+      "coverage_ids": [
+        "FR-FE-06",
+        "FR-WD-06"
+      ],
+      "requirement_ids": [
+        "FR-FE-06",
+        "FR-WD-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "ClientInstruction=NONE 的年费任务。",
+      "steps_summary": "执行“生成年费通知函”。",
+      "expected": "生成 T_Document(ANNUITY_NOTICE) 和附件；NoticeSent=true；NotifyCount+1。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-005",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "D4 PAY 生成年费草单",
+      "stage_code": "D4",
+      "stage_name": "PAY 生成年费草单",
+      "coverage_ids": [
+        "FR-FE-02",
+        "FR-FE-03",
+        "FR-FE-06",
+        "V-FI-04"
+      ],
+      "requirement_ids": [
+        "FR-FE-02",
+        "FR-FE-03",
+        "FR-FE-06"
+      ],
+      "validation_ids": [
+        "V-FI-04"
+      ],
+      "preconditions": "年费任务 YearNo=1，ClientInstruction=PAY。",
+      "steps_summary": "执行“生成年费草单”。",
+      "expected": "生成 T_FeeDraft(Type=ANNUITY_FEE) 和 YearNo=1 的 FeeItem；YearNo 不小于 FirstAnnuityYear；DraftGenerated=true。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-006",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P1",
+      "categories": [
+        "Happy",
+        "Boundary"
+      ],
+      "topic": "D4 同时缴下一年度",
+      "stage_code": "D4",
+      "stage_name": "同时缴下一年度",
+      "coverage_ids": [
+        "FR-FE-06"
+      ],
+      "requirement_ids": [
+        "FR-FE-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "YearNo=N 的年费任务，勾选 PayNextYear。",
+      "steps_summary": "执行草单生成。",
+      "expected": "同一草单可同时包含 YearNo=N 和 N+1 两个年度明细；金额分别正确。",
+      "automation_recommendation": "服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p1",
+        "happy",
+        "boundary"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-007",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P1",
+      "categories": [
+        "Happy",
+        "Unhappy"
+      ],
+      "topic": "D3/D4 ABANDON 处理",
+      "stage_code": null,
+      "stage_name": "D3/D4 ABANDON 处理",
+      "coverage_ids": [
+        "FR-FE-06",
+        "FR-CM-04"
+      ],
+      "requirement_ids": [
+        "FR-FE-06",
+        "FR-CM-04"
+      ],
+      "validation_ids": [],
+      "preconditions": "年费任务 ClientInstruction 可设为 ABANDON。",
+      "steps_summary": "将当前年度设为 ABANDON，并检查是否批量影响后续年度；再尝试为 ABANDON 年度生成草单。",
+      "expected": "ABANDON 年度不应生成草单；按策略可联动未来年度也置为 ABANDON；专利后续可能终止或停止监视。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p1",
+        "happy",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-008",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P0",
+      "categories": [
+        "Unhappy"
+      ],
+      "topic": "D4 年度边界非法",
+      "stage_code": "D4",
+      "stage_name": "年度边界非法",
+      "coverage_ids": [
+        "FR-FE-03",
+        "V-FI-04"
+      ],
+      "requirement_ids": [
+        "FR-FE-03"
+      ],
+      "validation_ids": [
+        "V-FI-04"
+      ],
+      "preconditions": "存在 FirstAnnuityYear=3 的案件。",
+      "steps_summary": "尝试为 YearNo=2 创建 ANNUITY_FEE 明细或手工改 YearNo<FirstAnnuityYear。",
+      "expected": "系统阻止保存并提示年度非法。",
+      "automation_recommendation": "服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p0",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-009",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "D5 年费官费清单与缴费",
+      "stage_code": "D5",
+      "stage_name": "年费官费清单与缴费",
+      "coverage_ids": [
+        "FR-FE-04",
+        "FR-FE-06"
+      ],
+      "requirement_ids": [
+        "FR-FE-04",
+        "FR-FE-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在含 GOV 项的 ANNUITY_FEE 草单。",
+      "steps_summary": "生成 PayList(Type=ANNUITY)，登记 GovPayment 实缴信息。",
+      "expected": "年费官费清单生成成功；PaidDate/PaidAmt/InvoiceNo 可查询到；不同 YearNo 明细不混淆。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-010",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "D6 年费账单与收款",
+      "stage_code": "D6",
+      "stage_name": "年费账单与收款",
+      "coverage_ids": [
+        "FR-BL-02",
+        "FR-BL-05",
+        "FR-FE-07"
+      ],
+      "requirement_ids": [
+        "FR-BL-02",
+        "FR-BL-05",
+        "FR-FE-07"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在 ANNUITY_FEE 草单。",
+      "steps_summary": "生成账单、登记客户付款、冲销到账单并查看 CaseReceipt。",
+      "expected": "账单、收款、CaseReceipt 成功闭环；YearNo 在 BillItem/CaseReceipt 中可追踪。",
+      "automation_recommendation": "API+DB+UI。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-011",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P1",
+      "categories": [
+        "Happy",
+        "Unhappy"
+      ],
+      "topic": "D7 逾期/终止/恢复",
+      "stage_code": "D7",
+      "stage_name": "逾期/终止/恢复",
+      "coverage_ids": [
+        "FR-FE-06",
+        "FR-CM-04"
+      ],
+      "requirement_ids": [
+        "FR-FE-06",
+        "FR-CM-04"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在逾期未缴的年费任务。",
+      "steps_summary": "触发逾期识别；标记专利终止或停止监视；后续补缴/恢复时重新启用相关任务或状态。",
+      "expected": "IsOverdue 正确置位；终止后不再继续常规通知；恢复后可重新纳入后续年份管理（如业务允许）。",
+      "automation_recommendation": "需要人工验证业务策略。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p1",
+        "happy",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-012",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P2",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "D8 年费服务费提成",
+      "stage_code": "D8",
+      "stage_name": "年费服务费提成",
+      "coverage_ids": [
+        "FR-COM-02",
+        "FR-COM-04"
+      ],
+      "requirement_ids": [
+        "FR-COM-02",
+        "FR-COM-04"
+      ],
+      "validation_ids": [],
+      "preconditions": "年费草单/账单包含 SERVICE 项，且规则允许计入提成。",
+      "steps_summary": "触发提成计算。",
+      "expected": "年费服务费按规则进入 BaseFee；如系统配置不计入，则明确不生成提成。",
+      "automation_recommendation": "服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p2",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-D-013",
+      "wave": "D",
+      "wave_title": "D 年费周期",
+      "context": "E2E 场景 D：多年度滚动年费通知/草单/清单/账单/收款",
+      "priority": "P1",
+      "categories": [
+        "Boundary"
+      ],
+      "topic": "IsFeeMonitor=false",
+      "stage_code": null,
+      "stage_name": "IsFeeMonitor=false",
+      "coverage_ids": [
+        "FR-CM-02",
+        "V-E-03",
+        "FR-FE-06"
+      ],
+      "requirement_ids": [
+        "FR-CM-02",
+        "FR-FE-06"
+      ],
+      "validation_ids": [
+        "V-E-03"
+      ],
+      "preconditions": "已授权案件但 IsFeeMonitor=false。",
+      "steps_summary": "执行年费初始化与定期提取。",
+      "expected": "默认不生成或不展示该案年费任务；除非后续手工启用监视。",
+      "automation_recommendation": "API+UI。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_d",
+        "p1",
+        "boundary"
+      ],
+      "status": "skeleton_ready"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+- id: DS-CL-001
+  name: 北京创新科技有限公司
+  client_type: 直接客户
+  country: CN
+  default_currency: CNY
+  note: 有有效默认文件地址和账单地址
+- id: DS-CL-002
+  name: Wilson & Partners LLP
+  client_type: 代理所
+  country: US
+  default_currency: USD
+  note: 用于 ForeignAgent
+- id: DS-CL-003
+  name: Global Pharma Inc.
+  client_type: 直接客户
+  country: US
+  default_currency: USD
+  note: 用于涉外/PCT
+- id: DS-CL-004
+  name: Dormant Client
+  client_type: 直接客户
+  country: CN
+  default_currency: CNY
+  note: 含一条停用地址用于负例

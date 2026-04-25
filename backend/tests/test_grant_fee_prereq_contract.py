@@ -67,7 +67,10 @@ def test_grant_fee_module_contract_shape_and_rbac_freeze(
         }
 
     grant_fee_perm_codes = {
-        code for perm_list in ROLE_PERMISSIONS.values() for code in perm_list if code.startswith("GrantFeeTask.")
+        code
+        for perm_list in ROLE_PERMISSIONS.values()
+        for code in perm_list
+        if code.startswith("GrantFeeTask.")
     }
     assert grant_fee_perm_codes == {"GrantFeeTask.Read", "GrantFeeTask.Write"}
     assert {code for code in perm_codes if code.startswith("GrantFeeTask.")} == {

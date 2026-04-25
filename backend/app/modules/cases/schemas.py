@@ -59,6 +59,7 @@ class CaseCreate(BaseModel):
     patent_category: PatentCategory = PatentCategory.INV
     flow_dir: FlowDir = FlowDir.CN_DOMESTIC
     status: CaseStatus | None = None
+    filing_date: date | None = None
     client_id: str | None = None
     foreign_agent_id: str | None = None
     foreign_ref: str | None = Field(None, max_length=64)
@@ -220,7 +221,10 @@ class CaseUpdateLimited(BaseModel):
     title_en: str | None = None
     # A3 — Spec details (Agent can update these)
     spec_pages: int | None = Field(None, ge=0)
+    draw_pages: int | None = Field(None, ge=0)
     claim_count: int | None = Field(None, ge=0)
+    claim_pages: int | None = Field(None, ge=0)
+    manuscript_words: int | None = Field(None, ge=0)
     inventors: list[CaseInventorIn] | None = None
 
 
@@ -390,3 +394,5 @@ class CaseBatchFilingActionOut(BaseModel):
     success_count: int
     failure_count: int
     updated_case_ids: list[str]
+    document_ids: list[str] = Field(default_factory=list)
+    created_task_ids: list[str] = Field(default_factory=list)

@@ -47,9 +47,7 @@ def upgrade() -> None:
         sa.Column("created_by", sa.String(36), nullable=True),
         sa.Column("updated_by", sa.String(36), nullable=True),
     )
-    op.create_index(
-        "ix_t_commission_settlement_status", "t_commission_settlement", ["status"]
-    )
+    op.create_index("ix_t_commission_settlement_status", "t_commission_settlement", ["status"])
     op.create_index(
         "ix_t_commission_settlement_settle_date", "t_commission_settlement", ["settle_date"]
     )
@@ -71,9 +69,7 @@ def upgrade() -> None:
         ),
         sa.Column("line_no", sa.Integer(), nullable=False, server_default=sa.text("1")),
         sa.Column("amount", sa.Numeric(18, 2), nullable=False, server_default=sa.text("0")),
-        sa.Column(
-            "status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")
-        ),
+        sa.Column("status", sa.String(24), nullable=False, server_default=sa.text("'PENDING'")),
         sa.Column("remark", sa.Text(), nullable=True),
         sa.Column(
             "created_at",

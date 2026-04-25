@@ -37,11 +37,21 @@
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
             <el-form-item label="客户编号">
-              <el-input
-                v-model.trim="searchForm.client_id"
-                placeholder="请输入客户编号"
+              <el-select
+                v-model="searchForm.client_id"
+                filterable
                 clearable
-              />
+                :loading="clientOptionsLoading"
+                placeholder="请选择客户"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="client in clientOptions"
+                  :key="client.id"
+                  :label="formatClientOption(client)"
+                  :value="String(client.id)"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :lg="6">
@@ -118,11 +128,21 @@
         <el-row :gutter="12">
           <el-col :xs="24" :sm="12">
             <el-form-item label="客户编号" prop="client_id" :error="fieldErrors.get('client_id')?.join('，')">
-              <el-input
-                v-model.trim="historicalForm.client_id"
-                placeholder="请输入客户编号"
+              <el-select
+                v-model="historicalForm.client_id"
+                filterable
                 clearable
-              />
+                :loading="clientOptionsLoading"
+                placeholder="请选择客户"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="client in clientOptions"
+                  :key="client.id"
+                  :label="formatClientOption(client)"
+                  :value="String(client.id)"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12">
@@ -218,11 +238,14 @@
             {{ formatDateTime(row.updated_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
+            <el-button text type="primary" @click="goToDetail(row)">
+              详情
+            </el-button>
             <el-button
               text
-              type="primary"
+              type="success"
               :disabled="!canExport(row)"
               :loading="exportingId === row.id"
               @click="handleExport(row)"
@@ -252,7 +275,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import dayjs from 'dayjs'
+import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { getClients } from '../../../api/clients'
+import type { Client } from '../../../api/clients.types'
 import {
   createHistoricalPayList,
   exportPayList,
@@ -266,6 +292,8 @@ import type {
   PayListListItem,
 } from '../../../api/govPayments.types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+
+const router = useRouter()
 
 interface PayListSearchForm {
   pay_list_no: string
@@ -318,12 +346,14 @@ const creatingHistorical = ref(false)
 const showHistoricalForm = ref(false)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 const historicalFormRef = ref<FormInstance>()
+const clientOptionsLoading = ref(false)
+const clientOptions = ref<Client[]>([])
 
 const searchForm = reactive<PayListSearchForm>({ ...defaultSearchForm })
 const historicalForm = reactive<HistoricalPayListForm>({ ...defaultHistoricalForm })
 
 const historicalRules: FormRules<HistoricalPayListForm> = {
-  client_id: [{ required: true, message: '客户编号为必填项', trigger: 'blur' }],
+  client_id: [{ required: true, message: '请选择客户', trigger: 'change' }],
   currency: [{ required: true, message: '币种为必填项', trigger: 'blur' }],
 }
 
@@ -389,6 +419,24 @@ function formatDateTime(dateValue?: string): string {
   if (!dateValue) return '—'
   const parsed = dayjs(dateValue)
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : dateValue
+}
+
+function formatClientOption(client: Client): string {
+  const code = client.client_code ? `${client.client_code} · ` : ''
+  const name = client.name || client.name_cn || client.name_en || `客户 ${client.id}`
+  return `${code}${name}`
+}
+
+async function fetchClientOptions() {
+  clientOptionsLoading.value = true
+  try {
+    const result = await getClients({ page: 1, page_size: 100 })
+    clientOptions.value = result.items
+  } catch (err) {
+    error.value = mapGovPaymentsError(err)
+  } finally {
+    clientOptionsLoading.value = false
+  }
 }
 
 function toggleHistoricalForm() {
@@ -473,6 +521,10 @@ function canExport(row: PayListListItem): boolean {
   return (row.status || '').toUpperCase() === 'DRAFT'
 }
 
+function goToDetail(row: PayListListItem) {
+  router.push(`/fee-management/pay-lists/${row.id}`)
+}
+
 async function handleExport(row: PayListListItem) {
   if (!canExport(row)) {
     ElMessage.warning('只有草稿状态的官费清单可以导出。')
@@ -530,6 +582,7 @@ function handleRefresh() {
 }
 
 onMounted(() => {
+  void fetchClientOptions()
   void loadPayLists()
 })
 </script>

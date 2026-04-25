@@ -6,6 +6,12 @@
         <span class="page-count">{{ total }} 条</span>
       </div>
       <div class="page-header-right">
+        <router-link to="/documents/wizard">
+          <el-button>文书向导</el-button>
+        </router-link>
+        <router-link to="/documents/dispatch">
+          <el-button>文书寄出</el-button>
+        </router-link>
         <router-link to="/documents/new">
           <el-button type="primary">{{ ZH.docList.newDoc }}</el-button>
         </router-link>

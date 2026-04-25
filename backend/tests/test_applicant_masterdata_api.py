@@ -16,6 +16,7 @@ def _seed_applicant(
     code: str,
     name_cn: str,
     name_en: str | None = None,
+    applicant_type: str = "ENTITY",
     is_active: bool = True,
 ) -> str:
     applicant_id = str(uuid4())
@@ -26,6 +27,7 @@ def _seed_applicant(
                 code=code,
                 name_cn=name_cn,
                 name_en=name_en,
+                applicant_type=applicant_type,
                 is_active=is_active,
             )
         )
@@ -48,11 +50,29 @@ def test_create_applicant_returns_object_shape_and_defaults_active(
 
     assert response.status_code == 201
     body = response.json()
-    assert set(body) == {"id", "code", "name_cn", "name_en", "is_active"}
+    assert set(body) == {"id", "code", "name_cn", "name_en", "is_active", "applicant_type"}
     assert body["code"] == code
     assert body["name_cn"] == "测试申请人甲"
     assert body["name_en"] == "Applicant A"
     assert body["is_active"] is True
+    assert body["applicant_type"] == "ENTITY"
+
+
+def test_create_applicant_accepts_explicit_applicant_type(client, auth_headers) -> None:
+    code = f"APP-{uuid4().hex[:8].upper()}"
+    payload = {
+        "code": code,
+        "name_cn": "测试申请人乙",
+        "name_en": "Applicant B",
+        "applicant_type": "INDIVIDUAL",
+    }
+
+    response = client.post("/api/v1/applicants", json=payload, headers=auth_headers)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["code"] == code
+    assert body["applicant_type"] == "INDIVIDUAL"
 
 
 @pytest.mark.parametrize(
@@ -111,6 +131,7 @@ def test_update_applicant_and_deactivate_applicant_roundtrip(
             "code": "APP-NEW",
             "name_cn": "测试申请人新",
             "name_en": "New Applicant",
+            "applicant_type": "INDIVIDUAL",
             "is_active": False,
         },
         headers=auth_headers,
@@ -121,6 +142,7 @@ def test_update_applicant_and_deactivate_applicant_roundtrip(
     assert updated_body["code"] == "APP-NEW"
     assert updated_body["name_cn"] == "测试申请人新"
     assert updated_body["name_en"] == "New Applicant"
+    assert updated_body["applicant_type"] == "INDIVIDUAL"
     assert updated_body["is_active"] is False
 
     deactivate_response = client.put(

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 案件详情 - 工作流与文件材料区</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="active">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>右侧不是普通附件列表，而是当前节点所需文件、满足状态和可执行动作。</div>
+  </aside>
+  <main class="main">
+      <section class="case-header">
+        <div>
+          <h1>25F0411CN · 一种高效电池管理方法</h1>
+          <p>客户：ABC科技有限公司 · 代理人：王律师</p>
+        </div>
+        <div class="status-strip">
+          <span>申请状态：未递交</span><span>客户状态：收案处理中</span><span>文件完整度：5/7</span><span>待办：1</span>
+        </div>
+      </section>
+      <section class="workflow-shell">
+        <aside class="workflow">
+          <h2>案件工作流</h2>
+          <div class="node done">收案</div>
+          <div class="node active">撰写准备</div>
+          <div class="node">客户确认</div>
+          <div class="node">递交</div>
+          <div class="node">等待受理</div>
+          <div class="node">审查阶段</div>
+          <div class="node">授权/结案</div>
+        </aside>
+        <main class="card main-action">
+          <h2>当前节点：撰写准备</h2>
+          <table class="data-table compact">
+            <tbody>
+              <tr><th>下一建议</th><td>补齐委托书，同时准备最终递交稿。</td></tr>
+              <tr><th>允许动作</th><td>继续撰写、上传补充文件、生成缺失任务。</td></tr>
+              <tr><th>阻止动作</th><td>不允许直接执行递交。</td></tr>
+              <tr><th>原因</th><td>递交节点要求最终说明书、权利要求书、摘要、附图和委托书均已核验。</td></tr>
+            </tbody>
+          </table>
+          <div class="toolbar"><button class="btn primary">上传补充文件</button><button class="btn">准备最终材料</button><button class="btn">生成补件任务</button></div>
+        </main>
+        <aside class="card file-dock">
+          <h2>当前节点文件材料</h2>
+          <h3>已满足</h3>
+          <ul class="check-list">
+            <li>客户指示 · 已核验</li>
+            <li>说明书收案稿 · 已核验</li>
+            <li>权利要求书收案稿 · 已核验</li>
+            <li>摘要 · 已核验</li>
+            <li>附图 · 已核验</li>
+          </ul>
+          <h3>缺失/待补</h3>
+          <ul class="warn-list">
+            <li>委托书 · 递交前必需</li>
+            <li>费用减缴证明 · 可选</li>
+          </ul>
+          <div class="notice warn"><b>门禁结论</b><span>允许撰写；递交前需重新检查最终稿。</span></div>
+        </aside>
+      </section>
+    </main>
+</div>
+</body>
+</html>

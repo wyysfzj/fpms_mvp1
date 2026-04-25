@@ -225,6 +225,7 @@ function mapBillListItem(input: BackendBill): BillListItem {
         bill_no: input.bill_no || input.id,
         client_id: input.client_id,
         client_name: input.client_name || undefined,
+        direction: input.direction || undefined,
         status: input.status || 'DRAFT',
         amount: asNumber(input.amount),
         balance: asNumber(input.balance),

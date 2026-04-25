@@ -75,9 +75,7 @@ def upgrade() -> None:
         sa.Column("updated_by", sa.String(36), nullable=True),
         sa.UniqueConstraint("bill_id", name="uq_t_bad_debt_voucher_bill"),
     )
-    op.create_index(
-        "ix_t_bad_debt_voucher_bill_id", "t_bad_debt_voucher", ["bill_id"]
-    )
+    op.create_index("ix_t_bad_debt_voucher_bill_id", "t_bad_debt_voucher", ["bill_id"])
     op.create_index("ix_t_bad_debt_voucher_status", "t_bad_debt_voucher", ["status"])
 
     op.create_table(
@@ -112,18 +110,14 @@ def upgrade() -> None:
         sa.Column("created_by", sa.String(36), nullable=True),
         sa.Column("updated_by", sa.String(36), nullable=True),
     )
-    op.create_index(
-        "ix_t_bad_debt_recovery_voucher_id", "t_bad_debt_recovery", ["voucher_id"]
-    )
+    op.create_index("ix_t_bad_debt_recovery_voucher_id", "t_bad_debt_recovery", ["voucher_id"])
     op.create_index(
         "ix_t_bad_debt_recovery_recovery_date", "t_bad_debt_recovery", ["recovery_date"]
     )
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_t_bad_debt_recovery_recovery_date", table_name="t_bad_debt_recovery"
-    )
+    op.drop_index("ix_t_bad_debt_recovery_recovery_date", table_name="t_bad_debt_recovery")
     op.drop_index("ix_t_bad_debt_recovery_voucher_id", table_name="t_bad_debt_recovery")
     op.drop_table("t_bad_debt_recovery")
 

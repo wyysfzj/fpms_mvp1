@@ -21,7 +21,16 @@
         class="draft-form"
       >
         <div class="form-section">
-          <h3 class="form-section-title">草稿基础信息</h3>
+          <h3 class="form-section-title">{{ isApplyFeeMode ? '生成申请费草稿' : '草稿基础信息' }}</h3>
+
+          <el-alert
+            v-if="isApplyFeeMode"
+            type="info"
+            show-icon
+            :closable="false"
+            title="将根据案件的权利要求数、费减、折扣率和费率配置生成真实申请费草稿。"
+            class="mode-alert"
+          />
 
           <el-form-item label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
             <el-input
@@ -53,13 +62,28 @@
             </el-select>
           </el-form-item>
 
-          <div class="field-hint">币种用于初始化草稿明细与金额汇总。</div>
+          <el-form-item
+            v-if="isApplyFeeMode"
+            label="折扣率"
+            prop="discount_rate"
+            :error="fieldErrors.get('discount_rate')?.join(', ')"
+          >
+            <el-input
+              v-model.trim="form.discount_rate"
+              placeholder="可选，例如 0.90"
+              class="full-width"
+            />
+          </el-form-item>
+
+          <div class="field-hint">
+            {{ isApplyFeeMode ? '申请费草稿会自动生成官费与服务费明细。' : '币种用于初始化草稿明细与金额汇总。' }}
+          </div>
         </div>
 
         <div class="form-actions">
           <el-button @click="goBack">取消</el-button>
           <el-button type="primary" :loading="saving" @click="handleSubmit">
-            创建草稿
+            {{ isApplyFeeMode ? '生成申请费草稿' : '创建草稿' }}
           </el-button>
         </div>
       </el-form>
@@ -68,27 +92,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, reactive } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { createFeeDraft } from '../../../api/fees'
+import { createFeeDraft, generateApplyFeeDraft } from '../../../api/fees'
 import type { FeeDraftCreatePayload } from '../../../api/fees.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 
 const router = useRouter()
+const route = useRoute()
 const formRef = ref<FormInstance>()
 const saving = ref(false)
 const error = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 
 const form = reactive({
-  case_id: '',
+  case_id: String(route.query.case_id || ''),
   client_id: '',
   currency: 'CNY',
+  discount_rate: '',
 })
+
+const isApplyFeeMode = computed(() => String(route.query.draft_type || '').toUpperCase() === 'APPLY_FEE')
 
 const rules: FormRules = {
   case_id: [
@@ -113,16 +141,14 @@ async function handleSubmit() {
   error.value = null
 
   try {
-    const payload: FeeDraftCreatePayload = {
-      case_id: form.case_id,
-      currency: form.currency,
-    }
-    if (form.client_id) {
-      payload.client_id = form.client_id
-    }
-
-    const draft = await createFeeDraft(payload)
-    ElMessage.success('费用草稿创建成功')
+    const draft = isApplyFeeMode.value
+      ? await generateApplyFeeDraft({
+          case_id: form.case_id,
+          currency: form.currency,
+          discount_rate: form.discount_rate || undefined,
+        })
+      : await createGenericDraft()
+    ElMessage.success(isApplyFeeMode.value ? '申请费草稿生成成功' : '费用草稿创建成功')
     router.push(`/fees/drafts/${draft.id}`)
   } catch (err) {
     const apiError = err as ApiError
@@ -134,6 +160,17 @@ async function handleSubmit() {
   } finally {
     saving.value = false
   }
+}
+
+async function createGenericDraft() {
+  const payload: FeeDraftCreatePayload = {
+    case_id: form.case_id,
+    currency: form.currency,
+  }
+  if (form.client_id) {
+    payload.client_id = form.client_id
+  }
+  return createFeeDraft(payload)
 }
 </script>
 
@@ -159,5 +196,9 @@ async function handleSubmit() {
 
 .field-hint a:hover {
   text-decoration: underline;
+}
+
+.mode-alert {
+  margin-bottom: 16px;
 }
 </style>

@@ -58,6 +58,6 @@ onMounted(async () => {
 })
 
 function handleCreate() {
-  router.push(`/fees/drafts/new?case_id=${props.caseId}`)
+  router.push(`/fees/drafts/new?case_id=${props.caseId}&draft_type=APPLY_FEE`)
 }
 </script>

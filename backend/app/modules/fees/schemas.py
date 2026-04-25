@@ -21,6 +21,12 @@ class FeeDraftUpdateIn(BaseModel):
     currency: str | None = None
 
 
+class ApplyFeeDraftGenerateIn(BaseModel):
+    case_id: str
+    currency: str = "CNY"
+    discount_rate: Decimal | None = None
+
+
 class FeeDraftOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -124,11 +130,11 @@ class FeeItemOut(BaseModel):
 
     id: str
     draft_id: str
-    case_id: str
-    rate_id: str
-    fee_code: str
-    fee_name: str
-    fee_type: FeeType
+    case_id: str | None = None
+    rate_id: str | None = None
+    fee_code: str | None = None
+    fee_name: str | None = None
+    fee_type: FeeType | None = None
     year_no: int | None = None
     quantity: Decimal | None = None
     unit_price: Decimal | None = None

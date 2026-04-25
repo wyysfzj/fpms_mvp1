@@ -43,13 +43,23 @@
           </el-form-item>
 
           <el-form-item label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
-            <el-input
-              v-model.trim="form.case_id"
-              placeholder="请输入案件编号"
+            <el-select
+              v-model="form.case_id"
+              filterable
+              clearable
+              :loading="caseOptionsLoading"
+              placeholder="请选择案件"
               class="full-width"
-            />
+            >
+              <el-option
+                v-for="caseItem in caseOptions"
+                :key="caseItem.id"
+                :label="formatCaseOption(caseItem)"
+                :value="caseItem.id"
+              />
+            </el-select>
             <div class="field-hint">
-              <router-link to="/cases">查看案件列表</router-link> 以获取正确编号
+              <router-link to="/cases">查看案件列表</router-link> 以确认案卷号
             </div>
           </el-form-item>
         </div>
@@ -92,12 +102,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { onMounted, ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { createTask } from '../../../api/tasks'
 import type { TaskCreatePayload } from '../../../api/tasks.types'
+import { getCases } from '../../../api/cases'
+import type { Case } from '../../../api/cases.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import { mapValidationDetailsToFieldErrors } from '../../../utils/validation'
@@ -108,6 +120,8 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const error = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
+const caseOptionsLoading = ref(false)
+const caseOptions = ref<Case[]>([])
 
 const form = reactive<TaskCreatePayload>({
   title: '',
@@ -123,7 +137,7 @@ const rules: FormRules = {
     { required: true, message: '标题为必填项', trigger: 'blur' },
   ],
   case_id: [
-    { required: true, message: '案件编号为必填项', trigger: 'blur' },
+    { required: true, message: '请选择案件', trigger: 'change' },
   ],
   due_date: [
     { required: true, message: '截止日期为必填项', trigger: 'change' },
@@ -168,9 +182,31 @@ async function handleSave() {
   }
 }
 
+function formatCaseOption(caseItem: Case): string {
+  const title = caseItem.title ? ` · ${caseItem.title}` : ''
+  const client = caseItem.client_name ? ` · ${caseItem.client_name}` : ''
+  return `${caseItem.case_no}${title}${client}`
+}
+
+async function fetchCaseOptions() {
+  caseOptionsLoading.value = true
+  try {
+    const result = await getCases({ page: 1, page_size: 100 })
+    caseOptions.value = result.items
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    caseOptionsLoading.value = false
+  }
+}
+
 function handleCancel() {
   router.push('/tasks')
 }
+
+onMounted(() => {
+  fetchCaseOptions()
+})
 </script>
 
 <style scoped>

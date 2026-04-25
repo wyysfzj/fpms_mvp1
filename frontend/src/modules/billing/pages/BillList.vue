@@ -211,6 +211,13 @@
             {{ row.client_name || row.client_id || '—' }}
           </template>
         </el-table-column>
+        <el-table-column label="方向" width="90">
+          <template #default="{ row }">
+            <el-tag :type="billDirectionTagType(row.direction)" size="small">
+              {{ billDirectionText(row.direction) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column :label="ZH.billList.status" width="100">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">
@@ -377,6 +384,28 @@ function statusTagType(status: BillStatus): 'info' | 'warning' | 'success' | 'da
     case 'ISSUED': return 'warning'
     case 'VOID': return 'danger'
     default: return 'info'
+  }
+}
+
+function billDirectionText(direction?: string): string {
+  switch ((direction || '').toUpperCase()) {
+    case 'AR':
+      return '应收'
+    case 'AP':
+      return '应付'
+    default:
+      return direction || '—'
+  }
+}
+
+function billDirectionTagType(direction?: string): 'success' | 'warning' | 'info' {
+  switch ((direction || '').toUpperCase()) {
+    case 'AR':
+      return 'success'
+    case 'AP':
+      return 'warning'
+    default:
+      return 'info'
   }
 }
 

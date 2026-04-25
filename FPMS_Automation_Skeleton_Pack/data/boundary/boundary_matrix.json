@@ -1,0 +1,204 @@
+{
+  "boundary_cases": [
+    {
+      "id": "BND-001",
+      "object": "CaseNo",
+      "boundary_point": "最小非空/唯一",
+      "test_values": "动态值 CASE-${RUN_ID}-001 / 重复现有 CaseNo",
+      "expected": "非空且唯一时可保存；重复时报错",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-002",
+      "object": "Title_CN",
+      "boundary_point": "仅空白字符",
+      "test_values": "'   '",
+      "expected": "应视为无效并阻止保存",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-003",
+      "object": "FilingDate vs PrioDate",
+      "boundary_point": "等于/小于",
+      "test_values": "2026-03-15 = 2026-03-15；2026-03-14 < 2026-03-15",
+      "expected": "等于允许；小于拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-004",
+      "object": "SubmittedDate vs RecvDate",
+      "boundary_point": "等于/小于",
+      "test_values": "2026-04-01 = 2026-04-01；2026-03-31 < 2026-04-01",
+      "expected": "等于允许；小于拒绝/警告",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-005",
+      "object": "FeeReduction",
+      "boundary_point": "0/1/越界",
+      "test_values": "0；1；-0.01；1.01",
+      "expected": "0 和 1 合法；越界拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-006",
+      "object": "DiscountRate",
+      "boundary_point": "0/1/越界",
+      "test_values": "0；1；-0.01；1.01",
+      "expected": "0 和 1 合法；越界拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-007",
+      "object": "SpecPages/DrawPages/ClaimCount/ClaimPages/ManuscriptWords",
+      "boundary_point": "0/超大正整数",
+      "test_values": "0；99999",
+      "expected": "非负允许；系统不应溢出",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-008",
+      "object": "ClaimCount 超项阈值",
+      "boundary_point": "阈值点",
+      "test_values": "10；11",
+      "expected": "10 不加收或仅基础费；11 触发 1 项超项费",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-009",
+      "object": "Page 超页阈值",
+      "boundary_point": "阈值点",
+      "test_values": "30；31",
+      "expected": "31 触发超页费",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-010",
+      "object": "Task Deadline vs BaseDate",
+      "boundary_point": "等于/早于",
+      "test_values": "Deadline=BaseDate；Deadline<BaseDate",
+      "expected": "等于可保存；早于拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-011",
+      "object": "InnerDeadline vs Deadline",
+      "boundary_point": "等于/晚于",
+      "test_values": "Inner=Deadline；Inner>Deadline",
+      "expected": "等于允许；晚于拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-012",
+      "object": "RemindX",
+      "boundary_point": "等于 Deadline / 晚于 Deadline",
+      "test_values": "Remind=Deadline；Remind>Deadline",
+      "expected": "等于允许；晚于拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-013",
+      "object": "Payment Amount",
+      "boundary_point": "0/负数",
+      "test_values": "0；-1",
+      "expected": "按实现决定 0 是否允许；负数拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-014",
+      "object": "OffsetAmt vs PaymentLine.BalanceAmt",
+      "boundary_point": "等于/大于",
+      "test_values": "1000；1001",
+      "expected": "等于可全额冲销；大于拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-015",
+      "object": "OffsetAmt vs Bill.Balance",
+      "boundary_point": "等于/大于",
+      "test_values": "600；601",
+      "expected": "等于可全额结清；大于拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-016",
+      "object": "CaseReceipt ReceivedAmt vs ReceivableAmt",
+      "boundary_point": "等于/小于/大于",
+      "test_values": "1000；800；1200",
+      "expected": "等于结清；小于欠款；大于识别预收",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-017",
+      "object": "Annuity YearNo",
+      "boundary_point": "等于/小于 FirstAnnuityYear",
+      "test_values": "3；2",
+      "expected": "等于允许；小于拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-018",
+      "object": "GovPayment PaidAmt",
+      "boundary_point": "空/0/正数",
+      "test_values": "NULL；0；PlannedAmt",
+      "expected": "空值默认 PlannedAmt；0 或正数按业务规则处理",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-019",
+      "object": "OutgoingRegNo/IncomingRegNo",
+      "boundary_point": "长度上限",
+      "test_values": "最大长度；超长",
+      "expected": "达到上限允许；超长拒绝",
+      "tags": [
+        "boundary_matrix"
+      ]
+    },
+    {
+      "id": "BND-020",
+      "object": "NotifyCount",
+      "boundary_point": "0→1→N",
+      "test_values": "0,1,2...",
+      "expected": "每次发送通知仅递增 1，不允许回退为负",
+      "tags": [
+        "boundary_matrix"
+      ]
+    }
+  ]
+}

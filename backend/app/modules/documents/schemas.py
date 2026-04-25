@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -194,6 +195,12 @@ class DocumentUpdateIn(BaseModel):
     reply_to_id: str | None = None
     need_reply: bool | None = None
     reply_date: date | None = None
+    reply_task_action: Literal["UPDATE", "CANCEL", "NONE"] | None = None
+    reply_task_due_date: date | None = None
+    reply_task_internal_due_date: date | None = None
+    reply_task_remind1: date | None = None
+    reply_task_remind2: date | None = None
+    reply_task_remind3: date | None = None
 
 
 class DocumentOut(BaseModel):

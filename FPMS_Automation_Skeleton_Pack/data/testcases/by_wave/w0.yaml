@@ -1,0 +1,453 @@
+wave: W0
+wave_title: W0 基础配置
+context: 执行前置：主数据、参数、模板、权限
+cases:
+- id: TC-W0-001
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P0
+  categories:
+  - Happy
+  topic: 主数据-客户
+  stage_code: null
+  stage_name: 主数据-客户
+  coverage_ids:
+  - FR-CM-03
+  - FR-WD-09
+  - FR-WD-10
+  requirement_ids:
+  - FR-CM-03
+  - FR-WD-09
+  - FR-WD-10
+  validation_ids: []
+  preconditions: 使用 DS-U-ADM 登录；准备 DS-CL-001 基本信息、两条地址、一条联系人。
+  steps_summary: 进入“设置→客户维护”，创建客户、默认文件地址、默认账单地址和联系人；保存后再打开编辑页校验。
+  expected: 客户、地址、联系人均保存成功；默认地址标记唯一；搜索可按名称命中；后续案卷和账单下拉中可选。
+  automation_recommendation: API+UI；断言 T_Client/T_ClientAddress/T_ClientContact 被创建，默认地址唯一。
+  data_refs:
+  - DS-CL-001
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-W0-002
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Unhappy
+  - Boundary
+  topic: 主数据-客户地址
+  stage_code: null
+  stage_name: 主数据-客户地址
+  coverage_ids:
+  - FR-WD-10
+  - V-C-06
+  requirement_ids:
+  - FR-WD-10
+  validation_ids:
+  - V-C-06
+  preconditions: DS-U-ADM；客户 DS-CL-004 含一条停用地址和一条有效地址。
+  steps_summary: 将停用地址设为默认账单地址并尝试在案卷中选择；再切换为有效地址重试。
+  expected: 停用地址不能被设为有效默认收件地址或在案卷中被使用；切换为有效地址后可正常引用。
+  automation_recommendation: UI+DB；验证停用标志在地址选择器中过滤或阻断。
+  data_refs:
+  - DS-CL-004
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - unhappy
+  - boundary
+  status: skeleton_ready
+- id: TC-W0-003
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 主数据-申请人
+  stage_code: null
+  stage_name: 主数据-申请人
+  coverage_ids:
+  - FR-CM-03
+  requirement_ids:
+  - FR-CM-03
+  validation_ids: []
+  preconditions: DS-U-ADM；准备法人申请人 DS-AP-001 和自然人 DS-AP-002。
+  steps_summary: 创建申请人主数据并填写名称、国籍、地址、IsLegalEntity、HasGeneralPower、IsJobInvention 等字段；保存并搜索。
+  expected: 申请人保存成功；能按名称模糊搜索；HasGeneralPower/IsLegalEntity 在案卷引用时可被带出。
+  automation_recommendation: API+UI；后续案卷测试复用。
+  data_refs:
+  - DS-AP-001
+  - DS-AP-002
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-004
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P2
+  categories:
+  - Happy
+  topic: 主数据-申请人合并
+  stage_code: null
+  stage_name: 主数据-申请人合并
+  coverage_ids:
+  - FR-CM-03
+  requirement_ids:
+  - FR-CM-03
+  validation_ids: []
+  preconditions: DS-U-ADM；创建两条近似重复的申请人记录。
+  steps_summary: 在“申请人维护”执行合并；保留主记录，确认关联地址/标记字段。
+  expected: 重复记录被合并；主记录保留，关联引用不丢失，旧记录不可再被新案选用。
+  automation_recommendation: 建议人工+后台脚本校验引用完整性。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-W0-005
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 主数据-国家地区
+  stage_code: null
+  stage_name: 主数据-国家地区
+  coverage_ids:
+  - FR-CM-01
+  - FR-FE-01
+  - FR-CS-01
+  requirement_ids:
+  - FR-CM-01
+  - FR-FE-01
+  - FR-CS-01
+  validation_ids: []
+  preconditions: DS-U-ADM；准备 CN/US/JP/HK/EP 数据。
+  steps_summary: 维护国家代码、默认币种、IsDomestic、DefaultLanguage、PCT 成员标志；保存后在案卷/费率/报表处引用。
+  expected: 国家配置可被案卷、费率、年费和报表使用；Domestic/PCT member 标志在规则分支中可识别。
+  automation_recommendation: API+UI；验证 T_Country 可被下拉引用。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-006
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P2
+  categories:
+  - Happy
+  topic: 主数据-菌种保藏单位
+  stage_code: null
+  stage_name: 主数据-菌种保藏单位
+  coverage_ids:
+  - FR-CM-05
+  requirement_ids:
+  - FR-CM-05
+  validation_ids: []
+  preconditions: DS-U-ADM；准备 DS-BIO-UNIT-001。
+  steps_summary: 维护菌种保藏单位编码、中英文名、地址、联系人；保存后在案卷扩展页引用。
+  expected: 菌种保藏单位保存成功；在案卷“菌种保藏”标签页可搜索选择。
+  automation_recommendation: UI+API。
+  data_refs:
+  - DS-BIO-UNIT-001
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p2
+  - happy
+  status: skeleton_ready
+- id: TC-W0-007
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P0
+  categories:
+  - Happy
+  topic: 业务参数-费率固定金额
+  stage_code: null
+  stage_name: 业务参数-费率固定金额
+  coverage_ids:
+  - FR-FE-01
+  - FR-FE-03
+  requirement_ids:
+  - FR-FE-01
+  - FR-FE-03
+  validation_ids: []
+  preconditions: DS-U-FI-01；准备 CN_APPL_BASE、CN_APPL_SERVICE_BASE。
+  steps_summary: 在费率维护中创建 Group=APPLY 的 FIXED 费率，设置 FeeType、DefaultCurrency、DefaultAmount、AllowReduction/AllowDiscount。
+  expected: 费率创建成功，可按 Group/Country/CaseType 查询到；后续草单生成时可被命中。
+  automation_recommendation: API+UI；断言 T_FeeRate 基本字段。
+  data_refs:
+  - DS-U-FI-01
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-W0-008
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 业务参数-费率分档
+  stage_code: null
+  stage_name: 业务参数-费率分档
+  coverage_ids:
+  - FR-FE-01
+  - FR-FE-03
+  requirement_ids:
+  - FR-FE-01
+  - FR-FE-03
+  validation_ids: []
+  preconditions: DS-U-FI-01；准备 BY_YEAR、BY_CLAIMS、BY_PAGES、COMPOSITE 四类 CalcParams。
+  steps_summary: 创建年费分档、超项费、超页费和复合计算费率；保存后执行计算预览或在草单生成中调用。
+  expected: 系统能保存 CalcMode/CalcParams；不同模式能被后续草单正确调用。
+  automation_recommendation: 优先 API/服务层自动化；对 CalcParams 做 schema 断言。
+  data_refs:
+  - DS-U-FI-01
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-009
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Unhappy
+  topic: 业务参数-时限模板合法配置
+  stage_code: null
+  stage_name: 业务参数-时限模板合法配置
+  coverage_ids:
+  - FR-DL-01
+  - V-TM-01
+  - V-TM-02
+  - V-TM-03
+  - V-TM-04
+  requirement_ids:
+  - FR-DL-01
+  validation_ids:
+  - V-TM-01
+  - V-TM-02
+  - V-TM-03
+  - V-TM-04
+  preconditions: DS-U-ADM；准备模板代码 APPLY_FEE_LIMIT、OA_REPLY_LIMIT。
+  steps_summary: 创建有效模板；再分别尝试 Code 重复、AddYears/AddMonths/AddDays 全为 0、DailyRemind=true 但无 InnerOffset/Remind、DeadlineBase=CUSTOM
+    但调用端不传 BaseDate。
+  expected: 有效模板可保存；重复 Code 被拒；无增量模板被拒；DailyRemind 配置不足被拒；调用端缺 BaseDate 时任务生成失败并给出明确错误。
+  automation_recommendation: API+UI；模板校验优先服务层自动化。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-W0-010
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P0
+  categories:
+  - Happy
+  topic: 业务参数-文档模板配置
+  stage_code: null
+  stage_name: 业务参数-文档模板配置
+  coverage_ids:
+  - FR-WD-01
+  - FR-WD-03
+  - V-TPL-01
+  - V-TPL-02
+  - V-TPL-03
+  - V-TPL-04
+  - V-TPL-05
+  requirement_ids:
+  - FR-WD-01
+  - FR-WD-03
+  validation_ids:
+  - V-TPL-01
+  - V-TPL-02
+  - V-TPL-03
+  - V-TPL-04
+  - V-TPL-05
+  preconditions: DS-U-ADM；准备 OA_NOTICE、OA_REPLY、GRANT_NOTICE、ANNUITY_NOTICE 模板与对应 TaskTemplate/FeeRate。
+  steps_summary: 创建 DocTemplate，设置 DocType、StatusEffect、StatusRestore、DeadlineTemplateCode、FeeDraftType、FeeItemList、InputFieldList、PlainTemplateID_CN/EN。
+  expected: 模板保存成功；字段映射有效；后续向导中默认值、状态联动、任务和草单生成均可被带出。
+  automation_recommendation: UI+API；校验模板定义对象存在。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-W0-011
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Unhappy
+  topic: 业务参数-文档模板非法配置
+  stage_code: null
+  stage_name: 业务参数-文档模板非法配置
+  coverage_ids:
+  - FR-WD-03
+  - V-TPL-01
+  - V-TPL-02
+  - V-TPL-03
+  - V-TPL-04
+  - V-TPL-05
+  requirement_ids:
+  - FR-WD-03
+  validation_ids:
+  - V-TPL-01
+  - V-TPL-02
+  - V-TPL-03
+  - V-TPL-04
+  - V-TPL-05
+  preconditions: DS-U-ADM；准备不存在的 DeadlineTemplateCode、FeeCode、InputField 字段名。
+  steps_summary: 分别尝试保存：重复 TemplateCode；不存在的 DeadlineTemplateCode；只配置 StatusRestore 未说明回复逻辑；FeeItemList 引用不存在费率；InputFieldList
+    引用不存在字段。
+  expected: 系统逐项阻止保存并提示具体错误点。
+  automation_recommendation: 服务层自动化最佳；UI 断言错误提示。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-W0-012
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 文档模板与信头
+  stage_code: null
+  stage_name: 文档模板与信头
+  coverage_ids:
+  - FR-WD-09
+  - FR-WD-10
+  - FR-BL-04
+  requirement_ids:
+  - FR-WD-09
+  - FR-WD-10
+  - FR-BL-04
+  validation_ids: []
+  preconditions: DS-U-ADM；准备中文/英文 Word 模板与 CN/EN 信头。
+  steps_summary: 上传 T_Template，配置 Group/Language/FilePath/Enabled；创建两套 T_LetterHead 并关联到模板。
+  expected: 模板和信头均可保存；不同语言模板输出时能正确带出对应抬头。
+  automation_recommendation: 可用文件存在性检查+模板渲染 smoke。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-013
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P1
+  categories:
+  - Happy
+  topic: 系统参数
+  stage_code: null
+  stage_name: 系统参数
+  coverage_ids:
+  - FR-BL-09
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-BL-09
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: DS-U-ADM；准备催款间隔、默认 WaitPay 阈值、退款策略等参数。
+  steps_summary: 维护 T_SystemParam（若实现）；分别设置催款间隔、预收款负账单策略、WaitPay 阈值、ForceSettle 默认策略。
+  expected: 参数保存成功；相关流程读取到新值，且更新后对新交易生效。
+  automation_recommendation: API/配置读取自动化。
+  data_refs:
+  - DS-U-ADM
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-W0-014
+  wave: W0
+  wave_title: W0 基础配置
+  context: 执行前置：主数据、参数、模板、权限
+  priority: P0
+  categories:
+  - Happy
+  - Unhappy
+  topic: 权限矩阵
+  stage_code: null
+  stage_name: 权限矩阵
+  coverage_ids:
+  - FR-CM-06
+  - FR-DL-06
+  - FR-BL-06
+  requirement_ids:
+  - FR-CM-06
+  - FR-DL-06
+  - FR-BL-06
+  validation_ids: []
+  preconditions: 准备 DS-U-ADM / DS-U-FM-01 / DS-U-AG-01 / DS-U-LMT-01 / DS-U-FI-01。
+  steps_summary: 分别以各角色登录，验证菜单、按钮和高危操作权限：案卷完整编辑、受限编辑、时限取消、反冲销、已缴费修改、坏账标记。
+  expected: Admin 拥有全权限；Formalities 具备流程维护权限；Limited Editor 仅见补充信息入口；Finance 无法修改非法业务字段；高危操作仅授权用户可执行。
+  automation_recommendation: UI+权限接口自动化。
+  data_refs:
+  - DS-U-ADM
+  - DS-U-AG-01
+  - DS-U-FI-01
+  - DS-U-FM-01
+  - DS-U-LMT-01
+  dynamic_refs: []
+  tags:
+  - wave_w0
+  - p0
+  - happy
+  - unhappy
+  status: skeleton_ready

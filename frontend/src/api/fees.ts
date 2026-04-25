@@ -2,6 +2,7 @@ import { http } from './http'
 import type { Pagination } from './types'
 import type {
     CalcMode,
+    ApplyFeeDraftGeneratePayload,
     FeeDraftCreatePayload,
     FeeDraftDetail,
     FeeDraftListItem,
@@ -40,8 +41,11 @@ interface BackendFeeRate {
 interface BackendFeeItem {
     id: string
     draft_id: string
+    case_id?: string | null
     rate_id: string
+    fee_code?: string | null
     fee_name?: string | null
+    fee_type?: string | null
     quantity?: string | number | null
     unit_price?: string | number | null
     amount?: string | number | null
@@ -148,8 +152,12 @@ function mapFeeItem(input: BackendFeeItem): FeeItem {
     return {
         id: input.id,
         draft_id: input.draft_id,
+        case_id: input.case_id ?? null,
         rate_id: input.rate_id,
-        description: input.remark || input.fee_name || '',
+        fee_code: input.fee_code ?? null,
+        fee_name: input.fee_name ?? null,
+        fee_type: input.fee_type ?? null,
+        description: input.remark || input.fee_name || input.fee_code || '',
         quantity: Number(input.quantity || 0),
         unit_price: Number(input.unit_price || 0),
         amount: Number(input.amount || 0),
@@ -379,6 +387,18 @@ export async function getFeeDraft(id: string): Promise<FeeDraftDetail> {
  */
 export async function createFeeDraft(data: FeeDraftCreatePayload): Promise<FeeDraftDetail> {
     const response = await http.post<BackendFeeDraftDetail>('/fees/drafts', data)
+    return mapFeeDraftDetail(response.data)
+}
+
+/**
+ * Generate an application fee draft from case data and configured fee rates.
+ */
+export async function generateApplyFeeDraft(data: ApplyFeeDraftGeneratePayload): Promise<FeeDraftDetail> {
+    const response = await http.post<BackendFeeDraftDetail>('/fees/drafts/apply-fee/generate', {
+        case_id: data.case_id,
+        currency: data.currency || 'CNY',
+        discount_rate: data.discount_rate ?? undefined,
+    })
     return mapFeeDraftDetail(response.data)
 }
 

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_perm
 from app.core.errors import raise_business_error
 from app.db.session import get_db
+from app.modules.cases.models import Case
 from app.modules.commission.export_excel import (
     COMMISSION_REPORT_EXPORT_MIME_TYPE,
     build_commission_settlement_report_xlsx,
@@ -148,10 +149,11 @@ def _to_settlement_out(item: CommissionSettlement) -> dict[str, Any]:
     }
 
 
-def _to_commission_out(item: Commission) -> dict[str, Any]:
+def _to_commission_out(item: Commission, *, case_no: str | None = None) -> dict[str, Any]:
     return {
         "id": item.id,
         "case_id": item.case_id,
+        "case_no": case_no,
         "agent_id": item.agent_id,
         "rule_id": item.rule_id,
         "fee_type": item.fee_type,
@@ -177,6 +179,7 @@ def _to_commission_out(item: Commission) -> dict[str, Any]:
 def get_commission(
     agent_id: str | None = Query(default=None),
     case_id: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
     status: str | None = Query(default=None),
     settleable_date_from: date | None = Query(default=None),
     settleable_date_to: date | None = Query(default=None),
@@ -200,11 +203,13 @@ def get_commission(
             status_code=400,
         )
 
-    stmt = select(Commission)
+    stmt = select(Commission, Case.case_no).join(Case, Case.id == Commission.case_id)
     if agent_id:
         stmt = stmt.where(Commission.agent_id == agent_id.strip())
     if case_id:
         stmt = stmt.where(Commission.case_id == case_id.strip())
+    if case_no:
+        stmt = stmt.where(Case.case_no == case_no.strip())
     if status:
         stmt = stmt.where(Commission.status == status.strip())
     if settleable_date_from:
@@ -218,18 +223,14 @@ def get_commission(
 
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     offset = (page - 1) * page_size
-    items = (
-        db.execute(
-            stmt.order_by(Commission.created_at.desc(), Commission.id.desc())
-            .offset(offset)
-            .limit(page_size)
-        )
-        .scalars()
-        .all()
-    )
+    items = db.execute(
+        stmt.order_by(Commission.created_at.desc(), Commission.id.desc())
+        .offset(offset)
+        .limit(page_size)
+    ).all()
 
     return {
-        "items": [_to_commission_out(item) for item in items],
+        "items": [_to_commission_out(item, case_no=case_no_value) for item, case_no_value in items],
         "page": page,
         "page_size": page_size,
         "total": total,

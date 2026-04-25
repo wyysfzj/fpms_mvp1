@@ -177,19 +177,41 @@ def _create_fee_items_from_candidates(
     candidates: list[dict[str, object]],
 ) -> None:
     """Create FeeItem rows from parsed candidates."""
+    total_gov = Decimal("0")
+    total_service = Decimal("0")
+    total_misc = Decimal("0")
+    total_amount = Decimal("0")
+
     for item_data in candidates:
+        fee_type = str(item_data.get("fee_type") or "SERVICE").upper()
+        amount = item_data.get("amount", Decimal("0"))
+        if not isinstance(amount, Decimal):
+            amount = _to_decimal(amount) or Decimal("0")
+        total_amount += amount
+        if fee_type == "GOV":
+            total_gov += amount
+        elif fee_type == "SERVICE":
+            total_service += amount
+        else:
+            total_misc += amount
+
         fee_item = FeeItem(
             id=str(uuid4()),
             draft_id=draft.id,
             case_id=document.case_id,
             fee_code=item_data.get("fee_code"),
             fee_name=item_data.get("fee_name"),
-            fee_type=item_data.get("fee_type", "SERVICE"),
+            fee_type=fee_type,
             quantity=item_data.get("quantity"),
             unit_price=item_data.get("unit_price"),
-            amount=item_data.get("amount", Decimal("0")),
+            amount=amount,
         )
         db.add(fee_item)
+
+    draft.total_gov = total_gov
+    draft.total_service = total_service
+    draft.total_misc = total_misc
+    draft.amount = total_amount
 
 
 def _create_fee_items_from_wizard_row(

@@ -14,6 +14,7 @@ from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.fees.models import FeeDraft, FeeItem
 from app.modules.fees.schemas import (
+    ApplyFeeDraftGenerateIn,
     FeeDraftCreateIn,
     FeeDraftListItemOut,
     FeeDraftOut,
@@ -30,6 +31,7 @@ from app.modules.fees.schemas import (
 from app.modules.fees.service import add_fee_item, list_fee_drafts, list_fee_items, list_fee_rates
 from app.modules.fees.service import create_fee_draft as create_fee_draft_service
 from app.modules.fees.service import create_fee_rate as create_fee_rate_service
+from app.modules.fees.service import generate_apply_fee_draft as generate_apply_fee_draft_service
 from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
 from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
 from app.modules.fees.service import update_fee_item as update_fee_item_service
@@ -169,6 +171,29 @@ def create_fee_draft(
     - 422: VALIDATION_ERROR
     """
     draft = create_fee_draft_service(db, data=payload, actor_id=current_user.id)
+    return FeeDraftOut.model_validate(draft)
+
+
+@router.post(
+    "/fees/drafts/apply-fee/generate",
+    status_code=status.HTTP_201_CREATED,
+    response_model=FeeDraftOut,
+    summary="Generate application fee draft",
+)
+def generate_apply_fee_draft(
+    payload: ApplyFeeDraftGenerateIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> FeeDraftOut:
+    draft, created = generate_apply_fee_draft_service(
+        db,
+        data=payload,
+        actor_id=current_user.id,
+    )
+    if not created:
+        response.status_code = status.HTTP_200_OK
     return FeeDraftOut.model_validate(draft)
 
 
@@ -396,6 +421,14 @@ def delete_fee_item(
             "Fee item not found",
             status_code=status.HTTP_404_NOT_FOUND,
         )
+    remaining_count = db.query(FeeItem).filter(FeeItem.draft_id == item.draft_id).count()
+    if remaining_count <= 1:
+        raise_business_error(
+            "FEE_DRAFT_ITEM_REQUIRED",
+            "Fee draft must keep at least one fee item",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            details={"draft_id": item.draft_id},
+        )
 
     db.delete(item)
     db.commit()
@@ -505,6 +538,13 @@ def update_fee_draft(
     if "draft_type" in payload:
         draft.draft_type = payload.get("draft_type") or draft.draft_type
     if "currency" in payload:
+        if not str(payload.get("currency") or "").strip():
+            raise_business_error(
+                "FEE_DRAFT_CURRENCY_REQUIRED",
+                "Fee draft currency is required",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={"currency": payload.get("currency")},
+            )
         draft.currency = payload.get("currency") or draft.currency
     if "status" in payload:
         draft.status = payload.get("status") or draft.status

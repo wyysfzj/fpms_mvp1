@@ -1,0 +1,40 @@
+- id: DS-DATE-001
+  meaning: 收案日
+  date_value: '2026-04-01'
+  purpose: 新案
+- id: DS-DATE-002
+  meaning: 申请日
+  date_value: '2026-04-05'
+  purpose: 新案
+- id: DS-DATE-003
+  meaning: 最早优先权日
+  date_value: '2026-03-15'
+  purpose: 优先权边界
+- id: DS-DATE-004
+  meaning: OA 官方发文日
+  date_value: '2026-08-15'
+  purpose: OA
+- id: DS-DATE-005
+  meaning: OA 官方绝限
+  date_value: '2026-10-15'
+  purpose: 官方绝限覆盖
+- id: DS-DATE-006
+  meaning: 授权发文日
+  date_value: '2027-06-20'
+  purpose: GRANT_NOTICE
+- id: DS-DATE-007
+  meaning: 授权公告日
+  date_value: '2027-07-01'
+  purpose: GRANT_NOTICE
+- id: DS-DATE-008
+  meaning: 有效期截止
+  date_value: '2046-04-05'
+  purpose: 20 年示例
+- id: DS-DATE-009
+  meaning: 国家阶段进入日
+  date_value: '2028-07-15'
+  purpose: PCT_NATIONAL
+- id: DS-DATE-010
+  meaning: 年费到期日示例
+  date_value: '2028-04-05'
+  purpose: Annuity Y1

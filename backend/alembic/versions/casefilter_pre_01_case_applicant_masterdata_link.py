@@ -51,7 +51,9 @@ def upgrade() -> None:
     insp = sa.inspect(bind)
     existing_columns = {col["name"] for col in insp.get_columns("t_case_applicant")}
     existing_fks = {_fk_key(fk) for fk in insp.get_foreign_keys("t_case_applicant")}
-    existing_indexes = {idx["name"] for idx in insp.get_indexes("t_case_applicant") if idx.get("name")}
+    existing_indexes = {
+        idx["name"] for idx in insp.get_indexes("t_case_applicant") if idx.get("name")
+    }
 
     with op.batch_alter_table("t_case_applicant") as batch_op:
         if "applicant_id" not in existing_columns:

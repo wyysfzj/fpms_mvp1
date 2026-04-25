@@ -99,7 +99,7 @@ def build_task_list_print_html(
         </tr>
       </thead>
       <tbody>
-        {''.join(rows)}
+        {"".join(rows)}
       </tbody>
     </table>
   </body>
@@ -182,7 +182,7 @@ def build_task_special_search_print_html(
         </tr>
       </thead>
       <tbody>
-        {''.join(rows)}
+        {"".join(rows)}
       </tbody>
     </table>
   </body>

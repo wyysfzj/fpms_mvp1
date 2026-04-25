@@ -114,6 +114,47 @@ def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None
     original_doc.reply_date = doc_date
 
 
+def _validate_reply_to_document(
+    db: Session,
+    *,
+    case_id: str,
+    reply_to_id: str | None,
+    template: DocTemplate | None,
+) -> None:
+    if not reply_to_id:
+        return
+
+    original_doc = db.execute(
+        select(Document).where(Document.id == reply_to_id)
+    ).scalar_one_or_none()
+    if not original_doc:
+        raise_business_error(
+            "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
+        )
+
+    if original_doc.case_id != case_id:
+        raise_business_error(
+            "REPLY_TO_CASE_MISMATCH",
+            "Reply-to document must belong to the same case",
+            status_code=400,
+        )
+
+    expected_template_code = _normalize_text(getattr(template, "reply_to_template_code", None))
+    if expected_template_code:
+        original_template_code = None
+        if original_doc.doc_template_id:
+            original_template = db.execute(
+                select(DocTemplate).where(DocTemplate.id == original_doc.doc_template_id)
+            ).scalar_one_or_none()
+            original_template_code = _normalize_text(getattr(original_template, "code", None))
+        if original_template_code != expected_template_code:
+            raise_business_error(
+                "REPLY_TO_TEMPLATE_MISMATCH",
+                "Reply-to document template does not match reply template rule",
+                status_code=400,
+            )
+
+
 def _normalize_text(value: str | None) -> str | None:
     if value is None:
         return None
@@ -265,6 +306,13 @@ def _create_document_record(
                 "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
             )
 
+    _validate_reply_to_document(
+        db,
+        case_id=data.case_id,
+        reply_to_id=data.reply_to_id,
+        template=template,
+    )
+
     document = Document(
         id=str(uuid4()),
         case_id=data.case_id,
@@ -351,13 +399,9 @@ def list_documents(
     elif replied is False:
         stmt = stmt.where(Document.reply_date.is_(None))
     if has_attachment is True:
-        stmt = stmt.where(
-            exists(select(1).where(DocAttachment.document_id == Document.id))
-        )
+        stmt = stmt.where(exists(select(1).where(DocAttachment.document_id == Document.id)))
     elif has_attachment is False:
-        stmt = stmt.where(
-            ~exists(select(1).where(DocAttachment.document_id == Document.id))
-        )
+        stmt = stmt.where(~exists(select(1).where(DocAttachment.document_id == Document.id)))
     if date_from:
         stmt = stmt.where(Document.doc_date >= date_from)
     if date_to:
@@ -453,7 +497,8 @@ def create_document_wizard_batch(
                     doc_template=template,
                     row_attachment_rows=explicit_attachment_rows,
                 )
-            TaskGenerationService().generate_from_document(db, document)
+            if not explicit_task_rows:
+                TaskGenerationService().generate_from_document(db, document)
             created_rows.append((idx, document))
 
         db.commit()
@@ -492,6 +537,7 @@ def preview_document_wizard_tasks(
             doc_date=payload.doc_date,
             direction=getattr(payload.direction, "value", payload.direction),
             doc_template_id=payload.doc_template_id,
+            extra_data=payload.extra_data,
             title=payload.title,
             case=case,
         )
@@ -928,6 +974,7 @@ def _create_document_wizard_tasks_from_rows(
         doc_date=document.doc_date,
         direction=getattr(document.direction, "value", document.direction),
         doc_template_id=document.doc_template_id,
+        extra_data=document.extra_data,
         title=document.title,
         case=case,
     )
@@ -1365,12 +1412,97 @@ def get_document(db: Session, document_id: str) -> Document:
     return document
 
 
+def _pop_reply_task_controls(updates: dict[str, object]) -> tuple[str | None, dict[str, date]]:
+    action = updates.pop("reply_task_action", None)
+    task_updates: dict[str, date] = {}
+    field_map = {
+        "reply_task_due_date": "due_date",
+        "reply_task_internal_due_date": "internal_due_date",
+        "reply_task_remind1": "remind1",
+        "reply_task_remind2": "remind2",
+        "reply_task_remind3": "remind3",
+    }
+    for input_field, task_field in field_map.items():
+        if input_field in updates:
+            value = updates.pop(input_field)
+            if value is not None:
+                task_updates[task_field] = value
+    return action, task_updates
+
+
+def _get_open_reply_task(db: Session, *, document_id: str) -> Task:
+    task = (
+        db.execute(
+            select(Task)
+            .where(Task.document_id == document_id, Task.status == TaskStatus.OPEN.value)
+            .order_by(Task.created_at.asc(), Task.id.asc())
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if not task:
+        raise_business_error(
+            "DOCUMENT_REPLY_TASK_NOT_FOUND",
+            "Open reply task not found",
+            status_code=404,
+        )
+    return task
+
+
+def _apply_reply_task_update_controls(
+    db: Session,
+    *,
+    document: Document,
+    action: str | None,
+    task_updates: dict[str, date],
+    need_reply_update: bool,
+) -> None:
+    requires_explicit_action = bool(task_updates) or need_reply_update
+    if requires_explicit_action and action is None:
+        raise_business_error(
+            "DOCUMENT_REPLY_TASK_ACTION_REQUIRED",
+            "reply_task_action is required when editing reply task side effects",
+            status_code=400,
+        )
+    if action in (None, "NONE"):
+        return
+
+    task = _get_open_reply_task(db, document_id=document.id)
+    if action == "CANCEL":
+        from_status = task.status
+        task.status = TaskStatus.CANCELLED.value
+        task.done_at = datetime.utcnow()
+        _create_task_log(
+            db,
+            task_id=task.id,
+            action=TaskAction.CANCEL,
+            from_status=from_status,
+            to_status=TaskStatus.CANCELLED.value,
+            remark=f"Document reply task cancelled from document edit {document.id}",
+        )
+        return
+
+    if action == "UPDATE":
+        for field, value in task_updates.items():
+            setattr(task, field, value)
+        _create_task_log(
+            db,
+            task_id=task.id,
+            action=TaskAction.UPDATE,
+            from_status=task.status,
+            to_status=task.status,
+            remark=f"Document reply task updated from document edit {document.id}",
+        )
+
+
 def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Document:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
         raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
 
     updates = data.model_dump(exclude_unset=True)
+    reply_task_action, reply_task_updates = _pop_reply_task_controls(updates)
     case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
     if not case:
         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
@@ -1397,6 +1529,14 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
 
     for field, value in updates.items():
         setattr(document, field, value)
+
+    _apply_reply_task_update_controls(
+        db,
+        document=document,
+        action=reply_task_action,
+        task_updates=reply_task_updates,
+        need_reply_update=("need_reply" in updates and updates["need_reply"] is False),
+    )
 
     _apply_template_defaults(
         case=case,

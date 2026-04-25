@@ -1031,13 +1031,22 @@ def get_case_receipt(
     - 404: Case receipt not found
     - 422: VALIDATION_ERROR
     """
-    receipt = db.query(CaseReceipt).filter(CaseReceipt.case_id == case_id).first()
-    if not receipt:
+    receipts = db.query(CaseReceipt).filter(CaseReceipt.case_id == case_id).all()
+    if not receipts:
         raise_business_error(
             "CASE_RECEIPT_NOT_FOUND",
             "Case receipt not found",
             status_code=status.HTTP_404_NOT_FOUND,
         )
+    receipt = receipts[0]
+    receivable_amt = sum((Decimal(row.receivable_amt or 0) for row in receipts), Decimal("0"))
+    received_amt = sum((Decimal(row.received_amt or 0) for row in receipts), Decimal("0"))
+    fee_types = {row.fee_type for row in receipts if row.fee_type}
+    currencies = {row.currency for row in receipts if row.currency}
+    last_receipt_date = max(
+        (row.last_receipt_date for row in receipts if row.last_receipt_date),
+        default=None,
+    )
 
     bill_rows = (
         db.query(
@@ -1073,16 +1082,16 @@ def get_case_receipt(
     return CaseReceiptResponse(
         id=receipt.id,
         case_id=receipt.case_id,
-        fee_type=receipt.fee_type,
-        currency=receipt.currency,
-        receivable_amt=receipt.receivable_amt,
-        received_amt=receipt.received_amt,
-        last_receipt_date=receipt.last_receipt_date,
-        fee_code=receipt.fee_code,
-        year_no=receipt.year_no,
-        is_arrears=receipt.is_arrears,
-        invoice_no=receipt.invoice_no,
-        is_commissionable=receipt.is_commissionable,
+        fee_type=receipt.fee_type if len(fee_types) <= 1 else "MIXED",
+        currency=receipt.currency if len(currencies) <= 1 else "MIXED",
+        receivable_amt=receivable_amt,
+        received_amt=received_amt,
+        last_receipt_date=last_receipt_date,
+        fee_code=receipt.fee_code if len(receipts) == 1 else None,
+        year_no=receipt.year_no if len(receipts) == 1 else None,
+        is_arrears=receivable_amt > received_amt,
+        invoice_no=receipt.invoice_no if len(receipts) == 1 else None,
+        is_commissionable=any(row.is_commissionable for row in receipts),
         bills=bill_overview_rows,
     )
 

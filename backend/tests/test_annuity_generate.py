@@ -1,8 +1,8 @@
 """Tests for AnnuityTask multi-year generation (FR-FE-06)."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta
-from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -29,7 +29,9 @@ def client_id(client: TestClient, auth_headers: dict) -> str:
 
 
 @pytest.fixture
-def granted_case_id(client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker) -> str:
+def granted_case_id(
+    client: TestClient, auth_headers: dict, client_id: str, session_factory: sessionmaker
+) -> str:
     resp = client.post(
         "/api/v1/cases",
         json={
@@ -115,7 +117,10 @@ def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
 
 # --- GENERATE ---
 
-def test_generate_annuity_tasks_success(client: TestClient, auth_headers: dict, granted_case_id: str):
+
+def test_generate_annuity_tasks_success(
+    client: TestClient, auth_headers: dict, granted_case_id: str
+):
     resp = client.post(
         "/api/v1/annuity/tasks/generate",
         json={"case_id": granted_case_id},
@@ -136,7 +141,9 @@ def test_generate_case_not_found(client: TestClient, auth_headers: dict):
     assert resp.status_code == 404
 
 
-def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_granted_case_id: str):
+def test_generate_case_not_granted(
+    client: TestClient, auth_headers: dict, not_granted_case_id: str
+):
     resp = client.post(
         "/api/v1/annuity/tasks/generate",
         json={"case_id": not_granted_case_id},
@@ -145,7 +152,9 @@ def test_generate_case_not_granted(client: TestClient, auth_headers: dict, not_g
     assert resp.status_code == 400
 
 
-def test_generate_no_first_annuity_year(client: TestClient, auth_headers: dict, granted_no_year_case_id: str):
+def test_generate_no_first_annuity_year(
+    client: TestClient, auth_headers: dict, granted_no_year_case_id: str
+):
     resp = client.post(
         "/api/v1/annuity/tasks/generate",
         json={"case_id": granted_no_year_case_id},
@@ -173,7 +182,9 @@ def test_generate_idempotent(client: TestClient, auth_headers: dict, granted_cas
     assert resp2.json()["tasks_skipped"] == created_first
 
 
-def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, granted_case_id: str):
+def test_generate_prefills_fee_amounts(
+    client: TestClient, auth_headers: dict, granted_case_id: str
+):
     _seed_annuity_rates(client, auth_headers)
 
     # Re-generate (delete old tasks first via direct DB or just use new case)
@@ -201,6 +212,7 @@ def test_generate_prefills_fee_amounts(client: TestClient, auth_headers: dict, g
 
 # --- LIST NEW FIELDS ---
 
+
 def test_list_includes_new_fields(client: TestClient, auth_headers: dict, granted_case_id: str):
     client.post(
         "/api/v1/annuity/tasks/generate",
@@ -212,12 +224,21 @@ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, grante
     items = resp.json()["items"]
     assert len(items) > 0
     item = items[0]
-    for field in ("gov_fee_amt", "service_fee_amt", "notify_count", "pay_next_year",
-                  "draft_generated", "notice_sent", "is_overdue"):
+    for field in (
+        "gov_fee_amt",
+        "service_fee_amt",
+        "notify_count",
+        "pay_next_year",
+        "draft_generated",
+        "notice_sent",
+        "is_overdue",
+    ):
         assert field in item, f"Missing field: {field}"
 
 
-def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
+def test_list_is_overdue_computed(
+    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
+):
     with session_factory() as db:
         task = AnnuityTask(
             case_id=granted_case_id,
@@ -240,7 +261,9 @@ def test_list_is_overdue_computed(client: TestClient, auth_headers: dict, grante
     assert overdue_items[0]["is_overdue"] is True
 
 
-def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker):
+def test_list_is_overdue_false_when_done(
+    client: TestClient, auth_headers: dict, granted_case_id: str, session_factory: sessionmaker
+):
     with session_factory() as db:
         task = AnnuityTask(
             case_id=granted_case_id,
@@ -264,6 +287,7 @@ def test_list_is_overdue_false_when_done(client: TestClient, auth_headers: dict,
 
 
 # --- DRAFT GENERATED FLAG ---
+
 
 def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, granted_case_id: str):
     _seed_annuity_rates(client, auth_headers)
@@ -311,6 +335,7 @@ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, grante
 
 
 # --- PERMISSIONS ---
+
 
 def test_permissions_generate(client: TestClient):
     resp = client.post("/api/v1/annuity/tasks/generate", json={"case_id": "x"})

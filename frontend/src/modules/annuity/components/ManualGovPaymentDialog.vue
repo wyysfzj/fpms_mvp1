@@ -35,11 +35,21 @@
             prop="case_id"
             :error="fieldErrors.get('case_id')?.join('，')"
           >
-            <el-input
-              v-model.trim="form.case_id"
-              placeholder="请输入案件编号"
+            <el-select
+              v-model="form.case_id"
+              filterable
               clearable
-            />
+              :loading="caseOptionsLoading"
+              placeholder="请选择案件"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="caseItem in caseOptions"
+                :key="caseItem.id"
+                :label="formatCaseOption(caseItem)"
+                :value="caseItem.id"
+              />
+            </el-select>
           </el-form-item>
         </el-col>
         <el-col :xs="24" :sm="12">
@@ -128,6 +138,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { getCases } from '../../../api/cases'
+import type { Case } from '../../../api/cases.types'
 import { addManualGovPayment, mapGovPaymentsError } from '../../../api/govPayments'
 import type { GovPaymentsApiError } from '../../../api/govPayments.types'
 import { mapFieldErrors } from '../../../api/errors'
@@ -159,6 +171,8 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const error = ref<GovPaymentsApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
+const caseOptionsLoading = ref(false)
+const caseOptions = ref<Case[]>([])
 
 const form = reactive<ManualGovPaymentForm>({
   case_id: '',
@@ -170,7 +184,7 @@ const form = reactive<ManualGovPaymentForm>({
 })
 
 const rules: FormRules<ManualGovPaymentForm> = {
-  case_id: [{ required: true, message: '案件编号为必填项', trigger: 'blur' }],
+  case_id: [{ required: true, message: '请选择案件', trigger: 'change' }],
   paid_date: [{ required: true, message: '缴费日期为必填项', trigger: 'change' }],
   paid_amount: [
     {
@@ -203,11 +217,32 @@ function resetForm() {
   fieldErrors.value = new Map()
 }
 
+function formatCaseOption(caseItem: Case): string {
+  const title = caseItem.title ? ` · ${caseItem.title}` : ''
+  const client = caseItem.client_name ? ` · ${caseItem.client_name}` : ''
+  return `${caseItem.case_no}${title}${client}`
+}
+
+async function fetchCaseOptions() {
+  caseOptionsLoading.value = true
+  try {
+    const result = await getCases({ page: 1, page_size: 100 })
+    caseOptions.value = result.items
+  } catch (err) {
+    error.value = mapGovPaymentsError(err)
+  } finally {
+    caseOptionsLoading.value = false
+  }
+}
+
 watch(
   () => props.modelValue,
   (value) => {
     visible.value = value
-    if (value) resetForm()
+    if (value) {
+      resetForm()
+      void fetchCaseOptions()
+    }
   },
 )
 
@@ -226,7 +261,7 @@ function mapErrorMessage(apiError: ApiError): string {
     case 'PAY_LIST_STATE_CONFLICT':
       return '当前清单状态不允许补录手工明细。'
     case 'CASE_REQUIRED':
-      return '案件编号为必填项。'
+      return '请选择案件。'
     case 'CASE_NOT_FOUND':
       return '案件不存在，请检查后重试。'
     case 'PAY_LIST_SCOPE_INVALID':

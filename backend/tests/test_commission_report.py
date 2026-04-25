@@ -153,9 +153,7 @@ def test_settlement_report_returns_summary_and_grouped_totals(
     assert resp.status_code == 200, resp.text
     payload = resp.json()
 
-    assert {"filters", "summary", "totals", "by_agent", "by_case", "details"}.issubset(
-        payload
-    )
+    assert {"filters", "summary", "totals", "by_agent", "by_case", "details"}.issubset(payload)
     assert payload["filters"] == {
         "agent_id": None,
         "case_id": None,
@@ -242,7 +240,7 @@ def test_settlement_report_export_returns_excel_payload(
         response.headers["content-type"]
         == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    assert "attachment; filename=\"commission-settlement-report.xlsx\"" in response.headers.get(
+    assert 'attachment; filename="commission-settlement-report.xlsx"' in response.headers.get(
         "content-disposition", ""
     )
 

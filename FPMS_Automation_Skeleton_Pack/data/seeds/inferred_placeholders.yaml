@@ -1,0 +1,9 @@
+- id: DS-BIO-UNIT-001
+  entity_type: bio_deposit_unit
+  status: placeholder_required
+  note: 在 TC-W0-006、TC-A-002 中被引用，但共享测试数据段未显式给出。建议在环境 seed 中创建。
+- id: DS-CN
+  entity_type: country_alias
+  status: alias_inferred
+  note: 推断为 DS-CTY-CN 的别名，建议在自动化数据层统一归一化为 DS-CTY-CN。
+  suggested_canonical: DS-CTY-CN

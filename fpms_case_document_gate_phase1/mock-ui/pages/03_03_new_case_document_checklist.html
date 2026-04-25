@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 新建案卷 - 文件核验清单</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="active">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>门禁检查的是要求项是否被合格文件满足，而不是简单统计上传数量。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">新建案卷 · 第 3 步</div>
+          <h1>文件核验清单</h1>
+          <p>清单由案件类型、专利类型、流向和流程节点共同决定；每一项都记录满足它的文件和核验状态。</p>
+        </div>
+        <button class="btn primary">保存核验结果</button>
+      </section>
+      <section class="card">
+        <h2>收案节点要求</h2>
+        <table class="data-table">
+          <thead><tr><th>要求项</th><th>要求级别</th><th>匹配文件</th><th>文件状态</th><th>门禁结果</th><th>动作</th></tr></thead>
+          <tbody>
+            <tr><td>客户指示</td><td>必需</td><td>客户委托邮件.eml</td><td><span class="tag ok">已核验</span></td><td><span class="tag ok">通过</span></td><td>查看</td></tr>
+            <tr><td>说明书</td><td>必需</td><td>说明书.docx</td><td><span class="tag ok">已核验</span></td><td><span class="tag ok">通过</span></td><td>查看版本</td></tr>
+            <tr><td>权利要求书</td><td>必需</td><td>权利要求书.docx</td><td><span class="tag ok">已核验</span></td><td><span class="tag ok">通过</span></td><td>查看版本</td></tr>
+            <tr><td>摘要</td><td>必需</td><td>摘要.docx</td><td><span class="tag ok">已核验</span></td><td><span class="tag ok">通过</span></td><td>查看</td></tr>
+            <tr><td>附图</td><td>条件必需</td><td>附图.pdf</td><td><span class="tag ok">已核验</span></td><td><span class="tag ok">通过</span></td><td>查看</td></tr>
+            <tr><td>委托书</td><td>递交前必需</td><td>未匹配</td><td><span class="tag warn">待补</span></td><td><span class="tag warn">软通过</span></td><td>生成补件任务</td></tr>
+            <tr><td>费用减缴证明</td><td>可选</td><td>未匹配</td><td><span class="tag muted">未提供</span></td><td><span class="tag muted">不阻止</span></td><td>标记不申请</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="grid three">
+        <div class="card small"><h3>门禁快照</h3><b>软通过</b><span>可创建案卷，不允许直接递交。</span></div>
+        <div class="card small"><h3>缺失任务</h3><b>1 项</b><span>补交委托书，默认期限 2026-05-05。</span></div>
+        <div class="card small"><h3>非闭合范围</h3><b>不生成递交稿</b><span>最终材料在递交节点重新核验。</span></div>
+      </section>
+    </main>
+</div>
+</body>
+</html>

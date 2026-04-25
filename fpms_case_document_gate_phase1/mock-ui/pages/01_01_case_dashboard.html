@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 案件工作台总览</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="active">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>按案卷聚合今日风险：缺材料、待确认影响、未归档文件都回到案卷处理。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">今日工作台</div>
+          <h1>案件工作台总览</h1>
+          <p>主入口仍是案卷，但每个风险都能追溯到具体文件、文书事件和待执行动作。</p>
+        </div>
+        <button class="btn primary">处理最高风险</button>
+      </section>
+      <section class="metric-grid">
+        <div class="metric"><b>18</b><span>有材料缺口案卷</span></div>
+        <div class="metric warn"><b>6</b><span>影响预览待确认</span></div>
+        <div class="metric danger"><b>2</b><span>递交硬阻止</span></div>
+        <div class="metric ok"><b>31</b><span>今日可推进案卷</span></div>
+      </section>
+      <section class="grid two">
+        <div class="card">
+          <h2>文件驱动风险队列</h2>
+          <table class="data-table">
+            <thead><tr><th>案卷号</th><th>当前节点</th><th>风险来源</th><th>下一动作</th><th>负责人</th></tr></thead>
+            <tbody>
+              <tr><td>25F0411CN</td><td>撰写准备</td><td><span class="tag warn">委托书待补</span></td><td>生成补件任务</td><td>王律师</td></tr>
+              <tr><td>25F0413CN</td><td>递交</td><td><span class="tag danger">最终外观图缺失</span></td><td>补齐最终稿</td><td>李流程</td></tr>
+              <tr><td>25F0408CN</td><td>来文处理</td><td><span class="tag review">终止通知待确认</span></td><td>确认影响计划</td><td>赵律师</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>待确认影响计划</h2>
+          <div class="stack">
+            <div class="event-card">
+              <b>第一次审查意见通知书</b>
+              <span>将生成答复时限任务，状态从实审进入一通。</span>
+              <em>来源文件已核验</em>
+            </div>
+            <div class="event-card">
+              <b>专利权终止通知</b>
+              <span>需要律师确认是否进入恢复决策流程。</span>
+              <em>特殊规则</em>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>案卷与文件状态看板</h2>
+        <div class="lane-board">
+          <div><b>已收到未识别</b><span>4 个文件包</span></div>
+          <div><b>已识别待核验</b><span>9 份文件</span></div>
+          <div><b>已核验待事件化</b><span>5 份官方来文</span></div>
+          <div><b>已形成文书事件</b><span>12 条今日新增</span></div>
+        </div>
+      </section>
+    </main>
+</div>
+</body>
+</html>

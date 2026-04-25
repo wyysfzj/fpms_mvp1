@@ -172,6 +172,12 @@ export interface FeeDraftCreatePayload {
     draft_type?: string
 }
 
+export interface ApplyFeeDraftGeneratePayload {
+    case_id: string
+    currency?: string
+    discount_rate?: number | string | null
+}
+
 export interface FeeDraftUpdatePayload {
     case_id?: string
     client_id?: string | null
@@ -185,7 +191,11 @@ export interface FeeDraftUpdatePayload {
 export interface FeeItem {
     id: string
     draft_id: string
+    case_id?: string | null
     description: string
+    fee_code?: string | null
+    fee_name?: string | null
+    fee_type?: string | null
     quantity: number
     unit_price: number
     amount: number

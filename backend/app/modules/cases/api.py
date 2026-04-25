@@ -24,6 +24,7 @@ from app.modules.cases.schemas import (
     CaseCreateIn,
     CaseListReportResponse,
     CaseUpdateFull,
+    CaseUpdateLimited,
 )
 from app.modules.cases.service import (
     create_case as create_case_service,
@@ -39,6 +40,9 @@ from app.modules.cases.service import (
 )
 from app.modules.cases.service import (
     update_case_full as update_case_full_service,
+)
+from app.modules.cases.service import (
+    update_case_limited as update_case_limited_service,
 )
 from app.modules.masterdata.clients.models import Client
 
@@ -328,6 +332,7 @@ def submit_batch_filing(
         selected_case_ids=payload.selected_case_ids,
         submitted_date=payload.submitted_date,
         apply_exam_now=payload.apply_exam_now,
+        generate_list=payload.generate_list,
         user_id=current_user.id,
     )
     return result.model_dump()
@@ -377,10 +382,11 @@ def create_case(
 @router.post("/cases/{case_id}/limited-edit", summary="Limited edit of a case")
 def limited_edit_case(
     case_id: str,
-    payload: dict[str, Any],
+    payload: CaseUpdateLimited,
     _perm: None = Depends(require_perm("Case.EditLimited")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """
     Limited edit for a case (title fields only).
 
@@ -404,26 +410,8 @@ def limited_edit_case(
     - 404: Case not found
     - 422: VALIDATION_ERROR
     """
-    case = db.query(Case).filter(Case.id == case_id).first()
-    if not case:
-        raise_business_error(
-            "CASE_NOT_FOUND",
-            "Case not found",
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-
-    if "title_cn" in payload:
-        case.title_cn = payload.get("title_cn")
-    if "title_en" in payload:
-        case.title_en = payload.get("title_en")
-    # A3 — Spec details (Agent-editable)
-    if "spec_pages" in payload:
-        case.spec_pages = payload.get("spec_pages")
-    if "claim_count" in payload:
-        case.claim_count = payload.get("claim_count")
-
-    db.commit()
-    return {"status": "ok"}
+    case = update_case_limited_service(db, case_id, payload, current_user.id)
+    return _serialize_case(db, case)
 
 
 @router.get("/cases/export", summary="Export cases (filtered list)")

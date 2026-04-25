@@ -1,0 +1,299 @@
+wave: F
+wave_title: F 预收款
+context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+cases:
+- id: TC-F-001
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Happy
+  topic: F1 录入通用预收款
+  stage_code: F1
+  stage_name: 录入通用预收款
+  coverage_ids:
+  - FR-BL-09
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  requirement_ids:
+  - FR-BL-09
+  validation_ids:
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  preconditions: Finance 登录；客户 DS-CL-001。
+  steps_summary: 登记 Payment，Remark=预收款，创建默认 PaymentLine(CaseID=NULL)。
+  expected: Payment 保存成功；PaymentLine.RawAmount=Amount、AllocatedAmt=0、BalanceAmt=Amount；在预收款报表可见。
+  automation_recommendation: API+DB+UI。
+  data_refs:
+  - DS-CL-001
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-F-002
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Unhappy
+  topic: F1 预收款输入非法
+  stage_code: F1
+  stage_name: 预收款输入非法
+  coverage_ids:
+  - FR-BL-09
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  requirement_ids:
+  - FR-BL-09
+  validation_ids:
+  - V-PM-01
+  - V-PM-02
+  - V-PM-03
+  preconditions: 同一客户已存在 PayNo=PRE-${RUN_ID}-001。
+  steps_summary: 分别测试 Amount<0、PayDate 明显超当前、重复 PayNo。
+  expected: 系统逐项阻止保存。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs:
+  - PRE-${RUN_ID}-001
+  tags:
+  - wave_f
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-F-003
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  topic: F2 预收款池查询
+  stage_code: F2
+  stage_name: 预收款池查询
+  coverage_ids:
+  - FR-BL-09
+  requirement_ids:
+  - FR-BL-09
+  validation_ids: []
+  preconditions: 存在多条未分配 PaymentLine。
+  steps_summary: 进入预收款池或报表查看客户预收余额。
+  expected: 按客户展示 PayNo/PayDate/原金额/BalanceAmt/Remark；客户总预收余额汇总正确。
+  automation_recommendation: 查询自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-F-004
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  topic: F3 案卷级预挂
+  stage_code: F3
+  stage_name: 案卷级预挂
+  coverage_ids:
+  - FR-BL-09
+  requirement_ids:
+  - FR-BL-09
+  validation_ids: []
+  preconditions: 存在未分配 PaymentLine 和目标案 CASE-A-${RUN_ID}-001。
+  steps_summary: 将 PaymentLine 预挂到某案或创建 CaseID 已知的 PaymentLine。
+  expected: 后续冲销时默认优先显示该案相关账单；但仍可在权限允许下调整分配目标。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs:
+  - CASE-A-${RUN_ID}-001
+  tags:
+  - wave_f
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-F-005
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Happy
+  topic: F4 用预收抵扣后续账单-全额
+  stage_code: F4
+  stage_name: 用预收抵扣后续账单-全额
+  coverage_ids:
+  - FR-BL-05
+  - FR-BL-09
+  - V-OF-01
+  - V-OF-02
+  requirement_ids:
+  - FR-BL-05
+  - FR-BL-09
+  validation_ids:
+  - V-OF-01
+  - V-OF-02
+  preconditions: 存在预收款 PaymentLine 和后续新案/年费/顾问账单。
+  steps_summary: 在冲销界面使用预收款全额抵扣单张账单。
+  expected: Bill.Balance 降为 0、Status=SETTLED；PaymentLine.AllocatedAmt 增加、BalanceAmt 减少；生成 Offset。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-F-006
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Happy
+  topic: F6 预收跨多案多账单分摊
+  stage_code: F6
+  stage_name: 预收跨多案多账单分摊
+  coverage_ids:
+  - FR-BL-05
+  - FR-BL-09
+  requirement_ids:
+  - FR-BL-05
+  - FR-BL-09
+  validation_ids: []
+  preconditions: 单条预收款金额足以覆盖多张账单。
+  steps_summary: 将同一 PaymentLine 分配到不同案、不同类型的多张账单。
+  expected: 系统允许多次/多目标消耗；每张账单余额正确变化；PaymentLine 剩余金额正确。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-F-007
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P0
+  categories:
+  - Unhappy
+  topic: F4/F6 超额分配
+  stage_code: null
+  stage_name: F4/F6 超额分配
+  coverage_ids:
+  - FR-BL-05
+  - V-OF-01
+  - V-OF-02
+  requirement_ids:
+  - FR-BL-05
+  validation_ids:
+  - V-OF-01
+  - V-OF-02
+  preconditions: 存在 BalanceAmt=1000 的 PaymentLine 和 Balance=600 的账单。
+  steps_summary: 尝试一次分配 1200 或对某账单分配 700。
+  expected: 系统分别因超过 PaymentLine.BalanceAmt 或 Bill.Balance 而拒绝。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-F-008
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  topic: F5 转化为案卷实收
+  stage_code: F5
+  stage_name: 转化为案卷实收
+  coverage_ids:
+  - FR-FE-07
+  - FR-BL-09
+  - V-CR-02
+  requirement_ids:
+  - FR-FE-07
+  - FR-BL-09
+  validation_ids:
+  - V-CR-02
+  preconditions: 预收款已冲销到具体账单。
+  steps_summary: 检查 T_CaseReceipt 的 ReceivableAmt/ReceivedAmt/IsPrepayment/IsArrears 变化。
+  expected: 预收在未分配前不提高 PaidRatio；一旦通过 Offset 绑定到具体案/费用项，CaseReceipt 更新为已收，并可用于提成 PaidRatio。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-F-009
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: F7 剩余预收处理
+  stage_code: F7
+  stage_name: 剩余预收处理
+  coverage_ids:
+  - FR-BL-09
+  requirement_ids:
+  - FR-BL-09
+  validation_ids: []
+  preconditions: 客户预收余额 > 当前所有账单总额。
+  steps_summary: 测试余额留存、退款或通过负账单/调整账单处理。
+  expected: 余额可继续留存并在预收报表中显示；退款/调整遵循系统参数策略；不会把未分配余额当作已收服务费。
+  automation_recommendation: 需要人工确认财务策略。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-F-010
+  wave: F
+  wave_title: F 预收款
+  context: E2E 场景 F：预收款池 → 后续冲销 → CaseReceipt → 提成影响
+  priority: P1
+  categories:
+  - Happy
+  topic: F8 与提成关系
+  stage_code: F8
+  stage_name: 与提成关系
+  coverage_ids:
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: 存在 WaitPay=true 的提成记录，客户有大额未分配预收。
+  steps_summary: 先仅录入预收不分配；再将其分配到服务费账单。
+  expected: 未分配预收不改变 Commission 可结算性；完成 Offset 且 CaseReceipt 更新后，PaidRatio 提升，可结算性随之变化。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_f
+  - p1
+  - happy
+  status: skeleton_ready

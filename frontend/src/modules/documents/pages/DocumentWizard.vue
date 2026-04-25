@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="page-header-left">
         <h1 class="page-title">中间文件向导</h1>
-        <span class="page-subtitle">五步完成批量登记</span>
+        <span class="page-subtitle">五步预览并在最后统一提交</span>
       </div>
       <div class="page-header-right">
         <el-button @click="handleReturn">返回文书列表</el-button>
@@ -13,9 +13,9 @@
     <el-card class="wizard-card" shadow="never">
       <el-steps :active="activeStepIndex" align-center finish-status="success">
         <el-step title="解析案件" description="录入案件清单" />
-        <el-step title="编辑并提交" description="核对批量内容" />
-        <el-step title="时限联动" description="预留任务步骤" />
-        <el-step title="费用联动" description="预留费用步骤" />
+        <el-step title="编辑文书" description="可仅登记文书" />
+        <el-step title="时限预览" description="预览任务候选" />
+        <el-step title="费用预览" description="预览费用候选" />
         <el-step title="附件生成" description="预览附件候选" />
       </el-steps>
     </el-card>
@@ -213,8 +213,15 @@
 
       <div v-else-if="isStep2" class="wizard-step">
         <el-alert
-          title="请逐案补录标题、文书日期、内部文号、是否需要回复、回复来源文件 ID 和补充说明，然后一次性批量提交。"
+          title="请逐案补录文书信息。本步骤可以仅登记文书；如果需要同时写入任务、费用和附件，请继续完成后续预览步骤，并在最后点击“完成向导并提交”。"
           type="info"
+          :closable="false"
+          show-icon
+        />
+
+        <el-alert
+          title="点击“仅登记文书”只会创建文书记录，不会写入后续任务、费用或附件。"
+          type="warning"
           :closable="false"
           show-icon
         />
@@ -332,7 +339,7 @@
 
       <div v-else-if="isStep3" class="wizard-step">
         <el-alert
-          title="当前步骤会根据第二步的文书草案预览相关时限任务候选。你可以调整允许编辑的字段，但这些修改目前只保存在页面内存中。"
+          title="当前步骤会根据第二步的文书草案预览相关时限任务候选。预览阶段不会写入真实任务，只有最后点击“完成向导并提交”后才会统一提交。"
           type="info"
           :closable="false"
           show-icon
@@ -350,7 +357,7 @@
           <div class="step-panel-header">
             <div>
               <div class="section-title">任务候选预览</div>
-              <div class="section-hint">仅显示当前草案中适用时限联动的文书。当前不会写入真实任务。</div>
+                <div class="section-hint">仅显示当前草案中适用时限联动的文书。预览阶段不会写入真实任务。</div>
             </div>
             <div class="step-panel-actions">
               <el-button :loading="step3Loading" @click="reloadStep3Preview">重新生成预览</el-button>
@@ -475,7 +482,7 @@
 
       <div v-else-if="isStep4" class="wizard-step">
         <el-alert
-          title="当前步骤会根据第二步的文书草案预览费用候选。你可以调整允许编辑的字段，但这些修改目前只保存在页面内存中。"
+          title="当前步骤会根据第二步的文书草案预览费用候选。预览阶段不会写入真实费用草稿，只有最后点击“完成向导并提交”后才会统一提交。"
           type="info"
           :closable="false"
           show-icon
@@ -493,7 +500,7 @@
           <div class="step-panel-header">
             <div>
               <div class="section-title">费用候选预览</div>
-              <div class="section-hint">仅显示当前草案中适用费用联动的文书。当前不会写入真实费用草稿。</div>
+                <div class="section-hint">仅显示当前草案中适用费用联动的文书。预览阶段不会写入真实费用草稿。</div>
             </div>
             <div class="step-panel-actions">
               <el-button :loading="step4Loading" @click="reloadStep4Preview">重新生成预览</el-button>
@@ -610,7 +617,7 @@
 
       <div v-else class="wizard-step">
         <el-alert
-          title="当前步骤会根据第二步的文书草案预览附件与模板候选。你可以调整允许编辑的字段；预览阶段不会立即写入真实附件，完成向导后会统一生成。"
+          title="当前步骤会根据第二步的文书草案预览附件与模板候选。预览阶段不会写入真实附件，点击“完成向导并提交”后会统一生成。"
           type="info"
           :closable="false"
           show-icon
@@ -628,7 +635,7 @@
           <div class="step-panel-header">
             <div>
               <div class="section-title">附件候选预览</div>
-              <div class="section-hint">仅显示当前草案中适用模板生成的文书。完成向导时会按当前设置统一生成。</div>
+                <div class="section-hint">仅显示当前草案中适用模板生成的文书。完成向导并提交时会按当前设置统一生成。</div>
             </div>
             <div class="step-panel-actions">
               <el-button :loading="step5Loading" @click="reloadStep5Preview">重新生成预览</el-button>
@@ -724,14 +731,14 @@
       <el-button :disabled="isStep1" @click="goBack">上一步</el-button>
       <el-button v-if="isStep1" type="primary" :disabled="!canEnterStep2" @click="goNext">下一步</el-button>
       <template v-else-if="isStep2">
-        <el-button @click="goNext">查看后续步骤壳层</el-button>
+        <el-button @click="goNext">继续预览联动内容</el-button>
         <el-button
-          type="primary"
+          type="warning"
           :loading="submitLoading"
           :disabled="!canSubmitStep2"
-          @click="submitStep2Batch"
+          @click="submitWizardBatch('documents-only')"
         >
-          批量提交
+          仅登记文书
         </el-button>
       </template>
       <el-button v-else-if="!isStep5" type="primary" @click="goNext">下一步</el-button>
@@ -740,7 +747,7 @@
         type="primary"
         :loading="submitLoading"
         :disabled="!canSubmitStep2"
-        @click="submitStep2Batch"
+        @click="submitWizardBatch('full')"
       >
         完成向导并提交
       </el-button>
@@ -1412,7 +1419,7 @@ function getWizardSubmitError(apiError: ApiError): string {
   }
 }
 
-async function submitStep2Batch(): Promise<void> {
+async function submitWizardBatch(mode: 'documents-only' | 'full'): Promise<void> {
   if (!documentWizardState.defaults.doc_template_id) {
     submitError.value = '请先带入文书模板后再提交。'
     ElMessage.warning(submitError.value)
@@ -1429,8 +1436,12 @@ async function submitStep2Batch(): Promise<void> {
   submitError.value = null
 
   try {
-    const result = await createDocumentWizardBatch(buildFinalSubmitPayload())
-    ElMessage.success(`已成功批量创建 ${result.created} 份文书。`)
+    const payload = mode === 'documents-only' ? buildStep2Payload() : buildFinalSubmitPayload()
+    const result = await createDocumentWizardBatch(payload)
+    const successMessage = mode === 'documents-only'
+      ? `已登记 ${result.created} 份文书，未写入后续任务、费用或附件。`
+      : `已完成向导并创建 ${result.created} 份文书及已确认的联动内容。`
+    ElMessage.success(successMessage)
     resetDocumentWizardState()
     step2Rows.value = []
     step3PreviewRows.value = []

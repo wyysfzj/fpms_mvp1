@@ -19,6 +19,7 @@ export interface BillListItem {
     bill_no: string
     client_id: string
     client_name?: string
+    direction?: BillDirection | string
     status: BillStatus
     amount: number
     balance: number

@@ -1,0 +1,548 @@
+{
+  "rule_coverage": [
+    {
+      "rule_id": "V-A-01",
+      "covered_by": [
+        "TC-A-001",
+        "TC-A-003"
+      ]
+    },
+    {
+      "rule_id": "V-A-02",
+      "covered_by": [
+        "TC-A-004"
+      ]
+    },
+    {
+      "rule_id": "V-A-03",
+      "covered_by": [
+        "TC-A-005"
+      ]
+    },
+    {
+      "rule_id": "V-A-04",
+      "covered_by": [
+        "TC-A-008"
+      ]
+    },
+    {
+      "rule_id": "V-B-01",
+      "covered_by": [
+        "TC-A-005"
+      ]
+    },
+    {
+      "rule_id": "V-B-02",
+      "covered_by": [
+        "TC-A-005"
+      ]
+    },
+    {
+      "rule_id": "V-BF-01",
+      "covered_by": [
+        "TC-A-011",
+        "TC-A-012"
+      ]
+    },
+    {
+      "rule_id": "V-BF-02",
+      "covered_by": [
+        "TC-A-011",
+        "TC-A-012"
+      ]
+    },
+    {
+      "rule_id": "V-BL-01",
+      "covered_by": [
+        "TC-A-019",
+        "TC-A-020"
+      ]
+    },
+    {
+      "rule_id": "V-BL-02",
+      "covered_by": [
+        "TC-A-019",
+        "TC-A-020"
+      ]
+    },
+    {
+      "rule_id": "V-BL-03",
+      "covered_by": [
+        "TC-A-019",
+        "TC-A-020"
+      ]
+    },
+    {
+      "rule_id": "V-BL-04",
+      "covered_by": [
+        "TC-A-019",
+        "TC-A-020"
+      ]
+    },
+    {
+      "rule_id": "V-BL-05",
+      "covered_by": [
+        "TC-X-014"
+      ]
+    },
+    {
+      "rule_id": "V-BL-06",
+      "covered_by": [
+        "TC-X-015"
+      ]
+    },
+    {
+      "rule_id": "V-BL-07",
+      "covered_by": [
+        "TC-X-014",
+        "TC-X-015"
+      ]
+    },
+    {
+      "rule_id": "V-C-01",
+      "covered_by": [
+        "TC-A-001",
+        "TC-A-006"
+      ]
+    },
+    {
+      "rule_id": "V-C-02",
+      "covered_by": [
+        "TC-A-001",
+        "TC-A-006"
+      ]
+    },
+    {
+      "rule_id": "V-C-03",
+      "covered_by": [
+        "TC-A-006"
+      ]
+    },
+    {
+      "rule_id": "V-C-04",
+      "covered_by": [
+        "TC-A-002"
+      ]
+    },
+    {
+      "rule_id": "V-C-05",
+      "covered_by": [
+        "TC-A-007"
+      ]
+    },
+    {
+      "rule_id": "V-C-06",
+      "covered_by": [
+        "TC-W0-002",
+        "TC-A-007"
+      ]
+    },
+    {
+      "rule_id": "V-C-07",
+      "covered_by": [
+        "TC-A-007"
+      ]
+    },
+    {
+      "rule_id": "V-CR-01",
+      "covered_by": [
+        "TC-A-021",
+        "TC-X-025"
+      ]
+    },
+    {
+      "rule_id": "V-CR-02",
+      "covered_by": [
+        "TC-A-022",
+        "TC-F-008",
+        "TC-X-025"
+      ]
+    },
+    {
+      "rule_id": "V-CR-03",
+      "covered_by": [
+        "TC-A-021",
+        "TC-X-025"
+      ]
+    },
+    {
+      "rule_id": "V-D-01",
+      "covered_by": [
+        "TC-A-008",
+        "TC-G0-001",
+        "TC-G0-002"
+      ]
+    },
+    {
+      "rule_id": "V-D-02",
+      "covered_by": [
+        "TC-A-008"
+      ]
+    },
+    {
+      "rule_id": "V-D-03",
+      "covered_by": [
+        "TC-A-008"
+      ]
+    },
+    {
+      "rule_id": "V-D-04",
+      "covered_by": [
+        "TC-A-008"
+      ]
+    },
+    {
+      "rule_id": "V-DOC-01",
+      "covered_by": [
+        "TC-B-003"
+      ]
+    },
+    {
+      "rule_id": "V-DOC-02",
+      "covered_by": [
+        "TC-B-003"
+      ]
+    },
+    {
+      "rule_id": "V-DOC-03",
+      "covered_by": [
+        "TC-B-003"
+      ]
+    },
+    {
+      "rule_id": "V-DOC-04",
+      "covered_by": [
+        "TC-B-003"
+      ]
+    },
+    {
+      "rule_id": "V-DOC-05",
+      "covered_by": [
+        "TC-B-003",
+        "TC-G0-002"
+      ]
+    },
+    {
+      "rule_id": "V-E-01",
+      "covered_by": [
+        "TC-A-009"
+      ]
+    },
+    {
+      "rule_id": "V-E-02",
+      "covered_by": [
+        "TC-A-009"
+      ]
+    },
+    {
+      "rule_id": "V-E-03",
+      "covered_by": [
+        "TC-D-013"
+      ]
+    },
+    {
+      "rule_id": "V-EX-01",
+      "covered_by": [
+        "TC-H-003"
+      ]
+    },
+    {
+      "rule_id": "V-EX-02",
+      "covered_by": [
+        "TC-H-003"
+      ]
+    },
+    {
+      "rule_id": "V-FD-01",
+      "covered_by": [
+        "TC-A-015",
+        "TC-A-016"
+      ]
+    },
+    {
+      "rule_id": "V-FD-02",
+      "covered_by": [
+        "TC-A-015",
+        "TC-A-016"
+      ]
+    },
+    {
+      "rule_id": "V-FI-01",
+      "covered_by": [
+        "TC-A-015",
+        "TC-A-016"
+      ]
+    },
+    {
+      "rule_id": "V-FI-02",
+      "covered_by": [
+        "TC-A-016"
+      ]
+    },
+    {
+      "rule_id": "V-FI-03",
+      "covered_by": [
+        "TC-A-015",
+        "TC-A-016"
+      ]
+    },
+    {
+      "rule_id": "V-FI-04",
+      "covered_by": [
+        "TC-D-005",
+        "TC-D-008"
+      ]
+    },
+    {
+      "rule_id": "V-FI-05",
+      "covered_by": [
+        "TC-A-015"
+      ]
+    },
+    {
+      "rule_id": "V-GF-01",
+      "covered_by": [
+        "TC-G0-007"
+      ]
+    },
+    {
+      "rule_id": "V-GF-02",
+      "covered_by": [
+        "TC-G0-006",
+        "TC-G0-007"
+      ]
+    },
+    {
+      "rule_id": "V-GP-01",
+      "covered_by": [
+        "TC-A-017"
+      ]
+    },
+    {
+      "rule_id": "V-GP-02",
+      "covered_by": [
+        "TC-A-017"
+      ]
+    },
+    {
+      "rule_id": "V-GP-03",
+      "covered_by": [
+        "TC-A-018"
+      ]
+    },
+    {
+      "rule_id": "V-INV-01",
+      "covered_by": [
+        "TC-E-001",
+        "TC-E-002"
+      ]
+    },
+    {
+      "rule_id": "V-INV-02",
+      "covered_by": [
+        "TC-E-001",
+        "TC-E-002"
+      ]
+    },
+    {
+      "rule_id": "V-INV-03",
+      "covered_by": [
+        "TC-E-001"
+      ]
+    },
+    {
+      "rule_id": "V-OF-01",
+      "covered_by": [
+        "TC-A-021",
+        "TC-A-022",
+        "TC-F-005",
+        "TC-F-007"
+      ]
+    },
+    {
+      "rule_id": "V-OF-02",
+      "covered_by": [
+        "TC-A-021",
+        "TC-A-022",
+        "TC-F-005",
+        "TC-F-007"
+      ]
+    },
+    {
+      "rule_id": "V-P-01",
+      "covered_by": [
+        "TC-A-002"
+      ]
+    },
+    {
+      "rule_id": "V-P-02",
+      "covered_by": [
+        "TC-A-002"
+      ]
+    },
+    {
+      "rule_id": "V-P-03",
+      "covered_by": [
+        "TC-A-002"
+      ]
+    },
+    {
+      "rule_id": "V-PCT-01",
+      "covered_by": [
+        "TC-C-001",
+        "TC-C-002"
+      ]
+    },
+    {
+      "rule_id": "V-PCT-02",
+      "covered_by": [
+        "TC-C-009"
+      ]
+    },
+    {
+      "rule_id": "V-PCT-03",
+      "covered_by": [
+        "TC-C-003"
+      ]
+    },
+    {
+      "rule_id": "V-PL-01",
+      "covered_by": [
+        "TC-A-017",
+        "TC-A-018"
+      ]
+    },
+    {
+      "rule_id": "V-PL-02",
+      "covered_by": [
+        "TC-A-017",
+        "TC-A-018"
+      ]
+    },
+    {
+      "rule_id": "V-PL-03",
+      "covered_by": [
+        "TC-A-017",
+        "TC-A-018"
+      ]
+    },
+    {
+      "rule_id": "V-PM-01",
+      "covered_by": [
+        "TC-A-021",
+        "TC-A-022",
+        "TC-F-001",
+        "TC-F-002"
+      ]
+    },
+    {
+      "rule_id": "V-PM-02",
+      "covered_by": [
+        "TC-A-021",
+        "TC-A-022",
+        "TC-F-001",
+        "TC-F-002"
+      ]
+    },
+    {
+      "rule_id": "V-PM-03",
+      "covered_by": [
+        "TC-A-021",
+        "TC-A-022",
+        "TC-F-001",
+        "TC-F-002"
+      ]
+    },
+    {
+      "rule_id": "V-TASK-01",
+      "covered_by": [
+        "TC-X-027"
+      ]
+    },
+    {
+      "rule_id": "V-TASK-02",
+      "covered_by": [
+        "TC-X-027"
+      ]
+    },
+    {
+      "rule_id": "V-TASK-03",
+      "covered_by": [
+        "TC-X-027"
+      ]
+    },
+    {
+      "rule_id": "V-TASK-04",
+      "covered_by": [
+        "TC-X-027"
+      ]
+    },
+    {
+      "rule_id": "V-TASK-05",
+      "covered_by": [
+        "TC-X-027"
+      ]
+    },
+    {
+      "rule_id": "V-TM-01",
+      "covered_by": [
+        "TC-W0-009"
+      ]
+    },
+    {
+      "rule_id": "V-TM-02",
+      "covered_by": [
+        "TC-W0-009"
+      ]
+    },
+    {
+      "rule_id": "V-TM-03",
+      "covered_by": [
+        "TC-W0-009",
+        "TC-A-014"
+      ]
+    },
+    {
+      "rule_id": "V-TM-04",
+      "covered_by": [
+        "TC-W0-009",
+        "TC-A-014"
+      ]
+    },
+    {
+      "rule_id": "V-TPL-01",
+      "covered_by": [
+        "TC-W0-010",
+        "TC-W0-011"
+      ]
+    },
+    {
+      "rule_id": "V-TPL-02",
+      "covered_by": [
+        "TC-W0-010",
+        "TC-W0-011"
+      ]
+    },
+    {
+      "rule_id": "V-TPL-03",
+      "covered_by": [
+        "TC-W0-010",
+        "TC-W0-011"
+      ]
+    },
+    {
+      "rule_id": "V-TPL-04",
+      "covered_by": [
+        "TC-W0-010",
+        "TC-W0-011"
+      ]
+    },
+    {
+      "rule_id": "V-TPL-05",
+      "covered_by": [
+        "TC-W0-010",
+        "TC-W0-011"
+      ]
+    }
+  ]
+}

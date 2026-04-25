@@ -32,11 +32,11 @@ class Expense(Base):
     vendor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     expense_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     currency: Mapped[str] = mapped_column(String(8), nullable=False, server_default=text("'CNY'"))
-    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, server_default=text("0"))
-    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(24), nullable=False, server_default=text("'DRAFT'")
+    amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, server_default=text("0")
     )
+    tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, server_default=text("'DRAFT'"))
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")

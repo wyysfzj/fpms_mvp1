@@ -1,6 +1,7 @@
 export interface CommissionListParams {
     agent_id?: string
     case_id?: string
+    case_no?: string
     status?: string
     settleable_date_from?: string
     settleable_date_to?: string
@@ -13,6 +14,7 @@ export interface CommissionListParams {
 export interface CommissionRecord {
     id: number
     case_id: string
+    case_no?: string
     agent_id?: string
     rule_id?: number
     fee_type?: string

@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FPMS TestCase",
+  "type": "object",
+  "required": [
+    "id",
+    "wave",
+    "priority",
+    "categories",
+    "topic",
+    "coverage_ids",
+    "preconditions",
+    "steps_summary",
+    "expected"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^TC-[A-Z0-9-]+$"
+    },
+    "wave": {
+      "type": "string"
+    },
+    "wave_title": {
+      "type": "string"
+    },
+    "context": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "P0",
+        "P1",
+        "P2"
+      ]
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "topic": {
+      "type": "string"
+    },
+    "stage_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stage_name": {
+      "type": "string"
+    },
+    "coverage_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "requirement_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "validation_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "preconditions": {
+      "type": "string"
+    },
+    "steps_summary": {
+      "type": "string"
+    },
+    "expected": {
+      "type": "string"
+    },
+    "automation_recommendation": {
+      "type": "string"
+    },
+    "data_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dynamic_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

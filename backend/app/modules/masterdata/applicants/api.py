@@ -59,6 +59,10 @@ def create_applicant_endpoint(
     db: Session = Depends(get_db),
 ) -> ApplicantOut:
     applicant = create_applicant(db, data=payload)
+    if applicant.applicant_type != payload.applicant_type:
+        applicant.applicant_type = payload.applicant_type
+        db.commit()
+        db.refresh(applicant)
     return ApplicantOut.model_validate(applicant)
 
 

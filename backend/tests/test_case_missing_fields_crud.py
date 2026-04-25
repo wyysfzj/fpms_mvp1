@@ -51,9 +51,7 @@ def test_create_case_roundtrips_missing_fields_into_detail(
     foreign_agent_id = _create_client(
         client, auth_headers, name_cn="外方代理所", client_type="AGENT"
     )
-    doc_address_id = _create_client_address(
-        client, auth_headers, client_id, address_type="MAILING"
-    )
+    doc_address_id = _create_client_address(client, auth_headers, client_id, address_type="MAILING")
     bill_address_id = _create_client_address(
         client, auth_headers, client_id, address_type="BILLING"
     )
@@ -116,13 +114,9 @@ def test_create_case_roundtrips_missing_fields_into_detail(
     assert detail["cert_no"] == "CERT-001"
 
 
-def test_put_case_updates_missing_fields(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
+def test_put_case_updates_missing_fields(client: TestClient, auth_headers: dict[str, str]) -> None:
     client_id = _create_client(client, auth_headers, name_cn="更新客户")
-    doc_address_id = _create_client_address(
-        client, auth_headers, client_id, address_type="MAILING"
-    )
+    doc_address_id = _create_client_address(client, auth_headers, client_id, address_type="MAILING")
     bill_address_id = _create_client_address(
         client, auth_headers, client_id, address_type="BILLING"
     )

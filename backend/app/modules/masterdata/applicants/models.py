@@ -13,6 +13,11 @@ class Applicant(UUIDPrimaryKeyMixin, Base):
     code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     name_cn: Mapped[str] = mapped_column(String(256), nullable=False)
     name_en: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    applicant_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=text("'ENTITY'"),
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
 
     __table_args__ = (UniqueConstraint("name_cn", name="uq_applicant_name_cn"),)

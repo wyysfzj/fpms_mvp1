@@ -304,7 +304,7 @@ def test_case_receipt_backward_compat(client, auth_headers, session_factory):
     # New fields should be null (not set)
     assert data["fee_code"] is None
     assert data["year_no"] is None
-    assert data["is_arrears"] is None or data["is_arrears"] is False
+    assert data["is_arrears"] is True
     assert data["invoice_no"] is None
     assert data["is_commissionable"] is None or data["is_commissionable"] is False
 

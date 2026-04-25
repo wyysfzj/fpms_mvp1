@@ -57,8 +57,13 @@ def test_masterdata_prereq_list_contract(
 
     items = payload["items"]
     assert isinstance(items, list)
-    assert len(items) == 1
-    assert {"id", "code", "name_cn", "name_en", "is_active"} == set(items[0])
+    seeded_code = f"APP-{code}" if path.endswith("/applicants") else f"CTY-{code}"
+    seeded_items = [item for item in items if item["code"] == seeded_code]
+    assert seeded_items
+    expected_fields = {"id", "code", "name_cn", "name_en", "is_active"}
+    if path.endswith("/applicants"):
+        expected_fields.add("applicant_type")
+    assert expected_fields == set(seeded_items[0])
 
     def _no_perms(_db, _user_id) -> set[str]:
         return set()
@@ -79,7 +84,7 @@ def test_applicant_and_country_contract_shapes_match(client, auth_headers) -> No
     country_items = country_payload["items"]
 
     if applicant_items and country_items:
-        assert set(applicant_items[0]) == set(country_items[0])
+        assert set(applicant_items[0]) == set(country_items[0]) | {"applicant_type"}
 
 
 def test_masterdata_permission_namespaces_are_frozen(session_factory) -> None:
@@ -99,9 +104,7 @@ def test_masterdata_permission_namespaces_are_frozen(session_factory) -> None:
         "Country.Write",
         "Department.Read",
         "Department.Write",
-    }.issubset(
-        perm_codes
-    )
+    }.issubset(perm_codes)
     assert "Applicant.Create" not in perm_codes
     assert "Applicant.Edit" not in perm_codes
     assert "Applicant.Action" not in perm_codes

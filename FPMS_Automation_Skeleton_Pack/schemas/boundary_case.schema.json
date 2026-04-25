@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FPMS BoundaryCase",
+  "type": "object",
+  "required": [
+    "id",
+    "object",
+    "boundary_point",
+    "test_values",
+    "expected"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^BND-[0-9]{3}$"
+    },
+    "object": {
+      "type": "string"
+    },
+    "boundary_point": {
+      "type": "string"
+    },
+    "test_values": {
+      "type": "string"
+    },
+    "expected": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

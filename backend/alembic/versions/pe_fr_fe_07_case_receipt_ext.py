@@ -6,6 +6,7 @@ Create Date: 2026-03-24
 
 Add 4 columns to t_case_receipt: fee_name, due_date, is_prepayment, remark.
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa

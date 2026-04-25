@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from datetime import date
+import calendar
+import json
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -12,7 +14,7 @@ from app.core.errors import raise_business_error
 from app.core.pagination import PageResult, offset_limit
 from app.modules.auth.models import T_Role, T_User, T_UserRole
 from app.modules.billing.models import BillItem, PaymentLine
-from app.modules.cases.enums import CaseStatus, CaseType, FlowDir
+from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
 from app.modules.cases.models import (
     Case,
     T_BioDeposit,
@@ -36,13 +38,18 @@ from app.modules.cases.schemas import (
     CaseUpdateFull,
     CaseUpdateLimited,
 )
+from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.models import Document
 from app.modules.fees.models import FeeDraft
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress
+from app.modules.tasks.enums import TaskAction, TaskDeadlineBase, TaskRemindBase
+from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 
 _CONSULTING_CASE_TYPES = {CaseType.CONSULTING.value, CaseType.SEARCH.value}
 _FOREIGN_FLOW_DIRS = {FlowDir.CN_OUTBOUND.value, FlowDir.FOREIGN_INBOUND.value}
 _FOREIGN_AGENT_TYPES = {"AGENT", "代理所"}
+_ORGANIZATION_LIKE_APPLICANT_TYPES = {"ENTITY", "UNIV", "GOV"}
 _AGENT_ROLE_CODE = "Agent"
 _INVALIDATION_ROLES = {"PATENTEE", "REQUESTER", "BOTH"}
 _TERMINAL_STATUS_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
@@ -74,6 +81,10 @@ _CASE_GRANTED_RATE_DENOMINATOR_STATUSES = _CASE_GRANTED_LINEAGE_STATUSES | {
     CaseStatus.WITHDRAWN.value,
     CaseStatus.ABANDONED.value,
 }
+_APPLY_FEE_LIMIT_TEMPLATE_CODE = "APPLY_FEE_LIMIT"
+_APPLY_FEE_LIMIT_TEMPLATE_NAME = "申请费时限"
+_APPLY_FEE_LIMIT_DEFAULT_ADD_DAYS = 30
+_APPLY_FEE_LIMIT_DEFAULT_INNER_OFFSET_DAYS = 7
 
 
 def _normalize_required_text(value: str | None, field_name: str) -> str:
@@ -90,6 +101,56 @@ def _normalize_required_text(value: str | None, field_name: str) -> str:
 def _normalize_search_token(value: str | None) -> str | None:
     normalized = (value or "").strip().lower().replace(" ", "").replace("-", "")
     return normalized or None
+
+
+def _contains_control_characters(value: str) -> bool:
+    return any(ord(char) < 32 or ord(char) == 127 for char in value)
+
+
+def _normalize_app_no(value: str | None, *, required: bool) -> str | None:
+    if value is None:
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        if required:
+            raise_business_error(
+                "CASE_APP_NO_INVALID",
+                "app_no is invalid",
+                details={"app_no": value},
+                status_code=400,
+            )
+        return None
+
+    if _contains_control_characters(normalized):
+        raise_business_error(
+            "CASE_APP_NO_INVALID",
+            "app_no is invalid",
+            details={"app_no": value},
+            status_code=400,
+        )
+    return normalized
+
+
+def _is_present_text(value: str | None) -> bool:
+    return bool((value or "").strip())
+
+
+def _earliest_priority_date_from_dicts(priorities: list[dict[str, Any]]) -> date | None:
+    priority_dates = [
+        priority.get("prio_date") for priority in priorities if priority.get("prio_date")
+    ]
+    return min(priority_dates) if priority_dates else None
+
+
+def _earliest_priority_date_for_case(db: Session, case_id: str) -> date | None:
+    row = (
+        db.query(T_Priority.prio_date)
+        .filter(T_Priority.case_id == case_id, T_Priority.prio_date.is_not(None))
+        .order_by(T_Priority.prio_date.asc())
+        .first()
+    )
+    return row.prio_date if row else None
 
 
 def validate_applicants(applicants: list[dict]) -> None:
@@ -152,6 +213,73 @@ def validate_case_applicant_links(db: Session, applicants: list[CaseApplicantIn]
             raise_business_error("APPLICANT_NOT_FOUND", "Applicant not found", status_code=404)
 
 
+def validate_case_applicant_kind_mismatch(
+    db: Session,
+    *,
+    applicant_kind: str | None,
+    first_applicant_id: str | None,
+) -> None:
+    normalized_applicant_kind = (applicant_kind or "").strip().upper()
+    if not normalized_applicant_kind or not first_applicant_id:
+        return
+
+    first_applicant = db.query(Applicant).filter(Applicant.id == first_applicant_id).first()
+    if not first_applicant:
+        return
+
+    first_applicant_type = (first_applicant.applicant_type or "").strip().upper()
+    if not first_applicant_type:
+        return
+
+    if first_applicant_type == "INDIVIDUAL":
+        if normalized_applicant_kind != "INDIVIDUAL":
+            raise_business_error(
+                "CASE_APPLICANT_KIND_MISMATCH",
+                "applicant_kind does not match the first applicant type",
+                details={
+                    "applicant_kind": normalized_applicant_kind,
+                    "first_applicant_type": first_applicant_type,
+                    "first_applicant_id": first_applicant_id,
+                },
+                status_code=400,
+            )
+        return
+
+    if first_applicant_type in _ORGANIZATION_LIKE_APPLICANT_TYPES:
+        if normalized_applicant_kind not in _ORGANIZATION_LIKE_APPLICANT_TYPES:
+            raise_business_error(
+                "CASE_APPLICANT_KIND_MISMATCH",
+                "applicant_kind does not match the first applicant type",
+                details={
+                    "applicant_kind": normalized_applicant_kind,
+                    "first_applicant_type": first_applicant_type,
+                    "first_applicant_id": first_applicant_id,
+                },
+                status_code=400,
+            )
+
+
+def _default_legacy_case_applicant(db: Session, client_id: str | None) -> CaseApplicantIn:
+    client_name: str | None = None
+    if client_id:
+        client = db.query(Client.name_cn, Client.name_en).filter(Client.id == client_id).first()
+        if client:
+            client_name = (client.name_cn or client.name_en or "").strip() or None
+
+    return CaseApplicantIn(
+        seq=1,
+        is_first=True,
+        name_cn=client_name or "未录入申请人",
+    )
+
+
+def _normalize_create_case_applicants(db: Session, data: CaseCreate) -> list[CaseApplicantIn]:
+    applicants = list(data.applicants)
+    if applicants or "applicants" in data.model_fields_set:
+        return applicants
+    return [_default_legacy_case_applicant(db, data.client_id)]
+
+
 def validate_foreign_agent(
     db: Session,
     *,
@@ -184,7 +312,7 @@ def validate_foreign_agent(
 def validate_country_fields(*, flow_dir: str | None, to_country: str | None) -> None:
     normalized_flow_dir = (flow_dir or "").strip()
     normalized_to_country = (to_country or "").strip()
-    if normalized_flow_dir in _FOREIGN_FLOW_DIRS and not normalized_to_country:
+    if normalized_flow_dir == FlowDir.CN_OUTBOUND.value and not normalized_to_country:
         raise_business_error(
             "CASE_TO_COUNTRY_REQUIRED",
             "to_country is required for foreign-facing cases",
@@ -212,6 +340,26 @@ def _validate_case_address(
         raise_business_error(
             "CASE_ADDRESS_CLIENT_MISMATCH",
             f"{field_name} must belong to the selected client",
+            status_code=400,
+        )
+
+
+def validate_case_type_patent_category_combo(
+    *, case_type: str | None, patent_category: str | None
+) -> None:
+    normalized_case_type = (case_type or "").strip().upper()
+    normalized_patent_category = (patent_category or "").strip().upper()
+    if (
+        normalized_case_type == CaseType.SEARCH.value
+        and normalized_patent_category == PatentCategory.DES.value
+    ):
+        raise_business_error(
+            "CASE_TYPE_COMBO_INVALID",
+            "case_type and patent_category are not a valid combination",
+            details={
+                "case_type": normalized_case_type,
+                "patent_category": normalized_patent_category,
+            },
             status_code=400,
         )
 
@@ -264,6 +412,23 @@ def validate_priorities(priorities: list[dict]) -> None:
                 "Priority country_code, prio_no and prio_date must all be provided",
                 status_code=400,
             )
+
+
+def validate_filing_date_after_priority(
+    *, filing_date: date | None, earliest_priority_date: date | None
+) -> None:
+    if filing_date is None or earliest_priority_date is None:
+        return
+    if filing_date < earliest_priority_date:
+        raise_business_error(
+            "CASE_FILING_BEFORE_PRIORITY",
+            "filing_date must be on or after the earliest priority date",
+            details={
+                "filing_date": str(filing_date),
+                "earliest_priority_date": str(earliest_priority_date),
+            },
+            status_code=400,
+        )
 
 
 def validate_bio_deposits(bio_deposits: list[dict]) -> None:
@@ -413,16 +578,77 @@ def validate_case_type_specific_fields(
 
 
 def validate_status_required_fields(
-    *, status: str | None, app_no: str | None, filing_date: date | None
+    *,
+    status: str | None,
+    app_no: str | None,
+    filing_date: date | None,
+    pub_no: str | None = None,
+    pub_date: date | None = None,
+    grant_no: str | None = None,
+    grant_date: date | None = None,
+    first_annuity_year: int | None = None,
+    valid_until: date | None = None,
 ) -> None:
-    if not status or status not in _STATUSES_REQUIRING_APPLICATION_FIELDS:
+    normalized_status = (status or "").strip().upper()
+    if normalized_status == CaseStatus.PUBLISHED.value:
+        missing_fields: list[str] = []
+        if app_no is None:
+            missing_fields.append("app_no")
+        if filing_date is None:
+            missing_fields.append("filing_date")
+        if not _is_present_text(pub_no):
+            missing_fields.append("pub_no")
+        if pub_date is None:
+            missing_fields.append("pub_date")
+        if missing_fields:
+            raise_business_error(
+                "CASE_PUBLISHED_FIELDS_REQUIRED",
+                "PUBLISHED cases require app_no, filing_date, pub_no and pub_date",
+                details={
+                    "status": normalized_status,
+                    "missing_fields": missing_fields,
+                },
+                status_code=400,
+            )
         return
-    if not (app_no and filing_date):
-        raise_business_error(
-            "CASE_STATUS_REQUIRES_APPLICATION_FIELDS",
-            "app_no and filing_date are required for the target status",
-            status_code=400,
-        )
+
+    if normalized_status == CaseStatus.GRANTED.value:
+        missing_fields = []
+        if app_no is None:
+            missing_fields.append("app_no")
+        if filing_date is None:
+            missing_fields.append("filing_date")
+        if not _is_present_text(pub_no):
+            missing_fields.append("pub_no")
+        if pub_date is None:
+            missing_fields.append("pub_date")
+        if not _is_present_text(grant_no):
+            missing_fields.append("grant_no")
+        if grant_date is None:
+            missing_fields.append("grant_date")
+        if first_annuity_year is None:
+            missing_fields.append("first_annuity_year")
+        if valid_until is None:
+            missing_fields.append("valid_until")
+        if missing_fields:
+            raise_business_error(
+                "CASE_GRANTED_FIELDS_REQUIRED",
+                "GRANTED cases require publication, grant and annuity fields",
+                details={
+                    "status": normalized_status,
+                    "missing_fields": missing_fields,
+                },
+                status_code=400,
+            )
+        return
+
+    if normalized_status in _STATUSES_REQUIRING_APPLICATION_FIELDS:
+        if not (app_no and filing_date):
+            raise_business_error(
+                "CASE_STATUS_REQUIRES_APPLICATION_FIELDS",
+                "app_no and filing_date are required for the target status",
+                status_code=400,
+            )
 
 
 def _apply_case_report_filters(
@@ -824,6 +1050,11 @@ def list_cases(
 
     off, lim = offset_limit(page, page_size)
     items = query.order_by(Case.created_at.desc()).offset(off).limit(lim).all()
+    client_ids = {case.client_id for case in items if case.client_id}
+    client_name_map: dict[str, str] = {}
+    if client_ids:
+        clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
+        client_name_map = {client.id: client.name_cn for client in clients}
 
     list_items = [
         CaseListItem(
@@ -832,10 +1063,13 @@ def list_cases(
             case_type=case.case_type,
             patent_category=case.patent_category,
             client_id=case.client_id,
+            client_name=client_name_map.get(case.client_id) if case.client_id else None,
             title_cn=case.title_cn,
             title_en=case.title_en,
             app_no=case.app_no,
             status=case.status,
+            filing_date=str(case.filing_date) if case.filing_date else None,
+            recv_date=str(case.recv_date) if case.recv_date else None,
             patent_no=case.patent_no,
             primary_agent_id=case.primary_agent_id,
         )
@@ -913,12 +1147,250 @@ def list_batch_filing_candidates(
     return PageResult(items=candidate_items, page=page, page_size=page_size, total=total)
 
 
+def _batch_filing_ref(submitted_date: date, selected_case_ids: list[str]) -> str:
+    first_case_marker = selected_case_ids[0][:8] if selected_case_ids else "EMPTY"
+    return f"BATCH-FILING-{submitted_date.isoformat()}-{len(selected_case_ids)}-{first_case_marker}"
+
+
+def _create_batch_filing_documents(
+    db: Session,
+    *,
+    cases: list[Case],
+    selected_case_ids: list[str],
+    submitted_date: date,
+    user_id: str,
+) -> list[str]:
+    batch_ref = _batch_filing_ref(submitted_date, selected_case_ids)
+    extra_data = json.dumps(
+        {
+            "source": "batch_filing",
+            "batch_ref": batch_ref,
+            "selected_case_ids": selected_case_ids,
+        },
+        ensure_ascii=False,
+    )
+    document_ids: list[str] = []
+    for case in cases:
+        document = Document(
+            id=str(uuid4()),
+            case_id=case.id,
+            doc_type=DocumentDocType.OFFICIAL_OUT.value,
+            direction=DocumentDirection.OUT.value,
+            doc_date=submitted_date,
+            title=f"批量递交清单-{submitted_date.isoformat()}",
+            ref_no=batch_ref,
+            extra_data=extra_data,
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        db.add(document)
+        document_ids.append(document.id)
+    return document_ids
+
+
+def _get_or_create_apply_fee_limit_template(db: Session, *, user_id: str) -> TaskTemplate:
+    template = (
+        db.query(TaskTemplate)
+        .filter(TaskTemplate.code == _APPLY_FEE_LIMIT_TEMPLATE_CODE)
+        .one_or_none()
+    )
+    if template:
+        return template
+
+    template = TaskTemplate(
+        id=str(uuid4()),
+        code=_APPLY_FEE_LIMIT_TEMPLATE_CODE,
+        name=_APPLY_FEE_LIMIT_TEMPLATE_NAME,
+        enabled=True,
+        deadline_base=TaskDeadlineBase.CASE_EVENT,
+        add_days=_APPLY_FEE_LIMIT_DEFAULT_ADD_DAYS,
+        add_months=0,
+        inner_offset_days=_APPLY_FEE_LIMIT_DEFAULT_INNER_OFFSET_DAYS,
+        remind_base=TaskRemindBase.DEADLINE,
+        created_by=user_id,
+        updated_by=user_id,
+    )
+    db.add(template)
+    db.flush()
+    return template
+
+
+def _add_months(base: date, months: int) -> date:
+    month = base.month - 1 + months
+    year = base.year + month // 12
+    month = month % 12 + 1
+    day = min(base.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _compute_task_dates(template: TaskTemplate, base_date: date) -> tuple[date, date | None]:
+    due_date = base_date
+    add_months = template.add_months or 0
+    add_days = template.add_days or 0
+    if add_months:
+        due_date = _add_months(due_date, add_months)
+    if add_days:
+        due_date = due_date + timedelta(days=add_days)
+
+    internal_due_date = None
+    if template.inner_offset_days is not None:
+        internal_due_date = due_date - timedelta(days=template.inner_offset_days)
+    return due_date, internal_due_date
+
+
+def _resolve_apply_fee_limit_base_date(
+    case: Case, template: TaskTemplate, submitted_date: date
+) -> date:
+    deadline_base = template.deadline_base or TaskDeadlineBase.CASE_EVENT
+    if deadline_base == TaskDeadlineBase.CASE_EVENT:
+        return submitted_date
+    if deadline_base == TaskDeadlineBase.FILING_DATE:
+        base_date = case.filing_date
+    elif deadline_base == TaskDeadlineBase.RECEIVE_DATE:
+        base_date = case.recv_date
+    elif deadline_base == TaskDeadlineBase.PUB_DATE:
+        base_date = case.pub_date
+    elif deadline_base == TaskDeadlineBase.GRANT_DATE:
+        base_date = case.grant_date
+    else:
+        raise_business_error(
+            "TASK_DEADLINE_BASE_UNSUPPORTED",
+            "APPLY_FEE_LIMIT template deadline_base is not supported for batch filing",
+            details={"deadline_base": str(deadline_base)},
+            status_code=400,
+        )
+    if base_date is None:
+        raise_business_error(
+            "TASK_DEADLINE_BASE_DATE_REQUIRED",
+            "APPLY_FEE_LIMIT base date is missing for batch filing",
+            details={"deadline_base": deadline_base.value, "case_id": case.id},
+            status_code=400,
+        )
+    return base_date
+
+
+def _resolve_remind_base_date(
+    template: TaskTemplate, *, due_date: date, internal_due_date: date | None
+) -> date:
+    if template.remind_base == TaskRemindBase.INNER and internal_due_date is not None:
+        return internal_due_date
+    return due_date
+
+
+def _compute_task_reminders(
+    template: TaskTemplate, *, due_date: date, internal_due_date: date | None
+) -> tuple[date | None, date | None, date | None, date | None]:
+    remind_base_date = _resolve_remind_base_date(
+        template,
+        due_date=due_date,
+        internal_due_date=internal_due_date,
+    )
+
+    def _offset(days: int | None) -> date | None:
+        if days is None:
+            return None
+        return remind_base_date - timedelta(days=days)
+
+    remind1 = _offset(template.remind_1_offset_days)
+    remind2 = _offset(template.remind_2_offset_days)
+    remind3 = _offset(template.remind_3_offset_days)
+    daily_remind_from = None
+    if template.daily_remind:
+        candidates = [value for value in (remind1, remind2, remind3) if value is not None]
+        daily_remind_from = min(candidates) if candidates else remind_base_date
+    return remind1, remind2, remind3, daily_remind_from
+
+
+def _resolve_default_worker_id(db: Session, template: TaskTemplate) -> str | None:
+    role_code = (template.default_worker_role or "").strip()
+    if not role_code:
+        return None
+
+    return (
+        db.query(T_User.id)
+        .join(T_UserRole, T_UserRole.user_id == T_User.id)
+        .join(T_Role, T_Role.id == T_UserRole.role_id)
+        .filter(T_Role.code == role_code, T_User.is_active.is_(True))
+        .order_by(T_User.created_at.asc(), T_User.id.asc())
+        .scalar()
+    )
+
+
+def _create_apply_fee_limit_tasks(
+    db: Session,
+    *,
+    cases: list[Case],
+    submitted_date: date,
+    user_id: str,
+) -> list[str]:
+    template = _get_or_create_apply_fee_limit_template(db, user_id=user_id)
+    worker_id = _resolve_default_worker_id(db, template)
+
+    created_task_ids: list[str] = []
+    for case in cases:
+        base_date = _resolve_apply_fee_limit_base_date(case, template, submitted_date)
+        due_date, internal_due_date = _compute_task_dates(template, base_date)
+        remind1, remind2, remind3, daily_remind_from = _compute_task_reminders(
+            template,
+            due_date=due_date,
+            internal_due_date=internal_due_date,
+        )
+        existing_task = (
+            db.query(Task)
+            .filter(
+                Task.case_id == case.id,
+                Task.task_template_id == template.id,
+                Task.status == "OPEN",
+            )
+            .one_or_none()
+        )
+        if existing_task:
+            continue
+
+        task = Task(
+            id=str(uuid4()),
+            case_id=case.id,
+            task_template_id=template.id,
+            title=template.name or template.code,
+            base_date=base_date,
+            due_date=due_date,
+            internal_due_date=internal_due_date,
+            remind1=remind1,
+            remind2=remind2,
+            remind3=remind3,
+            daily_remind_from=daily_remind_from,
+            daily_remind=bool(template.daily_remind),
+            worker_id=worker_id,
+            supervisor_id=template.default_supervisor_id,
+            status="OPEN",
+            created_by=user_id,
+            updated_by=user_id,
+        )
+        db.add(task)
+        db.add(
+            TaskLog(
+                id=str(uuid4()),
+                task_id=task.id,
+                action=TaskAction.AUTO_CREATE.value,
+                from_status=None,
+                to_status=task.status,
+                remark="Created by batch filing submit",
+                created_by=user_id,
+                updated_by=user_id,
+            )
+        )
+        created_task_ids.append(task.id)
+
+    return created_task_ids
+
+
 def execute_batch_filing(
     db: Session,
     *,
     selected_case_ids: list[str],
     submitted_date: date,
     apply_exam_now: bool,
+    generate_list: bool = False,
     user_id: str,
 ) -> CaseBatchFilingActionOut:
     if not selected_case_ids:
@@ -962,6 +1434,7 @@ def execute_batch_filing(
         )
 
     updated_case_ids: list[str] = []
+    ordered_cases: list[Case] = []
     for case_id in unique_case_ids:
         case = case_by_id[case_id]
         case.submitted_date = submitted_date
@@ -970,12 +1443,33 @@ def execute_batch_filing(
             case.has_exam_request = True
         case.updated_by = user_id
         updated_case_ids.append(case.id)
+        ordered_cases.append(case)
+
+    document_ids = (
+        _create_batch_filing_documents(
+            db,
+            cases=ordered_cases,
+            selected_case_ids=unique_case_ids,
+            submitted_date=submitted_date,
+            user_id=user_id,
+        )
+        if generate_list
+        else []
+    )
+    created_task_ids = _create_apply_fee_limit_tasks(
+        db,
+        cases=ordered_cases,
+        submitted_date=submitted_date,
+        user_id=user_id,
+    )
 
     db.commit()
     return CaseBatchFilingActionOut(
         success_count=len(updated_case_ids),
         failure_count=0,
         updated_case_ids=updated_case_ids,
+        document_ids=document_ids,
+        created_task_ids=created_task_ids,
     )
 
 
@@ -989,12 +1483,22 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
             status_code=400,
         )
 
-    applicants_dict = [applicant.model_dump() for applicant in data.applicants]
+    applicants = _normalize_create_case_applicants(db, data)
+    applicants_dict = [applicant.model_dump() for applicant in applicants]
     priorities_dict = [priority.model_dump() for priority in data.priorities]
     bio_deposits_dict = [bio_deposit.model_dump() for bio_deposit in data.bio_deposits]
-    if applicants_dict:
-        validate_applicants(applicants_dict)
-        validate_case_applicant_links(db, data.applicants)
+    validate_applicants(applicants_dict)
+    validate_case_applicant_links(db, applicants)
+    first_applicant = next((applicant for applicant in applicants if applicant.is_first), None)
+    validate_case_applicant_kind_mismatch(
+        db,
+        applicant_kind=data.applicant_kind,
+        first_applicant_id=first_applicant.applicant_id if first_applicant else None,
+    )
+    validate_case_type_patent_category_combo(
+        case_type=data.case_type.value,
+        patent_category=data.patent_category.value,
+    )
     validate_client_exists(db, data.client_id)
     validate_foreign_agent(db, flow_dir=data.flow_dir.value, foreign_agent_id=data.foreign_agent_id)
     validate_country_fields(flow_dir=data.flow_dir.value, to_country=data.to_country)
@@ -1006,6 +1510,23 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
     )
     validate_priorities(priorities_dict)
     validate_bio_deposits(bio_deposits_dict)
+    normalized_app_no = _normalize_app_no(
+        data.app_no,
+        required=(data.status.value if data.status else None)
+        in {CaseStatus.PUBLISHED.value, CaseStatus.GRANTED.value},
+    )
+    if "applicants" in data.model_fields_set:
+        validate_status_required_fields(
+            status=data.status.value if data.status else None,
+            app_no=normalized_app_no,
+            filing_date=data.filing_date,
+            pub_no=data.pub_no,
+            pub_date=data.pub_date,
+            grant_no=data.grant_no,
+            grant_date=data.grant_date,
+            first_annuity_year=data.first_annuity_year,
+            valid_until=data.valid_until,
+        )
     validate_case_type_specific_fields(
         db,
         case_type=data.case_type.value,
@@ -1034,8 +1555,9 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         bill_address_id=data.bill_address_id,
         title_cn=data.title_cn,
         title_en=data.title_en,
-        app_no=data.app_no,
+        app_no=normalized_app_no,
         status=data.status.value if data.status else "NOT_FILED",
+        filing_date=data.filing_date,
         recv_date=data.recv_date,
         # A3 — Publication / Grant
         pub_date=data.pub_date,
@@ -1088,7 +1610,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
     db.add(case)
     db.flush()
 
-    for applicant in data.applicants:
+    for applicant in applicants:
         db.add(
             T_CaseApplicant(
                 id=str(uuid4()),
@@ -1219,6 +1741,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     target_flow_dir = (
         data.flow_dir.value if "flow_dir" in provided_fields and data.flow_dir else case.flow_dir
     )
+    target_patent_category = case.patent_category
     target_to_country = data.to_country if "to_country" in provided_fields else case.to_country
     target_foreign_agent_id = (
         data.foreign_agent_id if "foreign_agent_id" in provided_fields else case.foreign_agent_id
@@ -1229,12 +1752,40 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     target_bill_address_id = (
         data.bill_address_id if "bill_address_id" in provided_fields else case.bill_address_id
     )
+    target_pub_no = data.pub_no if "pub_no" in provided_fields else case.pub_no
+    target_pub_date = data.pub_date if "pub_date" in provided_fields else case.pub_date
+    target_grant_no = data.grant_no if "grant_no" in provided_fields else case.grant_no
+    target_grant_date = data.grant_date if "grant_date" in provided_fields else case.grant_date
+    target_first_annuity_year = (
+        data.first_annuity_year
+        if "first_annuity_year" in provided_fields
+        else case.first_annuity_year
+    )
+    target_valid_until = data.valid_until if "valid_until" in provided_fields else case.valid_until
 
     validate_case_status_transition(case.status, target_status)
+    if data.priorities is not None:
+        priorities_dict = [priority.model_dump() for priority in data.priorities]
+        validate_priorities(priorities_dict)
+
+    normalized_target_app_no = _normalize_app_no(
+        target_app_no,
+        required=target_status in {CaseStatus.PUBLISHED.value, CaseStatus.GRANTED.value},
+    )
     validate_status_required_fields(
         status=target_status,
-        app_no=target_app_no,
+        app_no=normalized_target_app_no,
         filing_date=target_filing_date,
+        pub_no=target_pub_no,
+        pub_date=target_pub_date,
+        grant_no=target_grant_no,
+        grant_date=target_grant_date,
+        first_annuity_year=target_first_annuity_year,
+        valid_until=target_valid_until,
+    )
+    validate_case_type_patent_category_combo(
+        case_type=target_case_type,
+        patent_category=target_patent_category,
     )
     validate_foreign_agent(
         db,
@@ -1282,6 +1833,15 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         ),
         invalid_role=data.invalid_role if "invalid_role" in provided_fields else case.invalid_role,
     )
+    if target_status in {CaseStatus.PUBLISHED.value, CaseStatus.GRANTED.value}:
+        if data.priorities is not None:
+            earliest_priority_date = _earliest_priority_date_from_dicts(priorities_dict)
+        else:
+            earliest_priority_date = _earliest_priority_date_for_case(db, case_id)
+        validate_filing_date_after_priority(
+            filing_date=target_filing_date,
+            earliest_priority_date=earliest_priority_date,
+        )
 
     if "case_type" in provided_fields and data.case_type is not None:
         case.case_type = data.case_type
@@ -1292,7 +1852,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     if "title_en" in provided_fields:
         case.title_en = data.title_en
     if "app_no" in provided_fields:
-        case.app_no = data.app_no
+        case.app_no = normalized_target_app_no
     if "filing_date" in provided_fields:
         case.filing_date = data.filing_date
     if "recv_date" in provided_fields:
@@ -1405,6 +1965,18 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         if applicants_dict:
             validate_applicants(applicants_dict)
             validate_case_applicant_links(db, data.applicants)
+            first_applicant = next(
+                (applicant for applicant in data.applicants if applicant.is_first), None
+            )
+            validate_case_applicant_kind_mismatch(
+                db,
+                applicant_kind=(
+                    data.applicant_kind
+                    if "applicant_kind" in provided_fields
+                    else case.applicant_kind
+                ),
+                first_applicant_id=first_applicant.applicant_id if first_applicant else None,
+            )
 
         db.query(T_CaseApplicant).filter(T_CaseApplicant.case_id == case_id).delete()
 
@@ -1422,6 +1994,18 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
                     address_en=applicant.address_en,
                 )
             )
+    elif "applicant_kind" in provided_fields:
+        first_applicant = (
+            db.query(T_CaseApplicant.applicant_id)
+            .filter(T_CaseApplicant.case_id == case_id)
+            .order_by(T_CaseApplicant.seq)
+            .first()
+        )
+        validate_case_applicant_kind_mismatch(
+            db,
+            applicant_kind=data.applicant_kind,
+            first_applicant_id=first_applicant.applicant_id if first_applicant else None,
+        )
 
     if data.inventors is not None:
         db.query(T_CaseInventor).filter(T_CaseInventor.case_id == case_id).delete()
@@ -1437,8 +2021,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
             )
 
     if data.priorities is not None:
-        priorities_dict = [priority.model_dump() for priority in data.priorities]
-        validate_priorities(priorities_dict)
         db.query(T_Priority).filter(T_Priority.case_id == case_id).delete()
         for prio in data.priorities:
             db.add(
@@ -1501,8 +2083,14 @@ def update_case_limited(db: Session, case_id: str, data: CaseUpdateLimited, user
     # A3 — Spec details (Agent-editable)
     if data.spec_pages is not None:
         case.spec_pages = data.spec_pages
+    if data.draw_pages is not None:
+        case.draw_pages = data.draw_pages
     if data.claim_count is not None:
         case.claim_count = data.claim_count
+    if data.claim_pages is not None:
+        case.claim_pages = data.claim_pages
+    if data.manuscript_words is not None:
+        case.manuscript_words = data.manuscript_words
 
     case.updated_by = user_id
 

@@ -5,6 +5,11 @@
         <h1 class="page-title">预收款管理报表</h1>
         <span class="page-count">{{ total }} 条</span>
       </div>
+      <div class="page-header-right">
+        <router-link to="/billing/payments/new">
+          <el-button type="primary">新增回款</el-button>
+        </router-link>
+      </div>
     </div>
 
     <div class="report-summary">
@@ -28,13 +33,22 @@
 
     <el-form :model="filters" inline class="filter-form">
       <el-form-item label="客户ID">
-        <el-input
+        <el-select
           v-model="filters.client_id"
           clearable
+          filterable
+          :loading="clientOptionsLoading"
           class="filter-input"
-          placeholder="请输入客户ID"
+          placeholder="请选择客户"
           @change="onFilterChange"
-        />
+        >
+          <el-option
+            v-for="client in clientOptions"
+            :key="client.id"
+            :label="formatClientOption(client)"
+            :value="client.id"
+          />
+        </el-select>
       </el-form-item>
       <el-form-item label="预收状态">
         <el-select
@@ -318,6 +332,7 @@ import {
   getPayments,
   reverseOffset,
 } from '../../../api/billing'
+import { getClients } from '../../../api/clients'
 import type {
   BillListItem,
   OffsetListItem,
@@ -325,6 +340,7 @@ import type {
   PaymentListItem,
   PaymentListResponse,
 } from '../../../api/billing.types'
+import type { Client } from '../../../api/clients.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -356,6 +372,8 @@ const filters = reactive({
   pay_date_range: null as [string, string] | null,
   has_unapplied_only: false,
 })
+const clientOptionsLoading = ref(false)
+const clientOptions = ref<Client[]>([])
 const summaryCurrency = computed(() => payments.value[0]?.currency || 'CNY')
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 
@@ -453,6 +471,18 @@ async function fetchOffsets() {
   }
 }
 
+async function fetchClientOptions() {
+  clientOptionsLoading.value = true
+  try {
+    const result = await getClients({ page: 1, page_size: 100 })
+    clientOptions.value = result.items
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    clientOptionsLoading.value = false
+  }
+}
+
 function onFilterChange() {
   const alreadyOnFirstPage = page.value === 1
   page.value = 1
@@ -509,6 +539,11 @@ function getPrepaymentTagType(status?: string): 'success' | 'warning' | 'info' {
 
 function formatPaymentNo(payment: PaymentListItem): string {
   return payment.reference || payment.id
+}
+
+function formatClientOption(client: Client): string {
+  const code = client.client_code ? `${client.client_code} · ` : ''
+  return `${code}${client.name || client.id}`
 }
 
 function formatPaymentOption(payment: PaymentListItem): string {
@@ -684,6 +719,7 @@ watch(
 onMounted(() => {
   fetchPayments()
   fetchOffsets()
+  fetchClientOptions()
 })
 </script>
 

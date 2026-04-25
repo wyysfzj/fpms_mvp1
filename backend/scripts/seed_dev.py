@@ -18,6 +18,7 @@ from app.models.system_param import SystemParam  # noqa: E402
 from app.modules.auth.models import T_Role, T_User, T_UserRole  # noqa: E402
 from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor  # noqa: E402
 from app.modules.documents.models import DocTemplate  # noqa: E402
+from app.modules.masterdata.applicants.models import Applicant  # noqa: E402
 from app.modules.masterdata.clients.models import Client  # noqa: E402
 from app.modules.rbac.service import seed_default_roles_perms  # noqa: E402
 from app.modules.tasks.models import TaskTemplate  # noqa: E402
@@ -304,6 +305,52 @@ def seed_v3_cases(db: Session) -> None:
     print(f"Created {len(v3_cases)} V3 test cases covering all 13 statuses")
 
 
+def seed_masterdata_applicants(db: Session) -> None:
+    """Seed core dev applicants with persisted applicant_type values. Idempotent."""
+    seed_rows = [
+        {
+            "code": "DS-AP-001",
+            "name_cn": "北京创新科技有限公司",
+            "name_en": "Beijing Innovation Technology Co., Ltd.",
+            "applicant_type": "ENTITY",
+        },
+        {
+            "code": "DS-AP-002",
+            "name_cn": "张三",
+            "name_en": "Zhang San",
+            "applicant_type": "INDIVIDUAL",
+        },
+    ]
+
+    created = 0
+    updated = 0
+    for seed_row in seed_rows:
+        existing = db.query(Applicant).filter(Applicant.code == seed_row["code"]).first()
+        if not existing:
+            db.add(
+                Applicant(
+                    id=str(uuid4()),
+                    code=seed_row["code"],
+                    name_cn=seed_row["name_cn"],
+                    name_en=seed_row["name_en"],
+                    applicant_type=seed_row["applicant_type"],
+                    is_active=True,
+                )
+            )
+            created += 1
+            continue
+
+        if existing.applicant_type != seed_row["applicant_type"]:
+            existing.applicant_type = seed_row["applicant_type"]
+            updated += 1
+
+    db.commit()
+    if created or updated:
+        print(f"Seeded {created} dev applicants and updated {updated} applicant types")
+    else:
+        print("Dev applicants already seeded, skipping")
+
+
 def seed_task_templates(db: Session) -> None:
     """Seed starter task templates. Idempotent."""
     templates = [
@@ -465,6 +512,10 @@ def main() -> None:
         print("Seeding V3 workflow test cases...")
         seed_v3_cases(db)
         print("✓ V3 test cases seeded")
+
+        print("Seeding masterdata applicants...")
+        seed_masterdata_applicants(db)
+        print("✓ Masterdata applicants seeded")
 
         print("Seeding task templates...")
         seed_task_templates(db)

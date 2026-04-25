@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>07 案件递交 - 最终材料门禁</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="active">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>递交检查的是最终递交稿和签章材料，不是收案时上传过什么。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">案件递交批处理</div>
+          <h1>最终材料门禁</h1>
+          <p>执行递交前检查最终稿、客户确认、委托书、附图/外观图等递交材料；阻止项不会进入本批次。</p>
+        </div>
+        <button class="btn primary">执行可递交案件</button>
+      </section>
+      <section class="card">
+        <h2>递交候选案件</h2>
+        <table class="data-table">
+          <thead><tr><th>选择</th><th>案卷号</th><th>名称</th><th>最终材料</th><th>缺失项</th><th>门禁结论</th><th>处理</th></tr></thead>
+          <tbody>
+            <tr><td><input type="checkbox" checked></td><td>25F0411CN</td><td>一种高效电池管理方法</td><td>6/7</td><td>委托书</td><td><span class="tag warn">允许后补</span></td><td>查看材料</td></tr>
+            <tr><td><input type="checkbox" checked></td><td>25F0412CN</td><td>图像识别装置</td><td>7/7</td><td>无</td><td><span class="tag ok">可递交</span></td><td>查看材料</td></tr>
+            <tr><td><input type="checkbox" disabled></td><td>25F0413CN</td><td>外观设计 A</td><td>3/5</td><td>最终外观图</td><td><span class="tag danger">不可递交</span></td><td>补文件</td></tr>
+            <tr><td><input type="checkbox" checked></td><td>25F0414CN</td><td>通信协议优化方法</td><td>6/6</td><td>无</td><td><span class="tag ok">可递交</span></td><td>查看材料</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="grid two">
+        <div class="card"><h2>递交参数</h2><table class="data-table compact"><tbody>
+          <tr><th>递交日期</th><td>2026-04-22</td></tr>
+          <tr><th>同时提实审</th><td>是</td></tr>
+          <tr><th>生成递交清单</th><td>是</td></tr>
+          <tr><th>本批次</th><td>3 件可执行，其中 1 件带后补审计</td></tr>
+        </tbody></table></div>
+        <div class="card"><h2>执行预览</h2><div class="impact-list">
+          <span>申请状态：未递交 → 等待受理</span>
+          <span>生成：递交清单文书事件、申请费时限任务</span>
+          <span class="danger-text">阻止：25F0413CN 缺最终外观图</span>
+        </div></div>
+      </section>
+    </main>
+</div>
+</body>
+</html>

@@ -102,7 +102,15 @@ class AnnuityTask(Base):
     service_fee_amt: Mapped[Decimal | None] = mapped_column(
         Numeric(18, 2), nullable=True, server_default=text("0")
     )
-    notify_count: Mapped[int | None] = mapped_column(Integer, nullable=True, server_default=text("0"))
-    pay_next_year: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
-    draft_generated: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
-    notice_sent: Mapped[bool | None] = mapped_column(Boolean, nullable=True, server_default=text("0"))
+    notify_count: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, server_default=text("0")
+    )
+    pay_next_year: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, server_default=text("0")
+    )
+    draft_generated: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, server_default=text("0")
+    )
+    notice_sent: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, server_default=text("0")
+    )

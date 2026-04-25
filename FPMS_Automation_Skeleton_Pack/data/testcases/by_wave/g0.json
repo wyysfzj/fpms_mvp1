@@ -1,0 +1,361 @@
+{
+  "wave": "G0",
+  "wave_title": "G0 授权阶段",
+  "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+  "cases": [
+    {
+      "id": "TC-G0-001",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "L5 授权通知录入",
+      "stage_code": "L5",
+      "stage_name": "授权通知录入",
+      "coverage_ids": [
+        "FR-WD-03",
+        "FR-CM-04",
+        "V-D-01"
+      ],
+      "requirement_ids": [
+        "FR-WD-03",
+        "FR-CM-04"
+      ],
+      "validation_ids": [
+        "V-D-01"
+      ],
+      "preconditions": "一件 NORMAL/PCT_NATIONAL 案状态在 SUB_EXAM 或 OA2；配置 GRANT_NOTICE 模板。",
+      "steps_summary": "录入 OFFICIAL_IN + GRANT_NOTICE，填写 IssueDate、GrantDate、GrantNo、FirstAnnuityYear、ValidUntil、Summary。",
+      "expected": "文档保存成功；T_Case.Status 更新为 GRANTED；Grant 相关字段回写；文档可在中间文件列表中查询。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-002",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Unhappy"
+      ],
+      "topic": "GRANT_NOTICE 必填字段缺失",
+      "stage_code": null,
+      "stage_name": "GRANT_NOTICE 必填字段缺失",
+      "coverage_ids": [
+        "FR-WD-03",
+        "V-D-01",
+        "V-DOC-05"
+      ],
+      "requirement_ids": [
+        "FR-WD-03"
+      ],
+      "validation_ids": [
+        "V-D-01",
+        "V-DOC-05"
+      ],
+      "preconditions": "存在待授权案件。",
+      "steps_summary": "录入 GRANT_NOTICE 时缺少 GrantDate、GrantNo、FirstAnnuityYear 或 ValidUntil 任一字段保存。",
+      "expected": "系统阻止保存并指出缺失字段；案卷状态不应进入 GRANTED。",
+      "automation_recommendation": "服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p0",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-003",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "授权费时限任务生成",
+      "stage_code": null,
+      "stage_name": "授权费时限任务生成",
+      "coverage_ids": [
+        "FR-DL-02",
+        "FR-DL-03"
+      ],
+      "requirement_ids": [
+        "FR-DL-02",
+        "FR-DL-03"
+      ],
+      "validation_ids": [],
+      "preconditions": "TC-G0-001 成功；存在 GRANT_CERT_FEE_LIMIT 模板。",
+      "steps_summary": "录入授权通知后检查是否生成授权费时限任务。",
+      "expected": "系统创建 GRANT_CERT_FEE_LIMIT 任务，含 Deadline/InnerDeadline/Remind*、WorkerID、SupervisorID；任务在首页/我的任务出现。",
+      "automation_recommendation": "API+DB+UI。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-004",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "GrantFeeTask 提取",
+      "stage_code": null,
+      "stage_name": "GrantFeeTask 提取",
+      "coverage_ids": [
+        "FR-FE-05"
+      ],
+      "requirement_ids": [
+        "FR-FE-05"
+      ],
+      "validation_ids": [],
+      "preconditions": "已授权案件，存在 T_GrantFeeTask 机制。",
+      "steps_summary": "打开授权费管理列表，按授权日期/客户过滤，查看 GovFeeAmt、ServiceFeeAmt、ClientInstruction、NotifyCount。",
+      "expected": "新授权案件出现在授权费列表；字段完整；默认 ClientInstruction=NONE、DraftGenerated=false、NoticeSent=false。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-005",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "授权费通知函",
+      "stage_code": null,
+      "stage_name": "授权费通知函",
+      "coverage_ids": [
+        "FR-FE-05",
+        "FR-WD-06"
+      ],
+      "requirement_ids": [
+        "FR-FE-05",
+        "FR-WD-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "GrantFeeTask.ClientInstruction=NONE。",
+      "steps_summary": "执行“生成授权费通知函”。",
+      "expected": "生成 T_Document(TemplateCode=GRANT_FEE_NOTICE) 和附件；GrantFeeTask.NoticeSent=true，NotifyCount+1。",
+      "automation_recommendation": "UI+DB+附件。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-006",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "授权费草单生成",
+      "stage_code": null,
+      "stage_name": "授权费草单生成",
+      "coverage_ids": [
+        "FR-FE-02",
+        "FR-FE-05",
+        "V-GF-02"
+      ],
+      "requirement_ids": [
+        "FR-FE-02",
+        "FR-FE-05"
+      ],
+      "validation_ids": [
+        "V-GF-02"
+      ],
+      "preconditions": "GrantFeeTask.ClientInstruction=PAY；费率已配置登记费/证书费/印花税。",
+      "steps_summary": "执行“生成授权费草单”。",
+      "expected": "生成 T_FeeDraft(Type=GRANT_FEE) 和多条 FeeItem；DraftGenerated=true；TotalGov/TotalService/TotalAmt 正确。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-007",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Unhappy"
+      ],
+      "topic": "授权费费率缺失/重复",
+      "stage_code": null,
+      "stage_name": "授权费费率缺失/重复",
+      "coverage_ids": [
+        "FR-FE-05",
+        "V-GF-01",
+        "V-GF-02"
+      ],
+      "requirement_ids": [
+        "FR-FE-05"
+      ],
+      "validation_ids": [
+        "V-GF-01",
+        "V-GF-02"
+      ],
+      "preconditions": "GrantFeeTask.ClientInstruction=PAY；去掉一项 GRANT 费率或预先造一张 GRANT_FEE 草单。",
+      "steps_summary": "尝试生成授权费草单。",
+      "expected": "缺关键费率时系统阻断；同案同类型草单已存在时系统提示避免重复或阻断。",
+      "automation_recommendation": "服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p0",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-008",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "授权费清单/账单/收款闭环",
+      "stage_code": null,
+      "stage_name": "授权费清单/账单/收款闭环",
+      "coverage_ids": [
+        "FR-FE-04",
+        "FR-BL-02",
+        "FR-BL-05",
+        "FR-FE-07"
+      ],
+      "requirement_ids": [
+        "FR-FE-04",
+        "FR-BL-02",
+        "FR-BL-05",
+        "FR-FE-07"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在 GRANT_FEE 草单。",
+      "steps_summary": "将 GOV 项生成 PayList(Type=GRANT) 并登记缴费；从草单生成账单；客户付款并冲销。",
+      "expected": "授权费官费清单、账单、收款和 CaseReceipt 全链路成功；费用查询能看见官方缴费与客户收款两部分。",
+      "automation_recommendation": "API+DB+UI。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-009",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "年费初始化触发",
+      "stage_code": null,
+      "stage_name": "年费初始化触发",
+      "coverage_ids": [
+        "FR-FE-06"
+      ],
+      "requirement_ids": [
+        "FR-FE-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "TC-G0-001 成功；IsFeeMonitor=true。",
+      "steps_summary": "授权完成后检查是否创建 AnnuityTask 初始记录。",
+      "expected": "按 FirstAnnuityYear 和 ValidUntil 生成年费任务或具备后续滚动生成条件；未监视案件不应初始化年费任务。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-G0-010",
+      "wave": "G0",
+      "wave_title": "G0 授权阶段",
+      "context": "授权节点：GRANT_NOTICE → 授权费时限/草单/账单 → 年费初始化 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "授权服务费提成",
+      "stage_code": null,
+      "stage_name": "授权服务费提成",
+      "coverage_ids": [
+        "FR-COM-02",
+        "FR-COM-04",
+        "FR-COM-06"
+      ],
+      "requirement_ids": [
+        "FR-COM-02",
+        "FR-COM-04",
+        "FR-COM-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "授权费账单含 SERVICE 项；存在授权阶段提成规则。",
+      "steps_summary": "触发提成计算并查看是否进入 S2 可结算判断。",
+      "expected": "授权阶段服务费进入 Commission；可作为 S2 结算关键节点；满足状态+回款阈值后进入可结算列表。",
+      "automation_recommendation": "服务层+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_g0",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    }
+  ]
+}

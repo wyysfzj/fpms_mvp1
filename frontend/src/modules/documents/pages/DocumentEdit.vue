@@ -95,11 +95,24 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="案件编号" prop="case_id" :error="fieldErrors.get('case_id')?.join(', ')">
-                <el-input
-                  v-model.trim="form.case_id"
-                  placeholder="请输入关联案件编号"
+                <el-select
+                  v-model="form.case_id"
+                  filterable
+                  clearable
+                  :loading="caseOptionsLoading"
+                  placeholder="请选择案件"
                   class="full-width"
-                />
+                >
+                  <el-option
+                    v-for="caseItem in caseOptions"
+                    :key="caseItem.id"
+                    :label="formatCaseOption(caseItem)"
+                    :value="caseItem.id"
+                  />
+                </el-select>
+                <div class="field-hint">
+                  <router-link to="/cases">查看案件列表</router-link> 以确认案卷号
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
@@ -146,6 +159,8 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { getCase, getCases } from '../../../api/cases'
+import type { Case } from '../../../api/cases.types'
 import { getDocument, getDocTemplates, updateDocument } from '../../../api/documents'
 import type { DocTemplate, Document, DocumentUpdatePayload } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
@@ -162,6 +177,8 @@ const error = ref<ApiError | null>(null)
 const docData = ref<Document | null>(null)
 const docTemplates = ref<DocTemplate[]>([])
 const fieldErrors = ref<Map<string, string[]>>(new Map())
+const caseOptionsLoading = ref(false)
+const caseOptions = ref<Case[]>([])
 
 const form = reactive<DocumentUpdatePayload>({
   title: '',
@@ -211,10 +228,42 @@ async function fetchDocument() {
     form.doc_date = docData.value.doc_date || ''
     form.doc_type = docData.value.doc_type || undefined
     form.description = docData.value.description || ''
+    await ensureCurrentCaseOption(form.case_id)
   } catch (err) {
     error.value = err as ApiError
   } finally {
     loading.value = false
+  }
+}
+
+function formatCaseOption(caseItem: Case): string {
+  const title = caseItem.title ? ` · ${caseItem.title}` : ''
+  const client = caseItem.client_name ? ` · ${caseItem.client_name}` : ''
+  return `${caseItem.case_no}${title}${client}`
+}
+
+async function fetchCaseOptions() {
+  caseOptionsLoading.value = true
+  try {
+    const result = await getCases({ page: 1, page_size: 100 })
+    caseOptions.value = result.items
+    await ensureCurrentCaseOption(form.case_id)
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    caseOptionsLoading.value = false
+  }
+}
+
+async function ensureCurrentCaseOption(caseId?: string): Promise<void> {
+  if (!caseId || caseOptions.value.some((caseItem) => caseItem.id === caseId)) {
+    return
+  }
+  try {
+    const caseItem = await getCase(caseId)
+    caseOptions.value = [caseItem, ...caseOptions.value]
+  } catch {
+    // Keep the saved case id in the form; backend validation handles stale references.
   }
 }
 
@@ -256,6 +305,7 @@ function handleCancel() {
 
 onMounted(() => {
   fetchDocument()
+  fetchCaseOptions()
   getDocTemplates({ enabled: true, page_size: 100 })
     .then((result) => {
       docTemplates.value = result.items

@@ -59,6 +59,24 @@ def _create_case(
         payload["recv_date"] = recv_date
     if app_no is not None:
         payload["app_no"] = app_no
+    if status != "NOT_FILED":
+        payload.setdefault("app_no", _uid("CASE-RPT-APP"))
+        default_filing_date = (
+            "2025-01-01"
+            if status in {"GRANTED", "TERMINATED", "INVALIDATED", "WITHDRAWN", "ABANDONED"}
+            else "2026-01-01"
+        )
+        payload.setdefault("filing_date", default_filing_date)
+    if status == "PUBLISHED":
+        payload.setdefault("pub_no", _uid("CASE-RPT-PUB"))
+        payload.setdefault("pub_date", "2026-01-15")
+    if status == "GRANTED":
+        payload.setdefault("pub_no", _uid("CASE-RPT-PUB"))
+        payload.setdefault("pub_date", "2026-01-15")
+        payload.setdefault("grant_no", _uid("CASE-RPT-GRANT"))
+        payload.setdefault("grant_date", "2026-02-01")
+        payload.setdefault("first_annuity_year", 1)
+        payload.setdefault("valid_until", "2046-01-01")
     if country is not None:
         payload["from_country"] = country
     if primary_agent_id is not None:
@@ -117,7 +135,7 @@ def test_get_cases_returns_case_report_summary_and_preserves_list_contract(
         auth_headers,
         client_id=client_a,
         case_type="NORMAL",
-        patent_category="DES",
+        patent_category="INV",
         status="PENDING",
         filing_date="2026-01-10",
         app_no="CASE-RPT-001",
@@ -188,7 +206,7 @@ def test_get_cases_supports_case_report_filters(
         auth_headers,
         client_id=client_a,
         case_type="SEARCH",
-        patent_category="DES",
+        patent_category="INV",
         status="PENDING",
         recv_date=(today - timedelta(days=10)).isoformat(),
         app_no="CASE-RPT-011",

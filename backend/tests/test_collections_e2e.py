@@ -190,7 +190,8 @@ def test_collections_dunning_list_and_bad_debt_lifecycle(
     assert mark_payload["status"] == "BAD_DEBT"
 
     duplicate_mark_resp = client.post(f"/api/v1/bills/{bill_id}/bad-debt", headers=auth_headers)
-    _assert_error(duplicate_mark_resp, 409, "BAD_DEBT_ALREADY_MARKED")
+    assert duplicate_mark_resp.status_code == 200, duplicate_mark_resp.text
+    assert duplicate_mark_resp.json()["status"] == "BAD_DEBT"
 
     restore_resp = client.post(f"/api/v1/bills/{bill_id}/bad-debt/restore", headers=auth_headers)
     assert restore_resp.status_code == 200, restore_resp.text

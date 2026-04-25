@@ -1,0 +1,24 @@
+- id: DS-TPL-TASK-001
+  code: APPLY_FEE_LIMIT
+  base: CASE_EVENT/FILING_DATE
+  purpose: 新案申请费时限
+- id: DS-TPL-TASK-002
+  code: EXAM_REQUEST_LIMIT
+  base: FILING_DATE
+  purpose: 实审请求时限
+- id: DS-TPL-TASK-003
+  code: OA_REPLY_LIMIT
+  base: DISPATCH_DATE/OfficialDueDate
+  purpose: OA 答复时限
+- id: DS-TPL-TASK-004
+  code: GRANT_CERT_FEE_LIMIT
+  base: GRANT_DATE/IssueDate
+  purpose: 授权费时限
+- id: DS-TPL-TASK-005
+  code: PCT_NATIONAL_ENTRY_LIMIT
+  base: CUSTOM/CASE_EVENT
+  purpose: 国家阶段进入时限
+- id: DS-TPL-TASK-006
+  code: INVALID_DEFENSE_LIMIT
+  base: DISPATCH_DATE
+  purpose: 无效答辩/举证期限

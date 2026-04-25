@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 案内登记来文 - 影响预览</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="active">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>官方来文必须绑定来源文件；提交前先形成影响计划，由用户确认后再落账。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">案件内文书登记</div>
+          <h1>官方来文影响预览</h1>
+          <p>登记来文时必须绑定已核验来源文件，系统试跑规则并展示状态、任务、费用和文件状态影响。</p>
+        </div>
+        <button class="btn primary">确认并登记来文</button>
+      </section>
+      <section class="grid two">
+        <div class="card">
+          <h2>文书事件信息</h2>
+          <div class="form-grid">
+            <label>方向<input value="官方来文"></label>
+            <label>文书类型<input value="第一次审查意见通知书"></label>
+            <label>模板代码<input value="OA_NOTICE"></label>
+            <label>发文日<input value="2026-03-01"></label>
+            <label>官方绝限<input value="2026-07-01"></label>
+            <label>来源文件<input value="第一次审查意见通知书.pdf"></label>
+          </div>
+          <div class="notice ok"><b>来源文件已核验</b><span>文件状态将从“已核验待事件化”变为“已形成文书事件”。</span></div>
+        </div>
+        <div class="card">
+          <h2>影响计划</h2>
+          <table class="data-table compact">
+            <tbody>
+              <tr><th>匹配规则</th><td>RULE-OA-NOTICE-01</td></tr>
+              <tr><th>申请状态</th><td>实审 → 一通</td></tr>
+              <tr><th>客户状态</th><td>实审 → 一通待转达</td></tr>
+              <tr><th>任务</th><td>生成 OA 答复时限任务</td></tr>
+              <tr><th>费用</th><td>不生成；答复提交时再计费</td></tr>
+              <tr><th>确认要求</th><td>普通规则，流程人员可确认</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="card">
+        <h2>特殊规则提示</h2>
+        <div class="lane-board">
+          <div><b>专利证书</b><span>只改客户服务状态为领证，不重复生成授权费。</span></div>
+          <div><b>专利权终止通知</b><span>必须律师确认，可能生成恢复决策任务。</span></div>
+          <div><b>延长期限审批通知</b><span>只提示调整时限，不自动改案件状态。</span></div>
+        </div>
+      </section>
+    </main>
+</div>
+</body>
+</html>

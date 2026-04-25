@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 案件详情 - 卷宗事件账本</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="active">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>时间线以文书事件为中心，每条事件都显示来源文件、影响计划和已落账效果。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">案卷详情</div>
+          <h1>卷宗事件账本</h1>
+          <p>文件不直接改案件；文件形成文书事件，文书事件确认后才落状态、任务、费用和文件状态。</p>
+        </div>
+        <button class="btn primary">登记新事件</button>
+      </section>
+      <section class="timeline ledger">
+        <div>
+          <b>客户新申请委托</b>
+          <span>来源：客户委托邮件.eml、说明书.docx、权利要求书.docx。影响：客户状态变为收案处理中，生成补委托书任务。</span>
+          <em>已落账 · 2026-04-21 · 幂等键 CLIENT_INTAKE:25F0411CN</em>
+        </div>
+        <div>
+          <b>补交委托书</b>
+          <span>来源：委托书签章版.pdf。影响：委托书要求项变为已满足，补件任务自动完成。</span>
+          <em>待确认 · 来源文件已核验</em>
+        </div>
+        <div>
+          <b>递交清单</b>
+          <span>来源：最终递交材料包。影响：申请状态从未递交变为等待受理，生成申请费时限任务。</span>
+          <em>未发生 · 等待递交门禁通过</em>
+        </div>
+      </section>
+      <section class="grid two">
+        <div class="card"><h2>关联文件状态</h2><table class="data-table compact"><tbody>
+          <tr><td>说明书.docx</td><td>收案稿</td><td><span class="tag ok">已归档</span></td></tr>
+          <tr><td>说明书-最终稿.docx</td><td>最终递交稿</td><td><span class="tag warn">待客户确认</span></td></tr>
+          <tr><td>委托书签章版.pdf</td><td>递交前必需</td><td><span class="tag review">待确认</span></td></tr>
+        </tbody></table></div>
+        <div class="card"><h2>审计摘要</h2><div class="audit-list"><span>每次影响计划保留提交人、确认人、覆盖原因。</span><span>重复上传同一文件只新增文件状态，不重复生成任务。</span><span>特殊规则必须人工确认后落账。</span></div></div>
+      </section>
+    </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,14 @@
+references:
+- original: DS-BIO-UNIT-001
+  status: placeholder_required
+  suggested_canonical: null
+  reason: 用例引用了菌种保藏单位种子，但共享数据段未显式给出此记录，需要在目标环境补建或由自动化 seed 脚本创建。
+  appears_in:
+  - TC-W0-006
+  - TC-A-002
+- original: DS-CN
+  status: alias_inferred
+  suggested_canonical: DS-CTY-CN
+  reason: 测试用例引用国家数据时使用了缩写 DS-CN；共享数据集中唯一匹配的国家种子为 DS-CTY-CN。
+  appears_in:
+  - TC-A-001

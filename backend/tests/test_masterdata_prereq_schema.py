@@ -36,15 +36,22 @@ def test_masterdata_models_expose_frozen_minimal_columns(tmp_path) -> None:
     Base.metadata.create_all(engine)
 
     for model, table_name in ((Applicant, "t_applicant"), (Country, "t_country")):
-        assert model.__tablename__ == table_name
-        assert set(model.__table__.columns.keys()) == {
+        expected_columns = {
             "id",
             "code",
             "name_cn",
             "name_en",
             "is_active",
         }
+        if table_name == "t_applicant":
+            expected_columns.add("applicant_type")
+        assert model.__tablename__ == table_name
+        assert set(model.__table__.columns.keys()) == expected_columns
         assert getattr(model.__table__.c.is_active.server_default.arg, "text", None) in {"1"}
+        if table_name == "t_applicant":
+            assert getattr(model.__table__.c.applicant_type.server_default.arg, "text", None) in {
+                "'ENTITY'"
+            }
 
     inspector = inspect(engine)
     assert "t_applicant" in inspector.get_table_names()
@@ -52,7 +59,10 @@ def test_masterdata_models_expose_frozen_minimal_columns(tmp_path) -> None:
 
     for table_name in ("t_applicant", "t_country"):
         db_columns = {column["name"] for column in inspector.get_columns(table_name)}
-        assert db_columns == {"id", "code", "name_cn", "name_en", "is_active"}
+        expected_columns = {"id", "code", "name_cn", "name_en", "is_active"}
+        if table_name == "t_applicant":
+            expected_columns.add("applicant_type")
+        assert db_columns == expected_columns
 
         uniques = {
             tuple(constraint["column_names"])
@@ -83,7 +93,10 @@ def test_masterdata_prereq_migration_creates_expected_schema(tmp_path, monkeypat
 
     for table_name in ("t_applicant", "t_country"):
         db_columns = {column["name"] for column in inspector.get_columns(table_name)}
-        assert db_columns == {"id", "code", "name_cn", "name_en", "is_active"}
+        expected_columns = {"id", "code", "name_cn", "name_en", "is_active"}
+        if table_name == "t_applicant":
+            expected_columns.add("applicant_type")
+        assert db_columns == expected_columns
 
         unique_sets = {
             tuple(constraint["column_names"])

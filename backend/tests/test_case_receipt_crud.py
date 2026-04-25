@@ -1,4 +1,5 @@
 """Tests for CaseReceipt manual CRUD (FR-FE-07)."""
+
 from __future__ import annotations
 
 from decimal import Decimal
@@ -27,6 +28,7 @@ def case_id(client: TestClient, auth_headers: dict) -> str:
 
 
 # --- CREATE ---
+
 
 def test_create_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
     resp = client.post(
@@ -137,6 +139,7 @@ def test_create_user_override_prepayment(client: TestClient, auth_headers: dict,
 
 # --- UPDATE ---
 
+
 def test_update_case_receipt_success(client: TestClient, auth_headers: dict, case_id: str):
     create_resp = client.post(
         "/api/v1/case-receipts",
@@ -182,6 +185,7 @@ def test_update_not_found(client: TestClient, auth_headers: dict):
 
 
 # --- LIST ---
+
 
 def test_list_case_receipts_no_filter(client: TestClient, auth_headers: dict, case_id: str):
     client.post(
@@ -263,8 +267,11 @@ def test_list_pagination(client: TestClient, auth_headers: dict):
 
 # --- PERMISSIONS ---
 
+
 def test_permissions_create(client: TestClient):
-    resp = client.post("/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"})
+    resp = client.post(
+        "/api/v1/case-receipts", json={"case_id": "x", "receivable_amt": "1", "received_amt": "1"}
+    )
     assert resp.status_code == 401
 
 
@@ -274,6 +281,7 @@ def test_permissions_update(client: TestClient):
 
 
 # --- INTEGRATION ---
+
 
 def test_manual_receipt_no_conflict_with_auto(client: TestClient, auth_headers: dict, case_id: str):
     resp = client.post(

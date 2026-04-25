@@ -25,7 +25,24 @@ def _unique_case_no() -> str:
     return f"WZ-{uuid4().hex[:8].upper()}"
 
 
+def _create_applicant(client: TestClient, auth_headers: dict[str, str]) -> dict:
+    suffix = uuid4().hex[:8].upper()
+    resp = client.post(
+        "/api/v1/applicants",
+        headers=auth_headers,
+        json={
+            "code": f"WZ-AP-{suffix}",
+            "name_cn": f"Wizard测试申请人-{suffix}",
+            "applicant_type": "ENTITY",
+            "is_active": True,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
+    applicant = _create_applicant(client, auth_headers)
     resp = client.post(
         CASE_BASE,
         headers=auth_headers,
@@ -35,6 +52,14 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": "Wizard Test Case",
+            "applicants": [
+                {
+                    "seq": 1,
+                    "is_first": True,
+                    "applicant_id": applicant["id"],
+                    "name_cn": applicant["name_cn"],
+                }
+            ],
         },
     )
     assert resp.status_code == 201, resp.text

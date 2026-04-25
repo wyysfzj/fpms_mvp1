@@ -40,6 +40,7 @@ export const MENU_GROUPS: MenuGroup[] = [
         children: [
             { key: 'clients', label: '客户管理', icon: '👥', route: '/clients', requiredPerms: [Perms.CLIENTS_READ] },
             { key: 'cases', label: '案件管理', icon: '📂', route: '/cases', requiredPerms: [Perms.CASES_READ] },
+            { key: 'documents', label: '文书管理', icon: '📄', route: '/documents', requiredPerms: [Perms.DOCUMENTS_READ] },
             { key: 'tasks', label: '任务与期限', icon: '📅', route: '/tasks', requiredPerms: [Perms.TASKS_READ] },
             {
                 key: 'task_special_search',
@@ -58,8 +59,9 @@ export const MENU_GROUPS: MenuGroup[] = [
         label: '财务',
         children: [
             { key: 'fees', label: '费用草稿', icon: '💰', route: '/fees/drafts', requiredPerms: [Perms.FEES_READ] },
+            { key: 'fee_rates', label: '费率管理', icon: '💱', route: '/fees/rates', requiredPerms: [Perms.FEE_RATE_READ] },
             { key: 'grant_fee_tasks', label: '授权费任务', icon: '🧾', route: '/grant-fee/tasks', requiredPerms: ['GrantFeeTask.Read'] },
-            { key: 'fee_management_pay_lists', label: '官费清单', icon: '📑', route: '/fee-management/pay-lists', requiredPerms: [Perms.BILLING_WRITE] },
+            { key: 'fee_management_pay_lists', label: '官费清单', icon: '📑', route: '/fee-management/pay-lists', requiredPerms: [Perms.PAY_LIST_READ] },
             { key: 'bills', label: '账单管理', icon: '🧾', route: '/billing/bills', requiredPerms: [Perms.BILLING_READ] },
             { key: 'payments', label: '回款与核销', icon: '💳', route: '/billing/payments', requiredPerms: [Perms.BILLING_READ] },
             {
@@ -72,14 +74,14 @@ export const MENU_GROUPS: MenuGroup[] = [
             { key: 'offsets', label: '冲销管理', icon: '🔄', route: '/billing/offsets', requiredPerms: [Perms.BILLING_READ] },
             { key: 'case_receipts', label: '个案收款登记', icon: '📋', route: '/billing/case-receipts', requiredPerms: [Perms.BILLING_READ] },
             { key: 'expenses', label: '支出管理', icon: '📉', route: '/expenses', requiredPerms: [Perms.FEES_WRITE] },
-            { key: 'commission_rules', label: '提成规则', icon: '🧮', route: '/commission/rules', requiredPerms: [Perms.FEES_WRITE] },
-            { key: 'commission_records', label: '提成记录', icon: '📚', route: '/commission', requiredPerms: [Perms.FEES_WRITE] },
+            { key: 'commission_rules', label: '提成规则', icon: '🧮', route: '/commission/rules', requiredPerms: [Perms.COMMISSION_RULE_READ] },
+            { key: 'commission_records', label: '提成记录', icon: '📚', route: '/commission', requiredPerms: [Perms.COMMISSION_READ] },
             {
                 key: 'commission_settlements',
                 label: '提成结算',
                 icon: '📊',
                 route: '/commission/settlements',
-                requiredPerms: [Perms.BILLING_WRITE],
+                requiredPerms: [Perms.COMMISSION_SETTLEMENT_CREATE, Perms.COMMISSION_REPORT_READ],
             },
             {
                 key: 'consulting_profitability',
@@ -96,14 +98,22 @@ export const MENU_GROUPS: MenuGroup[] = [
         children: [
             { key: 'settings', label: '系统配置', icon: '⚙️', route: '/system/params', requiredPerms: [Perms.SETTINGS_READ] },
             {
+                key: 'settings_masterdata_home',
+                label: '主数据入口',
+                icon: '🗂️',
+                route: '/settings/masterdata',
+                requiredPerms: [Perms.APPLICANT_READ, Perms.COUNTRY_READ, Perms.DEPARTMENT_READ],
+            },
+            {
                 key: 'settings_masterdata_departments',
                 label: '部门主数据',
                 icon: '🏢',
                 route: '/settings/masterdata/departments',
-                requiredPerms: ['Department.Read'],
+                requiredPerms: [Perms.DEPARTMENT_READ],
             },
             { key: 'task_templates', label: '任务模板', icon: '📋', route: '/system/task-templates', requiredPerms: [Perms.SETTINGS_READ] },
             { key: 'doc_templates', label: '文件模板', icon: '📄', route: '/system/doc-templates', requiredPerms: [Perms.SETTINGS_READ] },
+            { key: 'letterheads', label: '信纸抬头', icon: '🏷️', route: '/system/letterheads', requiredPerms: [Perms.LETTERHEAD_READ] },
         ],
     },
 ]

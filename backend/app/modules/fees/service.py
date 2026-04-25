@@ -17,6 +17,7 @@ from app.modules.cases.models import Case, T_CaseAgentSplit
 from app.modules.fees.enums import FeeDraftStatus, FeeType
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
 from app.modules.fees.schemas import (
+    ApplyFeeDraftGenerateIn,
     FeeDraftCreateIn,
     FeeDraftUpdateIn,
     FeeItemCreateIn,
@@ -36,6 +37,15 @@ _CONSULTING_DRAFT_TYPE_MAP = {
 _CONSULTING_MODES = {"FIXED", "HOURLY", "HYBRID"}
 _MONEY_QUANT = Decimal("0.01")
 _QTY_QUANT = Decimal("0.0001")
+_APPLY_FEE_DRAFT_TYPE = "APPLY_FEE"
+_APPLY_FEE_BASE_GOV_CODE = "APPLY_BASE_GOV"
+_APPLY_FEE_EXCESS_CLAIM_CODE = "APPLY_EXCESS_CLAIM"
+_APPLY_FEE_SERVICE_CODE = "APPLY_SERVICE"
+_APPLY_FEE_REQUIRED_CODES = (
+    _APPLY_FEE_BASE_GOV_CODE,
+    _APPLY_FEE_EXCESS_CLAIM_CODE,
+    _APPLY_FEE_SERVICE_CODE,
+)
 
 
 def _normalize_optional_text(value: str | None) -> str | None:
@@ -586,6 +596,209 @@ def create_fee_draft(db: Session, *, data: FeeDraftCreateIn, actor_id: str | Non
     return draft
 
 
+def _money(value: Decimal) -> Decimal:
+    return Decimal(value).quantize(_MONEY_QUANT, rounding=ROUND_HALF_UP)
+
+
+def _normalize_ratio(value: Decimal | str | None, *, default: Decimal) -> Decimal:
+    if value is None:
+        return default
+    try:
+        ratio = Decimal(value)
+    except (InvalidOperation, TypeError, ValueError):
+        return default
+    if ratio < Decimal("0"):
+        return Decimal("0")
+    if ratio > Decimal("1"):
+        return Decimal("1")
+    return ratio
+
+
+def _enabled_fee_rates_by_code(
+    db: Session, *, fee_codes: tuple[str, ...], currency: str
+) -> dict[str, FeeRate]:
+    rates = (
+        db.execute(
+            select(FeeRate).where(
+                FeeRate.fee_code.in_(fee_codes),
+                FeeRate.currency == currency,
+                FeeRate.enabled.is_(True),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {rate.fee_code: rate for rate in rates}
+
+
+def _assert_apply_fee_supported_case(case: Case) -> None:
+    if (
+        case.case_type != "NORMAL"
+        or case.flow_dir != "CN_DOMESTIC"
+        or case.patent_category != "INV"
+    ):
+        raise_business_error(
+            "APPLY_FEE_UNSUPPORTED_CASE",
+            "Apply fee draft generation only supports domestic invention cases",
+            details={
+                "case_id": case.id,
+                "case_type": case.case_type,
+                "flow_dir": case.flow_dir,
+                "patent_category": case.patent_category,
+            },
+            status_code=400,
+        )
+
+
+def _existing_open_apply_fee_draft(db: Session, *, case_id: str, currency: str) -> FeeDraft | None:
+    return (
+        db.execute(
+            select(FeeDraft)
+            .where(
+                FeeDraft.case_id == case_id,
+                FeeDraft.draft_type == _APPLY_FEE_DRAFT_TYPE,
+                FeeDraft.currency == currency,
+                FeeDraft.status == FeeDraftStatus.OPEN.value,
+            )
+            .order_by(FeeDraft.created_at.asc(), FeeDraft.id.asc())
+        )
+        .scalars()
+        .first()
+    )
+
+
+def _add_apply_fee_item(
+    db: Session,
+    *,
+    draft: FeeDraft,
+    rate: FeeRate,
+    quantity: Decimal,
+    unit_price: Decimal,
+    amount: Decimal,
+    remark: str,
+    actor_id: str | None,
+) -> None:
+    db.add(
+        FeeItem(
+            id=str(uuid4()),
+            draft_id=draft.id,
+            case_id=draft.case_id,
+            rate_id=rate.id,
+            fee_code=rate.fee_code,
+            fee_name=rate.fee_name,
+            fee_type=rate.fee_type,
+            quantity=quantity.quantize(_QTY_QUANT),
+            unit_price=_money(unit_price),
+            amount=_money(amount),
+            remark=remark,
+            created_by=actor_id,
+            updated_by=actor_id,
+        )
+    )
+
+
+def generate_apply_fee_draft(
+    db: Session, *, data: ApplyFeeDraftGenerateIn, actor_id: str | None
+) -> tuple[FeeDraft, bool]:
+    case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+    _assert_apply_fee_supported_case(case)
+
+    currency = (data.currency or "CNY").strip().upper()
+    existing = _existing_open_apply_fee_draft(db, case_id=case.id, currency=currency)
+    if existing:
+        return existing, False
+
+    rates_by_code = _enabled_fee_rates_by_code(
+        db,
+        fee_codes=_APPLY_FEE_REQUIRED_CODES,
+        currency=currency,
+    )
+    missing_fee_codes = [
+        fee_code for fee_code in _APPLY_FEE_REQUIRED_CODES if fee_code not in rates_by_code
+    ]
+    if missing_fee_codes:
+        raise_business_error(
+            "APPLY_FEE_RATE_MISSING",
+            "Required apply fee rates are missing",
+            details={"missing_fee_codes": missing_fee_codes, "currency": currency},
+            status_code=409,
+        )
+
+    fee_reduction_ratio = _normalize_ratio(case.fee_reduction, default=Decimal("1"))
+    discount_ratio = _normalize_ratio(
+        data.discount_rate or case.discount_rate, default=Decimal("0")
+    )
+    claim_count = Decimal(case.claim_count or 0)
+    excess_claim_count = max(claim_count - Decimal("10"), Decimal("0"))
+
+    base_rate = rates_by_code[_APPLY_FEE_BASE_GOV_CODE]
+    excess_rate = rates_by_code[_APPLY_FEE_EXCESS_CLAIM_CODE]
+    service_rate = rates_by_code[_APPLY_FEE_SERVICE_CODE]
+
+    base_unit = Decimal(base_rate.default_amount or 0)
+    excess_unit = Decimal(excess_rate.default_amount or 0)
+    service_unit = Decimal(service_rate.default_amount or 0)
+
+    base_amount = _money(base_unit * fee_reduction_ratio)
+    excess_amount = _money(excess_unit * excess_claim_count * fee_reduction_ratio)
+    service_amount = _money(service_unit * (Decimal("1") - discount_ratio))
+
+    draft = FeeDraft(
+        id=str(uuid4()),
+        case_id=case.id,
+        client_id=case.client_id,
+        draft_type=_APPLY_FEE_DRAFT_TYPE,
+        currency=currency,
+        status=FeeDraftStatus.OPEN.value,
+        total_gov=base_amount + excess_amount,
+        total_service=service_amount,
+        total_misc=Decimal("0"),
+        amount=base_amount + excess_amount + service_amount,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(draft)
+    db.flush()
+
+    _add_apply_fee_item(
+        db,
+        draft=draft,
+        rate=base_rate,
+        quantity=Decimal("1"),
+        unit_price=base_unit,
+        amount=base_amount,
+        remark="apply fee base official fee",
+        actor_id=actor_id,
+    )
+    if excess_claim_count > 0:
+        _add_apply_fee_item(
+            db,
+            draft=draft,
+            rate=excess_rate,
+            quantity=excess_claim_count,
+            unit_price=excess_unit,
+            amount=excess_amount,
+            remark="apply fee excess claim fee",
+            actor_id=actor_id,
+        )
+    _add_apply_fee_item(
+        db,
+        draft=draft,
+        rate=service_rate,
+        quantity=Decimal("1"),
+        unit_price=service_unit,
+        amount=service_amount,
+        remark="apply fee service fee",
+        actor_id=actor_id,
+    )
+
+    db.commit()
+    db.refresh(draft)
+    return draft, True
+
+
 def update_fee_draft(
     db: Session,
     *,
@@ -698,6 +911,13 @@ def add_fee_item(
     unit_price = data.unit_price if data.unit_price is not None else rate.default_amount
     if unit_price is None:
         unit_price = Decimal("0")
+    if Decimal(quantity) < Decimal("0") or Decimal(unit_price) < Decimal("0"):
+        raise_business_error(
+            "FEE_ITEM_AMOUNT_INVALID",
+            "Fee item quantity and unit price must be non-negative",
+            status_code=400,
+            details={"quantity": str(quantity), "unit_price": str(unit_price)},
+        )
     amount = Decimal(quantity) * Decimal(unit_price)
 
     item = FeeItem(
@@ -748,6 +968,13 @@ def update_fee_item(
 
     quantity = item.quantity if item.quantity is not None else Decimal("1")
     unit_price = item.unit_price if item.unit_price is not None else Decimal("0")
+    if Decimal(quantity) < Decimal("0") or Decimal(unit_price) < Decimal("0"):
+        raise_business_error(
+            "FEE_ITEM_AMOUNT_INVALID",
+            "Fee item quantity and unit price must be non-negative",
+            status_code=400,
+            details={"quantity": str(quantity), "unit_price": str(unit_price)},
+        )
     if "quantity" in updates or "unit_price" in updates:
         item.amount = Decimal(quantity) * Decimal(unit_price)
 

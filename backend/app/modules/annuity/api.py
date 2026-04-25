@@ -62,7 +62,7 @@ class GovPaymentCreateIn(BaseModel):
     pay_list_id: int
     fee_item_id: str = Field(..., min_length=1, max_length=36)
     paid_date: date | None = None
-    paid_amount: Decimal | None = Field(default=None, gt=0)
+    paid_amount: Decimal | None = None
     official_receipt_no: str | None = Field(default=None, max_length=64)
     remark: str | None = None
 

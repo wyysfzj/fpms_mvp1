@@ -19,9 +19,9 @@
       </el-col>
       <el-col :xs="24" :sm="12" :md="6" :lg="5">
         <el-input
-          v-model.trim="filters.case_id"
+          v-model.trim="filters.case_no"
           aria-label="案件筛选"
-          placeholder="案件编号"
+          placeholder="案卷号"
           clearable
           @keyup.enter="onFilterChange"
         />
@@ -85,7 +85,11 @@
     <div v-else class="page-table">
       <el-table :data="records" aria-label="提成记录列表" stripe size="small" class="compact-table">
         <el-table-column prop="id" label="编号" width="80" />
-        <el-table-column prop="case_id" label="案件编号" min-width="160" />
+        <el-table-column prop="case_no" label="案卷号" min-width="160">
+          <template #default="{ row }">
+            {{ row.case_no || row.case_id }}
+          </template>
+        </el-table-column>
         <el-table-column prop="agent_id" label="代理人编号" min-width="160">
           <template #default="{ row }">
             {{ row.agent_id || '—' }}
@@ -137,6 +141,20 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="待回款" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.wait_pay ? 'warning' : 'info'" size="small">
+              {{ row.wait_pay ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="强制结算" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.force_settle ? 'success' : 'info'" size="small">
+              {{ row.force_settle ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="settleable_date" label="可结算日期" width="130">
           <template #default="{ row }">
             {{ row.settleable_date || '—' }}
@@ -179,7 +197,7 @@ const isEmpty = computed(() => !loading.value && !error.value && total.value ===
 
 const filters = reactive({
   agent_id: '',
-  case_id: '',
+  case_no: '',
   status: '',
   settleable_date_range: [] as string[],
   created_at_range: [] as string[],
@@ -198,7 +216,7 @@ function buildParams(): CommissionListParams {
 
   return {
     agent_id: normalizeOptional(filters.agent_id),
-    case_id: normalizeOptional(filters.case_id),
+    case_no: normalizeOptional(filters.case_no),
     status: normalizeOptional(filters.status),
     settleable_date_from: settleableFrom || undefined,
     settleable_date_to: settleableTo || undefined,
@@ -230,7 +248,7 @@ function onFilterChange() {
 
 function resetFilters() {
   filters.agent_id = ''
-  filters.case_id = ''
+  filters.case_no = ''
   filters.status = ''
   filters.settleable_date_range = []
   filters.created_at_range = []

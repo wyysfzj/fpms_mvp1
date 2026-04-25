@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>09 待归档文件 - 辅助队列</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="active">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>待归档文件只负责把游离文件送回案卷动作，不成为第二条业务主线。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">辅助队列</div>
+          <h1>待归档文件</h1>
+          <p>这里处理先上传、扫描批次、历史导入和未来邮件下载文件；所有处理动作都回到案卷流程。</p>
+        </div>
+        <button class="btn primary">批量识别</button>
+      </section>
+      <section class="card">
+        <h2>游离文件包</h2>
+        <table class="data-table">
+          <thead><tr><th>来源</th><th>主题/批次</th><th>文件数</th><th>建议动作</th><th>可信度</th><th>入口</th></tr></thead>
+          <tbody>
+            <tr><td>客户邮件</td><td>高效电池管理方法新申请</td><td>5</td><td>创建新案卷</td><td><span class="tag ok">高</span></td><td>进入新建案卷</td></tr>
+            <tr><td>扫描批次</td><td>官方通知书 20260422</td><td>12</td><td>案内登记来文</td><td><span class="tag warn">中</span></td><td>匹配案卷</td></tr>
+            <tr><td>历史导入</td><td>授权证书补录</td><td>3</td><td>登记证书事件</td><td><span class="tag review">需复核</span></td><td>选择案卷</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="grid three">
+        <div class="card small"><h3>允许动作</h3><span>创建案卷、案内登记来文、补充已有案卷材料。</span></div>
+        <div class="card small"><h3>不允许动作</h3><span>不在此直接改状态、生成费用或关闭任务。</span></div>
+        <div class="card small"><h3>审计要求</h3><span>每次匹配都保留来源文件包和操作者。</span></div>
+      </section>
+    </main>
+</div>
+</body>
+</html>

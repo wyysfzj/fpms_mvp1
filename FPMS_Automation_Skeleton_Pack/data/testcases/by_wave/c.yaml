@@ -1,0 +1,357 @@
+wave: C
+wave_title: C PCT→国家阶段
+context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+cases:
+- id: TC-C-001
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C0 PCT国际案立案
+  stage_code: C0
+  stage_name: PCT国际案立案
+  coverage_ids:
+  - FR-CM-01
+  - FR-CM-05
+  - V-PCT-01
+  requirement_ids:
+  - FR-CM-01
+  - FR-CM-05
+  validation_ids:
+  - V-PCT-01
+  preconditions: DS-U-FM-01；客户 DS-CL-003；申请人 DS-AP-003；案号 CASE-C-${RUN_ID}-INTL。
+  steps_summary: 创建 CaseType=PCT_INTL 案，填写 IntlAppNo、IntlAppDate、RO、ISA、IntlPubNo/Date、IntlPubLang、NeedIPER 等。
+  expected: 案卷保存成功；PCT 国际字段持久化；状态为 PCT_INTL_EXAM 或配置默认状态；后续可登记国际阶段来文。
+  automation_recommendation: UI+DB。
+  data_refs:
+  - DS-AP-003
+  - DS-CL-003
+  - DS-U-FM-01
+  dynamic_refs:
+  - CASE-C-${RUN_ID}-INTL
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-002
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Unhappy
+  topic: C0 PCT国际必填缺失
+  stage_code: C0
+  stage_name: PCT国际必填缺失
+  coverage_ids:
+  - FR-CM-05
+  - V-PCT-01
+  requirement_ids:
+  - FR-CM-05
+  validation_ids:
+  - V-PCT-01
+  preconditions: DS-U-FM-01；PCT_INTL 新案。
+  steps_summary: 不填写 IntlAppNo 或 IntlAppDate 直接保存。
+  expected: 保存被拒并提示缺少国际申请号/日。
+  automation_recommendation: 服务层自动化。
+  data_refs:
+  - DS-U-FM-01
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-C-003
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: C1 NeedIPER 提醒
+  stage_code: C1
+  stage_name: NeedIPER 提醒
+  coverage_ids:
+  - FR-CM-05
+  - V-PCT-03
+  - FR-DL-02
+  requirement_ids:
+  - FR-CM-05
+  - FR-DL-02
+  validation_ids:
+  - V-PCT-03
+  preconditions: 已有 PCT_INTL 案，NeedIPER=true。
+  steps_summary: 保存时暂不填 IPERDate；触发相关提醒/查询逻辑；之后补录 IPERDate。
+  expected: 系统允许保存或强提示，但会在时限/提醒中标识需补录 IPERDate；补录后提醒消失，UpdatedAt 更新。
+  automation_recommendation: 人工+服务层校验。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p1
+  - happy
+  - boundary
+  status: skeleton_ready
+- id: TC-C-004
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P1
+  categories:
+  - Happy
+  topic: C1 国际阶段来文登记
+  stage_code: C1
+  stage_name: 国际阶段来文登记
+  coverage_ids:
+  - FR-WD-01
+  - FR-WD-02
+  - FR-WD-06
+  requirement_ids:
+  - FR-WD-01
+  - FR-WD-02
+  - FR-WD-06
+  validation_ids: []
+  preconditions: 已有 PCT_INTL 案；配置受理通知/检索报告/书面意见/IPER 模板。
+  steps_summary: 分别录入 OFFICIAL_IN 文档：RO 受理通知、国际检索报告、书面意见、IPER；上传附件。
+  expected: 每类来文均能登记并归档；必要字段进入 ExtraData；附件可预览下载。
+  automation_recommendation: UI+附件存储。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-C-005
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C2 国家阶段计划初始化
+  stage_code: C2
+  stage_name: 国家阶段计划初始化
+  coverage_ids:
+  - FR-DL-02
+  - FR-CM-05
+  requirement_ids:
+  - FR-DL-02
+  - FR-CM-05
+  validation_ids: []
+  preconditions: 已有 PCT_INTL 案；目标国家=CN/US/JP。
+  steps_summary: 执行国家阶段计划初始化，生成每国一条计划数据和进入期限基础信息。
+  expected: 系统生成 3 条国家阶段计划记录，状态为 PLANNED/OPEN（按实现）；每条记录含国家、预计进入期限、是否已建子案标记。
+  automation_recommendation: API+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-006
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C3 进入时限任务生成
+  stage_code: C3
+  stage_name: 进入时限任务生成
+  coverage_ids:
+  - FR-DL-02
+  - FR-DL-03
+  requirement_ids:
+  - FR-DL-02
+  - FR-DL-03
+  validation_ids: []
+  preconditions: 已有国家阶段计划；配置 PCT_NATIONAL_ENTRY_LIMIT。
+  steps_summary: 生成各国进入时限任务并检查 Worker/Supervisor/提醒日。
+  expected: 每个目标国家生成 1 条进入任务；任务与计划和母案正确关联；我的任务/监督任务可见。
+  automation_recommendation: 服务层+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-007
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C4 客户 ENTER/ABANDON 指示
+  stage_code: C4
+  stage_name: 客户 ENTER/ABANDON 指示
+  coverage_ids:
+  - FR-CM-05
+  - FR-DL-07
+  requirement_ids:
+  - FR-CM-05
+  - FR-DL-07
+  validation_ids: []
+  preconditions: 存在 CN/US/JP 进入计划。
+  steps_summary: 在国家阶段计划中将 CN、US 标记为 ENTER，JP 标记为 ABANDON；保存并查看计划状态。
+  expected: 计划状态正确变更；ABANDON 国家不再要求创建国家案；ENTER 国家保留待建子案动作。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-008
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Happy
+  topic: C5 创建国家阶段案卷
+  stage_code: C5
+  stage_name: 创建国家阶段案卷
+  coverage_ids:
+  - FR-CM-01
+  - FR-CM-05
+  requirement_ids:
+  - FR-CM-01
+  - FR-CM-05
+  validation_ids: []
+  preconditions: CN 计划状态=ENTER；母案含申请人/发明人/优先权/PCT 信息。
+  steps_summary: 基于 ENTER 计划创建 CaseType=PCT_NATIONAL 子案。
+  expected: 系统为 CN 创建新案卷；复制申请人、发明人、优先权、PCT 信息；Status=NOT_FILED；国家计划状态变为 CASE_CREATED 且记录 NationalCaseID。
+  automation_recommendation: API+DB+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - happy
+  status: skeleton_ready
+- id: TC-C-009
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P0
+  categories:
+  - Unhappy
+  topic: C5 国家阶段必填缺失
+  stage_code: C5
+  stage_name: 国家阶段必填缺失
+  coverage_ids:
+  - FR-CM-05
+  - V-PCT-02
+  requirement_ids:
+  - FR-CM-05
+  validation_ids:
+  - V-PCT-02
+  preconditions: 创建或编辑 PCT_NATIONAL 子案。
+  steps_summary: 不填写 PCT_NationalEntryDate 保存。
+  expected: 保存被拒并提示国家阶段进入日必填。
+  automation_recommendation: 服务层自动化。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p0
+  - unhappy
+  status: skeleton_ready
+- id: TC-C-010
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P1
+  categories:
+  - Unhappy
+  topic: C5 重复创建国家案
+  stage_code: C5
+  stage_name: 重复创建国家案
+  coverage_ids:
+  - FR-CM-05
+  requirement_ids:
+  - FR-CM-05
+  validation_ids: []
+  preconditions: 同一母案、同一国家计划已创建 NationalCaseID。
+  steps_summary: 再次对同一国家执行“创建国家案”。
+  expected: 系统阻止重复创建，或提示已有 NationalCaseID 并跳转现有子案。
+  automation_recommendation: API+UI。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p1
+  - unhappy
+  status: skeleton_ready
+- id: TC-C-011
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P1
+  categories:
+  - Happy
+  topic: C5 进入任务核销
+  stage_code: C5
+  stage_name: 进入任务核销
+  coverage_ids:
+  - FR-DL-04
+  - FR-DL-10
+  requirement_ids:
+  - FR-DL-04
+  - FR-DL-10
+  validation_ids: []
+  preconditions: CN 国家子案已创建；对应进入任务仍 OPEN。
+  steps_summary: 完成进入操作后核销 PCT_NATIONAL_ENTRY_LIMIT 任务。
+  expected: 任务状态变为 DONE，DoneDate 记录；TaskLog 写 MARK_DONE；计划状态保持 CASE_CREATED/ENTERED。
+  automation_recommendation: UI+DB。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p1
+  - happy
+  status: skeleton_ready
+- id: TC-C-012
+  wave: C
+  wave_title: C PCT→国家阶段
+  context: E2E 场景 C：PCT 国际 → 国家阶段计划 → 子案建立 → 接主流水线
+  priority: P2
+  categories:
+  - Happy
+  topic: C6 国家案对接主流水线
+  stage_code: C6
+  stage_name: 国家案对接主流水线
+  coverage_ids:
+  - FR-CM-07
+  - FR-WD-04
+  - FR-FE-04
+  - FR-BL-05
+  - FR-COM-02
+  requirement_ids:
+  - FR-CM-07
+  - FR-WD-04
+  - FR-FE-04
+  - FR-BL-05
+  - FR-COM-02
+  validation_ids: []
+  preconditions: 已有 PCT_NATIONAL 子案。
+  steps_summary: 对该子案执行递交、申请费、OA、授权或年费等任一后续流程 smoke。
+  expected: 国家阶段子案完全复用 A/B/G0/D/E/F/G/H 流水线；下游模块不依赖母案特殊分支。
+  automation_recommendation: 建议接口级烟测。
+  data_refs: []
+  dynamic_refs: []
+  tags:
+  - wave_c
+  - p2
+  - happy
+  status: skeleton_ready

@@ -1,0 +1,305 @@
+{
+  "wave": "H",
+  "wave_title": "H 顾问/检索",
+  "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+  "cases": [
+    {
+      "id": "TC-H-001",
+      "wave": "H",
+      "wave_title": "H 顾问/检索",
+      "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "H1 项目立案",
+      "stage_code": "H1",
+      "stage_name": "项目立案",
+      "coverage_ids": [
+        "FR-CS-01"
+      ],
+      "requirement_ids": [
+        "FR-CS-01"
+      ],
+      "validation_ids": [],
+      "preconditions": "DS-U-FM-01；客户 DS-CL-001；案号 CASE-H-${RUN_ID}-001。",
+      "steps_summary": "创建 CaseType=CONSULTING 或 SEARCH 案卷，填写项目范围、负责人、预计工时、状态 NOT_STARTED 或 IN_PROGRESS。",
+      "expected": "项目案卷保存成功；顾问专属字段持久化；可在高级案件查询中被检出。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [
+        "DS-CL-001",
+        "DS-U-FM-01"
+      ],
+      "dynamic_refs": [
+        "CASE-H-${RUN_ID}-001"
+      ],
+      "tags": [
+        "wave_h",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-H-002",
+      "wave": "H",
+      "wave_title": "H 顾问/检索",
+      "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "H2 内部任务",
+      "stage_code": "H2",
+      "stage_name": "内部任务",
+      "coverage_ids": [
+        "FR-CS-02",
+        "FR-DL-06"
+      ],
+      "requirement_ids": [
+        "FR-CS-02",
+        "FR-DL-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "顾问案已创建。",
+      "steps_summary": "创建项目内部任务，例如 CONSULT_SCOPING、SEARCH_EXECUTION、ANALYSIS_REPORT；调整责任人并核销。",
+      "expected": "任务可正常创建、编辑、DONE；不依赖官方来文；日志完整。",
+      "automation_recommendation": "API+UI。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_h",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-H-003",
+      "wave": "H",
+      "wave_title": "H 顾问/检索",
+      "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy",
+        "Boundary"
+      ],
+      "topic": "H3 项目支出",
+      "stage_code": "H3",
+      "stage_name": "项目支出",
+      "coverage_ids": [
+        "FR-CS-03",
+        "FR-FE-08",
+        "V-EX-01",
+        "V-EX-02"
+      ],
+      "requirement_ids": [
+        "FR-CS-03",
+        "FR-FE-08"
+      ],
+      "validation_ids": [
+        "V-EX-01",
+        "V-EX-02"
+      ],
+      "preconditions": "顾问案已创建。",
+      "steps_summary": "录入 SEARCH_DB、TRANSLATION、TRANSPORT 等支出；测试 Quantity*UnitPrice 与 Total 不一致的手工总额。",
+      "expected": "非负校验生效；Total 不一致时系统提示确认是否采用手工总额；支出可按案件/时间/类别查询。",
+      "automation_recommendation": "UI+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_h",
+        "p1",
+        "happy",
+        "boundary"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-H-004",
+      "wave": "H",
+      "wave_title": "H 顾问/检索",
+      "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "H4 固定报价草单",
+      "stage_code": "H4",
+      "stage_name": "固定报价草单",
+      "coverage_ids": [
+        "FR-CS-04",
+        "FR-FE-02",
+        "FR-FE-03"
+      ],
+      "requirement_ids": [
+        "FR-CS-04",
+        "FR-FE-02",
+        "FR-FE-03"
+      ],
+      "validation_ids": [],
+      "preconditions": "顾问案配置固定报价。",
+      "steps_summary": "生成 CONSULT_FEE 或 SEARCH_FEE 草单，添加固定报价服务费明细。",
+      "expected": "草单生成成功；TotalService 正确；TotalGov 一般为 0；状态为 OPEN。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_h",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-H-005",
+      "wave": "H",
+      "wave_title": "H 顾问/检索",
+      "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "H4 工时/混合报价草单",
+      "stage_code": "H4",
+      "stage_name": "工时/混合报价草单",
+      "coverage_ids": [
+        "FR-CS-04",
+        "FR-FE-02",
+        "FR-FE-03"
+      ],
+      "requirement_ids": [
+        "FR-CS-04",
+        "FR-FE-02",
+        "FR-FE-03"
+      ],
+      "validation_ids": [],
+      "preconditions": "顾问案配置按工时或混合模式。",
+      "steps_summary": "创建多条服务费明细：高级顾问工时、检索分析人工时、可转嫁杂费。",
+      "expected": "数量、单价、金额和杂费汇总正确；可同时包含 SERVICE 与 MISC。",
+      "automation_recommendation": "API+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_h",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-H-006",
+      "wave": "H",
+      "wave_title": "H 顾问/检索",
+      "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "priority": "P0",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "H5 账单/收款/CaseReceipt",
+      "stage_code": "H5",
+      "stage_name": "账单/收款/CaseReceipt",
+      "coverage_ids": [
+        "FR-CS-05",
+        "FR-BL-02",
+        "FR-BL-05",
+        "FR-FE-07"
+      ],
+      "requirement_ids": [
+        "FR-CS-05",
+        "FR-BL-02",
+        "FR-BL-05",
+        "FR-FE-07"
+      ],
+      "validation_ids": [],
+      "preconditions": "存在 CONSULT_FEE/SEARCH_FEE 草单。",
+      "steps_summary": "从草单生成账单；客户付款并冲销；查看 CaseReceipt。",
+      "expected": "项目账单和收款闭环成功；CaseReceipt 记录项目实收；费用报表可见。",
+      "automation_recommendation": "API+DB+UI。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_h",
+        "p0",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-H-007",
+      "wave": "H",
+      "wave_title": "H 顾问/检索",
+      "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy"
+      ],
+      "topic": "H6 顾问提成",
+      "stage_code": "H6",
+      "stage_name": "顾问提成",
+      "coverage_ids": [
+        "FR-CS-06",
+        "FR-COM-01",
+        "FR-COM-02",
+        "FR-COM-06"
+      ],
+      "requirement_ids": [
+        "FR-CS-06",
+        "FR-COM-01",
+        "FR-COM-02",
+        "FR-COM-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "顾问案账单含 SERVICE 项；存在 CONSULTING/SEARCH 提成规则。",
+      "steps_summary": "触发提成计算并查看结算候选。",
+      "expected": "根据顾问/检索规则创建 Commission；可为一次性提成或 S1/S2 两阶段；满足条件可进入结算批次。",
+      "automation_recommendation": "服务层+DB。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_h",
+        "p1",
+        "happy"
+      ],
+      "status": "skeleton_ready"
+    },
+    {
+      "id": "TC-H-008",
+      "wave": "H",
+      "wave_title": "H 顾问/检索",
+      "context": "E2E 场景 H：项目立案 → 内部任务/支出 → 草单/账单/收款 → 提成",
+      "priority": "P1",
+      "categories": [
+        "Happy",
+        "Unhappy"
+      ],
+      "topic": "状态关闭",
+      "stage_code": null,
+      "stage_name": "状态关闭",
+      "coverage_ids": [
+        "FR-CS-01",
+        "FR-CS-05",
+        "FR-CS-06"
+      ],
+      "requirement_ids": [
+        "FR-CS-01",
+        "FR-CS-05",
+        "FR-CS-06"
+      ],
+      "validation_ids": [],
+      "preconditions": "顾问案存在未完成任务、未结账单或未结算提成。",
+      "steps_summary": "先尝试将项目状态设为 CLOSED；再在任务完成、账单结清、提成结算后重试。",
+      "expected": "业务未完成时不应关闭或需强警告；全部闭环后状态可变为 CLOSED。",
+      "automation_recommendation": "人工+服务层自动化。",
+      "data_refs": [],
+      "dynamic_refs": [],
+      "tags": [
+        "wave_h",
+        "p1",
+        "happy",
+        "unhappy"
+      ],
+      "status": "skeleton_ready"
+    }
+  ]
+}

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.core.security import get_password_hash
+from app.db.base import Base
 from app.db.session import get_db
 from app.models import *  # noqa: F401, F403  — ensure full ORM registry before any query
 from app.modules.auth.models import T_Role, T_User, T_UserRole
@@ -68,41 +69,50 @@ def session_factory(engine) -> sessionmaker:
 @pytest.fixture(scope="session")
 def seed_data(session_factory: sessionmaker) -> None:
     with session_factory() as db:
-        seed_default_roles_perms(db)
-        admin_role = db.query(T_Role).filter(T_Role.code == "Admin").first()
-        if not admin_role:
-            raise RuntimeError("Admin role 'Admin' not found after seeding.")
-
-        admin_user = db.query(T_User).filter(T_User.username == "admin").first()
-        if not admin_user:
-            admin_user = T_User(
-                id=str(uuid4()),
-                username="admin",
-                display_name="Administrator",
-                password_hash=get_password_hash("admin123"),
-                is_active=True,
-            )
-            db.add(admin_user)
-            db.flush()
-
-        existing_binding = (
-            db.query(T_UserRole)
-            .filter(
-                T_UserRole.user_id == admin_user.id,
-                T_UserRole.role_id == admin_role.id,
-            )
-            .first()
-        )
-        if not existing_binding:
-            db.add(T_UserRole(user_id=admin_user.id, role_id=admin_role.id))
-
-        # Seed task templates (OA_REPLY, GRANT_FEE)
-        _seed_task_templates(db)
-
-        # Seed doc templates (OA_IN, OA_OUT, ACCEPTANCE_NOTICE, GRANT_NOTICE, CLIENT_IN)
-        _seed_doc_templates(db)
-
+        _seed_baseline(db)
         db.commit()
+
+
+@pytest.fixture(autouse=True)
+def _reset_test_data(session_factory: sessionmaker) -> None:
+    with session_factory() as db:
+        for table in reversed(Base.metadata.sorted_tables):
+            db.execute(table.delete())
+        _seed_baseline(db)
+        db.commit()
+
+
+def _seed_baseline(db: Session) -> None:
+    seed_default_roles_perms(db)
+    admin_role = db.query(T_Role).filter(T_Role.code == "Admin").first()
+    if not admin_role:
+        raise RuntimeError("Admin role 'Admin' not found after seeding.")
+
+    admin_user = db.query(T_User).filter(T_User.username == "admin").first()
+    if not admin_user:
+        admin_user = T_User(
+            id=str(uuid4()),
+            username="admin",
+            display_name="Administrator",
+            password_hash=get_password_hash("admin123"),
+            is_active=True,
+        )
+        db.add(admin_user)
+        db.flush()
+
+    existing_binding = (
+        db.query(T_UserRole)
+        .filter(
+            T_UserRole.user_id == admin_user.id,
+            T_UserRole.role_id == admin_role.id,
+        )
+        .first()
+    )
+    if not existing_binding:
+        db.add(T_UserRole(user_id=admin_user.id, role_id=admin_role.id))
+
+    _seed_task_templates(db)
+    _seed_doc_templates(db)
 
 
 def _seed_task_templates(db: Session) -> None:
@@ -161,7 +171,9 @@ def _seed_doc_templates(db: Session) -> None:
 
 
 @pytest.fixture
-def client(session_factory: sessionmaker, seed_data: None) -> Generator[TestClient, None, None]:
+def client(
+    session_factory: sessionmaker, _reset_test_data: None
+) -> Generator[TestClient, None, None]:
     from app.main import app
 
     def override_get_db() -> Generator[Session, None, None]:

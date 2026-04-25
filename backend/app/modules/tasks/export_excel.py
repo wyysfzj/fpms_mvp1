@@ -7,9 +7,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from app.modules.tasks.schemas import TaskListItemOut, TaskSpecialSearchItemOut
 
-TASK_LIST_EXPORT_MIME_TYPE = (
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-)
+TASK_LIST_EXPORT_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def _column_name(index: int) -> str:
@@ -41,8 +39,7 @@ def _sheet_xml(rows: list[list[object]]) -> bytes:
     row_xml_parts: list[str] = []
     for row_no, row in enumerate(rows, start=1):
         cells = "".join(
-            _cell_xml(row_no, column_no, value)
-            for column_no, value in enumerate(row, start=1)
+            _cell_xml(row_no, column_no, value) for column_no, value in enumerate(row, start=1)
         )
         row_xml_parts.append(f'<row r="{row_no}">{cells}</row>')
 

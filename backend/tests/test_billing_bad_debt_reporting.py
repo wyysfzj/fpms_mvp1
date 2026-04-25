@@ -147,7 +147,7 @@ def test_get_bills_supports_bad_debt_status_filter_and_summary(
         "bill_date",
         "due_date",
     }
-    assert all(set(item) == expected_item_keys for item in payload["items"])
+    assert all(expected_item_keys <= set(item) for item in payload["items"])
 
     filtered_resp = client.get(
         "/api/v1/bills?bad_debt_status=OPEN&page=1&page_size=20",

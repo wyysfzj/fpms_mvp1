@@ -43,6 +43,8 @@
             <span class="meta-divider">|</span>
             <span class="bill-no">{{ billDisplayNo }}</span>
             <span class="meta-divider">|</span>
+            <span>{{ billDirectionText(bill.direction) }}</span>
+            <span class="meta-divider">|</span>
             <span>{{ bill.currency }}</span>
           </div>
           <div class="case-title">
@@ -105,6 +107,10 @@
                   <div class="info-item">
                     <span class="info-label">{{ ZH.billDetail.status }}</span>
                     <span class="info-value">{{ getBillStatusDisplay(bill.status) }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">账单方向</span>
+                    <span class="info-value">{{ billDirectionText(bill.direction) }}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">{{ ZH.billDetail.client }}</span>
@@ -379,6 +385,17 @@ function formatDate(dateStr: string): string {
 function getBillStatusDisplay(status?: string): string {
   if (status === 'BAD_DEBT') return '坏账'
   return getBillStatusText(status)
+}
+
+function billDirectionText(direction?: string): string {
+  switch ((direction || '').toUpperCase()) {
+    case 'AR':
+      return '应收'
+    case 'AP':
+      return '应付'
+    default:
+      return direction || '—'
+  }
 }
 
 function getSummaries({ columns }: { columns: { property?: string; label?: string }[] }): string[] {

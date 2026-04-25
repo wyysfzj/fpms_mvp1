@@ -225,9 +225,7 @@ def list_expenses(
         client_name_map = {str(client_id): str(name_cn) for client_id, name_cn in clients}
 
     department_ids = {
-        str(department_id_value)
-        for *_, department_id_value in stats_rows
-        if department_id_value
+        str(department_id_value) for *_, department_id_value in stats_rows if department_id_value
     }
     department_name_map: dict[str, str] = {}
     if department_ids:
@@ -235,8 +233,7 @@ def list_expenses(
             select(Department.id, Department.name_cn).where(Department.id.in_(department_ids))
         ).all()
         department_name_map = {
-            str(department_id_value): str(name_cn)
-            for department_id_value, name_cn in departments
+            str(department_id_value): str(name_cn) for department_id_value, name_cn in departments
         }
 
     case_amounts_map: dict[str, dict[str, Any]] = {}
@@ -271,16 +268,15 @@ def list_expenses(
         case_row["expense_count"] += 1
         case_row["total_amount"] = _quantize_money(case_row["total_amount"] + amount_decimal)
 
-        resolved_client_id = (
-            (str(expense_client_id) if expense_client_id else "").strip()
-            or (str(case_client_id) if case_client_id else "").strip()
-        )
+        resolved_client_id = (str(expense_client_id) if expense_client_id else "").strip() or (
+            str(case_client_id) if case_client_id else ""
+        ).strip()
         client_key = resolved_client_id or "UNASSIGNED"
         client_label = (
-            client_name_map.get(resolved_client_id)
-            if resolved_client_id
-            else None
-        ) or resolved_client_id or "未分配客户"
+            (client_name_map.get(resolved_client_id) if resolved_client_id else None)
+            or resolved_client_id
+            or "未分配客户"
+        )
         client_row = client_amounts_map.setdefault(
             client_key,
             {
@@ -296,10 +292,10 @@ def list_expenses(
         resolved_department_id = (str(department_id_value) if department_id_value else "").strip()
         department_key = resolved_department_id or "UNASSIGNED"
         department_label = (
-            department_name_map.get(resolved_department_id)
-            if resolved_department_id
-            else None
-        ) or resolved_department_id or "未分配部门"
+            (department_name_map.get(resolved_department_id) if resolved_department_id else None)
+            or resolved_department_id
+            or "未分配部门"
+        )
         department_row = department_amounts_map.setdefault(
             department_key,
             {
@@ -355,23 +351,23 @@ def list_expenses(
             continue
         amount_decimal = _quantize_money(_to_decimal(amount_value, "amount"))
         currency_key = (
-            (str(expense_currency) if expense_currency else "").strip().upper() or _DEFAULT_CURRENCY
-        )
+            str(expense_currency) if expense_currency else ""
+        ).strip().upper() or _DEFAULT_CURRENCY
 
         key = (str(case_id_value), currency_key)
         expense_totals_by_case_currency[key] = _quantize_money(
             expense_totals_by_case_currency.get(key, Decimal("0.00")) + amount_decimal
         )
         case_labels_by_id[str(case_id_value)] = (
-            (str(case_no_value) if case_no_value else "").strip() or str(case_id_value)
-        )
+            str(case_no_value) if case_no_value else ""
+        ).strip() or str(case_id_value)
 
     gross_profit_amounts: list[dict[str, Any]] = []
     for case_id_value, receipt_currency, received_sum, case_no_value in receipt_rows:
         normalized_case_id = str(case_id_value)
         normalized_currency = (
-            (str(receipt_currency) if receipt_currency else "").strip().upper() or _DEFAULT_CURRENCY
-        )
+            str(receipt_currency) if receipt_currency else ""
+        ).strip().upper() or _DEFAULT_CURRENCY
         expense_total = expense_totals_by_case_currency.get(
             (normalized_case_id, normalized_currency),
             Decimal("0.00"),

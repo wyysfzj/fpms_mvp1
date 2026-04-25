@@ -1,0 +1,28 @@
+- id: DS-U-ADM
+  role: Admin
+  username_example: admin.fpms
+  note: 全权限；配置/高危操作
+- id: DS-U-FM-01
+  role: Formalities
+  username_example: formalities1
+  note: 案卷/文档/批处理/时限维护
+- id: DS-U-AG-01
+  role: Agent
+  username_example: agent.primary
+  note: 主办代理人
+- id: DS-U-AG-02
+  role: Agent
+  username_example: agent.secondary
+  note: 协办代理人
+- id: DS-U-LMT-01
+  role: Limited Agent
+  username_example: agent.limited
+  note: 仅 CaseEditLimited
+- id: DS-U-FI-01
+  role: Finance
+  username_example: finance1
+  note: 费用/账单/收款/官费清单
+- id: DS-U-SP-01
+  role: Supervisor
+  username_example: supervisor1
+  note: 监督任务和审批

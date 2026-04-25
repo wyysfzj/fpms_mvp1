@@ -20,6 +20,12 @@
         <p>后续将承载国家主数据的列表、编辑与启停用能力。</p>
         <router-link to="/settings/masterdata/countries">进入国家入口</router-link>
       </article>
+
+      <article class="card">
+        <h2>部门</h2>
+        <p>维护系统中的部门主数据，用于人员、权限和业务归属。</p>
+        <router-link to="/settings/masterdata/departments">进入部门入口</router-link>
+      </article>
     </div>
 
     <p class="note">当前任务仅建立入口骨架，具体数据管理能力将在后续任务补齐。</p>

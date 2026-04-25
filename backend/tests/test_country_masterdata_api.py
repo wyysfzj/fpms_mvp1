@@ -204,4 +204,3 @@ def test_update_country_rejects_unique_conflicts(
     )
     assert name_conflict.status_code == 400
     assert name_conflict.json()["error"]["code"] == "COUNTRY_NAME_CN_DUPLICATE"
-

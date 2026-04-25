@@ -52,14 +52,36 @@ def _create_client(client: TestClient, auth_headers: dict, **overrides) -> dict:
     return resp.json()
 
 
+def _create_applicant(client: TestClient, auth_headers: dict) -> dict:
+    suffix = uuid.uuid4().hex[:8].upper()
+    payload = {
+        "code": f"AP-{suffix}",
+        "name_cn": f"B3测试申请人-{suffix}",
+        "applicant_type": "ENTITY",
+        "is_active": True,
+    }
+    resp = client.post("/api/v1/applicants", json=payload, headers=auth_headers)
+    assert resp.status_code == 201, f"Applicant creation failed: {resp.text}"
+    return resp.json()
+
+
 def _create_case(client: TestClient, auth_headers: dict, **overrides) -> dict:
     """Create a test case, return response JSON."""
+    applicant = _create_applicant(client, auth_headers)
     payload = {
         "case_no": _unique("CASE"),
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
         "title_cn": "B3 Test Case",
+        "applicants": [
+            {
+                "seq": 1,
+                "is_first": True,
+                "applicant_id": applicant["id"],
+                "name_cn": applicant["name_cn"],
+            }
+        ],
         **overrides,
     }
     resp = client.post(CASE_BASE, json=payload, headers=auth_headers)
@@ -384,6 +406,62 @@ def test_fee_item_list_creates_items(
     # Verify case_id is set on items
     for item in items:
         assert item.case_id == case["id"]
+
+
+def test_oa_fee_template_creates_service_and_gov_items_with_totals(
+    client: TestClient, auth_headers: dict, session_factory: sessionmaker
+) -> None:
+    """OA_FEE template creates SERVICE/GOV items and stable totals."""
+    fee_items_json = json.dumps(
+        [
+            {
+                "fee_code": "OA_SERVICE",
+                "fee_name": "OA服务费",
+                "fee_type": "SERVICE",
+                "amount": "800.00",
+            },
+            {
+                "fee_code": "OA_GOV",
+                "fee_name": "OA官费",
+                "fee_type": "GOV",
+                "amount": "120.00",
+            },
+        ],
+        ensure_ascii=False,
+    )
+    tmpl = _create_doc_template(
+        client,
+        auth_headers,
+        code=f"OA-FEE-{uuid.uuid4().hex[:8].upper()}",
+        name="OA费用模板",
+        direction="OUT",
+        fee_draft_type="OA_FEE",
+        fee_item_list=fee_items_json,
+    )
+    case = _create_case(client, auth_headers)
+
+    resp = _create_document_raw(
+        client,
+        auth_headers,
+        case["id"],
+        direction="OUT",
+        doc_template_id=tmpl["id"],
+        title="OA费用答复",
+    )
+    assert resp.status_code == 201, resp.text
+    draft_id = resp.headers.get("X-Auto-Fee-Draft-Created")
+    assert draft_id is not None
+
+    detail = _get_fee_draft_detail(client, auth_headers, draft_id)
+    assert detail["draft_type"] == "OA_FEE"
+    assert float(detail["total_service"]) == 800.0
+    assert float(detail["total_gov"]) == 120.0
+    assert float(detail["total_misc"]) == 0.0
+    assert float(detail["amount"]) == 920.0
+
+    with session_factory() as db:
+        items = db.query(FeeItem).filter(FeeItem.draft_id == draft_id).all()
+    assert sorted(item.fee_type for item in items) == ["GOV", "SERVICE"]
 
 
 # ---------------------------------------------------------------------------

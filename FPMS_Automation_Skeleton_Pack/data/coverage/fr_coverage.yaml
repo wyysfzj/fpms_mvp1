@@ -1,0 +1,460 @@
+fr_coverage:
+- fr_id: FR-BL-01
+  description: 系统必须支持维护账单头 `T_Bill` 与账单明细 `T_BillItem`，包括收付方向（应收/应付）、账单状态（尚未冲销/部分冲销/已经冲销/坏账）、折扣率、坏账信息等。
+  covered_by:
+  - TC-A-019
+  - TC-X-008
+- fr_id: FR-BL-02
+  description: 系统必须支持从费用草单 `T_FeeDraft/T_FeeItem` 自动生成账单（应收为主），并绑定账单明细与原草单/费用明细。
+  covered_by:
+  - TC-A-019
+  - TC-A-020
+  - TC-B-011
+  - TC-G0-008
+  - TC-D-010
+  - TC-E-011
+  - TC-H-006
+- fr_id: FR-BL-03
+  description: 系统必须支持纯手工创建账单，允许直接录入明细行（不依赖草单），同时支持 AR（应收）与 AP（应付）方向。
+  covered_by:
+  - TC-A-020
+  - TC-X-014
+  - TC-X-015
+- fr_id: FR-BL-04
+  description: 系统必须支持基于模板系统打印/导出账单文档（中/英、不同版式）。
+  covered_by:
+  - TC-W0-012
+  - TC-X-016
+- fr_id: FR-BL-05
+  description: 系统必须支持记录收款 `T_Payment`，并通过 `T_Offset` 将收款分配到一个或多个账单上，自动更新账单余额与状态。
+  covered_by:
+  - TC-A-021
+  - TC-A-022
+  - TC-B-011
+  - TC-C-012
+  - TC-G0-008
+  - TC-D-010
+  - TC-E-011
+  - TC-F-005
+  - TC-F-006
+  - TC-F-007
+  - TC-G-005
+  - TC-G-008
+  - TC-H-006
+- fr_id: FR-BL-06
+  description: 系统必须支持对冲销记录进行反冲销（在时间/权限控制下），恢复账单余额与收款余额。
+  covered_by:
+  - TC-W0-014
+  - TC-X-013
+- fr_id: FR-BL-07
+  description: 系统必须支持将账单标记为坏账/从坏账恢复，并在催款与普通统计中区别显示。
+  covered_by:
+  - TC-G-001
+  - TC-G-007
+  - TC-G-008
+  - TC-G-009
+  - TC-X-010
+- fr_id: FR-BL-08
+  description: 系统必须支持生成催款单 `T_Dunning/T_DunningLine`，按客户+截止日期列出未结账单，并可基于模板生成催款函。
+  covered_by:
+  - TC-G-001
+  - TC-G-002
+  - TC-G-003
+  - TC-G-004
+  - TC-G-005
+  - TC-G-006
+  - TC-X-010
+- fr_id: FR-BL-09
+  description: 系统必须支持预收款管理：允许登记预收收款行，在未分配到账单时保持“预收状态”，并在后续冲销账单时从预收款中扣减。
+  covered_by:
+  - TC-W0-013
+  - TC-F-001
+  - TC-F-002
+  - TC-F-003
+  - TC-F-004
+  - TC-F-005
+  - TC-F-006
+  - TC-F-008
+  - TC-F-009
+- fr_id: FR-CM-01
+  description: 系统必须支持根据案件类型、专利类别、申请方向创建新案，案卷号在全系统唯一。
+  covered_by:
+  - TC-W0-005
+  - TC-A-001
+  - TC-A-003
+  - TC-A-004
+  - TC-C-001
+  - TC-C-008
+  - TC-E-001
+  - TC-E-003
+  - TC-X-001
+- fr_id: FR-CM-02
+  description: 保存时必须校验必填字段及组合规则（案卷号唯一、法律状态与申请号/申请日对应、优先权完整性等）。
+  covered_by:
+  - TC-A-001
+  - TC-A-002
+  - TC-A-003
+  - TC-A-005
+  - TC-A-006
+  - TC-A-008
+  - TC-A-009
+  - TC-D-013
+- fr_id: FR-CM-03
+  description: 系统必须支持从主数据中选择客户、申请人、外方代理，并允许从案卷界面跳转创建新记录后回填。
+  covered_by:
+  - TC-W0-001
+  - TC-W0-003
+  - TC-W0-004
+  - TC-A-002
+  - TC-A-005
+  - TC-A-007
+- fr_id: FR-CM-04
+  description: 系统必须维护完整的法律状态枚举，并支持由中间文件/流程自动更新。
+  covered_by:
+  - TC-A-011
+  - TC-B-008
+  - TC-G0-001
+  - TC-D-007
+  - TC-D-011
+  - TC-E-004
+  - TC-E-008
+  - TC-E-009
+  - TC-E-010
+  - TC-X-007
+  - TC-X-022
+  - TC-X-023
+  - TC-X-024
+- fr_id: FR-CM-05
+  description: 系统必须支持 A）0..n 条优先权记录，B）0..n 条菌种保藏记录，C）PCT 国际/国家阶段字段，D）无效案专属字段。
+  covered_by:
+  - TC-W0-006
+  - TC-A-002
+  - TC-C-001
+  - TC-C-002
+  - TC-C-003
+  - TC-C-005
+  - TC-C-007
+  - TC-C-008
+  - TC-C-009
+  - TC-C-010
+  - TC-E-001
+  - TC-E-002
+  - TC-E-013
+- fr_id: FR-CM-06
+  description: 系统必须提供“限制修改视图”，只允许编辑白名单字段，权限独立控制。
+  covered_by:
+  - TC-W0-014
+  - TC-A-010
+- fr_id: FR-CM-07
+  description: 系统必须提供“案件递交批处理”，依据筛选条件列出案件，并批量设置递交日期、提实审与法律状态。
+  covered_by:
+  - TC-A-011
+  - TC-A-012
+  - TC-C-012
+- fr_id: FR-COM-01
+  description: 系统必须支持维护提成规则 `T_CommissionRule`，包括一次/二次提成比例、基数计算方式和适用范围。
+  covered_by:
+  - TC-A-023
+  - TC-E-012
+  - TC-H-007
+- fr_id: FR-COM-02
+  description: 系统必须支持在服务费账单生成时，根据提成规则自动为相关案件和代理人生成或更新提成记录 `T_Commission`。
+  covered_by:
+  - TC-A-023
+  - TC-B-012
+  - TC-C-012
+  - TC-G0-010
+  - TC-D-012
+  - TC-E-012
+  - TC-E-014
+  - TC-H-007
+- fr_id: FR-COM-03
+  description: 系统必须支持多代理人（主办/协办/团队成员）按比例分摊提成基数，并分别记录各自提成金额。
+  covered_by:
+  - TC-A-023
+  - TC-B-012
+  - TC-E-014
+- fr_id: FR-COM-04
+  description: 系统必须支持 `WaitPay`（款到后才能结算）逻辑，即在相关账单收款比例未达条件时，将提成记录标记为“不可结算”。
+  covered_by:
+  - TC-W0-013
+  - TC-A-023
+  - TC-A-024
+  - TC-B-012
+  - TC-G0-010
+  - TC-D-012
+  - TC-E-012
+  - TC-F-010
+  - TC-G-010
+- fr_id: FR-COM-05
+  description: 系统必须支持 `ForceSettle`（案件可结算酬金）逻辑，以允许对特殊案件提前结算提成。
+  covered_by:
+  - TC-W0-013
+  - TC-A-024
+  - TC-F-010
+  - TC-G-010
+- fr_id: FR-COM-06
+  description: 系统必须支持提成结算批次 `T_CommissionSettlement` 的创建，与结算明细 `T_CommissionSettleLine` 的生成，并标记对应的提成记录（S1\_Done/S2\_Done）。
+  covered_by:
+  - TC-G0-010
+  - TC-E-012
+  - TC-H-007
+- fr_id: FR-COM-07
+  description: 系统必须提供提成结算报表，按代理人/案件/时间区间统计提成金额，并支持导出。
+  covered_by:
+  - TC-X-011
+- fr_id: FR-CS-01
+  description: 系统必须支持以 CaseType=CONSULTING/SEARCH 的方式为顾问/检索项目建立案卷记录，并记录项目专属属性（范围、负责人、预计工时等）。
+  covered_by:
+  - TC-W0-005
+  - TC-H-001
+  - TC-H-008
+  - TC-X-023
+- fr_id: FR-CS-02
+  description: 系统必须允许在顾问/检索案卷上创建内部任务 `T_Task`（非官方时限任务），用于项目执行管理。
+  covered_by:
+  - TC-B-005
+  - TC-H-002
+- fr_id: FR-CS-03
+  description: 系统必须支持记录顾问/检索项目的支出费用 `T_Expense`，按案件/类别/时间进行查询和统计。
+  covered_by:
+  - TC-H-003
+- fr_id: FR-CS-04
+  description: 系统必须支持为顾问/检索项目生成服务费草单 `T_FeeDraft/T_FeeItem`，支持固定报价、按工时计费或混合模式。
+  covered_by:
+  - TC-H-004
+  - TC-H-005
+- fr_id: FR-CS-05
+  description: 系统必须支持从顾问/检索草单生成账单 `T_Bill/T_BillItem`，并使用收款/冲销机制处理相关款项。
+  covered_by:
+  - TC-H-006
+  - TC-H-008
+- fr_id: FR-CS-06
+  description: 系统必须支持按照 `T_CommissionRule` 的 CONSULTING/SEARCH 规则为顾问/检索项目生成提成记录 `T_Commission`，并纳入结算批次。
+  covered_by:
+  - TC-H-007
+  - TC-H-008
+- fr_id: FR-DL-01
+  description: 系统必须支持维护时限模板（起算基准、年/月/日增量、提醒规则、默认监督人/责任人）。
+  covered_by:
+  - TC-W0-009
+  - TC-A-014
+- fr_id: FR-DL-02
+  description: 系统必须能根据时限模板，从案件事件/中间文件/年费任务中自动创建时限任务。
+  covered_by:
+  - TC-A-013
+  - TC-A-014
+  - TC-B-002
+  - TC-B-004
+  - TC-C-003
+  - TC-C-005
+  - TC-C-006
+  - TC-G0-003
+  - TC-E-005
+- fr_id: FR-DL-03
+  description: 每个时限任务必须区分“作业人”和“监督人”，并在不同视图中以不同角色展示。
+  covered_by:
+  - TC-A-013
+  - TC-B-004
+  - TC-C-006
+  - TC-G0-003
+- fr_id: FR-DL-04
+  description: 系统必须为作业人提供“我的时限任务”视图，按内部时限/官方绝限排序，支持核销/取消核销。
+  covered_by:
+  - TC-B-008
+  - TC-C-011
+  - TC-E-006
+  - TC-X-017
+- fr_id: FR-DL-05
+  description: 系统必须为监督人提供“监督时限”视图，按作业人/类型/状态/逾期情况过滤任务。
+  covered_by:
+  - TC-X-017
+- fr_id: FR-DL-06
+  description: 系统必须支持手工新增/编辑/删除时限任务（受角色/权限控制）。
+  covered_by:
+  - TC-W0-014
+  - TC-B-005
+  - TC-B-013
+  - TC-H-002
+  - TC-X-027
+- fr_id: FR-DL-07
+  description: 系统必须提供“申请费时限检索”和“实审时限检索”，用于批量查找尚未缴费/尚未提实审案件。
+  covered_by:
+  - TC-C-007
+  - TC-D-003
+  - TC-X-002
+  - TC-X-005
+  - TC-X-006
+- fr_id: FR-DL-08
+  description: 登录或进入首页时，系统必须自动查询并展示当前用户相关的“今日提醒清单”。
+  covered_by:
+  - TC-X-017
+- fr_id: FR-DL-09
+  description: 系统必须允许将任意时限列表导出/打印为期限清单。
+  covered_by:
+  - TC-X-017
+- fr_id: FR-DL-10
+  description: 系统必须记录时限任务的关键操作日志（创建、修改、责任人变更、核销、取消核销、取消任务）以便审计。
+  covered_by:
+  - TC-A-013
+  - TC-B-004
+  - TC-B-008
+  - TC-C-011
+  - TC-E-006
+  - TC-X-012
+- fr_id: FR-FE-01
+  description: 系统必须支持维护标准费率表 `T_FeeRate`，按费用类型/国别/专利类别/案件类型区分官费、服务费、杂费及默认金额与币种。
+  covered_by:
+  - TC-W0-005
+  - TC-W0-007
+  - TC-W0-008
+  - TC-X-026
+- fr_id: FR-FE-02
+  description: 系统必须支持按“案件+草单类型”创建费用草单 `T_FeeDraft`，并包含 1..N 条费用明细 `T_FeeItem`。
+  covered_by:
+  - TC-A-015
+  - TC-A-016
+  - TC-B-009
+  - TC-G0-006
+  - TC-D-005
+  - TC-E-011
+  - TC-H-004
+  - TC-H-005
+- fr_id: FR-FE-03
+  description: 系统必须根据标准费率表 + 案件参数 + 费减比例/折扣率，自动计算费用明细金额，可被用户手工覆盖。
+  covered_by:
+  - TC-W0-007
+  - TC-W0-008
+  - TC-A-015
+  - TC-A-016
+  - TC-B-009
+  - TC-D-005
+  - TC-D-008
+  - TC-H-004
+  - TC-H-005
+- fr_id: FR-FE-04
+  description: 系统必须支持基于费用草单构造“官费清单 `T_PayList` + 官费缴费明细 `T_GovPayment`”，并支持导出、缴费登记以及状态追踪。
+  covered_by:
+  - TC-A-017
+  - TC-A-018
+  - TC-B-010
+  - TC-C-012
+  - TC-G0-008
+  - TC-D-009
+  - TC-E-011
+- fr_id: FR-FE-05
+  description: 系统必须支持年登印费管理：从授权案件中提取登记费任务，记录客户指示与通知状态，并自动生成相关草单与通知函。
+  covered_by:
+  - TC-G0-004
+  - TC-G0-005
+  - TC-G0-006
+  - TC-G0-007
+- fr_id: FR-FE-06
+  description: 系统必须支持年费管理：按到期区间提取年费任务，记录客户指示/通知状态，并自动生成年费草单与通知函。
+  covered_by:
+  - TC-G0-009
+  - TC-D-001
+  - TC-D-002
+  - TC-D-003
+  - TC-D-004
+  - TC-D-005
+  - TC-D-006
+  - TC-D-007
+  - TC-D-009
+  - TC-D-011
+  - TC-D-013
+  - TC-X-009
+- fr_id: FR-FE-07
+  description: 系统必须支持个案收款登记 `T_CaseReceipt`，记录应收/实收、欠款标记、可提成标记和发票信息。
+  covered_by:
+  - TC-A-021
+  - TC-B-011
+  - TC-G0-008
+  - TC-D-010
+  - TC-E-011
+  - TC-F-008
+  - TC-G-005
+  - TC-G-008
+  - TC-H-006
+  - TC-X-025
+- fr_id: FR-FE-08
+  description: 系统必须支持第三方支出记录 `T_Expense`，并可按案件、项目、时间查询与统计。
+  covered_by:
+  - TC-H-003
+- fr_id: FR-FE-09
+  description: 系统必须提供“费用情况查询”，将官方缴费记录与个案收款记录以两张一览表方式展示。
+  covered_by:
+  - TC-X-002
+  - TC-X-004
+  - TC-X-008
+- fr_id: FR-WD-01
+  description: 系统必须支持四大类中间文件（官方来文、致函官方、客户来文、致函客户），以及可配置子类型（常用文件定义）。
+  covered_by:
+  - TC-W0-010
+  - TC-B-001
+  - TC-C-004
+- fr_id: FR-WD-02
+  description: 系统必须提供“中间文件录入向导”，支持对 1..N 个案件批量登记中间文件。
+  covered_by:
+  - TC-B-001
+  - TC-B-003
+  - TC-B-006
+  - TC-C-004
+  - TC-E-004
+- fr_id: FR-WD-03
+  description: 系统必须根据常用文件定义自动填充缺省字段（是否需通知代理人、是否需回复、时限模板、费用草单类型、案件状态变更等）。
+  covered_by:
+  - TC-W0-010
+  - TC-W0-011
+  - TC-B-001
+  - TC-B-006
+  - TC-B-007
+  - TC-G0-001
+  - TC-G0-002
+  - TC-E-008
+- fr_id: FR-WD-04
+  description: 对“需要回复”的中间文件，系统必须自动计算回复绝限、内部限和提醒日期，并建立对应的时限任务记录。
+  covered_by:
+  - TC-B-001
+  - TC-B-002
+  - TC-B-007
+  - TC-B-013
+  - TC-C-012
+  - TC-E-005
+  - TC-E-006
+  - TC-E-007
+- fr_id: FR-WD-05
+  description: 对定义了费用草单类型/费用项目的中间文件，系统必须自动生成关联费用草单，并可手工补充。
+  covered_by:
+  - TC-B-009
+  - TC-E-004
+- fr_id: FR-WD-06
+  description: 系统必须支持为每个中间文件存档 0..N 个电子附件，并支持查看/导出。
+  covered_by:
+  - TC-B-006
+  - TC-C-004
+  - TC-G0-005
+  - TC-D-004
+  - TC-G-004
+  - TC-X-021
+- fr_id: FR-WD-07
+  description: 系统必须支持按多种条件查询中间文件，并输出不同格式的中间文件清单/证书清单。
+  covered_by:
+  - TC-X-003
+- fr_id: FR-WD-08
+  description: 系统必须支持“邮寄信息登记”，对一批中间文件统一输入挂号号，支持“一号复制给全部”或逐条录入。
+  covered_by:
+  - TC-X-018
+- fr_id: FR-WD-09
+  description: 系统必须支持为指定客户+邮寄日期生成“文件交接单”，并支持打印或基于模板生成 Word 版本。
+  covered_by:
+  - TC-W0-001
+  - TC-W0-012
+  - TC-X-019
+- fr_id: FR-WD-10
+  description: 系统必须支持信封打印，按“客户地址/申请人联系人/申请人地址”的优先级自动选择收件人信息，并打印信封版式。
+  covered_by:
+  - TC-W0-001
+  - TC-W0-002
+  - TC-W0-012
+  - TC-X-020

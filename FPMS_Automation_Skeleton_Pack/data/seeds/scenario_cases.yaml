@@ -1,0 +1,32 @@
+- id: DS-CASE-A-001
+  case_type: NORMAL/IN_IN/INVENTION
+  initial_status: NOT_FILED
+  purpose: 新案申请主线
+- id: DS-CASE-B-001
+  case_type: NORMAL/IN_IN/INVENTION
+  initial_status: SUB_EXAM
+  purpose: OA 场景
+- id: DS-CASE-C-INTL
+  case_type: PCT_INTL
+  initial_status: PCT_INTL_EXAM
+  purpose: PCT 国际案
+- id: DS-CASE-C-NAT
+  case_type: PCT_NATIONAL
+  initial_status: NOT_FILED
+  purpose: 国家阶段子案
+- id: DS-CASE-G0-001
+  case_type: NORMAL
+  initial_status: SUB_EXAM/OA2
+  purpose: 待授权案
+- id: DS-CASE-D-001
+  case_type: NORMAL
+  initial_status: GRANTED
+  purpose: 需年费监视
+- id: DS-CASE-E-ORIG
+  case_type: NORMAL
+  initial_status: GRANTED
+  purpose: 无效/诉讼原案
+- id: DS-CASE-H-001
+  case_type: CONSULTING/SEARCH
+  initial_status: NOT_STARTED/IN_PROGRESS
+  purpose: 顾问/检索项目

@@ -1,0 +1,24 @@
+- id: DS-AP-001
+  name: 北京创新科技有限公司
+  applicant_type: 法人
+  country: CN
+  has_general_power: 是
+  is_job_invention: 是
+- id: DS-AP-002
+  name: 张三
+  applicant_type: 自然人
+  country: CN
+  has_general_power: 否
+  is_job_invention: 否
+- id: DS-AP-003
+  name: ACME Biotech Inc.
+  applicant_type: 法人
+  country: US
+  has_general_power: 否
+  is_job_invention: 否
+- id: DS-AP-004
+  name: Osaka Machines KK
+  applicant_type: 法人
+  country: JP
+  has_general_power: 否
+  is_job_invention: 否

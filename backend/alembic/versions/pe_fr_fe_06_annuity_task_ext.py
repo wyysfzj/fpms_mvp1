@@ -6,6 +6,7 @@ Create Date: 2026-03-25
 
 Add 6 columns to t_annuity_task and 1 column to t_case (first_annuity_year).
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -44,9 +45,7 @@ def upgrade() -> None:
         existing_case = {col["name"] for col in insp.get_columns("t_case")}
         if "first_annuity_year" not in existing_case:
             with op.batch_alter_table("t_case") as batch_op:
-                batch_op.add_column(
-                    sa.Column("first_annuity_year", sa.Integer(), nullable=True)
-                )
+                batch_op.add_column(sa.Column("first_annuity_year", sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:

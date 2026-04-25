@@ -20,6 +20,8 @@ ROLE_PERMISSIONS = {
         "Bill.Create",
         "Bill.Print",
         "Bill.Read",
+        "Billing.BadDebtMark",
+        "Billing.BadDebtRecover",
         "Billing.Edit",
         "Applicant.Read",
         "Applicant.Write",

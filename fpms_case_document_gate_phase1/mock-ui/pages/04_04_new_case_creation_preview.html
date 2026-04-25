@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 新建案卷 - 事件提交预览</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">案卷主线 + 文件门禁</div>
+    <nav class="nav"><a href="01_01_case_dashboard.html" class="">01 案件工作台</a>
+<a href="02_02_new_case_intake_files.html" class="">02 新建案卷·收案文件</a>
+<a href="03_03_new_case_document_checklist.html" class="">03 文件核验清单</a>
+<a href="04_04_new_case_creation_preview.html" class="active">04 创建预览</a>
+<a href="05_05_case_workflow_document_dock.html" class="">05 案件详情·文件材料区</a>
+<a href="06_06_case_dossier_timeline.html" class="">06 卷宗事件账本</a>
+<a href="07_07_batch_filing_material_gate.html" class="">07 递交材料门禁</a>
+<a href="08_08_case_document_registration.html" class="">08 案内登记来文</a>
+<a href="09_09_unfiled_file_tray.html" class="">09 待归档文件</a>
+<a href="10_10_doc_status_rule_matrix.html" class="">10 规则矩阵</a></nav>
+    <div class="principle"><b>页面定位</b>建案前展示一次事务会落哪些对象；状态、任务、费用都由影响计划驱动。</div>
+  </aside>
+  <main class="main">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">新建案卷 · 第 6 步</div>
+          <h1>事件提交预览</h1>
+          <p>提交后会创建案卷、客户收案文书事件、文件关联和缺失材料任务；不会生成递交稿或递交状态。</p>
+        </div>
+        <button class="btn primary">创建案卷并归档收案文件</button>
+      </section>
+      <section class="grid two">
+        <div class="card">
+          <h2>将创建的业务事实</h2>
+          <div class="timeline">
+            <div><b>案卷主档</b><span>25F0411CN · 发明 · 中国内申请</span></div>
+            <div><b>文书事件</b><span>客户新申请委托，事件类型 CLIENT_INTAKE。</span></div>
+            <div><b>文件链路</b><span>5 份收案文件作为来源文件和收案稿归档。</span></div>
+            <div><b>门禁快照</b><span>收案节点软通过，记录缺失委托书。</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>影响计划</h2>
+          <table class="data-table compact">
+            <tbody>
+              <tr><th>案卷流程阶段</th><td>收案 → 撰写准备</td></tr>
+              <tr><th>法律状态</th><td>不改变，仍为未递交</td></tr>
+              <tr><th>客户服务状态</th><td>收案处理中</td></tr>
+              <tr><th>任务</th><td>生成“补交委托书”任务</td></tr>
+              <tr><th>费用</th><td>不生成费用草单</td></tr>
+            </tbody>
+          </table>
+          <div class="notice"><b>幂等键</b><span>CLIENT_INTAKE:25F0411CN:20260421，防止重复建案事件。</span></div>
+        </div>
+      </section>
+      <section class="notice danger"><b>明确非闭合</b><span>本步骤不递交、不生成最终申请文件、不触发官费时限。</span></section>
+    </main>
+</div>
+</body>
+</html>

@@ -126,10 +126,21 @@
                     prop="client_id"
                     :error="fieldErrors.get('client_id')?.join(', ')"
                   >
-                    <el-input
-                      v-model.trim="manualForm.client_id"
-                      placeholder="请输入客户编号"
-                    />
+                    <el-select
+                      v-model="manualForm.client_id"
+                      filterable
+                      clearable
+                      :loading="clientOptionsLoading"
+                      class="full-width"
+                      placeholder="请选择客户"
+                    >
+                      <el-option
+                        v-for="client in clientOptions"
+                        :key="client.id"
+                        :label="formatClientOption(client)"
+                        :value="client.id"
+                      />
+                    </el-select>
                     <div class="field-hint">
                       <router-link to="/clients">查看客户列表</router-link>
                     </div>
@@ -141,10 +152,22 @@
                     prop="case_id"
                     :error="fieldErrors.get('case_id')?.join(', ')"
                   >
-                    <el-input
-                      v-model.trim="manualForm.case_id"
-                      placeholder="可选案件编号"
-                    />
+                    <el-select
+                      v-model="manualForm.case_id"
+                      filterable
+                      clearable
+                      :disabled="!manualForm.client_id"
+                      :loading="caseOptionsLoading"
+                      class="full-width"
+                      placeholder="请选择案件（可选）"
+                    >
+                      <el-option
+                        v-for="caseItem in caseOptions"
+                        :key="caseItem.id"
+                        :label="formatCaseOption(caseItem)"
+                        :value="caseItem.id"
+                      />
+                    </el-select>
                     <div class="field-hint">
                       <router-link to="/cases">查看案件列表</router-link>
                     </div>
@@ -283,7 +306,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
@@ -291,6 +314,10 @@ import { createBillFromDrafts, createManualBill } from '../../../api/billing'
 import type { BillFromDraftsPayload, BillManualPayload, BillManualItem, BillDirection } from '../../../api/billing.types'
 import { getFeeDrafts } from '../../../api/fees'
 import type { FeeDraftListItem } from '../../../api/fees.types'
+import { getClients } from '../../../api/clients'
+import type { Client } from '../../../api/clients.types'
+import { getCases } from '../../../api/cases'
+import type { Case } from '../../../api/cases.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -303,6 +330,10 @@ const error = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 const draftOptionsLoading = ref(false)
 const availableDrafts = ref<FeeDraftListItem[]>([])
+const clientOptionsLoading = ref(false)
+const caseOptionsLoading = ref(false)
+const clientOptions = ref<Client[]>([])
+const caseOptions = ref<Case[]>([])
 
 const draftsFormRef = ref<FormInstance>()
 const manualFormRef = ref<FormInstance>()
@@ -331,7 +362,7 @@ const directionOptions = [
 
 const manualRules: FormRules = {
   client_id: [
-    { required: true, message: '客户编号为必填项', trigger: 'blur' },
+    { required: true, message: '请选择客户', trigger: 'change' },
   ],
   currency: [
     { required: true, message: '币种为必填项', trigger: 'change' },
@@ -380,6 +411,16 @@ const availableDraftOptions = computed(() => {
   })
 })
 
+function formatClientOption(client: Client): string {
+  const code = client.client_code ? `${client.client_code} · ` : ''
+  return `${code}${client.name || client.id}`
+}
+
+function formatCaseOption(caseItem: Case): string {
+  const title = caseItem.title ? ` · ${caseItem.title}` : ''
+  return `${caseItem.case_no}${title}`
+}
+
 async function fetchAvailableDrafts() {
   draftOptionsLoading.value = true
   try {
@@ -389,6 +430,39 @@ async function fetchAvailableDrafts() {
     error.value = err as ApiError
   } finally {
     draftOptionsLoading.value = false
+  }
+}
+
+async function fetchClientOptions() {
+  clientOptionsLoading.value = true
+  try {
+    const result = await getClients({ page: 1, page_size: 100 })
+    clientOptions.value = result.items
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    clientOptionsLoading.value = false
+  }
+}
+
+async function fetchCaseOptions() {
+  if (!manualForm.client_id) {
+    caseOptions.value = []
+    return
+  }
+
+  caseOptionsLoading.value = true
+  try {
+    const result = await getCases({
+      page: 1,
+      page_size: 100,
+      client_id: manualForm.client_id,
+    })
+    caseOptions.value = result.items
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    caseOptionsLoading.value = false
   }
 }
 
@@ -490,8 +564,17 @@ async function handleCreateManual() {
   }
 }
 
+watch(
+  () => manualForm.client_id,
+  () => {
+    manualForm.case_id = ''
+    void fetchCaseOptions()
+  }
+)
+
 onMounted(() => {
   fetchAvailableDrafts()
+  fetchClientOptions()
 })
 </script>
 

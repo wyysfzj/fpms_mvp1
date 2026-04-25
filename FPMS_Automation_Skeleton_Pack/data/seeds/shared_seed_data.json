@@ -1,0 +1,499 @@
+{
+  "users": [
+    {
+      "id": "DS-U-ADM",
+      "role": "Admin",
+      "username_example": "admin.fpms",
+      "note": "全权限；配置/高危操作"
+    },
+    {
+      "id": "DS-U-FM-01",
+      "role": "Formalities",
+      "username_example": "formalities1",
+      "note": "案卷/文档/批处理/时限维护"
+    },
+    {
+      "id": "DS-U-AG-01",
+      "role": "Agent",
+      "username_example": "agent.primary",
+      "note": "主办代理人"
+    },
+    {
+      "id": "DS-U-AG-02",
+      "role": "Agent",
+      "username_example": "agent.secondary",
+      "note": "协办代理人"
+    },
+    {
+      "id": "DS-U-LMT-01",
+      "role": "Limited Agent",
+      "username_example": "agent.limited",
+      "note": "仅 CaseEditLimited"
+    },
+    {
+      "id": "DS-U-FI-01",
+      "role": "Finance",
+      "username_example": "finance1",
+      "note": "费用/账单/收款/官费清单"
+    },
+    {
+      "id": "DS-U-SP-01",
+      "role": "Supervisor",
+      "username_example": "supervisor1",
+      "note": "监督任务和审批"
+    }
+  ],
+  "countries": [
+    {
+      "id": "DS-CTY-CN",
+      "code": "CN",
+      "name": "中国",
+      "default_currency": "CNY",
+      "is_domestic": "是",
+      "is_pct_member": "是"
+    },
+    {
+      "id": "DS-CTY-US",
+      "code": "US",
+      "name": "美国",
+      "default_currency": "USD",
+      "is_domestic": "否",
+      "is_pct_member": "是"
+    },
+    {
+      "id": "DS-CTY-JP",
+      "code": "JP",
+      "name": "日本",
+      "default_currency": "JPY",
+      "is_domestic": "否",
+      "is_pct_member": "是"
+    },
+    {
+      "id": "DS-CTY-HK",
+      "code": "HK",
+      "name": "中国香港",
+      "default_currency": "HKD",
+      "is_domestic": "否",
+      "is_pct_member": "否/按实现"
+    },
+    {
+      "id": "DS-CTY-EP",
+      "code": "EP",
+      "name": "欧洲专利局",
+      "default_currency": "EUR",
+      "is_domestic": "否",
+      "is_pct_member": "是"
+    }
+  ],
+  "clients": [
+    {
+      "id": "DS-CL-001",
+      "name": "北京创新科技有限公司",
+      "client_type": "直接客户",
+      "country": "CN",
+      "default_currency": "CNY",
+      "note": "有有效默认文件地址和账单地址"
+    },
+    {
+      "id": "DS-CL-002",
+      "name": "Wilson & Partners LLP",
+      "client_type": "代理所",
+      "country": "US",
+      "default_currency": "USD",
+      "note": "用于 ForeignAgent"
+    },
+    {
+      "id": "DS-CL-003",
+      "name": "Global Pharma Inc.",
+      "client_type": "直接客户",
+      "country": "US",
+      "default_currency": "USD",
+      "note": "用于涉外/PCT"
+    },
+    {
+      "id": "DS-CL-004",
+      "name": "Dormant Client",
+      "client_type": "直接客户",
+      "country": "CN",
+      "default_currency": "CNY",
+      "note": "含一条停用地址用于负例"
+    }
+  ],
+  "applicants": [
+    {
+      "id": "DS-AP-001",
+      "name": "北京创新科技有限公司",
+      "applicant_type": "法人",
+      "country": "CN",
+      "has_general_power": "是",
+      "is_job_invention": "是"
+    },
+    {
+      "id": "DS-AP-002",
+      "name": "张三",
+      "applicant_type": "自然人",
+      "country": "CN",
+      "has_general_power": "否",
+      "is_job_invention": "否"
+    },
+    {
+      "id": "DS-AP-003",
+      "name": "ACME Biotech Inc.",
+      "applicant_type": "法人",
+      "country": "US",
+      "has_general_power": "否",
+      "is_job_invention": "否"
+    },
+    {
+      "id": "DS-AP-004",
+      "name": "Osaka Machines KK",
+      "applicant_type": "法人",
+      "country": "JP",
+      "has_general_power": "否",
+      "is_job_invention": "否"
+    }
+  ],
+  "doc_templates": [
+    {
+      "id": "DS-TPL-DOC-001",
+      "template_code": "OA_NOTICE",
+      "doc_type": "OFFICIAL_IN",
+      "key_config": "StatusEffect=OA1/OA2",
+      "note": "DeadlineTemplate=OA_REPLY_LIMIT"
+    },
+    {
+      "id": "DS-TPL-DOC-002",
+      "template_code": "OA_REPLY",
+      "doc_type": "OFFICIAL_OUT",
+      "key_config": "StatusRestore=SUB_EXAM",
+      "note": "ReplyTo=OA_NOTICE"
+    },
+    {
+      "id": "DS-TPL-DOC-003",
+      "template_code": "GRANT_NOTICE",
+      "doc_type": "OFFICIAL_IN",
+      "key_config": "StatusEffect=GRANTED",
+      "note": "InputField=IssueDate/GrantDate/GrantNo/FirstAnnuityYear/ValidUntil"
+    },
+    {
+      "id": "DS-TPL-DOC-004",
+      "template_code": "GRANT_FEE_NOTICE",
+      "doc_type": "CLIENT_OUT",
+      "key_config": "授权费通知函",
+      "note": "附件模板可生成"
+    },
+    {
+      "id": "DS-TPL-DOC-005",
+      "template_code": "ANNUITY_NOTICE",
+      "doc_type": "CLIENT_OUT",
+      "key_config": "年费通知函",
+      "note": "附件模板可生成"
+    },
+    {
+      "id": "DS-TPL-DOC-006",
+      "template_code": "INVALID_REQUEST",
+      "doc_type": "OFFICIAL_OUT",
+      "key_config": "StatusEffect=INVALID_FILED",
+      "note": "FeeDraftType=INVALID_FEE"
+    },
+    {
+      "id": "DS-TPL-DOC-007",
+      "template_code": "INVALID_DECISION",
+      "doc_type": "OFFICIAL_IN",
+      "key_config": "DecisionResult/AffectedClaims",
+      "note": "更新无效案和原案状态"
+    },
+    {
+      "id": "DS-TPL-DOC-008",
+      "template_code": "DUNNING_LETTER",
+      "doc_type": "CLIENT_OUT",
+      "key_config": "催款函",
+      "note": "来源 T_Dunning"
+    }
+  ],
+  "task_templates": [
+    {
+      "id": "DS-TPL-TASK-001",
+      "code": "APPLY_FEE_LIMIT",
+      "base": "CASE_EVENT/FILING_DATE",
+      "purpose": "新案申请费时限"
+    },
+    {
+      "id": "DS-TPL-TASK-002",
+      "code": "EXAM_REQUEST_LIMIT",
+      "base": "FILING_DATE",
+      "purpose": "实审请求时限"
+    },
+    {
+      "id": "DS-TPL-TASK-003",
+      "code": "OA_REPLY_LIMIT",
+      "base": "DISPATCH_DATE/OfficialDueDate",
+      "purpose": "OA 答复时限"
+    },
+    {
+      "id": "DS-TPL-TASK-004",
+      "code": "GRANT_CERT_FEE_LIMIT",
+      "base": "GRANT_DATE/IssueDate",
+      "purpose": "授权费时限"
+    },
+    {
+      "id": "DS-TPL-TASK-005",
+      "code": "PCT_NATIONAL_ENTRY_LIMIT",
+      "base": "CUSTOM/CASE_EVENT",
+      "purpose": "国家阶段进入时限"
+    },
+    {
+      "id": "DS-TPL-TASK-006",
+      "code": "INVALID_DEFENSE_LIMIT",
+      "base": "DISPATCH_DATE",
+      "purpose": "无效答辩/举证期限"
+    }
+  ],
+  "fee_rates": [
+    {
+      "id": "DS-RATE-001",
+      "code": "CN_APPL_BASE",
+      "group": "APPLY",
+      "fee_type": "GOV",
+      "calc_mode": "FIXED",
+      "note": "国内基础申请官费"
+    },
+    {
+      "id": "DS-RATE-002",
+      "code": "CN_APPL_SERVICE_BASE",
+      "group": "APPLY",
+      "fee_type": "SERVICE",
+      "calc_mode": "FIXED",
+      "note": "新案申请服务费"
+    },
+    {
+      "id": "DS-RATE-003",
+      "code": "CN_APPL_EXTRA_CLAIM",
+      "group": "APPLY",
+      "fee_type": "GOV",
+      "calc_mode": "BY_CLAIMS",
+      "note": "超 10 项加收"
+    },
+    {
+      "id": "DS-RATE-004",
+      "code": "CN_GRANT_REG",
+      "group": "GRANT",
+      "fee_type": "GOV",
+      "calc_mode": "FIXED",
+      "note": "授权登记费"
+    },
+    {
+      "id": "DS-RATE-005",
+      "code": "CN_GRANT_CERT",
+      "group": "GRANT",
+      "fee_type": "GOV",
+      "calc_mode": "FIXED",
+      "note": "证书费"
+    },
+    {
+      "id": "DS-RATE-006",
+      "code": "CN_STAMP_DUTY",
+      "group": "GRANT",
+      "fee_type": "GOV",
+      "calc_mode": "FIXED",
+      "note": "印花税"
+    },
+    {
+      "id": "DS-RATE-007",
+      "code": "CN_ANNUITY_YEAR",
+      "group": "ANNUITY",
+      "fee_type": "GOV/SERVICE",
+      "calc_mode": "BY_YEAR",
+      "note": "年费分档"
+    },
+    {
+      "id": "DS-RATE-008",
+      "code": "OA_SERVICE_STANDARD",
+      "group": "INTERMEDIATE",
+      "fee_type": "SERVICE",
+      "calc_mode": "FIXED",
+      "note": "OA 答复服务费"
+    },
+    {
+      "id": "DS-RATE-009",
+      "code": "INVALID_REQUEST_FEE",
+      "group": "INVALID",
+      "fee_type": "GOV/SERVICE",
+      "calc_mode": "FIXED",
+      "note": "无效请求费"
+    },
+    {
+      "id": "DS-RATE-010",
+      "code": "CONSULT_FIXED",
+      "group": "CONSULT",
+      "fee_type": "SERVICE",
+      "calc_mode": "FIXED",
+      "note": "顾问固定报价"
+    },
+    {
+      "id": "DS-RATE-011",
+      "code": "CONSULT_SENIOR_HOUR",
+      "group": "CONSULT",
+      "fee_type": "SERVICE",
+      "calc_mode": "FIXED",
+      "note": "高级顾问小时费"
+    }
+  ],
+  "commission_rules": [
+    {
+      "id": "DS-COM-001",
+      "scope": "NORMAL/IN_IN/INVENTION",
+      "base_mode": "BY_SERVICE_FEE",
+      "ratio": "S1=30%, S2=20%",
+      "note": "WaitPay=true"
+    },
+    {
+      "id": "DS-COM-002",
+      "scope": "OA",
+      "base_mode": "BY_SERVICE_FEE",
+      "ratio": "S1=20%, S2=0~10%",
+      "note": "按阶段追加"
+    },
+    {
+      "id": "DS-COM-003",
+      "scope": "GRANT",
+      "base_mode": "BY_SERVICE_FEE",
+      "ratio": "S1=0, S2=20%",
+      "note": "授权节点可结算"
+    },
+    {
+      "id": "DS-COM-004",
+      "scope": "CONSULTING/SEARCH",
+      "base_mode": "FIXED or BY_SERVICE_FEE",
+      "ratio": "S1=40%, S2=0 或 30/10",
+      "note": "顾问规则"
+    }
+  ],
+  "scenario_cases": [
+    {
+      "id": "DS-CASE-A-001",
+      "case_type": "NORMAL/IN_IN/INVENTION",
+      "initial_status": "NOT_FILED",
+      "purpose": "新案申请主线"
+    },
+    {
+      "id": "DS-CASE-B-001",
+      "case_type": "NORMAL/IN_IN/INVENTION",
+      "initial_status": "SUB_EXAM",
+      "purpose": "OA 场景"
+    },
+    {
+      "id": "DS-CASE-C-INTL",
+      "case_type": "PCT_INTL",
+      "initial_status": "PCT_INTL_EXAM",
+      "purpose": "PCT 国际案"
+    },
+    {
+      "id": "DS-CASE-C-NAT",
+      "case_type": "PCT_NATIONAL",
+      "initial_status": "NOT_FILED",
+      "purpose": "国家阶段子案"
+    },
+    {
+      "id": "DS-CASE-G0-001",
+      "case_type": "NORMAL",
+      "initial_status": "SUB_EXAM/OA2",
+      "purpose": "待授权案"
+    },
+    {
+      "id": "DS-CASE-D-001",
+      "case_type": "NORMAL",
+      "initial_status": "GRANTED",
+      "purpose": "需年费监视"
+    },
+    {
+      "id": "DS-CASE-E-ORIG",
+      "case_type": "NORMAL",
+      "initial_status": "GRANTED",
+      "purpose": "无效/诉讼原案"
+    },
+    {
+      "id": "DS-CASE-H-001",
+      "case_type": "CONSULTING/SEARCH",
+      "initial_status": "NOT_STARTED/IN_PROGRESS",
+      "purpose": "顾问/检索项目"
+    }
+  ],
+  "date_seeds": [
+    {
+      "id": "DS-DATE-001",
+      "meaning": "收案日",
+      "date_value": "2026-04-01",
+      "purpose": "新案"
+    },
+    {
+      "id": "DS-DATE-002",
+      "meaning": "申请日",
+      "date_value": "2026-04-05",
+      "purpose": "新案"
+    },
+    {
+      "id": "DS-DATE-003",
+      "meaning": "最早优先权日",
+      "date_value": "2026-03-15",
+      "purpose": "优先权边界"
+    },
+    {
+      "id": "DS-DATE-004",
+      "meaning": "OA 官方发文日",
+      "date_value": "2026-08-15",
+      "purpose": "OA"
+    },
+    {
+      "id": "DS-DATE-005",
+      "meaning": "OA 官方绝限",
+      "date_value": "2026-10-15",
+      "purpose": "官方绝限覆盖"
+    },
+    {
+      "id": "DS-DATE-006",
+      "meaning": "授权发文日",
+      "date_value": "2027-06-20",
+      "purpose": "GRANT_NOTICE"
+    },
+    {
+      "id": "DS-DATE-007",
+      "meaning": "授权公告日",
+      "date_value": "2027-07-01",
+      "purpose": "GRANT_NOTICE"
+    },
+    {
+      "id": "DS-DATE-008",
+      "meaning": "有效期截止",
+      "date_value": "2046-04-05",
+      "purpose": "20 年示例"
+    },
+    {
+      "id": "DS-DATE-009",
+      "meaning": "国家阶段进入日",
+      "date_value": "2028-07-15",
+      "purpose": "PCT_NATIONAL"
+    },
+    {
+      "id": "DS-DATE-010",
+      "meaning": "年费到期日示例",
+      "date_value": "2028-04-05",
+      "purpose": "Annuity Y1"
+    }
+  ],
+  "inferred_placeholders": [
+    {
+      "id": "DS-BIO-UNIT-001",
+      "entity_type": "bio_deposit_unit",
+      "status": "placeholder_required",
+      "note": "在 TC-W0-006、TC-A-002 中被引用，但共享测试数据段未显式给出。建议在环境 seed 中创建。"
+    },
+    {
+      "id": "DS-CN",
+      "entity_type": "country_alias",
+      "status": "alias_inferred",
+      "note": "推断为 DS-CTY-CN 的别名，建议在自动化数据层统一归一化为 DS-CTY-CN。",
+      "suggested_canonical": "DS-CTY-CN"
+    }
+  ]
+}
