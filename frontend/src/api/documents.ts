@@ -15,6 +15,8 @@ import type {
     DocumentMailingBatchIn,
     DocumentMailingBatchOut,
     DocumentCreatePayload,
+    DocumentImpactPreviewPayload,
+    DocumentImpactPreviewResult,
     DocumentListParams,
     DocumentUpdatePayload,
     DocumentWizardAttachmentPreviewResult,
@@ -305,6 +307,13 @@ export async function getDocument(id: string | number): Promise<Document> {
 export async function createDocument(data: DocumentCreatePayload): Promise<Document> {
     const response = await http.post<BackendDocument>('/documents', toCreatePayload(data))
     return mapDocument(response.data)
+}
+
+export async function previewDocumentImpact(
+    data: DocumentImpactPreviewPayload
+): Promise<DocumentImpactPreviewResult> {
+    const response = await http.post<DocumentImpactPreviewResult>('/documents/impact-preview', data)
+    return response.data
 }
 
 /**

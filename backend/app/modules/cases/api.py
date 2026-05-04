@@ -11,6 +11,12 @@ from app.api.deps import current_user_dep, require_perm
 from app.core.errors import raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
+from app.modules.cases.document_gate_service import (
+    GateCaseContext,
+    GateDocumentInput,
+    MaterialGateResult,
+    evaluate_material_gate,
+)
 from app.modules.cases.models import (
     Case,
     T_BioDeposit,
@@ -22,6 +28,11 @@ from app.modules.cases.models import (
 from app.modules.cases.schemas import (
     CaseBatchFilingActionIn,
     CaseCreateIn,
+    CaseDocumentGateCheckOut,
+    CaseDocumentGateFileEventOut,
+    CaseDocumentGateMatchedDocumentOut,
+    CaseDocumentGateMissingItemOut,
+    CaseDocumentGatePreviewOut,
     CaseListReportResponse,
     CaseUpdateFull,
     CaseUpdateLimited,
@@ -44,6 +55,7 @@ from app.modules.cases.service import (
 from app.modules.cases.service import (
     update_case_limited as update_case_limited_service,
 )
+from app.modules.documents.models import DocTemplate, Document
 from app.modules.masterdata.clients.models import Client
 
 router = APIRouter()
@@ -236,6 +248,158 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
     }
 
 
+def _load_gate_documents(
+    db: Session,
+    source_document_ids: list[str] | None,
+) -> list[GateDocumentInput]:
+    if not source_document_ids:
+        return []
+
+    unique_document_ids = list(dict.fromkeys(source_document_ids))
+    rows = (
+        db.query(Document, DocTemplate.code)
+        .outerjoin(DocTemplate, Document.doc_template_id == DocTemplate.id)
+        .filter(Document.id.in_(unique_document_ids))
+        .all()
+    )
+    row_by_document_id = {
+        document.id: (document, template_code) for document, template_code in rows
+    }
+    missing_document_ids = [
+        document_id for document_id in unique_document_ids if document_id not in row_by_document_id
+    ]
+    if missing_document_ids:
+        raise_business_error(
+            "CASE_DOCUMENT_GATE_SOURCE_NOT_FOUND",
+            "One or more source documents do not exist",
+            details={"source_document_ids": missing_document_ids},
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    return [
+        GateDocumentInput(
+            id=document.id,
+            title=document.title,
+            doc_type=document.doc_type,
+            direction=document.direction,
+            template_code=template_code,
+            has_attachment=True,
+            extra_data=document.extra_data,
+        )
+        for document_id in unique_document_ids
+        for document, template_code in [row_by_document_id[document_id]]
+    ]
+
+
+def _load_case_gate_documents(db: Session, case_id: str) -> list[GateDocumentInput]:
+    rows = (
+        db.query(Document, DocTemplate.code)
+        .outerjoin(DocTemplate, Document.doc_template_id == DocTemplate.id)
+        .filter(Document.case_id == case_id)
+        .order_by(Document.doc_date.asc(), Document.created_at.asc(), Document.id.asc())
+        .all()
+    )
+    return [
+        GateDocumentInput(
+            id=document.id,
+            title=document.title,
+            doc_type=document.doc_type,
+            direction=document.direction,
+            template_code=template_code,
+            has_attachment=True,
+            extra_data=document.extra_data,
+        )
+        for document, template_code in rows
+    ]
+
+
+def _document_event_status(document: Document) -> str:
+    if document.reply_to_id:
+        return "REPLY_FILE"
+    if document.reply_date:
+        return "REPLIED"
+    if document.need_reply:
+        return "NEED_REPLY"
+    if document.outgoing_reg_no:
+        return "MAILED"
+    return "REGISTERED"
+
+
+def _build_case_document_file_events(
+    db: Session, case_id: str
+) -> list[CaseDocumentGateFileEventOut]:
+    documents = (
+        db.query(Document)
+        .filter(Document.case_id == case_id)
+        .order_by(Document.doc_date.asc(), Document.created_at.asc(), Document.id.asc())
+        .all()
+    )
+    return [
+        CaseDocumentGateFileEventOut(
+            document_id=document.id,
+            title=document.title,
+            doc_type=document.doc_type,
+            direction=document.direction,
+            event_status=_document_event_status(document),
+            need_reply=document.need_reply,
+            reply_date=str(document.reply_date) if document.reply_date else None,
+            reply_to_id=document.reply_to_id,
+        )
+        for document in documents
+    ]
+
+
+def _build_document_gate_preview_out(
+    *,
+    case_type: str,
+    patent_category: str,
+    flow_dir: str,
+    gate: MaterialGateResult,
+    file_events: list[CaseDocumentGateFileEventOut] | None = None,
+) -> CaseDocumentGatePreviewOut:
+    return CaseDocumentGatePreviewOut(
+        case_type=case_type,
+        patent_category=patent_category,
+        flow_dir=flow_dir,
+        conclusion=gate.conclusion.value,
+        hard_block=gate.hard_block,
+        afterfill_audit_required=gate.afterfill_audit_required,
+        material_count=gate.material_count,
+        checks=[
+            CaseDocumentGateCheckOut(
+                requirement_code=check.requirement_code,
+                requirement_name=check.requirement_name,
+                role=check.role,
+                blocks_submission=check.blocks_submission,
+                afterfill_allowed=check.afterfill_allowed,
+                status="MATCHED" if check.matched_documents else "MISSING",
+                matched_documents=[
+                    CaseDocumentGateMatchedDocumentOut(
+                        id=document.id,
+                        title=document.title,
+                        doc_type=document.doc_type,
+                        template_code=document.template_code,
+                    )
+                    for document in check.matched_documents
+                ],
+            )
+            for check in gate.checks
+        ],
+        missing_items=[
+            CaseDocumentGateMissingItemOut(
+                requirement_code=item.requirement_code,
+                requirement_name=item.requirement_name,
+                role=item.role,
+                blocks_submission=item.blocks_submission,
+                afterfill_allowed=item.afterfill_allowed,
+            )
+            for item in gate.missing_items
+        ],
+        file_events=file_events or [],
+        suggested_actions=gate.suggested_actions,
+    )
+
+
 @router.get("/cases", summary="List cases", response_model=CaseListReportResponse)
 def get_cases(
     q: str | None = Query(default=None),
@@ -336,6 +500,81 @@ def submit_batch_filing(
         user_id=current_user.id,
     )
     return result.model_dump()
+
+
+@router.get(
+    "/cases/document-gate/intake-preview",
+    response_model=CaseDocumentGatePreviewOut,
+    summary="Preview intake document material gate",
+)
+def preview_case_intake_document_gate(
+    case_type: str = Query(default="NORMAL"),
+    patent_category: str = Query(default="INV"),
+    flow_dir: str = Query(default="CN_DOMESTIC"),
+    has_exam_request: bool | None = Query(default=None),
+    no_power: bool | None = Query(default=None),
+    has_priority: bool | None = Query(default=None),
+    source_document_ids: list[str] | None = Query(default=None),
+    _perm: None = Depends(require_perm("Case.Read")),
+    db: Session = Depends(get_db),
+) -> CaseDocumentGatePreviewOut:
+    documents = _load_gate_documents(db, source_document_ids)
+    gate = evaluate_material_gate(
+        GateCaseContext(
+            case_type=case_type,
+            patent_category=patent_category,
+            flow_dir=flow_dir,
+            has_exam_request=has_exam_request,
+            no_power=no_power,
+            has_priority=has_priority,
+        ),
+        documents=documents,
+    )
+    return _build_document_gate_preview_out(
+        case_type=case_type,
+        patent_category=patent_category,
+        flow_dir=flow_dir,
+        gate=gate,
+    )
+
+
+@router.get(
+    "/cases/{case_id}/document-gate",
+    response_model=CaseDocumentGatePreviewOut,
+    summary="Get case document material gate",
+)
+def get_case_document_gate(
+    case_id: str,
+    _perm: None = Depends(require_perm("Case.Read")),
+    db: Session = Depends(get_db),
+) -> CaseDocumentGatePreviewOut:
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise_business_error(
+            "CASE_NOT_FOUND",
+            "Case not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    has_priority = db.query(T_Priority.id).filter(T_Priority.case_id == case.id).first() is not None
+    gate = evaluate_material_gate(
+        GateCaseContext(
+            case_type=case.case_type,
+            patent_category=case.patent_category,
+            flow_dir=case.flow_dir,
+            has_exam_request=case.has_exam_request,
+            no_power=case.no_power,
+            has_priority=has_priority,
+        ),
+        documents=_load_case_gate_documents(db, case.id),
+    )
+    return _build_document_gate_preview_out(
+        case_type=case.case_type,
+        patent_category=case.patent_category,
+        flow_dir=case.flow_dir,
+        gate=gate,
+        file_events=_build_case_document_file_events(db, case.id),
+    )
 
 
 @router.post("/cases", status_code=status.HTTP_201_CREATED, summary="Create a case")

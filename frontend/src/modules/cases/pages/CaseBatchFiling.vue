@@ -115,6 +115,20 @@
         :closable="false"
         show-icon
       />
+      <div class="final-material-gate-strip">
+        <div>
+          <span class="gate-strip-label">最终材料门禁</span>
+          <strong>递交前检查最终稿、签章件和客户确认记录</strong>
+        </div>
+        <div class="gate-strip-tags">
+          <el-tag :type="hardBlockCount ? 'danger' : 'success'" size="small">
+            硬阻止：{{ hardBlockCount }} 件
+          </el-tag>
+          <el-tag :type="afterfillAuditCount ? 'warning' : 'info'" size="small">
+            后补审计：{{ afterfillAuditCount }} 件
+          </el-tag>
+        </div>
+      </div>
     </el-card>
 
     <div v-if="error" class="page-error">
@@ -125,7 +139,7 @@
 
     <div v-else class="page-table">
       <el-table :data="candidates" stripe size="small" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="50" />
+        <el-table-column type="selection" width="50" :selectable="isCandidateSelectable" />
         <el-table-column prop="case_no" label="案号" width="160" />
         <el-table-column prop="title_cn" label="标题" min-width="220" />
         <el-table-column prop="client_name" label="客户" min-width="180" />
@@ -134,6 +148,28 @@
         <el-table-column prop="flow_dir" label="流程方向" width="130" />
         <el-table-column prop="recv_date" label="收文日" width="120" />
         <el-table-column prop="status" label="状态" width="120" />
+        <el-table-column label="最终材料" width="100">
+          <template #default="{ row }">
+            {{ getFinalMaterialGate(row).count }}
+          </template>
+        </el-table-column>
+        <el-table-column label="缺失项" min-width="130">
+          <template #default="{ row }">
+            {{ getFinalMaterialGate(row).missing }}
+          </template>
+        </el-table-column>
+        <el-table-column label="门禁结论" width="120">
+          <template #default="{ row }">
+            <el-tag :type="getFinalMaterialGate(row).tagType" size="small">
+              {{ getFinalMaterialGate(row).conclusion }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="处理" width="120">
+          <template #default="{ row }">
+            {{ getFinalMaterialGate(row).action }}
+          </template>
+        </el-table-column>
         <el-table-column label="已提实审" width="100">
           <template #default="{ row }">
             {{ row.has_exam_request ? '是' : '否' }}
@@ -141,12 +177,52 @@
         </el-table-column>
       </el-table>
 
+      <el-alert
+        v-if="hardBlockCount"
+        class="final-material-hard-block"
+        title="硬阻止"
+        :description="hardBlockDescription"
+        type="error"
+        :closable="false"
+        show-icon
+      />
+
       <PaginationBar
         v-model:page="page"
         v-model:page-size="pageSize"
         :total="total"
         @change="fetchCandidates"
       />
+    </div>
+
+    <div class="batch-gate-preview-grid">
+      <el-card shadow="never">
+        <template #header>
+          <span>后补审计</span>
+        </template>
+        <el-empty v-if="!afterfillAuditRows.length" description="当前没有后补审计项" :image-size="72" />
+        <el-table v-else :data="afterfillAuditRows" size="small">
+          <el-table-column prop="case_no" label="案号" min-width="130" />
+          <el-table-column prop="items" label="后补项" min-width="160" />
+          <el-table-column prop="conclusion" label="门禁结论" min-width="110" />
+        </el-table>
+      </el-card>
+
+      <el-card shadow="never">
+        <template #header>
+          <span>执行预览</span>
+        </template>
+        <el-empty v-if="!executionPreviewItems.length" description="暂无执行预览" :image-size="72" />
+        <ul v-else class="execution-preview-list">
+          <li
+            v-for="item in executionPreviewItems"
+            :key="`${item.case_no}-${item.kind}-${item.label}`"
+            :class="{ 'execution-preview-danger': !item.enabled }"
+          >
+            {{ item.case_no }}：{{ item.label }}{{ item.detail ? `，${item.detail}` : '' }}
+          </li>
+        </ul>
+      </el-card>
     </div>
   </div>
 </template>
@@ -177,6 +253,8 @@ const page = ref(1)
 const pageSize = ref(20)
 const selectedIds = ref<string[]>([])
 
+type GateTagType = 'success' | 'warning' | 'danger' | 'info'
+
 const filters = reactive<CaseBatchFilingQueryParams>({
   case_type: '',
   flow_dir: '',
@@ -205,6 +283,115 @@ const recvDateRange = computed({
     filters.recv_date_to = value?.[1] || ''
   },
 })
+
+const selectedCandidates = computed(() => {
+  const selected = new Set(selectedIds.value)
+  return candidates.value.filter((candidate) => selected.has(candidate.id))
+})
+const previewCandidates = computed(() => selectedCandidates.value.length ? selectedCandidates.value : candidates.value)
+const hardBlockCount = computed(() =>
+  candidates.value.filter((candidate) => candidate.final_material_gate?.hard_block).length
+)
+const afterfillAuditCount = computed(() =>
+  candidates.value.filter((candidate) => candidate.final_material_gate?.afterfill_audit_required).length
+)
+const hardBlockDescription = computed(() => {
+  const blockedRows = candidates.value.filter((candidate) => candidate.final_material_gate?.hard_block)
+  const caseNos = blockedRows.map((candidate) => candidate.case_no).join('、')
+  const missingItems = Array.from(new Set(
+    blockedRows.flatMap((candidate) =>
+      candidate.final_material_gate?.missing_items
+        .filter((item) => item.blocks_submission)
+        .map((item) => item.requirement_name) || []
+    )
+  )).join('、')
+  return `以下案件不会进入本次递交事务：${caseNos || '无'}；硬性缺失项：${missingItems || '无'}。`
+})
+const afterfillAuditRows = computed(() =>
+  previewCandidates.value
+    .filter((candidate) => candidate.final_material_gate?.afterfill_audit_required)
+    .map((candidate) => ({
+      case_no: candidate.case_no,
+      items: getMissingMaterialText(candidate, true),
+      conclusion: getConclusionText(candidate.final_material_gate?.conclusion),
+    }))
+)
+const executionPreviewItems = computed(() =>
+  previewCandidates.value.flatMap((candidate) =>
+    (candidate.final_material_gate?.execution_preview || []).map((item) => ({
+      case_no: candidate.case_no,
+      kind: item.kind,
+      label: item.label,
+      enabled: item.enabled,
+      detail: item.detail,
+    }))
+  )
+)
+
+function getFinalMaterialGate(row: CaseBatchFilingCandidate) {
+  const gate = row.final_material_gate
+  if (!gate) {
+    return {
+      count: '-',
+      missing: '暂无门禁数据',
+      conclusion: '未核验',
+      tagType: 'info' as GateTagType,
+      action: '等待核验',
+    } as const
+  }
+
+  return {
+    count: `${gate.material_count} 项`,
+    missing: getMissingMaterialText(row),
+    conclusion: getConclusionText(gate.conclusion, gate.hard_block),
+    tagType: getConclusionTagType(gate.conclusion, gate.hard_block),
+    action: getGateAction(row),
+  } as const
+}
+
+function getMissingMaterialText(row: CaseBatchFilingCandidate, afterfillOnly = false) {
+  const items = row.final_material_gate?.missing_items || []
+  const filtered = afterfillOnly ? items.filter((item) => item.afterfill_allowed) : items
+  return filtered.length ? filtered.map((item) => item.requirement_name).join('、') : '无'
+}
+
+function getConclusionText(conclusion?: string, hardBlock = false) {
+  if (hardBlock || conclusion === 'BLOCKED') return '硬阻止'
+  if (conclusion === 'WARNING') return '允许后补'
+  if (conclusion === 'PASS') return '可递交'
+  return '未核验'
+}
+
+function getConclusionTagType(conclusion?: string, hardBlock = false): GateTagType {
+  if (hardBlock || conclusion === 'BLOCKED') return 'danger'
+  if (conclusion === 'WARNING') return 'warning'
+  if (conclusion === 'PASS') return 'success'
+  return 'info'
+}
+
+function getGateAction(row: CaseBatchFilingCandidate) {
+  const gate = row.final_material_gate
+  if (!gate) return '等待核验'
+  if (gate.hard_block) return '补齐材料'
+  if (gate.afterfill_audit_required) return '填写后补审计'
+  return '查看材料'
+}
+
+function isCandidateSelectable(row: CaseBatchFilingCandidate) {
+  return Boolean(row.final_material_gate && !row.final_material_gate.hard_block)
+}
+
+function normalizeSubmitError(apiError: ApiError) {
+  if (apiError.code === 'CASE_BATCH_FILING_MATERIAL_GATE_BLOCKED') {
+    const caseNos = Array.isArray(apiError.details?.case_nos)
+      ? apiError.details.case_nos.map((item) => String(item)).join('、')
+      : ''
+    return caseNos
+      ? `存在硬阻止案件，后端已拒绝递交：${caseNos}。`
+      : '存在硬阻止案件，后端已拒绝递交。'
+  }
+  return apiError.message || '递交失败，请稍后重试。'
+}
 
 async function fetchClients() {
   const response = await getClients({ page: 1, page_size: 200 })
@@ -244,7 +431,7 @@ function resetFilters() {
 }
 
 function handleSelectionChange(rows: CaseBatchFilingCandidate[]) {
-  selectedIds.value = rows.map((row) => row.id)
+  selectedIds.value = rows.filter(isCandidateSelectable).map((row) => row.id)
 }
 
 async function handleSubmit() {
@@ -254,6 +441,11 @@ async function handleSubmit() {
   }
   if (!actionForm.submitted_date) {
     ElMessage.error('请选择递交日。')
+    return
+  }
+  const blockedRows = selectedCandidates.value.filter((candidate) => candidate.final_material_gate?.hard_block)
+  if (blockedRows.length) {
+    ElMessage.error(`存在硬阻止案件，请先补齐材料：${blockedRows.map((row) => row.case_no).join('、')}。`)
     return
   }
 
@@ -269,7 +461,9 @@ async function handleSubmit() {
     ElMessage.success(`递交完成：成功更新 ${result.success_count} 件案件。`)
     await fetchCandidates()
   } catch (err) {
-    error.value = err as ApiError
+    const apiError = err as ApiError
+    error.value = apiError
+    ElMessage.error(normalizeSubmitError(apiError))
   } finally {
     submitting.value = false
   }
@@ -306,5 +500,76 @@ onMounted(async () => {
 .selection-summary {
   color: var(--el-text-color-secondary);
   font-size: 13px;
+}
+
+.final-material-gate-strip {
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 12px 14px;
+}
+
+.final-material-gate-strip div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gate-strip-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.gate-strip-tags {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.final-material-hard-block {
+  margin-top: 14px;
+}
+
+.batch-gate-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.execution-preview-list {
+  color: var(--el-text-color-regular);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.6;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.execution-preview-danger {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+  .final-material-gate-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .gate-strip-tags {
+    justify-content: flex-start;
+  }
+
+  .batch-gate-preview-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

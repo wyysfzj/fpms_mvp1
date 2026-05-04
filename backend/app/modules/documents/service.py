@@ -31,6 +31,9 @@ from app.modules.documents.schemas import (
     DocumentCreateIn,
     DocumentDispatchCreateIn,
     DocumentEnvelopePreviewOut,
+    DocumentImpactItemOut,
+    DocumentImpactPreviewIn,
+    DocumentImpactPreviewOut,
     DocumentMailingBatchIn,
     DocumentUpdateIn,
     DocumentWizardAttachmentFinalRowIn,
@@ -427,6 +430,148 @@ def list_documents(
 
 def create_document(db: Session, data: DocumentCreateIn) -> Document:
     return _create_document_record(db, data, commit=True)
+
+
+def preview_document_impact(
+    db: Session,
+    data: DocumentImpactPreviewIn,
+) -> DocumentImpactPreviewOut:
+    case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    template = None
+    if data.doc_template_id:
+        template = db.execute(
+            select(DocTemplate).where(DocTemplate.id == data.doc_template_id)
+        ).scalar_one_or_none()
+        if not template:
+            raise_business_error(
+                "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
+            )
+
+    status_impacts: list[DocumentImpactItemOut] = []
+    deadline_impacts: list[DocumentImpactItemOut] = []
+    task_impacts: list[DocumentImpactItemOut] = []
+    fee_impacts: list[DocumentImpactItemOut] = []
+    file_status_impacts: list[DocumentImpactItemOut] = []
+    confirmation_items: list[str] = []
+    risk_tips: list[str] = []
+
+    if template:
+        if data.direction == DocumentDirection.IN and _normalize_text(template.status_effect):
+            status_impacts.append(
+                DocumentImpactItemOut(
+                    kind="CASE_STATUS",
+                    title="案件状态影响",
+                    effect=template.status_effect,
+                    requires_confirmation=True,
+                    detail=f"登记后案件状态预计变更为 {template.status_effect}",
+                )
+            )
+            confirmation_items.append("案件状态将受模板影响")
+        if (
+            data.direction == DocumentDirection.OUT
+            and data.reply_to_id
+            and _normalize_text(template.status_restore)
+        ):
+            status_impacts.append(
+                DocumentImpactItemOut(
+                    kind="CASE_STATUS_RESTORE",
+                    title="案件状态恢复",
+                    effect=template.status_restore,
+                    requires_confirmation=True,
+                    detail=f"答复登记后案件状态预计恢复为 {template.status_restore}",
+                )
+            )
+            confirmation_items.append("案件状态将受模板影响")
+
+        if _normalize_text(template.deadline_template_code):
+            deadline_impacts.append(
+                DocumentImpactItemOut(
+                    kind="DEADLINE_TEMPLATE",
+                    title="期限模板影响",
+                    effect=template.deadline_template_code,
+                    requires_confirmation=True,
+                    detail="登记后将按模板计算期限",
+                )
+            )
+            task_impacts.append(
+                DocumentImpactItemOut(
+                    kind="AUTO_TASK",
+                    title="任务影响",
+                    effect=template.deadline_template_code,
+                    requires_confirmation=True,
+                    detail="登记后将生成或更新期限任务",
+                )
+            )
+            confirmation_items.append("期限任务将受模板影响")
+
+        if _normalize_text(template.fee_draft_type):
+            fee_impacts.append(
+                DocumentImpactItemOut(
+                    kind="FEE_DRAFT",
+                    title="费用影响",
+                    effect=template.fee_draft_type,
+                    requires_confirmation=True,
+                    detail="登记后将尝试生成费用草稿",
+                )
+            )
+            confirmation_items.append("费用草稿将受模板影响")
+
+        if template.need_reply and data.direction == DocumentDirection.IN:
+            file_status_impacts.append(
+                DocumentImpactItemOut(
+                    kind="NEED_REPLY",
+                    title="文件状态影响",
+                    effect="NEED_REPLY",
+                    detail="登记后该文件将标记为需答复",
+                )
+            )
+    else:
+        risk_tips.append("未选择文件模板，系统不能预览模板驱动的状态、期限、任务或费用影响")
+
+    if data.reply_to_id:
+        source_document = db.execute(
+            select(Document).where(Document.id == data.reply_to_id)
+        ).scalar_one_or_none()
+        if not source_document:
+            raise_business_error(
+                "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
+            )
+        if source_document.case_id != data.case_id:
+            raise_business_error(
+                "REPLY_TO_DOC_CASE_MISMATCH",
+                "Reply-to document does not belong to this case",
+                status_code=400,
+            )
+        file_status_impacts.append(
+            DocumentImpactItemOut(
+                kind="REPLY_SOURCE",
+                title="回复来源文件影响",
+                effect="REPLIED",
+                requires_confirmation=True,
+                document_id=source_document.id,
+                detail="登记后回复来源文件将记录答复日期",
+            )
+        )
+        confirmation_items.append("回复来源文件将登记答复日期")
+    elif data.direction == DocumentDirection.OUT:
+        risk_tips.append("未选择回复来源文件，系统不能预览来源文件的答复状态影响")
+
+    return DocumentImpactPreviewOut(
+        case_id=case.id,
+        case_no=case.case_no,
+        template_code=template.code if template else None,
+        status_impacts=status_impacts,
+        deadline_impacts=deadline_impacts,
+        task_impacts=task_impacts,
+        fee_impacts=fee_impacts,
+        file_status_impacts=file_status_impacts,
+        confirmation_required=bool(confirmation_items),
+        confirmation_items=list(dict.fromkeys(confirmation_items)),
+        risk_tips=risk_tips,
+    )
 
 
 def create_document_wizard_batch(

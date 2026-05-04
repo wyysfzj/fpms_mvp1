@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FPMS 最小 UI 改动 Mock</title>
+<link rel="stylesheet" href="mock-ui/assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">最小 UI 改动 Mock</div>
+    <nav class="nav">
+      <a href="mock-ui/pages/11_00_minimal_ui_change_index.html" class="active">总览</a>
+      <a href="mock-ui/pages/11_01_min_case_create_intake_gate.html">新建案件</a>
+      <a href="mock-ui/pages/11_02_min_case_detail_file_event_tab.html">案件详情</a>
+      <a href="mock-ui/pages/11_03_min_document_create_impact_preview.html">登记来文</a>
+      <a href="mock-ui/pages/11_04_min_batch_filing_final_gate.html">批件递交</a>
+    </nav>
+    <div class="principle"><b>页面定位</b>本组页面只展示方案 A 的最小 UI 承接方式，不替换现有 10 页业务原型。</div>
+  </aside>
+  <main class="main">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">方案 A · 最小 UI 改动版</div>
+        <h1>案卷主线中的文件门禁</h1>
+        <p>把文件证据、材料核验、影响预览和递交门禁嵌入现有页面，而不是新建独立文件主流程。</p>
+      </div>
+      <a class="btn primary" href="mock-ui/pages/11_00_minimal_ui_change_index.html">进入总览</a>
+    </section>
+    <section class="grid two">
+      <a class="screen-card" href="mock-ui/pages/11_01_min_case_create_intake_gate.html">
+        <h2>新建案件 · 收案文件与材料核验</h2>
+        <p>在现有新建案件表单底部增加收案文件、材料清单和门禁预览。</p>
+      </a>
+      <a class="screen-card" href="mock-ui/pages/11_02_min_case_detail_file_event_tab.html">
+        <h2>案件详情 · 文件材料与文书事件</h2>
+        <p>在现有往来文件 Tab 中展示当前节点材料、文书事件和效果状态。</p>
+      </a>
+      <a class="screen-card" href="mock-ui/pages/11_03_min_document_create_impact_preview.html">
+        <h2>登记来文 · 来源文件与影响预览</h2>
+        <p>官方来文登记前先绑定来源文件，并展示状态、期限、任务、费用影响。</p>
+      </a>
+      <a class="screen-card" href="mock-ui/pages/11_04_min_batch_filing_final_gate.html">
+        <h2>批件递交 · 最终材料门禁</h2>
+        <p>在现有批量递交表格中增加最终材料、缺失项和门禁结论。</p>
+      </a>
+    </section>
+  </main>
+</div>
+</body>
+</html>

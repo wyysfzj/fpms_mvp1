@@ -14,6 +14,13 @@ from app.core.errors import raise_business_error
 from app.core.pagination import PageResult, offset_limit
 from app.modules.auth.models import T_Role, T_User, T_UserRole
 from app.modules.billing.models import BillItem, PaymentLine
+from app.modules.cases.document_gate_service import (
+    GateCaseContext,
+    GateDocumentInput,
+    MaterialGateResult,
+    build_batch_execution_preview,
+    evaluate_material_gate,
+)
 from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
 from app.modules.cases.models import (
     Case,
@@ -28,8 +35,11 @@ from app.modules.cases.schemas import (
     CaseApplicantIn,
     CaseBatchFilingActionOut,
     CaseBatchFilingCandidateItem,
+    CaseBatchFilingExecutionPreviewOut,
+    CaseBatchFilingFinalMaterialGateOut,
     CaseClientReportCountResponse,
     CaseCreate,
+    CaseDocumentGateMissingItemOut,
     CaseListItem,
     CaseListReportResponse,
     CaseReportCountResponse,
@@ -39,7 +49,7 @@ from app.modules.cases.schemas import (
     CaseUpdateLimited,
 )
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
-from app.modules.documents.models import Document
+from app.modules.documents.models import DocTemplate, Document
 from app.modules.fees.models import FeeDraft
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress
@@ -1085,6 +1095,84 @@ def list_cases(
     )
 
 
+def _load_batch_gate_documents(db: Session, case_id: str) -> list[GateDocumentInput]:
+    rows = (
+        db.query(Document, DocTemplate.code)
+        .outerjoin(DocTemplate, Document.doc_template_id == DocTemplate.id)
+        .filter(Document.case_id == case_id)
+        .order_by(Document.doc_date.asc(), Document.created_at.asc(), Document.id.asc())
+        .all()
+    )
+    return [
+        GateDocumentInput(
+            id=document.id,
+            title=document.title,
+            doc_type=document.doc_type,
+            direction=document.direction,
+            template_code=template_code,
+            has_attachment=True,
+            extra_data=document.extra_data,
+        )
+        for document, template_code in rows
+    ]
+
+
+def _case_has_priority(db: Session, case_id: str) -> bool:
+    return db.query(T_Priority.id).filter(T_Priority.case_id == case_id).first() is not None
+
+
+def _build_batch_final_material_gate_out(
+    gate: MaterialGateResult,
+) -> CaseBatchFilingFinalMaterialGateOut:
+    return CaseBatchFilingFinalMaterialGateOut(
+        material_count=gate.material_count,
+        missing_items=[
+            CaseDocumentGateMissingItemOut(
+                requirement_code=item.requirement_code,
+                requirement_name=item.requirement_name,
+                role=item.role,
+                blocks_submission=item.blocks_submission,
+                afterfill_allowed=item.afterfill_allowed,
+            )
+            for item in gate.missing_items
+        ],
+        conclusion=gate.conclusion.value,
+        hard_block=gate.hard_block,
+        afterfill_audit_required=gate.afterfill_audit_required,
+        execution_preview=[
+            CaseBatchFilingExecutionPreviewOut(
+                kind=item.kind,
+                label=item.label,
+                enabled=item.enabled,
+                detail=item.detail,
+            )
+            for item in build_batch_execution_preview(
+                gate,
+                apply_exam_now=False,
+                generate_list=True,
+            )
+        ],
+    )
+
+
+def _evaluate_batch_final_material_gate(
+    db: Session,
+    case: Case,
+) -> CaseBatchFilingFinalMaterialGateOut:
+    gate = evaluate_material_gate(
+        GateCaseContext(
+            case_type=case.case_type,
+            patent_category=case.patent_category,
+            flow_dir=case.flow_dir,
+            has_exam_request=case.has_exam_request,
+            no_power=case.no_power,
+            has_priority=_case_has_priority(db, case.id),
+        ),
+        documents=_load_batch_gate_documents(db, case.id),
+    )
+    return _build_batch_final_material_gate_out(gate)
+
+
 def list_batch_filing_candidates(
     db: Session,
     *,
@@ -1140,6 +1228,7 @@ def list_batch_filing_candidates(
             recv_date=str(case.recv_date) if case.recv_date else None,
             status=case.status,
             has_exam_request=case.has_exam_request,
+            final_material_gate=_evaluate_batch_final_material_gate(db, case),
         )
         for case in items
     ]
@@ -1430,6 +1519,25 @@ def execute_batch_filing(
         raise_business_error(
             "CASE_BATCH_FILING_SUBMITTED_DATE_INVALID",
             "submitted_date must be greater than or equal to recv_date",
+            status_code=400,
+        )
+
+    blocked_gate_case_nos: list[str] = []
+    blocked_gate_case_ids: list[str] = []
+    for case_id in unique_case_ids:
+        case = case_by_id[case_id]
+        material_gate = _evaluate_batch_final_material_gate(db, case)
+        if material_gate.hard_block:
+            blocked_gate_case_nos.append(case.case_no)
+            blocked_gate_case_ids.append(case.id)
+    if blocked_gate_case_ids:
+        raise_business_error(
+            "CASE_BATCH_FILING_MATERIAL_GATE_BLOCKED",
+            "One or more selected cases are blocked by final material gate",
+            details={
+                "case_ids": blocked_gate_case_ids,
+                "case_nos": blocked_gate_case_nos,
+            },
             status_code=400,
         )
 

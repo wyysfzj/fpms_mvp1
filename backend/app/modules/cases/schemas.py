@@ -381,6 +381,7 @@ class CaseBatchFilingCandidateItem(BaseModel):
     recv_date: str | None = None
     status: str
     has_exam_request: bool | None = None
+    final_material_gate: CaseBatchFilingFinalMaterialGateOut | None = None
 
 
 class CaseBatchFilingActionIn(BaseModel):
@@ -396,3 +397,69 @@ class CaseBatchFilingActionOut(BaseModel):
     updated_case_ids: list[str]
     document_ids: list[str] = Field(default_factory=list)
     created_task_ids: list[str] = Field(default_factory=list)
+
+
+class CaseDocumentGateMatchedDocumentOut(BaseModel):
+    id: str
+    title: str | None = None
+    doc_type: str | None = None
+    template_code: str | None = None
+
+
+class CaseDocumentGateCheckOut(BaseModel):
+    requirement_code: str
+    requirement_name: str
+    role: str
+    blocks_submission: bool
+    afterfill_allowed: bool
+    status: str
+    matched_documents: list[CaseDocumentGateMatchedDocumentOut] = Field(default_factory=list)
+
+
+class CaseDocumentGateMissingItemOut(BaseModel):
+    requirement_code: str
+    requirement_name: str
+    role: str
+    blocks_submission: bool
+    afterfill_allowed: bool
+
+
+class CaseDocumentGateFileEventOut(BaseModel):
+    document_id: str
+    title: str | None = None
+    doc_type: str | None = None
+    direction: str
+    event_status: str
+    need_reply: bool | None = None
+    reply_date: str | None = None
+    reply_to_id: str | None = None
+
+
+class CaseDocumentGatePreviewOut(BaseModel):
+    case_type: str
+    patent_category: str
+    flow_dir: str
+    conclusion: str
+    hard_block: bool
+    afterfill_audit_required: bool
+    material_count: int
+    checks: list[CaseDocumentGateCheckOut] = Field(default_factory=list)
+    missing_items: list[CaseDocumentGateMissingItemOut] = Field(default_factory=list)
+    file_events: list[CaseDocumentGateFileEventOut] = Field(default_factory=list)
+    suggested_actions: list[str] = Field(default_factory=list)
+
+
+class CaseBatchFilingExecutionPreviewOut(BaseModel):
+    kind: str
+    label: str
+    enabled: bool
+    detail: str | None = None
+
+
+class CaseBatchFilingFinalMaterialGateOut(BaseModel):
+    material_count: int
+    missing_items: list[CaseDocumentGateMissingItemOut] = Field(default_factory=list)
+    conclusion: str
+    hard_block: bool
+    afterfill_audit_required: bool
+    execution_preview: list[CaseBatchFilingExecutionPreviewOut] = Field(default_factory=list)

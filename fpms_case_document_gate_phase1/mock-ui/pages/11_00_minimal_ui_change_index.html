@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11 最小 UI 改动 Mock 总览</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">最小 UI 改动 Mock</div>
+    <nav class="nav">
+      <a href="11_00_minimal_ui_change_index.html" class="active">总览</a>
+      <a href="11_01_min_case_create_intake_gate.html">新建案件</a>
+      <a href="11_02_min_case_detail_file_event_tab.html">案件详情</a>
+      <a href="11_03_min_document_create_impact_preview.html">登记来文</a>
+      <a href="11_04_min_batch_filing_final_gate.html">批件递交</a>
+    </nav>
+    <div class="principle"><b>设计原则</b>保留案卷、文书、递交等现有入口；只补足文件证据、门禁解释和影响预览。</div>
+  </aside>
+  <main class="main">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">方案 A · 总览</div>
+        <h1>现有页面上的最小 UI 增量</h1>
+        <p>这组 mock 用 4 个页面表达最小闭环：建案看收案材料，详情看当前材料与事件，登记来文看影响，递交看最终稿门禁。</p>
+      </div>
+      <a class="btn primary" href="../../fpms_case_document_gate_minimal_ui_mock_index.html">返回入口</a>
+    </section>
+    <section class="metric-grid">
+      <div class="metric"><b>4</b><span>现有入口承接</span></div>
+      <div class="metric warn"><b>0</b><span>新增主流程</span></div>
+      <div class="metric ok"><b>1</b><span>核心业务链路</span></div>
+      <div class="metric danger"><b>3</b><span>明确不做范围</span></div>
+    </section>
+    <section class="card">
+      <h2>页面映射</h2>
+      <table class="data-table">
+        <thead>
+          <tr><th>现有入口</th><th>最小新增 UI</th><th>律师业务判断</th><th>非闭合范围</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>新建案件</td>
+            <td>收案文件包、材料清单、收案门禁预览</td>
+            <td>收案材料可以支持建案，但不代表可递交。</td>
+            <td>不生成递交稿，不触发官费时限。</td>
+          </tr>
+          <tr>
+            <td>案件详情</td>
+            <td>当前节点文件材料、文书事件、效果状态</td>
+            <td>文件是案卷动作证据，不直接改案件状态。</td>
+            <td>不做完整效果账本页面。</td>
+          </tr>
+          <tr>
+            <td>登记往来文件</td>
+            <td>来源文件绑定、模板规则提示升级为影响预览</td>
+            <td>官方来文必须先看状态、任务、期限和费用影响。</td>
+            <td>不做邮件自动拉取。</td>
+          </tr>
+          <tr>
+            <td>案件批件递交</td>
+            <td>最终材料、缺失项、门禁结论、后补审计</td>
+            <td>递交检查最终递交稿，不检查收案稿。</td>
+            <td>不做递交材料自动生成。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="grid two" style="margin-top:20px">
+      <a class="screen-card" href="11_01_min_case_create_intake_gate.html"><h2>01 新建案件</h2><p>在表单底部加一个折叠区，不改变原有必填字段顺序。</p></a>
+      <a class="screen-card" href="11_02_min_case_detail_file_event_tab.html"><h2>02 案件详情</h2><p>复用往来文件 Tab，加入当前节点材料区。</p></a>
+      <a class="screen-card" href="11_03_min_document_create_impact_preview.html"><h2>03 登记来文</h2><p>把模板规则提示升级为提交前影响预览。</p></a>
+      <a class="screen-card" href="11_04_min_batch_filing_final_gate.html"><h2>04 批件递交</h2><p>在候选案件表格里禁选硬阻止案件。</p></a>
+    </section>
+  </main>
+</div>
+</body>
+</html>

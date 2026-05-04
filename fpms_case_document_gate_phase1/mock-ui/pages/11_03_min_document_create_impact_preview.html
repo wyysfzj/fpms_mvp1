@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11-03 登记来文 · 来源文件与影响预览</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">最小 UI 改动 Mock</div>
+    <nav class="nav">
+      <a href="11_00_minimal_ui_change_index.html">总览</a>
+      <a href="11_01_min_case_create_intake_gate.html">新建案件</a>
+      <a href="11_02_min_case_detail_file_event_tab.html">案件详情</a>
+      <a href="11_03_min_document_create_impact_preview.html" class="active">登记来文</a>
+      <a href="11_04_min_batch_filing_final_gate.html">批件递交</a>
+    </nav>
+    <div class="principle"><b>最小改动</b>保留现有“登记往来文件”表单，把模板规则提示升级为提交前影响预览。</div>
+  </aside>
+  <main class="main">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">现有页面：登记往来文件</div>
+        <h1>官方来文来源文件与影响预览</h1>
+        <p>官方来文必须绑定来源文件；确认前先展示状态、期限、任务、费用和文件状态影响。</p>
+      </div>
+      <button class="btn primary">确认并登记来文</button>
+    </section>
+    <section class="grid two">
+      <div class="card">
+        <h2>往来文件信息保持现状</h2>
+        <div class="form-grid">
+          <label>标题<input value="第一次审查意见通知书"></label>
+          <label>方向<input value="收文"></label>
+          <label>文件日期<input value="2026-03-01"></label>
+          <label>所属案件<input value="25F0411CN"></label>
+          <label>文件类型<input value="官方来文"></label>
+          <label>文件模板<input value="OA_NOTICE — 审查意见通知书"></label>
+          <label class="wide">回复来源文件<input value="无"></label>
+        </div>
+        <div class="notice"><b>保留现状</b><span>模板选择、回复来源和案件锁定逻辑继续复用现有页面。</span></div>
+      </div>
+      <div class="card">
+        <h2>新增：来源文件</h2>
+        <div class="drop-zone">
+          <b>上传或选择已核验来源文件</b>
+          <span>官方来文没有来源文件时，只能保存草稿，不应触发状态或期限影响。</span>
+          <button class="btn primary">选择来源文件</button>
+        </div>
+        <table class="data-table compact">
+          <tbody>
+            <tr><th>来源文件</th><td>第一次审查意见通知书.pdf</td></tr>
+            <tr><th>文件状态</th><td><span class="tag ok">已核验</span></td></tr>
+            <tr><th>文件角色</th><td>来源文件</td></tr>
+            <tr><th>事件化结果</th><td>登记后标记为已形成文书事件</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="card" style="margin-top:20px">
+      <h2>影响预览</h2>
+      <table class="data-table">
+        <thead><tr><th>影响类型</th><th>预览结果</th><th>确认要求</th><th>风险提示</th></tr></thead>
+        <tbody>
+          <tr><td>申请状态</td><td>实审 → 一通</td><td><span class="tag ok">流程人员可确认</span></td><td>不得覆盖终局状态。</td></tr>
+          <tr><td>客户服务状态</td><td>审查中 → 一通待转达</td><td><span class="tag ok">流程人员可确认</span></td><td>需同步客户转达任务。</td></tr>
+          <tr><td>任务</td><td>生成 OA 答复期限任务，官方绝限 2026-07-01</td><td><span class="tag warn">需核对绝限</span></td><td>期限错误会造成不可恢复风险。</td></tr>
+          <tr><td>费用</td><td>不生成费用草稿；答复提交时再计费</td><td><span class="tag muted">无费用动作</span></td><td>避免登记来文即重复收费。</td></tr>
+          <tr><td>文件状态</td><td>已核验 → 已形成文书事件</td><td><span class="tag ok">自动记录</span></td><td>保留来源文件与操作者。</td></tr>
+        </tbody>
+      </table>
+      <div class="notice warn"><b>确认弹窗</b><span>点击登记时二次确认：本次将写入文书记录，并按模板规则触发状态与任务影响。</span></div>
+      <div class="notice danger"><b>特殊规则</b><span>专利证书、终止通知、恢复相关通知应要求律师或管理员确认后再落账。</span></div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

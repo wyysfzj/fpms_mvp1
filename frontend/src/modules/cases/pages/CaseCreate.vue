@@ -728,6 +728,149 @@
             </el-row>
           </el-collapse-item>
         </el-collapse>
+
+        <div class="form-section intake-gate-section">
+          <div class="intake-gate-header">
+            <div>
+              <h3 class="form-section-title">收案文件与材料核验</h3>
+              <p class="intake-gate-subtitle">
+                本区仅展示收案文件、材料清单和建案门禁预览；不会上传文件，也不会改变创建案件请求。
+              </p>
+            </div>
+            <el-tag type="warning" effect="plain">递交前仍需最终材料核验</el-tag>
+          </div>
+
+          <div class="intake-gate-grid">
+            <div class="intake-gate-card">
+              <div class="intake-card-title">收案文件包</div>
+              <div class="intake-drop-zone">
+                <strong>上传客户邮件、压缩包或申请文件</strong>
+                <span>文件先作为收案证据保存；当前页面只读取门禁预览，不调用上传接口。</span>
+                <el-button type="primary" plain disabled>选择文件</el-button>
+              </div>
+              <el-skeleton v-if="intakeGateLoading" :rows="4" animated />
+              <el-alert
+                v-else-if="intakeGateError"
+                title="收案材料门禁加载失败"
+                type="error"
+                show-icon
+                :closable="false"
+                :description="intakeGateError.message"
+              />
+              <el-empty
+                v-else-if="!intakeGate"
+                description="暂无收案材料门禁数据"
+                :image-size="72"
+              />
+              <table v-else class="intake-table">
+                <thead>
+                  <tr>
+                    <th>材料要求</th>
+                    <th>匹配文件</th>
+                    <th>材料角色</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="check in intakeGate.checks" :key="check.requirement_code">
+                    <td>{{ check.requirement_name }}</td>
+                    <td>{{ matchedDocumentText(check) }}</td>
+                    <td>{{ check.role }}</td>
+                    <td>
+                      <el-tag :type="checkStatusTagType(check)" size="small">
+                        {{ checkStatusText(check) }}
+                      </el-tag>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="intake-gate-card">
+              <div class="intake-card-title">收案材料门禁预览</div>
+              <el-skeleton v-if="intakeGateLoading" :rows="4" animated />
+              <el-alert
+                v-else-if="intakeGateError"
+                title="无法获取门禁结论"
+                type="error"
+                show-icon
+                :closable="false"
+                :description="intakeGateError.message"
+              />
+              <el-empty
+                v-else-if="!intakeGate"
+                description="暂无门禁结论"
+                :image-size="72"
+              />
+              <template v-else>
+                <table class="intake-table">
+                  <thead>
+                    <tr>
+                      <th>指标</th>
+                      <th>当前值</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>已匹配材料</td>
+                      <td>{{ intakeGate.material_count }} 项</td>
+                    </tr>
+                    <tr>
+                      <td>缺失材料</td>
+                      <td>{{ intakeGate.missing_items.length }} 项</td>
+                    </tr>
+                    <tr>
+                      <td>硬性阻止</td>
+                      <td>{{ intakeGate.hard_block ? '是' : '否' }}</td>
+                    </tr>
+                    <tr>
+                      <td>后补审计</td>
+                      <td>{{ intakeGate.afterfill_audit_required ? '需要' : '不需要' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <table v-if="intakeGate.missing_items.length" class="intake-table intake-missing-table">
+                  <thead>
+                    <tr>
+                      <th>缺失项</th>
+                      <th>材料角色</th>
+                      <th>处理方式</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in intakeGate.missing_items" :key="item.requirement_code">
+                      <td>{{ item.requirement_name }}</td>
+                      <td>{{ item.role }}</td>
+                      <td>{{ item.blocks_submission ? '补齐后递交' : item.afterfill_allowed ? '允许后补' : '不阻止' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <el-empty
+                  v-else
+                  description="当前门禁没有缺失材料"
+                  :image-size="56"
+                  class="intake-empty"
+                />
+
+                <el-alert
+                  :title="intakeGateConclusionTitle"
+                  :type="gateConclusionAlertType(intakeGate.conclusion)"
+                  show-icon
+                  :closable="false"
+                  class="intake-gate-alert"
+                />
+              </template>
+              <el-alert
+                title="非闭合范围：不递交、不生成最终申请文件、不生成官费时限。"
+                type="error"
+                show-icon
+                :closable="false"
+                class="intake-gate-alert"
+              />
+            </div>
+          </div>
+        </div>
       </el-form>
     </div>
 
@@ -776,9 +919,17 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { createCase } from '../../../api/cases'
+import { createCase, getCaseIntakeDocumentGate } from '../../../api/cases'
 import { createClient, getClients } from '../../../api/clients'
-import type { CaseAgentSplit, CaseApplicant, CaseCreatePayload, CasePriority } from '../../../api/cases.types'
+import type {
+  CaseAgentSplit,
+  CaseApplicant,
+  CaseCreatePayload,
+  CaseDocumentGateCheck,
+  CaseDocumentGateConclusion,
+  CaseDocumentGatePreview,
+  CasePriority,
+} from '../../../api/cases.types'
 import type { Client, ClientCreatePayload } from '../../../api/clients.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -828,6 +979,9 @@ const saving = ref(false)
 const loadingClients = ref(false)
 const creatingClient = ref(false)
 const error = ref<ApiError | null>(null)
+const intakeGate = ref<CaseDocumentGatePreview | null>(null)
+const intakeGateLoading = ref(false)
+const intakeGateError = ref<ApiError | null>(null)
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 const validationSummary = ref<ValidationItem[]>([])
 const agentSplitRowErrors = ref<string[][]>([])
@@ -924,6 +1078,27 @@ const showPrioritySection = computed(() => PRIORITY_CASE_TYPES.includes(form.cas
 const showPublicationSection = computed(() => !isConsultingCase.value)
 const showSpecificationSection = computed(() => !isConsultingCase.value)
 const showBioDepositSection = computed(() => !isConsultingCase.value)
+const hasPriorityForGate = computed(() =>
+  showPrioritySection.value
+  || (form.priorities || []).some((priority) =>
+    [priority.country_code, priority.prio_no, priority.prio_date].some((value) => String(value || '').trim())
+  )
+)
+const intakeGateParams = computed(() => ({
+  case_type: form.case_type || 'NORMAL',
+  patent_category: form.patent_category || 'INV',
+  flow_dir: form.flow_dir || 'CN_DOMESTIC',
+  has_exam_request: Boolean(form.has_exam_request),
+  no_power: Boolean(form.no_power),
+  has_priority: hasPriorityForGate.value,
+}))
+const intakeGateConclusionTitle = computed(() => {
+  if (!intakeGate.value) return '门禁结论：暂无数据'
+  const actions = intakeGate.value.suggested_actions.length
+    ? `；${intakeGate.value.suggested_actions.join('；')}`
+    : ''
+  return `门禁结论：${gateConclusionText(intakeGate.value.conclusion)}${actions}`
+})
 const quickClientDialogTitle = computed(() =>
   quickClientMode.value === 'client'
     ? '快速新建客户'
@@ -948,6 +1123,63 @@ const rules: FormRules = {
     },
   ],
   client_id: [{ required: true, message: '请选择客户', trigger: 'change' }],
+}
+
+function gateConclusionText(conclusion: CaseDocumentGateConclusion) {
+  if (conclusion === 'PASS') return '通过'
+  if (conclusion === 'WARNING') return '需后补'
+  if (conclusion === 'BLOCKED') return '阻止'
+  return conclusion
+}
+
+function gateConclusionAlertType(conclusion: CaseDocumentGateConclusion): 'success' | 'warning' | 'error' | 'info' {
+  if (conclusion === 'PASS') return 'success'
+  if (conclusion === 'WARNING') return 'warning'
+  if (conclusion === 'BLOCKED') return 'error'
+  return 'info'
+}
+
+function matchedDocumentText(check: CaseDocumentGateCheck) {
+  const titles = check.matched_documents
+    .map((document) => document.title || document.template_code || document.id)
+    .filter(Boolean)
+  return titles.length ? titles.join('，') : '未匹配'
+}
+
+function checkStatusText(check: CaseDocumentGateCheck) {
+  if (check.status === 'MATCHED') return '已匹配'
+  if (check.afterfill_allowed) return '允许后补'
+  if (check.blocks_submission) return '缺失阻止'
+  return '未匹配'
+}
+
+function checkStatusTagType(check: CaseDocumentGateCheck): 'success' | 'warning' | 'danger' | 'info' {
+  if (check.status === 'MATCHED') return 'success'
+  if (check.afterfill_allowed) return 'warning'
+  if (check.blocks_submission) return 'danger'
+  return 'info'
+}
+
+let intakeGateRequestSeq = 0
+
+async function fetchIntakeGatePreview() {
+  const requestSeq = ++intakeGateRequestSeq
+  intakeGateLoading.value = true
+  intakeGateError.value = null
+
+  try {
+    const result = await getCaseIntakeDocumentGate(intakeGateParams.value)
+    if (requestSeq !== intakeGateRequestSeq) return
+    intakeGate.value = result
+  } catch (err) {
+    if (requestSeq !== intakeGateRequestSeq) return
+    intakeGate.value = null
+    intakeGateError.value = err as ApiError
+  } finally {
+    if (requestSeq === intakeGateRequestSeq) {
+      intakeGateLoading.value = false
+    }
+  }
 }
 
 watch(
@@ -1049,6 +1281,14 @@ watch(
       fieldErrors.value.delete('foreign_agent_id')
     }
   }
+)
+
+watch(
+  intakeGateParams,
+  () => {
+    void fetchIntakeGatePreview()
+  },
+  { immediate: true }
 )
 
 async function fetchClients() {
@@ -1570,6 +1810,97 @@ onMounted(() => {
   font-weight: 600;
 }
 
+.intake-gate-section {
+  margin-top: 16px;
+}
+
+.intake-gate-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.intake-gate-subtitle {
+  margin: 4px 0 0;
+  color: var(--text-sub);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.intake-gate-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.intake-gate-card {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--color-bg-card);
+}
+
+.intake-card-title {
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.intake-drop-zone {
+  display: grid;
+  gap: 8px;
+  place-items: center;
+  min-height: 128px;
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px dashed var(--el-color-primary);
+  border-radius: 10px;
+  background: var(--el-color-primary-light-9);
+  text-align: center;
+}
+
+.intake-drop-zone span {
+  color: var(--text-sub);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.intake-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.intake-table th,
+.intake-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.intake-table th {
+  background: var(--el-fill-color-light);
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.intake-gate-alert {
+  margin-top: 12px;
+}
+
+.intake-missing-table {
+  margin-top: 12px;
+}
+
+.intake-empty {
+  padding: 8px 0 0;
+}
+
 .case-form .el-form-item {
   margin-bottom: 20px;
 }
@@ -1577,5 +1908,16 @@ onMounted(() => {
 .case-form .el-form-item__label {
   font-weight: 500;
   color: var(--text-main);
+}
+
+@media (max-width: 1100px) {
+  .intake-gate-header,
+  .intake-gate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intake-gate-header {
+    display: grid;
+  }
 }
 </style>

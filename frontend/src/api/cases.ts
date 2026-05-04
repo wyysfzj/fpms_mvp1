@@ -5,10 +5,12 @@ import type {
     CaseBatchFilingActionPayload,
     CaseBatchFilingActionResult,
     CaseBatchFilingCandidate,
-    CaseListResponse,
     CaseBatchFilingQueryParams,
     CaseCreatePayload,
+    CaseDocumentGatePreview,
+    CaseIntakeDocumentGateParams,
     CaseLimitedEditPayload,
+    CaseListResponse,
     CaseListParams,
     CaseUpdatePayload,
 } from './cases.types'
@@ -146,6 +148,7 @@ interface BackendCaseBatchFilingCandidate {
     recv_date?: string | null
     status: string
     has_exam_request?: boolean | null
+    final_material_gate?: CaseBatchFilingCandidate['final_material_gate'] | null
 }
 
 function mapCase(input: BackendCase): Case {
@@ -268,6 +271,7 @@ function mapBatchFilingCandidate(input: BackendCaseBatchFilingCandidate): CaseBa
         recv_date: input.recv_date || undefined,
         status: input.status,
         has_exam_request: input.has_exam_request ?? undefined,
+        final_material_gate: input.final_material_gate || undefined,
     }
 }
 
@@ -437,6 +441,38 @@ export async function getCases(params: CaseListParams = {}): Promise<CaseListRes
 export async function getCase(id: string | number): Promise<Case> {
     const response = await http.get<BackendCase>(`/cases/${id}`)
     return mapCase(response.data)
+}
+
+export async function getCaseIntakeDocumentGate(
+    params: CaseIntakeDocumentGateParams
+): Promise<CaseDocumentGatePreview> {
+    const query = new URLSearchParams()
+    query.set('case_type', params.case_type)
+    query.set('patent_category', params.patent_category)
+    query.set('flow_dir', params.flow_dir)
+    if (params.has_exam_request !== undefined) {
+        query.set('has_exam_request', String(params.has_exam_request))
+    }
+    if (params.no_power !== undefined) {
+        query.set('no_power', String(params.no_power))
+    }
+    if (params.has_priority !== undefined) {
+        query.set('has_priority', String(params.has_priority))
+    }
+    for (const documentId of params.source_document_ids || []) {
+        query.append('source_document_ids', documentId)
+    }
+
+    const response = await http.get<CaseDocumentGatePreview>(
+        '/cases/document-gate/intake-preview',
+        { params: query }
+    )
+    return response.data
+}
+
+export async function getCaseDocumentGate(caseId: string | number): Promise<CaseDocumentGatePreview> {
+    const response = await http.get<CaseDocumentGatePreview>(`/cases/${caseId}/document-gate`)
+    return response.data
 }
 
 /**

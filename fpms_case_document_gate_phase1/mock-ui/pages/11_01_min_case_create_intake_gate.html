@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11-01 新建案件 · 收案文件与材料核验</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">最小 UI 改动 Mock</div>
+    <nav class="nav">
+      <a href="11_00_minimal_ui_change_index.html">总览</a>
+      <a href="11_01_min_case_create_intake_gate.html" class="active">新建案件</a>
+      <a href="11_02_min_case_detail_file_event_tab.html">案件详情</a>
+      <a href="11_03_min_document_create_impact_preview.html">登记来文</a>
+      <a href="11_04_min_batch_filing_final_gate.html">批件递交</a>
+    </nav>
+    <div class="principle"><b>最小改动</b>不重做新建案件向导，只在现有表单底部增加“收案文件与材料核验”折叠区。</div>
+  </aside>
+  <main class="main">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">现有页面：新建案件</div>
+        <h1>收案文件与材料核验</h1>
+        <p>基础信息、申请人、涉外信息等现有表单保持不变；新增区域只解释哪些收案文件支持建案。</p>
+      </div>
+      <button class="btn primary">创建案件</button>
+    </section>
+    <section class="grid two">
+      <div class="card">
+        <h2>基础信息保持现状</h2>
+        <div class="form-grid">
+          <label>案号<input value="25F0411CN"></label>
+          <label>案件类型<input value="普通案件"></label>
+          <label>专利类别<input value="发明"></label>
+          <label>流程方向<input value="中国内申请"></label>
+          <label class="wide">案件标题<input value="一种高效电池管理方法"></label>
+          <label class="wide">客户<input value="ABC科技有限公司"></label>
+        </div>
+        <div class="notice"><b>保留现状</b><span>申请人、发明人、优先权、PCT、代理人分配等仍使用现有折叠区。</span></div>
+      </div>
+      <div class="card">
+        <h2>新增折叠区：收案文件包</h2>
+        <div class="drop-zone">
+          <b>上传客户邮件、压缩包或申请文件</b>
+          <span>文件先作为收案证据保存；本页只做 mock，不调用上传接口。</span>
+          <button class="btn primary">选择文件</button>
+        </div>
+        <table class="data-table compact">
+          <thead><tr><th>文件</th><th>类型建议</th><th>材料角色</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td>客户委托邮件.eml</td><td>客户指示</td><td>来源证据</td><td><span class="tag ok">已识别</span></td></tr>
+            <tr><td>说明书.docx</td><td>说明书</td><td>收案稿</td><td><span class="tag ok">已识别</span></td></tr>
+            <tr><td>权利要求书.docx</td><td>权利要求书</td><td>收案稿</td><td><span class="tag ok">已识别</span></td></tr>
+            <tr><td>摘要.docx</td><td>摘要</td><td>收案稿</td><td><span class="tag ok">已识别</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="card" style="margin-top:20px">
+      <h2>收案材料门禁预览</h2>
+      <table class="data-table">
+        <thead><tr><th>要求项</th><th>要求级别</th><th>匹配文件</th><th>建案结论</th><th>后续动作</th></tr></thead>
+        <tbody>
+          <tr><td>客户指示</td><td>必需</td><td>客户委托邮件.eml</td><td><span class="tag ok">通过</span></td><td>归档为来源证据</td></tr>
+          <tr><td>说明书收案稿</td><td>必需</td><td>说明书.docx</td><td><span class="tag ok">通过</span></td><td>进入撰写准备</td></tr>
+          <tr><td>权利要求书收案稿</td><td>必需</td><td>权利要求书.docx</td><td><span class="tag ok">通过</span></td><td>进入撰写准备</td></tr>
+          <tr><td>委托书</td><td>递交前必需</td><td>未匹配</td><td><span class="tag warn">软通过</span></td><td>生成补交委托书任务</td></tr>
+          <tr><td>费用减缴材料</td><td>可选</td><td>未匹配</td><td><span class="tag muted">不阻止</span></td><td>标记不申请或后补</td></tr>
+        </tbody>
+      </table>
+      <div class="notice warn"><b>门禁结论</b><span>允许创建案件并进入撰写准备；本页不允许把收案稿直接视为最终递交稿。</span></div>
+      <div class="notice danger"><b>非闭合范围</b><span>不递交、不生成最终申请文件、不生成官费时限。</span></div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

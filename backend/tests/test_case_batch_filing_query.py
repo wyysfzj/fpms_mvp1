@@ -154,4 +154,6 @@ def test_batch_filing_query_returns_not_filed_candidates_with_minimal_fields(
         "recv_date",
         "status",
         "has_exam_request",
+        "final_material_gate",
     }
+    assert item["final_material_gate"]["conclusion"] in {"PASS", "WARNING", "BLOCKED"}

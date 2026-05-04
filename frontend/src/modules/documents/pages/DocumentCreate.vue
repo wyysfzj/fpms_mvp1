@@ -183,6 +183,79 @@
             />
           </el-form-item>
         </div>
+
+        <div class="form-section document-impact-section">
+          <h3 class="form-section-title">来源文件与影响预览</h3>
+          <div class="document-impact-grid">
+            <section class="document-impact-card">
+              <h4 class="document-impact-title">来源文件</h4>
+              <div class="source-file-zone">
+                <div>
+                  <strong>上传或选择已核验来源文件</strong>
+                  <span>官方来文没有来源文件时，不应触发状态、期限或费用影响。</span>
+                </div>
+                <el-button type="primary" size="small" disabled>选择来源文件</el-button>
+              </div>
+              <el-descriptions :column="1" size="small" border>
+                <el-descriptions-item
+                  v-for="item in sourceFilePreviewRows"
+                  :key="item.label"
+                  :label="item.label"
+                >
+                  <el-tag v-if="item.tagType" :type="item.tagType" size="small">{{ item.value }}</el-tag>
+                  <span v-else>{{ item.value }}</span>
+                </el-descriptions-item>
+              </el-descriptions>
+            </section>
+
+            <section class="document-impact-card">
+              <h4 class="document-impact-title">影响预览</h4>
+              <el-skeleton v-if="impactPreviewLoading" :rows="4" animated />
+              <el-alert
+                v-else-if="impactPreviewError"
+                type="error"
+                :closable="false"
+                title="影响预览加载失败"
+                :description="impactPreviewError.message"
+                show-icon
+              />
+              <el-empty
+                v-else-if="!impactPreviewRows.length"
+                description="请选择案件并填写标题后查看影响预览"
+                :image-size="72"
+              />
+              <el-table v-else :data="impactPreviewRows" size="small" class="impact-preview-table">
+                <el-table-column prop="impactType" label="影响类型" min-width="120" />
+                <el-table-column prop="result" label="预览结果" min-width="220" />
+                <el-table-column label="确认要求" min-width="130">
+                  <template #default="{ row }">
+                    <el-tag :type="row.tagType" size="small">{{ row.confirmation }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="risk" label="风险提示" min-width="180" />
+              </el-table>
+            </section>
+          </div>
+
+          <el-alert
+            v-if="impactPreview?.confirmation_required"
+            class="impact-warning"
+            type="warning"
+            :closable="false"
+            title="确认警示"
+            :description="confirmationDescription"
+            show-icon
+          />
+          <el-alert
+            v-if="impactPreview?.risk_tips.length"
+            class="impact-warning"
+            type="error"
+            :closable="false"
+            title="风险提示"
+            :description="impactPreview.risk_tips.join('；')"
+            show-icon
+          />
+        </div>
       </el-form>
     </div>
   </div>
@@ -195,8 +268,8 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getCase, getCases } from '../../../api/cases'
 import type { Case } from '../../../api/cases.types'
-import { createDocument, getDocTemplates, getDocuments } from '../../../api/documents'
-import type { DocumentCreatePayload } from '../../../api/documents.types'
+import { createDocument, getDocTemplates, getDocuments, previewDocumentImpact } from '../../../api/documents'
+import type { DocumentCreatePayload, DocumentImpactItem, DocumentImpactPreviewResult } from '../../../api/documents.types'
 import type { DocTemplate, Document as Doc } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
@@ -215,6 +288,9 @@ const hasLockedCaseContext = ref(false)
 const caseContextReady = ref(false)
 const caseOptionsLoading = ref(false)
 const caseOptions = ref<Case[]>([])
+const impactPreview = ref<DocumentImpactPreviewResult | null>(null)
+const impactPreviewLoading = ref(false)
+const impactPreviewError = ref<ApiError | null>(null)
 
 const form = reactive<DocumentCreatePayload>({
   title: '',
@@ -237,6 +313,70 @@ const filteredTemplates = computed(() =>
 )
 const activeError = computed(() => caseContextError.value ?? error.value)
 const isCaseContextUnavailable = computed(() => hasLockedCaseContext.value && !caseContextReady.value)
+const selectedReplyDocument = computed(() =>
+  caseDocuments.value.find((document) => document.id === form.reply_to_id) || null
+)
+const sourceFilePreviewRows = computed(() => [
+  {
+    label: '来源文件',
+    value: selectedReplyDocument.value?.title || '未选择来源文件',
+    tagType: selectedReplyDocument.value ? 'success' : '',
+  },
+  {
+    label: '所属案件',
+    value: impactPreview.value?.case_no || lockedCaseNo.value || '待选择案件',
+    tagType: '',
+  },
+  {
+    label: '模板代码',
+    value: impactPreview.value?.template_code || selectedTemplate.value?.code || '未选择模板',
+    tagType: '',
+  },
+  {
+    label: '文件状态影响',
+    value: impactPreview.value?.file_status_impacts.length
+      ? impactPreview.value.file_status_impacts.map((item) => item.title).join('；')
+      : '暂无文件状态影响',
+    tagType: impactPreview.value?.file_status_impacts.length ? 'warning' : 'info',
+  },
+])
+const impactPreviewRows = computed(() => {
+  if (!impactPreview.value) return []
+  const groups = [
+    { label: '状态影响', items: impactPreview.value.status_impacts },
+    { label: '期限与任务影响', items: impactPreview.value.deadline_impacts },
+    { label: '任务影响', items: impactPreview.value.task_impacts },
+    { label: '费用影响', items: impactPreview.value.fee_impacts },
+    { label: '文件状态影响', items: impactPreview.value.file_status_impacts },
+  ]
+
+  return groups.flatMap((group) =>
+    group.items.map((item) => ({
+      impactType: group.label,
+      result: formatImpactItem(item),
+      confirmation: item.requires_confirmation ? '需要确认' : '自动记录',
+      risk: item.detail || '无额外风险提示',
+      tagType: impactTagType(item),
+    }))
+  )
+})
+const confirmationDescription = computed(() =>
+  impactPreview.value?.confirmation_items.length
+    ? impactPreview.value.confirmation_items.join('；')
+    : '登记前请确认本次影响预览。'
+)
+
+function formatImpactItem(item: DocumentImpactItem) {
+  const effect = item.effect ? `：${item.effect}` : ''
+  const detail = item.detail ? `；${item.detail}` : ''
+  return `${item.title}${effect}${detail}`
+}
+
+function impactTagType(item: DocumentImpactItem): 'success' | 'warning' | 'info' {
+  if (!item.enabled) return 'info'
+  if (item.requires_confirmation) return 'warning'
+  return 'success'
+}
 
 function getQueryParam(value: unknown): string {
   if (Array.isArray(value)) {
@@ -257,6 +397,44 @@ function onTemplateChange(templateId: string | null) {
   }
 }
 
+let impactPreviewRequestSeq = 0
+
+async function fetchImpactPreview() {
+  if (!form.case_id || !form.title.trim() || !form.doc_date || !form.direction) {
+    impactPreview.value = null
+    impactPreviewError.value = null
+    impactPreviewLoading.value = false
+    return
+  }
+
+  const requestSeq = ++impactPreviewRequestSeq
+  impactPreviewLoading.value = true
+  impactPreviewError.value = null
+
+  try {
+    const result = await previewDocumentImpact({
+      case_id: form.case_id,
+      doc_template_id: form.doc_template_id || null,
+      doc_type: form.doc_type,
+      direction: form.direction,
+      doc_date: form.doc_date,
+      title: form.title.trim(),
+      extra_data: form.description?.trim() || null,
+      reply_to_id: form.reply_to_id || null,
+    })
+    if (requestSeq !== impactPreviewRequestSeq) return
+    impactPreview.value = result
+  } catch (err) {
+    if (requestSeq !== impactPreviewRequestSeq) return
+    impactPreview.value = null
+    impactPreviewError.value = err as ApiError
+  } finally {
+    if (requestSeq === impactPreviewRequestSeq) {
+      impactPreviewLoading.value = false
+    }
+  }
+}
+
 watch(() => form.case_id, async (newCaseId) => {
   form.reply_to_id = null
   if (!newCaseId) {
@@ -270,6 +448,23 @@ watch(() => form.case_id, async (newCaseId) => {
     // Silently fail
   }
 })
+
+watch(
+  () => [
+    form.case_id,
+    form.doc_template_id,
+    form.doc_type,
+    form.direction,
+    form.doc_date,
+    form.title,
+    form.description,
+    form.reply_to_id,
+  ],
+  () => {
+    void fetchImpactPreview()
+  },
+  { immediate: true }
+)
 
 async function initializeCaseContext() {
   const routeCaseId = getQueryParam(route.query.case_id)
@@ -467,5 +662,81 @@ function handleCancel() {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.document-impact-section {
+  margin-top: 8px;
+}
+
+.document-impact-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(0, 1.15fr);
+  gap: 16px;
+}
+
+.document-impact-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.document-impact-title {
+  margin: 0 0 12px;
+  color: var(--text-main);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.source-file-zone {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
+.source-file-zone div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.source-file-zone strong {
+  color: var(--text-main);
+  font-size: 14px;
+}
+
+.source-file-zone span {
+  color: var(--text-sub);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.source-file-zone .el-button {
+  flex: 0 0 auto;
+}
+
+.impact-preview-table {
+  width: 100%;
+}
+
+.impact-warning {
+  margin-top: 14px;
+}
+
+@media (max-width: 1100px) {
+  .document-impact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .source-file-zone {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

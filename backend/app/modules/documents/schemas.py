@@ -31,6 +31,42 @@ class DocumentCreateIn(BaseModel):
     reply_to_id: str | None = None
 
 
+class DocumentImpactPreviewIn(BaseModel):
+    case_id: str = Field(..., min_length=1)
+    doc_template_id: str | None = None
+    doc_type: DocumentDocType | None = None
+    direction: DocumentDirection
+    doc_date: date
+    title: str = Field(..., min_length=1)
+    ref_no: str | None = None
+    extra_data: str | None = None
+    reply_to_id: str | None = None
+
+
+class DocumentImpactItemOut(BaseModel):
+    kind: str
+    title: str
+    effect: str | None = None
+    enabled: bool = True
+    requires_confirmation: bool = False
+    document_id: str | None = None
+    detail: str | None = None
+
+
+class DocumentImpactPreviewOut(BaseModel):
+    case_id: str
+    case_no: str | None = None
+    template_code: str | None = None
+    status_impacts: list[DocumentImpactItemOut] = Field(default_factory=list)
+    deadline_impacts: list[DocumentImpactItemOut] = Field(default_factory=list)
+    task_impacts: list[DocumentImpactItemOut] = Field(default_factory=list)
+    fee_impacts: list[DocumentImpactItemOut] = Field(default_factory=list)
+    file_status_impacts: list[DocumentImpactItemOut] = Field(default_factory=list)
+    confirmation_required: bool = False
+    confirmation_items: list[str] = Field(default_factory=list)
+    risk_tips: list[str] = Field(default_factory=list)
+
+
 class DocumentWizardBatchDefaultsIn(BaseModel):
     doc_template_id: str = Field(..., min_length=1)
     direction: DocumentDirection

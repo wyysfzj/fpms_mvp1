@@ -125,6 +125,42 @@ export interface DocumentCreatePayload {
     reply_to_id?: string | null
 }
 
+export interface DocumentImpactPreviewPayload {
+    case_id: string
+    doc_template_id?: string | null
+    doc_type?: 'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT'
+    direction: 'IN' | 'OUT'
+    doc_date: string
+    title: string
+    ref_no?: string | null
+    extra_data?: string | null
+    reply_to_id?: string | null
+}
+
+export interface DocumentImpactItem {
+    kind: string
+    title: string
+    effect?: string | null
+    enabled: boolean
+    requires_confirmation: boolean
+    document_id?: string | null
+    detail?: string | null
+}
+
+export interface DocumentImpactPreviewResult {
+    case_id: string
+    case_no?: string | null
+    template_code?: string | null
+    status_impacts: DocumentImpactItem[]
+    deadline_impacts: DocumentImpactItem[]
+    task_impacts: DocumentImpactItem[]
+    fee_impacts: DocumentImpactItem[]
+    file_status_impacts: DocumentImpactItem[]
+    confirmation_required: boolean
+    confirmation_items: string[]
+    risk_tips: string[]
+}
+
 export interface DocumentUpdatePayload {
     title?: string
     direction?: 'IN' | 'OUT'

@@ -311,6 +311,84 @@ export interface CaseLimitedEditPayload {
     notes?: string
 }
 
+export type CaseDocumentGateConclusion = 'PASS' | 'WARNING' | 'BLOCKED'
+
+export interface CaseDocumentGateMatchedDocument {
+    id: string
+    title?: string
+    doc_type?: string
+    template_code?: string
+}
+
+export interface CaseDocumentGateCheck {
+    requirement_code: string
+    requirement_name: string
+    role: string
+    blocks_submission: boolean
+    afterfill_allowed: boolean
+    status: string
+    matched_documents: CaseDocumentGateMatchedDocument[]
+}
+
+export interface CaseDocumentGateMissingItem {
+    requirement_code: string
+    requirement_name: string
+    role: string
+    blocks_submission: boolean
+    afterfill_allowed: boolean
+}
+
+export interface CaseDocumentGateFileEvent {
+    document_id: string
+    title?: string
+    doc_type?: string
+    direction: string
+    event_status: string
+    need_reply?: boolean | null
+    reply_date?: string
+    reply_to_id?: string
+}
+
+export interface CaseDocumentGatePreview {
+    case_type: string
+    patent_category: string
+    flow_dir: string
+    conclusion: CaseDocumentGateConclusion
+    hard_block: boolean
+    afterfill_audit_required: boolean
+    material_count: number
+    checks: CaseDocumentGateCheck[]
+    missing_items: CaseDocumentGateMissingItem[]
+    file_events: CaseDocumentGateFileEvent[]
+    suggested_actions: string[]
+}
+
+export interface CaseIntakeDocumentGateParams {
+    case_type: string
+    patent_category: string
+    flow_dir: string
+    has_exam_request?: boolean
+    no_power?: boolean
+    has_priority?: boolean
+    source_document_ids?: string[]
+}
+
+export interface CaseBatchFilingExecutionPreview {
+    kind: string
+    label: string
+    enabled: boolean
+    detail?: string
+}
+
+export interface CaseBatchFilingFinalMaterialGate {
+    material_count: number
+    missing_items: CaseDocumentGateMissingItem[]
+    conclusion: CaseDocumentGateConclusion
+    hard_block: boolean
+    afterfill_audit_required: boolean
+    execution_preview: CaseBatchFilingExecutionPreview[]
+}
+
 export interface CaseBatchFilingCandidate {
     id: string
     case_no: string
@@ -322,6 +400,7 @@ export interface CaseBatchFilingCandidate {
     recv_date?: string
     status: string
     has_exam_request?: boolean
+    final_material_gate?: CaseBatchFilingFinalMaterialGate
 }
 
 export interface CaseBatchFilingQueryParams {

@@ -40,6 +40,28 @@ def _seed_applicant(session_factory, *, name_cn: str = "批件递交申请人") 
     return applicant_id
 
 
+def _create_required_documents(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    *,
+    case_id: str,
+) -> None:
+    for title in ("发明专利请求书", "说明书", "权利要求书", "摘要"):
+        response = client.post(
+            "/api/v1/documents",
+            headers=auth_headers,
+            json={
+                "case_id": case_id,
+                "doc_template_id": None,
+                "doc_type": "CLIENT_IN",
+                "direction": "IN",
+                "doc_date": "2026-03-01",
+                "title": title,
+            },
+        )
+        assert response.status_code == 201, response.text
+
+
 def _create_case(
     client: TestClient,
     auth_headers: dict[str, str],
@@ -59,6 +81,7 @@ def _create_case(
         "title_cn": f"{case_no_prefix} 标题",
         "status": "NOT_FILED",
         "recv_date": recv_date,
+        "no_power": True,
         "applicants": [
             {
                 "seq": 1,
@@ -72,7 +95,9 @@ def _create_case(
         payload["has_exam_request"] = has_exam_request
     response = client.post("/api/v1/cases", json=payload, headers=auth_headers)
     assert response.status_code == 201, response.text
-    return response.json()
+    case_data = response.json()
+    _create_required_documents(client, auth_headers, case_id=case_data["id"])
+    return case_data
 
 
 def test_batch_filing_action_updates_status_submitted_date_and_exam_request(

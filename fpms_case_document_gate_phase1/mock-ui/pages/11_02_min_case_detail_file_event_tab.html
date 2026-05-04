@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11-02 案件详情 · 文件材料与文书事件</title>
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">FPMS</div>
+    <div class="logo-sub">最小 UI 改动 Mock</div>
+    <nav class="nav">
+      <a href="11_00_minimal_ui_change_index.html">总览</a>
+      <a href="11_01_min_case_create_intake_gate.html">新建案件</a>
+      <a href="11_02_min_case_detail_file_event_tab.html" class="active">案件详情</a>
+      <a href="11_03_min_document_create_impact_preview.html">登记来文</a>
+      <a href="11_04_min_batch_filing_final_gate.html">批件递交</a>
+    </nav>
+    <div class="principle"><b>最小改动</b>复用现有“往来文件记录”Tab，升级为“文件材料与文书事件”。</div>
+  </aside>
+  <main class="main">
+    <section class="case-header">
+      <div>
+        <h1>25F0411CN · 一种高效电池管理方法</h1>
+        <p>客户：ABC科技有限公司 · 当前法律状态：未递交 · 所内阶段：撰写准备</p>
+      </div>
+      <div class="status-strip">
+        <span>收案材料 5/7</span>
+        <span>最终材料 0/7</span>
+        <span>缺失任务 1</span>
+        <span>待影响确认 0</span>
+      </div>
+    </section>
+    <section class="grid two">
+      <div class="card">
+        <h2>当前节点文件材料</h2>
+        <table class="data-table compact">
+          <thead><tr><th>要求项</th><th>匹配文件</th><th>材料角色</th><th>结论</th></tr></thead>
+          <tbody>
+            <tr><td>客户指示</td><td>客户委托邮件.eml</td><td>来源证据</td><td><span class="tag ok">已满足</span></td></tr>
+            <tr><td>说明书</td><td>说明书.docx</td><td>收案稿</td><td><span class="tag ok">已满足</span></td></tr>
+            <tr><td>权利要求书</td><td>权利要求书.docx</td><td>收案稿</td><td><span class="tag ok">已满足</span></td></tr>
+            <tr><td>委托书</td><td>未匹配</td><td>签章件</td><td><span class="tag warn">递交前必需</span></td></tr>
+            <tr><td>最终说明书</td><td>未匹配</td><td>最终递交稿</td><td><span class="tag warn">递交前核验</span></td></tr>
+          </tbody>
+        </table>
+        <div class="notice warn"><b>门禁结论</b><span>允许继续撰写和补充文件；不允许直接递交。</span></div>
+      </div>
+      <div class="card">
+        <h2>当前建议动作</h2>
+        <div class="stack">
+          <div class="event-card">
+            <b>上传补充文件</b>
+            <span>用于补齐委托书、最终递交稿或客户确认记录。</span>
+            <button class="btn primary">进入文件补充</button>
+          </div>
+          <div class="event-card">
+            <b>生成缺失任务</b>
+            <span>为委托书后补生成期限任务，避免递交前遗漏。</span>
+            <button class="btn">生成补件任务</button>
+          </div>
+          <div class="event-card">
+            <b>准备最终材料</b>
+            <span>最终说明书、最终权利要求书和最终摘要必须与收案稿区分。</span>
+            <button class="btn">准备递交材料</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="card" style="margin-top:20px">
+      <h2>文件材料与文书事件</h2>
+      <table class="data-table">
+        <thead><tr><th>方向</th><th>标题</th><th>业务阶段</th><th>文件角色</th><th>效果状态</th><th>动作</th></tr></thead>
+        <tbody>
+          <tr><td><span class="tag ok">收文</span></td><td>客户新申请委托</td><td>收案</td><td>来源证据、收案稿</td><td><span class="tag ok">已落账</span></td><td>查看</td></tr>
+          <tr><td><span class="tag warn">任务</span></td><td>补交委托书</td><td>撰写准备</td><td>签章件</td><td><span class="tag warn">待补</span></td><td>处理</td></tr>
+          <tr><td><span class="tag muted">草稿</span></td><td>最终递交材料包</td><td>递交</td><td>最终递交稿</td><td><span class="tag muted">未形成</span></td><td>准备</td></tr>
+        </tbody>
+      </table>
+      <div class="notice"><b>审计提示</b><span>本页仅展示文书事件和文件效果摘要；完整效果账本留给后续任务实现。</span></div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

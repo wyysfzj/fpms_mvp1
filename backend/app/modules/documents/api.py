@@ -26,6 +26,8 @@ from app.modules.documents.schemas import (
     DocumentDispatchLineOut,
     DocumentDispatchOut,
     DocumentEnvelopePreviewOut,
+    DocumentImpactPreviewIn,
+    DocumentImpactPreviewOut,
     DocumentListOut,
     DocumentMailingBatchIn,
     DocumentMailingBatchItemOut,
@@ -54,6 +56,7 @@ from app.modules.documents.service import (
     get_document_envelope_preview,
     list_doc_templates,
     list_documents,
+    preview_document_impact,
     preview_document_wizard_attachment_candidates,
     preview_document_wizard_fee_candidates,
     preview_document_wizard_tasks,
@@ -389,6 +392,19 @@ def create_document(
         response.headers["X-Auto-Fee-Draft-Created"] = auto_fee_draft_id
     case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
     return _build_document_out(document, case_no=case.case_no if case else None)
+
+
+@router.post(
+    "/documents/impact-preview",
+    response_model=DocumentImpactPreviewOut,
+    summary="Preview document create impacts",
+)
+def preview_document_impact_endpoint(
+    payload: DocumentImpactPreviewIn,
+    _perm: None = Depends(require_perm("Doc.Create")),
+    db: Session = Depends(get_db),
+) -> DocumentImpactPreviewOut:
+    return preview_document_impact(db, payload)
 
 
 @router.post(
