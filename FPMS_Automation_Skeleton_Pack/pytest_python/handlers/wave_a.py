@@ -366,7 +366,7 @@ def handle_tc_a_002(runtime: RuntimeContext, case: TestCase) -> None:
 
         if runtime.db.enabled():
             runtime.db.assert_row_exists("t_case", {"id": case_id, "case_no": case_no})
-            runtime.db.assert_row_exists("t_case_priority", {"case_id": case_id})
+            runtime.db.assert_row_exists("t_priority", {"case_id": case_id})
             runtime.db.assert_row_exists("t_case_bio_deposit", {"case_id": case_id})
     except requests.RequestException as exc:
         pytest.skip(f"Real backend unavailable for TC-A-002: {exc}")

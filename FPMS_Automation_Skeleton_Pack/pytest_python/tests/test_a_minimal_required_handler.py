@@ -137,7 +137,7 @@ def test_tc_a_002_creates_full_field_case_and_checks_detail_surface() -> None:
     assert len(payload["bio_deposits"]) == 1
     assert runtime.db.calls == [
         ("t_case", {"id": "case-1", "case_no": "A002-RUN-A2"}),
-        ("t_case_priority", {"case_id": "case-1"}),
+        ("t_priority", {"case_id": "case-1"}),
         ("t_case_bio_deposit", {"case_id": "case-1"}),
     ]
 
