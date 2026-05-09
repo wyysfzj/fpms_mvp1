@@ -292,7 +292,7 @@ const dateRange = computed({
 async function fetchReferenceData() {
   const [clientResult, templateResult] = await Promise.all([
     getClients({ page: 1, page_size: 200 }),
-    getDocTemplates({ enabled: true, page_size: 200 }),
+    getDocTemplates({ enabled: true, page_size: 100 }),
   ])
   clients.value = clientResult.items
   templates.value = templateResult.items.filter((item) => item.direction === 'OUT')
