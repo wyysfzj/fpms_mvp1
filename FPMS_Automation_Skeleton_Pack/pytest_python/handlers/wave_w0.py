@@ -2113,12 +2113,26 @@ _EXPECTED_SEED_ONLY_HARD_BLOCKERS = {
     "task_template.enabled",
 }
 
+_READINESS_BLOCKER_COUNT_KEYS = {
+    "fee_rate.apply": "fee_rate",
+    "commission_rule.enabled": "commission_rule",
+    "template.enabled": "template",
+    "letter_head.default": "letter_head",
+    "country.active": "country",
+    "department.active": "department",
+    "doc_template.enabled": "doc_template",
+    "task_template.enabled": "task_template",
+}
+
 
 def _assert_config_readiness(payload: dict[str, Any]) -> None:
     counts = payload.get("counts")
     if not isinstance(counts, list):
         raise AssertionError("Config readiness response missing counts list")
     count_keys = {item.get("key") for item in counts if isinstance(item, dict)}
+    count_by_key = {
+        item.get("key"): item.get("count") for item in counts if isinstance(item, dict)
+    }
     missing_count_keys = _EXPECTED_READINESS_COUNT_KEYS - count_keys
     if missing_count_keys:
         raise AssertionError(
@@ -2134,7 +2148,13 @@ def _assert_config_readiness(payload: dict[str, Any]) -> None:
     if not isinstance(missing, list):
         raise AssertionError("Config readiness response missing missing list")
     missing_keys = {item.get("key") for item in missing if isinstance(item, dict)}
-    absent_blockers = _EXPECTED_SEED_ONLY_HARD_BLOCKERS - missing_keys
+    absent_blockers = {
+        key
+        for key in _EXPECTED_SEED_ONLY_HARD_BLOCKERS - missing_keys
+        if not _readiness_count_positive(
+            count_by_key.get(_READINESS_BLOCKER_COUNT_KEYS[key])
+        )
+    }
     if absent_blockers:
         raise AssertionError(
             f"Config readiness missing hard blockers: {sorted(absent_blockers)}"
@@ -2151,6 +2171,10 @@ def _assert_config_readiness(payload: dict[str, Any]) -> None:
                 raise AssertionError(
                     f"Config readiness entry missing {field}: {item.get('key')}"
                 )
+
+
+def _readiness_count_positive(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and value > 0
 
 
 def handle_tc_w0_cfg_011(runtime: RuntimeContext, case: TestCase) -> None:

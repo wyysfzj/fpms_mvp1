@@ -119,6 +119,23 @@ def _readiness_payload() -> dict[str, Any]:
     }
 
 
+def _stateful_readiness_payload() -> dict[str, Any]:
+    payload = _readiness_payload()
+    for item in payload["counts"]:
+        if item["key"] != "system_param":
+            item["count"] = 1
+    payload["missing"] = [
+        {
+            "key": "system_param.bill_template_path",
+            "label": "账单打印模板路径",
+            "table": "t_system_param",
+            "severity": "hard_block",
+            "message": "缺少 bill_template_path",
+        }
+    ]
+    return payload
+
+
 def test_tc_w0_cfg_014_handler_reads_config_readiness() -> None:
     runtime = FakeRuntime(
         username="admin",
@@ -151,6 +168,18 @@ def test_tc_w0_cfg_014_handler_fails_when_hard_blocker_missing() -> None:
 
     with pytest.raises(AssertionError, match="template.enabled"):
         handle_tc_w0_cfg_014(runtime, _case())  # type: ignore[arg-type]
+
+
+def test_tc_w0_cfg_014_handler_accepts_full_wave_readiness_state() -> None:
+    runtime = FakeRuntime(
+        username="admin",
+        password="dummy-password",
+        run_id="RUN-W0-STATEFUL",
+        api=FakeApi(_stateful_readiness_payload()),
+        db=FakeDb(),
+    )
+
+    handle_tc_w0_cfg_014(runtime, _case())  # type: ignore[arg-type]
 
 
 def test_tc_w0_cfg_014_is_registered_as_real_handler() -> None:
