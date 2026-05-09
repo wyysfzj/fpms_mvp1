@@ -1244,11 +1244,7 @@ def handle_tc_w0_cfg_006(runtime: RuntimeContext, case: TestCase) -> None:
         case_id = _required_value(created_case, "id", "created case")
 
         rule_payload = _commission_rule_payload(catalog, "DS-CFG-COM-NORMAL-SERVICE")
-        _json_or_assert(
-            runtime.api.post("/commission/rules", json=rule_payload),
-            "create commission split rule",
-            expected_statuses={200, 201},
-        )
+        _ensure_commission_rule(runtime, rule_payload, "commission split")
 
         bill_payload = _manual_service_bill_payload(catalog, client_id, case_id)
         _json_or_assert(
@@ -1422,6 +1418,37 @@ def _assert_commission_settle_flags(
 def _commission_rule_payload(catalog: SeedCatalog, seed_id: str) -> dict[str, Any]:
     seed = catalog.normalized(seed_id)
     return dict(seed["payload"])
+
+
+def _ensure_commission_rule(
+    runtime: RuntimeContext,
+    payload: dict[str, Any],
+    action: str,
+) -> dict[str, Any]:
+    existing = _search_by_field(
+        runtime,
+        "/commission/rules",
+        "rule_name",
+        payload["rule_name"],
+    )
+    if existing is None:
+        return _json_or_assert(
+            runtime.api.post("/commission/rules", json=payload),
+            f"create {action} rule",
+            expected_statuses={200, 201},
+        )
+
+    if existing.get("enabled") == payload["enabled"]:
+        return existing
+
+    rule_id = _required_value(existing, "id", "existing commission rule")
+    return _json_or_assert(
+        runtime.api.put(
+            f"/commission/rules/{rule_id}",
+            json={"enabled": payload["enabled"]},
+        ),
+        f"enable {action} rule",
+    )
 
 
 def _assert_status(response: Any, expected_statuses: set[int], action: str) -> None:

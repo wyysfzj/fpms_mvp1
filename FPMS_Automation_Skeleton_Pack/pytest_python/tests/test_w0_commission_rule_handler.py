@@ -485,6 +485,43 @@ def test_tc_w0_cfg_006_handler_reuses_existing_config_client() -> None:
     assert case_payload["client_id"] == "client-existing"
 
 
+def test_tc_w0_cfg_006_handler_reuses_rule_disabled_by_cfg_005() -> None:
+    runtime = FakeRuntime(
+        username="admin",
+        password="dummy-password",
+        run_id="RUN-W0-COM-RULE-REUSE",
+        api=FakeApi(),
+        db=FakeDb(enabled=False),
+    )
+
+    handle_tc_w0_cfg_005(runtime, _case())  # type: ignore[arg-type]
+    rule_post_count = len(
+        [
+            call
+            for call in runtime.api.calls
+            if call["method"] == "POST" and call["path"] == "/commission/rules"
+        ]
+    )
+    assert runtime.api.rules[0]["enabled"] is False
+
+    handle_tc_w0_cfg_006(runtime, _split_case())  # type: ignore[arg-type]
+
+    rule_post_paths = [
+        call["path"]
+        for call in runtime.api.calls
+        if call["method"] == "POST" and call["path"] == "/commission/rules"
+    ]
+    assert len(rule_post_paths) == rule_post_count
+    rule_puts = [
+        call
+        for call in runtime.api.calls
+        if call["method"] == "PUT" and call["path"] == "/commission/rules/1"
+    ]
+    assert rule_puts[-1]["kwargs"]["json"] == {"enabled": True}
+    assert runtime.api.rules[0]["enabled"] is True
+    assert len(runtime.api.commissions) == 2
+
+
 def test_tc_w0_cfg_005_handler_runs_db_asserts_when_enabled() -> None:
     runtime = FakeRuntime(
         username="admin",
