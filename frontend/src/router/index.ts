@@ -139,6 +139,7 @@ const routes = [
 
       // System
       { path: 'system/params', name: 'system_params', component: () => import('../modules/system/pages/SystemParams.vue') },
+      { path: 'system/templates', name: 'system_templates', component: () => import('../modules/system/pages/TemplateList.vue') },
       { path: 'system/task-templates', name: 'system_task_templates', component: () => import('../modules/system/pages/TaskTemplateList.vue') },
       { path: 'system/doc-templates', name: 'system_doc_templates', component: () => import('../modules/system/pages/DocTemplateList.vue') },
       { path: 'system/letterheads', name: 'system_letterheads', component: () => import('../modules/system/pages/LetterheadList.vue') },

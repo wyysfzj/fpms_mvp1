@@ -1,0 +1,53 @@
+manifest_id: PARAM-CONFIG-SUPPLEMENT-01
+title: 参数配置专项补充测试资产
+status: supplemental_not_in_canonical_155
+source_scope:
+- docs/FPMS SPEC 2.0.md
+- docs/FRMS_SPEC2_2nd_POST.md
+- docs/FPMS_SPEC2_2nd_Review.md
+- docs/FPMS_SPEC2_2nd_Review_REFRESH.md
+- previous_config_parameter_implementation_audit
+asset_files:
+  testcases_yaml: FPMS_Automation_Skeleton_Pack/data/testcases/supplemental/config_parameters.yaml
+  testcases_json: FPMS_Automation_Skeleton_Pack/data/testcases/supplemental/config_parameters.json
+  seed_data_yaml: FPMS_Automation_Skeleton_Pack/data/seeds/config_parameters_detailed.yaml
+canonical_pack_policy:
+  all_testcases_updated: false
+  reason: Existing validate_assets.py enforces the canonical 155-case baseline and wave counts.
+  promotion_rule: Promote these supplemental cases only through a separate atomic task that updates all_testcases, wave manifests, coverage, handlers, and validation counts together.
+case_groups:
+- group: system_params
+  cases:
+  - TC-W0-CFG-001
+  - TC-W0-CFG-002
+  follow_up_task: W0-AUTO-PY-CFG-SYSTEM-PARAMS-01
+- group: fee_rates
+  cases:
+  - TC-W0-CFG-003
+  - TC-W0-CFG-004
+  follow_up_task: W0-AUTO-PY-CFG-FEE-RATES-01
+- group: commission_rules
+  cases:
+  - TC-W0-CFG-005
+  - TC-W0-CFG-006
+  - TC-W0-CFG-007
+  follow_up_task: W0-AUTO-PY-CFG-COMMISSION-RULES-01
+- group: templates
+  cases:
+  - TC-W0-CFG-008
+  - TC-W0-CFG-009
+  - TC-W0-CFG-010
+  - TC-W0-CFG-011
+  follow_up_task: W0-AUTO-PY-CFG-TEMPLATES-01
+- group: masterdata_rbac_seed_ui
+  cases:
+  - TC-W0-CFG-012
+  - TC-W0-CFG-013
+  - TC-W0-CFG-014
+  - TC-W0-CFG-015
+  follow_up_task: W0-AUTO-PY-CFG-RBAC-SEED-AUDIT-01
+automation_notes:
+- Prefer pytest for API, service, DB, readiness, fee, and commission assertions.
+- Prefer Playwright for configuration pages, menu visibility, loading/error/empty states, and route exposure.
+- Do not use static mock data as completion evidence for these cases.
+- Use FPMS_RUN_ID for all created codes, names, case numbers, bill numbers, and template paths.

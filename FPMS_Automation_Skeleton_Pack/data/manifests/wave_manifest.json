@@ -4,11 +4,11 @@
       "wave": "W0",
       "title": "W0 基础配置",
       "description": "执行前置：主数据、参数、模板、权限",
-      "case_count": 14,
-      "happy_count": 11,
-      "unhappy_count": 4,
-      "boundary_count": 1,
-      "actual_case_count": 14
+      "case_count": 29,
+      "happy_count": 23,
+      "unhappy_count": 12,
+      "boundary_count": 5,
+      "actual_case_count": 29
     },
     {
       "wave": "A",

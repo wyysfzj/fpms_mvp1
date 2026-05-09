@@ -36,6 +36,64 @@ def test_upsert_system_param_create(client: TestClient, auth_headers: dict[str, 
     assert key in keys
 
 
+def test_list_system_params_includes_metadata(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    """GET /system/params includes operator-facing metadata."""
+    key = "test_param_metadata"
+    resp = client.put(
+        f"/api/v1/system/params/{key}",
+        json={
+            "param_value": "hello",
+            "value_type": "string",
+            "description": "Metadata description",
+            "is_secret": False,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    list_resp = client.get("/api/v1/system/params", headers=auth_headers)
+    assert list_resp.status_code == 200
+    param = next(p for p in list_resp.json() if p["param_key"] == key)
+
+    assert param["description"] == "Metadata description"
+    assert param["created_at"]
+    assert param["updated_at"]
+
+
+def test_config_readiness_reports_missing_seed_config(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    """GET /system/config-readiness reports counts and hard blockers."""
+    resp = client.get("/api/v1/system/config-readiness", headers=auth_headers)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "BLOCKED"
+    assert data["hard_blocked"] is True
+
+    counts = {item["key"]: item["count"] for item in data["counts"]}
+    assert counts["fee_rate"] == 0
+    assert counts["commission_rule"] == 0
+    assert counts["template"] == 0
+    assert counts["letter_head"] == 0
+    assert counts["country"] == 0
+    assert counts["department"] == 0
+    assert counts["doc_template"] >= 1
+    assert counts["task_template"] >= 1
+
+    missing = {item["key"]: item for item in data["missing"]}
+    assert "system_param.default_currency" in missing
+    assert "system_param.bill_template_path" in missing
+    assert "fee_rate.apply" in missing
+    assert "commission_rule.enabled" in missing
+    assert "template.enabled" in missing
+    assert "letter_head.default" in missing
+    assert "country.active" in missing
+    assert "department.active" in missing
+
+
 def test_upsert_system_param_update(client: TestClient, auth_headers: dict[str, str]) -> None:
     """PUT updates an existing param's value."""
     key = "test_param_update"

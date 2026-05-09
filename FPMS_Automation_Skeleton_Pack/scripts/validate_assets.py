@@ -15,7 +15,7 @@ def main() -> int:
     boundary_cases = load_yaml(ROOT / "data" / "boundary" / "boundary_matrix.yaml")["boundary_cases"]
     wave_manifest = load_yaml(ROOT / "data" / "manifests" / "wave_manifest.yaml")["waves"]
 
-    assert len(all_cases) == 155, f"Expected 155 cases, got {len(all_cases)}"
+    assert len(all_cases) == 170, f"Expected 170 cases, got {len(all_cases)}"
     assert len(boundary_cases) == 20, f"Expected 20 boundary cases, got {len(boundary_cases)}"
 
     ids = [case["id"] for case in all_cases]

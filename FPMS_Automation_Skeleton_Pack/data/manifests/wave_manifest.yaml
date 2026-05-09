@@ -2,11 +2,11 @@ waves:
 - wave: W0
   title: W0 基础配置
   description: 执行前置：主数据、参数、模板、权限
-  case_count: 14
-  happy_count: 11
-  unhappy_count: 4
-  boundary_count: 1
-  actual_case_count: 14
+  case_count: 29
+  happy_count: 23
+  unhappy_count: 12
+  boundary_count: 5
+  actual_case_count: 29
 - wave: A
   title: A 新案申请
   description: E2E 场景 A：新案立案 → 递交 → 申请费 → 账单 → 收款 → 提成

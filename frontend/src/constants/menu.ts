@@ -159,6 +159,7 @@ export const MENU_GROUPS: MenuGroup[] = [
             },
             { key: 'task_templates', label: '任务模板', icon: '📋', route: '/system/task-templates', requiredPerms: [Perms.SETTINGS_READ] },
             { key: 'doc_templates', label: '文件模板', icon: '📄', route: '/system/doc-templates', requiredPerms: [Perms.SETTINGS_READ] },
+            { key: 'system_templates', label: '模板文件源', icon: '🧾', route: '/system/templates', requiredPerms: [Perms.TEMPLATE_READ] },
             { key: 'letterheads', label: '信纸抬头', icon: '🏷️', route: '/system/letterheads', requiredPerms: [Perms.LETTERHEAD_READ] },
         ],
     },

@@ -1,0 +1,558 @@
+wave: W0-CFG
+wave_title: W0-CFG 参数配置补充审计
+context: 基于 SPEC 2.0、SPEC2 second-review/post ledger 与当前实现 finding 的参数配置专项用例；不并入 canonical 155 条基线。
+source_refs:
+- docs/FPMS SPEC 2.0.md
+- docs/FRMS_SPEC2_2nd_POST.md
+- docs/FPMS_SPEC2_2nd_Review.md
+- docs/FPMS_SPEC2_2nd_Review_REFRESH.md
+- FPMS_Automation_Skeleton_Pack/docs/source/FPMS_SPEC_2_0.md
+- FPMS_Automation_Skeleton_Pack/docs/source/FPMS_SPEC2_0_Test_Cases_E2E.md
+cases:
+- id: TC-W0-CFG-001
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 系统参数 API 与 UI 元数据
+  priority: P0
+  categories:
+  - Happy
+  - Security
+  topic: 系统参数-清单、更新、密文遮蔽
+  stage_code: null
+  stage_name: 系统参数
+  coverage_ids:
+  - FR-BL-04
+  - FR-BL-09
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-BL-04
+  - FR-BL-09
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: DS-U-ADM；准备 DS-CFG-SYS-DEFAULT-CURRENCY、DS-CFG-SYS-BILL-TEMPLATE、DS-CFG-SYS-SECRET-SAMPLE。
+  steps_summary: 通过 PUT /system/params/{param_key} 新增或更新三个参数；GET /system/params 校验 key/value_type/is_secret；再以只读角色查询；最后检查前端“系统参数”页是否展示配置含义并遮蔽密文值。
+  expected: 普通参数返回真实值；is_secret=true 的参数返回遮蔽值；无 SystemParam.Edit 权限的用户不能更新；UI 不暴露密文原值，并能让操作者理解参数用途。当前实现若列表缺 description/updated_at，应记录为前端可用性缺口。
+  automation_recommendation: API+UI；API 断言权限和遮蔽，UI 断言表格列和编辑入口。
+  data_refs:
+  - DS-U-ADM
+  - DS-CFG-SYS-DEFAULT-CURRENCY
+  - DS-CFG-SYS-BILL-TEMPLATE
+  - DS-CFG-SYS-SECRET-SAMPLE
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p0
+  - system_param
+  - security
+  status: supplemental_ready
+- id: TC-W0-CFG-002
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 账单打印模板路径参数
+  priority: P0
+  categories:
+  - Happy
+  - Unhappy
+  topic: 系统参数-bill_template_path 控制账单打印
+  stage_code: null
+  stage_name: 系统参数
+  coverage_ids:
+  - FR-BL-04
+  requirement_ids:
+  - FR-BL-04
+  validation_ids: []
+  preconditions: DS-U-FI-01；存在可打印账单；准备 DS-CFG-SYS-BILL-TEMPLATE 和 DS-CFG-TEMPLATE-BILL-CN。
+  steps_summary: 先删除或留空 bill_template_path 后调用账单打印接口；再通过系统参数设置模板路径并确保模板文件存在；重新调用账单打印。
+  expected: 缺 bill_template_path 或文件不存在时返回明确 409/404 类业务错误且无 500；配置有效路径后返回可下载/可渲染结果；审计中记录当前 seed 未包含 bill_template_path 的缺口。
+  automation_recommendation: API+文件存在性 smoke；不要求真实人工校验 docx 内容。
+  data_refs:
+  - DS-U-FI-01
+  - DS-CFG-SYS-BILL-TEMPLATE
+  - DS-CFG-TEMPLATE-BILL-CN
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p0
+  - system_param
+  - billing_print
+  status: supplemental_ready
+- id: TC-W0-CFG-003
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 申请费费率必备配置
+  priority: P0
+  categories:
+  - Happy
+  - Unhappy
+  topic: 费率-申请费必备三项配置与缺失阻断
+  stage_code: null
+  stage_name: 业务参数-费率
+  coverage_ids:
+  - FR-FE-01
+  - FR-FE-03
+  requirement_ids:
+  - FR-FE-01
+  - FR-FE-03
+  validation_ids:
+  - V-FI-01
+  - V-FI-05
+  preconditions: DS-U-FI-01；准备 NORMAL/INV/CN_DOMESTIC 案件；准备 DS-CFG-RATE-APPLY-BASE-GOV、DS-CFG-RATE-APPLY-EXCESS-CLAIM、DS-CFG-RATE-APPLY-SERVICE。
+  steps_summary: 清理 run-scoped APPLY_BASE_GOV/APPLY_EXCESS_CLAIM/APPLY_SERVICE 后尝试生成申请费草单；再创建三项 enabled=true 且 currency=CNY 的费率后重试。
+  expected: 缺任一必备费率时生成申请费草单被 409 阻断并返回 missing_fee_codes；三项费率齐全后生成 GOV/SERVICE 明细，官费可受费减影响，服务费可受折扣影响。
+  automation_recommendation: API+DB；断言 t_fee_rate、t_fee_draft、t_fee_item。
+  data_refs:
+  - DS-U-FI-01
+  - DS-CFG-RATE-APPLY-BASE-GOV
+  - DS-CFG-RATE-APPLY-EXCESS-CLAIM
+  - DS-CFG-RATE-APPLY-SERVICE
+  - DS-CFG-CASE-NORMAL-INV
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p0
+  - fee_rate
+  - apply_fee
+  status: supplemental_ready
+- id: TC-W0-CFG-004
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 费率计算模式兼容性
+  priority: P1
+  categories:
+  - Boundary
+  - Unhappy
+  topic: 费率-calc_mode 覆盖与当前实现差距
+  stage_code: null
+  stage_name: 业务参数-费率
+  coverage_ids:
+  - FR-FE-01
+  - FR-FE-03
+  requirement_ids:
+  - FR-FE-01
+  - FR-FE-03
+  validation_ids:
+  - V-FI-01
+  - V-FI-03
+  preconditions: DS-U-FI-01；准备 FIXED、PER_CLAIM、BY_YEAR、BY_PAGES、COMPOSITE 五类费率数据。
+  steps_summary: 分别创建五类 calc_mode 费率；调用费用计算或可触发费用生成的服务；记录每种模式是否参与真实金额计算。
+  expected: FIXED 和 PER_CLAIM 应按当前实现返回可核算金额；BY_YEAR/BY_PAGES/COMPOSITE 若仅保存不计算，测试应标记为 SPEC gap，不允许以默认金额静默冒充完整实现。
+  automation_recommendation: 服务层参数化；对未实现 calc_mode 断言有日志/明确 gap 标记。
+  data_refs:
+  - DS-U-FI-01
+  - DS-CFG-RATE-APPLY-BASE-GOV
+  - DS-CFG-RATE-APPLY-EXCESS-CLAIM
+  - DS-CFG-RATE-ANNUITY-GOV-Y1
+  - DS-CFG-RATE-BY-PAGES
+  - DS-CFG-RATE-COMPOSITE
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p1
+  - fee_rate
+  - boundary
+  status: supplemental_ready
+- id: TC-W0-CFG-005
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 提成规则 CRUD 与校验
+  priority: P0
+  categories:
+  - Happy
+  - Unhappy
+  topic: 提成规则-比例、固定额、启停和冲突校验
+  stage_code: null
+  stage_name: 提成规则
+  coverage_ids:
+  - FR-COM-01
+  requirement_ids:
+  - FR-COM-01
+  validation_ids: []
+  preconditions: DS-U-ADM；准备 DS-CFG-COM-NORMAL-SERVICE、DS-CFG-COM-NORMAL-SERVICE-DISABLED、DS-CFG-COM-INVALID-RATE。
+  steps_summary: 创建 NORMAL/SERVICE/CN_DOMESTIC/INV 规则；查询 enabled=true/false；尝试重复作用域规则、s1_rate<0、s2_rate>1、固定金额为负数；再停用规则后确认不被匹配。
+  expected: 有效规则可创建和查询；非法比例/金额被 400/422 阻断；停用规则不参与后续提成生成；错误响应不能出现 500。
+  automation_recommendation: API+DB；断言 t_commission_rule。
+  data_refs:
+  - DS-U-ADM
+  - DS-CFG-COM-NORMAL-SERVICE
+  - DS-CFG-COM-NORMAL-SERVICE-DISABLED
+  - DS-CFG-COM-INVALID-RATE
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p0
+  - commission_rule
+  status: supplemental_ready
+- id: TC-W0-CFG-006
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 提成生成与代理人分摊
+  priority: P0
+  categories:
+  - Happy
+  topic: 提成-服务费账单触发 70/30 分摊
+  stage_code: null
+  stage_name: 提成规则
+  coverage_ids:
+  - FR-COM-02
+  - FR-COM-03
+  requirement_ids:
+  - FR-COM-02
+  - FR-COM-03
+  validation_ids: []
+  preconditions: DS-U-FI-01；案件 DS-CFG-CASE-NORMAL-INV 含主办/协办 agent_splits=70/30；存在 DS-CFG-COM-NORMAL-SERVICE；账单含 SERVICE 明细。
+  steps_summary: 通过真实费用草单或手工账单生成含 SERVICE 项的账单；触发账单生成后的 commission hook；查询 /commission 并可选 DB 断言。
+  expected: 系统为两个代理人分别生成或更新 Commission；base_fee 按服务费和 share_ratio 分摊；s1/s2 金额按规则比例与固定额计算；没有 agent_splits 时回退 primary_agent_id=100%。
+  automation_recommendation: API+DB；断言 t_commission.agent_id/base_fee/s1_amount/s2_amount。
+  data_refs:
+  - DS-U-FI-01
+  - DS-CFG-CASE-NORMAL-INV
+  - DS-CFG-COM-NORMAL-SERVICE
+  - DS-CFG-BILL-SERVICE-1000
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p0
+  - commission
+  - split
+  status: supplemental_ready
+- id: TC-W0-CFG-007
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 提成 WaitPay / ForceSettle
+  priority: P1
+  categories:
+  - Boundary
+  topic: 提成-WaitPay 与 ForceSettle 可结算性
+  stage_code: null
+  stage_name: 提成规则
+  coverage_ids:
+  - FR-COM-04
+  - FR-COM-05
+  requirement_ids:
+  - FR-COM-04
+  - FR-COM-05
+  validation_ids: []
+  preconditions: 存在 wait_pay=true 的 Commission；准备 0%、50%、100% 个案收款比例和 force_settle=true 规则。
+  steps_summary: 逐步登记 CaseReceipt 或付款冲销，使 paid_ratio 从 0% 到 100%；每一步查询 /commission；再把同规则 force_settle=true 后重算或新建一单。
+  expected: wait_pay=true 且未全额收款时不可结算；达到规则收款条件后可结算；force_settle=true 可使记录提前进入可结算集合，并保留 wait_pay/force_settle 标记。
+  automation_recommendation: API+DB；优先复用付款/冲销/CaseReceipt 自动化辅助。
+  data_refs:
+  - DS-CFG-COM-NORMAL-WAITPAY
+  - DS-CFG-COM-NORMAL-FORCE
+  - DS-CFG-BILL-SERVICE-1000
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p1
+  - commission
+  - waitpay
+  status: supplemental_ready
+- id: TC-W0-CFG-008
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 时限模板和自动任务
+  priority: P0
+  categories:
+  - Happy
+  - Boundary
+  topic: 时限模板-起算基准、内部期限、提醒
+  stage_code: null
+  stage_name: 业务参数-时限模板
+  coverage_ids:
+  - FR-DL-01
+  - FR-DL-02
+  requirement_ids:
+  - FR-DL-01
+  - FR-DL-02
+  validation_ids:
+  - V-TM-01
+  - V-TM-03
+  - V-TM-04
+  preconditions: DS-U-ADM；准备 DS-CFG-TASK-OA-REPLY 和 OA_IN 文档模板；案件 doc_date=2026-05-09。
+  steps_summary: 创建 OA_REPLY 任务模板；创建绑定 deadline_template_code 的 OA_IN 文档模板；登记来文并检查自动任务。
+  expected: 自动任务 due_date=doc_date+add_days，internal_due_date 按 inner_offset_days 回推，remind1/2/3 和 daily_remind_from 符合 remind_base；重复登记不应重复生成同一来源任务。
+  automation_recommendation: API+DB；断言 t_task 和 task logs。
+  data_refs:
+  - DS-U-ADM
+  - DS-CFG-TASK-OA-REPLY
+  - DS-CFG-DOC-OA-IN
+  - DS-CFG-CASE-NORMAL-INV
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p0
+  - task_template
+  status: supplemental_ready
+- id: TC-W0-CFG-009
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 文件模板默认值、状态和费用影响
+  priority: P0
+  categories:
+  - Happy
+  topic: 文件模板-状态影响、回复链、费用草单预览
+  stage_code: null
+  stage_name: 业务参数-文档模板
+  coverage_ids:
+  - FR-WD-01
+  - FR-WD-03
+  - FR-WD-04
+  - FR-WD-05
+  requirement_ids:
+  - FR-WD-01
+  - FR-WD-03
+  - FR-WD-04
+  - FR-WD-05
+  validation_ids:
+  - V-TPL-01
+  - V-TPL-03
+  - V-TPL-04
+  preconditions: DS-U-ADM；准备 DS-CFG-DOC-OA-IN、DS-CFG-DOC-OA-OUT、DS-CFG-RATE-OA-SERVICE。
+  steps_summary: 创建 OA_IN 与 OA_OUT 文件模板；调用 /documents/impact-preview；确认后创建 OA_IN 文档，再创建 reply_to 指向 OA_IN 的 OA_OUT。
+  expected: 预览展示状态影响、任务影响、费用影响和确认要求；OA_IN 创建后 need_reply=true 并生成任务；OA_OUT 按 reply_to 恢复状态或关闭回复链；fee_item_list 中不存在费率时应明确阻断或提示。
+  automation_recommendation: API+DB；UI 可补充断言预览中文文案。
+  data_refs:
+  - DS-U-ADM
+  - DS-CFG-DOC-OA-IN
+  - DS-CFG-DOC-OA-OUT
+  - DS-CFG-RATE-OA-SERVICE
+  - DS-CFG-CASE-NORMAL-INV
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p0
+  - doc_template
+  - document_impact
+  status: supplemental_ready
+- id: TC-W0-CFG-010
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 模板文件源
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: 模板仓库-DOC_TEMPLATE 文件路径与渲染缺口
+  stage_code: null
+  stage_name: 模板文件源
+  coverage_ids:
+  - FR-WD-09
+  - FR-WD-10
+  - FR-BL-04
+  requirement_ids:
+  - FR-WD-09
+  - FR-WD-10
+  - FR-BL-04
+  validation_ids: []
+  preconditions: DS-U-ADM；准备 DS-CFG-TEMPLATE-DOC-OA-CN、DS-CFG-TEMPLATE-BILL-CN；存储路径下存在样例模板文件。
+  steps_summary: 通过 /templates 创建 Group=DOC_TEMPLATE、name=DocTemplate.code 的模板记录；再触发文件渲染或候选模板预览；用不存在路径重试。
+  expected: 有效模板源可被文档/账单渲染服务命中；不存在路径返回明确错误；当前前端 TemplateList 未挂路由或未真实上传文件内容时应记录为实现缺口。
+  automation_recommendation: API+文件 smoke；前端路由可用 Playwright 只读检查。
+  data_refs:
+  - DS-U-ADM
+  - DS-CFG-TEMPLATE-DOC-OA-CN
+  - DS-CFG-TEMPLATE-BILL-CN
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p1
+  - template_source
+  status: supplemental_ready
+- id: TC-W0-CFG-011
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 信头配置
+  priority: P1
+  categories:
+  - Happy
+  - Boundary
+  topic: 信头-默认信头唯一性和账单打印引用
+  stage_code: null
+  stage_name: 信头
+  coverage_ids:
+  - FR-WD-09
+  - FR-WD-10
+  - FR-BL-04
+  requirement_ids:
+  - FR-WD-09
+  - FR-WD-10
+  - FR-BL-04
+  validation_ids: []
+  preconditions: DS-U-ADM；准备 DS-CFG-LETTERHEAD-CN 和 DS-CFG-LETTERHEAD-EN；存在可打印账单。
+  steps_summary: 创建中文默认信头和英文默认信头；再创建第二个同 locale 默认信头；触发账单打印上下文构建。
+  expected: 每个 locale 只能有一个默认信头，新的默认信头会取消同 locale 旧默认；账单打印上下文带出默认信头；当前前端若只支持新增不支持编辑，应记录为前端功能缺口。
+  automation_recommendation: API+DB+打印上下文 smoke。
+  data_refs:
+  - DS-U-ADM
+  - DS-CFG-LETTERHEAD-CN
+  - DS-CFG-LETTERHEAD-EN
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p1
+  - letterhead
+  status: supplemental_ready
+- id: TC-W0-CFG-012
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 主数据配置
+  priority: P1
+  categories:
+  - Happy
+  - Unhappy
+  topic: 主数据-国家、部门、申请人和客户引用
+  stage_code: null
+  stage_name: 主数据
+  coverage_ids:
+  - FR-CM-01
+  - FR-CM-03
+  - FR-FE-01
+  requirement_ids:
+  - FR-CM-01
+  - FR-CM-03
+  - FR-FE-01
+  validation_ids:
+  - V-C-06
+  preconditions: DS-U-ADM；准备 DS-CFG-COUNTRY-CN、DS-CFG-DEPT-PATENT、DS-CFG-CLIENT-ACTIVE、DS-CFG-APPLICANT-ENTITY。
+  steps_summary: 创建或校验国家、部门、客户、申请人；将停用主数据用于案件/费率/报表引用；再切回有效主数据。
+  expected: 有效主数据可被案件、费率和报表引用；停用记录不能作为新业务默认选择；当前清理后的 seed 中 country/department 为空，应被 readiness audit 捕获。
+  automation_recommendation: API+UI；主数据下拉过滤和 DB 引用同时验证。
+  data_refs:
+  - DS-U-ADM
+  - DS-CFG-COUNTRY-CN
+  - DS-CFG-DEPT-PATENT
+  - DS-CFG-CLIENT-ACTIVE
+  - DS-CFG-APPLICANT-ENTITY
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p1
+  - masterdata
+  status: supplemental_ready
+- id: TC-W0-CFG-013
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: RBAC 配置与保护端点
+  priority: P0
+  categories:
+  - Security
+  - Happy
+  - Unhappy
+  topic: 权限-配置端点和菜单可见性
+  stage_code: null
+  stage_name: 权限
+  coverage_ids:
+  - FR-CM-06
+  - FR-DL-06
+  - FR-BL-06
+  requirement_ids:
+  - FR-CM-06
+  - FR-DL-06
+  - FR-BL-06
+  validation_ids: []
+  preconditions: DS-U-ADM、DS-U-FI-01、DS-U-FM-01、DS-U-LMT-01；角色权限 seed 已运行。
+  steps_summary: 分别访问 /system/params、/fees/rates、/commission/rules、/task-templates、/doc-templates、/templates、/letterheads、/countries、/departments 的读写接口；同时检查对应菜单和按钮。
+  expected: 具备对应 Read/Edit/Create 权限的角色可访问；无权限角色返回 403 且菜单/按钮不可见；权限必须由函数参数 Depends(require_perm(...)) 保护。
+  automation_recommendation: API 权限矩阵+Playwright 菜单可见性。
+  data_refs:
+  - DS-U-ADM
+  - DS-U-FI-01
+  - DS-U-FM-01
+  - DS-U-LMT-01
+  dynamic_refs: []
+  tags:
+  - wave_w0_cfg
+  - p0
+  - rbac
+  - security
+  status: supplemental_ready
+- id: TC-W0-CFG-014
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 清理后种子库 readiness audit
+  priority: P0
+  categories:
+  - Audit
+  - Unhappy
+  topic: 种子数据-配置缺口阻断业务 smoke
+  stage_code: null
+  stage_name: 种子数据
+  coverage_ids:
+  - FR-FE-01
+  - FR-COM-01
+  - FR-WD-09
+  - FR-BL-04
+  requirement_ids:
+  - FR-FE-01
+  - FR-COM-01
+  - FR-WD-09
+  - FR-BL-04
+  validation_ids: []
+  preconditions: 当前数据库已清理为种子数据；不创建额外业务配置。
+  steps_summary: 读取 t_system_param、t_fee_rate、t_commission_rule、t_template、t_letter_head、t_country、t_department、t_doc_template、t_task_template 的计数和关键 key/code；运行申请费、账单打印、提成生成的只读 readiness 检查。
+  expected: readiness audit 必须明确报告 fee_rate=0、commission_rule=0、template=0、letter_head=0、country/department=0 等缺口；不得把“表存在”误判为“业务参数已可用”。
+  automation_recommendation: DB 只读检查+API smoke；适合做部署前 P0 readiness gate。
+  data_refs:
+  - DS-CFG-SEED-EXPECTED-COUNTS
+  dynamic_refs: []
+  tags:
+  - wave_w0_cfg
+  - p0
+  - seed_readiness
+  - audit
+  status: supplemental_ready
+- id: TC-W0-CFG-015
+  wave: W0-CFG
+  wave_title: W0-CFG 参数配置补充审计
+  context: 前端配置页真实数据展示
+  priority: P1
+  categories:
+  - UI
+  - Happy
+  topic: 前端-配置页从真实 API 展示并暴露缺口
+  stage_code: null
+  stage_name: 前端配置页
+  coverage_ids:
+  - FR-FE-01
+  - FR-COM-01
+  - FR-DL-01
+  - FR-WD-03
+  requirement_ids:
+  - FR-FE-01
+  - FR-COM-01
+  - FR-DL-01
+  - FR-WD-03
+  validation_ids: []
+  preconditions: DS-U-ADM 登录前端；准备 supplemental 配置数据；浏览器访问系统参数、费率、提成规则、任务模板、文件模板、信头、主数据页面。
+  steps_summary: 逐页检查列表、筛选、新增/编辑、启停、loading/error/empty 状态；核对页面展示字段是否与 API payload 一致；特别检查 TemplateList 是否有路由入口。
+  expected: 所有新增可见文案为简体中文；列表数据来自真实 API；empty 状态能反映未配置而不是静态 mock；当前 TemplateList 未挂路由、SystemParams 元数据映射不完整等问题应形成 UI gap。
+  automation_recommendation: Playwright UI smoke+API fixture；不拦截静态 mock 数据。
+  data_refs:
+  - DS-U-ADM
+  - DS-CFG-SYS-BILL-TEMPLATE
+  - DS-CFG-RATE-APPLY-BASE-GOV
+  - DS-CFG-COM-NORMAL-SERVICE
+  - DS-CFG-TASK-OA-REPLY
+  - DS-CFG-DOC-OA-IN
+  dynamic_refs:
+  - FPMS_RUN_ID
+  tags:
+  - wave_w0_cfg
+  - p1
+  - frontend
+  - ui
+  status: supplemental_ready

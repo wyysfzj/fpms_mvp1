@@ -70,6 +70,15 @@ priorities:
   - TC-X-012
   - TC-X-022
   - TC-X-024
+  - TC-W0-CFG-001
+  - TC-W0-CFG-002
+  - TC-W0-CFG-003
+  - TC-W0-CFG-005
+  - TC-W0-CFG-006
+  - TC-W0-CFG-008
+  - TC-W0-CFG-009
+  - TC-W0-CFG-013
+  - TC-W0-CFG-014
   P1:
   - TC-W0-002
   - TC-W0-003
@@ -148,6 +157,12 @@ priorities:
   - TC-X-025
   - TC-X-026
   - TC-X-027
+  - TC-W0-CFG-004
+  - TC-W0-CFG-007
+  - TC-W0-CFG-010
+  - TC-W0-CFG-011
+  - TC-W0-CFG-012
+  - TC-W0-CFG-015
   P2:
   - TC-W0-004
   - TC-W0-006

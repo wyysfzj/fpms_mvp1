@@ -33,6 +33,7 @@ export const COMMISSION_REPORT_READ = 'CommissionReport.Read'
 // Settings / Admin
 export const SETTINGS_READ = 'SystemParam.Read'
 export const SETTINGS_WRITE = 'SystemParam.Edit'
+export const TEMPLATE_READ = 'Template.Read'
 export const CLIENTS_READ = 'Client.Read'
 export const CLIENTS_WRITE = 'Client.Edit'
 export const APPLICANT_READ = 'Applicant.Read'

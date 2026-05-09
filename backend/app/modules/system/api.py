@@ -6,8 +6,14 @@ from sqlalchemy.orm import Session
 from app.api.deps import current_user_dep, require_perm
 from app.db.session import get_db
 from app.modules.auth.models import T_User
-from app.modules.system.schemas import OkOut, SystemParamListItemOut, SystemParamUpsertIn
+from app.modules.system.schemas import (
+    ConfigReadinessOut,
+    OkOut,
+    SystemParamListItemOut,
+    SystemParamUpsertIn,
+)
 from app.modules.system.service import (
+    build_config_readiness,
     list_system_params,
     mask_secret_param_value,
 )
@@ -47,10 +53,37 @@ def get_system_params(
             param_key=param.param_key,
             param_value=mask_secret_param_value(param),
             value_type=param.value_type,
+            description=param.description,
             is_secret=param.is_secret,
+            updated_at=param.updated_at,
+            created_at=param.created_at,
         )
         for param in params
     ]
+
+
+@router.get(
+    "/system/config-readiness",
+    response_model=ConfigReadinessOut,
+    summary="Audit system configuration readiness",
+)
+def get_config_readiness(
+    _perm: None = Depends(require_perm("SystemParam.Read")),
+    db: Session = Depends(get_db),
+) -> ConfigReadinessOut:
+    """
+    Read-only audit for seed/config readiness.
+
+    **Auth**: Bearer JWT
+    **Permission**: SystemParam.Read
+    **Request example**:
+    `GET /api/v1/system/config-readiness`
+    **Responses**:
+    - 200: Current config readiness counts and missing hard blockers
+    - 401: AUTH_REQUIRED
+    - 403: FORBIDDEN
+    """
+    return ConfigReadinessOut.model_validate(build_config_readiness(db))
 
 
 @router.put(

@@ -25,7 +25,10 @@ interface SystemParamBackendListItem {
     param_key: string
     param_value: string
     value_type?: string
+    description?: string | null
     is_secret?: boolean
+    updated_at?: string
+    created_at?: string
 }
 
 function inferFileType(filePath: string, language?: string | null): string {
@@ -109,6 +112,11 @@ export async function getSystemParams(): Promise<SystemParamListItem[]> {
     return response.data.map((item) => ({
         key: item.param_key,
         value: item.param_value,
+        value_type: item.value_type,
+        description: item.description ?? undefined,
+        is_secret: item.is_secret,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
     }))
 }
 
@@ -120,6 +128,7 @@ export async function upsertSystemParam(key: string, payload: SystemParamUpsertP
         param_value: payload.value,
         value_type: payload.value_type || 'string',
         description: payload.description,
+        is_secret: payload.is_secret,
     })
 }
 

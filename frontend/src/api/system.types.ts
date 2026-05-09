@@ -45,7 +45,10 @@ export interface TemplateUploadPayload {
 export interface SystemParamListItem {
     key: string
     value: string
+    value_type?: string
     description?: string
+    is_secret?: boolean
+    created_at?: string
     updated_at?: string
 }
 
@@ -53,6 +56,7 @@ export interface SystemParamUpsertPayload {
     value: string
     value_type?: string
     description?: string
+    is_secret?: boolean
 }
 
 // Letterhead Types

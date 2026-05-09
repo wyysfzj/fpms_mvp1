@@ -1,0 +1,585 @@
+system_params:
+- id: DS-CFG-SYS-DEFAULT-CURRENCY
+  api: PUT /system/params/default_currency
+  table: t_system_param
+  payload:
+    param_value: CNY
+    value_type: string
+    description: 默认币种
+    is_secret: false
+  purpose: 新建费用、客户或账单未显式指定币种时的默认配置基线。
+  current_implementation_note: 当前 seed 已包含 default_currency，但需要测试确认实际业务流是否读取。
+- id: DS-CFG-SYS-BILL-TEMPLATE
+  api: PUT /system/params/bill_template_path
+  table: t_system_param
+  payload:
+    param_value: templates/bill_standard_${RUN_ID}.docx
+    value_type: string
+    description: 账单打印模板路径
+    is_secret: false
+  purpose: 账单打印接口读取该参数定位 docx 模板。
+  current_implementation_note: 当前 seed 未包含 bill_template_path；账单打印 readiness 应报告缺配置。
+- id: DS-CFG-SYS-TASK-SHEET-TEMPLATE
+  api: PUT /system/params/task_sheet_template_path
+  table: t_system_param
+  payload:
+    param_value: templates/task_sheet.docx
+    value_type: string
+    description: 任务单模板路径
+    is_secret: false
+  purpose: 任务打印接口读取该参数定位任务单模板。
+  current_implementation_note: 当前 seed 已包含 task_sheet_template_path。
+- id: DS-CFG-SYS-COMMISSION-WAITPAY-THRESHOLD
+  api: PUT /system/params/commission_wait_pay_threshold
+  table: t_system_param
+  payload:
+    param_value: "1.00"
+    value_type: decimal
+    description: SPEC 期望的款到后可结算比例阈值
+    is_secret: false
+  purpose: SPEC 中 WaitPay 阈值配置测试数据。
+  current_implementation_note: 当前 commission 逻辑主要使用规则 wait_pay/force_settle 和收款状态；未确认该系统参数被读取，应作为 gap 验证。
+- id: DS-CFG-SYS-SECRET-SAMPLE
+  api: PUT /system/params/external_storage_token
+  table: t_system_param
+  payload:
+    param_value: secret-${RUN_ID}
+    value_type: string
+    description: 密文遮蔽测试参数
+    is_secret: true
+  purpose: 验证系统参数列表和前端不会泄漏密文。
+
+fee_rates:
+- id: DS-CFG-RATE-APPLY-BASE-GOV
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: APPLY_BASE_GOV
+    fee_name: 申请基础官费
+    fee_type: GOV
+    currency: CNY
+    default_amount: "1000.00"
+    enabled: true
+    rate_group: APPLY
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: FIXED
+    calc_params: null
+    allow_reduction: true
+  expected_use: 申请费草单基础官费，按 fee_reduction 计算。
+- id: DS-CFG-RATE-APPLY-EXCESS-CLAIM
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: APPLY_EXCESS_CLAIM
+    fee_name: 权利要求附加费
+    fee_type: GOV
+    currency: CNY
+    default_amount: "150.00"
+    enabled: true
+    rate_group: APPLY
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: PER_CLAIM
+    calc_params: '{"base_claims":10}'
+    allow_reduction: true
+  expected_use: claim_count 超过 10 项时按超项数量生成官费。
+- id: DS-CFG-RATE-APPLY-SERVICE
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: APPLY_SERVICE
+    fee_name: 新申请服务费
+    fee_type: SERVICE
+    currency: CNY
+    default_amount: "500.00"
+    enabled: true
+    rate_group: APPLY
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: FIXED
+    calc_params: null
+    allow_reduction: false
+  expected_use: 申请费服务费，进入账单后作为 commission base。
+- id: DS-CFG-RATE-OA-SERVICE
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: OA_SERVICE_STANDARD
+    fee_name: OA 答复服务费
+    fee_type: SERVICE
+    currency: CNY
+    default_amount: "800.00"
+    enabled: true
+    rate_group: INTERMEDIATE
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: FIXED
+    calc_params: null
+    allow_reduction: false
+  expected_use: OA 来文或答复文件模板费用联动。
+- id: DS-CFG-RATE-GRANT-GOV
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: GRANT_FEE_GOV
+    fee_name: 授权官费
+    fee_type: GOV
+    currency: CNY
+    default_amount: "255.00"
+    enabled: true
+    rate_group: GRANT
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: FIXED
+    calc_params: null
+    allow_reduction: true
+  expected_use: 授权费任务生成官费草单。
+- id: DS-CFG-RATE-GRANT-SERVICE
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: GRANT_FEE_SERVICE
+    fee_name: 授权服务费
+    fee_type: SERVICE
+    currency: CNY
+    default_amount: "600.00"
+    enabled: true
+    rate_group: GRANT
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: FIXED
+    calc_params: null
+    allow_reduction: false
+  expected_use: 授权费服务费，进入提成基数。
+- id: DS-CFG-RATE-ANNUITY-GOV-Y1
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: ANNUITY_GOV
+    fee_name: 第一年年费官费
+    fee_type: GOV
+    currency: CNY
+    default_amount: "900.00"
+    enabled: true
+    rate_group: ANNUITY
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: BY_YEAR
+    calc_params: '{"year_no":1}'
+    allow_reduction: true
+  expected_use: 年费任务生成官费明细；当前实现可能按 rate_group 查询但 calc_mode 计算需验证。
+- id: DS-CFG-RATE-ANNUITY-SERVICE-Y1
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: ANNUITY_SERVICE
+    fee_name: 第一年年费服务费
+    fee_type: SERVICE
+    currency: CNY
+    default_amount: "300.00"
+    enabled: true
+    rate_group: ANNUITY
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: FIXED
+    calc_params: '{"year_no":1}'
+    allow_reduction: false
+  expected_use: 年费服务费，进入提成基数。
+- id: DS-CFG-RATE-BY-PAGES
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: SPEC_PAGE_SURCHARGE
+    fee_name: 说明书超页费
+    fee_type: GOV
+    currency: CNY
+    default_amount: "50.00"
+    enabled: true
+    rate_group: APPLY
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: BY_PAGES
+    calc_params: '{"base_pages":30}'
+    allow_reduction: true
+  expected_use: SPEC 期望的超页费率；当前实现若未计算应标为 gap。
+- id: DS-CFG-RATE-COMPOSITE
+  api: POST /fees/rates
+  table: t_fee_rate
+  payload:
+    fee_code: APPLY_COMPOSITE_SAMPLE
+    fee_name: 复合计费样例
+    fee_type: GOV
+    currency: CNY
+    default_amount: "0.00"
+    enabled: true
+    rate_group: APPLY
+    country_code: CN
+    case_type: NORMAL
+    patent_category: INV
+    calc_mode: COMPOSITE
+    calc_params: '{"fixed":"100","per_claim":"20","base_claims":10}'
+    allow_reduction: true
+  expected_use: SPEC 期望的复合计费样例；当前实现若未计算应标为 gap。
+
+commission_rules:
+- id: DS-CFG-COM-NORMAL-SERVICE
+  api: POST /commission/rules
+  table: t_commission_rule
+  payload:
+    rule_name: 普通申请服务费提成-${RUN_ID}
+    case_type: NORMAL
+    fee_type: SERVICE
+    flow_dir: CN_DOMESTIC
+    patent_category: INV
+    s1_rate: "0.30"
+    s2_rate: "0.20"
+    s1_fixed_amount: "0.00"
+    s2_fixed_amount: "0.00"
+    wait_pay: false
+    force_settle: false
+    enabled: true
+    effective_from: "2026-01-01"
+    effective_to: null
+    remark: NORMAL/SERVICE 基础提成规则
+  expected_use: 服务费账单生成 commission，初始可结算。
+- id: DS-CFG-COM-NORMAL-WAITPAY
+  api: POST /commission/rules
+  table: t_commission_rule
+  payload:
+    rule_name: 普通申请款到后提成-${RUN_ID}
+    case_type: NORMAL
+    fee_type: SERVICE
+    flow_dir: CN_DOMESTIC
+    patent_category: INV
+    s1_rate: "0.30"
+    s2_rate: "0.20"
+    s1_fixed_amount: "0.00"
+    s2_fixed_amount: "0.00"
+    wait_pay: true
+    force_settle: false
+    enabled: true
+    effective_from: "2026-01-01"
+    effective_to: null
+    remark: WaitPay=true 边界测试
+  expected_use: 未满足收款条件时 commission 不可结算。
+- id: DS-CFG-COM-NORMAL-FORCE
+  api: POST /commission/rules
+  table: t_commission_rule
+  payload:
+    rule_name: 普通申请强制可结算-${RUN_ID}
+    case_type: NORMAL
+    fee_type: SERVICE
+    flow_dir: CN_DOMESTIC
+    patent_category: INV
+    s1_rate: "0.30"
+    s2_rate: "0.20"
+    s1_fixed_amount: "0.00"
+    s2_fixed_amount: "0.00"
+    wait_pay: true
+    force_settle: true
+    enabled: true
+    effective_from: "2026-01-01"
+    effective_to: null
+    remark: ForceSettle=true 边界测试
+  expected_use: 即使收款条件未满足也可进入可结算集合。
+- id: DS-CFG-COM-NORMAL-SERVICE-DISABLED
+  api: POST /commission/rules
+  table: t_commission_rule
+  payload:
+    rule_name: 停用提成规则-${RUN_ID}
+    case_type: NORMAL
+    fee_type: SERVICE
+    flow_dir: CN_DOMESTIC
+    patent_category: INV
+    s1_rate: "0.10"
+    s2_rate: "0.00"
+    s1_fixed_amount: "0.00"
+    s2_fixed_amount: "0.00"
+    wait_pay: false
+    force_settle: false
+    enabled: false
+    effective_from: "2026-01-01"
+    effective_to: null
+    remark: 不应参与匹配
+  expected_use: 查询可见但不参与 commission hook。
+- id: DS-CFG-COM-INVALID-RATE
+  api: POST /commission/rules
+  table: t_commission_rule
+  invalid_payloads:
+  - field: s1_rate
+    value: "-0.01"
+    expected_status: 400
+  - field: s2_rate
+    value: "1.01"
+    expected_status: 400
+  - field: s1_fixed_amount
+    value: "-1.00"
+    expected_status: 400
+  purpose: 提成规则非法边界。
+
+task_templates:
+- id: DS-CFG-TASK-OA-REPLY
+  api: POST /task-templates
+  table: t_task_template
+  payload:
+    code: OA_REPLY_${RUN_ID}
+    name: OA 答复期限-${RUN_ID}
+    deadline_base: DISPATCH_DATE
+    add_days: 120
+    add_months: 0
+    inner_offset_days: 14
+    remind_base: INNER
+    remind_1_offset_days: 30
+    remind_2_offset_days: 14
+    remind_3_offset_days: 3
+    daily_remind: true
+    default_supervisor_id: null
+    default_worker_role: Agent
+    description: OA 来文自动答复任务
+  expected_use: OA_IN 文档创建后自动生成回复任务。
+- id: DS-CFG-TASK-GRANT-FEE
+  api: POST /task-templates
+  table: t_task_template
+  payload:
+    code: GRANT_FEE_${RUN_ID}
+    name: 授权缴费期限-${RUN_ID}
+    deadline_base: GRANT_DATE
+    add_days: 60
+    add_months: 0
+    inner_offset_days: 7
+    remind_base: DEADLINE
+    remind_1_offset_days: 30
+    remind_2_offset_days: 14
+    remind_3_offset_days: 3
+    daily_remind: false
+    default_supervisor_id: null
+    default_worker_role: Agent
+    description: 授权通知后生成缴费任务
+  expected_use: 授权通知文件或授权费流程使用。
+
+doc_templates:
+- id: DS-CFG-DOC-OA-IN
+  api: POST /doc-templates
+  table: t_doc_template
+  payload:
+    code: OA_IN_${RUN_ID}
+    name: 审查意见通知书-${RUN_ID}
+    direction: IN
+    enabled: true
+    status_effect: OA1
+    status_restore: null
+    deadline_template_code: OA_REPLY_${RUN_ID}
+    fee_draft_type: OA_SERVICE
+    fee_item_list: '[{"fee_code":"OA_SERVICE_STANDARD","fee_name":"OA 答复服务费","fee_type":"SERVICE","quantity":"1","unit_price":"800.00","amount":"800.00"}]'
+    need_reply: true
+    reply_to_template_code: null
+    input_fields: '["official_due_date","dispatch_date"]'
+  expected_use: 创建 OA 来文时预览状态、任务和费用影响。
+- id: DS-CFG-DOC-OA-OUT
+  api: POST /doc-templates
+  table: t_doc_template
+  payload:
+    code: OA_OUT_${RUN_ID}
+    name: 审查意见答复书-${RUN_ID}
+    direction: OUT
+    enabled: true
+    status_effect: null
+    status_restore: SUB_EXAM
+    deadline_template_code: null
+    fee_draft_type: null
+    fee_item_list: null
+    need_reply: false
+    reply_to_template_code: OA_IN_${RUN_ID}
+    input_fields: '["reply_date"]'
+  expected_use: 创建答复文件时关闭回复链并恢复状态。
+- id: DS-CFG-DOC-GRANT-NOTICE
+  api: POST /doc-templates
+  table: t_doc_template
+  payload:
+    code: GRANT_NOTICE_${RUN_ID}
+    name: 授权通知书-${RUN_ID}
+    direction: IN
+    enabled: true
+    status_effect: GRANT_PENDING
+    status_restore: null
+    deadline_template_code: GRANT_FEE_${RUN_ID}
+    fee_draft_type: GRANT_FEE
+    fee_item_list: '[{"fee_code":"GRANT_FEE_GOV","fee_name":"授权官费","fee_type":"GOV","amount":"255.00"},{"fee_code":"GRANT_FEE_SERVICE","fee_name":"授权服务费","fee_type":"SERVICE","amount":"600.00"}]'
+    need_reply: false
+    reply_to_template_code: null
+    input_fields: '["issue_date","grant_date","grant_no","first_annuity_year","valid_until"]'
+  expected_use: 授权阶段任务、费用和年费初始化前置。
+- id: DS-CFG-DOC-GRANT-FEE-NOTICE
+  api: POST /doc-templates
+  table: t_doc_template
+  payload:
+    code: GRANT_FEE_NOTICE
+    name: 授权费通知函
+    direction: OUT
+    enabled: true
+    status_effect: null
+    status_restore: null
+    deadline_template_code: null
+    fee_draft_type: null
+    fee_item_list: null
+    need_reply: false
+    reply_to_template_code: null
+    input_fields: '["grant_fee_task_id"]'
+  expected_use: 授权费通知生成服务期待的固定模板代码；当前 seed 未包含，应被 readiness 捕获。
+
+template_sources:
+- id: DS-CFG-TEMPLATE-DOC-OA-CN
+  api: POST /templates
+  table: t_template
+  payload:
+    name: OA_IN_${RUN_ID}
+    group: DOC_TEMPLATE
+    language: zh-CN
+    file_path: templates/doc_oa_in_${RUN_ID}.docx
+    enabled: true
+  expected_use: 文档渲染按 group=DOC_TEMPLATE 且 name=DocTemplate.code 命中。
+- id: DS-CFG-TEMPLATE-BILL-CN
+  api: POST /templates
+  table: t_template
+  payload:
+    name: bill_standard_${RUN_ID}
+    group: BILL_TEMPLATE
+    language: zh-CN
+    file_path: templates/bill_standard_${RUN_ID}.docx
+    enabled: true
+  expected_use: 配合 bill_template_path 做账单打印 smoke。
+
+letterheads:
+- id: DS-CFG-LETTERHEAD-CN
+  api: POST /letterheads
+  table: t_letter_head
+  payload:
+    name: 中文默认信头-${RUN_ID}
+    locale: zh-CN
+    logo_file_path: templates/logo_${RUN_ID}.png
+    header_text: 北京示例知识产权代理有限公司
+    footer_text: 本文件由 FPMS 测试环境生成
+    address_block: 北京市海淀区测试路 1 号
+    phone: 010-00000000
+    email: test@example.cn
+    website: https://example.cn
+    is_default: true
+  expected_use: 中文账单或文档打印默认信头。
+- id: DS-CFG-LETTERHEAD-EN
+  api: POST /letterheads
+  table: t_letter_head
+  payload:
+    name: English Default Letterhead-${RUN_ID}
+    locale: en-US
+    logo_file_path: templates/logo_${RUN_ID}.png
+    header_text: Example IP Agency
+    footer_text: Generated by FPMS test environment
+    address_block: 1 Test Road, Beijing
+    phone: 010-00000000
+    email: test@example.cn
+    website: https://example.cn
+    is_default: true
+  expected_use: 英文账单或文档打印默认信头。
+
+master_data:
+- id: DS-CFG-COUNTRY-CN
+  api: POST /countries
+  table: t_country
+  payload:
+    code: CN
+    name_cn: 中国
+    name_en: China
+    is_active: true
+  expected_use: 案件国家、费率 country_code、报表过滤。
+- id: DS-CFG-DEPT-PATENT
+  api: POST /departments
+  table: t_department
+  payload:
+    department_code: PATENT
+    name_cn: 专利部
+    is_active: true
+  expected_use: 费用/支出/统计按部门归集。
+- id: DS-CFG-CLIENT-ACTIVE
+  api: POST /clients
+  table: t_client
+  payload:
+    client_code: CL-CFG-${RUN_ID}
+    name_cn: 配置测试客户-${RUN_ID}
+    name_en: Config Test Client
+    email: cfg-${RUN_ID}@example.cn
+    client_type: DIRECT
+    default_currency: CNY
+    is_active: true
+  expected_use: 案件、账单、收款的客户引用。
+- id: DS-CFG-APPLICANT-ENTITY
+  api: POST /applicants
+  table: t_applicant
+  payload:
+    code: AP-CFG-${RUN_ID}
+    name_cn: 配置测试申请人-${RUN_ID}
+    name_en: Config Test Applicant
+    applicant_type: ENTITY
+    is_active: true
+  expected_use: 案件申请人引用和申请人类型规则。
+
+business_records:
+- id: DS-CFG-CASE-NORMAL-INV
+  api: POST /cases
+  table: t_case
+  payload:
+    case_no: CASE-CFG-${RUN_ID}-001
+    case_type: NORMAL
+    patent_category: INV
+    flow_dir: CN_DOMESTIC
+    from_country: CN
+    title_cn: 参数配置测试案
+    recv_date: "2026-05-09"
+    claim_count: 12
+    fee_reduction: "0.15"
+    discount_rate: "0.10"
+    primary_agent_id: DS-U-AG-01
+    agent_splits:
+    - agent_id: DS-U-AG-01
+      role: PRIMARY
+      share_ratio: "70.0000"
+    - agent_id: DS-U-AG-02
+      role: SECONDARY
+      share_ratio: "30.0000"
+  expected_use: 申请费、文档模板和提成分摊测试共同基准案。
+- id: DS-CFG-BILL-SERVICE-1000
+  api: POST /bills/manual
+  table: t_bill
+  payload:
+    bill_no: BILL-CFG-${RUN_ID}-001
+    currency: CNY
+    items:
+    - case_ref: DS-CFG-CASE-NORMAL-INV
+      fee_type: SERVICE
+      fee_code: APPLY_SERVICE
+      amount: "1000.00"
+  expected_use: Commission hook 基准账单；70/30 分摊后 base_fee 为 700/300。
+
+seed_audit_expectations:
+- id: DS-CFG-SEED-EXPECTED-COUNTS
+  current_seed_counts_after_cleanup:
+    t_system_param: 4
+    t_doc_template: 5
+    t_task_template: 2
+    t_fee_rate: 0
+    t_commission_rule: 0
+    t_template: 0
+    t_letter_head: 0
+    t_country: 0
+    t_department: 0
+  readiness_decision: BLOCKED_FOR_FULL_CONFIG_SMOKE
+  purpose: 部署或 E2E 前识别“表存在但业务参数未配置”的风险。

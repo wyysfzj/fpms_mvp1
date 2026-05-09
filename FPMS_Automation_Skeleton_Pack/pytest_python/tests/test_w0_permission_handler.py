@@ -10,6 +10,7 @@ from handlers.wave_w0 import (
     handle_tc_w0_010,
     handle_tc_w0_013,
     handle_tc_w0_014,
+    handle_tc_w0_cfg_013,
 )
 
 
@@ -23,6 +24,15 @@ ROLE_PERMISSIONS = {
         "Case.EditLimited",
         "Billing.Edit",
         "DocTemplate.Create",
+        "CommissionRule.Read",
+        "Country.Read",
+        "Department.Read",
+        "DocTemplate.Read",
+        "FeeRate.Read",
+        "LetterHead.Read",
+        "SystemParam.Read",
+        "TaskTemplate.Read",
+        "Template.Read",
         "FeeRate.Create",
     },
     "Formalities": {
@@ -145,6 +155,26 @@ class FakeApi:
             return FakeResponse(
                 200, {"items": [], "page": 1, "page_size": 1, "total": 0}
             )
+        config_permission_by_path = {
+            "/system/config-readiness": "SystemParam.Read",
+            "/fees/rates": "FeeRate.Read",
+            "/commission/rules": "CommissionRule.Read",
+            "/task-templates": "TaskTemplate.Read",
+            "/doc-templates": "DocTemplate.Read",
+            "/templates": "Template.Read",
+            "/letterheads": "LetterHead.Read",
+            "/countries": "Country.Read",
+            "/departments": "Department.Read",
+        }
+        required_perm = config_permission_by_path.get(path)
+        if required_perm is not None:
+            if not self._has_permission(required_perm):
+                return FakeResponse(
+                    403, {"error": {"details": {"required_perm": required_perm}}}
+                )
+            return FakeResponse(
+                200, {"items": [], "page": 1, "page_size": 1, "total": 0}
+            )
         return FakeResponse(404, {"message": "not found"})
 
     def post(self, path: str, **kwargs: Any) -> FakeResponse:
@@ -244,6 +274,28 @@ def _case() -> SkeletonTestCase:
     )
 
 
+def _cfg_case() -> SkeletonTestCase:
+    return SkeletonTestCase(
+        id="TC-W0-CFG-013",
+        wave="W0",
+        wave_title="W0 基础配置",
+        context="RBAC 配置与保护端点",
+        priority="P0",
+        categories=["Security", "Happy", "Unhappy"],
+        topic="权限-配置端点和菜单可见性",
+        stage_code=None,
+        stage_name="权限",
+        coverage_ids=[],
+        requirement_ids=[],
+        validation_ids=[],
+        preconditions="",
+        steps_summary="",
+        expected="",
+        automation_recommendation="",
+        data_refs=["DS-U-ADM", "DS-U-FI-01", "DS-U-FM-01", "DS-U-LMT-01"],
+    )
+
+
 def test_tc_w0_014_handler_prepares_users_and_checks_permission_matrix() -> None:
     runtime = FakeRuntime(
         username="admin",
@@ -316,6 +368,56 @@ def test_tc_w0_014_handler_prepares_users_and_checks_permission_matrix() -> None
     assert runtime.db.rows == []
 
 
+def test_tc_w0_cfg_013_handler_checks_config_endpoint_permissions() -> None:
+    runtime = FakeRuntime(
+        username="admin",
+        password="dummy-password",
+        run_id="RUN-W0-CFG-RBAC",
+        api=FakeApi(),
+        db=FakeDb(enabled=False),
+    )
+
+    handle_tc_w0_cfg_013(runtime, _cfg_case())  # type: ignore[arg-type]
+
+    login_users = [
+        call["username"] for call in runtime.api.calls if call["method"] == "LOGIN"
+    ]
+    assert login_users == ["admin", "finance-w0perm-RUN-W0-CFG-RBAC"]
+
+    config_checks = [
+        call
+        for call in runtime.api.calls
+        if call["method"] == "GET"
+        and call["path"]
+        in {
+            "/system/config-readiness",
+            "/fees/rates",
+            "/commission/rules",
+            "/task-templates",
+            "/doc-templates",
+            "/templates",
+            "/letterheads",
+            "/countries",
+            "/departments",
+        }
+    ]
+    assert [call["as_user"] for call in config_checks] == [
+        "finance-w0perm-RUN-W0-CFG-RBAC",
+    ] * 9
+    assert [call["path"] for call in config_checks] == [
+        "/system/config-readiness",
+        "/fees/rates",
+        "/commission/rules",
+        "/task-templates",
+        "/doc-templates",
+        "/templates",
+        "/letterheads",
+        "/countries",
+        "/departments",
+    ]
+    assert runtime.db.rows == []
+
+
 def test_tc_w0_014_handler_runs_db_asserts_when_enabled() -> None:
     runtime = FakeRuntime(
         username="admin",
@@ -342,4 +444,5 @@ def test_only_tc_w0_014_is_newly_unskeletoned() -> None:
     assert not getattr(handle_tc_w0_007, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_010, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_014, "_is_skeleton", False)
+    assert not getattr(handle_tc_w0_cfg_013, "_is_skeleton", False)
     assert getattr(handle_tc_w0_013, "_is_skeleton", False) is True

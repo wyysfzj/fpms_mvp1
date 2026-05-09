@@ -1,5 +1,6 @@
 import type { ExecutionContext, TestCase } from "../support/types";
 import { markSkeleton } from "../support/helpers";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 /**
  * TC-W0-001 | 主数据-客户
@@ -323,6 +324,112 @@ export const TC_W0_014 = markSkeleton(async (ctx: ExecutionContext, tc: TestCase
   // Assert: 校验 UI / API / DB / 文件输出
 });
 
+/**
+ * TC-W0-CFG-015 | 前端配置页真实数据展示
+ * 覆盖: FR-FE-01, FR-COM-01, FR-DL-01, FR-WD-03
+ * 数据: DS-U-ADM, DS-CFG-SYS-BILL-TEMPLATE
+ * 动态值: FPMS_RUN_ID
+ *
+ * 前置:
+ * DS-U-ADM 登录前端；准备 supplemental 配置数据。
+ *
+ * 步骤摘要:
+ * 通过真实 API 写入系统参数；打开系统参数页；核对页面展示字段是否与 API payload 一致。
+ *
+ * 预期:
+ * 列表数据来自真实 API；描述、更新时间和密文遮蔽正常展示；不使用静态 mock 数据。
+ */
+export const TC_W0_CFG_015 = async (ctx: ExecutionContext, tc: TestCase): Promise<void> => {
+  void tc;
+
+  const page = ctx.page as Page;
+  const request = ctx.request as APIRequestContext;
+  const runId = String(ctx.runId || process.env.FPMS_RUN_ID || "LOCAL-RUN-001");
+  const apiBaseUrl = normalizeApiBaseUrl(process.env.FPMS_API_URL || "http://localhost:8000/api");
+  const username = process.env.FPMS_USERNAME || "admin";
+  const password = process.env.FPMS_PASSWORD || "admin123";
+  const token = await loginForConfigPage(request, apiBaseUrl, username, password);
+
+  const normalKey = runScopedKey("pw_system_param", runId);
+  const secretKey = runScopedKey("pw_secret_param", runId);
+  await upsertSystemParam(request, apiBaseUrl, token, normalKey, {
+    param_value: `pw-value-${runId}`,
+    value_type: "string",
+    description: `Playwright 参数 ${runId}`,
+    is_secret: false,
+  });
+  await upsertSystemParam(request, apiBaseUrl, token, secretKey, {
+    param_value: `secret-${runId}`,
+    value_type: "string",
+    description: `Playwright 密文 ${runId}`,
+    is_secret: true,
+  });
+
+  await page.addInitScript((storedToken) => {
+    window.localStorage.setItem("fpms_token", storedToken);
+  }, token);
+  await page.goto("/system/params");
+
+  await expect(page.getByRole("heading", { name: "系统参数" })).toBeVisible();
+  await expect(page.getByText(normalKey)).toBeVisible();
+  await expect(page.getByText(`pw-value-${runId}`)).toBeVisible();
+  await expect(page.getByText(`Playwright 参数 ${runId}`)).toBeVisible();
+  await expect(page.getByText(secretKey)).toBeVisible();
+  await expect(page.getByText("******")).toBeVisible();
+  await expect(page.getByText(`secret-${runId}`)).toHaveCount(0);
+};
+
+function normalizeApiBaseUrl(raw: string): string {
+  const trimmed = raw.replace(/\/$/, "");
+  return trimmed.endsWith("/api") ? `${trimmed}/v1` : trimmed;
+}
+
+function runScopedKey(prefix: string, runId: string): string {
+  return `${prefix}_${runId}`.replaceAll("-", "_");
+}
+
+async function loginForConfigPage(
+  request: APIRequestContext,
+  apiBaseUrl: string,
+  username: string,
+  password: string
+): Promise<string> {
+  let response;
+  try {
+    response = await request.post(`${apiBaseUrl}/auth/login`, {
+      data: { username, password },
+    });
+  } catch (error) {
+    test.skip(true, `真实后端不可用，跳过配置页真实 API smoke: ${String(error)}`);
+    throw error;
+  }
+  if (!response.ok()) {
+    test.skip(true, `登录真实后端失败，跳过配置页真实 API smoke: HTTP ${response.status()}`);
+  }
+  const payload = await response.json();
+  const token = payload?.access_token;
+  if (typeof token !== "string" || token.length === 0) {
+    throw new Error("登录响应缺少 access_token");
+  }
+  return token;
+}
+
+async function upsertSystemParam(
+  request: APIRequestContext,
+  apiBaseUrl: string,
+  token: string,
+  key: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const response = await request.put(`${apiBaseUrl}/system/params/${key}`, {
+    data: payload,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok()) {
+    throw new Error(`系统参数写入失败: ${key}, HTTP ${response.status()}`);
+  }
+}
+
 export const waveW0Handlers: Record<string, (ctx: ExecutionContext, tc: TestCase) => Promise<void>> = {
   "TC-W0-001": TC_W0_001,
   "TC-W0-002": TC_W0_002,
@@ -338,4 +445,5 @@ export const waveW0Handlers: Record<string, (ctx: ExecutionContext, tc: TestCase
   "TC-W0-012": TC_W0_012,
   "TC-W0-013": TC_W0_013,
   "TC-W0-014": TC_W0_014,
+  "TC-W0-CFG-015": TC_W0_CFG_015,
 };

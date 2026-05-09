@@ -30,8 +30,33 @@ class SystemParamListItemOut(BaseModel):
     param_key: str
     param_value: str
     value_type: str
+    description: str | None
     is_secret: bool
+    updated_at: datetime
+    created_at: datetime
 
 
 class OkOut(BaseModel):
     status: str = "ok"
+
+
+class ConfigReadinessCountOut(BaseModel):
+    key: str
+    label: str
+    count: int
+
+
+class ConfigReadinessMissingOut(BaseModel):
+    key: str
+    label: str
+    table: str
+    severity: str
+    message: str
+
+
+class ConfigReadinessOut(BaseModel):
+    status: str
+    hard_blocked: bool
+    checked_at: datetime
+    counts: list[ConfigReadinessCountOut]
+    missing: list[ConfigReadinessMissingOut]
