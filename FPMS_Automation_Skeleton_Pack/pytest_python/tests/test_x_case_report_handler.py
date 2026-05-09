@@ -200,6 +200,13 @@ def test_tc_x_007_handler_verifies_case_report_summary() -> None:
         "TERMINATED",
         "PENDING",
     ]
+    granted_case = runtime.api.cases[0]
+    assert granted_case["pub_no"] == "PUB-RUN-X-CASE-RPT-007G"
+    assert granted_case["pub_date"] == "2026-04-15"
+    assert granted_case["grant_no"] == "GRANT-RUN-X-CASE-RPT-007G"
+    assert granted_case["grant_date"] == "2026-05-01"
+    assert granted_case["first_annuity_year"] == 1
+    assert granted_case["valid_until"] == "2046-05-01"
     report_calls = [
         call
         for call in runtime.api.calls

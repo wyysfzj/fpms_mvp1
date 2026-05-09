@@ -1122,7 +1122,12 @@ def handle_tc_x_007(runtime: RuntimeContext, case: TestCase) -> None:
                 "status": "GRANTED",
                 "from_country": "CN",
                 "to_country": "US",
+                "pub_no": unique_code("PUB", runtime.run_id, "007G"),
+                "pub_date": "2026-04-15",
+                "grant_no": unique_code("GRANT", runtime.run_id, "007G"),
                 "grant_date": "2026-05-01",
+                "first_annuity_year": 1,
+                "valid_until": "2046-05-01",
             },
         )
         _ensure_x_special_task_case(
