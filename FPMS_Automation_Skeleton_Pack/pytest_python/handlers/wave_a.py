@@ -3580,7 +3580,7 @@ def handle_tc_a_018(runtime: RuntimeContext, case: TestCase) -> None:
 
         if runtime.db.enabled():
             runtime.db.assert_row_exists(
-                "t_pay_list", {"id": pay_list_id, "status": "PAID"}
+                "t_pay_list", {"id": pay_list_id, "status": "PARTIAL"}
             )
     except requests.RequestException as exc:
         pytest.skip(f"Real backend unavailable for TC-A-018: {exc}")
