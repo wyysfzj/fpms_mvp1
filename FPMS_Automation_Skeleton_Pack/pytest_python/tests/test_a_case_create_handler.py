@@ -78,6 +78,17 @@ class FakeDb:
         return {"id": "row-id", **where}
 
 
+class NameOnlyApplicantSearchApi(FakeApi):
+    def get(self, path: str, **kwargs: Any) -> FakeResponse:
+        if path == "/applicants":
+            self.calls.append({"method": "GET", "path": path, "kwargs": kwargs})
+            q = (kwargs.get("params") or {}).get("q")
+            if self.applicant is not None and q == self.applicant.get("name_cn"):
+                return FakeResponse(200, _list_response(self.applicant))
+            return FakeResponse(200, _list_response(None))
+        return super().get(path, **kwargs)
+
+
 @dataclass
 class FakeRuntime:
     username: str
@@ -172,6 +183,7 @@ def test_tc_a_001_handler_creates_minimal_case_via_api() -> None:
     assert get_paths == [
         "/clients",
         "/applicants",
+        "/applicants",
         "/cases",
         "/cases/case-001",
     ]
@@ -192,6 +204,33 @@ def test_tc_a_001_handler_runs_db_asserts_when_enabled() -> None:
         ("t_case", {"case_no": "CASE-A-RUN-A-DB-001", "status": "NOT_FILED"}),
         ("t_case_applicant", {"case_id": "case-001"}),
     ]
+
+
+def test_tc_a_001_handler_reuses_existing_applicant_found_by_name() -> None:
+    api = NameOnlyApplicantSearchApi()
+    api.applicant = {
+        "id": "applicant-existing",
+        "code": "AP-A-001-RUN-A-NAME-REUSE",
+        "name_cn": "北京创新科技有限公司-RUN-A-NAME-REUSE",
+        "name_en": None,
+        "is_active": True,
+    }
+    runtime = FakeRuntime(
+        username="admin",
+        password="pw",
+        run_id="RUN-A-NAME-REUSE",
+        api=api,
+        db=FakeDb(enabled=False),
+    )
+
+    handle_tc_a_001(runtime, _case())  # type: ignore[arg-type]
+
+    post_paths = [
+        call["path"] for call in runtime.api.calls if call["method"] == "POST"
+    ]
+    assert post_paths == ["/clients", "/cases"]
+    case_payload = _post_payload(runtime.api.calls, "/cases")
+    assert case_payload["applicants"][0]["applicant_id"] == "applicant-existing"
 
 
 def test_only_tc_a_001_is_no_longer_skeleton() -> None:

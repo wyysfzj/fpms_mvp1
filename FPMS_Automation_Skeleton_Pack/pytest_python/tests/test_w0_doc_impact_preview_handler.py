@@ -25,6 +25,7 @@ class FakeApi:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
         self.cases: list[dict[str, Any]] = []
+        self.task_templates: list[dict[str, Any]] = []
         self.doc_templates: list[dict[str, Any]] = []
 
     def login(self, username: str, password: str) -> str:
@@ -41,7 +42,9 @@ class FakeApi:
             self.cases.append(item)
             return FakeResponse(201, item)
         if path == "/task-templates":
-            return FakeResponse(201, {"id": "task-1", **payload})
+            item = {"id": f"task-{len(self.task_templates) + 1}", **payload}
+            self.task_templates.append(item)
+            return FakeResponse(201, item)
         if path == "/doc-templates":
             item = {"id": f"doc-template-{len(self.doc_templates) + 1}", **payload}
             self.doc_templates.append(item)
@@ -98,6 +101,18 @@ class FakeApi:
                     ],
                     "risk_tips": [],
                 },
+            )
+        return FakeResponse(404, {"message": "not found"})
+
+    def get(self, path: str, **kwargs: Any) -> FakeResponse:
+        self.calls.append({"method": "GET", "path": path, "kwargs": kwargs})
+        if path == "/task-templates":
+            return FakeResponse(200, self.task_templates)
+        if path == "/doc-templates":
+            q = (kwargs.get("params") or {}).get("q")
+            items = [item for item in self.doc_templates if item["code"] == q]
+            return FakeResponse(
+                200, {"items": items, "page": 1, "page_size": 20, "total": len(items)}
             )
         return FakeResponse(404, {"message": "not found"})
 

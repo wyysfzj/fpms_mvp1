@@ -140,6 +140,7 @@ def _ensure_tc_a_001_applicant(
     seed: dict[str, Any],
 ) -> dict[str, Any]:
     applicant_code = unique_code("AP-A-001", runtime.run_id)
+    name_cn = f"{seed['name']}-{runtime.run_id}"
     search = _json_or_assert(
         runtime.api.get(
             "/applicants",
@@ -151,9 +152,20 @@ def _ensure_tc_a_001_applicant(
     if existing is not None:
         return existing
 
+    name_search = _json_or_assert(
+        runtime.api.get(
+            "/applicants",
+            params={"page": 1, "page_size": 20, "q": name_cn},
+        ),
+        "search applicant by name",
+    )
+    existing = _find_item(name_search, "name_cn", name_cn)
+    if existing is not None:
+        return existing
+
     payload = {
         "code": applicant_code,
-        "name_cn": f"{seed['name']}-{runtime.run_id}",
+        "name_cn": name_cn,
         "name_en": None,
         "is_active": True,
     }

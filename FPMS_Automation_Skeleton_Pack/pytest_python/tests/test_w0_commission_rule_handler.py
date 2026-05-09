@@ -123,6 +123,17 @@ class FakeApi:
             return FakeResponse(
                 200, {"items": items, "page": 1, "page_size": 20, "total": len(items)}
             )
+        if path == "/clients":
+            params = kwargs.get("params") or {}
+            q = params.get("q")
+            items = [
+                item
+                for item in self.clients
+                if not q or item.get("client_code") == q or item.get("name_cn") == q
+            ]
+            return FakeResponse(
+                200, {"items": items, "page": 1, "page_size": 20, "total": len(items)}
+            )
         if path != "/commission/rules":
             return FakeResponse(404, {"message": "not found"})
         params = kwargs.get("params") or {}
@@ -439,6 +450,39 @@ def test_tc_w0_cfg_006_handler_creates_split_commissions() -> None:
         ("90.00", "60.00"),
     ]
     assert runtime.db.rows == []
+
+
+def test_tc_w0_cfg_006_handler_reuses_existing_config_client() -> None:
+    runtime = FakeRuntime(
+        username="admin",
+        password="dummy-password",
+        run_id="RUN-W0-COM-SPLIT-REUSE",
+        api=FakeApi(),
+        db=FakeDb(enabled=False),
+    )
+    runtime.api.clients.append(
+        {
+            "id": "client-existing",
+            "client_code": "CL-CFG-RUN-W0-COM-SPLIT-REUSE",
+            "name_cn": "配置测试客户-RUN-W0-COM-SPLIT-REUSE",
+            "client_type": "DIRECT",
+            "default_currency": "CNY",
+            "is_active": True,
+        }
+    )
+
+    handle_tc_w0_cfg_006(runtime, _split_case())  # type: ignore[arg-type]
+
+    post_paths = [
+        call["path"] for call in runtime.api.calls if call["method"] == "POST"
+    ]
+    assert "/clients" not in post_paths
+    case_payload = [
+        call["kwargs"]["json"]
+        for call in runtime.api.calls
+        if call["method"] == "POST" and call["path"] == "/cases"
+    ][0]
+    assert case_payload["client_id"] == "client-existing"
 
 
 def test_tc_w0_cfg_005_handler_runs_db_asserts_when_enabled() -> None:

@@ -659,11 +659,7 @@ def handle_tc_w0_cfg_002(runtime: RuntimeContext, case: TestCase) -> None:
         _assert_readiness_missing(readiness, "system_param.bill_template_path")
 
         catalog = SeedCatalog.load(run_id=runtime.run_id)
-        client = _json_or_assert(
-            runtime.api.post("/clients", json=_config_client_payload(catalog)),
-            "create bill print client",
-            expected_statuses={200, 201},
-        )
+        client = _ensure_config_client(runtime, catalog, "bill print")
         client_id = _required_value(client, "id", "created client")
 
         bill = _json_or_assert(
@@ -760,19 +756,11 @@ def handle_tc_w0_cfg_008(runtime: RuntimeContext, case: TestCase) -> None:
 
         catalog = SeedCatalog.load(run_id=runtime.run_id)
         task_payload = _task_template_payload(catalog, "DS-CFG-TASK-OA-REPLY")
-        created_task = _json_or_assert(
-            runtime.api.post("/task-templates", json=task_payload),
-            "create OA reply task template",
-            expected_statuses={200, 201},
-        )
+        created_task = _ensure_task_template(runtime, task_payload, "OA reply")
         _assert_task_template_payload(created_task, task_payload)
 
         doc_payload = _doc_template_payload(catalog, "DS-CFG-DOC-OA-IN")
-        created_doc = _json_or_assert(
-            runtime.api.post("/doc-templates", json=doc_payload),
-            "create OA incoming doc template",
-            expected_statuses={200, 201},
-        )
+        created_doc = _ensure_doc_template(runtime, doc_payload, "OA incoming")
         _assert_doc_template_fields(created_doc, doc_payload)
 
         task_list = _json_or_assert(
@@ -881,17 +869,11 @@ def handle_tc_w0_cfg_009(runtime: RuntimeContext, case: TestCase) -> None:
         case_id = _required_value(created_case, "id", "created case")
 
         task_payload = _task_template_payload(catalog, "DS-CFG-TASK-OA-REPLY")
-        _json_or_assert(
-            runtime.api.post("/task-templates", json=task_payload),
-            "create impact preview task template",
-            expected_statuses={200, 201},
-        )
+        _ensure_task_template(runtime, task_payload, "impact preview")
 
         doc_payload = _doc_template_payload(catalog, "DS-CFG-DOC-OA-IN")
-        created_doc_template = _json_or_assert(
-            runtime.api.post("/doc-templates", json=doc_payload),
-            "create impact preview doc template",
-            expected_statuses={200, 201},
+        created_doc_template = _ensure_doc_template(
+            runtime, doc_payload, "impact preview"
         )
         doc_template_id = _required_value(
             created_doc_template, "id", "created doc template"
@@ -1250,12 +1232,7 @@ def handle_tc_w0_cfg_006(runtime: RuntimeContext, case: TestCase) -> None:
         catalog = SeedCatalog.load(run_id=runtime.run_id)
         agent_a, agent_b = _ensure_commission_agent_users(runtime)
 
-        client_payload = _config_client_payload(catalog)
-        client = _json_or_assert(
-            runtime.api.post("/clients", json=client_payload),
-            "create commission split client",
-            expected_statuses={200, 201},
-        )
+        client = _ensure_config_client(runtime, catalog, "commission split")
         client_id = _required_value(client, "id", "created client")
 
         case_payload = _commission_case_payload(catalog, client_id, agent_a, agent_b)
@@ -1328,6 +1305,27 @@ def _ensure_commission_agent_users(
 def _config_client_payload(catalog: SeedCatalog) -> dict[str, Any]:
     seed = catalog.normalized("DS-CFG-CLIENT-ACTIVE")
     return dict(seed["payload"])
+
+
+def _ensure_config_client(
+    runtime: RuntimeContext,
+    catalog: SeedCatalog,
+    action: str,
+) -> dict[str, Any]:
+    payload = _config_client_payload(catalog)
+    existing = _search_by_field(
+        runtime,
+        "/clients",
+        "client_code",
+        payload["client_code"],
+    )
+    if existing is not None:
+        return existing
+    return _json_or_assert(
+        runtime.api.post("/clients", json=payload),
+        f"create {action} client",
+        expected_statuses={200, 201},
+    )
 
 
 def _commission_case_payload(
@@ -1656,6 +1654,78 @@ def _assert_doc_template_search_hit(
     raise AssertionError(
         f"Created doc template was not found by code {expected_payload['code']}"
     )
+
+
+def _ensure_task_template(
+    runtime: RuntimeContext,
+    payload: dict[str, Any],
+    action: str,
+) -> dict[str, Any]:
+    existing = _search_by_field(
+        runtime,
+        "/task-templates",
+        "code",
+        payload["code"],
+        params={"enabled_only": False},
+    )
+    if existing is not None:
+        return existing
+    return _json_or_assert(
+        runtime.api.post("/task-templates", json=payload),
+        f"create {action} task template",
+        expected_statuses={200, 201},
+    )
+
+
+def _ensure_doc_template(
+    runtime: RuntimeContext,
+    payload: dict[str, Any],
+    action: str,
+) -> dict[str, Any]:
+    existing = _search_by_field(
+        runtime,
+        "/doc-templates",
+        "code",
+        payload["code"],
+        params={"page": 1, "page_size": 20, "q": payload["code"]},
+    )
+    if existing is not None:
+        return existing
+    return _json_or_assert(
+        runtime.api.post("/doc-templates", json=payload),
+        f"create {action} doc template",
+        expected_statuses={200, 201},
+    )
+
+
+def _search_by_field(
+    runtime: RuntimeContext,
+    path: str,
+    field: str,
+    value: Any,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    search_params = params or {"page": 1, "page_size": 20, "q": value}
+    payload = _json_or_assert(
+        runtime.api.get(path, params=search_params),
+        f"search {path}",
+    )
+    return _find_item_by_field(payload, field, value)
+
+
+def _find_item_by_field(payload: Any, field: str, value: Any) -> dict[str, Any] | None:
+    for item in _payload_items(payload):
+        if isinstance(item, dict) and item.get(field) == value:
+            return item
+    return None
+
+
+def _payload_items(payload: Any) -> list[Any]:
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict) and isinstance(payload.get("items"), list):
+        return payload["items"]
+    raise AssertionError("Search response missing items list")
 
 
 def _assert_doc_template_fields(

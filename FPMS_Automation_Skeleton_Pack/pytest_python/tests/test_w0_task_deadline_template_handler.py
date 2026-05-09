@@ -133,8 +133,31 @@ def test_tc_w0_cfg_008_handler_creates_linked_deadline_templates() -> None:
     assert doc_payload["status_effect"] == "OA1"
 
     get_calls = [call for call in runtime.api.calls if call["method"] == "GET"]
-    assert [call["path"] for call in get_calls] == ["/task-templates", "/doc-templates"]
+    assert [call["path"] for call in get_calls] == [
+        "/task-templates",
+        "/doc-templates",
+        "/task-templates",
+        "/doc-templates",
+    ]
     assert runtime.db.rows == []
+
+
+def test_tc_w0_cfg_008_handler_reuses_existing_templates_for_same_run() -> None:
+    runtime = FakeRuntime(
+        username="admin",
+        password="dummy-password",
+        run_id="RUN-W0-DL-REUSE",
+        api=FakeApi(),
+        db=FakeDb(enabled=False),
+    )
+
+    handle_tc_w0_cfg_008(runtime, _case())  # type: ignore[arg-type]
+    handle_tc_w0_cfg_008(runtime, _case())  # type: ignore[arg-type]
+
+    post_paths = [
+        call["path"] for call in runtime.api.calls if call["method"] == "POST"
+    ]
+    assert post_paths == ["/task-templates", "/doc-templates"]
 
 
 def test_tc_w0_cfg_008_handler_runs_db_asserts_when_enabled() -> None:
