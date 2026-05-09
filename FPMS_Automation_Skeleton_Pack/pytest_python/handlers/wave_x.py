@@ -782,6 +782,12 @@ def _required_value(payload: dict[str, Any], field: str, label: str) -> Any:
     return value
 
 
+def _required_current_user_id(payload: dict[str, Any]) -> Any:
+    if isinstance(payload.get("user"), dict):
+        payload = payload["user"]
+    return _required_value(payload, "id", "current user")
+
+
 def _assert_equal(actual: Any, expected: Any, label: str) -> None:
     if actual != expected:
         raise AssertionError(f"{label} expected {expected!r}, got {actual!r}")
@@ -1739,7 +1745,7 @@ def handle_tc_x_017(runtime: RuntimeContext, case: TestCase) -> None:
     try:
         runtime.api.login(runtime.username, runtime.password)
         current_user = _json_or_assert(runtime.api.get("/auth/me"), "get current user")
-        user_id = _required_value(current_user, "id", "current user")
+        user_id = _required_current_user_id(current_user)
         client = _ensure_x_client(runtime, "017")
         applicant = _ensure_x_applicant(runtime, "017")
         case_data = _ensure_x_task_case(runtime, client, applicant)

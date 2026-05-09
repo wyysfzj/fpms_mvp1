@@ -3,8 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import pytest
+
 from framework.models import TestCase as SkeletonTestCase
-from handlers.wave_x import handle_tc_x_012, handle_tc_x_013
+from handlers.wave_x import (
+    _required_current_user_id,
+    handle_tc_x_012,
+    handle_tc_x_013,
+)
 
 
 class FakeResponse:
@@ -261,6 +267,25 @@ def test_tc_x_012_handler_runs_db_assert_when_enabled() -> None:
     handle_tc_x_012(runtime, _case())  # type: ignore[arg-type]
 
     assert runtime.db.rows == [("t_task_log", {"task_id": "task-1"})]
+
+
+def test_required_current_user_id_accepts_auth_me_envelope() -> None:
+    payload = {
+        "user": {"id": "user-envelope", "username": "admin"},
+        "roles": ["Admin"],
+        "permissions": ["Task.Read"],
+    }
+
+    assert _required_current_user_id(payload) == "user-envelope"
+
+
+def test_required_current_user_id_preserves_top_level_compatibility() -> None:
+    assert _required_current_user_id({"id": "user-top-level"}) == "user-top-level"
+
+
+def test_required_current_user_id_rejects_missing_id() -> None:
+    with pytest.raises(AssertionError, match="current user missing required field: id"):
+        _required_current_user_id({"user": {"username": "admin"}})
 
 
 def test_tc_x_012_is_registered_as_real_handler() -> None:
