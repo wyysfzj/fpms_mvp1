@@ -38,6 +38,8 @@ class FakeApi:
         self.calls.append({"method": "POST", "path": path, "kwargs": kwargs})
         payload = kwargs["json"]
         if path == "/cases":
+            if any(item["case_no"] == payload["case_no"] for item in self.cases):
+                return FakeResponse(400, {"error": {"code": "CASE_NO_DUPLICATE"}})
             item = {"id": f"case-{len(self.cases) + 1}", **payload}
             self.cases.append(item)
             return FakeResponse(201, item)
@@ -106,6 +108,16 @@ class FakeApi:
 
     def get(self, path: str, **kwargs: Any) -> FakeResponse:
         self.calls.append({"method": "GET", "path": path, "kwargs": kwargs})
+        if path == "/cases":
+            case_no = (kwargs.get("params") or {}).get("case_no")
+            items = [
+                item
+                for item in self.cases
+                if case_no is None or item["case_no"] == case_no
+            ]
+            return FakeResponse(
+                200, {"items": items, "page": 1, "page_size": 20, "total": len(items)}
+            )
         if path == "/task-templates":
             return FakeResponse(200, self.task_templates)
         if path == "/doc-templates":
@@ -219,6 +231,39 @@ def test_tc_w0_cfg_009_handler_runs_db_asserts_when_enabled() -> None:
             {"code": "OA_IN_RUN-W0-IMPACT-DB", "fee_draft_type": "OA_SERVICE"},
         ),
     ]
+
+
+def test_tc_w0_cfg_009_handler_reuses_existing_config_case() -> None:
+    runtime = FakeRuntime(
+        username="admin",
+        password="dummy-password",
+        run_id="RUN-W0-IMPACT-REUSE",
+        api=FakeApi(),
+        db=FakeDb(enabled=False),
+    )
+    runtime.api.cases.append(
+        {
+            "id": "case-existing",
+            "case_no": "CASE-CFG-RUN-W0-IMPACT-REUSE-001",
+        }
+    )
+
+    handle_tc_w0_cfg_009(runtime, _case())  # type: ignore[arg-type]
+
+    post_paths = [
+        call["path"] for call in runtime.api.calls if call["method"] == "POST"
+    ]
+    assert post_paths == [
+        "/task-templates",
+        "/doc-templates",
+        "/documents/impact-preview",
+    ]
+    preview_payload = [
+        call["kwargs"]["json"]
+        for call in runtime.api.calls
+        if call["method"] == "POST" and call["path"] == "/documents/impact-preview"
+    ][0]
+    assert preview_payload["case_id"] == "case-existing"
 
 
 def test_tc_w0_cfg_009_is_registered_as_real_handler() -> None:

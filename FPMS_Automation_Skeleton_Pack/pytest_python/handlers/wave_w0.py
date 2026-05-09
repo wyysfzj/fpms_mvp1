@@ -861,11 +861,7 @@ def handle_tc_w0_cfg_009(runtime: RuntimeContext, case: TestCase) -> None:
 
         catalog = SeedCatalog.load(run_id=runtime.run_id)
         case_payload = _config_case_payload(catalog)
-        created_case = _json_or_assert(
-            runtime.api.post("/cases", json=case_payload),
-            "create config preview case",
-            expected_statuses={200, 201},
-        )
+        created_case = _ensure_config_case(runtime, case_payload)
         case_id = _required_value(created_case, "id", "created case")
 
         task_payload = _task_template_payload(catalog, "DS-CFG-TASK-OA-REPLY")
@@ -911,6 +907,26 @@ def _config_case_payload(catalog: SeedCatalog) -> dict[str, Any]:
     payload.pop("primary_agent_id", None)
     payload.pop("agent_splits", None)
     return payload
+
+
+def _ensure_config_case(
+    runtime: RuntimeContext,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    existing = _search_by_field(
+        runtime,
+        "/cases",
+        "case_no",
+        payload["case_no"],
+        params={"page": 1, "page_size": 20, "case_no": payload["case_no"]},
+    )
+    if existing is not None:
+        return existing
+    return _json_or_assert(
+        runtime.api.post("/cases", json=payload),
+        "create config preview case",
+        expected_statuses={200, 201},
+    )
 
 
 def _assert_document_impact_preview(
