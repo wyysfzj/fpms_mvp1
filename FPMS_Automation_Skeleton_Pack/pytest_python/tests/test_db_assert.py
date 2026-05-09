@@ -27,11 +27,40 @@ def sqlite_dsn(tmp_path: Path) -> str:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE t_template_source (
+                id TEXT PRIMARY KEY,
+                "group" TEXT NOT NULL,
+                file_path TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE t_bill_item (
+                id TEXT PRIMARY KEY,
+                bill_id TEXT NOT NULL,
+                case_id TEXT NULL
+            )
+            """
+        )
         conn.executemany(
             "INSERT INTO t_client (id, client_code, name_cn, is_active) VALUES (?, ?, ?, ?)",
             [
                 ("c1", "CL-001", "北京创新科技有限公司", 1),
                 ("c2", "CL-002", "Wilson & Partners LLP", 1),
+            ],
+        )
+        conn.execute(
+            'INSERT INTO t_template_source (id, "group", file_path) VALUES (?, ?, ?)',
+            ("tpl1", "DOC_TEMPLATE", "/tmp/template.docx"),
+        )
+        conn.executemany(
+            "INSERT INTO t_bill_item (id, bill_id, case_id) VALUES (?, ?, ?)",
+            [
+                ("bi1", "bill-1", None),
+                ("bi2", "bill-1", "case-1"),
             ],
         )
         conn.commit()
@@ -90,11 +119,28 @@ def test_assert_row_exists_returns_row_or_raises(sqlite_dsn: str) -> None:
         db.assert_row_exists("t_client", {"client_code": "MISSING"})
 
 
+def test_assert_row_exists_quotes_safe_identifiers(sqlite_dsn: str) -> None:
+    db = DbAssert(sqlite_dsn)
+
+    row = db.assert_row_exists("t_template_source", {"group": "DOC_TEMPLATE"})
+
+    assert row["id"] == "tpl1"
+
+
+def test_assert_row_exists_matches_none_with_is_null(sqlite_dsn: str) -> None:
+    db = DbAssert(sqlite_dsn)
+
+    row = db.assert_row_exists("t_bill_item", {"bill_id": "bill-1", "case_id": None})
+
+    assert row["id"] == "bi1"
+
+
 def test_assert_count_returns_count_and_checks_expected(sqlite_dsn: str) -> None:
     db = DbAssert(sqlite_dsn)
 
     assert db.assert_count("t_client") == 2
     assert db.assert_count("t_client", {"is_active": 1}, expected=2) == 2
+    assert db.assert_count("t_bill_item", {"case_id": None}, expected=1) == 1
     with pytest.raises(AssertionError):
         db.assert_count("t_client", {"is_active": 1}, expected=1)
 

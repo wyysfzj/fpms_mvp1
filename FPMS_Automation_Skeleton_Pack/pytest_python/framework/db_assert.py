@@ -55,15 +55,12 @@ class DbAssert:
         if not where:
             raise ValueError("assert_row_exists requires at least one where condition")
 
-        clauses = []
-        params: dict[str, Any] = {}
-        for index, (column, value) in enumerate(where.items()):
-            self._validate_identifier(column)
-            param_name = f"p{index}"
-            clauses.append(f"{column} = :{param_name}")
-            params[param_name] = value
+        clauses, params = self._where_clauses(where)
 
-        query = f"select * from {table} where {' and '.join(clauses)} limit 1"
+        query = (
+            f"select * from {self._quote_identifier(table)} "
+            f"where {' and '.join(clauses)} limit 1"
+        )
         row = self.fetch_one(query, params)
         if row is None:
             raise AssertionError(
@@ -79,15 +76,9 @@ class DbAssert:
     ) -> int:
         self._validate_identifier(table)
         where = where or {}
-        clauses = []
-        params: dict[str, Any] = {}
-        for index, (column, value) in enumerate(where.items()):
-            self._validate_identifier(column)
-            param_name = f"p{index}"
-            clauses.append(f"{column} = :{param_name}")
-            params[param_name] = value
+        clauses, params = self._where_clauses(where)
 
-        query = f"select count(*) as count from {table}"
+        query = f"select count(*) as count from {self._quote_identifier(table)}"
         if clauses:
             query = f"{query} where {' and '.join(clauses)}"
 
@@ -106,3 +97,20 @@ class DbAssert:
     def _validate_identifier(self, identifier: str) -> None:
         if not self._IDENTIFIER_RE.fullmatch(identifier):
             raise DbAssertIdentifierError(f"Unsafe SQL identifier: {identifier!r}")
+
+    def _quote_identifier(self, identifier: str) -> str:
+        self._validate_identifier(identifier)
+        return f'"{identifier}"'
+
+    def _where_clauses(self, where: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+        clauses = []
+        params: dict[str, Any] = {}
+        for index, (column, value) in enumerate(where.items()):
+            quoted_column = self._quote_identifier(column)
+            if value is None:
+                clauses.append(f"{quoted_column} is null")
+                continue
+            param_name = f"p{index}"
+            clauses.append(f"{quoted_column} = :{param_name}")
+            params[param_name] = value
+        return clauses, params
