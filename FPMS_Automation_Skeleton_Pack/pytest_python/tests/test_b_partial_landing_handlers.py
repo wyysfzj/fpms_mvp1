@@ -37,6 +37,15 @@ def test_tc_b_004_handler_implemented_and_scoped() -> None:
     assert "OPEN" in source
 
 
+def test_tc_b_005_handler_implemented_and_scoped() -> None:
+    assert not getattr(wave_b.handle_tc_b_005, "_is_skeleton", False)
+    source = inspect.getsource(wave_b.handle_tc_b_005)
+    assert '"/tasks"' in source
+    assert "/assign" in source
+    assert "/logs" in source
+    assert "official OA reply task" in source
+
+
 def test_tc_b_006_handler_implemented_and_scoped() -> None:
     assert not getattr(wave_b.handle_tc_b_006, "_is_skeleton", False)
     source = inspect.getsource(wave_b.handle_tc_b_006)
@@ -69,5 +78,16 @@ def test_tc_b_009_handler_implemented_and_scoped() -> None:
     assert "total_service" in source
 
 
-def test_unlanded_b_handlers_remain_skeleton() -> None:
-    assert getattr(wave_b.handle_tc_b_005, "_is_skeleton", False)
+def test_no_partial_b_handlers_remain_skeleton() -> None:
+    for handler in (
+        wave_b.handle_tc_b_001,
+        wave_b.handle_tc_b_002,
+        wave_b.handle_tc_b_003,
+        wave_b.handle_tc_b_004,
+        wave_b.handle_tc_b_005,
+        wave_b.handle_tc_b_006,
+        wave_b.handle_tc_b_007,
+        wave_b.handle_tc_b_008,
+        wave_b.handle_tc_b_009,
+    ):
+        assert not getattr(handler, "_is_skeleton", False)

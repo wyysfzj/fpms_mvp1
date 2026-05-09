@@ -201,7 +201,6 @@ def handle_tc_w0_002(runtime: RuntimeContext, case: TestCase) -> None:
     return None
 
 
-@skeleton_case
 def handle_tc_w0_003(runtime: RuntimeContext, case: TestCase) -> None:
     # TC-W0-003 | 主数据-申请人
     # 覆盖: FR-CM-03
@@ -210,10 +209,75 @@ def handle_tc_w0_003(runtime: RuntimeContext, case: TestCase) -> None:
     # 前置: DS-U-ADM；准备法人申请人 DS-AP-001 和自然人 DS-AP-002。
     # 步骤摘要: 创建申请人主数据并填写名称、国籍、地址、IsLegalEntity、HasGeneralPower、IsJobInvention 等字段；保存并搜索。
     # 预期: 申请人保存成功；能按名称模糊搜索；HasGeneralPower/IsLegalEntity 在案卷引用时可被带出。
-    # Arrange: 准备种子数据 / 鉴权 / 页面或 API 上下文。
-    # Act: 按 steps_summary 执行业务流。
-    # Assert: 按 expected 做 UI / API / DB / 文件断言。
-    return None
+    del case
+
+    try:
+        runtime.api.login(runtime.username, runtime.password)
+
+        catalog = SeedCatalog.load(run_id=runtime.run_id)
+        specs = _w0_applicant_specs(catalog, runtime.run_id)
+        for spec in specs:
+            _create_or_verify_masterdata(runtime, spec)
+
+        if runtime.db.enabled():
+            for spec in specs:
+                runtime.db.assert_row_exists(spec["table"], spec["db_where"])
+    except requests.RequestException as exc:
+        pytest.skip(f"Real backend unavailable for TC-W0-003: {exc}")
+
+
+def _w0_applicant_specs(catalog: SeedCatalog, run_id: str) -> list[dict[str, Any]]:
+    return [
+        _w0_applicant_spec(catalog, "DS-AP-001", "AP-W0-003-ENTITY", run_id),
+        _w0_applicant_spec(catalog, "DS-AP-002", "AP-W0-003-IND", run_id),
+    ]
+
+
+def _w0_applicant_spec(
+    catalog: SeedCatalog,
+    seed_id: str,
+    code_prefix: str,
+    run_id: str,
+) -> dict[str, Any]:
+    seed = catalog.normalized(seed_id)
+    applicant_code = unique_code(code_prefix, run_id)
+    applicant_type = _normalize_applicant_type(seed.get("applicant_type"))
+    payload = {
+        "code": applicant_code,
+        "name_cn": f"{seed['name']}-{run_id}",
+        "name_en": None,
+        "applicant_type": applicant_type,
+        "is_active": True,
+    }
+    return {
+        "create_path": "/applicants",
+        "list_path": "/applicants",
+        "payload": payload,
+        "query": applicant_code,
+        "identity_field": "code",
+        "identity_value": applicant_code,
+        "table": "t_applicant",
+        "db_where": {
+            "code": applicant_code,
+            "applicant_type": applicant_type,
+            "is_active": True,
+        },
+    }
+
+
+def _normalize_applicant_type(value: Any) -> str:
+    if not isinstance(value, str):
+        return "ENTITY"
+    cleaned = value.strip()
+    if not cleaned:
+        return "ENTITY"
+    aliases = {
+        "法人": "ENTITY",
+        "自然人": "INDIVIDUAL",
+        "ENTITY": "ENTITY",
+        "INDIVIDUAL": "INDIVIDUAL",
+    }
+    return aliases.get(cleaned, aliases.get(cleaned.upper(), cleaned.upper()))
 
 
 @skeleton_case
@@ -231,7 +295,6 @@ def handle_tc_w0_004(runtime: RuntimeContext, case: TestCase) -> None:
     return None
 
 
-@skeleton_case
 def handle_tc_w0_005(runtime: RuntimeContext, case: TestCase) -> None:
     # TC-W0-005 | 主数据-国家地区
     # 覆盖: FR-CM-01, FR-FE-01, FR-CS-01
@@ -240,10 +303,64 @@ def handle_tc_w0_005(runtime: RuntimeContext, case: TestCase) -> None:
     # 前置: DS-U-ADM；准备 CN/US/JP/HK/EP 数据。
     # 步骤摘要: 维护国家代码、默认币种、IsDomestic、DefaultLanguage、PCT 成员标志；保存后在案卷/费率/报表处引用。
     # 预期: 国家配置可被案卷、费率、年费和报表使用；Domestic/PCT member 标志在规则分支中可识别。
-    # Arrange: 准备种子数据 / 鉴权 / 页面或 API 上下文。
-    # Act: 按 steps_summary 执行业务流。
-    # Assert: 按 expected 做 UI / API / DB / 文件断言。
-    return None
+    del case
+
+    try:
+        runtime.api.login(runtime.username, runtime.password)
+
+        catalog = SeedCatalog.load(run_id=runtime.run_id)
+        specs = _w0_country_specs(catalog)
+        for spec in specs:
+            _create_or_verify_masterdata(runtime, spec)
+
+        if runtime.db.enabled():
+            for spec in specs:
+                runtime.db.assert_row_exists(spec["table"], spec["db_where"])
+    except requests.RequestException as exc:
+        pytest.skip(f"Real backend unavailable for TC-W0-005: {exc}")
+
+
+_COUNTRY_NAME_EN_BY_CODE = {
+    "CN": "China",
+    "US": "United States",
+    "JP": "Japan",
+    "HK": "Hong Kong",
+    "EP": "European Patent Office",
+}
+
+
+def _w0_country_specs(catalog: SeedCatalog) -> list[dict[str, Any]]:
+    return [
+        _w0_country_spec(catalog, seed_id)
+        for seed_id in (
+            "DS-CTY-CN",
+            "DS-CTY-US",
+            "DS-CTY-JP",
+            "DS-CTY-HK",
+            "DS-CTY-EP",
+        )
+    ]
+
+
+def _w0_country_spec(catalog: SeedCatalog, seed_id: str) -> dict[str, Any]:
+    seed = catalog.normalized(seed_id)
+    country_code = catalog.country_code(str(seed["code"]))
+    payload = {
+        "code": country_code,
+        "name_cn": str(seed["name"]),
+        "name_en": _COUNTRY_NAME_EN_BY_CODE.get(country_code),
+        "is_active": True,
+    }
+    return {
+        "create_path": "/countries",
+        "list_path": "/countries",
+        "payload": payload,
+        "query": country_code,
+        "identity_field": "code",
+        "identity_value": country_code,
+        "table": "t_country",
+        "db_where": {"code": country_code, "is_active": True},
+    }
 
 
 @skeleton_case
@@ -1349,7 +1466,6 @@ def _assert_commission_rule_search_hit(
     )
 
 
-@skeleton_case
 def handle_tc_w0_008(runtime: RuntimeContext, case: TestCase) -> None:
     # TC-W0-008 | 业务参数-费率分档
     # 覆盖: FR-FE-01, FR-FE-03
@@ -1361,10 +1477,9 @@ def handle_tc_w0_008(runtime: RuntimeContext, case: TestCase) -> None:
     # Arrange: 准备种子数据 / 鉴权 / 页面或 API 上下文。
     # Act: 按 steps_summary 执行业务流。
     # Assert: 按 expected 做 UI / API / DB / 文件断言。
-    return None
+    handle_tc_w0_cfg_004(runtime, case)
 
 
-@skeleton_case
 def handle_tc_w0_009(runtime: RuntimeContext, case: TestCase) -> None:
     # TC-W0-009 | 业务参数-时限模板合法配置
     # 覆盖: FR-DL-01, V-TM-01, V-TM-02, V-TM-03, V-TM-04
@@ -1373,10 +1488,7 @@ def handle_tc_w0_009(runtime: RuntimeContext, case: TestCase) -> None:
     # 前置: DS-U-ADM；准备模板代码 APPLY_FEE_LIMIT、OA_REPLY_LIMIT。
     # 步骤摘要: 创建有效模板；再分别尝试 Code 重复、AddYears/AddMonths/AddDays 全为 0、DailyRemind=true 但无 InnerOffset/Remind、DeadlineBase=CUSTOM 但调用端不传 BaseDate。
     # 预期: 有效模板可保存；重复 Code 被拒；无增量模板被拒；DailyRemind 配置不足被拒；调用端缺 BaseDate 时任务生成失败并给出明确错误。
-    # Arrange: 准备种子数据 / 鉴权 / 页面或 API 上下文。
-    # Act: 按 steps_summary 执行业务流。
-    # Assert: 按 expected 做 UI / API / DB / 文件断言。
-    return None
+    handle_tc_w0_cfg_008(runtime, case)
 
 
 def handle_tc_w0_010(runtime: RuntimeContext, case: TestCase) -> None:
@@ -1585,7 +1697,6 @@ def handle_tc_w0_011(runtime: RuntimeContext, case: TestCase) -> None:
     return None
 
 
-@skeleton_case
 def handle_tc_w0_012(runtime: RuntimeContext, case: TestCase) -> None:
     # TC-W0-012 | 文档模板与信头
     # 覆盖: FR-WD-09, FR-WD-10, FR-BL-04
@@ -1594,13 +1705,10 @@ def handle_tc_w0_012(runtime: RuntimeContext, case: TestCase) -> None:
     # 前置: DS-U-ADM；准备中文/英文 Word 模板与 CN/EN 信头。
     # 步骤摘要: 上传 T_Template，配置 Group/Language/FilePath/Enabled；创建两套 T_LetterHead 并关联到模板。
     # 预期: 模板和信头均可保存；不同语言模板输出时能正确带出对应抬头。
-    # Arrange: 准备种子数据 / 鉴权 / 页面或 API 上下文。
-    # Act: 按 steps_summary 执行业务流。
-    # Assert: 按 expected 做 UI / API / DB / 文件断言。
-    return None
+    handle_tc_w0_cfg_010(runtime, case)
+    handle_tc_w0_cfg_011(runtime, case)
 
 
-@skeleton_case
 def handle_tc_w0_013(runtime: RuntimeContext, case: TestCase) -> None:
     # TC-W0-013 | 系统参数
     # 覆盖: FR-BL-09, FR-COM-04, FR-COM-05
@@ -1609,10 +1717,7 @@ def handle_tc_w0_013(runtime: RuntimeContext, case: TestCase) -> None:
     # 前置: DS-U-ADM；准备催款间隔、默认 WaitPay 阈值、退款策略等参数。
     # 步骤摘要: 维护 T_SystemParam（若实现）；分别设置催款间隔、预收款负账单策略、WaitPay 阈值、ForceSettle 默认策略。
     # 预期: 参数保存成功；相关流程读取到新值，且更新后对新交易生效。
-    # Arrange: 准备种子数据 / 鉴权 / 页面或 API 上下文。
-    # Act: 按 steps_summary 执行业务流。
-    # Assert: 按 expected 做 UI / API / DB / 文件断言。
-    return None
+    handle_tc_w0_cfg_001(runtime, case)
 
 
 def handle_tc_w0_cfg_001(runtime: RuntimeContext, case: TestCase) -> None:

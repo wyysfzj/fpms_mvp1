@@ -439,10 +439,10 @@ def test_tc_w0_014_handler_runs_db_asserts_when_enabled() -> None:
     assert ("t_role_perm", {"perm_code": "Case.EditLimited"}) in runtime.db.rows
 
 
-def test_only_tc_w0_014_is_newly_unskeletoned() -> None:
+def test_w0_permission_and_system_param_canonical_handlers_are_unskeletoned() -> None:
     assert not getattr(handle_tc_w0_001, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_007, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_010, "_is_skeleton", False)
+    assert not getattr(handle_tc_w0_013, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_014, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_cfg_013, "_is_skeleton", False)
-    assert getattr(handle_tc_w0_013, "_is_skeleton", False) is True

@@ -428,4 +428,4 @@ def test_only_tc_w0_007_is_newly_unskeletoned() -> None:
     assert not getattr(handle_tc_w0_007, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_cfg_003, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_cfg_004, "_is_skeleton", False)
-    assert getattr(handle_tc_w0_008, "_is_skeleton", False) is True
+    assert not getattr(handle_tc_w0_008, "_is_skeleton", False)

@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 import requests
 
-from framework.helpers import skeleton_case
 from framework.models import TestCase
 from framework.runtime import RuntimeContext
 
@@ -233,7 +232,6 @@ def handle_tc_b_004(runtime: RuntimeContext, case: TestCase) -> None:
         pytest.skip(f"Real backend unavailable for TC-B-004: {exc}")
 
 
-@skeleton_case
 def handle_tc_b_005(runtime: RuntimeContext, case: TestCase) -> None:
     # TC-B-005 | B3 内部准备任务
     # 覆盖: FR-CS-02, FR-DL-06
@@ -242,10 +240,101 @@ def handle_tc_b_005(runtime: RuntimeContext, case: TestCase) -> None:
     # 前置: CASE-B-${RUN_ID}-001；Agent/Formalities 可手工建任务。
     # 步骤摘要: 在案卷或时限模块手工增加“内部答复准备”任务，设 BaseDate/Deadline/Worker/Supervisor；保存后修改备注和责任人。
     # 预期: 内部任务保存成功；责任人变更写 CHANGE_WORKER/CHANGE_SUPERVISOR 日志；不影响官方答复任务本身。
-    # Arrange: 准备种子数据 / 鉴权 / 页面或 API 上下文。
-    # Act: 按 steps_summary 执行业务流。
-    # Assert: 按 expected 做 UI / API / DB / 文件断言。
-    return None
+    del case
+    try:
+        _login(runtime)
+        created = _create_oa_in_document(runtime, "005")
+        case_id = created["case"]["id"]
+        user_id = _current_user_id(runtime)
+
+        official_tasks = _tasks_for_document(
+            runtime,
+            case_id,
+            created["document"]["id"],
+        )
+        _assert_present(official_tasks, "official OA reply task list")
+        official_task = official_tasks[0]
+        official_before = _json_or_assert(
+            runtime.api.get(f"/tasks/{official_task['id']}"),
+            "get official OA reply task before internal task",
+        )
+
+        internal_task = _json_or_assert(
+            runtime.api.post(
+                "/tasks",
+                json={
+                    "case_id": case_id,
+                    "title": f"内部答复准备-{runtime.run_id}",
+                    "base_date": "2026-01-16",
+                    "due_date": "2026-02-05",
+                    "internal_due_date": "2026-01-29",
+                    "worker_id": user_id,
+                    "supervisor_id": user_id,
+                    "remark": "内部答复准备初始备注",
+                },
+            ),
+            "create internal preparation task",
+            expected_statuses={201},
+        )
+        _assert_equal(internal_task.get("case_id"), case_id, "internal task case_id")
+        _assert_equal(internal_task.get("status"), "OPEN", "internal task status")
+
+        _json_or_assert(
+            runtime.api.post(
+                f"/tasks/{internal_task['id']}/assign",
+                json={
+                    "worker_id": user_id,
+                    "supervisor_id": user_id,
+                    "remark": "调整内部准备责任人",
+                },
+            ),
+            "assign internal preparation task",
+        )
+        updated = _json_or_assert(
+            runtime.api.put(
+                f"/tasks/{internal_task['id']}",
+                json={"remark": "内部答复准备备注已更新"},
+            ),
+            "update internal preparation task remark",
+        )
+        _assert_equal(updated.get("worker_id"), user_id, "internal task worker")
+        _assert_equal(updated.get("supervisor_id"), user_id, "internal task supervisor")
+        _assert_equal(
+            updated.get("remark"),
+            "内部答复准备备注已更新",
+            "internal task remark",
+        )
+
+        logs = _json_or_assert(
+            runtime.api.get(f"/tasks/{internal_task['id']}/logs"),
+            "list internal task logs",
+        )
+        actions = {log.get("action") for log in logs if isinstance(log, dict)}
+        if "CREATE" not in actions or "ASSIGN" not in actions:
+            raise AssertionError(f"Internal task missing CREATE/ASSIGN logs: {logs}")
+
+        official_after = _json_or_assert(
+            runtime.api.get(f"/tasks/{official_task['id']}"),
+            "get official OA reply task after internal task",
+        )
+        _assert_equal(
+            official_after.get("status"),
+            official_before.get("status"),
+            "official task status",
+        )
+        _assert_equal(
+            official_after.get("document_id"),
+            created["document"]["id"],
+            "official task document_id",
+        )
+        if official_after.get("id") == updated.get("id"):
+            raise AssertionError("Internal task overwrote official OA reply task")
+        if runtime.db.enabled():
+            runtime.db.assert_row_exists(
+                "t_task", {"id": internal_task["id"], "status": "OPEN"}
+            )
+    except requests.RequestException as exc:
+        pytest.skip(f"Real backend unavailable for TC-B-005: {exc}")
 
 
 def handle_tc_b_006(runtime: RuntimeContext, case: TestCase) -> None:

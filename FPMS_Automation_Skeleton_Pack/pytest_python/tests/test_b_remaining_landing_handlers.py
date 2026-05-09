@@ -37,9 +37,9 @@ def test_tc_b_013_handler_implemented_and_scoped() -> None:
     assert "CANCELLED" in source
 
 
-def test_only_tc_b_005_remains_skeleton_in_partial_b_wave() -> None:
-    assert getattr(wave_b.handle_tc_b_005, "_is_skeleton", False)
+def test_no_landed_b_handler_remains_skeleton() -> None:
     for handler in (
+        wave_b.handle_tc_b_005,
         wave_b.handle_tc_b_009,
         wave_b.handle_tc_b_010,
         wave_b.handle_tc_b_011,

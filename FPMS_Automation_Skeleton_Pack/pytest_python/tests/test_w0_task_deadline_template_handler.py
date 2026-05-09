@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from framework.models import TestCase as SkeletonTestCase
-from handlers.wave_w0 import HANDLERS, handle_tc_w0_cfg_008
+from handlers.wave_w0 import HANDLERS, handle_tc_w0_009, handle_tc_w0_cfg_008
 
 
 class FakeResponse:
@@ -164,6 +164,8 @@ def test_tc_w0_cfg_008_handler_runs_db_asserts_when_enabled() -> None:
     ]
 
 
-def test_tc_w0_cfg_008_is_registered_as_real_handler() -> None:
+def test_tc_w0_009_and_cfg_008_are_registered_as_real_handlers() -> None:
+    assert HANDLERS["TC-W0-009"] is handle_tc_w0_009
     assert HANDLERS["TC-W0-CFG-008"] is handle_tc_w0_cfg_008
+    assert not getattr(handle_tc_w0_009, "_is_skeleton", False)
     assert not getattr(handle_tc_w0_cfg_008, "_is_skeleton", False)

@@ -186,6 +186,6 @@ def test_tc_w0_cfg_001_handler_runs_db_asserts_when_enabled() -> None:
     ]
 
 
-def test_tc_w0_cfg_001_is_unskeletoned_only_for_system_params_slice() -> None:
+def test_tc_w0_013_and_cfg_001_are_unskeletoned_for_system_params_slice() -> None:
     assert not getattr(handle_tc_w0_cfg_001, "_is_skeleton", False)
-    assert getattr(handle_tc_w0_013, "_is_skeleton", False) is True
+    assert not getattr(handle_tc_w0_013, "_is_skeleton", False)
