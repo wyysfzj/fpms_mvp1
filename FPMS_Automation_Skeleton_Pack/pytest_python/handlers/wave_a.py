@@ -2263,9 +2263,55 @@ def _arrange_batch2_cases(
                 "set case agent splits",
                 expected_statuses={200, 201},
             )
+        _ensure_batch2_material_documents(runtime, case_id, patent_category)
         cases.append({"id": case_id, "case_no": case_no, "payload": payload})
 
     return {"client": client, "applicant": applicant, "cases": cases}
+
+
+def _ensure_batch2_material_documents(
+    runtime: RuntimeContext,
+    case_id: str,
+    patent_category: str,
+) -> None:
+    for title in _batch2_material_titles(patent_category):
+        existing = _json_or_assert(
+            runtime.api.get(
+                "/documents",
+                params={
+                    "case_id": case_id,
+                    "direction": "IN",
+                    "q": title,
+                    "page": 1,
+                    "page_size": 20,
+                },
+            ),
+            "search Batch 2 material document",
+        )
+        if _has_items(existing):
+            continue
+        _json_or_assert(
+            runtime.api.post(
+                "/documents",
+                json={
+                    "case_id": case_id,
+                    "doc_template_id": None,
+                    "doc_type": "CLIENT_IN",
+                    "direction": "IN",
+                    "doc_date": "2026-03-01",
+                    "title": title,
+                },
+            ),
+            "create Batch 2 material document",
+            expected_statuses={200, 201},
+        )
+
+
+def _batch2_material_titles(patent_category: str) -> tuple[str, ...]:
+    normalized = normalize_patent_category(patent_category)
+    if normalized == "DES":
+        return ("申请请求书", "外观设计图片")
+    return ("申请请求书", "说明书", "权利要求书", "摘要")
 
 
 def _build_batch2_case_payload(
