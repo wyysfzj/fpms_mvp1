@@ -1357,8 +1357,8 @@ def _commission_case_payload(
     payload["client_id"] = client_id
     payload["primary_agent_id"] = agent_a["user_id"]
     payload["agent_splits"] = [
-        {"agent_id": agent_a["user_id"], "role": "PRIMARY", "share_ratio": "70.0000"},
-        {"agent_id": agent_b["user_id"], "role": "SECONDARY", "share_ratio": "30.0000"},
+        {"agent_id": agent_a["user_id"], "role": "Agent", "share_ratio": "70.0000"},
+        {"agent_id": agent_b["user_id"], "role": "Agent", "share_ratio": "30.0000"},
     ]
     return payload
 

@@ -449,13 +449,13 @@ def test_tc_w0_cfg_006_handler_creates_split_commissions() -> None:
     ]
     assert case_split_puts[-1]["kwargs"]["json"] == {
         "agent_splits": [
-            {"agent_id": "user-1", "role": "PRIMARY", "share_ratio": "70.0000"},
-            {"agent_id": "user-2", "role": "SECONDARY", "share_ratio": "30.0000"},
+            {"agent_id": "user-1", "role": "Agent", "share_ratio": "70.0000"},
+            {"agent_id": "user-2", "role": "Agent", "share_ratio": "30.0000"},
         ]
     }
     assert runtime.api.cases[0]["agent_splits"] == [
-        {"agent_id": "user-1", "role": "PRIMARY", "share_ratio": "70.0000"},
-        {"agent_id": "user-2", "role": "SECONDARY", "share_ratio": "30.0000"},
+        {"agent_id": "user-1", "role": "Agent", "share_ratio": "70.0000"},
+        {"agent_id": "user-2", "role": "Agent", "share_ratio": "30.0000"},
     ]
 
     assert [
