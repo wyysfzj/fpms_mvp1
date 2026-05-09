@@ -1252,12 +1252,18 @@ def handle_tc_w0_cfg_006(runtime: RuntimeContext, case: TestCase) -> None:
         client_id = _required_value(client, "id", "created client")
 
         case_payload = _commission_case_payload(catalog, client_id, agent_a, agent_b)
+        agent_splits = case_payload.pop("agent_splits")
         created_case = _json_or_assert(
             runtime.api.post("/cases", json=case_payload),
             "create commission split case",
             expected_statuses={200, 201},
         )
         case_id = _required_value(created_case, "id", "created case")
+        _json_or_assert(
+            runtime.api.put(f"/cases/{case_id}", json={"agent_splits": agent_splits}),
+            "persist commission split case agent splits",
+            expected_statuses={200},
+        )
 
         rule_payload = _commission_rule_payload(catalog, "DS-CFG-COM-NORMAL-SERVICE")
         _ensure_commission_rule(runtime, rule_payload, "commission split")

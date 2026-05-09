@@ -149,6 +149,15 @@ class FakeApi:
 
     def put(self, path: str, **kwargs: Any) -> FakeResponse:
         self.calls.append({"method": "PUT", "path": path, "kwargs": kwargs})
+        case_prefix = "/cases/"
+        if path.startswith(case_prefix):
+            case_id = path.removeprefix(case_prefix)
+            for case in self.cases:
+                if case["id"] == case_id:
+                    case.update(kwargs["json"])
+                    return FakeResponse(200, case)
+            return FakeResponse(404, {"message": "not found"})
+
         prefix = "/commission/rules/"
         if not path.startswith(prefix):
             return FakeResponse(404, {"message": "not found"})
@@ -432,7 +441,19 @@ def test_tc_w0_cfg_006_handler_creates_split_commissions() -> None:
     ][0]
     assert case_payload["client_id"] == "client-1"
     assert case_payload["primary_agent_id"] == "user-1"
-    assert case_payload["agent_splits"] == [
+    assert "agent_splits" not in case_payload
+    case_split_puts = [
+        call
+        for call in runtime.api.calls
+        if call["method"] == "PUT" and call["path"] == "/cases/case-1"
+    ]
+    assert case_split_puts[-1]["kwargs"]["json"] == {
+        "agent_splits": [
+            {"agent_id": "user-1", "role": "PRIMARY", "share_ratio": "70.0000"},
+            {"agent_id": "user-2", "role": "SECONDARY", "share_ratio": "30.0000"},
+        ]
+    }
+    assert runtime.api.cases[0]["agent_splits"] == [
         {"agent_id": "user-1", "role": "PRIMARY", "share_ratio": "70.0000"},
         {"agent_id": "user-2", "role": "SECONDARY", "share_ratio": "30.0000"},
     ]
