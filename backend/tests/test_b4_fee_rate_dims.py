@@ -181,6 +181,45 @@ def test_list_fee_rates_filter_by_calc_mode(client, auth_headers):
     assert f"{tag}-FIX" not in per_claim_codes
 
 
+def test_fee_rate_api_accepts_skeleton_calc_mode_metadata(client, auth_headers):
+    tag = _unique("SKELCM")
+    mode_params = {
+        "BY_YEAR": '{"year_no":1}',
+        "BY_PAGES": '{"base_pages":30}',
+        "COMPOSITE": '{"fixed":"100","per_claim":"20","base_claims":10}',
+    }
+
+    for mode, calc_params in mode_params.items():
+        fee_code = f"{tag}-{mode}"
+        data = _create_rate(
+            client,
+            auth_headers,
+            fee_code=fee_code,
+            calc_mode=mode,
+            calc_params=calc_params,
+        )
+
+        assert data["calc_mode"] == mode
+        assert data["calc_params"] == calc_params
+
+        resp = client.get(RATE_URL, params={"calc_mode": mode}, headers=auth_headers)
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert any(item["fee_code"] == fee_code and item["calc_mode"] == mode for item in items)
+
+    created = _create_rate(client, auth_headers, fee_code=f"{tag}-UPDATE", calc_mode="FIXED")
+    for mode, calc_params in mode_params.items():
+        resp = client.put(
+            f"{RATE_URL}/{created['id']}",
+            json={"calc_mode": mode, "calc_params": calc_params},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, f"Update failed for {mode}: {resp.text}"
+        updated = resp.json()
+        assert updated["calc_mode"] == mode
+        assert updated["calc_params"] == calc_params
+
+
 # ---------------------------------------------------------------------------
 # T7 — calculate_fee_amount: FIXED mode returns default_amount
 # ---------------------------------------------------------------------------
@@ -240,6 +279,25 @@ def test_calc_fee_amount_per_claim_stub():
     result = calculate_fee_amount(rate)
     # Stub: unimplemented modes return default_amount
     assert result == Decimal("75.00")
+
+
+def test_calc_fee_amount_metadata_modes_fall_back_to_default_amount():
+    from app.modules.fees.models import FeeRate
+    from app.modules.fees.service import calculate_fee_amount
+
+    for mode in ("BY_YEAR", "BY_PAGES", "COMPOSITE"):
+        rate = FeeRate(
+            id=str(uuid.uuid4()),
+            fee_code=f"UNIT-{mode}",
+            fee_type="SERVICE",
+            currency="CNY",
+            default_amount=Decimal("125.00"),
+            calc_mode=mode,
+            calc_params='{"note":"metadata-only"}',
+            enabled=True,
+        )
+        result = calculate_fee_amount(rate)
+        assert result == Decimal("125.00")
 
 
 # ---------------------------------------------------------------------------
