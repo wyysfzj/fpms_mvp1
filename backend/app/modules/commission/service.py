@@ -24,6 +24,7 @@ _ACTIVE_SETTLEMENT_STATUSES = {"DRAFT", "CREATED"}
 _SETTLEMENT_GENERATE_ALLOWED_STATUSES = {"DRAFT", "GENERATED"}
 _SETTLEMENT_REPORT_TIME_FIELDS = {"line_created_at", "settleable_date", "settlement_period"}
 _UNKNOWN_TIME_BUCKET = "UNKNOWN"
+_UNASSIGNED_AGENT_SENTINELS = {"UNASSIGNED"}
 
 
 def _normalize_optional_text(value: str | None) -> str | None:
@@ -1382,11 +1383,14 @@ def generate_commission_settlement_lines(
 
     commission_stmt = select(Commission).where(
         Commission.is_settleable.is_(True),
-        Commission.agent_id == normalized_agent_id,
         ~func.upper(func.coalesce(Commission.status, "")).in_(
             sorted(_TERMINAL_COMMISSION_STATUSES)
         ),
     )
+    if normalized_agent_id.upper() in _UNASSIGNED_AGENT_SENTINELS:
+        commission_stmt = commission_stmt.where(Commission.agent_id.is_(None))
+    else:
+        commission_stmt = commission_stmt.where(Commission.agent_id == normalized_agent_id)
     if normalized_case_id:
         commission_stmt = commission_stmt.where(Commission.case_id == normalized_case_id)
     if settlement.period_from is not None:
