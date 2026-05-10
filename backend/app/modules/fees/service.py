@@ -507,6 +507,7 @@ def list_fee_drafts(
     stmt = select(FeeDraft)
 
     case_id = filters.get("case_id")
+    case_no = _normalize_optional_text(filters.get("case_no"))
     client_id = filters.get("client_id")
     currency = _normalize_report_text_filter(filters.get("currency"))
     fee_type = _normalize_report_text_filter(filters.get("fee_type"))
@@ -519,6 +520,8 @@ def list_fee_drafts(
 
     if case_id:
         stmt = stmt.where(FeeDraft.case_id == case_id)
+    if case_no:
+        stmt = stmt.join(Case, Case.id == FeeDraft.case_id).where(Case.case_no == case_no)
     if client_id:
         stmt = stmt.where(FeeDraft.client_id == client_id)
     if currency:

@@ -68,6 +68,7 @@ def get_fee_drafts(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     case_id: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
     client_id: str | None = Query(default=None),
     fee_type: str | None = Query(default=None),
     currency: str | None = Query(default=None),
@@ -99,6 +100,7 @@ def get_fee_drafts(
     """
     filters = {
         "case_id": case_id,
+        "case_no": case_no,
         "client_id": client_id,
         "fee_type": fee_type,
         "currency": currency,

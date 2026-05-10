@@ -46,6 +46,10 @@ The fee draft list "案件编号" filter must support the visible case number en
 - `artifacts/FE-FEE-DRAFT-CASE-NO-FILTER-01/summary.md`
 - `artifacts/FE-FEE-DRAFT-CASE-NO-FILTER-01/git/diff.patch`
 
+## Prerequisite Task IDs
+
+- `API-E2E-FEE-DRAFT-CASE-NO-FILTER-01`
+
 ## Remaining Follow-Up Task IDs
 
-- `API-E2E-FEE-DRAFT-CASE-NO-FILTER-01` if backend does not expose a case-number compatible query.
+- None
