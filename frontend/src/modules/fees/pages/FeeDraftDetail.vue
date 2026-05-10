@@ -194,6 +194,7 @@ import RelationChainCard from '../../../components/relations/RelationChainCard.v
 import { usePageContext } from '../../../stores/pageContext'
 import { ZH } from '../../../constants/labels.zh'
 import { getFeeDraftStatusText } from '../../../constants/displayText'
+import { formatMoney } from '../../../utils/money'
 
 const route = useRoute()
 const router = useRouter()
@@ -222,14 +223,6 @@ const isLocked = computed(() => draft.value?.status === 'LOCKED')
 const statusTagType = computed<'warning' | 'info'>(() => {
   return draft.value?.status === 'LOCKED' ? 'warning' : 'info'
 })
-
-function formatMoney(value: number | string | undefined, currency: string): string {
-  const amount = value == null ? 0 : Number(value)
-  if (Number.isNaN(amount)) {
-    return `${currency} ${String(value ?? 0)}`
-  }
-  return new Intl.NumberFormat('zh-CN', { style: 'currency', currency }).format(amount)
-}
 
 async function resolveDisplayContext() {
   caseDisplayNo.value = draft.value?.case_id || ''

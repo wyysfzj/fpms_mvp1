@@ -192,6 +192,7 @@ import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
 import { ZH } from '../../../constants/labels.zh'
 import { getFeeDraftStatusText } from '../../../constants/displayText'
+import { formatMoney } from '../../../utils/money'
 
 const router = useRouter()
 
@@ -270,16 +271,7 @@ function statusTagType(status: FeeDraftStatus): 'info' | 'warning' {
 }
 
 function formatAmount(amount: FeeMoney, currency?: string): string {
-  const curr = currency || 'CNY'
-  const numericAmount = typeof amount === 'number' ? amount : Number(amount)
-  if (Number.isNaN(numericAmount)) {
-    return `${curr} ${amount}`
-  }
-
-  return new Intl.NumberFormat('zh-CN', {
-    style: 'currency',
-    currency: curr,
-  }).format(numericAmount)
+  return formatMoney(amount, currency)
 }
 
 function getShortId(id: string | null | undefined): string {
