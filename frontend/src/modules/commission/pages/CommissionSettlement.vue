@@ -282,23 +282,66 @@
             :title="`目标案件号 ${reportTargetCaseNumber} 当前有 ${settleableReportDetails.length} 条可结算明细，可用于生成结算批次明细。`"
           />
           <el-alert
+            v-else-if="targetSettleableCommissions.length"
+            type="success"
+            :closable="false"
+            show-icon
+            :title="`目标案件号 ${reportTargetCaseNumber} 当前有 ${targetSettleableCommissions.length} 条可生成提成记录，可先创建目标批次再生成明细。`"
+          />
+          <el-alert
+            v-else-if="targetCommissionsLoading"
+            type="info"
+            :closable="false"
+            show-icon
+            title="正在查询目标案件提成记录。"
+          />
+          <el-alert
             v-else
             type="warning"
             :closable="false"
             show-icon
             :title="`目标案件号 ${reportTargetCaseNumber} 当前没有可结算明细，请先确认收款、阶段完成或提成规则。`"
           />
+          <el-table
+            v-if="targetSettleableCommissions.length"
+            :data="targetSettleableCommissions"
+            stripe
+            size="small"
+            class="compact-table target-commission-table"
+          >
+            <el-table-column prop="id" label="提成编号" width="100" />
+            <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+              <template #default="{ row }">
+                {{ row.agent_id || '未分配' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="case_no" label="案件编号" min-width="160" />
+            <el-table-column label="可结算金额" width="140" align="right">
+              <template #default="{ row }">
+                <span class="mono-num">{{ formatMoney(row.s1_amount + row.s2_amount) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="100" />
+          </el-table>
           <div class="guide-actions">
             <el-button
+              type="primary"
+              :disabled="!hasTargetSettleableSource"
+              :loading="creating"
+              @click="handleCreateTargetSettlement"
+            >
+              创建目标批次
+            </el-button>
+            <el-button
               type="success"
-              :disabled="!settleableReportDetails.length || !generateForm.settlement_id"
+              :disabled="!hasTargetSettleableSource || !generateForm.settlement_id"
               :loading="generating"
               @click="useReportTargetForGeneration"
             >
               按目标案件号生成
             </el-button>
             <span class="guide-note">
-              需要先创建或选择一个结算批次；系统仅向接口提交案件号，不需要手工查找隐藏案件 ID。
+              需要先创建或选择一个结算批次；未分配代理人的提成会使用未分配批次，系统仅向接口提交案件号。
             </span>
           </div>
         </div>
@@ -429,9 +472,11 @@ import {
   createCommissionSettlement,
   exportCommissionSettlementReport,
   generateCommissionSettlementLines,
+  getCommission,
   getCommissionSettlementReport,
 } from '../../../api/commission'
 import type {
+  CommissionRecord,
   CommissionSettlement,
   CommissionSettlementCreatePayload,
   CommissionSettlementGenerateLinesParams,
@@ -468,11 +513,14 @@ const generating = ref(false)
 const lastGenerate = ref<CommissionSettlementGenerateLinesResult | null>(null)
 const lastGenerateCaseNumber = ref('')
 const recentSettlements = ref<CommissionSettlement[]>([])
+const UNASSIGNED_AGENT_ID = 'UNASSIGNED'
 
 const reportLoading = ref(false)
 const exporting = ref(false)
 const report = ref<CommissionSettlementReportResult | null>(null)
 const lastReportCaseNumber = ref('')
+const targetCommissions = ref<CommissionRecord[]>([])
+const targetCommissionsLoading = ref(false)
 const reportFilters = reactive({
   agent_id: '',
   case_id: '',
@@ -490,6 +538,21 @@ const reportTargetResolvedCaseId = computed(() => {
   return report.value.filters.case_id
 })
 const settleableReportDetails = computed(() => report.value?.details.filter((detail) => detail.is_settleable) || [])
+const targetSettleableCommissions = computed(() => {
+  return targetCommissions.value.filter((item) => {
+    if (!item.is_settleable) return false
+    const status = (item.status || '').toUpperCase()
+    return !['SETTLED', 'CANCELLED', 'VOID', 'CLOSED'].includes(status)
+  })
+})
+const hasTargetSettleableSource = computed(() => {
+  return settleableReportDetails.value.length > 0 || targetSettleableCommissions.value.length > 0
+})
+const targetSettlementAgentId = computed(() => {
+  const reportAgent = settleableReportDetails.value.find((detail) => detail.agent_id)?.agent_id
+  const commissionAgent = targetSettleableCommissions.value.find((item) => item.agent_id)?.agent_id
+  return reportAgent || commissionAgent || UNASSIGNED_AGENT_ID
+})
 
 function toApiError(errorLike: unknown): ApiError | null {
   if (!errorLike || typeof errorLike !== 'object') return null
@@ -672,6 +735,22 @@ function buildCreatePayload(): CommissionSettlementCreatePayload {
   }
 }
 
+async function loadTargetCommissions(caseNo: string) {
+  targetCommissions.value = []
+  if (!caseNo) return
+
+  targetCommissionsLoading.value = true
+  try {
+    const result = await getCommission({ case_no: caseNo, page: 1, page_size: 100 })
+    targetCommissions.value = result.items
+  } catch (err) {
+    error.value = toApiError(err)
+    ElMessage.error('查询目标案件提成记录失败，请稍后重试。')
+  } finally {
+    targetCommissionsLoading.value = false
+  }
+}
+
 function buildReportParams(): CommissionSettlementReportParams {
   return {
     agent_id: normalizeOptional(reportFilters.agent_id),
@@ -730,6 +809,23 @@ async function handleCreateSettlement() {
   }
 }
 
+async function handleCreateTargetSettlement() {
+  if (!reportTargetCaseNumber.value) {
+    ElMessage.warning('请先输入目标案件号并查询报表')
+    return
+  }
+  if (!hasTargetSettleableSource.value) {
+    ElMessage.warning('目标案件当前没有可生成的提成记录')
+    return
+  }
+
+  createForm.agent_id = targetSettlementAgentId.value
+  createForm.currency = reportFilters.currency.trim() || report.value?.filters.currency || 'CNY'
+  createForm.remark = `目标案件 ${reportTargetCaseNumber.value} 提成结算`
+  generateForm.case_id = reportTargetCaseNumber.value
+  await handleCreateSettlement()
+}
+
 async function handleGenerateLines() {
   if (!generateForm.settlement_id) {
     ElMessage.warning('请先输入结算批次编号')
@@ -773,6 +869,7 @@ async function queryReport() {
     if (targetCaseNumber && !generateForm.case_id) {
       generateForm.case_id = targetCaseNumber
     }
+    await loadTargetCommissions(targetCaseNumber)
   } catch (err) {
     error.value = toApiError(err)
     ElMessage.error(mapReportError(err))
@@ -804,6 +901,7 @@ function resetReportFilters() {
   reportFilters.date_range = []
   reportFilters.time_field = 'line_created_at'
   lastReportCaseNumber.value = ''
+  targetCommissions.value = []
   queryReport()
 }
 

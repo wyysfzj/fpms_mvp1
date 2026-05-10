@@ -24,13 +24,14 @@ Commission settlement page must provide a visible target-case path that lets the
 - `frontend/src/api/commission.ts`
 - `frontend/src/api/commission.types.ts`
 - `frontend/src/modules/commission/pages/CommissionSettlement.vue`
+- `frontend/tests/commission-settlement-target-source.mjs`
 - `tasks/frontend/DEMO-UI/FE-COMMISSION-SETTLEMENT-TARGET-CASE-GENERATION-01.md`
 - `artifacts/FE-COMMISSION-SETTLEMENT-TARGET-CASE-GENERATION-01/**`
 
 ## Verification Commands
 
 ```bash
-./scripts/evidence_run.sh FE-COMMISSION-SETTLEMENT-TARGET-CASE-GENERATION-01 test /bin/zsh -lc 'cd frontend && npm run typecheck'
+./scripts/evidence_run.sh FE-COMMISSION-SETTLEMENT-TARGET-CASE-GENERATION-01 test /bin/zsh -lc 'cd frontend && npm run typecheck && node tests/commission-settlement-target-source.mjs'
 ```
 
 ```bash
