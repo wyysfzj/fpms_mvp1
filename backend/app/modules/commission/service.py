@@ -1112,6 +1112,20 @@ def _to_month_bucket(value: date | datetime | None) -> str:
     return normalized.strftime("%Y-%m")
 
 
+def _resolve_case_filter_id(db: Session, value: str | None) -> str | None:
+    normalized = _normalize_optional_text(value)
+    if normalized is None:
+        return None
+
+    resolved = db.execute(
+        select(Case.id)
+        .where(or_(Case.id == normalized, Case.case_no == normalized))
+        .order_by(Case.id.asc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return resolved or normalized
+
+
 def get_commission_settlement_report(
     db: Session,
     *,
@@ -1133,7 +1147,7 @@ def get_commission_settlement_report(
 
     effective_time_field = _normalize_report_time_field(time_field)
     normalized_agent_id = _normalize_optional_text(agent_id)
-    normalized_case_id = _normalize_optional_text(case_id)
+    normalized_case_id = _resolve_case_filter_id(db, case_id)
     normalized_currency = _normalize_optional_text(currency)
     normalized_settlement_status = _normalize_optional_text(settlement_status)
     normalized_line_status = _normalize_optional_text(line_status)
@@ -1324,6 +1338,7 @@ def generate_commission_settlement_lines(
     db: Session,
     *,
     settlement_id: int,
+    case_id: str | None = None,
     actor_id: str | None = None,
 ) -> dict[str, Any]:
     settlement = db.execute(
@@ -1348,6 +1363,7 @@ def generate_commission_settlement_lines(
         )
 
     normalized_agent_id = _normalize_optional_text(settlement.agent_id)
+    normalized_case_id = _resolve_case_filter_id(db, case_id)
     if not normalized_agent_id:
         raise_business_error(
             "COMMISSION_SETTLEMENT_INVALID",
@@ -1371,6 +1387,8 @@ def generate_commission_settlement_lines(
             sorted(_TERMINAL_COMMISSION_STATUSES)
         ),
     )
+    if normalized_case_id:
+        commission_stmt = commission_stmt.where(Commission.case_id == normalized_case_id)
     if settlement.period_from is not None:
         commission_stmt = commission_stmt.where(
             Commission.settleable_date.is_not(None),

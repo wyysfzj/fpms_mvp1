@@ -31,12 +31,16 @@ def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
 
 
 def _create_case(
-    client: TestClient, auth_headers: dict[str, str], *, client_id: str | None = None
+    client: TestClient,
+    auth_headers: dict[str, str],
+    *,
+    client_id: str | None = None,
+    case_no: str | None = None,
 ) -> str:
     response = client.post(
         "/api/v1/cases",
         json={
-            "case_no": _unique_case_no(),
+            "case_no": case_no or _unique_case_no(),
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
@@ -87,6 +91,7 @@ def _assert_item_shape(item: dict) -> None:
     assert set(item) == {
         "task_id",
         "case_id",
+        "case_no",
         "status",
         "due_date",
         "client_instruction",
@@ -396,6 +401,47 @@ def test_grant_fee_worklist_filters_by_overdue_and_case_and_date_range(
     range_payload = range_resp.json()
     assert range_payload["total"] == 1
     assert range_payload["items"][0]["task_id"] == other_task_id
+
+
+def test_grant_fee_worklist_filters_and_projects_case_no(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    target_case_no = "RUI202605100035"
+    target_case_id = _create_case(client, auth_headers, case_no=target_case_no)
+    other_case_id = _create_case(client, auth_headers, case_no="RUI202605100036")
+
+    target_task_id = _insert_task(
+        session_factory,
+        case_id=target_case_id,
+        due_date=date(2026, 6, 10),
+        notice_sent=True,
+        notify_count=1,
+    )
+    _insert_task(
+        session_factory,
+        case_id=other_case_id,
+        due_date=date(2026, 6, 11),
+        notice_sent=True,
+        notify_count=1,
+    )
+
+    response = client.get(
+        WORKLIST_BASE,
+        headers=auth_headers,
+        params={"case_no": target_case_no, "page": 1, "page_size": 20},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["total"] == 1
+    item = payload["items"][0]
+    _assert_item_shape(item)
+    assert item["task_id"] == target_task_id
+    assert item["case_id"] == target_case_id
+    assert item["case_no"] == target_case_no
+    assert item["status"] == "WAITING_CLIENT"
 
 
 def test_grant_fee_worklist_projects_bill_visibility_from_existing_lineage(

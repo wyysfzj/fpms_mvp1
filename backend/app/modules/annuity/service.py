@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
@@ -84,6 +84,32 @@ def _normalize_optional_text(value: Any) -> str | None:
     return text or None
 
 
+def _resolve_case_ids_for_annuity_filters(
+    db: Session,
+    *,
+    case_id: Any = None,
+    case_no: Any = None,
+) -> list[str] | None:
+    resolved_ids: set[str] | None = None
+
+    normalized_case_id = _normalize_optional_text(case_id)
+    if normalized_case_id:
+        id_rows = db.execute(
+            select(Case.id).where(
+                or_(Case.id == normalized_case_id, Case.case_no == normalized_case_id)
+            )
+        ).scalars()
+        resolved_ids = set(id_rows)
+
+    normalized_case_no = _normalize_optional_text(case_no)
+    if normalized_case_no:
+        no_rows = db.execute(select(Case.id).where(Case.case_no == normalized_case_no)).scalars()
+        no_ids = set(no_rows)
+        resolved_ids = no_ids if resolved_ids is None else resolved_ids & no_ids
+
+    return sorted(resolved_ids) if resolved_ids is not None else None
+
+
 def _normalize_pending_mode(value: Any) -> str:
     if value is None:
         return "all"
@@ -146,12 +172,16 @@ def list_annuity_tasks(
 
     stmt = select(AnnuityTask)
 
-    case_id = filters.get("case_id")
+    case_ids = _resolve_case_ids_for_annuity_filters(
+        db,
+        case_id=filters.get("case_id"),
+        case_no=filters.get("case_no"),
+    )
     client_id = filters.get("client_id")
     notice_status_values = _normalize_statuses(filters.get("notice_status"))
 
-    if case_id:
-        stmt = stmt.where(AnnuityTask.case_id == case_id)
+    if case_ids is not None:
+        stmt = stmt.where(AnnuityTask.case_id.in_(case_ids))
     if client_id:
         stmt = stmt.where(AnnuityTask.client_id == client_id)
     if due_from:
@@ -598,12 +628,16 @@ def list_annuity_tasks_report(
         filters.get("pending_mode", filters.get("pending_filter", filters.get("pending")))
     )
 
-    case_id = filters.get("case_id")
+    case_ids = _resolve_case_ids_for_annuity_filters(
+        db,
+        case_id=filters.get("case_id"),
+        case_no=filters.get("case_no"),
+    )
     client_id = filters.get("client_id")
     notice_status_values = _normalize_statuses(filters.get("notice_status"))
 
-    if case_id:
-        stmt = stmt.where(AnnuityTask.case_id == case_id)
+    if case_ids is not None:
+        stmt = stmt.where(AnnuityTask.case_id.in_(case_ids))
     if client_id:
         stmt = stmt.where(AnnuityTask.client_id == client_id)
     if due_from:
@@ -1926,9 +1960,10 @@ def generate_annuity_tasks_for_case(
     case_id: str,
 ) -> dict:
     """Generate multi-year annuity tasks for a GRANTED case."""
-    from app.modules.cases.models import Case
-
-    case = db.query(Case).filter(Case.id == case_id).first()
+    normalized_case_id = (case_id or "").strip()
+    case = db.execute(
+        select(Case).where(or_(Case.id == normalized_case_id, Case.case_no == normalized_case_id))
+    ).scalar_one_or_none()
     if not case:
         raise_business_error("CASE_NOT_FOUND", "案卷不存在", status_code=404)
 
@@ -1945,6 +1980,7 @@ def generate_annuity_tasks_for_case(
         last_year = 20
 
     first_year = case.first_annuity_year
+    resolved_case_id = case.id
     tasks_created = 0
     tasks_skipped = 0
 
@@ -1952,7 +1988,7 @@ def generate_annuity_tasks_for_case(
         # Check if task already exists for this case + year
         existing = (
             db.query(AnnuityTask)
-            .filter(AnnuityTask.case_id == case_id, AnnuityTask.year_no == year_no)
+            .filter(AnnuityTask.case_id == resolved_case_id, AnnuityTask.year_no == year_no)
             .first()
         )
         if existing:
@@ -1974,7 +2010,7 @@ def generate_annuity_tasks_for_case(
         svc_amt = _rate_amount(db, fee_type="SERVICE", currency="CNY", year_no=year_no)
 
         task = AnnuityTask(
-            case_id=case_id,
+            case_id=resolved_case_id,
             client_id=case.client_id,
             year_no=year_no,
             due_date=due,
@@ -1987,7 +2023,7 @@ def generate_annuity_tasks_for_case(
 
     db.flush()
     return {
-        "case_id": case_id,
+        "case_id": resolved_case_id,
         "case_no": case.case_no,
         "first_year": first_year,
         "last_year": last_year,

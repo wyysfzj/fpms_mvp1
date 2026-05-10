@@ -43,6 +43,7 @@ class GrantFeeTaskListItemResponse(BaseModel):
 
     task_id: str
     case_id: str
+    case_no: str | None = None
     status: str
     due_date: date
     client_instruction: str

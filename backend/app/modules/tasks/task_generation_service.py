@@ -93,16 +93,21 @@ class TaskGenerationService:
         return False
 
     def _get_document_type(self, db: Session, document) -> str | None:
+        doc_template_id = getattr(document, "doc_template_id", None)
+        if isinstance(doc_template_id, str) and doc_template_id.strip():
+            doc_template = db.query(DocTemplate).filter(DocTemplate.id == doc_template_id).first()
+            if doc_template and getattr(doc_template, "deadline_template_code", None):
+                return doc_template.deadline_template_code
+
         for attr in ("doc_type", "doc_code", "template_code"):
             value = getattr(document, attr, None)
             if value:
                 return str(value)
 
-        doc_template_id = getattr(document, "doc_template_id", None)
-        if doc_template_id:
+        if isinstance(doc_template_id, str) and doc_template_id.strip():
             doc_template = db.query(DocTemplate).filter(DocTemplate.id == doc_template_id).first()
             if doc_template:
-                return getattr(doc_template, "deadline_template_code", None) or doc_template.code
+                return doc_template.code
 
         return None
 

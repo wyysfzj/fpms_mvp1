@@ -225,7 +225,7 @@ async function handleSubmit() {
   error.value = null
 
   try {
-    await createPayment({
+    const createdPayment = await createPayment({
       bill_id: form.bill_id,
       amount: form.amount,
       payment_method: form.payment_method,
@@ -235,7 +235,13 @@ async function handleSubmit() {
     })
 
     ElMessage.success('回款登记成功，可在回款列表查看预收状态与未分配金额')
-    router.push('/billing/payments')
+    router.push({
+      path: '/billing/payments',
+      query: {
+        bill_id: createdPayment.bill_id || form.bill_id,
+        payment_id: createdPayment.id,
+      },
+    })
   } catch (err) {
     const apiError = err as ApiError
     error.value = apiError

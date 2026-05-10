@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -39,6 +39,7 @@ GRANT_FEE_GOV_FEE_CODE = "GRANT_FEE_GOV"
 GRANT_FEE_SERVICE_FEE_CODE = "GRANT_FEE_SERVICE"
 GRANT_FEE_NOTICE_TEMPLATE_CODE = "GRANT_FEE_NOTICE"
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+GRANT_FEE_NOTICE_DUE_DAYS = 60
 
 _STATE_ALLOWED_ACTIONS = {
     "OPEN": ("mark_waiting_client",),
@@ -83,6 +84,11 @@ def list_grant_fee_tasks(
     if case_id:
         predicates.append(T_GrantFeeTask.case_id == case_id)
 
+    case_no = str(filters.get("case_no") or "").strip()
+    if case_no:
+        stmt = stmt.join(Case, Case.id == T_GrantFeeTask.case_id)
+        predicates.append(Case.case_no == case_no)
+
     client_instruction = str(filters.get("client_instruction") or "").strip().upper()
     if client_instruction:
         predicates.append(T_GrantFeeTask.client_instruction == client_instruction)
@@ -107,6 +113,7 @@ def list_grant_fee_tasks(
     stmt = stmt.order_by(T_GrantFeeTask.due_date.asc(), T_GrantFeeTask.id.asc())
 
     tasks = list(db.execute(stmt).scalars().all())
+    case_no_map = _build_grant_fee_task_case_no_map(db, tasks=tasks)
     bill_visibility_map = _build_grant_fee_bill_visibility_map(db, tasks=tasks)
     projected_items = []
     status_filter = str(filters.get("status") or "").strip().upper()
@@ -119,6 +126,7 @@ def list_grant_fee_tasks(
             _serialize_grant_fee_task_list_item(
                 task,
                 state=status,
+                case_no=case_no_map.get(task.case_id),
                 bill_visibility=bill_visibility_map.get(
                     task.id,
                     {"billed": False, "linked_bill_id": None, "linked_bill_no": None},
@@ -210,6 +218,29 @@ def derive_grant_fee_task_state(task: T_GrantFeeTask) -> str:
     return "OPEN"
 
 
+def _case_has_required_grant_fields(case: Case) -> bool:
+    return all(
+        (
+            case.app_no,
+            case.filing_date,
+            case.pub_no,
+            case.pub_date,
+            case.grant_no,
+            case.grant_date,
+            case.first_annuity_year is not None,
+            case.valid_until,
+        )
+    )
+
+
+def _advance_case_to_granted_if_ready(db: Session, *, task: T_GrantFeeTask) -> None:
+    case = db.execute(select(Case).where(Case.id == task.case_id)).scalar_one_or_none()
+    if case is None or case.status == "GRANTED":
+        return
+    if _case_has_required_grant_fields(case):
+        case.status = "GRANTED"
+
+
 def get_grant_fee_task_state(db: Session, *, task_id: str) -> dict[str, Any]:
     task = _load_grant_fee_task(db, task_id=task_id)
     state = derive_grant_fee_task_state(task)
@@ -241,10 +272,55 @@ def apply_grant_fee_task_action(
         )
 
     _apply_grant_fee_task_mutation(task, normalized_action=normalized_action)
+    if normalized_action == "mark_done":
+        _advance_case_to_granted_if_ready(db, task=task)
 
     db.commit()
     db.refresh(task)
     return _serialize_grant_fee_task_state(task, state=derive_grant_fee_task_state(task))
+
+
+def ensure_grant_fee_task_for_notice_document(
+    db: Session,
+    *,
+    document: Document,
+    template: DocTemplate,
+) -> T_GrantFeeTask | None:
+    if (
+        (template.code or "").strip().upper() != "GRANT_NOTICE"
+        or (template.fee_draft_type or "").strip().upper() != GRANT_FEE_DRAFT_TYPE
+        or not str(document.case_id or "").strip()
+    ):
+        return None
+
+    existing_task = (
+        db.execute(
+            select(T_GrantFeeTask)
+            .where(T_GrantFeeTask.case_id == document.case_id)
+            .order_by(T_GrantFeeTask.created_at.asc(), T_GrantFeeTask.id.asc())
+        )
+        .scalars()
+        .first()
+    )
+    if existing_task is not None:
+        return existing_task
+
+    base_date = document.doc_date or date.today()
+    task = T_GrantFeeTask(
+        case_id=document.case_id,
+        due_date=base_date + timedelta(days=GRANT_FEE_NOTICE_DUE_DAYS),
+        gov_fee_amt=0,
+        service_fee_amt=0,
+        currency="CNY",
+        client_instruction="NONE",
+        notify_count=0,
+        draft_generated=False,
+        notice_sent=False,
+        is_overdue=False,
+    )
+    db.add(task)
+    db.flush()
+    return task
 
 
 def apply_grant_fee_batch_instruction(
@@ -604,15 +680,29 @@ def _build_grant_fee_bill_visibility_map(
     return visibility_map
 
 
+def _build_grant_fee_task_case_no_map(
+    db: Session,
+    *,
+    tasks: list[T_GrantFeeTask],
+) -> dict[str, str]:
+    case_ids = sorted({str(task.case_id) for task in tasks if str(task.case_id or "").strip()})
+    if not case_ids:
+        return {}
+    rows = db.execute(select(Case.id, Case.case_no).where(Case.id.in_(case_ids))).all()
+    return {case_id: case_no for case_id, case_no in rows if case_no}
+
+
 def _serialize_grant_fee_task_list_item(
     task: T_GrantFeeTask,
     *,
     state: str,
+    case_no: str | None,
     bill_visibility: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "task_id": task.id,
         "case_id": task.case_id,
+        "case_no": case_no,
         "status": state,
         "due_date": task.due_date,
         "client_instruction": (task.client_instruction or "NONE").strip().upper() or "NONE",

@@ -5,6 +5,7 @@
 export interface AnnuityTask {
     id: number
     case_id: string
+    case_no?: string | null
     client_id: string
     year_no: number
     due_date: string
@@ -78,6 +79,7 @@ export interface AnnuityTaskListParams {
     task_status?: string
     pending_mode?: AnnuityPendingMode
     case_id?: string
+    case_no?: string
     client_id?: string
     country?: string
     annuity_year?: number

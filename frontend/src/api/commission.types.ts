@@ -124,6 +124,10 @@ export interface CommissionSettlementGenerateLinesResult {
     status: string
 }
 
+export interface CommissionSettlementGenerateLinesParams {
+    case_id?: string
+}
+
 export interface CommissionSettlementReportParams {
     agent_id?: string
     case_id?: string

@@ -8,6 +8,7 @@ import type {
     CommissionRuleUpdatePayload,
     CommissionSettlement,
     CommissionSettlementCreatePayload,
+    CommissionSettlementGenerateLinesParams,
     CommissionSettlementGenerateLinesResult,
     CommissionSettlementReportParams,
     CommissionSettlementReportResult,
@@ -325,9 +326,12 @@ export async function createCommissionSettlement(
 
 export async function generateCommissionSettlementLines(
     id: number,
+    params: CommissionSettlementGenerateLinesParams = {},
 ): Promise<CommissionSettlementGenerateLinesResult> {
     const response = await http.post<BackendCommissionSettlementGenerateLinesResult>(
         `/commission/settlements/${id}/generate-lines`,
+        undefined,
+        { params },
     )
 
     return {

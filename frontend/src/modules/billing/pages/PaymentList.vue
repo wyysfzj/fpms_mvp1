@@ -50,6 +50,24 @@
           />
         </el-select>
       </el-form-item>
+      <el-form-item label="账单编号">
+        <el-select
+          v-model="filters.bill_id"
+          clearable
+          filterable
+          :loading="billFilterOptionsLoading"
+          class="filter-input"
+          placeholder="请选择账单"
+          @change="onFilterChange"
+        >
+          <el-option
+            v-for="bill in billFilterOptions"
+            :key="bill.id"
+            :label="formatBillOption(bill)"
+            :value="bill.id"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="预收状态">
         <el-select
           v-model="filters.prepayment_status"
@@ -114,6 +132,21 @@
         <el-table-column prop="pay_no" label="收款编号" width="160">
           <template #default="{ row }">
             <span class="mono-num">{{ formatPaymentNo(row) }}</span>
+            <el-tag v-if="row.id === selectedPaymentId" class="target-tag" type="warning" size="small">
+              目标回款
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="关联账单" width="180">
+          <template #default="{ row }">
+            <router-link
+              v-if="row.bill_id"
+              class="bill-link"
+              :to="`/billing/bills/${row.bill_id}`"
+            >
+              {{ row.bill_no || row.bill_id }}
+            </router-link>
+            <span v-else class="text-muted">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="client_name" label="客户" min-width="180">
@@ -152,6 +185,13 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="120" align="center">
+          <template #default="{ row }">
+            <el-button size="small" text type="primary" @click="openOffsetDialog(row)">
+              创建核销
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <PaginationBar v-model:page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[10, 20, 50]" />
@@ -160,7 +200,7 @@
     <!-- Offsets Section -->
     <div class="section-divider">
       <h2 class="section-title">核销记录</h2>
-      <el-button size="small" @click="openOffsetDialog">创建核销</el-button>
+      <el-button size="small" @click="openOffsetDialog()">创建核销</el-button>
     </div>
 
     <div class="offset-note">
@@ -261,6 +301,7 @@
               :value="payment.id"
             />
           </el-select>
+          <div class="field-hint">付款记录会显示收款编号、关联账单、客户和金额，便于选择目标回款。</div>
         </el-form-item>
 
         <el-form-item label="付款分录" prop="payment_line_id" :error="offsetFieldErrors.get('payment_line_id')?.join(', ')">
@@ -322,6 +363,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -348,6 +390,7 @@ import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
 
+const route = useRoute()
 const payments = ref<PaymentListItem[]>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
@@ -367,6 +410,7 @@ const summary = ref<Pick<
   remaining_prepayment_balance: 0,
 })
 const filters = reactive({
+  bill_id: (route.query.bill_id as string) || '',
   client_id: '',
   prepayment_status: '',
   pay_date_range: null as [string, string] | null,
@@ -374,8 +418,16 @@ const filters = reactive({
 })
 const clientOptionsLoading = ref(false)
 const clientOptions = ref<Client[]>([])
+const billFilterOptionsLoading = ref(false)
+const billFilterOptions = ref<BillListItem[]>([])
 const summaryCurrency = computed(() => payments.value[0]?.currency || 'CNY')
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+const selectedPaymentId = computed(() => (route.query.payment_id as string) || '')
+const selectedPayment = computed(() =>
+  selectedPaymentId.value
+    ? payments.value.find((payment) => payment.id === selectedPaymentId.value) || null
+    : null
+)
 
 // Offsets state
 const offsets = ref<OffsetListItem[]>([])
@@ -393,6 +445,7 @@ const paymentLinesLoading = ref(false)
 const offsetPaymentOptions = ref<PaymentListItem[]>([])
 const offsetBillOptions = ref<BillListItem[]>([])
 const paymentLines = ref<PaymentLineItem[]>([])
+const pendingOffsetTarget = ref<Pick<PaymentListItem, 'id' | 'bill_id'> | null>(null)
 
 const offsetForm = reactive({
   payment_id: '',
@@ -437,6 +490,7 @@ async function fetchPayments() {
     const result = await getPayments({
       page: page.value,
       page_size: pageSize.value,
+      bill_id: filters.bill_id || undefined,
       client_id: filters.client_id.trim() || undefined,
       prepayment_status: filters.prepayment_status || undefined,
       pay_date_from: payDateFrom,
@@ -483,6 +537,18 @@ async function fetchClientOptions() {
   }
 }
 
+async function fetchBillFilterOptions() {
+  billFilterOptionsLoading.value = true
+  try {
+    const result = await getBills({ page: 1, page_size: 100 })
+    billFilterOptions.value = result.items
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    billFilterOptionsLoading.value = false
+  }
+}
+
 function onFilterChange() {
   const alreadyOnFirstPage = page.value === 1
   page.value = 1
@@ -492,6 +558,7 @@ function onFilterChange() {
 }
 
 function resetFilters() {
+  filters.bill_id = ''
   filters.client_id = ''
   filters.prepayment_status = ''
   filters.pay_date_range = null
@@ -548,8 +615,9 @@ function formatClientOption(client: Client): string {
 
 function formatPaymentOption(payment: PaymentListItem): string {
   const refText = formatPaymentNo(payment)
+  const billText = payment.bill_no || payment.bill_id || '未关联账单'
   const clientText = payment.client_name || payment.client_id
-  return `${refText} | ${clientText} | ${formatAmount(payment.amount, payment.currency)}`
+  return `${refText} | ${billText} | ${clientText} | ${formatAmount(payment.amount, payment.currency)}`
 }
 
 function formatPaymentLineOption(line: PaymentLineItem): string {
@@ -579,15 +647,26 @@ function resetOffsetForm() {
   paymentLines.value = []
 }
 
-function openOffsetDialog() {
+function openOffsetDialog(payment?: PaymentListItem) {
   lastFocusedElement.value = document.activeElement instanceof HTMLElement
     ? document.activeElement
     : null
+  pendingOffsetTarget.value = payment
+    ? { id: payment.id, bill_id: payment.bill_id }
+    : selectedPayment.value
+      ? { id: selectedPayment.value.id, bill_id: selectedPayment.value.bill_id }
+      : null
   showOffsetDialog.value = true
 }
 
 async function handleOffsetDialogOpen() {
   await loadOffsetDialogOptions()
+  if (pendingOffsetTarget.value) {
+    offsetForm.payment_id = pendingOffsetTarget.value.id
+    if (pendingOffsetTarget.value.bill_id) {
+      offsetForm.bill_id = pendingOffsetTarget.value.bill_id
+    }
+  }
 }
 
 function restoreOffsetTriggerFocus() {
@@ -709,7 +788,11 @@ watch(
     offsetForm.payment_line_id = ''
     await loadPaymentLinesForSelectedPayment()
 
-    const preferredBill = offsetBillCandidates.value.find((bill) => bill.balance > 0) || offsetBillCandidates.value[0]
+    const paymentBillId = selectedOffsetPayment.value?.bill_id
+    const preferredBill =
+      offsetBillCandidates.value.find((bill) => bill.id === paymentBillId) ||
+      offsetBillCandidates.value.find((bill) => bill.balance > 0) ||
+      offsetBillCandidates.value[0]
     if (preferredBill) {
       offsetForm.bill_id = preferredBill.id
     }
@@ -720,6 +803,7 @@ onMounted(() => {
   fetchPayments()
   fetchOffsets()
   fetchClientOptions()
+  fetchBillFilterOptions()
 })
 </script>
 
@@ -779,6 +863,10 @@ onMounted(() => {
 
 .mono-num {
   font-family: var(--font-mono);
+}
+
+.target-tag {
+  margin-left: 6px;
 }
 
 .section-divider {

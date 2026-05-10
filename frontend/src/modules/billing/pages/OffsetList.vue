@@ -22,6 +22,14 @@
         <el-option label="正常" :value="false" />
         <el-option label="已反转" :value="true" />
       </el-select>
+      <el-input
+        v-model.trim="filterBillId"
+        placeholder="请输入账单ID"
+        clearable
+        style="width: 220px;"
+        @keyup.enter="handleFilter"
+        @clear="handleFilter"
+      />
       <el-button type="primary" @click="handleFilter">查询</el-button>
       <el-button @click="handleReset">重置</el-button>
     </div>
@@ -95,12 +103,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getOffsets, reverseOffset } from '../../../api/billing'
 import type { OffsetListItem } from '../../../api/billing.types'
 
 const router = useRouter()
+const route = useRoute()
 
 const items = ref<OffsetListItem[]>([])
 const loading = ref(false)
@@ -109,6 +118,7 @@ const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const filterReversed = ref<boolean | string>('')
+const filterBillId = ref((route.query.bill_id as string) || '')
 
 function formatAmount(val: number): string {
   return val.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -124,6 +134,9 @@ async function fetchData() {
     }
     if (filterReversed.value !== '' && filterReversed.value !== null) {
       params.is_reversed = filterReversed.value
+    }
+    if (filterBillId.value) {
+      params.bill_id = filterBillId.value
     }
     const result = await getOffsets(params as Parameters<typeof getOffsets>[0])
     items.value = result.items
@@ -142,6 +155,7 @@ function handleFilter() {
 
 function handleReset() {
   filterReversed.value = ''
+  filterBillId.value = ''
   page.value = 1
   fetchData()
 }

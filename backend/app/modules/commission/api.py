@@ -336,12 +336,14 @@ def export_commission_reports_settlement(
 )
 def post_commission_settlement_generate_lines(
     id: int,
+    case_id: str | None = Query(default=None),
     _perm: None = Depends(require_perm("CommissionSettlement.Action")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     return generate_commission_settlement_lines(
         db,
         settlement_id=id,
+        case_id=case_id,
     )
 
 

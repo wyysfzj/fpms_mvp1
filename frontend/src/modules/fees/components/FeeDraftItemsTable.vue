@@ -42,9 +42,18 @@
         class="compact-table items-table"
         show-summary
         :summary-method="getSummaries"
-        @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="48" :selectable="isGovItem" />
+        <el-table-column label="选择" width="64" align="center">
+          <template #default="{ row }">
+            <el-checkbox
+              :model-value="isItemSelected(row)"
+              :disabled="!isGovItem(row)"
+              :aria-label="selectionLabel(row)"
+              @change="handleGovItemToggle(row, $event)"
+              @click.stop
+            />
+          </template>
+        </el-table-column>
         <el-table-column label="费用类型" width="100">
           <template #default="{ row }">
             <el-tag :type="isGovItem(row) ? 'success' : 'info'" size="small">
@@ -281,8 +290,29 @@ function isGovItem(item: FeeItem): boolean {
   return (item.fee_type || '').toUpperCase() === 'GOV'
 }
 
-function handleSelectionChange(selection: FeeItem[]) {
-  selectedItems.value = selection
+function isItemSelected(item: FeeItem): boolean {
+  return selectedItems.value.some(selected => selected.id === item.id)
+}
+
+function selectionLabel(item: FeeItem): string {
+  const rowName = item.description || `#${item.id}`
+  if (!isGovItem(item)) {
+    return `该费用明细不可选择：${rowName}`
+  }
+  return `选择官费明细：${rowName}`
+}
+
+function handleGovItemToggle(item: FeeItem, checked: boolean | string | number) {
+  if (!isGovItem(item)) return
+
+  if (checked === true) {
+    if (!isItemSelected(item)) {
+      selectedItems.value = [...selectedItems.value, item]
+    }
+    return
+  }
+
+  selectedItems.value = selectedItems.value.filter(selected => selected.id !== item.id)
 }
 
 function openPayListDialog() {

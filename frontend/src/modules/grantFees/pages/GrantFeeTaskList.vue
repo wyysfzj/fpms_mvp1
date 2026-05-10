@@ -84,7 +84,7 @@
       </el-form-item>
       <el-form-item label="案件编号">
         <el-input
-          v-model="filters.case_id"
+          v-model="filters.case_no"
           class="filter-input"
           clearable
           placeholder="请输入案件编号"
@@ -149,7 +149,7 @@
         <el-table-column label="案件" min-width="180">
           <template #default="{ row }">
             <router-link :to="`/cases/${row.case_id}`" class="case-link">
-              {{ row.case_id }}
+              {{ row.case_no || row.case_id }}
             </router-link>
           </template>
         </el-table-column>
@@ -287,14 +287,14 @@ const filters = reactive<{
   client_instruction: '' | GrantFeeTaskClientInstruction
   draft_generated: '' | 'true' | 'false'
   is_overdue: '' | 'true' | 'false'
-  case_id: string
+  case_no: string
   date_range: [string, string] | []
 }>({
   status: '',
   client_instruction: '',
   draft_generated: '',
   is_overdue: '',
-  case_id: '',
+  case_no: '',
   date_range: [],
 })
 
@@ -360,7 +360,7 @@ function buildParams() {
     client_instruction: filters.client_instruction || undefined,
     draft_generated: filters.draft_generated === '' ? undefined : filters.draft_generated === 'true',
     is_overdue: filters.is_overdue === '' ? undefined : filters.is_overdue === 'true',
-    case_id: filters.case_id || undefined,
+    case_no: filters.case_no.trim() || undefined,
     date_from,
     date_to,
     page: page.value,
@@ -507,7 +507,7 @@ function resetFilters() {
   filters.client_instruction = ''
   filters.draft_generated = ''
   filters.is_overdue = ''
-  filters.case_id = ''
+  filters.case_no = ''
   filters.date_range = []
   applyFilters()
 }

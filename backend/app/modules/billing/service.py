@@ -383,9 +383,34 @@ def _resolve_payment_prepayment_status(lines: list[PaymentLine]) -> str:
     return "PARTIALLY_ALLOCATED"
 
 
+def _load_bill_payment_context(
+    db: Session,
+    *,
+    bill_id: str | None,
+    required: bool,
+) -> tuple[Bill | None, set[str]]:
+    if not bill_id:
+        return None, set()
+
+    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+    if bill is None:
+        if required:
+            raise_business_error("BILL_NOT_FOUND", "Bill not found", status_code=404)
+        return None, set()
+
+    case_ids = {
+        row.case_id
+        for row in db.query(BillItem.case_id)
+        .filter(BillItem.bill_id == bill.id, BillItem.case_id.isnot(None))
+        .all()
+    }
+    return bill, {case_id for case_id in case_ids if case_id}
+
+
 def list_payments(
     db: Session,
     *,
+    bill_id: str | None = None,
     client_id: str | None = None,
     prepayment_status: str | None = None,
     pay_date_from: date | None = None,
@@ -396,11 +421,17 @@ def list_payments(
 ) -> dict[str, object]:
     from app.modules.masterdata.clients.models import Client
 
+    target_bill, target_case_ids = _load_bill_payment_context(db, bill_id=bill_id, required=False)
     query = db.query(
         Payment,
         func.coalesce(Client.name_cn, Client.name_en).label("client_name"),
     ).outerjoin(Client, Client.id == Payment.client_id)
 
+    if target_bill is not None:
+        query = query.filter(
+            Payment.client_id == target_bill.client_id,
+            Payment.currency == target_bill.currency,
+        )
     if client_id:
         query = query.filter(Payment.client_id == client_id)
     if pay_date_from:
@@ -436,6 +467,9 @@ def list_payments(
     report_rows: list[dict[str, object]] = []
     for payment, client_name in rows:
         lines = payment_line_map.get(payment.id, [])
+        if target_bill is not None and target_case_ids:
+            if not any(line.case_id in target_case_ids for line in lines):
+                continue
         allocated_amt = sum((line.allocated_amt for line in lines), Decimal("0"))
         unapplied_amt = sum((line.balance_amt for line in lines), Decimal("0"))
         row_status = _resolve_payment_prepayment_status(lines)
@@ -447,6 +481,8 @@ def list_payments(
             {
                 "id": payment.id,
                 "pay_no": payment.pay_no,
+                "bill_id": target_bill.id if target_bill is not None else None,
+                "bill_no": target_bill.bill_no if target_bill is not None else None,
                 "client_id": payment.client_id,
                 "client_name": client_name,
                 "pay_date": payment.pay_date,
@@ -1633,10 +1669,26 @@ def process_payment(db: Session, data: PaymentSchema) -> Payment:
             status_code=400,
             details={"pay_date": data.pay_date.isoformat()},
         )
+    bill, bill_case_ids = _load_bill_payment_context(db, bill_id=data.bill_id, required=True)
+    effective_client_id = bill.client_id if bill is not None else data.client_id
+    effective_currency = bill.currency if bill is not None else data.currency
+    if not effective_client_id:
+        raise_business_error(
+            "PAYMENT_CLIENT_REQUIRED",
+            "client_id is required when bill_id is not provided",
+            status_code=400,
+        )
+    if data.client_id and bill is not None and data.client_id != bill.client_id:
+        raise_business_error(
+            "PAYMENT_BILL_CLIENT_MISMATCH",
+            "Payment client must match bill client",
+            status_code=400,
+        )
+
     if data.pay_no:
         existing = (
             db.query(Payment)
-            .filter(Payment.client_id == data.client_id, Payment.pay_no == data.pay_no)
+            .filter(Payment.client_id == effective_client_id, Payment.pay_no == data.pay_no)
             .first()
         )
         if existing:
@@ -1644,22 +1696,23 @@ def process_payment(db: Session, data: PaymentSchema) -> Payment:
                 "PAYMENT_PAY_NO_DUPLICATE",
                 "Payment number already exists for this client",
                 status_code=400,
-                details={"client_id": data.client_id, "pay_no": data.pay_no},
+                details={"client_id": effective_client_id, "pay_no": data.pay_no},
             )
 
+    linked_case_id = next(iter(bill_case_ids)) if len(bill_case_ids) == 1 else None
     payment = Payment(
         id=str(uuid4()),
         pay_no=data.pay_no,
-        client_id=data.client_id,
+        client_id=effective_client_id,
         pay_date=data.pay_date,
-        currency=data.currency,
+        currency=effective_currency,
         amount=data.amount,
         remark=data.remark,
     )
     payment_line = PaymentLine(
         id=str(uuid4()),
         payment_id=payment.id,
-        case_id=None,
+        case_id=linked_case_id,
         raw_amount=data.amount,
         allocated_amt=Decimal("0"),
         balance_amt=data.amount,

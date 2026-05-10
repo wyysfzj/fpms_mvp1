@@ -13,7 +13,7 @@
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.status)" size="small">
-            {{ row.status }}
+            {{ getTaskStatusText(row.status) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -28,6 +28,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getTasks } from '../../../api/tasks'
 import type { Task } from '../../../api/tasks.types'
+import { getTaskStatusText } from '../../../constants/displayText'
 
 const props = defineProps<{
   caseId: string
@@ -38,11 +39,16 @@ const items = ref<Task[]>([])
 const loading = ref(true)
 
 function statusTagType(status: string): '' | 'success' | 'warning' | 'danger' | 'info' {
-  switch (status) {
-    case 'OPEN': return 'warning'
-    case 'CLOSED': return 'success'
-    case 'CANCELLED': return 'info'
-    default: return ''
+  switch (status.toUpperCase()) {
+    case 'OPEN':
+      return 'warning'
+    case 'DONE':
+    case 'CLOSED':
+      return 'success'
+    case 'CANCELLED':
+      return 'info'
+    default:
+      return ''
   }
 }
 

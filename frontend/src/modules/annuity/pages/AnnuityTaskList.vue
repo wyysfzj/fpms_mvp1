@@ -24,7 +24,7 @@
       </el-form-item>
       <el-form-item label="案件编号">
         <el-input
-          v-model="filters.case_id"
+          v-model.trim="filters.case_no"
           class="filter-input"
           clearable
           placeholder="请输入案件编号"
@@ -167,7 +167,7 @@
         <el-table-column label="案件" min-width="180">
           <template #default="{ row }">
             <router-link :to="`/cases/${row.case_id}`" class="case-link">
-              {{ row.case_id }}
+              {{ row.case_no || row.case_id }}
             </router-link>
           </template>
         </el-table-column>
@@ -263,7 +263,11 @@
       @success="handleInstructionSaved"
     />
 
-    <AnnuityGenerateDialog v-model="showGenerateDialog" @saved="fetchTasks" />
+    <AnnuityGenerateDialog
+      v-model="showGenerateDialog"
+      :initial-case-no="targetCaseNo"
+      @saved="handleAnnuityTasksGenerated"
+    />
 
     <el-dialog
       v-model="generateReceiptVisible"
@@ -338,6 +342,7 @@ import type {
   AnnuityGenerateDraftResult,
   AnnuityPendingMode,
   AnnuityTask,
+  AnnuityTaskGenerateResult,
 } from '../../../api/annuity.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -355,7 +360,7 @@ const pageSize = ref(20)
 const total = ref(0)
 const filters = reactive<{
   client_id: string
-  case_id: string
+  case_no: string
   country: string
   annuity_year: number | undefined
   task_status: string
@@ -365,7 +370,7 @@ const filters = reactive<{
   date_range: string[]
 }>({
   client_id: '',
-  case_id: '',
+  case_no: '',
   country: '',
   annuity_year: undefined,
   task_status: '',
@@ -384,6 +389,7 @@ const generateReceipt = ref<AnnuityGenerateDraftResult | null>(null)
 const showGenerateDialog = ref(false)
 
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
+const targetCaseNo = computed(() => filters.case_no.trim())
 
 function applyFilters() {
   page.value = 1
@@ -392,7 +398,7 @@ function applyFilters() {
 
 function resetFilters() {
   filters.client_id = ''
-  filters.case_id = ''
+  filters.case_no = ''
   filters.country = ''
   filters.annuity_year = undefined
   filters.task_status = ''
@@ -414,7 +420,7 @@ async function fetchTasks() {
       page: page.value,
       page_size: pageSize.value,
       client_id: filters.client_id || undefined,
-      case_id: filters.case_id || undefined,
+      case_no: targetCaseNo.value || undefined,
       country: filters.country || undefined,
       annuity_year: filters.annuity_year,
       task_status: filters.task_status || undefined,
@@ -513,6 +519,15 @@ function openInstructionDialog(task: AnnuityTask) {
 }
 
 function handleInstructionSaved() {
+  fetchTasks()
+}
+
+function handleAnnuityTasksGenerated(result: AnnuityTaskGenerateResult) {
+  const generatedCaseNo = result.case_no?.trim()
+  if (generatedCaseNo) {
+    filters.case_no = generatedCaseNo
+    page.value = 1
+  }
   fetchTasks()
 }
 

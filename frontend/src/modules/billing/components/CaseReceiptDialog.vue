@@ -119,13 +119,14 @@
         <!-- 应收金额 -->
         <el-col :xs="24" :sm="12">
           <el-form-item label="应收金额" prop="receivable_amt">
-            <el-input-number
-              v-model="form.receivable_amt"
-              :min="0"
-              :precision="2"
-              controls-position="right"
+            <el-input
+              :model-value="form.receivable_amt ?? ''"
+              type="text"
+              inputmode="decimal"
               placeholder="请输入应收金额"
+              clearable
               style="width: 100%"
+              @input="setReceivableAmount"
             />
           </el-form-item>
         </el-col>
@@ -133,13 +134,14 @@
         <!-- 实收金额 -->
         <el-col :xs="24" :sm="12">
           <el-form-item label="实收金额" prop="received_amt">
-            <el-input-number
-              v-model="form.received_amt"
-              :min="0"
-              :precision="2"
-              controls-position="right"
+            <el-input
+              :model-value="form.received_amt ?? ''"
+              type="text"
+              inputmode="decimal"
               placeholder="请输入实收金额"
+              clearable
               style="width: 100%"
+              @input="setReceivedAmount"
             />
           </el-form-item>
         </el-col>
@@ -225,6 +227,8 @@ interface CaseOption {
   case_no: string
 }
 
+type AmountInputValue = number | string | null
+
 interface ReceiptForm {
   case_id: string
   fee_type: string | null
@@ -232,8 +236,8 @@ interface ReceiptForm {
   fee_name: string
   year_no: number | null
   currency: string
-  receivable_amt: number | null
-  received_amt: number | null
+  receivable_amt: AmountInputValue
+  received_amt: AmountInputValue
   last_receipt_date: string | null
   due_date: string | null
   is_arrears: boolean
@@ -265,6 +269,28 @@ const isEditMode = computed(() => !!props.receiptId)
 
 const dialogTitle = computed(() => (isEditMode.value ? '编辑收款记录' : '新增收款记录'))
 
+function normalizeAmount(value: AmountInputValue): number {
+  const normalized = typeof value === 'string' ? value.trim() : value
+  if (normalized === null || normalized === undefined || normalized === '') return 0
+  const numeric = Number(normalized)
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+function isValidAmount(value: AmountInputValue): boolean {
+  const normalized = typeof value === 'string' ? value.trim() : value
+  if (normalized === null || normalized === undefined || normalized === '') return false
+  const numeric = Number(normalized)
+  return Number.isFinite(numeric) && numeric >= 0
+}
+
+function setReceivableAmount(value: string | number): void {
+  form.receivable_amt = value
+}
+
+function setReceivedAmount(value: string | number): void {
+  form.received_amt = value
+}
+
 function makeEmptyForm(): ReceiptForm {
   return {
     case_id: props.prefillCaseId || '',
@@ -288,8 +314,8 @@ function makeEmptyForm(): ReceiptForm {
 const form = reactive<ReceiptForm>(makeEmptyForm())
 
 const amountHint = computed(() => {
-  const rec = form.receivable_amt ?? 0
-  const paid = form.received_amt ?? 0
+  const rec = normalizeAmount(form.receivable_amt)
+  const paid = normalizeAmount(form.received_amt)
   if (paid > 0 && rec > 0) {
     if (paid < rec) return '实收金额小于应收金额，将标记为欠款'
     if (paid > rec) return '实收金额大于应收金额，将标记为预收'
@@ -303,8 +329,7 @@ const rules: FormRules<ReceiptForm> = {
   receivable_amt: [
     {
       validator: (_rule, value: unknown, callback) => {
-        const n = Number(value)
-        if (value === null || value === undefined || !Number.isFinite(n) || n < 0) {
+        if (!isValidAmount(value as AmountInputValue)) {
           callback(new Error('请输入有效的应收金额'))
           return
         }
@@ -316,8 +341,7 @@ const rules: FormRules<ReceiptForm> = {
   received_amt: [
     {
       validator: (_rule, value: unknown, callback) => {
-        const n = Number(value)
-        if (value === null || value === undefined || !Number.isFinite(n) || n < 0) {
+        if (!isValidAmount(value as AmountInputValue)) {
           callback(new Error('请输入有效的实收金额'))
           return
         }
@@ -416,8 +440,8 @@ async function handleSubmit() {
         fee_name: form.fee_name || null,
         year_no: form.year_no ?? null,
         currency: form.currency || null,
-        receivable_amt: form.receivable_amt ?? 0,
-        received_amt: form.received_amt ?? 0,
+        receivable_amt: normalizeAmount(form.receivable_amt),
+        received_amt: normalizeAmount(form.received_amt),
         last_receipt_date: form.last_receipt_date || null,
         due_date: form.due_date || null,
         is_arrears: form.is_arrears,
@@ -435,8 +459,8 @@ async function handleSubmit() {
         fee_name: form.fee_name || null,
         year_no: form.year_no ?? null,
         currency: form.currency,
-        receivable_amt: form.receivable_amt ?? 0,
-        received_amt: form.received_amt ?? 0,
+        receivable_amt: normalizeAmount(form.receivable_amt),
+        received_amt: normalizeAmount(form.received_amt),
         last_receipt_date: form.last_receipt_date || null,
         due_date: form.due_date || null,
         is_arrears: form.is_arrears,

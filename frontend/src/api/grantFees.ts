@@ -19,6 +19,7 @@ import type {
 interface BackendGrantFeeTaskListItem {
     task_id: string
     case_id: string
+    case_no?: string | null
     status: string
     due_date: string
     client_instruction: string
@@ -110,6 +111,7 @@ function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListIt
     return {
         task_id: input.task_id,
         case_id: input.case_id,
+        case_no: input.case_no || undefined,
         status: normalizeStatus(input.status),
         due_date: input.due_date,
         client_instruction: normalizeInstruction(input.client_instruction),
@@ -187,6 +189,7 @@ export async function getGrantFeeTasks(
         draft_generated,
         is_overdue,
         case_id,
+        case_no,
         date_from,
         date_to,
         page = 1,
@@ -202,6 +205,7 @@ export async function getGrantFeeTasks(
             ...(draft_generated !== undefined ? { draft_generated: normalizeBoolean(draft_generated) } : {}),
             ...(is_overdue !== undefined ? { is_overdue: normalizeBoolean(is_overdue) } : {}),
             ...(case_id ? { case_id } : {}),
+            ...(case_no ? { case_no } : {}),
             ...(date_from ? { date_from } : {}),
             ...(date_to ? { date_to } : {}),
         },

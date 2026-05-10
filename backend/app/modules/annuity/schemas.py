@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class AnnuityTaskListItemResponse(BaseModel):
     id: int
     case_id: str
+    case_no: str | None = None
     client_id: str
     year_no: int
     due_date: date

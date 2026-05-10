@@ -128,6 +128,8 @@ interface BackendBadDebtRecovery {
 interface BackendPayment {
     id: string
     pay_no?: string | null
+    bill_id?: string | null
+    bill_no?: string | null
     client_id: string
     client_name?: string | null
     pay_date?: string | null
@@ -356,8 +358,8 @@ function mapPayment(
 ): PaymentListItem {
     return {
         id: input.id,
-        bill_id: extras.bill_id,
-        bill_no: extras.bill_no,
+        bill_id: input.bill_id || extras.bill_id,
+        bill_no: input.bill_no || extras.bill_no,
         client_id: input.client_id,
         client_name: input.client_name || undefined,
         amount: asNumber(input.amount),
@@ -576,8 +578,8 @@ export async function getPayments(params: PaymentListParams = {}): Promise<Payme
         remaining_prepayment_balance: asNumber(response.data.remaining_prepayment_balance),
         items: response.data.items.map((item) =>
             mapPayment(item, {
-                bill_id,
-                bill_no: bill_id,
+                bill_id: item.bill_id || bill_id,
+                bill_no: item.bill_no || bill_id,
             })
         ),
     }
@@ -608,6 +610,7 @@ export async function createPayment(payload: PaymentCreatePayload): Promise<Paym
     }
 
     const response = await http.post<BackendPayment>('/payments', {
+        bill_id: payload.bill_id || undefined,
         client_id: clientId,
         amount: payload.amount,
         pay_no: payload.reference || undefined,
@@ -812,6 +815,14 @@ interface BackendCaseReceipt {
     is_arrears?: boolean | null
     invoice_no?: string | null
     is_commissionable?: boolean | null
+    bills?: {
+        id: string
+        bill_no?: string | null
+        status?: string | null
+        amount?: string | number | null
+        balance?: string | number | null
+        issue_date?: string | null
+    }[]
 }
 
 function mapCaseReceipt(input: BackendCaseReceipt): CaseReceiptsSummary {
@@ -823,7 +834,14 @@ function mapCaseReceipt(input: BackendCaseReceipt): CaseReceiptsSummary {
         total_paid: totalPaid,
         total_outstanding: totalBilled - totalPaid,
         currency: input.currency || 'CNY',
-        bills: [],
+        bills: (input.bills || []).map((bill) => ({
+            id: bill.id,
+            bill_no: bill.bill_no || bill.id,
+            status: bill.status || 'DRAFT',
+            amount: asNumber(bill.amount),
+            balance: asNumber(bill.balance),
+            issue_date: bill.issue_date || undefined,
+        })),
         fee_type: input.fee_type || undefined,
         fee_code: input.fee_code || undefined,
         year_no: input.year_no ?? undefined,

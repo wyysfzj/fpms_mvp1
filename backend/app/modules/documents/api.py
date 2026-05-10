@@ -71,6 +71,7 @@ from app.modules.documents.service import (
 from app.modules.documents.service import (
     update_document as update_document_service,
 )
+from app.modules.grant_fees.service import ensure_grant_fee_task_for_notice_document
 from app.modules.masterdata.clients.models import Client
 from app.modules.tasks.task_generation_service import TaskGenerationService
 
@@ -365,6 +366,7 @@ def create_document(
 
     # B3: Auto-create fee draft if template has fee_draft_type
     auto_fee_draft_id = None
+    template = None
     if document.doc_template_id:
         template = db.execute(
             select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
@@ -378,6 +380,7 @@ def create_document(
                 logging.getLogger(__name__).warning(
                     "B3: fee draft creation failed for doc %s", document.id, exc_info=True
                 )
+            ensure_grant_fee_task_for_notice_document(db, document=document, template=template)
 
     try:
         created_tasks = TaskGenerationService().generate_from_document(db, document)

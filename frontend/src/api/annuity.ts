@@ -18,6 +18,7 @@ import type {
 interface BackendAnnuityTask {
     id: number
     case_id: string
+    case_no?: string | null
     client_id: string
     year_no: number
     due_date: string
@@ -124,6 +125,7 @@ function mapAnnuityTask(input: BackendAnnuityTask): AnnuityTask {
     return {
         id: input.id,
         case_id: input.case_id,
+        case_no: input.case_no ?? undefined,
         client_id: input.client_id,
         year_no: input.year_no,
         due_date: input.due_date,
@@ -233,6 +235,7 @@ export async function getAnnuityTasks(
         task_status,
         pending_mode,
         case_id,
+        case_no,
         client_id,
         country,
         annuity_year,
@@ -254,6 +257,7 @@ export async function getAnnuityTasks(
             ...(task_status ? { task_status } : {}),
             ...(pending_mode ? { pending_mode } : {}),
             ...(case_id ? { case_id } : {}),
+            ...(case_no ? { case_no } : {}),
             ...(client_id ? { client_id } : {}),
             ...(country ? { country } : {}),
             ...(annuity_year ? { annuity_year } : {}),

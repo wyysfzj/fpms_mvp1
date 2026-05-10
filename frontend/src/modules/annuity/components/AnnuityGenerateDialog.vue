@@ -23,6 +23,7 @@
           :loading="caseSearchLoading"
           placeholder="请输入案卷编号搜索"
           style="width: 100%"
+          @change="handleCaseChange"
         >
           <el-option
             v-for="c in caseOptions"
@@ -32,6 +33,17 @@
           />
         </el-select>
       </el-form-item>
+      <el-alert
+        v-if="targetCaseNo"
+        class="target-alert"
+        type="warning"
+        :closable="false"
+        show-icon
+      >
+        <template #title>
+          将为案件编号 {{ targetCaseNo }} 生成年费任务
+        </template>
+      </el-alert>
     </el-form>
 
     <template #footer>
@@ -42,8 +54,8 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { computed, reactive, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { generateAnnuityTasks } from '../../../api/annuity'
 import type { AnnuityTaskGenerateResult } from '../../../api/annuity.types'
 import { getCases } from '../../../api/cases'
@@ -59,11 +71,12 @@ interface GenerateForm {
 
 const props = defineProps<{
   modelValue: boolean
+  initialCaseNo?: string
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  saved: []
+  saved: [result: AnnuityTaskGenerateResult]
 }>()
 
 const visible = ref(props.modelValue)
@@ -71,10 +84,13 @@ const formRef = ref<FormInstance>()
 const saving = ref(false)
 const caseSearchLoading = ref(false)
 const caseOptions = ref<CaseOption[]>([])
+const selectedCaseNo = ref('')
 
 const form = reactive<GenerateForm>({
   case_id: '',
 })
+
+const targetCaseNo = computed(() => selectedCaseNo.value || form.case_id.trim())
 
 const rules: FormRules<GenerateForm> = {
   case_id: [{ required: true, message: '请选择案卷', trigger: 'change' }],
@@ -85,8 +101,7 @@ watch(
   (value) => {
     visible.value = value
     if (value) {
-      form.case_id = ''
-      caseOptions.value = []
+      resetFormFromInitialCase()
     }
   },
 )
@@ -111,6 +126,18 @@ async function searchCases(query: string) {
   }
 }
 
+function resetFormFromInitialCase() {
+  const initialCaseNo = props.initialCaseNo?.trim() || ''
+  form.case_id = initialCaseNo
+  selectedCaseNo.value = initialCaseNo
+  caseOptions.value = initialCaseNo ? [{ id: initialCaseNo, case_no: initialCaseNo }] : []
+}
+
+function handleCaseChange(value: string) {
+  const matchedCase = caseOptions.value.find((item) => item.id === value)
+  selectedCaseNo.value = matchedCase?.case_no || value
+}
+
 function handleClose() {
   visible.value = false
 }
@@ -119,12 +146,27 @@ async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  const confirmedCaseNo = targetCaseNo.value
+  try {
+    await ElMessageBox.confirm(
+      `确认仅为案件编号 ${confirmedCaseNo} 生成年费任务？`,
+      '确认生成年费任务',
+      {
+        confirmButtonText: '确认生成',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
   saving.value = true
   try {
     const result: AnnuityTaskGenerateResult = await generateAnnuityTasks({ case_id: form.case_id })
     ElMessage.success(`已生成 ${result.tasks_created} 条年费任务，跳过 ${result.tasks_skipped} 条已存在记录`)
     visible.value = false
-    emit('saved')
+    emit('saved', result)
   } catch (err: unknown) {
     const axiosErr = err as { response?: { data?: { message?: string } } }
     const bizMsg = axiosErr?.response?.data?.message
@@ -138,3 +180,9 @@ async function handleSubmit() {
   }
 }
 </script>
+
+<style scoped>
+.target-alert {
+  margin-bottom: 16px;
+}
+</style>

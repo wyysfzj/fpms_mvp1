@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
+from docx import Document as DocxDocument
 from sqlalchemy.orm import Session
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -22,6 +23,10 @@ from app.modules.masterdata.applicants.models import Applicant  # noqa: E402
 from app.modules.masterdata.clients.models import Client  # noqa: E402
 from app.modules.rbac.service import seed_default_roles_perms  # noqa: E402
 from app.modules.tasks.models import TaskTemplate  # noqa: E402
+from app.modules.templates.models import Template  # noqa: E402
+
+GRANT_FEE_NOTICE_TEMPLATE_CODE = "GRANT_FEE_NOTICE"
+GRANT_FEE_NOTICE_TEMPLATE_PATH = "templates/grant_fee_notice.docx"
 
 
 def seed_admin_user(db: Session) -> None:
@@ -466,11 +471,96 @@ def seed_doc_templates(db: Session) -> None:
         if not existing:
             db.add(DocTemplate(id=str(uuid4()), **t))
             created += 1
+    grant_fee_notice_changed = seed_grant_fee_notice_template_source(db)
     db.commit()
-    if created:
-        print(f"Created {created} doc templates")
+    if created or grant_fee_notice_changed:
+        print(f"Created/updated {created} doc templates and grant fee notice source")
     else:
         print("Doc templates already exist, skipping")
+
+
+def seed_grant_fee_notice_template_source(db: Session) -> bool:
+    """Ensure grant-fee notice rendering has the local demo template source it requires."""
+    _ensure_grant_fee_notice_docx_template()
+    changed = False
+
+    doc_template = (
+        db.query(DocTemplate).filter(DocTemplate.code == GRANT_FEE_NOTICE_TEMPLATE_CODE).first()
+    )
+    doc_values = {
+        "code": GRANT_FEE_NOTICE_TEMPLATE_CODE,
+        "name": "授权费通知函",
+        "direction": "OUT",
+        "need_reply": False,
+        "deadline_template_code": None,
+        "status_effect": None,
+        "status_restore": None,
+        "fee_draft_type": None,
+        "fee_item_list": None,
+        "reply_to_template_code": None,
+        "input_fields": None,
+        "enabled": True,
+    }
+    if doc_template is None:
+        db.add(DocTemplate(id=str(uuid4()), **doc_values))
+        changed = True
+    else:
+        for field, value in doc_values.items():
+            if getattr(doc_template, field) != value:
+                setattr(doc_template, field, value)
+                changed = True
+
+    sources = (
+        db.query(Template)
+        .filter(
+            Template.group == "DOC_TEMPLATE",
+            Template.name == GRANT_FEE_NOTICE_TEMPLATE_CODE,
+        )
+        .order_by(Template.created_at.asc(), Template.id.asc())
+        .all()
+    )
+    source_values = {
+        "name": GRANT_FEE_NOTICE_TEMPLATE_CODE,
+        "group": "DOC_TEMPLATE",
+        "language": "zh-CN",
+        "file_path": GRANT_FEE_NOTICE_TEMPLATE_PATH,
+        "enabled": True,
+    }
+    source = sources[0] if sources else None
+    for duplicate in sources[1:]:
+        db.delete(duplicate)
+        changed = True
+    if source is None:
+        db.add(Template(id=str(uuid4()), **source_values))
+        changed = True
+    else:
+        for field, value in source_values.items():
+            if getattr(source, field) != value:
+                setattr(source, field, value)
+                changed = True
+
+    return changed
+
+
+def _ensure_grant_fee_notice_docx_template() -> Path:
+    template_path = BASE_DIR / "storage" / GRANT_FEE_NOTICE_TEMPLATE_PATH
+    if template_path.exists():
+        return template_path
+
+    template_path.parent.mkdir(parents=True, exist_ok=True)
+    document = DocxDocument()
+    document.add_heading("授权费通知函", level=1)
+    document.add_paragraph("案件编号：{{ case_no }}")
+    document.add_paragraph("缴费期限：{{ grant_fee_task.due_date }}")
+    document.add_paragraph(
+        "官费金额：{{ grant_fee_task.gov_fee_amt }} {{ grant_fee_task.currency }}"
+    )
+    document.add_paragraph(
+        "服务费金额：{{ grant_fee_task.service_fee_amt }} {{ grant_fee_task.currency }}"
+    )
+    document.add_paragraph("请根据授权通知要求确认缴费指示。")
+    document.save(template_path)
+    return template_path
 
 
 def seed_system_params(db: Session) -> None:

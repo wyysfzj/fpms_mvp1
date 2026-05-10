@@ -71,6 +71,15 @@
           />
         </el-col>
         <el-col :xs="24" :sm="12" :md="8" :lg="6">
+          <el-input
+            v-model.trim="generateForm.case_id"
+            aria-label="生成目标案件号"
+            placeholder="目标案件号"
+            clearable
+            @keyup.enter="handleGenerateLines"
+          />
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="8" :lg="6">
           <el-button
             type="success"
             aria-label="生成结算明细"
@@ -82,10 +91,19 @@
           </el-button>
         </el-col>
       </el-row>
+      <div class="generate-guide">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="可输入案件号生成目标案件的结算明细；后端会按案件号解析到案件记录，只处理满足可结算条件的提成。"
+        />
+      </div>
 
       <div v-if="lastGenerate" class="result-block">
         <el-descriptions :column="3" border>
           <el-descriptions-item label="批次编号">{{ lastGenerate.settlement_id }}</el-descriptions-item>
+          <el-descriptions-item label="目标案件号">{{ lastGenerateCaseNumber || '全部' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="settlementStatusTagType(lastGenerate.status)" size="small">
               {{ settlementStatusLabel(lastGenerate.status) }}
@@ -148,7 +166,13 @@
           <el-input v-model.trim="reportFilters.agent_id" aria-label="报表代理人筛选" placeholder="代理人编号" clearable @keyup.enter="queryReport" />
         </el-col>
         <el-col :xs="24" :sm="12" :md="8" :lg="6">
-          <el-input v-model.trim="reportFilters.case_id" aria-label="报表案件筛选" placeholder="案件编号" clearable @keyup.enter="queryReport" />
+          <el-input
+            v-model.trim="reportFilters.case_id"
+            aria-label="报表目标案件号筛选"
+            placeholder="目标案件号"
+            clearable
+            @keyup.enter="queryReport"
+          />
         </el-col>
         <el-col :xs="12" :sm="8" :md="4" :lg="3">
           <el-input v-model.trim="reportFilters.currency" aria-label="报表币种筛选" placeholder="币种" clearable @keyup.enter="queryReport" />
@@ -235,7 +259,10 @@
           <div class="sub-title">当前筛选摘要</div>
           <el-descriptions :column="4" border size="small">
             <el-descriptions-item label="代理人">{{ report.filters.agent_id || '全部' }}</el-descriptions-item>
-            <el-descriptions-item label="案件">{{ report.filters.case_id || '全部' }}</el-descriptions-item>
+            <el-descriptions-item label="目标案件号">{{ reportTargetCaseNumber || '全部' }}</el-descriptions-item>
+            <el-descriptions-item v-if="reportTargetResolvedCaseId" label="解析案件标识">
+              {{ reportTargetResolvedCaseId }}
+            </el-descriptions-item>
             <el-descriptions-item label="币种">{{ report.filters.currency || '全部' }}</el-descriptions-item>
             <el-descriptions-item label="时间口径">{{ timeFieldLabel(report.filters.time_field) }}</el-descriptions-item>
             <el-descriptions-item label="批次状态">{{ report.filters.settlement_status || '全部' }}</el-descriptions-item>
@@ -243,6 +270,37 @@
             <el-descriptions-item label="开始日期">{{ report.filters.date_from || '未设置' }}</el-descriptions-item>
             <el-descriptions-item label="结束日期">{{ report.filters.date_to || '未设置' }}</el-descriptions-item>
           </el-descriptions>
+        </div>
+
+        <div v-if="reportTargetCaseNumber" class="table-section">
+          <div class="sub-title">目标案件生成引导</div>
+          <el-alert
+            v-if="settleableReportDetails.length"
+            type="success"
+            :closable="false"
+            show-icon
+            :title="`目标案件号 ${reportTargetCaseNumber} 当前有 ${settleableReportDetails.length} 条可结算明细，可用于生成结算批次明细。`"
+          />
+          <el-alert
+            v-else
+            type="warning"
+            :closable="false"
+            show-icon
+            :title="`目标案件号 ${reportTargetCaseNumber} 当前没有可结算明细，请先确认收款、阶段完成或提成规则。`"
+          />
+          <div class="guide-actions">
+            <el-button
+              type="success"
+              :disabled="!settleableReportDetails.length || !generateForm.settlement_id"
+              :loading="generating"
+              @click="useReportTargetForGeneration"
+            >
+              按目标案件号生成
+            </el-button>
+            <span class="guide-note">
+              需要先创建或选择一个结算批次；系统仅向接口提交案件号，不需要手工查找隐藏案件 ID。
+            </span>
+          </div>
         </div>
 
         <div v-if="!report.by_agent.length && !report.by_case.length && !report.details.length" class="page-empty">
@@ -270,7 +328,7 @@
           <div class="table-section">
             <div class="sub-title">按案件统计</div>
             <el-table :data="report.by_case" stripe size="small" class="compact-table">
-              <el-table-column prop="case_id" label="案件编号" min-width="180">
+              <el-table-column prop="case_id" label="案件标识" min-width="180">
                 <template #default="{ row }">
                   {{ row.case_id || '—' }}
                 </template>
@@ -294,7 +352,7 @@
                   {{ row.agent_id || '—' }}
                 </template>
               </el-table-column>
-              <el-table-column prop="case_id" label="案件编号" min-width="150" />
+              <el-table-column prop="case_id" label="案件标识" min-width="150" />
               <el-table-column prop="settlement_status" label="批次状态" width="100">
                 <template #default="{ row }">
                   <el-tag
@@ -364,7 +422,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import {
@@ -376,6 +434,7 @@ import {
 import type {
   CommissionSettlement,
   CommissionSettlementCreatePayload,
+  CommissionSettlementGenerateLinesParams,
   CommissionSettlementGenerateLinesResult,
   CommissionSettlementReportParams,
   CommissionSettlementReportResult,
@@ -403,14 +462,17 @@ const createRules: FormRules = {
 
 const generateForm = reactive({
   settlement_id: undefined as number | undefined,
+  case_id: '',
 })
 const generating = ref(false)
 const lastGenerate = ref<CommissionSettlementGenerateLinesResult | null>(null)
+const lastGenerateCaseNumber = ref('')
 const recentSettlements = ref<CommissionSettlement[]>([])
 
 const reportLoading = ref(false)
 const exporting = ref(false)
 const report = ref<CommissionSettlementReportResult | null>(null)
+const lastReportCaseNumber = ref('')
 const reportFilters = reactive({
   agent_id: '',
   case_id: '',
@@ -420,6 +482,14 @@ const reportFilters = reactive({
   date_range: [] as string[],
   time_field: 'line_created_at' as CommissionSettlementReportParams['time_field'],
 })
+
+const reportTargetCaseNumber = computed(() => lastReportCaseNumber.value || report.value?.filters.case_id || '')
+const reportTargetResolvedCaseId = computed(() => {
+  if (!report.value?.filters.case_id) return ''
+  if (report.value.filters.case_id === reportTargetCaseNumber.value) return ''
+  return report.value.filters.case_id
+})
+const settleableReportDetails = computed(() => report.value?.details.filter((detail) => detail.is_settleable) || [])
 
 function toApiError(errorLike: unknown): ApiError | null {
   if (!errorLike || typeof errorLike !== 'object') return null
@@ -615,6 +685,12 @@ function buildReportParams(): CommissionSettlementReportParams {
   }
 }
 
+function buildGenerateParams(): CommissionSettlementGenerateLinesParams {
+  return {
+    case_id: normalizeOptional(generateForm.case_id),
+  }
+}
+
 function downloadBlob(blob: Blob, fileName: string) {
   const url = window.URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -628,6 +704,11 @@ function downloadBlob(blob: Blob, fileName: string) {
 
 function useSettlement(id: number) {
   generateForm.settlement_id = id
+}
+
+function useReportTargetForGeneration() {
+  generateForm.case_id = reportTargetCaseNumber.value
+  handleGenerateLines()
 }
 
 async function handleCreateSettlement() {
@@ -658,8 +739,10 @@ async function handleGenerateLines() {
   generating.value = true
   error.value = null
   try {
-    const result = await generateCommissionSettlementLines(generateForm.settlement_id)
+    const targetCaseNumber = normalizeOptional(generateForm.case_id) || ''
+    const result = await generateCommissionSettlementLines(generateForm.settlement_id, buildGenerateParams())
     lastGenerate.value = result
+    lastGenerateCaseNumber.value = targetCaseNumber
 
     const index = recentSettlements.value.findIndex((s) => s.id === result.settlement_id)
     if (index >= 0) {
@@ -671,7 +754,7 @@ async function handleGenerateLines() {
       }
     }
 
-    ElMessage.success('明细生成成功')
+    ElMessage.success(targetCaseNumber ? `目标案件号 ${targetCaseNumber} 的明细生成成功` : '明细生成成功')
   } catch (err) {
     error.value = toApiError(err)
     ElMessage.error(mapGenerateLinesError(err))
@@ -683,8 +766,13 @@ async function handleGenerateLines() {
 async function queryReport() {
   reportLoading.value = true
   error.value = null
+  const targetCaseNumber = normalizeOptional(reportFilters.case_id) || ''
   try {
     report.value = await getCommissionSettlementReport(buildReportParams())
+    lastReportCaseNumber.value = targetCaseNumber
+    if (targetCaseNumber && !generateForm.case_id) {
+      generateForm.case_id = targetCaseNumber
+    }
   } catch (err) {
     error.value = toApiError(err)
     ElMessage.error(mapReportError(err))
@@ -715,6 +803,7 @@ function resetReportFilters() {
   reportFilters.line_status = ''
   reportFilters.date_range = []
   reportFilters.time_field = 'line_created_at'
+  lastReportCaseNumber.value = ''
   queryReport()
 }
 
@@ -741,6 +830,10 @@ onMounted(() => {
   align-items: center;
 }
 
+.generate-guide {
+  margin-top: 12px;
+}
+
 .result-block {
   margin-top: 16px;
 }
@@ -756,6 +849,20 @@ onMounted(() => {
 
 .filter-bar {
   margin-bottom: 16px;
+}
+
+.guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.guide-note {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .filter-actions {

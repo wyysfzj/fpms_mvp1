@@ -482,6 +482,7 @@ def recover_bill_bad_debt_action(
 def get_payments(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    bill_id: str | None = Query(default=None),
     client_id: str | None = Query(default=None),
     prepayment_status: str | None = Query(default=None),
     pay_date_from: date | None = Query(default=None),
@@ -511,6 +512,7 @@ def get_payments(
     return PaymentListResponse(
         **list_payments(
             db,
+            bill_id=bill_id,
             client_id=client_id,
             prepayment_status=prepayment_status,
             pay_date_from=pay_date_from,
@@ -691,6 +693,7 @@ def create_payment(
     return PaymentResponse(
         id=payment.id,
         pay_no=payment.pay_no,
+        bill_id=payload.bill_id,
         client_id=payment.client_id,
         pay_date=payment.pay_date,
         currency=payment.currency,
@@ -1031,23 +1034,6 @@ def get_case_receipt(
     - 404: Case receipt not found
     - 422: VALIDATION_ERROR
     """
-    receipts = db.query(CaseReceipt).filter(CaseReceipt.case_id == case_id).all()
-    if not receipts:
-        raise_business_error(
-            "CASE_RECEIPT_NOT_FOUND",
-            "Case receipt not found",
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
-    receipt = receipts[0]
-    receivable_amt = sum((Decimal(row.receivable_amt or 0) for row in receipts), Decimal("0"))
-    received_amt = sum((Decimal(row.received_amt or 0) for row in receipts), Decimal("0"))
-    fee_types = {row.fee_type for row in receipts if row.fee_type}
-    currencies = {row.currency for row in receipts if row.currency}
-    last_receipt_date = max(
-        (row.last_receipt_date for row in receipts if row.last_receipt_date),
-        default=None,
-    )
-
     bill_rows = (
         db.query(
             Bill.id,
@@ -1056,6 +1042,12 @@ def get_case_receipt(
             Bill.amount,
             Bill.balance,
             Bill.bill_date,
+            Bill.currency,
+            BillItem.amount.label("item_amount"),
+            BillItem.fee_code,
+            BillItem.fee_name,
+            BillItem.fee_type,
+            BillItem.year_no,
         )
         .join(BillItem, BillItem.bill_id == Bill.id)
         .filter(BillItem.case_id == case_id)
@@ -1064,7 +1056,15 @@ def get_case_receipt(
     )
     seen_bill_ids: set[str] = set()
     bill_overview_rows: list[dict[str, Any]] = []
+    bill_receivable_amt = Decimal("0")
+    bill_fee_types: set[str] = set()
+    bill_currencies: set[str] = set()
     for row in bill_rows:
+        bill_receivable_amt += Decimal(row.item_amount or 0)
+        if row.fee_type:
+            bill_fee_types.add(row.fee_type)
+        if row.currency:
+            bill_currencies.add(row.currency)
         if row.id in seen_bill_ids:
             continue
         seen_bill_ids.add(row.id)
@@ -1078,6 +1078,41 @@ def get_case_receipt(
                 "issue_date": row.bill_date,
             }
         )
+
+    receipts = db.query(CaseReceipt).filter(CaseReceipt.case_id == case_id).all()
+    if not receipts:
+        if not bill_overview_rows:
+            raise_business_error(
+                "CASE_RECEIPT_NOT_FOUND",
+                "Case receipt not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        bill_item = bill_rows[0] if len(bill_rows) == 1 else None
+        return CaseReceiptResponse(
+            id=case_id,
+            case_id=case_id,
+            fee_type=next(iter(bill_fee_types)) if len(bill_fee_types) == 1 else "MIXED",
+            currency=next(iter(bill_currencies)) if len(bill_currencies) == 1 else "MIXED",
+            receivable_amt=bill_receivable_amt,
+            received_amt=Decimal("0.00"),
+            fee_code=bill_item.fee_code if bill_item else None,
+            fee_name=bill_item.fee_name if bill_item else None,
+            year_no=bill_item.year_no if bill_item else None,
+            is_arrears=bill_receivable_amt > Decimal("0"),
+            is_prepayment=False,
+            is_commissionable=False,
+            bills=bill_overview_rows,
+        )
+
+    receipt = receipts[0]
+    receivable_amt = sum((Decimal(row.receivable_amt or 0) for row in receipts), Decimal("0"))
+    received_amt = sum((Decimal(row.received_amt or 0) for row in receipts), Decimal("0"))
+    fee_types = {row.fee_type for row in receipts if row.fee_type}
+    currencies = {row.currency for row in receipts if row.currency}
+    last_receipt_date = max(
+        (row.last_receipt_date for row in receipts if row.last_receipt_date),
+        default=None,
+    )
 
     return CaseReceiptResponse(
         id=receipt.id,

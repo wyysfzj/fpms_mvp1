@@ -26,6 +26,7 @@ from app.modules.annuity.service import (
     update_annuity_task_instruction,
 )
 from app.modules.auth.models import T_User
+from app.modules.cases.models import Case
 
 router = APIRouter()
 
@@ -90,6 +91,7 @@ def get_annuity_tasks(
     task_status: str | None = Query(default=None),
     pending_mode: str | None = Query(default=None),
     case_id: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
     client_id: str | None = Query(default=None),
     country: str | None = Query(default=None),
     annuity_year: int | None = Query(default=None, ge=1),
@@ -110,6 +112,7 @@ def get_annuity_tasks(
         "task_status": task_status,
         "pending_mode": pending_mode,
         "case_id": case_id,
+        "case_no": case_no,
         "client_id": client_id,
         "country": country,
         "annuity_year": annuity_year,
@@ -119,11 +122,17 @@ def get_annuity_tasks(
     tasks, total, summary = list_annuity_tasks_report(
         db, filters=filters, page=page, page_size=page_size
     )
+    case_no_map: dict[str, str] = {}
+    case_ids = sorted({task.case_id for task in tasks})
+    if case_ids:
+        cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
+        case_no_map = {case.id: case.case_no for case in cases}
 
     items = [
         {
             "id": task.id,
             "case_id": task.case_id,
+            "case_no": case_no_map.get(task.case_id),
             "client_id": task.client_id,
             "year_no": task.year_no,
             "due_date": task.due_date,

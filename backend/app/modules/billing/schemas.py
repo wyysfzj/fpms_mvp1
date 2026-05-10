@@ -194,7 +194,8 @@ class BillDetailResponse(BaseModel):
 class PaymentSchema(BaseModel):
     """Schema for recording payments."""
 
-    client_id: str = Field(..., min_length=1)
+    client_id: str | None = Field(None, min_length=1)
+    bill_id: str | None = Field(None, min_length=1)
     amount: Decimal
     pay_no: str | None = Field(None, max_length=64)
     pay_date: date | None = None
@@ -207,6 +208,7 @@ class PaymentResponse(BaseModel):
 
     id: str
     pay_no: str | None
+    bill_id: str | None = None
     client_id: str
     pay_date: date | None
     currency: str
@@ -218,6 +220,8 @@ class PaymentListItemResponse(BaseModel):
 
     id: str
     pay_no: str | None
+    bill_id: str | None = None
+    bill_no: str | None = None
     client_id: str
     client_name: str | None = None
     pay_date: date | None

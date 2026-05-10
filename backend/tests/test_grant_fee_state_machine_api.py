@@ -32,6 +32,29 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> str:
     return resp.json()["id"]
 
 
+def _set_case_grant_fields(
+    session_factory: sessionmaker,
+    *,
+    case_id: str,
+    complete: bool,
+) -> None:
+    from app.modules.cases.models import Case
+
+    with session_factory() as db:
+        case = db.execute(select(Case).where(Case.id == case_id)).scalar_one()
+        case.status = "GRANT_PENDING"
+        case.app_no = "CN202610000001"
+        case.filing_date = date(2026, 3, 20)
+        case.pub_no = "CN202610000001A"
+        case.pub_date = date(2026, 4, 1)
+        if complete:
+            case.grant_no = "CN202610000001B"
+            case.grant_date = date(2026, 8, 1)
+            case.first_annuity_year = 3
+            case.valid_until = date(2046, 3, 20)
+        db.commit()
+
+
 def _insert_task(
     session_factory: sessionmaker,
     *,
@@ -172,6 +195,64 @@ def test_grant_fee_state_machine_supports_pay_and_done_flow(
     assert task.notice_sent is True
     assert task.draft_generated is True
     assert task.notify_count == 4
+
+
+def test_grant_fee_done_advances_case_to_granted_when_grant_fields_present(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    case_id = _create_case(client, auth_headers)
+    _set_case_grant_fields(session_factory, case_id=case_id, complete=True)
+    task_id = _insert_task(
+        session_factory,
+        case_id=case_id,
+        notify_count=3,
+        notice_sent=True,
+        client_instruction="PAY",
+        draft_generated=True,
+    )
+
+    done_resp = client.put(
+        f"{STATE_BASE}/{task_id}/state",
+        headers=auth_headers,
+        json={"action": "mark_done"},
+    )
+    assert done_resp.status_code == 200, done_resp.text
+    assert done_resp.json()["state"] == "DONE"
+
+    case_resp = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
+    assert case_resp.status_code == 200, case_resp.text
+    assert case_resp.json()["status"] == "GRANTED"
+
+
+def test_grant_fee_done_does_not_advance_case_without_required_grant_fields(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    case_id = _create_case(client, auth_headers)
+    _set_case_grant_fields(session_factory, case_id=case_id, complete=False)
+    task_id = _insert_task(
+        session_factory,
+        case_id=case_id,
+        notify_count=3,
+        notice_sent=True,
+        client_instruction="PAY",
+        draft_generated=True,
+    )
+
+    done_resp = client.put(
+        f"{STATE_BASE}/{task_id}/state",
+        headers=auth_headers,
+        json={"action": "mark_done"},
+    )
+    assert done_resp.status_code == 200, done_resp.text
+    assert done_resp.json()["state"] == "DONE"
+
+    case_resp = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
+    assert case_resp.status_code == 200, case_resp.text
+    assert case_resp.json()["status"] == "GRANT_PENDING"
 
 
 def test_grant_fee_state_machine_supports_abandon_flow_and_rejects_invalid_transition(

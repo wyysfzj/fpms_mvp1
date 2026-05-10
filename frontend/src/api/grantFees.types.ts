@@ -40,6 +40,7 @@ export interface GrantFeeTaskBatchNoticeGenerateResult {
 export interface GrantFeeTaskListItem {
     task_id: string
     case_id: string
+    case_no?: string
     status: GrantFeeTaskStatus
     due_date: string
     client_instruction: GrantFeeTaskClientInstruction
@@ -104,6 +105,7 @@ export interface GrantFeeTaskListParams {
     draft_generated?: boolean
     is_overdue?: boolean
     case_id?: string
+    case_no?: string
     date_from?: string
     date_to?: string
     page?: number
