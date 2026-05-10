@@ -24,13 +24,14 @@ Bill detail must render a newly created bill from a locked fee draft even when c
 - `frontend/src/modules/billing/pages/BillDetail.vue`
 - `frontend/src/utils/money.ts`
 - `frontend/tests/money-format.mjs`
+- `frontend/tests/bill-detail-source.mjs`
 - `tasks/frontend/DEMO-UI/FE-BILL-DETAIL-NETWORK-ERROR-NEW-BILL-01.md`
 - `artifacts/FE-BILL-DETAIL-NETWORK-ERROR-NEW-BILL-01/**`
 
 ## Verification Commands
 
 ```bash
-./scripts/evidence_run.sh FE-BILL-DETAIL-NETWORK-ERROR-NEW-BILL-01 test /bin/zsh -lc 'cd frontend && npm run typecheck && node tests/money-format.mjs'
+./scripts/evidence_run.sh FE-BILL-DETAIL-NETWORK-ERROR-NEW-BILL-01 test /bin/zsh -lc 'cd frontend && npm run typecheck && rm -rf .tmp-money-test && npx tsc src/utils/money.ts --target ES2020 --module ES2020 --moduleResolution node --outDir .tmp-money-test --skipLibCheck && node tests/money-format.mjs && node tests/bill-detail-source.mjs'
 ```
 
 ```bash

@@ -45,7 +45,7 @@
             <span class="meta-divider">|</span>
             <span>{{ billDirectionText(bill.direction) }}</span>
             <span class="meta-divider">|</span>
-            <span>{{ bill.currency }}</span>
+            <span>{{ billCurrencyDisplay }}</span>
           </div>
           <div class="case-title">
             <h1>{{ ZH.billDetail.billNo }} {{ billDisplayNo }}</h1>
@@ -147,7 +147,7 @@
                   </div>
                   <div class="info-item">
                     <span class="info-label">{{ ZH.billDetail.currency }}</span>
-                    <span class="info-value">{{ bill.currency }}</span>
+                    <span class="info-value">{{ billCurrencyDisplay }}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">{{ ZH.billDetail.issueDate }}</span>
@@ -291,6 +291,7 @@ import { usePageContext } from '../../../stores/pageContext'
 import { useAuthStore } from '../../../stores/auth'
 import { ZH } from '../../../constants/labels.zh'
 import { getBillStatusText } from '../../../constants/displayText'
+import { formatMoney, normalizeCurrencyCode } from '../../../utils/money'
 
 const BAD_DEBT_MARK_PERMISSION = 'Billing.BadDebtMark'
 const BAD_DEBT_RECOVER_PERMISSION = 'Billing.BadDebtRecover'
@@ -339,6 +340,7 @@ const feeDraftRelation = computed(() => {
     label: feeDraftDisplay.value,
   }
 })
+const billCurrencyDisplay = computed(() => normalizeCurrencyCode(bill.value?.currency))
 
 const statusTagType = computed<'info' | 'warning' | 'success' | 'danger'>(() => {
   switch (bill.value?.status) {
@@ -367,11 +369,7 @@ async function fetchBill() {
 }
 
 function formatAmount(value: number): string {
-  const curr = bill.value?.currency || 'CNY'
-  return new Intl.NumberFormat('zh-CN', {
-    style: 'currency',
-    currency: curr,
-  }).format(value)
+  return formatMoney(value, bill.value?.currency)
 }
 
 function formatDate(dateStr: string): string {
