@@ -155,6 +155,7 @@ export interface FeeDraftListParams {
     page?: number
     page_size?: number
     case_id?: string
+    case_no?: string
     client_id?: string
     status?: FeeDraftStatus
     draft_status?: FeeDraftStatus

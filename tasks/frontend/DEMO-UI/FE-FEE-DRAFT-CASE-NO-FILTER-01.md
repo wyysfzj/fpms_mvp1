@@ -23,13 +23,14 @@ The fee draft list "案件编号" filter must support the visible case number en
 - `frontend/src/api/fees.ts`
 - `frontend/src/api/fees.types.ts`
 - `frontend/src/modules/fees/pages/FeeDraftList.vue`
+- `frontend/tests/fee-draft-case-no-source.mjs`
 - `tasks/frontend/DEMO-UI/FE-FEE-DRAFT-CASE-NO-FILTER-01.md`
 - `artifacts/FE-FEE-DRAFT-CASE-NO-FILTER-01/**`
 
 ## Verification Commands
 
 ```bash
-./scripts/evidence_run.sh FE-FEE-DRAFT-CASE-NO-FILTER-01 test /bin/zsh -lc 'cd frontend && npm run typecheck'
+./scripts/evidence_run.sh FE-FEE-DRAFT-CASE-NO-FILTER-01 test /bin/zsh -lc 'cd frontend && npm run typecheck && node tests/fee-draft-case-no-source.mjs'
 ```
 
 ```bash

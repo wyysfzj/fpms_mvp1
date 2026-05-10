@@ -27,7 +27,7 @@
       </el-form-item>
       <el-form-item label="案件编号">
         <el-input
-          v-model="filters.case_id"
+          v-model="filters.case_no"
           class="filter-input"
           clearable
           placeholder="请输入案件编号"
@@ -204,7 +204,7 @@ const pageSize = ref(20)
 const total = ref(0)
 const filters = reactive<{
   client_id: string
-  case_id: string
+  case_no: string
   fee_type: string
   currency: string
   draft_status: '' | FeeDraftStatus
@@ -212,7 +212,7 @@ const filters = reactive<{
   date_range: [string, string] | []
 }>({
   client_id: '',
-  case_id: '',
+  case_no: '',
   fee_type: '',
   currency: '',
   draft_status: '',
@@ -228,7 +228,7 @@ function applyFilters() {
 
 function resetFilters() {
   filters.client_id = ''
-  filters.case_id = ''
+  filters.case_no = ''
   filters.fee_type = ''
   filters.currency = ''
   filters.draft_status = ''
@@ -246,7 +246,7 @@ async function fetchDrafts() {
       page: page.value,
       page_size: pageSize.value,
       client_id: filters.client_id || undefined,
-      case_id: filters.case_id || undefined,
+      case_no: filters.case_no || undefined,
       fee_type: filters.fee_type || undefined,
       currency: filters.currency || undefined,
       draft_status: filters.draft_status || undefined,
