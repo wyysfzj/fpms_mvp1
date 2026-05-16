@@ -40,6 +40,20 @@ export const MENU_GROUPS: MenuGroup[] = [
         children: [
             { key: 'clients', label: '客户管理', icon: '👥', route: '/clients', requiredPerms: [Perms.CLIENTS_READ] },
             { key: 'cases', label: '案件管理', icon: '📂', route: '/cases', requiredPerms: [Perms.CASES_READ] },
+            {
+                key: 'case_batch_filing_menu',
+                label: '案件批量递交',
+                icon: '📤',
+                route: '/cases/batch-filing',
+                requiredPerms: [Perms.CASES_READ, Perms.CASES_WRITE],
+            },
+            {
+                key: 'grant_fee_tasks_case_lifecycle',
+                label: '授权费任务',
+                icon: '🧾',
+                route: '/grant-fee/tasks',
+                requiredPerms: ['GrantFeeTask.Read'],
+            },
             { key: 'documents', label: '文书管理', icon: '📄', route: '/documents', requiredPerms: [Perms.DOCUMENTS_READ] },
             { key: 'tasks', label: '任务与期限', icon: '📅', route: '/tasks', requiredPerms: [Perms.TASKS_READ] },
             {
