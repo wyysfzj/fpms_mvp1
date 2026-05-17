@@ -730,7 +730,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { getCase, updateCase } from '../../../api/cases'
+import { getCase, getCaseByCaseNo, updateCase } from '../../../api/cases'
 import { createClient, getClients } from '../../../api/clients'
 import type { Case, CaseAgentSplit, CaseApplicant, CasePriority, CaseUpdatePayload } from '../../../api/cases.types'
 import type { Client, ClientCreatePayload } from '../../../api/clients.types'
@@ -1031,14 +1031,18 @@ async function fetchClients() {
 }
 
 async function fetchCase() {
+  const caseNo = String(route.params.caseNo || '').trim()
   const id = String(route.params.id || '').trim()
-  if (!id) return
+  if (!caseNo && !id) return
 
   loading.value = true
   error.value = null
 
   try {
-    caseData.value = await getCase(id)
+    caseData.value = caseNo ? await getCaseByCaseNo(caseNo) : await getCase(id)
+    if (!caseNo && caseData.value.case_no) {
+      await router.replace({ name: 'case_edit_by_no', params: { caseNo: caseData.value.case_no } })
+    }
     form.title = caseData.value.title || ''
     form.status = caseData.value.status || ''
     form.app_no = caseData.value.app_no || ''
@@ -1342,7 +1346,7 @@ function mergeFieldErrors(items: ValidationItem[]) {
 }
 
 async function handleSave() {
-  const id = String(route.params.id || '').trim()
+  const id = String(caseData.value?.id || route.params.id || '').trim()
   if (!id) return
 
   fieldErrors.value = new Map()
@@ -1392,9 +1396,14 @@ async function handleSave() {
       delete payload.status
     }
 
-    await updateCase(id, payload)
+    const updated = await updateCase(id, payload)
     ElMessage.success('案件更新成功')
-    router.push(`/cases/${id}`)
+    const targetCaseNo = updated.case_no || caseData.value?.case_no
+    if (targetCaseNo) {
+      router.push({ name: 'case_detail_by_no', params: { caseNo: targetCaseNo } })
+      return
+    }
+    router.push({ name: 'case_detail', params: { id } })
   } catch (err) {
     const apiError = err as ApiError
     error.value = apiError
@@ -1420,8 +1429,12 @@ async function handleSave() {
 }
 
 function handleCancel() {
-  const id = route.params.id
-  router.push(`/cases/${id}`)
+  if (caseData.value?.case_no) {
+    router.push({ name: 'case_detail_by_no', params: { caseNo: caseData.value.case_no } })
+    return
+  }
+  const id = caseData.value?.id || route.params.id
+  router.push({ name: 'case_detail', params: { id } })
 }
 
 function resetQuickClientDialog() {

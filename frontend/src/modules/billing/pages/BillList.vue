@@ -370,8 +370,15 @@ function formatDate(dateStr: string): string {
   }
 }
 
+function isUuidLike(input?: string | null): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(input || '').trim())
+}
+
 function getBillDisplayNo(row: BillListItem): string {
-  return row.bill_no || '未生成账单号'
+  if (row.bill_no && !isUuidLike(row.bill_no)) {
+    return row.bill_no
+  }
+  return row.id ? '已关联账单' : '未生成账单号'
 }
 
 function handleRowClick(row: BillListItem) {

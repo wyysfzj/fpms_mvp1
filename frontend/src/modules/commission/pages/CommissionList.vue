@@ -21,7 +21,7 @@
         <el-input
           v-model.trim="filters.case_no"
           aria-label="案件筛选"
-          placeholder="案卷号"
+          placeholder="案号"
           clearable
           @keyup.enter="onFilterChange"
         />
@@ -84,7 +84,7 @@
 
     <div v-else class="page-table">
       <el-table :data="records" aria-label="提成记录列表" stripe size="small" class="compact-table">
-        <el-table-column prop="case_no" label="案卷号" min-width="160">
+        <el-table-column prop="case_no" label="案号" min-width="160">
           <template #default="{ row }">
             {{ formatCaseDisplay(row) }}
           </template>
@@ -96,7 +96,7 @@
         </el-table-column>
         <el-table-column prop="fee_type" label="费用类型" width="120">
           <template #default="{ row }">
-            {{ row.fee_type || '—' }}
+            {{ formatFeeTypeDisplay(row.fee_type) }}
           </template>
         </el-table-column>
         <el-table-column prop="base_fee" label="基础费用" width="140" align="right">
@@ -306,6 +306,16 @@ function formatCaseDisplay(row: CommissionRecord): string {
 
 function formatAgentDisplay(row: CommissionRecord): string {
   return row.agent_id ? '已分配' : '未分配'
+}
+
+function formatFeeTypeDisplay(type: string | null | undefined): string {
+  if (!type) return '—'
+  const map: Record<string, string> = {
+    GOV: '官费',
+    SERVICE: '服务费',
+    MISC: '其他费用',
+  }
+  return map[type] || '未知费用类型'
 }
 
 watch([page, pageSize], () => {

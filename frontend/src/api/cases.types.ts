@@ -119,6 +119,7 @@ export interface Case {
 export interface CaseListParams {
     page?: number
     page_size?: number
+    case_no?: string
     client_id?: string
     status?: string
     case_type?: string

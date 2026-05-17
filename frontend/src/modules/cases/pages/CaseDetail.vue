@@ -483,7 +483,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getCase } from '../../../api/cases'
+import { getCase, getCaseByCaseNo } from '../../../api/cases'
 import type { Case } from '../../../api/cases.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -594,8 +594,9 @@ const invalidRoleText = computed(() => {
 })
 
 async function fetchCase() {
+  const caseNo = String(route.params.caseNo || '').trim()
   const id = String(route.params.id || '').trim()
-  if (!id) {
+  if (!caseNo && !id) {
     return
   }
 
@@ -603,8 +604,11 @@ async function fetchCase() {
   error.value = null
 
   try {
-    caseData.value = await getCase(id)
+    caseData.value = caseNo ? await getCaseByCaseNo(caseNo) : await getCase(id)
     pageContext.setBreadcrumb(['案件管理', '案件详情', caseData.value.case_no || caseData.value.title || '未命名案件'])
+    if (!caseNo && caseData.value.case_no) {
+      await router.replace({ name: 'case_detail_by_no', params: { caseNo: caseData.value.case_no } })
+    }
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -617,8 +621,12 @@ function goBack() {
 }
 
 function handleEdit() {
-  const id = route.params.id
-  router.push(`/cases/${id}/edit`)
+  if (caseData.value?.case_no) {
+    router.push({ name: 'case_edit_by_no', params: { caseNo: caseData.value.case_no } })
+    return
+  }
+  const id = caseData.value?.id || route.params.id
+  router.push({ name: 'case_edit', params: { id } })
 }
 
 function handleLimitedEditSuccess() {

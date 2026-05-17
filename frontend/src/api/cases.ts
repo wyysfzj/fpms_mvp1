@@ -443,6 +443,16 @@ export async function getCase(id: string | number): Promise<Case> {
     return mapCase(response.data)
 }
 
+export async function getCaseByCaseNo(caseNo: string): Promise<Case> {
+    const normalizedCaseNo = caseNo.trim()
+    const result = await getCases({ case_no: normalizedCaseNo, page: 1, page_size: 1 })
+    const found = result.items.find(item => item.case_no === normalizedCaseNo)
+    if (!found) {
+        throw new Error('未找到对应案件')
+    }
+    return found
+}
+
 export async function getCaseIntakeDocumentGate(
     params: CaseIntakeDocumentGateParams
 ): Promise<CaseDocumentGatePreview> {

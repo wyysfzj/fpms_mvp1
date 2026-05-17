@@ -26,6 +26,16 @@
     <el-card class="filter-panel" shadow="never" style="margin-bottom: 16px;">
       <el-row :gutter="16">
         <el-col :span="6">
+          <el-form-item label="案号" class="filter-item">
+            <el-input
+              v-model.trim="filters.case_no"
+              placeholder="请输入案号"
+              clearable
+              @keyup.enter="handleSearch"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
           <el-form-item label="客户" class="filter-item">
             <el-select
               v-model="filters.client_id"
@@ -62,6 +72,8 @@
             </el-select>
           </el-form-item>
         </el-col>
+      </el-row>
+      <el-row :gutter="16">
         <el-col :span="6">
           <el-form-item label="国家/地区" class="filter-item">
             <el-input
@@ -257,6 +269,7 @@ const isEmpty = computed(() => !loading.value && !error.value && total.value ===
 
 // FB5: Filter state
 const filters = reactive({
+  case_no: '',
   client_id: '',
   case_type: '',
   patent_category: '',
@@ -339,7 +352,11 @@ function formatDate(dateStr: string): string {
 }
 
 function handleView(row: Case) {
-  router.push(`/cases/${row.id}`)
+  if (row.case_no) {
+    router.push({ name: 'case_detail_by_no', params: { caseNo: row.case_no } })
+    return
+  }
+  router.push({ name: 'case_detail', params: { id: row.id } })
 }
 
 function clearFilter() {
@@ -372,6 +389,7 @@ function handleSearch() {
 
 /** FB5: Reset all filter fields and re-fetch */
 function handleResetFilters() {
+  filters.case_no = ''
   filters.client_id = ''
   filters.case_type = ''
   filters.patent_category = ''

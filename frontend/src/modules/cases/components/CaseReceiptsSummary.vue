@@ -47,7 +47,7 @@
           </div>
           <div v-if="receipts.fee_type" class="info-item">
             <span class="info-label">费用类型</span>
-            <span class="info-value">{{ receipts.fee_type }}</span>
+            <span class="info-value">{{ formatFeeTypeDisplay(receipts.fee_type) }}</span>
           </div>
           <div v-if="receipts.year_no != null" class="info-item">
             <span class="info-label">年度</span>
@@ -85,7 +85,7 @@
         >
           <el-table-column prop="bill_no" label="账单号" width="140">
             <template #default="{ row }">
-              <span class="bill-no">{{ row.bill_no }}</span>
+              <span class="bill-no">{{ formatBillDisplay(row) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="100">
@@ -140,7 +140,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getCaseReceipts } from '../../../api/billing'
-import type { CaseReceiptsSummary, BillStatus } from '../../../api/billing.types'
+import type { CaseReceiptBill, CaseReceiptsSummary, BillStatus } from '../../../api/billing.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import { getBillStatusText } from '../../../constants/displayText'
@@ -214,6 +214,25 @@ function statusTagType(status: BillStatus): 'info' | 'warning' | 'success' | 'da
     case 'VOID': return 'danger'
     default: return 'info'
   }
+}
+
+function isUuidLike(value: string | null | undefined): boolean {
+  return !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function formatBillDisplay(row: CaseReceiptBill): string {
+  if (row.bill_no && !isUuidLike(row.bill_no)) return row.bill_no
+  return row.id ? '已关联账单' : '未生成账单号'
+}
+
+function formatFeeTypeDisplay(type: string | null | undefined): string {
+  if (!type) return '—'
+  const map: Record<string, string> = {
+    GOV: '官费',
+    SERVICE: '服务费',
+    MISC: '其他费用',
+  }
+  return map[type] || '未知费用类型'
 }
 
 function handleBillClick(row: { id: string }) {

@@ -147,9 +147,10 @@
         <el-table-column type="selection" width="48" />
         <el-table-column label="案件" min-width="180">
           <template #default="{ row }">
-            <router-link :to="`/cases/${row.case_id}`" class="case-link">
+            <router-link v-if="row.case_no" :to="{ name: 'case_detail_by_no', params: { caseNo: row.case_no } }" class="case-link">
               {{ formatCaseDisplay(row) }}
             </router-link>
+            <span v-else>{{ formatCaseDisplay(row) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="140">
@@ -344,12 +345,19 @@ function clientInstructionText(input: GrantFeeTaskClientInstruction): string {
   return labels[input] || '未知指示'
 }
 
+function isUuidLike(input?: string | null): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(input || '').trim())
+}
+
 function formatCaseDisplay(row: GrantFeeTaskListItem): string {
   return row.case_no || '未命名案件'
 }
 
 function formatBillDisplay(row: GrantFeeTaskListItem): string {
-  return row.linked_bill_no || '未生成账单号'
+  if (row.linked_bill_no && !isUuidLike(row.linked_bill_no)) {
+    return row.linked_bill_no
+  }
+  return row.linked_bill_id ? '已关联账单' : '未生成账单号'
 }
 
 function canGenerateDraft(row: GrantFeeTaskListItem): boolean {
