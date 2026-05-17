@@ -1,0 +1,23 @@
+services:
+  fpms-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+    image: fpms-mvp1-demo:sqlite
+    environment:
+      FPMS_ENV: demo
+      DATABASE_URL: sqlite:////data/fpms_demo.db
+      STORAGE_DIR: /data/storage
+      CORS_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080"]'
+      JWT_SECRET: ${JWT_SECRET:-demo-change-me}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}
+      FPMS_RUN_SEED: ${FPMS_RUN_SEED:-1}
+    ports:
+      - "8080:80"
+    volumes:
+      - fpms_demo_data:/data
+    restart: unless-stopped
+
+volumes:
+  fpms_demo_data:
+    name: fpms_demo_data
