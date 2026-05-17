@@ -35,6 +35,27 @@ npm run dev
 - Frontend: http://localhost:5173
 - Backend OpenAPI: http://localhost:8000/docs
 
+## Docker demo (SQLite)
+
+Use this path when the team needs a single-container demo on a laptop or a simple cloud container host while still using SQLite.
+
+```bash
+docker compose -f docker-compose.demo.yml up --build
+```
+
+- App URL: http://localhost:8080
+- Default seeded login: `admin` / `admin123`
+- Detailed guide: `docs/docker_demo_guide.md`
+
+Docker demo file index:
+
+- `Dockerfile.demo` - builds the Vue frontend, FastAPI backend runtime, and nginx into one demo image.
+- `docker-compose.demo.yml` - runs the SQLite demo container and persists `/data` in the `fpms_demo_data` volume.
+- `.dockerignore` - excludes local dependencies, build outputs, local env files, and SQLite files from the image build context.
+- `deploy/docker/demo/entrypoint.sh` - runs migrations, optional seed, backend API, and nginx at container startup.
+- `deploy/docker/demo/nginx.conf` - serves the SPA and proxies `/api/*`, `/healthz`, `/docs`, `/redoc`, and `/openapi.json`.
+- `docs/docker_demo_guide.md` - laptop and cloud deployment guide, including persistence, backup, reset, and troubleshooting.
+
 ## Production (Docker + Postgres)
 ```bash
 cp .env.prod.example .env
@@ -50,4 +71,3 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ## Non-MVP
 Each module includes a `*_future.md` to park non-MVP requirements and avoid scope creep.
-
