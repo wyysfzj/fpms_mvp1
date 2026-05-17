@@ -13,8 +13,13 @@
 - `src/tests/`：按 wave 的 spec 入口
 - `src/support/`：数据加载、annotations、router
 
+## 本地默认服务
+- `FPMS_BASE_URL` 默认指向当前 Vite 前端：`http://localhost:5173`
+- `FPMS_API_URL` 默认指向当前后端 API：`http://localhost:8000/api/v1`
+
 ## 落地建议
 1. 先实现 `waveW0.ts` 中的权限/配置 smoke
 2. 再实现 `waveA.ts`、`waveB.ts`、`waveG0.ts`、`waveD.ts`
 3. 选择器补在 page object 中，不要散落在 handler
 4. 所有导出文件都应带 snapshot 或内容断言
+5. 产品导航相关断言优先复用 `AppShellPage`，避免在 spec 中散落侧栏选择器

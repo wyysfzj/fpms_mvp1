@@ -8,10 +8,10 @@ export class LoginPage {
   }
 
   async login(username: string, password: string): Promise<void> {
-    // TODO: 根据实际登录页补充 selector
     await this.page.goto("/login");
-    await this.page.getByLabel("Username").fill(username);
-    await this.page.getByLabel("Password").fill(password);
-    await this.page.getByRole("button", { name: /login|登录/i }).click();
+    await this.page.getByLabel("用户名").fill(username);
+    await this.page.getByLabel("密码").fill(password);
+    await this.page.getByRole("button", { name: /登\s*录/ }).click();
+    await this.page.waitForURL(/\/dashboard(?:$|\?)/);
   }
 }
