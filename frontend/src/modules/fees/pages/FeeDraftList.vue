@@ -123,10 +123,10 @@
         class="compact-table"
         @row-click="handleRowClick"
       >
-        <el-table-column prop="id" :label="ZH.feeList.draftId" min-width="220">
+        <el-table-column label="费用草稿" min-width="220">
           <template #default="{ row }">
             <div class="draft-cell">
-              <span class="id-value">{{ getDraftDisplayId(row.id) }}</span>
+              <span class="id-value">{{ getDraftDisplay(row) }}</span>
               <span class="draft-subtext">{{ row.currency }} · {{ getFeeDraftStatusText(row.status) }}</span>
             </div>
           </template>
@@ -274,22 +274,17 @@ function formatAmount(amount: FeeMoney, currency?: string): string {
   return formatMoney(amount, currency)
 }
 
-function getShortId(id: string | null | undefined): string {
-  if (!id) return '—'
-  return id.slice(0, 8).toUpperCase()
-}
-
-function getDraftDisplayId(id: string): string {
-  return `草稿-${getShortId(id)}`
+function getDraftDisplay(row: FeeDraftListItem): string {
+  return row.case_no ? `费用草稿：${row.case_no}` : '费用草稿'
 }
 
 function getCaseDisplay(row: FeeDraftListItem): string {
-  return row.case_no || `案件-${getShortId(row.case_id)}`
+  return row.case_no || '未命名案件'
 }
 
 function getClientDisplay(row: FeeDraftListItem): string {
   if (row.client_name) return row.client_name
-  if (row.client_id) return `客户-${getShortId(row.client_id)}`
+  if (row.client_id) return '未命名客户'
   return '未关联客户'
 }
 

@@ -197,12 +197,12 @@
       <el-table :data="payLists" stripe size="small" class="compact-table">
         <el-table-column label="清单编号" min-width="160">
           <template #default="{ row }">
-            {{ row.pay_list_no || `#${row.id}` }}
+            {{ formatPayListNo(row) }}
           </template>
         </el-table-column>
         <el-table-column label="客户" min-width="160">
           <template #default="{ row }">
-            {{ row.client_name || row.client_id || '—' }}
+            {{ formatClientDisplay(row) }}
           </template>
         </el-table-column>
         <el-table-column prop="currency" label="币种" width="100" />
@@ -389,7 +389,7 @@ function payListStatusText(status?: string): string {
     case 'PARTIAL':
       return '部分完成'
     default:
-      return status || '未知'
+      return '未知状态'
   }
 }
 
@@ -423,8 +423,16 @@ function formatDateTime(dateValue?: string): string {
 
 function formatClientOption(client: Client): string {
   const code = client.client_code ? `${client.client_code} · ` : ''
-  const name = client.name || client.name_cn || client.name_en || `客户 ${client.id}`
+  const name = client.name || client.name_cn || client.name_en || '未命名客户'
   return `${code}${name}`
+}
+
+function formatPayListNo(row: PayListListItem): string {
+  return row.pay_list_no || '未生成清单编号'
+}
+
+function formatClientDisplay(row: PayListListItem): string {
+  return row.client_name || '未命名客户'
 }
 
 async function fetchClientOptions() {
@@ -513,7 +521,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 function buildExportFileName(row: PayListListItem): string {
-  const displayNo = row.pay_list_no || `清单-${row.id}`
+  const displayNo = row.pay_list_no || '未生成清单编号'
   return `官费清单-${displayNo}.xlsx`
 }
 
@@ -562,7 +570,7 @@ async function handleCreateHistorical() {
   error.value = null
   try {
     const created: PayListInfo = await createHistoricalPayList(buildHistoricalPayload())
-    ElMessage.success(`历史清单已创建：${created.pay_list_no || `#${created.id}`}`)
+    ElMessage.success(`历史清单已创建：${created.pay_list_no || '未生成清单编号'}`)
     showHistoricalForm.value = false
     resetHistoricalForm()
     await loadPayLists()

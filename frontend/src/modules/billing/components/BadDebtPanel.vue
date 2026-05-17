@@ -76,7 +76,7 @@
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">凭证编号</span>
-              <span class="info-value mono-num">{{ badDebtVoucher.id }}</span>
+              <span class="info-value">{{ formatVoucherDisplay() }}</span>
             </div>
             <div class="info-item">
               <span class="info-label">凭证状态</span>
@@ -353,6 +353,10 @@ function formatDate(value?: string | null): string {
   } catch {
     return value
   }
+}
+
+function formatVoucherDisplay(): string {
+  return '已生成'
 }
 
 function openMarkDialog(mode: MarkMode) {

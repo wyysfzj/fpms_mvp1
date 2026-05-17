@@ -81,7 +81,7 @@
           </el-col>
           <el-col :span="6">
             <el-form-item label="主办代理人">
-              <el-input v-model.trim="filters.primary_agent_id" placeholder="请输入代理人ID" />
+              <el-input v-model.trim="filters.primary_agent_id" placeholder="请输入代理人" />
             </el-form-item>
           </el-col>
           <el-col :span="6" class="filter-actions">

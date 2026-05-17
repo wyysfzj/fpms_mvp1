@@ -32,7 +32,7 @@
     </div>
 
     <el-form :model="filters" inline class="filter-form">
-      <el-form-item label="客户ID">
+      <el-form-item label="客户">
         <el-select
           v-model="filters.client_id"
           clearable
@@ -144,14 +144,14 @@
               class="bill-link"
               :to="`/billing/bills/${row.bill_id}`"
             >
-              {{ row.bill_no || row.bill_id }}
+              {{ getBillDisplay(row.bill_no, row.bill_id) }}
             </router-link>
             <span v-else class="text-muted">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="client_name" label="客户" min-width="180">
           <template #default="{ row }">
-            {{ row.client_name || row.client_id || '—' }}
+            {{ row.client_name || '未命名客户' }}
           </template>
         </el-table-column>
         <el-table-column prop="payment_date" label="收款日期" width="120">
@@ -219,13 +219,13 @@
       <el-table :data="offsets" stripe size="small" class="compact-table">
         <el-table-column prop="payment_line_id" label="付款分录" width="220">
           <template #default="{ row }">
-            <span class="mono-num">{{ row.payment_line_id }}</span>
+            <span>{{ formatOffsetPaymentLine(row) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="bill_id" label="账单" width="180">
           <template #default="{ row }">
             <router-link class="bill-link" :to="`/billing/bills/${row.bill_id}`">
-              {{ row.bill_id }}
+              {{ getBillDisplay(row.bill_no, row.bill_id) }}
             </router-link>
           </template>
         </el-table-column>
@@ -389,6 +389,7 @@ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
+import { getPrepaymentStatusText as getPrepaymentStatusLabel } from '../../../constants/displayText'
 
 const route = useRoute()
 const payments = ref<PaymentListItem[]>([])
@@ -579,16 +580,7 @@ function formatAmount(amount: number, currency?: string): string {
 }
 
 function getPrepaymentStatusText(status?: string): string {
-  switch (status) {
-    case 'FULLY_ALLOCATED':
-      return '已核销'
-    case 'PARTIALLY_ALLOCATED':
-      return '部分核销'
-    case 'UNALLOCATED':
-      return '未核销'
-    default:
-      return '待确认'
-  }
+  return getPrepaymentStatusLabel(status)
 }
 
 function getPrepaymentTagType(status?: string): 'success' | 'warning' | 'info' {
@@ -605,27 +597,36 @@ function getPrepaymentTagType(status?: string): 'success' | 'warning' | 'info' {
 }
 
 function formatPaymentNo(payment: PaymentListItem): string {
-  return payment.reference || payment.id
+  return payment.reference || '未生成收款编号'
 }
 
 function formatClientOption(client: Client): string {
   const code = client.client_code ? `${client.client_code} · ` : ''
-  return `${code}${client.name || client.id}`
+  return `${code}${client.name || '未命名客户'}`
 }
 
 function formatPaymentOption(payment: PaymentListItem): string {
   const refText = formatPaymentNo(payment)
-  const billText = payment.bill_no || payment.bill_id || '未关联账单'
-  const clientText = payment.client_name || payment.client_id
+  const billText = getBillDisplay(payment.bill_no, payment.bill_id)
+  const clientText = payment.client_name || '未命名客户'
   return `${refText} | ${billText} | ${clientText} | ${formatAmount(payment.amount, payment.currency)}`
 }
 
 function formatPaymentLineOption(line: PaymentLineItem): string {
-  return `${line.id} | 余额 ${formatAmount(line.balance_amt, 'CNY')}`
+  return `付款分录 | 余额 ${formatAmount(line.balance_amt, 'CNY')}`
 }
 
 function formatBillOption(bill: BillListItem): string {
-  return `${bill.bill_no} | 余额 ${formatAmount(bill.balance, bill.currency)}`
+  return `${getBillDisplay(bill.bill_no, bill.id)} | 余额 ${formatAmount(bill.balance, bill.currency)}`
+}
+
+function getBillDisplay(billNo?: string, billId?: string): string {
+  if (billNo) return billNo
+  return billId ? '未生成账单号' : '未关联账单'
+}
+
+function formatOffsetPaymentLine(row: OffsetListItem): string {
+  return row.bill_no ? `付款分录 · ${row.bill_no}` : '付款分录'
 }
 
 function formatDate(dateStr: string): string {

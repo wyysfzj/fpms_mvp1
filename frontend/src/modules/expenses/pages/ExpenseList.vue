@@ -104,17 +104,17 @@
         </el-table-column>
         <el-table-column prop="case_id" label="案件/项目" min-width="200">
           <template #default="{ row }">
-            <span class="mono-num">{{ row.case_id || '—' }}</span>
+            {{ formatCaseDisplay(row) }}
           </template>
         </el-table-column>
         <el-table-column prop="worker_id" label="经手人" min-width="180">
           <template #default="{ row }">
-            <span class="mono-num">{{ row.worker_id || '—' }}</span>
+            {{ formatWorkerDisplay(row) }}
           </template>
         </el-table-column>
         <el-table-column prop="department_id" label="部门" min-width="180">
           <template #default="{ row }">
-            <span class="mono-num">{{ row.department_id || '—' }}</span>
+            {{ formatDepartmentDisplay(row) }}
           </template>
         </el-table-column>
         <el-table-column prop="category" label="类别" width="140">
@@ -217,11 +217,11 @@ const filterDateRange = ref<string[]>([])
 const isEmpty = computed(() => !loading.value && !error.value && total.value === 0)
 
 function getCategoryText(category: string): string {
-  return CATEGORY_TEXT[category] || category
+  return CATEGORY_TEXT[category] || '未知类别'
 }
 
 function getStatusText(status: string): string {
-  return STATUS_TEXT[status] || status
+  return STATUS_TEXT[status] || '未知状态'
 }
 
 function getStatusTagType(status: string): 'info' | 'success' {
@@ -239,6 +239,18 @@ function formatAmount(amount: number, currency: string): string {
     style: 'currency',
     currency: currency || 'CNY',
   }).format(amount)
+}
+
+function formatCaseDisplay(row: ExpenseItem): string {
+  return row.case_id ? '已关联案件/项目' : '未关联案件/项目'
+}
+
+function formatWorkerDisplay(row: ExpenseItem): string {
+  return row.worker_id ? '已指定经手人' : '未指定经手人'
+}
+
+function formatDepartmentDisplay(row: ExpenseItem): string {
+  return row.department_id ? '已关联部门' : '未关联部门'
 }
 
 function handleSearch() {

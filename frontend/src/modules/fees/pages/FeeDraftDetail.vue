@@ -65,7 +65,7 @@
           <div class="case-title">
             <h1>{{ ZH.feeDetail.feeDraft }}</h1>
             <p class="meta-subtitle">
-              {{ ZH.feeDetail.draftType }}: {{ draft.draft_type }}
+              {{ ZH.feeDetail.draftType }}: {{ getFeeDraftTypeText(draft.draft_type) }}
             </p>
           </div>
         </div>
@@ -121,7 +121,7 @@
                   </div>
                   <div class="info-item">
                     <span class="info-label">{{ ZH.feeDetail.draftType }}</span>
-                    <span class="info-value">{{ draft.draft_type }}</span>
+                    <span class="info-value">{{ getFeeDraftTypeText(draft.draft_type) }}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">{{ ZH.feeDetail.currency }}</span>
@@ -193,7 +193,7 @@ import FeeDraftItemsTable from '../components/FeeDraftItemsTable.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
 import { usePageContext } from '../../../stores/pageContext'
 import { ZH } from '../../../constants/labels.zh'
-import { getFeeDraftStatusText } from '../../../constants/displayText'
+import { getFeeDraftStatusText, getFeeDraftTypeText } from '../../../constants/displayText'
 import { formatMoney } from '../../../utils/money'
 
 const route = useRoute()
@@ -213,9 +213,8 @@ const lockError = ref<ApiError | null>(null)
 
 const draftId = computed(() => String(route.params.id || ''))
 const displayDraftId = computed(() => {
-  if (!draft.value?.id) return '—'
-  const shortId = draft.value.id.slice(0, 8).toUpperCase()
-  return `${draft.value.draft_type}-${shortId}`
+  if (!draft.value) return '—'
+  return getFeeDraftTypeText(draft.value.draft_type) || '费用草稿'
 })
 
 const isLocked = computed(() => draft.value?.status === 'LOCKED')
@@ -225,8 +224,8 @@ const statusTagType = computed<'warning' | 'info'>(() => {
 })
 
 async function resolveDisplayContext() {
-  caseDisplayNo.value = draft.value?.case_id || ''
-  clientDisplayName.value = draft.value?.client_id || ''
+  caseDisplayNo.value = draft.value?.case_id ? '未命名案件' : ''
+  clientDisplayName.value = draft.value?.client_id ? '未命名客户' : ''
 
   const jobs: Promise<void>[] = []
 
@@ -234,10 +233,10 @@ async function resolveDisplayContext() {
     jobs.push(
       getCase(draft.value.case_id)
         .then(caseData => {
-          caseDisplayNo.value = caseData.case_no || draft.value?.case_id || ''
+          caseDisplayNo.value = caseData.case_no || '未命名案件'
         })
         .catch(() => {
-          caseDisplayNo.value = draft.value?.case_id || ''
+          caseDisplayNo.value = '未命名案件'
         })
     )
   }
@@ -246,10 +245,10 @@ async function resolveDisplayContext() {
     jobs.push(
       getClient(draft.value.client_id)
         .then(clientData => {
-          clientDisplayName.value = clientData.name || draft.value?.client_id || ''
+          clientDisplayName.value = clientData.name || '未命名客户'
         })
         .catch(() => {
-          clientDisplayName.value = draft.value?.client_id || ''
+          clientDisplayName.value = '未命名客户'
         })
     )
   }
@@ -266,7 +265,7 @@ async function fetchDraft() {
   try {
     draft.value = await getFeeDraft(draftId.value)
     await resolveDisplayContext()
-    pageContext.setBreadcrumb(['费用管理', '费用草稿', draftId.value.slice(0, 8)])
+    pageContext.setBreadcrumb(['费用管理', '费用草稿', displayDraftId.value])
   } catch (err) {
     error.value = err as ApiError
   } finally {

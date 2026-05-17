@@ -154,7 +154,7 @@
         <el-button :disabled="!currentDispatchId" @click="handleReloadDispatch">
           重新加载详情
         </el-button>
-        <span v-if="currentDispatchId" class="dispatch-meta">当前交接单编号：{{ currentDispatchId }}</span>
+        <span v-if="currentDispatchId" class="dispatch-meta">当前交接单：已生成</span>
       </div>
     </el-card>
 
@@ -162,11 +162,11 @@
       <div class="action-panel-header">
         <h3>交接单详情</h3>
         <div class="selection-summary">
-          {{ dispatchDetail.client_name || dispatchDetail.client_id }} · {{ dispatchDetail.dispatch_date }}
+          {{ formatDispatchClient(dispatchDetail) }} · {{ dispatchDetail.dispatch_date }}
         </div>
       </div>
       <div class="dispatch-detail-meta">
-        <span>交接单编号：{{ dispatchDetail.id }}</span>
+        <span>交接单：已生成</span>
         <span>明细数量：{{ dispatchDetail.lines.length }}</span>
         <span>备注：{{ dispatchDetail.remark || '无' }}</span>
       </div>
@@ -408,6 +408,10 @@ async function handleReloadDispatch() {
   } finally {
     creatingDispatch.value = false
   }
+}
+
+function formatDispatchClient(value: DocumentDispatchOut): string {
+  return value.client_name || '未命名客户'
 }
 
 onMounted(async () => {

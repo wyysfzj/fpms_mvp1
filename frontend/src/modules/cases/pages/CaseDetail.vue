@@ -133,7 +133,7 @@
                   <div class="info-grid">
                     <div class="info-item">
                       <span class="info-label">外方代理</span>
-                      <span class="info-value">{{ caseData.foreign_agent_name || caseData.foreign_agent_id || '-' }}</span>
+                      <span class="info-value">{{ formatForeignAgentDisplay() }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">外方案号</span>
@@ -148,12 +148,12 @@
                       <span class="info-value">{{ caseData.to_country || '-' }}</span>
                     </div>
                     <div class="info-item">
-                      <span class="info-label">公文地址 ID</span>
-                      <span class="info-value">{{ caseData.doc_address_id || '-' }}</span>
+                      <span class="info-label">公文地址</span>
+                      <span class="info-value">{{ formatAddressConfiguredDisplay(caseData.doc_address_id) }}</span>
                     </div>
                     <div class="info-item">
-                      <span class="info-label">账单地址 ID</span>
-                      <span class="info-value">{{ caseData.bill_address_id || '-' }}</span>
+                      <span class="info-label">账单地址</span>
+                      <span class="info-value">{{ formatAddressConfiguredDisplay(caseData.bill_address_id) }}</span>
                     </div>
                   </div>
                 </div>
@@ -231,12 +231,12 @@
                   <h4 class="info-section-title">无效案件信息</h4>
                   <div class="info-grid">
                     <div class="info-item">
-                      <span class="info-label">原案 ID</span>
-                      <span class="info-value">{{ caseData.original_case_id || '-' }}</span>
+                      <span class="info-label">原案</span>
+                      <span class="info-value">{{ formatOriginalCaseDisplay(caseData.original_case_id) }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">委托方</span>
-                      <span class="info-value">{{ caseData.invalid_client_name || caseData.invalid_client_id || '-' }}</span>
+                      <span class="info-value">{{ formatInvalidClientDisplay() }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">专利权人</span>
@@ -329,15 +329,15 @@
                   <div class="info-grid">
                     <div class="info-item">
                       <span class="info-label">主办代理人</span>
-                      <span class="info-value">{{ caseData.primary_agent_id || '-' }}</span>
+                      <span class="info-value">{{ formatAgentAssignmentDisplay(caseData.primary_agent_id) }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">辅办代理人</span>
-                      <span class="info-value">{{ caseData.second_agent_id || '-' }}</span>
+                      <span class="info-value">{{ formatAgentAssignmentDisplay(caseData.second_agent_id) }}</span>
                     </div>
                     <div class="info-item">
                       <span class="info-label">撰写人</span>
-                      <span class="info-value">{{ caseData.draftor_id || '-' }}</span>
+                      <span class="info-value">{{ formatAgentAssignmentDisplay(caseData.draftor_id) }}</span>
                     </div>
                   </div>
                 </div>
@@ -351,7 +351,7 @@
                       class="priority-item"
                     >
                       <span>分摊 {{ index + 1 }}</span>
-                      <span>{{ agentSplit.agent_id || '-' }}</span>
+                      <span>{{ formatAgentSplitDisplay(agentSplit.agent_id) }}</span>
                       <span>{{ formatAgentSplitRole(agentSplit.role) }}</span>
                       <span>{{ formatShareRatio(agentSplit.share_ratio) }}</span>
                     </div>
@@ -516,7 +516,13 @@ const statusTagClass = computed(() =>
   caseData.value?.status ? getStatusTagClass(caseData.value.status) : 'gray'
 )
 
-const statusDisplayText = computed(() => getCaseStatusText(caseData.value?.status))
+const statusDisplayText = computed(() => {
+  const status = caseData.value?.status
+  if (!status) return '-'
+
+  const mappedStatus = getCaseStatusText(status)
+  return mappedStatus === status ? formatUnknownCode('案件状态') : mappedStatus
+})
 
 const FEE_REDUCTION_MAP: Record<string, string> = {
   NONE: '不减免', PARTIAL: '部分减免', FULL: '全额减免'
@@ -546,27 +552,27 @@ const FLOW_DIR_MAP: Record<string, string> = {
 
 const feeReductionText = computed(() =>
   caseData.value?.fee_reduction
-    ? FEE_REDUCTION_MAP[caseData.value.fee_reduction] || caseData.value.fee_reduction
+    ? formatMappedCode(caseData.value.fee_reduction, FEE_REDUCTION_MAP, '减免类型')
     : '-'
 )
 const applicantKindText = computed(() =>
   caseData.value?.applicant_kind
-    ? APPLICANT_KIND_MAP[caseData.value.applicant_kind] || caseData.value.applicant_kind
+    ? formatMappedCode(caseData.value.applicant_kind, APPLICANT_KIND_MAP, '申请人类型')
     : '-'
 )
 const caseTypeText = computed(() =>
   caseData.value?.case_type
-    ? CASE_TYPE_MAP[caseData.value.case_type] || caseData.value.case_type
+    ? formatMappedCode(caseData.value.case_type, CASE_TYPE_MAP, '案件类型')
     : '-'
 )
 const patentCategoryText = computed(() =>
   caseData.value?.patent_category
-    ? PATENT_CATEGORY_MAP[caseData.value.patent_category] || caseData.value.patent_category
+    ? formatMappedCode(caseData.value.patent_category, PATENT_CATEGORY_MAP, '专利类别')
     : '-'
 )
 const flowDirText = computed(() =>
   caseData.value?.flow_dir
-    ? FLOW_DIR_MAP[caseData.value.flow_dir] || caseData.value.flow_dir
+    ? formatMappedCode(caseData.value.flow_dir, FLOW_DIR_MAP, '流程方向')
     : '-'
 )
 const statusAutomationHint = computed(() => {
@@ -584,7 +590,7 @@ const invalidRoleText = computed(() => {
   if (role === 'PATENTEE') return '代表专利权人'
   if (role === 'REQUESTER') return '代表请求人'
   if (role === 'BOTH') return '双方均代表'
-  return role || '-'
+  return role ? formatUnknownCode('我方角色') : '-'
 })
 
 async function fetchCase() {
@@ -598,7 +604,7 @@ async function fetchCase() {
 
   try {
     caseData.value = await getCase(id)
-    pageContext.setBreadcrumb(['案件管理', '案件详情', caseData.value.case_no || id])
+    pageContext.setBreadcrumb(['案件管理', '案件详情', caseData.value.case_no || caseData.value.title || '未命名案件'])
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -619,9 +625,45 @@ function handleLimitedEditSuccess() {
   fetchCase()
 }
 
+function formatUnknownCode(label: string) {
+  return `未识别${label}`
+}
+
+function formatMappedCode(value: string, map: Record<string, string>, unknownLabel: string) {
+  return map[value] || formatUnknownCode(unknownLabel)
+}
+
+function formatForeignAgentDisplay() {
+  if (caseData.value?.foreign_agent_name) return caseData.value.foreign_agent_name
+  if (caseData.value?.foreign_agent_id) return '已关联外方代理'
+  return '-'
+}
+
+function formatAddressConfiguredDisplay(addressId?: string | null) {
+  return addressId ? '已配置' : '-'
+}
+
+function formatOriginalCaseDisplay(originalCaseId?: string | null) {
+  return originalCaseId ? '已关联原案' : '-'
+}
+
+function formatInvalidClientDisplay() {
+  if (caseData.value?.invalid_client_name) return caseData.value.invalid_client_name
+  if (caseData.value?.invalid_client_id) return '已关联委托方'
+  return '-'
+}
+
+function formatAgentAssignmentDisplay(agentId?: string | null) {
+  return agentId ? '已指定' : '-'
+}
+
+function formatAgentSplitDisplay(agentId?: string | null) {
+  return agentId ? '已指定代理人' : '-'
+}
+
 function formatAgentSplitRole(role?: string | null) {
   if (role === 'Agent') return '代理人'
-  return '-'
+  return role ? formatUnknownCode('分摊角色') : '-'
 }
 
 function formatShareRatio(ratio?: number | null) {

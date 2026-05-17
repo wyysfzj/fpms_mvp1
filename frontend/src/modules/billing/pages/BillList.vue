@@ -144,12 +144,12 @@
       >
         <el-table-column prop="bill_no" :label="ZH.billList.billNo" width="140">
           <template #default="{ row }">
-            <span class="bill-no">{{ row.bill_no }}</span>
+            <span class="bill-no">{{ getBillDisplayNo(row) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="client_name" :label="ZH.billList.client" min-width="180">
           <template #default="{ row }">
-            {{ row.client_name || row.client_id || '—' }}
+            {{ row.client_name || '未命名客户' }}
           </template>
         </el-table-column>
         <el-table-column label="方向" width="90">
@@ -235,7 +235,7 @@ import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
 import { ZH } from '../../../constants/labels.zh'
-import { getBillStatusText } from '../../../constants/displayText'
+import { getBillDirectionText, getBillStatusText } from '../../../constants/displayText'
 
 const router = useRouter()
 
@@ -316,14 +316,7 @@ function statusTagType(status: BillStatus): 'info' | 'warning' | 'success' | 'da
 }
 
 function billDirectionText(direction?: string): string {
-  switch ((direction || '').toUpperCase()) {
-    case 'AR':
-      return '应收'
-    case 'AP':
-      return '应付'
-    default:
-      return direction || '—'
-  }
+  return getBillDirectionText(direction)
 }
 
 function billDirectionTagType(direction?: string): 'success' | 'warning' | 'info' {
@@ -377,6 +370,10 @@ function formatDate(dateStr: string): string {
   }
 }
 
+function getBillDisplayNo(row: BillListItem): string {
+  return row.bill_no || '未生成账单号'
+}
+
 function handleRowClick(row: BillListItem) {
   router.push(`/billing/bills/${row.id}`)
 }
@@ -389,7 +386,7 @@ async function handlePrint(row: BillListItem) {
     const blob = await printBill(row.id)
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
-    const billNo = row.bill_no || row.id
+    const billNo = getBillDisplayNo(row)
 
     link.href = url
     link.download = `bill-${billNo}.docx`

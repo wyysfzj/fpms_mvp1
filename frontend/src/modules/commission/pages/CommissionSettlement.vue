@@ -19,8 +19,8 @@
       <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-position="top">
         <el-row :gutter="12">
           <el-col :xs="24" :sm="12" :md="8" :lg="6">
-            <el-form-item label="代理人编号" prop="agent_id">
-              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人编号" />
+            <el-form-item label="代理人" prop="agent_id">
+              <el-input v-model.trim="createForm.agent_id" placeholder="请输入代理人配置值" />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12" :md="8" :lg="6">
@@ -102,7 +102,7 @@
 
       <div v-if="lastGenerate" class="result-block">
         <el-descriptions :column="3" border>
-          <el-descriptions-item label="批次编号">{{ lastGenerate.settlement_id }}</el-descriptions-item>
+          <el-descriptions-item label="结算批次">{{ formatBatchDisplay(lastGenerate.settlement_id) }}</el-descriptions-item>
           <el-descriptions-item label="目标案件号">{{ lastGenerateCaseNumber || '全部' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="settlementStatusTagType(lastGenerate.status)" size="small">
@@ -127,10 +127,9 @@
       <div v-if="recentSettlements.length" class="result-block">
         <div class="sub-title">本页创建的批次</div>
         <el-table :data="recentSettlements" stripe size="small" class="compact-table">
-          <el-table-column prop="id" label="编号" width="80" />
-          <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+          <el-table-column prop="agent_id" label="代理人" min-width="140">
             <template #default="{ row }">
-              {{ row.agent_id || '—' }}
+              {{ formatAgentDisplay(row.agent_id) }}
             </template>
           </el-table-column>
           <el-table-column prop="status" label="状态" width="100">
@@ -258,11 +257,8 @@
         <div class="table-section">
           <div class="sub-title">当前筛选摘要</div>
           <el-descriptions :column="4" border size="small">
-            <el-descriptions-item label="代理人">{{ report.filters.agent_id || '全部' }}</el-descriptions-item>
+            <el-descriptions-item label="代理人">{{ formatAgentFilter(report.filters.agent_id) }}</el-descriptions-item>
             <el-descriptions-item label="目标案件号">{{ reportTargetCaseNumber || '全部' }}</el-descriptions-item>
-            <el-descriptions-item v-if="reportTargetResolvedCaseId" label="解析案件标识">
-              {{ reportTargetResolvedCaseId }}
-            </el-descriptions-item>
             <el-descriptions-item label="币种">{{ report.filters.currency || '全部' }}</el-descriptions-item>
             <el-descriptions-item label="时间口径">{{ timeFieldLabel(report.filters.time_field) }}</el-descriptions-item>
             <el-descriptions-item label="批次状态">{{ report.filters.settlement_status || '全部' }}</el-descriptions-item>
@@ -309,10 +305,9 @@
             size="small"
             class="compact-table target-commission-table"
           >
-            <el-table-column prop="id" label="提成编号" width="100" />
-            <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+            <el-table-column prop="agent_id" label="代理人" min-width="140">
               <template #default="{ row }">
-                {{ row.agent_id || '未分配' }}
+                {{ formatAgentDisplay(row.agent_id) }}
               </template>
             </el-table-column>
             <el-table-column prop="case_no" label="案件编号" min-width="160" />
@@ -321,7 +316,11 @@
                 <span class="mono-num">{{ formatMoney(row.s1_amount + row.s2_amount) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" width="100" />
+            <el-table-column prop="status" label="状态" width="100">
+              <template #default="{ row }">
+                {{ commissionStatusLabel(row.status) }}
+              </template>
+            </el-table-column>
           </el-table>
           <div class="guide-actions">
             <el-button
@@ -354,9 +353,9 @@
           <div class="table-section">
             <div class="sub-title">按代理人统计</div>
             <el-table :data="report.by_agent" stripe size="small" class="compact-table">
-              <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+              <el-table-column prop="agent_id" label="代理人" min-width="160">
                 <template #default="{ row }">
-                  {{ row.agent_id || '—' }}
+                  {{ formatAgentDisplay(row.agent_id) }}
                 </template>
               </el-table-column>
               <el-table-column prop="line_count" label="明细数" width="100" />
@@ -371,9 +370,9 @@
           <div class="table-section">
             <div class="sub-title">按案件统计</div>
             <el-table :data="report.by_case" stripe size="small" class="compact-table">
-              <el-table-column prop="case_id" label="案件标识" min-width="180">
+              <el-table-column prop="case_id" label="案件" min-width="180">
                 <template #default="{ row }">
-                  {{ row.case_id || '—' }}
+                  {{ formatCaseDisplay(row.case_id) }}
                 </template>
               </el-table-column>
               <el-table-column prop="line_count" label="明细数" width="100" />
@@ -388,14 +387,26 @@
           <div class="table-section">
             <div class="sub-title">明细列表</div>
             <el-table :data="report.details" stripe size="small" class="compact-table">
-              <el-table-column prop="settlement_id" label="批次编号" width="90" />
-              <el-table-column prop="commission_id" label="提成编号" width="90" />
-              <el-table-column prop="agent_id" label="代理人编号" min-width="140">
+              <el-table-column prop="settlement_id" label="结算批次" width="110">
                 <template #default="{ row }">
-                  {{ row.agent_id || '—' }}
+                  {{ formatBatchDisplay(row.settlement_id) }}
                 </template>
               </el-table-column>
-              <el-table-column prop="case_id" label="案件标识" min-width="150" />
+              <el-table-column prop="commission_id" label="提成记录" width="110">
+                <template #default="{ row }">
+                  {{ formatCommissionDisplay(row.commission_id) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="agent_id" label="代理人" min-width="140">
+                <template #default="{ row }">
+                  {{ formatAgentDisplay(row.agent_id) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="case_id" label="案件" min-width="150">
+                <template #default="{ row }">
+                  {{ formatCaseDisplay(row.case_id) }}
+                </template>
+              </el-table-column>
               <el-table-column prop="settlement_status" label="批次状态" width="100">
                 <template #default="{ row }">
                   <el-tag
@@ -501,7 +512,7 @@ const createForm = reactive({
 })
 
 const createRules: FormRules = {
-  agent_id: [{ required: true, message: '代理人编号为必填项', trigger: 'blur' }],
+  agent_id: [{ required: true, message: '代理人为必填项', trigger: 'blur' }],
   currency: [{ required: true, message: '币种为必填项', trigger: 'blur' }],
 }
 
@@ -532,11 +543,6 @@ const reportFilters = reactive({
 })
 
 const reportTargetCaseNumber = computed(() => lastReportCaseNumber.value || report.value?.filters.case_id || '')
-const reportTargetResolvedCaseId = computed(() => {
-  if (!report.value?.filters.case_id) return ''
-  if (report.value.filters.case_id === reportTargetCaseNumber.value) return ''
-  return report.value.filters.case_id
-})
 const settleableReportDetails = computed(() => report.value?.details.filter((detail) => detail.is_settleable) || [])
 const targetSettleableCommissions = computed(() => {
   return targetCommissions.value.filter((item) => {
@@ -657,7 +663,7 @@ function settlementStatusLabel(status: string | undefined): string {
     VOID: '已作废',
     OPEN: '进行中',
   }
-  return map[status || ''] || status || '—'
+  return map[status || ''] || (status ? '未知状态' : '—')
 }
 
 function settlementStatusTagType(
@@ -693,7 +699,7 @@ function lineStatusLabel(status: string | undefined): string {
     VOID: '已作废',
     OPEN: '进行中',
   }
-  return map[status || ''] || status || '—'
+  return map[status || ''] || (status ? '未知状态' : '—')
 }
 
 function lineStatusTagType(status: string | undefined): 'success' | 'warning' | 'info' | 'danger' {
@@ -723,6 +729,31 @@ function settleableLabel(settleable: boolean | undefined): string {
 
 function completionTagType(done: boolean | undefined): 'success' | 'info' {
   return done ? 'success' : 'info'
+}
+
+function commissionStatusLabel(status: string | undefined): string {
+  return settlementStatusLabel(status)
+}
+
+function formatAgentDisplay(value?: string | null): string {
+  if (!value || value === UNASSIGNED_AGENT_ID) return '未分配'
+  return '已分配'
+}
+
+function formatAgentFilter(value?: string | null): string {
+  return value ? '已筛选指定代理人' : '全部'
+}
+
+function formatCaseDisplay(value?: string | null): string {
+  return value ? '已关联案件' : '未关联案件'
+}
+
+function formatBatchDisplay(value?: number | string | null): string {
+  return value ? '已选择批次' : '未选择批次'
+}
+
+function formatCommissionDisplay(value?: number | string | null): string {
+  return value ? '已生成提成' : '未生成提成'
 }
 
 function buildCreatePayload(): CommissionSettlementCreatePayload {
@@ -800,7 +831,7 @@ async function handleCreateSettlement() {
     const settlement = await createCommissionSettlement(buildCreatePayload())
     recentSettlements.value = [settlement, ...recentSettlements.value.filter((s) => s.id !== settlement.id)]
     generateForm.settlement_id = settlement.id
-    ElMessage.success(`批次创建成功（编号: ${settlement.id}）`)
+    ElMessage.success('批次创建成功。')
   } catch (err) {
     error.value = toApiError(err)
     ElMessage.error(mapCreateSettlementError(err))

@@ -120,30 +120,17 @@
         size="small"
         class="compact-table"
       >
-        <el-table-column prop="task_code" label="任务编码" width="160">
+        <el-table-column prop="task_code" label="任务类型" width="160">
           <template #default="{ row }">
-            <div class="code-cell">
-              <span class="mono-num">{{ row.task_code }}</span>
-              <span class="code-label">{{ getTaskCodeLabel(row.task_code) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="task_id" label="任务ID" min-width="220" show-overflow-tooltip>
-          <template #default="{ row }">
-            <router-link class="task-link mono-num" :to="`/tasks/${row.task_id}`">
-              {{ row.task_id }}
-            </router-link>
+            {{ getTaskCodeLabel(row.task_code) }}
           </template>
         </el-table-column>
         <el-table-column label="案件" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="code-cell">
-              <router-link v-if="row.case_id" class="case-link" :to="`/cases/${row.case_id}`">
-                {{ row.case_no || '未填写案件编号' }}
-              </router-link>
-              <span v-else>—</span>
-              <span class="code-label mono-num">{{ row.case_id }}</span>
-            </div>
+            <router-link v-if="row.case_id" class="case-link" :to="`/cases/${row.case_id}`">
+              {{ formatCaseDisplay(row) }}
+            </router-link>
+            <span v-else>{{ formatCaseDisplay(row) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="client_name" label="客户名称" min-width="180" show-overflow-tooltip>
@@ -154,7 +141,7 @@
         <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <router-link class="task-title-link" :to="`/tasks/${row.task_id}`">
-              {{ row.title }}
+              {{ formatTaskTitle(row) }}
             </router-link>
           </template>
         </el-table-column>
@@ -344,8 +331,16 @@ function formatDate(value?: string | null): string {
   return value ? dayjs(value).format('YYYY-MM-DD') : '—'
 }
 
+function formatTaskTitle(row: TaskSpecialSearchItem): string {
+  return row.title?.trim() || '未命名任务'
+}
+
+function formatCaseDisplay(row: TaskSpecialSearchItem): string {
+  return row.case_no || '未命名案件'
+}
+
 function getTaskCodeLabel(code: string): string {
-  return TASK_CODE_LABELS[code] || code
+  return TASK_CODE_LABELS[code] || '未知任务类型'
 }
 
 function getStatusText(status: string): string {

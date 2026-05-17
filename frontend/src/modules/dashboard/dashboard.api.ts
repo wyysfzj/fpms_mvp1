@@ -146,7 +146,7 @@ export async function fetchFinanceData(): Promise<FinanceItem[]> {
         items.push({
             type: 'payment',
             id: `pay-${p.id}`,
-            label: p.reference || `回款#${p.id.slice(0, 8)}`,
+            label: p.reference || '未生成回款编号',
             amount: p.amount,
             currency: p.currency,
             badge_text: '待核销',
@@ -168,7 +168,7 @@ export async function fetchFinanceData(): Promise<FinanceItem[]> {
         items.push({
             type: 'overdue_bill',
             id: `bill-${b.id}`,
-            label: b.bill_no,
+            label: b.bill_no || '未生成账单号',
             amount: b.amount,
             currency: b.currency,
             badge_text: `已逾期${dueDiff}天`,
@@ -189,7 +189,7 @@ export async function fetchFinanceData(): Promise<FinanceItem[]> {
         items.push({
             type: 'pending_bill',
             id: `bill-${b.id}`,
-            label: b.bill_no,
+            label: b.bill_no || '未生成账单号',
             amount: b.amount,
             currency: b.currency,
             badge_text: '待付款',

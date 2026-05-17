@@ -13,12 +13,12 @@
     </div>
 
     <el-form class="filter-form" :inline="true">
-      <el-form-item label="客户编号">
+      <el-form-item label="客户">
         <el-input
           v-model="filters.client_id"
           class="filter-input"
           clearable
-          placeholder="请输入客户编号"
+          placeholder="请输入客户配置值"
           @keyup.enter="applyFilters"
         />
       </el-form-item>
@@ -163,15 +163,18 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="48" />
-        <el-table-column prop="id" label="任务编号" width="90" />
         <el-table-column label="案件" min-width="180">
           <template #default="{ row }">
             <router-link :to="`/cases/${row.case_id}`" class="case-link">
-              {{ row.case_no || row.case_id }}
+              {{ formatCaseDisplay(row) }}
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column prop="client_id" label="客户编号" min-width="180" />
+        <el-table-column prop="client_id" label="客户" min-width="180">
+          <template #default="{ row }">
+            {{ formatClientDisplay(row) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="year_no" label="年度" width="90" />
         <el-table-column label="到期日" width="130">
           <template #default="{ row }">
@@ -288,10 +291,22 @@
         <div class="receipt-block">
           <h3 class="receipt-title">成功明细</h3>
           <el-table :data="generateReceipt.success" size="small" border>
-            <el-table-column prop="source_task_id" label="来源任务编号" width="110" />
-            <el-table-column prop="task_id" label="任务编号" width="90" />
+            <el-table-column label="来源任务" width="110">
+              <template #default="{ row }">
+                {{ formatSourceTaskDisplay(row.source_task_id) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="生成任务" width="90">
+              <template #default="{ row }">
+                {{ formatGeneratedTaskDisplay(row.task_id) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="year_no" label="年度" width="80" />
-            <el-table-column prop="draft_id" label="草单编号" min-width="210" />
+            <el-table-column label="草单" min-width="210">
+              <template #default="{ row }">
+                {{ formatDraftDisplay(row.draft_id) }}
+              </template>
+            </el-table-column>
             <el-table-column label="金额" width="140" align="right">
               <template #default="{ row }">
                 {{ formatMoney(row.amount, row.currency) }}
@@ -303,10 +318,14 @@
         <div class="receipt-block" style="margin-top: 16px">
           <h3 class="receipt-title">失败明细</h3>
           <el-table :data="generateReceipt.failed" size="small" border>
-            <el-table-column prop="source_task_id" label="来源任务编号" width="110" />
-            <el-table-column prop="task_id" label="任务编号" width="90">
+            <el-table-column label="来源任务" width="110">
               <template #default="{ row }">
-                {{ row.task_id ?? '—' }}
+                {{ formatSourceTaskDisplay(row.source_task_id) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="生成任务" width="90">
+              <template #default="{ row }">
+                {{ formatGeneratedTaskDisplay(row.task_id) }}
               </template>
             </el-table-column>
             <el-table-column prop="year_no" label="年度" width="80" />
@@ -472,7 +491,7 @@ function taskStatusText(status: string): string {
     case 'CANCELED':
       return '已取消'
     default:
-      return status || '未知'
+      return '未知状态'
   }
 }
 
@@ -496,7 +515,7 @@ function noticeStatusText(status: string): string {
     case 'SKIPPED':
       return '无需通知'
     default:
-      return status || '未知'
+      return '未知状态'
   }
 }
 
@@ -511,6 +530,26 @@ function instructionText(instruction?: string): string {
     default:
       return '未指示'
   }
+}
+
+function formatCaseDisplay(row: AnnuityTask): string {
+  return row.case_no || '未命名案件'
+}
+
+function formatClientDisplay(row: AnnuityTask): string {
+  return row.client_id ? '已关联客户' : '未关联客户'
+}
+
+function formatSourceTaskDisplay(value?: number | null): string {
+  return value ? '已关联任务' : '未关联任务'
+}
+
+function formatGeneratedTaskDisplay(value?: number | null): string {
+  return value ? '已生成任务' : '未生成任务'
+}
+
+function formatDraftDisplay(value?: string | null): string {
+  return value ? '已生成草单' : '未生成草单'
 }
 
 function openInstructionDialog(task: AnnuityTask) {

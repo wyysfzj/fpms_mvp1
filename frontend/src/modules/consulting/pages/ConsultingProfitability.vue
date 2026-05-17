@@ -11,7 +11,7 @@
         <el-input
           v-model.trim="caseId"
           aria-label="项目编号筛选"
-          placeholder="项目 ID（必填）"
+          placeholder="项目编号（必填）"
           clearable
           @keyup.enter="handleSearch"
         />
@@ -96,7 +96,7 @@
           <div class="section-title">项目收益汇总</div>
         </template>
         <el-descriptions :column="3" border>
-          <el-descriptions-item label="项目 ID">{{ income.case_id || caseId }}</el-descriptions-item>
+          <el-descriptions-item label="项目">{{ formatProjectDisplay(income.case_id, caseId) }}</el-descriptions-item>
           <el-descriptions-item label="统计币种">{{ currency }}</el-descriptions-item>
           <el-descriptions-item label="可计提提成">{{ income.is_commissionable === true ? '是' : income.is_commissionable === false ? '否' : '—' }}</el-descriptions-item>
           <el-descriptions-item label="费用类型">{{ income.fee_type || '—' }}</el-descriptions-item>
@@ -149,7 +149,7 @@
           </el-table-column>
           <el-table-column prop="status" label="状态" width="120">
             <template #default="{ row }">
-              {{ row.status || '—' }}
+              {{ statusLabel(row.status) }}
             </template>
           </el-table-column>
           <el-table-column prop="remark" label="备注" min-width="180">
@@ -188,6 +188,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   TRANSLATION: '翻译费用',
   TRANSPORT: '交通费用',
   OTHER: '其他费用',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: '草稿',
 }
 
 const route = useRoute()
@@ -311,7 +315,23 @@ function mapExpenseError(errorLike: unknown): string {
 }
 
 function categoryLabel(key: string): string {
-  return CATEGORY_LABELS[key] || key
+  return CATEGORY_LABELS[key] || '未知支出类别'
+}
+
+function statusLabel(status?: string | null): string {
+  if (!status) return '—'
+  return STATUS_LABELS[status] || '未知状态'
+}
+
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function formatProjectDisplay(...values: Array<string | null | undefined>): string {
+  const readable = values
+    .map((value) => String(value || '').trim())
+    .find((value) => value && !isUuidLike(value))
+  return readable || '当前项目'
 }
 
 function formatDate(value?: string | null): string {
@@ -347,7 +367,7 @@ async function queryProfitability() {
 
   const normalizedCaseId = caseId.value.trim()
   if (!normalizedCaseId) {
-    ElMessage.error('请输入项目 ID 后再查询。')
+    ElMessage.error('请输入项目编号后再查询。')
     return
   }
 

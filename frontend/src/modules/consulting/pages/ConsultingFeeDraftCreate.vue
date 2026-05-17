@@ -164,7 +164,7 @@
       </template>
 
       <el-descriptions :column="4" border>
-        <el-descriptions-item label="草单编号">{{ result.draft_id }}</el-descriptions-item>
+        <el-descriptions-item label="生成状态">{{ formatDraftDisplay(result.draft_id) }}</el-descriptions-item>
         <el-descriptions-item label="草单类型">{{ draftTypeLabel(result.draft_type) }}</el-descriptions-item>
         <el-descriptions-item label="模式">{{ modeLabel(result.mode) }}</el-descriptions-item>
         <el-descriptions-item label="币种">{{ currencyLabel(result.currency) }}</el-descriptions-item>
@@ -183,7 +183,11 @@
       <div class="line-section">
         <h3 class="line-section-title">草单明细</h3>
         <el-table :data="result.items" size="small" border>
-          <el-table-column prop="item_id" label="费用项编号" min-width="200" />
+          <el-table-column label="行号" width="90">
+            <template #default="{ $index }">
+              {{ lineDisplayText($index) }}
+            </template>
+          </el-table-column>
           <el-table-column prop="fee_code" label="费用代码" min-width="140" />
           <el-table-column prop="fee_name" label="费用名称" min-width="160" />
           <el-table-column label="费用类型" width="100">
@@ -404,10 +408,7 @@ function mapDraftCreateError(errorLike: unknown): string {
     return '案件不存在，请确认案件编号后重试。'
   }
   if (apiError.status === 409 && apiError.code === 'FEE_DRAFT_CONFLICT') {
-    const draftId = apiError.details?.draft_id
-    return typeof draftId === 'string'
-      ? `当前案件已有开启中的草单（${draftId}），请先处理冲突。`
-      : '当前案件已有开启中的草单，请先处理冲突。'
+    return '当前案件已有开启中的草单，请先处理冲突。'
   }
   if (apiError.status === 401) return '登录已失效，请重新登录后重试。'
   if (apiError.status === 403) return '无权限生成顾问/检索服务费草单。'
@@ -574,11 +575,19 @@ function feeTypeLabel(type: string): string {
   if (type === 'SERVICE') return '服务费'
   if (type === 'MISC') return '杂费'
   if (type === 'GOV') return '官费'
-  return type
+  return '未识别费用类型'
 }
 
 function currencyLabel(currency: string): string {
   return currency === 'CNY' ? '人民币' : currency
+}
+
+function formatDraftDisplay(draftId?: string | null): string {
+  return draftId ? '已生成' : '未生成'
+}
+
+function lineDisplayText(index: number): string {
+  return `第 ${index + 1} 行`
 }
 
 function goBack() {

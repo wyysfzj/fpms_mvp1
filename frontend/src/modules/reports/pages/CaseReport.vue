@@ -68,7 +68,7 @@
         </el-col>
         <el-col :span="6">
           <el-form-item label="代理人" class="filter-item">
-            <el-input v-model.trim="filters.agent_id" placeholder="请输入代理人ID" clearable />
+            <el-input v-model.trim="filters.agent_id" placeholder="请输入代理人" clearable />
           </el-form-item>
         </el-col>
       </el-row>

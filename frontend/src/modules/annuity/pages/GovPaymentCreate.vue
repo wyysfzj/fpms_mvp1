@@ -14,7 +14,7 @@
       type="warning"
       :closable="false"
       show-icon
-      title="请从官费清单回执中的“登记缴费”入口进入此页，系统会自动带入清单编号和费用项编号。"
+      title="请从官费清单回执中的“登记缴费”入口进入此页，系统会自动带入清单和费用项。"
     />
 
     <div v-if="error" class="page-error" role="alert" aria-live="assertive">
@@ -28,29 +28,22 @@
         <el-row :gutter="12">
           <el-col :xs="24" :sm="12">
             <el-form-item
-              label="官费清单编号"
+              label="官费清单"
               prop="pay_list_id"
               :error="fieldErrors.get('pay_list_id')?.join('，')"
             >
-              <el-input-number
-                v-model="form.pay_list_id"
-                :min="1"
-                :precision="0"
-                controls-position="right"
-                style="width: 100%"
-                disabled
-              />
+              <el-input :model-value="formatPayListContext()" style="width: 100%" disabled />
               <div class="field-hint">由回执页自动带入，不能手工修改。</div>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12">
             <el-form-item
-              label="费用项编号"
+              label="费用项"
               prop="fee_item_id"
               :error="fieldErrors.get('fee_item_id')?.join('，')"
             >
-              <el-input v-model.trim="form.fee_item_id" placeholder="费用项编号由上一步自动带入" disabled />
-              <div class="field-hint">生成行的费用项编号已锁定，防止误登记到其他费用项。</div>
+              <el-input :model-value="formatFeeItemContext()" placeholder="费用项由上一步自动带入" disabled />
+              <div class="field-hint">生成行的费用项已锁定，防止误登记到其他费用项。</div>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :sm="12">
@@ -111,8 +104,8 @@
       <h2 class="form-card-title">登记结果</h2>
 
       <el-descriptions :column="3" border>
-        <el-descriptions-item label="缴费记录编号">{{ result.gov_payment.id }}</el-descriptions-item>
-        <el-descriptions-item label="费用项编号">{{ result.gov_payment.fee_item_id }}</el-descriptions-item>
+        <el-descriptions-item label="缴费记录">{{ formatGovPaymentDisplay(result.gov_payment.id) }}</el-descriptions-item>
+        <el-descriptions-item label="费用项">{{ formatFeeItemContext(result.gov_payment.fee_item_id) }}</el-descriptions-item>
         <el-descriptions-item label="缴费状态">
           <el-tag :type="govPaymentStatusTag(result.gov_payment.status)">
             {{ govPaymentStatusText(result.gov_payment.status) }}
@@ -131,14 +124,14 @@
         <h3 class="section-title">官费清单状态</h3>
         <el-descriptions :column="3" border>
           <el-descriptions-item label="清单编号">
-            {{ result.pay_list.pay_list_no || `#${result.pay_list.id}` }}
+            {{ formatPayListDisplay(result.pay_list.pay_list_no) }}
           </el-descriptions-item>
           <el-descriptions-item label="清单状态">
             <el-tag :type="payListStatusTag(result.pay_list.status)">
               {{ payListStatusText(result.pay_list.status) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="客户编号">{{ result.pay_list.client_id }}</el-descriptions-item>
+          <el-descriptions-item label="客户">{{ formatClientDisplay(result.pay_list.client_id) }}</el-descriptions-item>
           <el-descriptions-item label="更新后总额">
             {{ formatMoney(result.pay_list.total_amount, result.pay_list.currency) }}
           </el-descriptions-item>
@@ -205,12 +198,12 @@ const form = reactive<GovPaymentForm>({
 
 const rules: FormRules<GovPaymentForm> = {
   pay_list_id: [
-    { required: true, message: '官费清单编号为必填项', trigger: 'blur' },
+    { required: true, message: '官费清单为必填项', trigger: 'blur' },
     {
       validator: (_rule, value: unknown, callback) => {
         const numeric = Number(value)
         if (!Number.isFinite(numeric) || numeric <= 0) {
-          callback(new Error('官费清单编号必须大于 0'))
+          callback(new Error('官费清单配置无效'))
           return
         }
         callback()
@@ -218,7 +211,7 @@ const rules: FormRules<GovPaymentForm> = {
       trigger: 'blur',
     },
   ],
-  fee_item_id: [{ required: true, message: '费用项编号为必填项', trigger: 'blur' }],
+  fee_item_id: [{ required: true, message: '费用项为必填项', trigger: 'blur' }],
   paid_amount: [
     {
       validator: (_rule, value: unknown, callback) => {
@@ -253,7 +246,7 @@ function govPaymentStatusText(status: string): string {
     case 'PLANNED':
       return '已计划'
     default:
-      return status || '未知'
+      return '未知状态'
   }
 }
 
@@ -277,7 +270,7 @@ function payListStatusText(status: string): string {
     case 'PAID':
       return '已完成'
     default:
-      return status || '未知'
+      return '未知状态'
   }
 }
 
@@ -297,6 +290,27 @@ function formatMoney(amount: number, currency: string): string {
     style: 'currency',
     currency: currency || 'CNY',
   }).format(amount || 0)
+}
+
+function formatPayListContext(): string {
+  return form.pay_list_id > 0 ? '已选择清单' : '未选择清单'
+}
+
+function formatFeeItemContext(value?: string | null): string {
+  const target = value ?? form.fee_item_id
+  return target ? '已选择费用项' : '未选择费用项'
+}
+
+function formatGovPaymentDisplay(value?: number | string | null): string {
+  return value ? '已登记缴费' : '未登记缴费'
+}
+
+function formatPayListDisplay(value?: string | null): string {
+  return value || '未生成清单编号'
+}
+
+function formatClientDisplay(value?: string | null): string {
+  return value ? '已关联客户' : '未关联客户'
 }
 
 async function handleSubmit() {

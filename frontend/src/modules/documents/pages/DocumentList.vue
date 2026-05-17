@@ -166,7 +166,6 @@
         size="small"
         class="compact-table"
       >
-        <el-table-column prop="id" :label="ZH.docList.id" width="70" />
         <el-table-column :label="ZH.docList.direction" width="100">
           <template #default="{ row }">
             <el-tag :type="row.direction === 'IN' ? 'success' : 'warning'" size="small">
@@ -178,7 +177,7 @@
         <el-table-column :label="ZH.docList.case_" width="120">
           <template #default="{ row }">
             <router-link v-if="row.case_id" :to="`/cases/${row.case_id}`" class="doc-case-link">
-              {{ row.case_no || `#${row.case_id}` }}
+              {{ formatCaseDisplay(row) }}
             </router-link>
             <span v-else>-</span>
           </template>
@@ -324,6 +323,10 @@ function formatDateTime(dateStr: string): string {
 
 function handleView(row: Document) {
   router.push(`/documents/${row.id}`)
+}
+
+function formatCaseDisplay(row: Document): string {
+  return row.case_no || '未命名案件'
 }
 
 watch([page, pageSize], () => {

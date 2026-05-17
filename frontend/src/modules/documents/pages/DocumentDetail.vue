@@ -29,7 +29,7 @@
       <!-- Relation Chain -->
       <RelationChainCard
         :case-ref="doc.case_id ? { id: doc.case_id, no: doc.case_no } : undefined"
-        :document="{ id: doc.id, refNo: doc.ref_no || doc.id }"
+        :document="{ id: doc.id, refNo: doc.ref_no || undefined, title: doc.title }"
       />
 
       <!-- Document Header Card -->
@@ -76,8 +76,8 @@
             <div class="widget-title">{{ ZH.docDetail.docInfo }}</div>
             <div class="info-grid">
               <div class="info-item">
-                <span class="info-label">{{ ZH.docDetail.id }}</span>
-                <span class="info-value case-no">#{{ doc.id }}</span>
+                <span class="info-label">文档</span>
+                <span class="info-value case-no">{{ formatDocumentDisplay(doc) }}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">{{ ZH.docDetail.direction }}</span>
@@ -219,7 +219,7 @@ async function fetchDocument() {
     pageContext.setBreadcrumb([
       '案件管理',
       '文档详情',
-      doc.value.doc_type ? getDocumentDocTypeText(doc.value.doc_type) : doc.value.id,
+      doc.value.doc_type ? getDocumentDocTypeText(doc.value.doc_type) : formatDocumentDisplay(doc.value),
     ])
   } catch (err) {
     error.value = err as ApiError
@@ -235,6 +235,10 @@ function formatDate(dateStr?: string): string {
   } catch {
     return dateStr
   }
+}
+
+function formatDocumentDisplay(value: Document): string {
+  return value.ref_no || value.title || '未命名往来文件'
 }
 
 function goBack() {

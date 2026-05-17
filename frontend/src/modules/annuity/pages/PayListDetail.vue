@@ -51,15 +51,15 @@
 
             <el-descriptions :column="2" border>
               <el-descriptions-item label="清单编号">
-                {{ detail.pay_list.pay_list_no || `#${detail.pay_list.id}` }}
+                {{ formatPayListNo(detail.pay_list) }}
               </el-descriptions-item>
               <el-descriptions-item label="状态">
                 <el-tag :type="payListStatusTag(detail.pay_list.status)">
                   {{ payListStatusText(detail.pay_list.status) }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="客户编号">
-                {{ detail.pay_list.client_id }}
+              <el-descriptions-item label="客户">
+                {{ formatClientDisplay(detail.pay_list.client_id) }}
               </el-descriptions-item>
               <el-descriptions-item label="币种">
                 {{ detail.pay_list.currency }}
@@ -113,12 +113,16 @@
               size="small"
               class="compact-table"
             >
-              <el-table-column label="费用项编号" min-width="170">
+              <el-table-column label="费用项" min-width="170">
                 <template #default="{ row }">
-                  {{ row.fee_item_id || '手工补录' }}
+                  {{ formatFeeItemDisplay(row.fee_item_id) }}
                 </template>
               </el-table-column>
-              <el-table-column prop="case_id" label="案件编号" min-width="180" />
+              <el-table-column prop="case_id" label="案件" min-width="180">
+                <template #default="{ row }">
+                  {{ formatCaseDisplay(row.case_id) }}
+                </template>
+              </el-table-column>
               <el-table-column label="状态" width="110">
                 <template #default="{ row }">
                   <el-tag :type="govPaymentStatusTag(row.status)">
@@ -297,7 +301,7 @@ const payList = computed(() => detail.value?.pay_list ?? null)
 
 const payListTitle = computed(() => {
   if (!payList.value) return '读取中'
-  return payList.value.pay_list_no || `#${payList.value.id}`
+  return formatPayListNo(payList.value)
 })
 
 const canExport = computed(() => (payList.value?.status || '').toUpperCase() === 'DRAFT')
@@ -362,7 +366,7 @@ function payListStatusText(status?: string): string {
     case 'PARTIAL':
       return '部分完成'
     default:
-      return status || '未知'
+      return '未知状态'
   }
 }
 
@@ -388,7 +392,7 @@ function govPaymentStatusText(status?: string): string {
     case 'PAID':
       return '已缴费'
     default:
-      return status || '未知'
+      return '未知状态'
   }
 }
 
@@ -416,8 +420,24 @@ function formatDateTime(dateValue?: string): string {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : dateValue
 }
 
+function formatPayListNo(target: NonNullable<typeof payList.value>): string {
+  return target.pay_list_no || '未生成清单编号'
+}
+
+function formatClientDisplay(value?: string | null): string {
+  return value ? '已关联客户' : '未关联客户'
+}
+
+function formatFeeItemDisplay(value?: string | null): string {
+  return value ? '已关联费用项' : '手工补录'
+}
+
+function formatCaseDisplay(value?: string | null): string {
+  return value ? '已关联案件' : '未关联案件'
+}
+
 function buildExportFileName(target: NonNullable<typeof payList.value>): string {
-  const displayNo = target.pay_list_no || `清单-${target.id}`
+  const displayNo = formatPayListNo(target)
   return `官费清单-${displayNo}.xlsx`
 }
 
@@ -438,7 +458,7 @@ async function loadDetail() {
     error.value = {
       status: 0,
       code: 'INVALID_PAY_LIST_ID',
-      message: '官费清单编号无效。',
+      message: '官费清单参数无效。',
       category: 'validation',
     }
     return

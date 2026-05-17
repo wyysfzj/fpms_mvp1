@@ -12,11 +12,26 @@
 
     <!-- Filter Bar -->
     <el-form :model="filters" inline class="filter-form" style="margin-bottom: 16px">
-      <el-form-item label="客户ID">
-        <el-input v-model="filters.client_id" placeholder="客户ID" clearable style="width: 140px" @change="onFilterChange" />
+      <el-form-item label="客户">
+        <el-select
+          v-model="filters.client_id"
+          placeholder="请选择客户"
+          clearable
+          filterable
+          :loading="clientOptionsLoading"
+          style="width: 180px"
+          @change="onFilterChange"
+        >
+          <el-option
+            v-for="client in clientOptions"
+            :key="client.id"
+            :label="formatClientOption(client)"
+            :value="client.id"
+          />
+        </el-select>
       </el-form-item>
-      <el-form-item label="案卷号">
-        <el-input v-model="filters.case_no" placeholder="案卷号" clearable style="width: 140px" @change="onFilterChange" />
+      <el-form-item label="案号">
+        <el-input v-model="filters.case_no" placeholder="案号" clearable style="width: 140px" @change="onFilterChange" />
       </el-form-item>
       <el-form-item label="费用类型">
         <el-select v-model="filters.fee_type" placeholder="全部" clearable style="width: 120px" @change="onFilterChange">
@@ -64,7 +79,7 @@
     <!-- Table -->
     <div v-else>
       <el-table :data="receipts" stripe size="small" class="compact-table">
-        <el-table-column prop="case_no" label="案卷号" width="140">
+        <el-table-column prop="case_no" label="案号" width="140">
           <template #default="{ row }">
             {{ row.case_no || '—' }}
           </template>
@@ -166,7 +181,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { listCaseReceipts } from '../../../api/billing'
+import { getClients } from '../../../api/clients'
 import type { CaseReceiptListItem, CaseReceiptListResponse } from '../../../api/billing.types'
+import type { Client } from '../../../api/clients.types'
 import CaseReceiptDialog from '../components/CaseReceiptDialog.vue'
 
 const receipts = ref<CaseReceiptListItem[]>([])
@@ -179,6 +196,8 @@ const isEmpty = computed(() => !loading.value && total.value === 0)
 const dialogVisible = ref(false)
 const editReceiptId = ref<string | null>(null)
 const editInitialData = ref<CaseReceiptListItem | null>(null)
+const clientOptions = ref<Client[]>([])
+const clientOptionsLoading = ref(false)
 
 const filters = reactive({
   client_id: '',
@@ -197,6 +216,11 @@ function getFeeTypeLabel(feeType?: string | null): string {
     case 'MISC': return '其他'
     default: return feeType || '—'
   }
+}
+
+function formatClientOption(client: Client): string {
+  const code = client.client_code ? `${client.client_code} · ` : ''
+  return `${code}${client.name || '未命名客户'}`
 }
 
 function formatDate(dateStr: string): string {
@@ -249,6 +273,16 @@ async function fetchReceipts() {
   }
 }
 
+async function loadClientOptions() {
+  clientOptionsLoading.value = true
+  try {
+    const result = await getClients({ page: 1, page_size: 100 })
+    clientOptions.value = result.items
+  } finally {
+    clientOptionsLoading.value = false
+  }
+}
+
 function openCreateDialog() {
   editReceiptId.value = null
   editInitialData.value = null
@@ -271,6 +305,7 @@ watch([page, pageSize], () => {
 
 onMounted(() => {
   fetchReceipts()
+  loadClientOptions()
 })
 </script>
 

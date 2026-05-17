@@ -195,12 +195,17 @@ function goBack() {
 }
 
 function formatBillOption(bill: BillListItem): string {
-  const clientText = bill.client_name || bill.client_id || '未关联客户'
+  const clientText = formatBillClient(bill)
   const balanceText = bill.balance.toLocaleString('zh-CN', {
     style: 'currency',
     currency: bill.currency || 'CNY',
   })
   return `${bill.bill_no} · ${clientText} · 余额 ${balanceText}`
+}
+
+function formatBillClient(bill: BillListItem): string {
+  if (bill.client_name) return bill.client_name
+  return bill.client_id ? '未命名客户' : '未关联客户'
 }
 
 async function fetchBillOptions() {

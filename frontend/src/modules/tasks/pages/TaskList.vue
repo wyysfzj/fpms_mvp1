@@ -76,12 +76,11 @@
         size="small"
         class="compact-table"
       >
-        <el-table-column prop="id" :label="ZH.taskList.id" width="70" />
         <el-table-column prop="title" :label="ZH.taskList.taskTitle" min-width="200" />
         <el-table-column prop="case_no" :label="ZH.taskList.case_" width="120">
           <template #default="{ row }">
             <router-link v-if="row.case_id" :to="`/cases/${row.case_id}`" class="task-case-link">
-              {{ row.case_no || `#${row.case_id}` }}
+              {{ formatCaseDisplay(row) }}
             </router-link>
             <span v-else>-</span>
           </template>
@@ -114,7 +113,7 @@
         </el-table-column>
         <el-table-column prop="assigned_to" :label="ZH.taskList.assigned" width="120">
           <template #default="{ row }">
-            {{ row.assigned_to || '-' }}
+            {{ formatAssigneeDisplay(row.assigned_to) }}
           </template>
         </el-table-column>
         <el-table-column :label="ZH.taskList.actions" width="100" fixed="right">
@@ -125,7 +124,7 @@
                 size="small"
                 class="row-actions-trigger"
                 :loading="actionLoading && actionTaskId === row.id"
-                :aria-label="`打开任务操作：${row.title || row.id}`"
+                :aria-label="`打开任务操作：${row.title || '未命名任务'}`"
               >
                 <span>{{ ZH.common.actions }}</span>
               </el-button>
@@ -251,6 +250,19 @@ function isUrgent(dueDate?: string): boolean {
   const now = dayjs()
   const daysUntilDue = due.diff(now, 'day')
   return daysUntilDue <= 3 && daysUntilDue >= 0
+}
+
+function formatCaseDisplay(row: Task): string {
+  return row.case_no || '未命名案件'
+}
+
+function formatAssigneeDisplay(assignee?: string): string {
+  if (!assignee) return '-'
+  return isUuidLike(assignee) ? '已分配' : assignee
+}
+
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 function getStatusType(status: string): '' | 'success' | 'warning' | 'danger' | 'info' {

@@ -52,7 +52,7 @@ const chainItems = computed<ChainItem[]>(() => {
       icon: '👥',
       id: props.client?.id,
       route: props.client?.id ? `/clients/${props.client.id}/edit` : '',
-      display: props.client?.name || truncateId(props.client?.id),
+      display: props.client?.name || '未命名客户',
     })
   }
 
@@ -62,7 +62,7 @@ const chainItems = computed<ChainItem[]>(() => {
       icon: '📂',
       id: props.caseRef?.id,
       route: props.caseRef?.id ? `/cases/${props.caseRef.id}` : '',
-      display: props.caseRef?.no || props.caseRef?.title || truncateId(props.caseRef?.id),
+      display: props.caseRef?.no || props.caseRef?.title || '未命名案件',
     })
   }
 
@@ -72,7 +72,7 @@ const chainItems = computed<ChainItem[]>(() => {
       icon: '📄',
       id: props.document?.id,
       route: props.document?.id ? `/documents/${props.document.id}` : '',
-      display: props.document?.refNo || truncateId(props.document?.id),
+      display: props.document?.refNo || props.document?.title || '未命名往来文件',
     })
   }
 
@@ -82,7 +82,7 @@ const chainItems = computed<ChainItem[]>(() => {
       icon: '💰',
       id: props.feeDraft?.id,
       route: props.feeDraft?.id ? `/fees/drafts/${props.feeDraft.id}` : '',
-      display: props.feeDraft?.label || truncateId(props.feeDraft?.id),
+      display: props.feeDraft?.label || '费用草稿',
     })
   }
 
@@ -92,7 +92,7 @@ const chainItems = computed<ChainItem[]>(() => {
       icon: '🧾',
       id: props.bill?.id,
       route: props.bill?.id ? `/billing/bills/${props.bill.id}` : '',
-      display: props.bill?.no || truncateId(props.bill?.id),
+      display: props.bill?.no || '未生成账单号',
     })
   }
 
@@ -100,9 +100,4 @@ const chainItems = computed<ChainItem[]>(() => {
 })
 
 const hasAnyLink = computed(() => chainItems.value.some(item => item.id))
-
-function truncateId(id?: string): string {
-  if (!id) return '未关联'
-  return id.length > 8 ? id.slice(0, 8) + '...' : id
-}
 </script>

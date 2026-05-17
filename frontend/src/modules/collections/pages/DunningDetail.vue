@@ -23,15 +23,15 @@
           </el-tag>
         </div>
         <p class="detail-subtitle">
-          催款单号：<span class="mono-text">{{ dunningItem.dunning_no || `DN-${dunningItem.id}` }}</span>
+          催款单号：<span class="mono-text">{{ formatDunningNo(dunningItem) }}</span>
         </p>
       </div>
 
       <div class="detail-card">
         <h2 class="section-title">批次信息</h2>
         <el-descriptions :column="2" border>
-          <el-descriptions-item label="批次编号">{{ dunningItem.id }}</el-descriptions-item>
-          <el-descriptions-item label="客户编号">{{ dunningItem.client_id }}</el-descriptions-item>
+          <el-descriptions-item label="催款单号">{{ formatDunningNo(dunningItem) }}</el-descriptions-item>
+          <el-descriptions-item label="客户">{{ formatDunningClient(dunningItem) }}</el-descriptions-item>
           <el-descriptions-item label="催款轮次">第 {{ dunningItem.round_no }} 轮</el-descriptions-item>
           <el-descriptions-item label="批次状态">{{ getStatusText(dunningItem.status) }}</el-descriptions-item>
           <el-descriptions-item label="截止日期">{{ formatDate(dunningItem.to_date) }}</el-descriptions-item>
@@ -164,6 +164,14 @@ function formatDateTime(input: string): string {
   const date = new Date(input)
   if (Number.isNaN(date.getTime())) return input
   return date.toLocaleString('zh-CN')
+}
+
+function formatDunningNo(item: DunningDetail): string {
+  return item.dunning_no || '未生成催款单号'
+}
+
+function formatDunningClient(item: DunningDetail): string {
+  return item.client_id ? '已关联客户' : '未关联客户'
 }
 
 function formatAmount(amount: number, currency?: string): string {

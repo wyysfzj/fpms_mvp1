@@ -39,7 +39,11 @@
         size="small"
         class="compact-table"
       >
-        <el-table-column prop="id" label="编号" width="80" />
+        <el-table-column label="客户编号" width="120">
+          <template #default="{ row }">
+            {{ row.client_code || '未设置' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="name" label="名称" min-width="180" />
         <el-table-column prop="contact_person" label="联系人" min-width="140" />
         <el-table-column prop="phone" label="电话" width="140" />
@@ -51,7 +55,7 @@
                 text
                 size="small"
                 class="row-actions-trigger"
-                :aria-label="`打开客户操作：${row.name || row.id}`"
+                :aria-label="`打开客户操作：${formatClientDisplay(row)}`"
               >
                 <span>操作</span>
               </el-button>
@@ -112,6 +116,10 @@ function handleView(row: Client) {
 
 function handleEdit(row: Client) {
   router.push(`/clients/${row.id}/edit`)
+}
+
+function formatClientDisplay(row: Client): string {
+  return row.name || row.name_cn || row.name_en || row.client_code || '未命名客户'
 }
 
 // Watch for pagination changes

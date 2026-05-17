@@ -59,7 +59,7 @@
       <EmptyState
         title="暂无催款批次"
         message="请调整筛选条件或先创建新的催款批次。"
-        icon="DN"
+        icon="款"
       />
     </div>
 
@@ -74,10 +74,14 @@
       >
         <el-table-column label="催款单号" min-width="170">
           <template #default="{ row }">
-            <span class="mono-text">{{ row.dunning_no || `DN-${row.id}` }}</span>
+            <span class="mono-text">{{ formatDunningNo(row.dunning_no) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="client_id" label="客户编号" min-width="140" />
+        <el-table-column label="客户" min-width="140">
+          <template #default="{ row }">
+            {{ formatDunningClient(row.client_id) }}
+          </template>
+        </el-table-column>
         <el-table-column label="轮次" width="90" align="center">
           <template #default="{ row }">
             第 {{ row.round_no }} 轮
@@ -259,6 +263,14 @@ function getStatusTagType(status: string): TagType {
     default:
       return ''
   }
+}
+
+function formatDunningNo(dunningNo?: string | null): string {
+  return dunningNo || '未生成催款单号'
+}
+
+function formatDunningClient(clientId?: string | null): string {
+  return clientId ? '已关联客户' : '未关联客户'
 }
 
 function formatDate(input: string | null): string {

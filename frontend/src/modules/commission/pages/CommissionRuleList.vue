@@ -57,16 +57,15 @@
 
     <div v-else class="page-table">
       <el-table :data="rules" aria-label="提成规则列表" stripe size="small" class="compact-table">
-        <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="rule_name" label="规则名称" min-width="180" />
         <el-table-column prop="case_type" label="案件类型" min-width="120">
           <template #default="{ row }">
-            {{ getCaseTypeText(row.case_type) }}
+            {{ formatCaseTypeText(row.case_type) }}
           </template>
         </el-table-column>
         <el-table-column prop="fee_type" label="费用类型" min-width="120">
           <template #default="{ row }">
-            {{ getFeeTypeText(row.fee_type) }}
+            {{ formatFeeTypeText(row.fee_type) }}
           </template>
         </el-table-column>
         <el-table-column prop="s1_rate" label="S1 比例" width="110" align="right">
@@ -152,22 +151,22 @@
           </el-col>
           <el-col :span="6">
             <el-form-item label="案件类型">
-              <el-input v-model.trim="form.case_type" placeholder="例如：NORMAL" />
+              <el-input v-model.trim="form.case_type" placeholder="请输入案件类型代码" />
             </el-form-item>
           </el-col>
           <el-col :span="6">
             <el-form-item label="费用类型">
-              <el-input v-model.trim="form.fee_type" placeholder="例如：SERVICE" />
+              <el-input v-model.trim="form.fee_type" placeholder="请输入费用类型代码" />
             </el-form-item>
           </el-col>
           <el-col :span="6">
             <el-form-item label="流程方向">
-              <el-input v-model.trim="form.flow_dir" placeholder="例如：INBOUND" />
+              <el-input v-model.trim="form.flow_dir" placeholder="请输入流程方向代码" />
             </el-form-item>
           </el-col>
           <el-col :span="6">
             <el-form-item label="专利类别">
-              <el-input v-model.trim="form.patent_category" placeholder="例如：INV" />
+              <el-input v-model.trim="form.patent_category" placeholder="请输入专利类别代码" />
             </el-form-item>
           </el-col>
 
@@ -479,6 +478,18 @@ async function toggleEnabled(rule: CommissionRule) {
 
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(2)}%`
+}
+
+function formatCaseTypeText(caseType?: string | null): string {
+  if (!caseType) return '—'
+  const text = getCaseTypeText(caseType)
+  return text === caseType ? '未知案件类型' : text
+}
+
+function formatFeeTypeText(feeType?: string | null): string {
+  if (!feeType) return '—'
+  const text = getFeeTypeText(feeType)
+  return text === feeType ? '未知费用类型' : text
 }
 
 watch([page, pageSize], () => {

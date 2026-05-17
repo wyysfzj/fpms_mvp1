@@ -3,7 +3,7 @@
     <div class="page-header">
       <div class="page-header-left">
         <h1 class="page-title">信封打印预览</h1>
-        <span class="page-count">文档编号：{{ documentId }}</span>
+        <span class="page-count">当前文档</span>
       </div>
       <div class="page-header-right">
         <el-button @click="goBack">返回</el-button>
@@ -83,7 +83,7 @@ const addressSourceLabel = computed(() => {
     case 'MANUAL_REQUIRED':
       return '需要手工补录'
     default:
-      return value || '-'
+      return value ? '未知地址来源' : '-'
   }
 })
 

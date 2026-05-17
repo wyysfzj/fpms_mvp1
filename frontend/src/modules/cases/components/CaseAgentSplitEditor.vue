@@ -1,7 +1,7 @@
 <template>
   <div class="agent-split-editor">
     <div class="section-toolbar">
-      <div class="field-hint">支持新增多行分摊记录。请填写代理人 ID、角色和分摊比例，删除最后一行即可清空为 []。</div>
+      <div class="field-hint">支持新增多行分摊记录。请填写代理人、角色和分摊比例，删除最后一行即可清空记录。</div>
       <el-button text type="primary" @click="handleAddRow">新增分摊行</el-button>
     </div>
 
@@ -17,10 +17,10 @@
 
       <el-row :gutter="16">
         <el-col :span="10">
-          <el-form-item label="代理人 ID">
+          <el-form-item label="代理人">
             <el-input
               :model-value="row.agent_id"
-              placeholder="请输入内部代理人 ID"
+              placeholder="请输入代理人"
               clearable
               @update:model-value="(value: unknown) => handleAgentIdChange(index, value)"
             />

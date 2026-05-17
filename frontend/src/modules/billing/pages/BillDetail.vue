@@ -290,7 +290,7 @@ import RelationChainCard from '../../../components/relations/RelationChainCard.v
 import { usePageContext } from '../../../stores/pageContext'
 import { useAuthStore } from '../../../stores/auth'
 import { ZH } from '../../../constants/labels.zh'
-import { getBillStatusText } from '../../../constants/displayText'
+import { getBillDirectionText, getBillStatusText } from '../../../constants/displayText'
 import { formatMoney, normalizeCurrencyCode } from '../../../utils/money'
 
 const BAD_DEBT_MARK_PERMISSION = 'Billing.BadDebtMark'
@@ -315,15 +315,15 @@ const canMarkBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_MARK_PERM
 const canRecoverBadDebt = computed(() => authStore.hasPermission(BAD_DEBT_RECOVER_PERMISSION))
 const billDisplayNo = computed(() => {
   if (!bill.value?.id) return '—'
-  return bill.value.bill_no || `账单-${bill.value.id.slice(0, 8).toUpperCase()}`
+  return bill.value.bill_no || '未生成账单号'
 })
 const clientDisplay = computed(() => {
   if (!bill.value?.client_id) return '未关联客户'
-  return bill.value.client_name || `客户-${bill.value.client_id.slice(0, 8).toUpperCase()}`
+  return bill.value.client_name || '未命名客户'
 })
 const caseDisplay = computed(() => {
   if (!bill.value?.case_id) return '—'
-  return bill.value.case_no || `案件-${bill.value.case_id.slice(0, 8).toUpperCase()}`
+  return bill.value.case_no || '未命名案件'
 })
 const feeDraftDisplay = computed(() => {
   if (!bill.value) return '—'
@@ -331,7 +331,7 @@ const feeDraftDisplay = computed(() => {
   const labels = bill.value.source_draft_labels || []
   if (labels.length === 1) return labels[0]
   if (labels.length > 1) return `${labels[0]} 等 ${labels.length} 个草稿`
-  return '—'
+  return bill.value.primary_draft_id ? '费用草稿' : '—'
 })
 const feeDraftRelation = computed(() => {
   if (!bill.value?.primary_draft_id) return undefined
@@ -386,14 +386,7 @@ function getBillStatusDisplay(status?: string): string {
 }
 
 function billDirectionText(direction?: string): string {
-  switch ((direction || '').toUpperCase()) {
-    case 'AR':
-      return '应收'
-    case 'AP':
-      return '应付'
-    default:
-      return direction || '—'
-  }
+  return getBillDirectionText(direction)
 }
 
 function getSummaries({ columns }: { columns: { property?: string; label?: string }[] }): string[] {

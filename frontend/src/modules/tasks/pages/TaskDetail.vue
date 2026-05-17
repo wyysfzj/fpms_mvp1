@@ -57,24 +57,24 @@
       <div class="case-header">
         <div class="case-header-main">
           <div class="case-meta">
-            <span class="case-no">#{{ task.id }}</span>
+            <span class="case-no">任务详情</span>
             <span class="meta-divider">|</span>
             <span v-if="task.case_id">
               <router-link :to="`/cases/${task.case_id}`" class="task-case-link">
-                {{ task.case_no || `案件 #${task.case_id}` }}
+                {{ formatCaseDisplay(task) }}
               </router-link>
             </span>
             <template v-if="task.worker_id">
               <span class="meta-divider">|</span>
-              <span>负责人: {{ task.worker_id }}</span>
+              <span>负责人：{{ formatAssigneeDisplay(task.worker_id) }}</span>
             </template>
             <template v-if="task.supervisor_id">
               <span class="meta-divider">|</span>
-              <span>监督人: {{ task.supervisor_id }}</span>
+              <span>监督人：{{ formatAssigneeDisplay(task.supervisor_id) }}</span>
             </template>
           </div>
           <div class="case-title">
-            <h1>{{ task.title || '未命名任务' }}</h1>
+            <h1>{{ formatTaskDisplayTitle(task) }}</h1>
           </div>
         </div>
         <div class="case-header-actions">
@@ -110,11 +110,11 @@
               </div>
               <div class="info-item">
                 <span class="info-label">负责人</span>
-                <span class="info-value">{{ task.worker_id || '-' }}</span>
+                <span class="info-value">{{ formatAssigneeDisplay(task.worker_id) }}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">监督人</span>
-                <span class="info-value">{{ task.supervisor_id || '-' }}</span>
+                <span class="info-value">{{ formatAssigneeDisplay(task.supervisor_id) }}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">创建时间</span>
@@ -204,6 +204,18 @@ function formatDate(dateStr?: string): string {
 function formatDateTime(dateStr?: string): string {
   if (!dateStr) return '-'
   return dayjs(dateStr).format('YYYY-MM-DD HH:mm')
+}
+
+function formatTaskDisplayTitle(value: Task): string {
+  return value.title?.trim() || '未命名任务'
+}
+
+function formatCaseDisplay(value: Task): string {
+  return value.case_no || '未命名案件'
+}
+
+function formatAssigneeDisplay(value?: string): string {
+  return value ? '已指定' : '-'
 }
 
 function isUrgent(dueDate?: string): boolean {

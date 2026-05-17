@@ -24,7 +24,7 @@
       </el-select>
       <el-input
         v-model.trim="filterBillId"
-        placeholder="请输入账单ID"
+        placeholder="请输入账单编号"
         clearable
         style="width: 220px;"
         @keyup.enter="handleFilter"
@@ -55,7 +55,7 @@
       <el-table-column label="账单号" width="160">
         <template #default="{ row }">
           <el-link type="primary" @click="goToBill(row.bill_id)">
-            {{ row.bill_no || row.bill_id.slice(0, 8) }}
+            {{ getBillDisplay(row.bill_no, row.bill_id) }}
           </el-link>
         </template>
       </el-table-column>
@@ -161,7 +161,7 @@ function handleReset() {
 }
 
 async function handleReverse(row: OffsetListItem) {
-  const billLabel = row.bill_no || row.bill_id.slice(0, 8)
+  const billLabel = getBillDisplay(row.bill_no, row.bill_id)
   const amountLabel = formatAmount(row.amount)
 
   try {
@@ -184,6 +184,11 @@ async function handleReverse(row: OffsetListItem) {
 
 function goToBill(billId: string) {
   router.push({ name: 'bill_detail', params: { id: billId } })
+}
+
+function getBillDisplay(billNo?: string, billId?: string): string {
+  if (billNo) return billNo
+  return billId ? '未生成账单号' : '未关联账单'
 }
 
 onMounted(fetchData)

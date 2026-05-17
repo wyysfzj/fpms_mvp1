@@ -84,15 +84,14 @@
 
     <div v-else class="page-table">
       <el-table :data="records" aria-label="提成记录列表" stripe size="small" class="compact-table">
-        <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="case_no" label="案卷号" min-width="160">
           <template #default="{ row }">
-            {{ row.case_no || row.case_id }}
+            {{ formatCaseDisplay(row) }}
           </template>
         </el-table-column>
-        <el-table-column prop="agent_id" label="代理人编号" min-width="160">
+        <el-table-column prop="agent_id" label="代理人" min-width="160">
           <template #default="{ row }">
-            {{ row.agent_id || '—' }}
+            {{ formatAgentDisplay(row) }}
           </template>
         </el-table-column>
         <el-table-column prop="fee_type" label="费用类型" width="120">
@@ -276,7 +275,7 @@ function statusLabel(status: string): string {
     VOID: '已作废',
     CLOSED: '已关闭',
   }
-  return map[status] || status || '—'
+  return map[status] || (status ? '未知状态' : '—')
 }
 
 function statusTagType(status: string): 'success' | 'warning' | 'danger' | 'info' {
@@ -299,6 +298,14 @@ function settleableTagType(isSettleable: boolean): 'success' | 'info' {
 
 function settleableLabel(isSettleable: boolean): string {
   return isSettleable ? '可结算' : '不可结算'
+}
+
+function formatCaseDisplay(row: CommissionRecord): string {
+  return row.case_no || '未命名案件'
+}
+
+function formatAgentDisplay(row: CommissionRecord): string {
+  return row.agent_id ? '已分配' : '未分配'
 }
 
 watch([page, pageSize], () => {

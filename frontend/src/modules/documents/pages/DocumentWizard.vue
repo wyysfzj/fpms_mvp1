@@ -238,7 +238,7 @@
           <div class="step-panel-header">
             <div>
               <div class="section-title">逐案编辑</div>
-              <div class="section-hint">当前只开放标题、文书日期、内部文号、需要回复、回复来源文件 ID 和补充说明。</div>
+              <div class="section-hint">当前只开放标题、文书日期、内部文号、需要回复、回复来源文件和补充说明。</div>
             </div>
             <div class="step-panel-actions">
               <el-button @click="reloadStep2Rows">重新载入当前解析结果</el-button>
@@ -308,7 +308,7 @@
                 </div>
 
                 <div class="step2-field">
-                  <div class="step2-field-label">回复来源文件 ID</div>
+                  <div class="step2-field-label">回复来源文件</div>
                   <el-input
                     v-model="row.reply_to_id"
                     placeholder="可选"

@@ -145,11 +145,10 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="48" />
-        <el-table-column prop="task_id" label="任务编号" min-width="180" />
         <el-table-column label="案件" min-width="180">
           <template #default="{ row }">
             <router-link :to="`/cases/${row.case_id}`" class="case-link">
-              {{ row.case_no || row.case_id }}
+              {{ formatCaseDisplay(row) }}
             </router-link>
           </template>
         </el-table-column>
@@ -202,7 +201,7 @@
           <template #default="{ row }">
             <template v-if="row.billed && row.linked_bill_id">
               <router-link class="bill-link" :to="`/billing/bills/${row.linked_bill_id}`">
-                {{ row.linked_bill_no || row.linked_bill_id }}
+                {{ formatBillDisplay(row) }}
               </router-link>
             </template>
             <el-tag v-else :type="row.draft_generated ? 'warning' : 'info'" size="small">
@@ -326,7 +325,7 @@ function statusText(status: GrantFeeTaskStatus): string {
     DRAFT_GENERATED: '已生成草单',
     DONE: '已完成',
   }
-  return labels[status] || status
+  return labels[status] || '未知状态'
 }
 
 function statusTagType(status: GrantFeeTaskStatus): 'info' | 'warning' | 'success' | 'danger' {
@@ -342,7 +341,15 @@ function clientInstructionText(input: GrantFeeTaskClientInstruction): string {
     PAY: '支付',
     ABANDON: '放弃',
   }
-  return labels[input] || input
+  return labels[input] || '未知指示'
+}
+
+function formatCaseDisplay(row: GrantFeeTaskListItem): string {
+  return row.case_no || '未命名案件'
+}
+
+function formatBillDisplay(row: GrantFeeTaskListItem): string {
+  return row.linked_bill_no || '未生成账单号'
 }
 
 function canGenerateDraft(row: GrantFeeTaskListItem): boolean {

@@ -27,7 +27,7 @@
             <div class="form-section">
               <h3 class="form-section-title">选择费用草稿</h3>
               <p class="form-section-desc">
-                请选择已锁定且已有费用明细的草稿，系统会使用内部草稿 ID 生成账单，无需手工输入 UUID。
+                请选择已锁定且已有费用明细的草稿，系统会根据所选草稿生成账单。
               </p>
 
               <el-form-item
@@ -356,8 +356,8 @@ const manualForm = reactive({
 })
 
 const directionOptions = [
-  { label: '应收 (AR)', value: 'AR' as BillDirection },
-  { label: '应付 (AP)', value: 'AP' as BillDirection },
+  { label: '应收账单', value: 'AR' as BillDirection },
+  { label: '应付账单', value: 'AP' as BillDirection },
 ]
 
 const manualRules: FormRules = {
@@ -389,15 +389,10 @@ function formatDraftAmount(amount: number | string | undefined, currency: string
   }).format(asNumericAmount(amount))
 }
 
-function buildDraftDisplayId(draft: FeeDraftListItem): string {
-  return `${draft.id.slice(0, 8).toUpperCase()}`
-}
-
 const availableDraftOptions = computed(() => {
   return availableDrafts.value.map((draft) => {
-    const draftTypePrefix = '费用草稿'
-    const readableDraftId = `${draftTypePrefix}-${buildDraftDisplayId(draft)}`
-    const caseDisplay = draft.case_no || `案件 ${draft.case_id.slice(0, 8).toUpperCase()}`
+    const readableDraftId = '费用草稿'
+    const caseDisplay = draft.case_no || '未命名案件'
     const clientDisplay = draft.client_name || '未关联客户'
     const amountDisplay = formatDraftAmount(draft.amount, draft.currency)
     return {
@@ -413,7 +408,7 @@ const availableDraftOptions = computed(() => {
 
 function formatClientOption(client: Client): string {
   const code = client.client_code ? `${client.client_code} · ` : ''
-  return `${code}${client.name || client.id}`
+  return `${code}${client.name || '未命名客户'}`
 }
 
 function formatCaseOption(caseItem: Case): string {

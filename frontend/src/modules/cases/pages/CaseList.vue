@@ -113,7 +113,7 @@
           <el-form-item label="代理人" class="filter-item">
             <el-input
               v-model="filters.agent_id"
-              placeholder="请输入代理人ID"
+              placeholder="请输入代理人"
               clearable
             />
           </el-form-item>
@@ -121,10 +121,10 @@
       </el-row>
       <el-row :gutter="16">
         <el-col :span="6">
-          <el-form-item label="申请人ID" class="filter-item">
+          <el-form-item label="申请人" class="filter-item">
             <el-input
               v-model="filters.applicant_id"
-              placeholder="请输入申请人ID"
+              placeholder="请输入申请人"
               clearable
             />
           </el-form-item>

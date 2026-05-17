@@ -37,7 +37,6 @@
         size="small"
         class="compact-table"
       >
-        <el-table-column prop="id" label="编号" width="80" />
         <el-table-column prop="name" label="名称" min-width="200" />
         <el-table-column label="费率" width="120">
           <template #default="{ row }">
@@ -165,31 +164,35 @@ function handleFormSuccess() {
 
 function feeTypeLabel(v?: string | null): string {
   const map: Record<string, string> = { GOV: '官费', SERVICE: '服务费', MISC: '其他' }
-  return v ? (map[v] ?? v) : '—'
+  return v ? (map[v] ?? unknownLabel('费用类型')) : '—'
 }
 
 function rateGroupLabel(v?: string | null): string {
   const map: Record<string, string> = { DOMESTIC: '国内', PCT: 'PCT', ANNUITY: '年费' }
-  return v ? (map[v] ?? v) : '—'
+  return v ? (map[v] ?? unknownLabel('费率组')) : '—'
 }
 
 function calcModeLabel(v?: string | null): string {
   const map: Record<string, string> = {
     FIXED: '固定', PER_CLAIM: '按权利要求', PER_PAGE: '按页', TIER: '阶梯'
   }
-  return v ? (map[v] ?? v) : '—'
+  return v ? (map[v] ?? unknownLabel('计算模式')) : '—'
 }
 
 function caseTypeLabel(v?: string | null): string {
   const map: Record<string, string> = {
     NORMAL: '普通', PCT_INTL: 'PCT国际', PCT_NATL: 'PCT国内', PRIORITY: '优先权'
   }
-  return v ? (map[v] ?? v) : '—'
+  return v ? (map[v] ?? unknownLabel('案件类型')) : '—'
 }
 
 function patentCategoryLabel(v?: string | null): string {
   const map: Record<string, string> = { INV: '发明', UM: '实用新型', DES: '外观设计' }
-  return v ? (map[v] ?? v) : '—'
+  return v ? (map[v] ?? unknownLabel('专利类别')) : '—'
+}
+
+function unknownLabel(label: string): string {
+  return `未知${label}`
 }
 
 watch([page, pageSize], () => {

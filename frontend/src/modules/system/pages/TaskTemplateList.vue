@@ -49,8 +49,8 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="默认监督人ID" width="140">
-        <template #default="{ row }">{{ row.default_supervisor_id || '—' }}</template>
+      <el-table-column label="默认监督人" width="140">
+        <template #default="{ row }">{{ formatDefaultSupervisor(row.default_supervisor_id) }}</template>
       </el-table-column>
       <el-table-column label="默认角色" width="120">
         <template #default="{ row }">{{ row.default_worker_role || '—' }}</template>
@@ -129,10 +129,10 @@
         <el-form-item label="每日提醒" prop="daily_remind">
           <el-switch v-model="form.daily_remind" />
         </el-form-item>
-        <el-form-item label="默认监督人ID" prop="default_supervisor_id">
+        <el-form-item label="默认监督人" prop="default_supervisor_id">
           <el-input
             v-model.trim="form.default_supervisor_id"
-            placeholder="可留空，直接填写用户ID"
+            placeholder="可留空，填写监督人配置值"
           />
         </el-form-item>
         <el-form-item label="默认角色" prop="default_worker_role">
@@ -218,9 +218,9 @@ const formRules: FormRules = {
           callback()
           return
         }
-        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-        if (!uuidPattern.test(value)) {
-          callback(new Error('默认监督人ID必须是有效的UUID'))
+        const supervisorConfigPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        if (!supervisorConfigPattern.test(value)) {
+          callback(new Error('默认监督人配置格式不正确'))
           return
         }
         callback()
@@ -407,6 +407,10 @@ function formatRemindOffsets(row: TaskTemplate): string {
   const remind2 = row.remind_2_offset_days ?? '—'
   const remind3 = row.remind_3_offset_days ?? '—'
   return `1: ${remind1} / 2: ${remind2} / 3: ${remind3}`
+}
+
+function formatDefaultSupervisor(value?: string | null): string {
+  return value ? '已指定' : '—'
 }
 </script>
 

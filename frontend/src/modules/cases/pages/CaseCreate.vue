@@ -250,24 +250,24 @@
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="来源国家/地区" :error="fieldErrors.get('from_country')?.join('，')">
-                  <el-input v-model="form.from_country" placeholder="请输入来源国家/地区代码，例如 CN" />
+                  <el-input v-model="form.from_country" placeholder="请输入来源国家/地区代码" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
                 <el-form-item label="目标国家/地区" :error="fieldErrors.get('to_country')?.join('，')">
-                  <el-input v-model="form.to_country" placeholder="请输入目标国家/地区代码，例如 US" />
+                  <el-input v-model="form.to_country" placeholder="请输入目标国家/地区代码" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-row :gutter="16">
               <el-col :span="12">
-                <el-form-item label="公文地址 ID" :error="fieldErrors.get('doc_address_id')?.join('，')">
-                  <el-input v-model="form.doc_address_id" placeholder="请输入客户地址主数据 ID" />
+                <el-form-item label="公文地址" :error="fieldErrors.get('doc_address_id')?.join('，')">
+                  <el-input v-model="form.doc_address_id" placeholder="请输入客户地址主数据" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="账单地址 ID" :error="fieldErrors.get('bill_address_id')?.join('，')">
-                  <el-input v-model="form.bill_address_id" placeholder="请输入客户地址主数据 ID" />
+                <el-form-item label="账单地址" :error="fieldErrors.get('bill_address_id')?.join('，')">
+                  <el-input v-model="form.bill_address_id" placeholder="请输入客户地址主数据" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -293,7 +293,7 @@
               </div>
               <el-row :gutter="16">
                 <el-col :span="8">
-                  <el-input v-model="priority.country_code" placeholder="国家/地区代码，例如 CN" />
+                  <el-input v-model="priority.country_code" placeholder="国家/地区代码" />
                 </el-col>
                 <el-col :span="8">
                   <el-input v-model="priority.prio_no" placeholder="优先权号" />
@@ -419,7 +419,7 @@
               <el-row :gutter="16">
                 <el-col :span="8">
                   <el-form-item label="国际公开语言">
-                    <el-input v-model="form.intl_pub_lang" placeholder="例如 EN" />
+                    <el-input v-model="form.intl_pub_lang" placeholder="请输入国际公开语言代码" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="8">
@@ -465,8 +465,8 @@
             </div>
             <el-row :gutter="16">
               <el-col :span="12">
-                <el-form-item label="原案 ID">
-                  <el-input v-model="form.original_case_id" placeholder="请输入被攻击原案的 Case ID" />
+                <el-form-item label="原案">
+                  <el-input v-model="form.original_case_id" placeholder="请输入被攻击原案" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -648,17 +648,17 @@
             <el-row :gutter="20">
               <el-col :span="8">
                 <el-form-item label="主办代理人">
-                  <el-input v-model="form.primary_agent_id" placeholder="请输入代理人 ID" />
+                  <el-input v-model="form.primary_agent_id" placeholder="请输入代理人" />
                 </el-form-item>
               </el-col>
               <el-col :span="8">
                 <el-form-item label="辅办代理人">
-                  <el-input v-model="form.second_agent_id" placeholder="请输入代理人 ID" />
+                  <el-input v-model="form.second_agent_id" placeholder="请输入代理人" />
                 </el-form-item>
               </el-col>
               <el-col :span="8">
                 <el-form-item label="撰写人">
-                  <el-input v-model="form.draftor_id" placeholder="请输入撰写人 ID" />
+                  <el-input v-model="form.draftor_id" placeholder="请输入撰写人" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -1141,7 +1141,7 @@ function gateConclusionAlertType(conclusion: CaseDocumentGateConclusion): 'succe
 
 function matchedDocumentText(check: CaseDocumentGateCheck) {
   const titles = check.matched_documents
-    .map((document) => document.title || document.template_code || document.id)
+    .map((document) => document.title || document.template_code || '未命名匹配文件')
     .filter(Boolean)
   return titles.length ? titles.join('，') : '未匹配'
 }

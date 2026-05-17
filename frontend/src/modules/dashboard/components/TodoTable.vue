@@ -22,7 +22,7 @@
             :to="`/cases/${row.case_id}`"
             class="chain-link"
           >
-            {{ row.case_no || row.case_id.slice(0, 8) + '...' }}
+            {{ formatCaseDisplay(row) }}
           </router-link>
           <span v-else class="text-muted">—</span>
         </template>
@@ -64,6 +64,10 @@ function isUrgent(dueDate?: string): boolean {
   const now = new Date()
   const diffDays = (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
   return diffDays <= 3 && diffDays >= 0
+}
+
+function formatCaseDisplay(row: Task): string {
+  return row.case_no || '未命名案件'
 }
 
 function statusClass(status: string): string {

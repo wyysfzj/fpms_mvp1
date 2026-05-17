@@ -46,12 +46,11 @@
         @click="handleTaskClick(task)"
       >
         <div class="reminder-header">
-          <span class="reminder-id">{{ task.id }}</span>
           <el-tag :type="getStatusType(task.status)" size="small">
             {{ getTaskStatusText(task.status) }}
           </el-tag>
         </div>
-        <div class="reminder-title">{{ task.title }}</div>
+        <div class="reminder-title">{{ formatReminderTitle(task) }}</div>
         <div class="reminder-meta">
           <span v-if="task.due_date" class="reminder-due" :class="{ urgent: isUrgent(task.due_date) }">
             截止：{{ formatDate(task.due_date) }}
@@ -124,6 +123,14 @@ function formatDate(dateStr?: string): string {
   return dayjs(dateStr).format('YYYY-MM-DD')
 }
 
+function formatReminderTitle(task: Task): string {
+  return task.title?.trim() || '未命名任务'
+}
+
+function formatAssigneeDisplay(value?: string): string {
+  return value ? '已指定' : ''
+}
+
 function isUrgent(dueDate?: string): boolean {
   if (!dueDate) return false
   const due = dayjs(dueDate)
@@ -154,12 +161,12 @@ function getStatusType(status: string): '' | 'success' | 'warning' | 'danger' | 
 
 function displayAssignee(task: Task): string {
   if (viewMode.value === 'worker' && task.supervisor_id) {
-    return `监督人：${task.supervisor_id}`
+    return `监督人：${formatAssigneeDisplay(task.supervisor_id)}`
   }
   if (viewMode.value === 'supervisor' && task.worker_id) {
-    return `负责人：${task.worker_id}`
+    return `负责人：${formatAssigneeDisplay(task.worker_id)}`
   }
-  return task.assigned_to ? `负责人：${task.assigned_to}` : ''
+  return task.assigned_to ? `负责人：${formatAssigneeDisplay(task.assigned_to)}` : ''
 }
 
 onMounted(() => {
