@@ -2,6 +2,7 @@ import { test as base, expect } from "@playwright/test";
 
 import { ApiClient } from "../clients/apiClient";
 import { DbClient } from "../clients/dbClient";
+import { AppShellPage } from "../pages/AppShellPage";
 import { BillingPage } from "../pages/BillingPage";
 import { CasePage } from "../pages/CasePage";
 import { DocumentPage } from "../pages/DocumentPage";
@@ -14,6 +15,7 @@ type FPMSFixtures = {
   runId: string;
   api: ApiClient;
   db: DbClient;
+  appShell: AppShellPage;
   loginPage: LoginPage;
   casePage: CasePage;
   documentPage: DocumentPage;
@@ -27,7 +29,7 @@ export const test = base.extend<FPMSFixtures>({
   runId: [process.env.FPMS_RUN_ID || "LOCAL-RUN-001", { option: true }],
 
   api: async ({ request }, use) => {
-    const api = new ApiClient(request, process.env.FPMS_API_URL || "http://localhost:8000/api");
+    const api = new ApiClient(request, process.env.FPMS_API_URL || "http://localhost:8000/api/v1");
     await use(api);
   },
 
@@ -38,6 +40,10 @@ export const test = base.extend<FPMSFixtures>({
 
   loginPage: async ({ page }, use) => {
     await use(new LoginPage(page));
+  },
+
+  appShell: async ({ page }, use) => {
+    await use(new AppShellPage(page));
   },
 
   casePage: async ({ page }, use) => {
