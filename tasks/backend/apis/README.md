@@ -41,7 +41,7 @@ Prerequisites:
 - `BE-APIv4-021_tasks_post_tasks_id_close` — `POST /tasks/{id}/close` → `backend/app/modules/tasks/api.py`  (perm: `Task.Action`)
 - `BE-APIv4-022_tasks_post_tasks_id_reopen` — `POST /tasks/{id}/reopen` → `backend/app/modules/tasks/api.py`  (perm: `Task.Action`)
 - `BE-APIv4-023_tasks_post_tasks_id_cancel` — `POST /tasks/{id}/cancel` → `backend/app/modules/tasks/api.py`  (perm: `Task.Action`)
-- `BE-APIv4-024_tasks_get_tasks_today?as=worker|supervisor` — `GET /tasks/today?as=worker|supervisor` → `backend/app/modules/tasks/api.py`  (perm: `Task.Read`)
+- `BE-APIv4-024_tasks_get_tasks_today_as_worker_supervisor` — `GET /tasks/today?as=worker|supervisor` → `backend/app/modules/tasks/api.py`  (perm: `Task.Read`)
 ## fees
 
 - `BE-APIv4-025_fees_get_fees_drafts` — `GET /fees/drafts` → `backend/app/modules/fees/api.py`  (perm: `Fee.Draft.Read`)

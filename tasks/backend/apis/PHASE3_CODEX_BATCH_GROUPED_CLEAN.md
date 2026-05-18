@@ -419,7 +419,7 @@ Hard requirements:
 After implementation, run Verify.
 ```
 
-### TASK_FILE: apis/BE-APIv4-024_tasks_get_tasks_today?as=worker|supervisor.md
+### TASK_FILE: apis/BE-APIv4-024_tasks_get_tasks_today_as_worker_supervisor.md
 ```text
 Open TASK_FILE and implement EXACTLY ONE endpoint per the task.
 

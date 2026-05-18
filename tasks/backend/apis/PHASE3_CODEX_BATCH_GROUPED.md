@@ -938,7 +938,7 @@ Hard requirements:
 After implementation, run the Verify commands.
 ```
 
-### TASK_FILE: apis/BE-APIv4-024_tasks_get_tasks_today?as=worker|supervisor.md
+### TASK_FILE: apis/BE-APIv4-024_tasks_get_tasks_today_as_worker_supervisor.md
 ```text
 Open TASK_FILE and implement EXACTLY ONE endpoint per the task.
 
@@ -1155,7 +1155,7 @@ PYTHONPATH=backend python -c "from app.main import app; print('\n'.join(sorted({
 
 After wiring, re-run step (1) until module paths appear.
 
-### TASK_FILE: __MACOSX/apis/._BE-APIv4-024_tasks_get_tasks_today?as=worker|supervisor.md
+### TASK_FILE: __MACOSX/apis/._BE-APIv4-024_tasks_get_tasks_today_as_worker_supervisor.md
 ```text
 Open TASK_FILE and implement EXACTLY ONE endpoint per the task.
 

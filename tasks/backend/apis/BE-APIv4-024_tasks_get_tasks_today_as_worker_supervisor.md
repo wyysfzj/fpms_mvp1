@@ -1,4 +1,4 @@
-# BE-APIv4-024_tasks_get_tasks_today?as=worker|supervisor — tasks GET /tasks/today?as=worker|supervisor
+# BE-APIv4-024_tasks_get_tasks_today_as_worker_supervisor — tasks GET /tasks/today?as=worker|supervisor
 
 ## Design references
 - `tasks/docs/task_02_api.md` 

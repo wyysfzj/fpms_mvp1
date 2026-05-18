@@ -33,7 +33,7 @@ Note (MVP1): permission codes use `Title.Action` naming and must stay consistent
 - `POST /tasks/{id}/close` → `Task.Action`  (task: `BE-APIv4-021_tasks_post_tasks_id_close`)
 - `POST /tasks/{id}/reopen` → `Task.Action`  (task: `BE-APIv4-022_tasks_post_tasks_id_reopen`)
 - `POST /tasks/{id}/cancel` → `Task.Action`  (task: `BE-APIv4-023_tasks_post_tasks_id_cancel`)
-- `GET /tasks/today?as=worker|supervisor` → `Task.Read`  (task: `BE-APIv4-024_tasks_get_tasks_today?as=worker|supervisor`)
+- `GET /tasks/today?as=worker|supervisor` → `Task.Read`  (task: `BE-APIv4-024_tasks_get_tasks_today_as_worker_supervisor`)
 - `GET /fees/drafts` → `Fee.Draft.Read`  (task: `BE-APIv4-025_fees_get_fees_drafts`)
 - `POST /fees/drafts` → `Fee.Draft.Create`  (task: `BE-APIv4-026_fees_post_fees_drafts`)
 - `GET /fees/drafts/{id}` → `Fee.Draft.Read`  (task: `BE-APIv4-027_fees_get_fees_drafts_id`)
