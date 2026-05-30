@@ -5,6 +5,71 @@ Agent MUST follow these rules without exception.
 
 ---
 
+## 0) Karpathy Behavioral Iron Rules (MANDATORY)
+
+These rules are derived from the installed `karpathy-guidelines` skill and are mandatory for all repository work.
+
+1. Think before coding.
+   - Do NOT assume silently.
+   - Surface assumptions, ambiguity, tradeoffs, and simpler alternatives before implementation.
+   - If the requested behavior is unclear or has multiple credible interpretations, stop and ask or state the chosen assumption explicitly.
+
+2. Simplicity first.
+   - Implement the minimum code or documentation change that satisfies the requested closure slice.
+   - Do NOT add speculative abstractions, configurability, features, or defensive paths that were not requested or required by the task.
+   - If the implementation becomes larger than the problem warrants, simplify before claiming completion.
+
+3. Surgical changes only.
+   - Touch only files and lines that directly serve the explicit task.
+   - Match existing local style and patterns.
+   - Do NOT refactor, reformat, rename, or clean up adjacent code unless the task explicitly requires it.
+   - Remove only unused code introduced by the current change; mention unrelated dead code instead of deleting it.
+
+4. Goal-driven execution with verification.
+   - Convert every task into concrete success criteria before or during execution.
+   - For code changes, prefer a verifiable loop: reproduce or specify the expected behavior, implement the smallest fix, then run targeted verification.
+   - Do NOT claim PASS, fixed, complete, or ready unless the relevant verification has run and the evidence requirements in this file are satisfied.
+
+## 0.1 Development Skill Stack & Precedence (MANDATORY)
+
+For future development, agents MUST use this skill stack in order. The order is a behavior precedence chain, not permission to ignore repository rules.
+
+1. Karpathy's `karpathy-guidelines` first.
+   - Start with assumptions, ambiguity, simplicity, surgical scope, and verifiable success criteria.
+   - If any later skill suggests broadening scope, adding speculative structure, or touching unrelated files, Karpathy's simplicity and surgical-change rules win.
+
+2. Superpowers second.
+   - Use the relevant Superpowers process skill when it matches the task: brainstorming for behavior/design changes, systematic-debugging for bugs, test-driven-development for feature/bugfix implementation, writing-plans for approved multi-step work, verification-before-completion before success claims, requesting-code-review for meaningful completed work.
+   - Apply Superpowers as workflow discipline, but do not let it override this repository's atomic task, evidence, SQLite, permission, status-code, or Simplified Chinese UI rules.
+   - For tiny single-file documentation or configuration updates, use a compact design statement in-thread instead of producing heavy planning artifacts unless the user explicitly asks for a full spec.
+
+3. `mattpocock/skills` third.
+   - Use `grill-with-docs` when requirements or domain terms are fuzzy; resolve vocabulary against `CONTEXT.md`/ADRs when those files exist.
+   - Use `diagnose` for bugs and regressions: create a fast feedback loop, reproduce, rank hypotheses, instrument one variable at a time, fix, then regression-test.
+   - Use `tdd` for code changes where tests are appropriate: one behavior test at a time through public interfaces, then minimal implementation, then refactor only while green.
+   - Use `to-prd`, `to-issues`, `triage`, `zoom-out`, `prototype`, or `improve-codebase-architecture` only when the task explicitly calls for that shape of work or when the lead has made it part of the approved plan.
+
+4. `atomic-evidence-gates` fourth and always before claiming completion.
+   - For implementation tasks, freeze exactly one task file path or one explicit batch manifest before editing.
+   - Initialize or create evidence under `artifacts/<TASK-ID>/**`, run targeted verification, record results, and validate scope before reporting PASS.
+   - If no task file exists and the user asks for a broad change, stop at planning or create/confirm the atomic task file before implementation.
+
+Conflict rule:
+
+- User instructions and this `AGENTS.md` remain authoritative. When two skills conflict, choose the stricter rule that preserves atomicity, scope control, evidence, and verifiable behavior.
+- Do not invoke every skill mechanically. Invoke the smallest relevant subset, in the precedence order above, and state the chosen subset briefly when it affects execution.
+
+## 0.2 Instruction Hygiene & Best-Practice Operating Loop
+
+- Keep durable rules in `AGENTS.md`; keep transient task details in task files, plans, issues, or `artifacts/<TASK-ID>/**`.
+- Prefer concrete commands, allowed files, expected behavior, and observable checks over broad prose.
+- Do not paste large skill bodies, external articles, or long rationale into task plans; reference the skill name and load the current local skill file when needed.
+- Before editing, identify: task id/path, closure slice, non-closure boundary, allowlist, relevant skills, and verification commands.
+- During execution, keep changes small and reviewable; stop and replan if a hidden prerequisite, shared-file conflict, or second closure slice appears.
+- After execution, report only evidence-backed claims: modified files, commands run, observed status, evidence path, closure completed, non-closure respected, and PASS/FAIL/BLOCKED.
+
+---
+
 ## 1) Atomic Task Discipline
 
 - The atomic unit remains EXACTLY ONE task file path.
