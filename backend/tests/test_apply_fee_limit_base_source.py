@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.modules.annuity.models import PayList  # noqa: F401
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.tasks.enums import TaskDeadlineBase, TaskRemindBase
 from app.modules.tasks.models import Task, TaskTemplate
@@ -116,6 +117,28 @@ def _set_filing_date(
     assert response.status_code == 200, response.text
 
 
+def _create_filing_materials(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    *,
+    case_id: str,
+) -> None:
+    for title in ("发明专利请求书", "说明书", "权利要求书", "摘要"):
+        response = client.post(
+            "/api/v1/documents",
+            headers=auth_headers,
+            json={
+                "case_id": case_id,
+                "doc_template_id": None,
+                "doc_type": "CLIENT_IN",
+                "direction": "IN",
+                "doc_date": "2026-03-02",
+                "title": title,
+            },
+        )
+        assert response.status_code == 201, response.text
+
+
 def _submit_batch(
     client: TestClient,
     auth_headers: dict[str, str],
@@ -157,6 +180,7 @@ def test_batch_filing_apply_fee_limit_uses_filing_date_base_source(
         case_id=case_data["id"],
         filing_date="2026-03-08",
     )
+    _create_filing_materials(client, auth_headers, case_id=case_data["id"])
 
     payload = _submit_batch(
         client,
@@ -192,6 +216,7 @@ def test_batch_filing_apply_fee_limit_keeps_case_event_base_source(
         client_id=client_id,
         applicant_id=applicant_id,
     )
+    _create_filing_materials(client, auth_headers, case_id=case_data["id"])
 
     payload = _submit_batch(
         client,

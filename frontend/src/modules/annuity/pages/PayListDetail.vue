@@ -167,6 +167,13 @@
         </el-col>
 
         <el-col :xs="24" :lg="8">
+          <FeeLinkagePanel
+            v-if="feePackageId && payList"
+            class="fee-linkage-side-panel"
+            :package-id="feePackageId"
+            :focus-id="String(payList.id)"
+          />
+
           <el-card shadow="never">
             <template #header>
               <div class="card-header">
@@ -268,6 +275,7 @@ import type {
 } from '../../../api/govPayments.types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import ManualGovPaymentDialog from '../components/ManualGovPaymentDialog.vue'
+import FeeLinkagePanel from '../../officialWorkflows/components/FeeLinkagePanel.vue'
 
 interface MarkPaidForm {
   paid_date: string
@@ -296,6 +304,7 @@ const payListId = computed(() => {
   const value = Number(route.params.id)
   return Number.isFinite(value) && value > 0 ? value : 0
 })
+const feePackageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
 
 const payList = computed(() => detail.value?.pay_list ?? null)
 
@@ -538,6 +547,10 @@ watch(payListId, () => {
 
 .rows-card {
   margin-top: 16px;
+}
+
+.fee-linkage-side-panel {
+  margin-bottom: 16px;
 }
 
 .loading-state {

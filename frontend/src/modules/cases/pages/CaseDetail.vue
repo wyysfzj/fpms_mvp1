@@ -116,6 +116,37 @@
                   <p class="status-linkage-text">{{ statusAutomationHint }}</p>
                 </div>
 
+                <div v-if="caseData.applicants?.length || caseData.inventors?.length" class="info-section">
+                  <h4 class="info-section-title">官方提交主体信息</h4>
+                  <div v-if="caseData.applicants?.length" class="official-party-list">
+                    <div
+                      v-for="(applicant, index) in caseData.applicants"
+                      :key="`applicant-${index}`"
+                      class="official-party-item"
+                    >
+                      <strong>申请人 {{ index + 1 }}</strong>
+                      <span>名称：{{ applicant.name_cn || applicant.name_en || '-' }}</span>
+                      <span>国籍：{{ applicant.nationality || '-' }}</span>
+                      <span>证件类型：{{ applicant.certificate_type || '-' }}</span>
+                      <span>证件号：{{ applicant.certificate_no || '-' }}</span>
+                      <span>官方邮编：{{ applicant.official_postcode || '-' }}</span>
+                      <span>官方申请人类型：{{ applicant.official_applicant_kind || '-' }}</span>
+                    </div>
+                  </div>
+                  <div v-if="caseData.inventors?.length" class="official-party-list">
+                    <div
+                      v-for="(inventor, index) in caseData.inventors"
+                      :key="`inventor-${index}`"
+                      class="official-party-item"
+                    >
+                      <strong>发明人 {{ index + 1 }}</strong>
+                      <span>姓名：{{ inventor.name_cn || inventor.name_en || '-' }}</span>
+                      <span>国籍：{{ inventor.nationality || '-' }}</span>
+                      <span>中国籍身份证号：{{ inventor.china_id_no || '-' }}</span>
+                    </div>
+                  </div>
+                </div>
+
                 <div v-if="caseData.priorities?.length" class="info-section">
                   <h4 class="info-section-title">优先权信息</h4>
                   <div class="priority-list">
@@ -719,6 +750,27 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.official-party-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.official-party-item {
+  display: grid;
+  grid-template-columns: 120px repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-card);
+}
+
+.official-party-item span,
+.official-party-item strong {
+  overflow-wrap: anywhere;
 }
 
 .priority-item {

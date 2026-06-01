@@ -6,6 +6,14 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 
+class PayListOfficialReadinessOut(BaseModel):
+    pay_list_id: int
+    official_upload_template_status: str | None = None
+    official_upload_template_name: str | None = None
+    official_upload_batch_limit: int | None = None
+    official_pay_list_boundary_note: str | None = None
+
+
 class AnnuityTaskListItemResponse(BaseModel):
     id: int
     case_id: str

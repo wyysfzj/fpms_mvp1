@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.modules.annuity.models import PayList  # noqa: F401
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.masterdata.applicants.models import Applicant
@@ -107,6 +108,28 @@ def _create_case(
     return response.json()
 
 
+def _create_filing_materials(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    *,
+    case_id: str,
+) -> None:
+    for title in ("发明专利请求书", "说明书", "权利要求书", "摘要"):
+        response = client.post(
+            "/api/v1/documents",
+            headers=auth_headers,
+            json={
+                "case_id": case_id,
+                "doc_template_id": None,
+                "doc_type": "CLIENT_IN",
+                "direction": "IN",
+                "doc_date": "2026-03-02",
+                "title": title,
+            },
+        )
+        assert response.status_code == 201, response.text
+
+
 def test_batch_filing_apply_fee_limit_task_uses_template_fields(
     client: TestClient,
     auth_headers: dict[str, str],
@@ -121,6 +144,7 @@ def test_batch_filing_apply_fee_limit_task_uses_template_fields(
         client_id=client_id,
         applicant_id=applicant_id,
     )
+    _create_filing_materials(client, auth_headers, case_id=case_data["id"])
 
     response = client.post(
         "/api/v1/cases/batch-filing/submit",

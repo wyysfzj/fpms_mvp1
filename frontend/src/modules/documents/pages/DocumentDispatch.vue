@@ -158,6 +158,11 @@
       </div>
     </el-card>
 
+    <LetterHandoffPanel
+      class="action-panel"
+      :document-id="selectedLetterHandoffDocumentId"
+    />
+
     <el-card v-if="dispatchDetail" class="action-panel" shadow="never">
       <div class="action-panel-header">
         <h3>交接单详情</h3>
@@ -242,6 +247,7 @@ import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
+import LetterHandoffPanel from '../../officialWorkflows/components/LetterHandoffPanel.vue'
 
 const documents = ref<Document[]>([])
 const clients = ref<Client[]>([])
@@ -256,6 +262,7 @@ const selectedIds = ref<string[]>([])
 const creatingDispatch = ref(false)
 const dispatchDetail = ref<DocumentDispatchOut | null>(null)
 const currentDispatchId = ref('')
+const selectedLetterHandoffDocumentId = computed(() => selectedIds.value.length === 1 ? selectedIds.value[0] : '')
 
 const filters = reactive<DocumentDispatchMailingListParams>({
   q: '',

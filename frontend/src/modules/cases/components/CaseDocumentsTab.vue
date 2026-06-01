@@ -12,6 +12,19 @@
       <span v-for="item in gateStatusItems" :key="item.label">{{ item.label }} {{ item.value }}</span>
     </div>
 
+    <section class="document-gate-card intake-role-card">
+      <h4 class="document-gate-title">新申请收案门禁</h4>
+      <el-table :data="newCaseGateRows" size="small" class="document-gate-table">
+        <el-table-column prop="fileName" label="客户文件" min-width="150" />
+        <el-table-column prop="requirement" label="要求" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.tagType" size="small">{{ row.requirement }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="usage" label="用途" min-width="220" />
+      </el-table>
+    </section>
+
     <div class="document-gate-grid">
       <section class="document-gate-card">
         <h4 class="document-gate-title">当前节点文件材料</h4>
@@ -106,6 +119,23 @@
         <el-table-column label="文件角色" min-width="130">
           <template #default="{ row }">{{ getDocumentRole(row) }}</template>
         </el-table-column>
+        <el-table-column label="官方附件" min-width="180">
+          <template #default="{ row }">
+            <div class="attachment-role-inline">
+              <template v-if="getAttachmentOfficialSummaries(row).length">
+                <el-tag
+                  v-for="summary in getAttachmentOfficialSummaries(row)"
+                  :key="summary"
+                  size="small"
+                  type="info"
+                >
+                  {{ summary }}
+                </el-tag>
+              </template>
+              <span v-else class="muted">未标注</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="效果状态" width="110">
           <template #default="{ row }">
             <el-tag :type="getFileEventTagType(row)" size="small">
@@ -139,7 +169,7 @@ import type {
   CaseDocumentGateFileEvent,
   CaseDocumentGatePreview,
 } from '../../../api/cases.types'
-import type { Document } from '../../../api/documents.types'
+import type { Attachment, Document } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 
 const props = defineProps<{
@@ -160,6 +190,38 @@ const gateStatusItems = computed(() => [
   { label: '硬性阻止', value: documentGate.value ? (documentGate.value.hard_block ? '是' : '否') : '-' },
   { label: '后补审计', value: documentGate.value ? (documentGate.value.afterfill_audit_required ? '需要' : '不需要') : '-' },
 ])
+
+const OFFICIAL_ROLE_TEXT: Record<string, string> = {
+  TECHNICAL_DISCLOSURE: '技术交底书',
+  COMMISSION_INSTRUCTION: '委托指示',
+  FILING_DOCUMENT: '递交文件',
+  FILING_XML_ZIP: 'XML压缩包',
+  FILING_MERGED_PDF: '合并PDF',
+  FILING_CLAIMS: '权利要求书',
+  OA_STATEMENT_WORD: 'OA意见陈述 Word',
+  OA_STATEMENT_PDF: 'OA意见陈述 PDF',
+  OA_MODIFIED_CLAIMS: 'OA修改后权利要求书',
+  OA_AMENDMENT_COMPARISON: 'OA修改对照页',
+  OA_OTHER_PROOF: 'OA其他证明文件',
+  OA_ADDITIONAL_FILE: 'OA附加文件',
+  RECEIPT_PDF: '回执',
+  MERGED_PDF: '合并PDF',
+}
+
+const newCaseGateRows = [
+  {
+    fileName: '技术交底书',
+    requirement: '必传',
+    tagType: 'danger',
+    usage: '作为新申请内容准备和后续官方递交文件生成的稳定来源。',
+  },
+  {
+    fileName: '委托指示（如有）',
+    requirement: '条件项',
+    tagType: 'warning',
+    usage: '客户提供时必须入库；未提供时不阻止建案。',
+  },
+]
 
 const materialRequirements = computed(() =>
   (documentGate.value?.checks || []).map((check) => ({
@@ -280,6 +342,31 @@ function getDocumentRole(row: Document) {
   return row.direction === 'IN' ? '往来收文' : '对外文书'
 }
 
+function normalizeCode(value?: string | null): string {
+  return String(value || '').trim().toUpperCase()
+}
+
+function getOfficialRoleText(role?: string | null): string {
+  const normalized = normalizeCode(role)
+  if (!normalized) return ''
+  return OFFICIAL_ROLE_TEXT[normalized] || normalized
+}
+
+function getAttachmentOfficialSummary(attachment: Attachment): string {
+  const roleText = getOfficialRoleText(attachment.official_file_role)
+  if (roleText) return roleText
+  if (attachment.source_role_alias) return `历史别名：${attachment.source_role_alias}`
+  if (attachment.is_receipt_evidence) return '回执证据'
+  if (attachment.is_archive_evidence) return '归档证据'
+  return ''
+}
+
+function getAttachmentOfficialSummaries(row: Document): string[] {
+  return (row.attachments || [])
+    .map((attachment) => getAttachmentOfficialSummary(attachment))
+    .filter((summary): summary is string => Boolean(summary))
+}
+
 function getFileEventStatusText(row: Document) {
   return eventStatusText(fileEventByDocumentId.value.get(row.id)?.event_status)
 }
@@ -385,6 +472,10 @@ async function handleCreate() {
   padding: 16px;
 }
 
+.intake-role-card {
+  background: #fbfdff;
+}
+
 .document-gate-title {
   margin: 0 0 12px;
   color: var(--text-main);
@@ -436,6 +527,12 @@ async function handleCreate() {
 
 .document-action-item .el-button {
   flex: 0 0 auto;
+}
+
+.attachment-role-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 @media (max-width: 1100px) {

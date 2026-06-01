@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,6 +23,17 @@ class DocAttachment(UUIDPrimaryKeyMixin, AuditMixin, Base):
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
     mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    official_file_role: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_role_alias: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    external_upload_position: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    package_usage_hint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_archive_evidence: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("0")
+    )
+    is_receipt_evidence: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("0")
+    )
 
     document: Mapped["Document"] = relationship("Document", back_populates="attachments")
 
@@ -85,6 +96,55 @@ class Document(UUIDPrimaryKeyMixin, AuditMixin, Base):
     reply_to_doc: Mapped["Document | None"] = relationship(
         "Document", back_populates="replies", remote_side="Document.id", foreign_keys=[reply_to_id]
     )
+
+
+class LetterHandoff(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_letter_handoff"
+
+    source_document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_document.id", ondelete="CASCADE"), nullable=False
+    )
+    generated_document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_document.id"), nullable=True
+    )
+    format_letter_mapping_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_format_letter_mapping.id"), nullable=True
+    )
+    format_letter_template_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_template.id"), nullable=True
+    )
+    client_contact_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_client_contact.id"), nullable=True
+    )
+    contact_selection_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    salutation_source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    salutation_text: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    generated_word_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mail_subject: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mail_body_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
+    longxia_handoff_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'PENDING'")
+    )
+    longxia_handoff_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    handoff_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class LetterHandoffAttachment(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_letter_handoff_attachment"
+
+    handoff_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_letter_handoff.id", ondelete="CASCADE"), nullable=False
+    )
+    attachment_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_doc_attachment.id"), nullable=True
+    )
+    file_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attachment_role: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    included: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("0"))
+    sort_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class DocDispatch(UUIDPrimaryKeyMixin, AuditMixin, Base):

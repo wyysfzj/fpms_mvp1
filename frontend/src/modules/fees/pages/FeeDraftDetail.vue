@@ -166,6 +166,13 @@
           </div>
         </el-tab-pane>
       </el-tabs>
+
+      <FeeLinkagePanel
+        v-if="feePackageId"
+        class="fee-linkage-section"
+        :package-id="feePackageId"
+        :focus-id="draft.id"
+      />
     </template>
 
     <div v-else-if="!loading && !error" class="page-empty">
@@ -191,6 +198,7 @@ import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import FeeDraftItemsTable from '../components/FeeDraftItemsTable.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
+import FeeLinkagePanel from '../../officialWorkflows/components/FeeLinkagePanel.vue'
 import { usePageContext } from '../../../stores/pageContext'
 import { ZH } from '../../../constants/labels.zh'
 import { getFeeDraftStatusText, getFeeDraftTypeText } from '../../../constants/displayText'
@@ -212,6 +220,7 @@ const lockLoading = ref(false)
 const lockError = ref<ApiError | null>(null)
 
 const draftId = computed(() => String(route.params.id || ''))
+const feePackageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
 const displayDraftId = computed(() => {
   if (!draft.value) return '—'
   return getFeeDraftTypeText(draft.value.draft_type) || '费用草稿'
@@ -396,5 +405,9 @@ onBeforeUnmount(() => {
 
 .locked-notice-icon {
   font-size: 16px;
+}
+
+.fee-linkage-section {
+  margin-top: 16px;
 }
 </style>

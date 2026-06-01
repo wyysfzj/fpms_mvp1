@@ -37,6 +37,29 @@ class FeeDraft(UUIDPrimaryKeyMixin, AuditMixin, Base):
     amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
+    official_fee_reduction_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    official_template_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    official_template_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    official_template_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class OfficialFeeChecklist(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_official_fee_checklist"
+
+    fee_draft_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("t_fee_draft.id", ondelete="CASCADE"), nullable=True
+    )
+    pay_list_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("t_pay_list.id", ondelete="CASCADE"), nullable=True
+    )
+    checklist_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    checklist_label: Mapped[str] = mapped_column(String(256), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'PENDING'")
+    )
+    required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("1"))
+    blocker_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class FeeItem(UUIDPrimaryKeyMixin, AuditMixin, Base):

@@ -68,6 +68,11 @@
               <p>{{ ZH.docDetail.noContent }}</p>
             </div>
           </div>
+          <LetterHandoffPanel
+            v-if="showLetterHandoffAction"
+            class="letter-handoff-section"
+            :document-id="doc.id"
+          />
         </div>
 
         <!-- Side Panel -->
@@ -128,6 +133,19 @@
                   </el-tag>
                 </div>
               </div>
+              <div v-if="attachmentOfficialSummaries.length" class="info-item info-item-full">
+                <span class="info-label">附件官方角色</span>
+                <div class="info-value template-rule-list">
+                  <el-tag
+                    v-for="summary in attachmentOfficialSummaries"
+                    :key="summary"
+                    size="small"
+                    class="template-rule-tag"
+                  >
+                    {{ summary }}
+                  </el-tag>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -135,6 +153,12 @@
             <div class="widget-title">{{ ZH.docDetail.quickActions }}</div>
             <div class="quick-actions">
               <el-button size="small" @click="handleEdit">{{ ZH.docDetail.editDoc }}</el-button>
+              <router-link v-if="showOaReplyAction" :to="oaReplyPackageRoute">
+                <el-button size="small">OA答复工作包</el-button>
+              </router-link>
+              <el-button v-if="showLetterHandoffAction" size="small" @click="scrollToLetterHandoff">
+                信函交接
+              </el-button>
             </div>
           </div>
 
@@ -162,11 +186,12 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getDocument, getDocTemplate } from '../../../api/documents'
-import type { DocTemplate, Document } from '../../../api/documents.types'
+import type { Attachment, DocTemplate, Document } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import AttachmentList from '../components/AttachmentList.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
+import LetterHandoffPanel from '../../officialWorkflows/components/LetterHandoffPanel.vue'
 import { usePageContext } from '../../../stores/pageContext'
 import { ZH } from '../../../constants/labels.zh'
 import { getDocumentDirectionText, getDocumentDocTypeText } from '../../../constants/displayText'
@@ -201,6 +226,49 @@ const templateHints = computed(() => {
   }
   return hints
 })
+const attachmentOfficialSummaries = computed(() => {
+  const attachments = doc.value?.attachments || []
+  return attachments
+    .map((attachment) => getAttachmentOfficialSummary(attachment))
+    .filter((summary): summary is string => Boolean(summary))
+})
+const showOaReplyAction = computed(() => {
+  const current = doc.value
+  if (!current) return false
+
+  const templateCode = normalizeCode(current.template_code || docTemplate.value?.code)
+  return Boolean(
+    current.need_reply
+    || current.reply_to_id
+    || current.doc_type === 'OFFICIAL_IN'
+    || templateCode.includes('OA')
+    || templateCode.includes('REPLY')
+  )
+})
+const oaReplyPackageRoute = computed(() => ({
+  path: '/official-workflows/oa-reply',
+  query: {
+    document_id: doc.value?.id || '',
+  },
+}))
+const showLetterHandoffAction = computed(() => doc.value?.direction === 'OUT')
+
+const OFFICIAL_ROLE_TEXT: Record<string, string> = {
+  TECHNICAL_DISCLOSURE: '技术交底书',
+  COMMISSION_INSTRUCTION: '委托指示',
+  FILING_DOCUMENT: '递交文件',
+  FILING_XML_ZIP: 'XML压缩包',
+  FILING_MERGED_PDF: '合并PDF',
+  FILING_CLAIMS: '权利要求书',
+  OA_STATEMENT_WORD: 'OA意见陈述 Word',
+  OA_STATEMENT_PDF: 'OA意见陈述 PDF',
+  OA_MODIFIED_CLAIMS: 'OA修改后权利要求书',
+  OA_AMENDMENT_COMPARISON: 'OA修改对照页',
+  OA_OTHER_PROOF: 'OA其他证明文件',
+  OA_ADDITIONAL_FILE: 'OA附加文件',
+  RECEIPT_PDF: '回执',
+  MERGED_PDF: '合并PDF',
+}
 
 async function fetchDocument() {
   const id = String(route.params.id || '').trim()
@@ -241,6 +309,25 @@ function formatDocumentDisplay(value: Document): string {
   return value.ref_no || value.title || '未命名往来文件'
 }
 
+function normalizeCode(value?: string | null): string {
+  return String(value || '').trim().toUpperCase()
+}
+
+function getOfficialRoleText(role?: string | null): string {
+  const normalized = normalizeCode(role)
+  if (!normalized) return ''
+  return OFFICIAL_ROLE_TEXT[normalized] || normalized
+}
+
+function getAttachmentOfficialSummary(attachment: Attachment): string {
+  const roleText = getOfficialRoleText(attachment.official_file_role)
+  if (roleText) return roleText
+  if (attachment.source_role_alias) return `历史别名：${attachment.source_role_alias}`
+  if (attachment.is_receipt_evidence) return '回执证据'
+  if (attachment.is_archive_evidence) return '归档证据'
+  return ''
+}
+
 function goBack() {
   router.push('/documents')
 }
@@ -248,6 +335,10 @@ function goBack() {
 function handleEdit() {
   const id = route.params.id
   router.push(`/documents/${id}/edit`)
+}
+
+function scrollToLetterHandoff() {
+  document.querySelector('.letter-handoff-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 onMounted(() => {
@@ -305,5 +396,9 @@ onBeforeUnmount(() => {
 
 .template-rule-tag {
   margin-right: 0;
+}
+
+.letter-handoff-section {
+  margin-top: 16px;
 }
 </style>

@@ -18,6 +18,7 @@ from app.modules.masterdata.applicants.api import router as applicants_router
 from app.modules.masterdata.clients.api import router as clients_router
 from app.modules.masterdata.countries.api import router as countries_router
 from app.modules.masterdata.departments.api import router as departments_router
+from app.modules.official_workflows.api import router as official_workflows_router
 from app.modules.system.api import router as system_router
 from app.modules.tasks.api import router as tasks_router
 from app.modules.templates.api import router as templates_router
@@ -34,6 +35,7 @@ api_router.include_router(departments_router, tags=["Departments"])
 api_router.include_router(case_router, tags=["Cases"])
 api_router.include_router(documents_router, tags=["Documents"])
 api_router.include_router(tasks_router, tags=["Tasks"])
+api_router.include_router(official_workflows_router, tags=["Official Workflows"])
 api_router.include_router(grant_fees_router, tags=["Grant Fees"])
 api_router.include_router(fees_router, tags=["Fees"])
 api_router.include_router(billing_router, tags=["Billing"])

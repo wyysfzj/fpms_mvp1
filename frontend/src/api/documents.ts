@@ -31,10 +31,18 @@ import type {
 
 interface BackendAttachment {
     id: string
+    document_id?: string
     file_name: string
     file_size: number
     mime_type?: string
     uploaded_at: string
+    official_file_role?: string | null
+    source_role_alias?: string | null
+    external_upload_position?: string | null
+    content_hash?: string | null
+    package_usage_hint?: string | null
+    is_archive_evidence?: boolean
+    is_receipt_evidence?: boolean
 }
 
 interface BackendDocument {
@@ -68,6 +76,14 @@ function mapAttachment(input: BackendAttachment): Attachment {
         file_size: Number(input.file_size || 0),
         content_type: input.mime_type,
         created_at: input.uploaded_at,
+        document_id: input.document_id,
+        official_file_role: input.official_file_role ?? null,
+        source_role_alias: input.source_role_alias ?? null,
+        external_upload_position: input.external_upload_position ?? null,
+        content_hash: input.content_hash ?? null,
+        package_usage_hint: input.package_usage_hint ?? null,
+        is_archive_evidence: input.is_archive_evidence ?? false,
+        is_receipt_evidence: input.is_receipt_evidence ?? false,
     }
 }
 

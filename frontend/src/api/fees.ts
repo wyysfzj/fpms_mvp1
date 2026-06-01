@@ -123,6 +123,10 @@ interface BackendFeeDraftDetail {
     total_service?: string | number
     total_misc?: string | number
     amount?: string | number
+    official_fee_reduction_note?: string | null
+    official_template_status?: string | null
+    official_template_version?: string | null
+    official_template_note?: string | null
     created_at?: string
     updated_at?: string
 }
@@ -191,6 +195,10 @@ function mapFeeDraftDetail(input: BackendFeeDraftDetail): FeeDraftDetail {
         total_service: input.total_service != null ? Number(input.total_service) : undefined,
         total_misc: input.total_misc != null ? Number(input.total_misc) : undefined,
         amount: input.amount != null ? Number(input.amount) : undefined,
+        official_fee_reduction_note: input.official_fee_reduction_note ?? null,
+        official_template_status: input.official_template_status ?? null,
+        official_template_version: input.official_template_version ?? null,
+        official_template_note: input.official_template_note ?? null,
         created_at: input.created_at,
         updated_at: input.updated_at,
     }

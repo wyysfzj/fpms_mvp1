@@ -10,12 +10,19 @@ export interface CaseApplicant {
     address_cn?: string
     address_en?: string
     source_client_id?: string
+    nationality?: string
+    certificate_type?: string
+    certificate_no?: string
+    official_postcode?: string
+    official_applicant_kind?: string
 }
 
 export interface CaseInventor {
     seq: number
     name_cn?: string
     name_en?: string
+    nationality?: string
+    china_id_no?: string
 }
 
 export interface CasePriority {
@@ -241,6 +248,7 @@ export interface CaseCreatePayload {
     fee_reduction?: string
     applicant_kind?: string
     applicants?: CaseApplicant[]
+    inventors?: CaseInventor[]
     priorities?: CasePriority[]
     agent_splits?: CaseAgentSplit[]
 }
@@ -306,6 +314,7 @@ export interface CaseUpdatePayload {
     fee_reduction?: string | null
     applicant_kind?: string | null
     applicants?: CaseApplicant[] | null
+    inventors?: CaseInventor[] | null
 }
 
 export interface CaseLimitedEditPayload {

@@ -180,6 +180,36 @@ export interface Attachment {
     file_size: number
     content_type?: string
     created_at: string
+    document_id?: string
+    official_file_role?: string | null
+    source_role_alias?: string | null
+    external_upload_position?: string | null
+    content_hash?: string | null
+    package_usage_hint?: string | null
+    is_archive_evidence?: boolean
+    is_receipt_evidence?: boolean
+}
+
+export interface AttachmentManifestItem {
+    attachment_id: string
+    document_id: string
+    file_name: string
+    official_file_role?: string | null
+    source_role_alias?: string | null
+    external_upload_position?: string | null
+    content_hash?: string | null
+    package_usage_hint?: string | null
+    is_archive_evidence: boolean
+    is_receipt_evidence: boolean
+}
+
+export interface AttachmentManifestSummary {
+    intake_gate_roles: AttachmentManifestItem[]
+    filing_roles: AttachmentManifestItem[]
+    oa_roles: AttachmentManifestItem[]
+    archive_roles: AttachmentManifestItem[]
+    historical_alias_roles: AttachmentManifestItem[]
+    missing_intake_gate_roles: string[]
 }
 
 export interface DocumentWizardBatchDefaults {

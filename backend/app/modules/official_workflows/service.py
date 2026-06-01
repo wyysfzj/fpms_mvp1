@@ -1,0 +1,1857 @@
+from __future__ import annotations
+
+import json
+from datetime import date, datetime
+from uuid import uuid4
+
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session
+
+from app.core.errors import raise_business_error
+from app.modules.annuity.models import GovPayment, PayList
+from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor
+from app.modules.documents.models import (
+    DocAttachment,
+    DocTemplate,
+    Document,
+    LetterHandoff,
+    LetterHandoffAttachment,
+)
+from app.modules.documents.schemas import LetterHandoffAttachmentOut, LetterHandoffOut
+from app.modules.documents.service import summarize_attachment_manifest
+from app.modules.fees.models import FeeDraft, OfficialFeeChecklist
+from app.modules.masterdata.clients.models import ClientContact
+from app.modules.official_workflows.models import (
+    OfficialWorkPackage,
+    OfficialWorkPackageChecklist,
+    OfficialWorkPackageManifest,
+    OfficialWorkPackageOverride,
+    OfficialWorkPackageReceipt,
+)
+from app.modules.official_workflows.schemas import (
+    OFFICIAL_WORK_PACKAGE_RECEIPT_KINDS,
+    FilingPackageFeeSummaryOut,
+    FilingPackageGateOut,
+    FilingPackageXmlZipOut,
+    FilingPreparationPackageOut,
+    LetterHandoffContactOut,
+    LetterHandoffMappingOut,
+    LetterHandoffPreviewAttachmentOut,
+    LetterHandoffPreviewOut,
+    LetterHandoffResultOut,
+    OaReplyAttachmentOut,
+    OaReplyDocumentOut,
+    OaReplyPackageOut,
+    OfficialFeeChecklistOut,
+    OfficialFeeDraftLinkOut,
+    OfficialFeeLinkageBlockerOut,
+    OfficialFeeLinkageOut,
+    OfficialFieldCheckOut,
+    OfficialFieldSummaryOut,
+    OfficialPayListLinkOut,
+    OfficialWorkPackageBlockerOut,
+    OfficialWorkPackageChecklistOut,
+    OfficialWorkPackageManifestOut,
+    OfficialWorkPackageOut,
+    OfficialWorkPackageStatusEvaluationOut,
+)
+from app.modules.tasks.models import Task
+from app.modules.templates.models import FormatLetterMapping, Template
+
+CHECKLIST_COMPLETE_STATUSES = {"DONE", "NOT_APPLICABLE", "OVERRIDDEN"}
+OFFICIAL_FEE_COMPLETE_STATUSES = {"DONE", "READY", "NOT_APPLICABLE", "OVERRIDDEN"}
+MAINTENANCE_MISSING_KINDS = {"SYSTEM_FIELD", "SYSTEM_FILE", "REQUIRED_MANIFEST"}
+CONFIRMATION_MISSING_KINDS = {
+    "OFFICIAL_TRANSIENT",
+    "UNCONFIRMED_OWNERSHIP",
+    "INTEGRATION_ONLY",
+}
+RECEIPT_ARCHIVED_STATUSES = {"ARCHIVED", "CONFIRMED", "RECEIVED"}
+
+
+def _normalize_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _normalize_code(value: str | None) -> str | None:
+    normalized = _normalize_text(value)
+    if not normalized:
+        return None
+    return normalized.upper()
+
+
+def classify_work_package_missing_item(missing_kind: str) -> str:
+    kind = _normalize_code(missing_kind)
+    if kind in MAINTENANCE_MISSING_KINDS:
+        return "NEEDS_MAINTENANCE"
+    if kind in CONFIRMATION_MISSING_KINDS:
+        return "NEEDS_CONFIRMATION"
+    raise_business_error(
+        "OFFICIAL_WORK_PACKAGE_MISSING_KIND_INVALID",
+        "Official work-package missing item kind is invalid",
+        details={"missing_kind": missing_kind},
+        status_code=400,
+    )
+
+
+def _get_package(db: Session, package_id: str) -> OfficialWorkPackage:
+    package = db.execute(
+        select(OfficialWorkPackage).where(OfficialWorkPackage.id == package_id)
+    ).scalar_one_or_none()
+    if not package:
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_NOT_FOUND",
+            "Official work package not found",
+            status_code=404,
+        )
+    return package
+
+
+def _require_filing_package(package: OfficialWorkPackage) -> None:
+    if _normalize_code(package.package_kind) != "FILING_PREP":
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_KIND_INVALID",
+            "Official work package is not a filing preparation package",
+            details={"package_kind": package.package_kind},
+            status_code=400,
+        )
+
+
+def _require_oa_package(package: OfficialWorkPackage) -> None:
+    if _normalize_code(package.package_kind) != "OA_REPLY":
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_KIND_INVALID",
+            "Official work package is not an OA reply package",
+            details={"package_kind": package.package_kind},
+            status_code=400,
+        )
+
+
+def _get_case(db: Session, case_id: str) -> Case:
+    case = db.execute(select(Case).where(Case.id == case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+    return case
+
+
+def _get_document(db: Session, document_id: str) -> Document:
+    document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
+    if not document:
+        raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
+    return document
+
+
+def _package_out(package: OfficialWorkPackage) -> OfficialWorkPackageOut:
+    return OfficialWorkPackageOut(
+        id=package.id,
+        case_id=package.case_id,
+        package_kind=package.package_kind,
+        status=package.status,
+        source_document_id=package.source_document_id,
+        reply_document_id=package.reply_document_id,
+        external_system=package.external_system,
+        remark=package.remark,
+    )
+
+
+def _checklist_out(checklist: OfficialWorkPackageChecklist) -> OfficialWorkPackageChecklistOut:
+    return OfficialWorkPackageChecklistOut(
+        id=checklist.id,
+        package_id=checklist.package_id,
+        section_code=checklist.section_code,
+        item_code=checklist.item_code,
+        item_label=checklist.item_label,
+        status=checklist.status,
+        required=checklist.required,
+        sort_order=checklist.sort_order,
+        evidence_note=checklist.evidence_note,
+    )
+
+
+def _manifest_out(manifest: OfficialWorkPackageManifest) -> OfficialWorkPackageManifestOut:
+    return OfficialWorkPackageManifestOut(
+        id=manifest.id,
+        package_id=manifest.package_id,
+        attachment_id=manifest.attachment_id,
+        official_file_role=manifest.official_file_role,
+        source_role_alias=manifest.source_role_alias,
+        external_upload_position=manifest.external_upload_position,
+        content_hash=manifest.content_hash,
+        required=manifest.required,
+        present=manifest.present,
+        sort_order=manifest.sort_order,
+        note=manifest.note,
+    )
+
+
+def _get_attachment(db: Session, attachment_id: str) -> DocAttachment:
+    attachment = db.execute(
+        select(DocAttachment).where(DocAttachment.id == attachment_id)
+    ).scalar_one_or_none()
+    if not attachment:
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_RECEIPT_ATTACHMENT_NOT_FOUND",
+            "Receipt attachment not found",
+            status_code=404,
+        )
+    return attachment
+
+
+def _case_attachments(db: Session, *, case_id: str) -> list[DocAttachment]:
+    return (
+        db.execute(
+            select(DocAttachment)
+            .join(Document, DocAttachment.document_id == Document.id)
+            .where(Document.case_id == case_id)
+            .order_by(DocAttachment.created_at.asc(), DocAttachment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _official_field_summary(db: Session, *, case: Case) -> OfficialFieldSummaryOut:
+    items: list[OfficialFieldCheckOut] = []
+
+    def add_check(code: str, label: str, present: bool, message: str | None = None) -> None:
+        items.append(
+            OfficialFieldCheckOut(
+                code=code,
+                label=label,
+                status="READY" if present else "MISSING",
+                message=None if present else message,
+            )
+        )
+
+    add_check("TITLE_CN", "发明名称", bool(_normalize_text(case.title_cn)), "发明名称缺失")
+    add_check(
+        "PRIMARY_AGENT_ID",
+        "代理人",
+        bool(_normalize_text(case.primary_agent_id)),
+        "代理人缺失",
+    )
+    add_check("SPEC_PAGES", "说明书页数", case.spec_pages is not None, "说明书页数缺失")
+    add_check("CLAIM_COUNT", "权利要求项数", case.claim_count is not None, "权利要求项数缺失")
+    add_check(
+        "FEE_REDUCTION",
+        "费减比例",
+        bool(_normalize_text(case.fee_reduction)),
+        "费减比例缺失或语义待确认",
+    )
+
+    applicants = (
+        db.execute(
+            select(T_CaseApplicant)
+            .where(T_CaseApplicant.case_id == case.id)
+            .order_by(T_CaseApplicant.seq.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if not applicants:
+        add_check("APPLICANT_REQUIRED", "申请人", False, "至少需要一个申请人")
+    for applicant in applicants:
+        prefix = f"APPLICANT_{applicant.seq}"
+        add_check(
+            f"{prefix}_NAME",
+            "申请人名称",
+            bool(_normalize_text(applicant.name_cn) or _normalize_text(applicant.name_en)),
+            "申请人名称缺失",
+        )
+        add_check(
+            f"{prefix}_NATIONALITY",
+            "申请人国籍",
+            bool(_normalize_text(applicant.nationality)),
+            "申请人国籍缺失",
+        )
+        add_check(
+            f"{prefix}_CERTIFICATE_TYPE",
+            "申请人证件类型",
+            bool(_normalize_text(applicant.certificate_type)),
+            "申请人证件类型缺失",
+        )
+        add_check(
+            f"{prefix}_CERTIFICATE_NO",
+            "申请人证件号",
+            bool(_normalize_text(applicant.certificate_no)),
+            "申请人证件号缺失",
+        )
+        add_check(
+            f"{prefix}_OFFICIAL_POSTCODE",
+            "申请人官方邮编",
+            bool(_normalize_text(applicant.official_postcode)),
+            "申请人官方邮编缺失",
+        )
+
+    inventors = (
+        db.execute(
+            select(T_CaseInventor)
+            .where(T_CaseInventor.case_id == case.id)
+            .order_by(T_CaseInventor.seq.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if not inventors:
+        add_check("INVENTOR_REQUIRED", "发明人", False, "至少需要一个发明人")
+    for inventor in inventors:
+        prefix = f"INVENTOR_{inventor.seq}"
+        add_check(
+            f"{prefix}_NAME",
+            "发明人名称",
+            bool(_normalize_text(inventor.name_cn) or _normalize_text(inventor.name_en)),
+            "发明人名称缺失",
+        )
+        add_check(
+            f"{prefix}_NATIONALITY",
+            "发明人国籍",
+            bool(_normalize_text(inventor.nationality)),
+            "发明人国籍缺失",
+        )
+        if _normalize_code(inventor.nationality) in {"CN", "CHINA", "中国"}:
+            add_check(
+                f"{prefix}_CHINA_ID_NO",
+                "中国籍发明人身份证号",
+                bool(_normalize_text(inventor.china_id_no)),
+                "中国籍发明人身份证号缺失",
+            )
+
+    missing_codes = [item.code for item in items if item.status != "READY"]
+    return OfficialFieldSummaryOut(
+        status="READY" if not missing_codes else "NEEDS_MAINTENANCE",
+        missing_codes=missing_codes,
+        items=items,
+    )
+
+
+def _upsert_manifest_role(
+    db: Session,
+    *,
+    package_id: str,
+    role: str,
+    required: bool,
+    sort_order: int,
+    attachment: DocAttachment | None = None,
+    external_upload_position: str | None = None,
+    note: str | None = None,
+) -> OfficialWorkPackageManifest:
+    existing = (
+        db.execute(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package_id,
+                OfficialWorkPackageManifest.official_file_role == role,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    manifest = existing or OfficialWorkPackageManifest(
+        id=str(uuid4()),
+        package_id=package_id,
+        official_file_role=role,
+    )
+    manifest.attachment_id = attachment.id if attachment else None
+    manifest.source_role_alias = (
+        getattr(attachment, "source_role_alias", None) if attachment else None
+    )
+    manifest.external_upload_position = external_upload_position or (
+        getattr(attachment, "external_upload_position", None) if attachment else None
+    )
+    manifest.content_hash = getattr(attachment, "content_hash", None) if attachment else None
+    manifest.required = required
+    manifest.present = bool(attachment)
+    manifest.sort_order = sort_order
+    manifest.note = note
+    if not existing:
+        db.add(manifest)
+    return manifest
+
+
+def _upsert_checklist(
+    db: Session,
+    *,
+    package_id: str,
+    section_code: str,
+    item_code: str,
+    item_label: str,
+    status: str = "PENDING",
+    required: bool = True,
+    sort_order: int | None = None,
+    evidence_note: str | None = None,
+) -> OfficialWorkPackageChecklist:
+    existing = (
+        db.execute(
+            select(OfficialWorkPackageChecklist).where(
+                OfficialWorkPackageChecklist.package_id == package_id,
+                OfficialWorkPackageChecklist.item_code == item_code,
+            )
+        )
+        .scalars()
+        .first()
+    )
+    checklist = existing or OfficialWorkPackageChecklist(
+        id=str(uuid4()),
+        package_id=package_id,
+        item_code=item_code,
+    )
+    checklist.section_code = section_code
+    checklist.item_label = item_label
+    checklist.status = _normalize_code(status) or "PENDING"
+    checklist.required = required
+    checklist.sort_order = sort_order
+    if evidence_note is not None:
+        checklist.evidence_note = _normalize_text(evidence_note)
+    if not existing:
+        db.add(checklist)
+    return checklist
+
+
+def _checklist_blocker_status(checklist: OfficialWorkPackageChecklist) -> str:
+    status = _normalize_code(checklist.status) or "PENDING"
+    if status == "NEEDS_CONFIRMATION":
+        return "NEEDS_CONFIRMATION"
+    return "NEEDS_MAINTENANCE"
+
+
+def _has_archived_receipt(receipts: list[OfficialWorkPackageReceipt]) -> bool:
+    return any(
+        bool(receipt.receipt_attachment_id)
+        and (_normalize_code(receipt.archive_status) in RECEIPT_ARCHIVED_STATUSES)
+        for receipt in receipts
+    )
+
+
+def _manual_payment_status(payments: list[GovPayment]) -> str:
+    if not payments:
+        return "NOT_CREATED"
+    paid_rows = [
+        payment
+        for payment in payments
+        if (_normalize_code(payment.status) in {"PAID", "RECORDED"})
+        or payment.paid_date is not None
+    ]
+    if not paid_rows:
+        return "MANUAL_PENDING"
+    if len(paid_rows) == len(payments):
+        return "MANUAL_CONFIRMED"
+    return "MANUAL_PARTIAL"
+
+
+def _is_confirmed_official_fee_checklist(checklist: OfficialFeeChecklist) -> bool:
+    return _normalize_code(checklist.status) in OFFICIAL_FEE_COMPLETE_STATUSES
+
+
+def _fee_checklist_blockers(
+    checklists: list[OfficialFeeChecklist],
+) -> list[OfficialFeeLinkageBlockerOut]:
+    blockers: list[OfficialFeeLinkageBlockerOut] = []
+    for checklist in checklists:
+        if checklist.required and not _is_confirmed_official_fee_checklist(checklist):
+            source_type = "FEE_DRAFT" if checklist.fee_draft_id else "PAY_LIST"
+            source_id = checklist.fee_draft_id or (
+                str(checklist.pay_list_id) if checklist.pay_list_id is not None else None
+            )
+            blockers.append(
+                OfficialFeeLinkageBlockerOut(
+                    blocker_code=checklist.checklist_code,
+                    blocker_label=checklist.checklist_label,
+                    source_type=source_type,
+                    source_id=source_id,
+                    status=_normalize_code(checklist.status) or "PENDING",
+                    message=checklist.blocker_reason or "Customer confirmation is required",
+                )
+            )
+    return blockers
+
+
+def _template_status_blockers(
+    *,
+    fee_drafts: list[FeeDraft],
+    pay_lists: list[PayList],
+) -> list[OfficialFeeLinkageBlockerOut]:
+    blockers: list[OfficialFeeLinkageBlockerOut] = []
+    for draft in fee_drafts:
+        status = _normalize_code(draft.official_template_status)
+        if status in {"UNCONFIRMED", "BLOCKED"}:
+            blockers.append(
+                OfficialFeeLinkageBlockerOut(
+                    blocker_code="FEE_DRAFT_OFFICIAL_TEMPLATE_UNCONFIRMED",
+                    blocker_label="费用草单官方模板兼容性",
+                    source_type="FEE_DRAFT",
+                    source_id=draft.id,
+                    status=status,
+                    message=draft.official_template_note
+                    or "Official payment template compatibility is not confirmed",
+                )
+            )
+
+    for pay_list in pay_lists:
+        status = _normalize_code(pay_list.official_upload_template_status)
+        if status in {"UNCONFIRMED", "BLOCKED"}:
+            blockers.append(
+                OfficialFeeLinkageBlockerOut(
+                    blocker_code="OFFICIAL_UPLOAD_TEMPLATE_UNCONFIRMED",
+                    blocker_label="官网补充缴费信息模板兼容性",
+                    source_type="PAY_LIST",
+                    source_id=str(pay_list.id),
+                    status=status,
+                    message=pay_list.official_pay_list_boundary_note
+                    or "Official upload template compatibility is not confirmed",
+                )
+            )
+    return blockers
+
+
+def get_official_fee_linkage(
+    db: Session,
+    *,
+    package_id: str,
+) -> OfficialFeeLinkageOut:
+    package = _get_package(db, package_id)
+    fee_drafts = (
+        db.execute(
+            select(FeeDraft)
+            .where(FeeDraft.case_id == package.case_id)
+            .order_by(FeeDraft.updated_at.desc(), FeeDraft.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+    draft_ids = [draft.id for draft in fee_drafts]
+
+    gov_payments = (
+        db.execute(
+            select(GovPayment)
+            .where(GovPayment.case_id == package.case_id)
+            .order_by(GovPayment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    pay_list_ids = sorted({payment.pay_list_id for payment in gov_payments})
+    pay_lists = (
+        db.execute(select(PayList).where(PayList.id.in_(pay_list_ids)).order_by(PayList.id.asc()))
+        .scalars()
+        .all()
+        if pay_list_ids
+        else []
+    )
+    payments_by_pay_list: dict[int, list[GovPayment]] = {
+        pay_list_id: [] for pay_list_id in pay_list_ids
+    }
+    for payment in gov_payments:
+        payments_by_pay_list.setdefault(payment.pay_list_id, []).append(payment)
+
+    checklist_conditions = []
+    if draft_ids:
+        checklist_conditions.append(OfficialFeeChecklist.fee_draft_id.in_(draft_ids))
+    if pay_list_ids:
+        checklist_conditions.append(OfficialFeeChecklist.pay_list_id.in_(pay_list_ids))
+    checklists = (
+        db.execute(
+            select(OfficialFeeChecklist)
+            .where(or_(*checklist_conditions))
+            .order_by(OfficialFeeChecklist.sort_order.asc(), OfficialFeeChecklist.id.asc())
+        )
+        .scalars()
+        .all()
+        if checklist_conditions
+        else []
+    )
+
+    blockers = _fee_checklist_blockers(list(checklists))
+    blockers.extend(
+        _template_status_blockers(fee_drafts=list(fee_drafts), pay_lists=list(pay_lists))
+    )
+
+    fee_rate_source_ready = any(
+        checklist.checklist_code == "FEE_RATE_SOURCE_READABLE"
+        and _is_confirmed_official_fee_checklist(checklist)
+        for checklist in checklists
+    )
+    if not fee_rate_source_ready:
+        blockers.append(
+            OfficialFeeLinkageBlockerOut(
+                blocker_code="FEE_RATE_SOURCE_UNCONFIRMED",
+                blocker_label="官费标准费率来源",
+                source_type="CUSTOMER_CONFIRMATION",
+                source_id=None,
+                status="UNCONFIRMED",
+                message="官费标准费率清单来自不可机读图片，需客户提供 Excel、可复制表格或清晰 PDF",
+            )
+        )
+
+    template_statuses = [
+        _normalize_code(draft.official_template_status) for draft in fee_drafts
+    ] + [_normalize_code(pay_list.official_upload_template_status) for pay_list in pay_lists]
+    known_template_statuses = [status for status in template_statuses if status]
+    official_excel_template_ready = bool(known_template_statuses) and all(
+        status == "READY" for status in known_template_statuses
+    )
+
+    return OfficialFeeLinkageOut(
+        package_id=package.id,
+        case_id=package.case_id,
+        official_excel_template_ready=official_excel_template_ready,
+        official_excel_generation_allowed=official_excel_template_ready and fee_rate_source_ready,
+        fee_drafts=[
+            OfficialFeeDraftLinkOut(
+                id=draft.id,
+                draft_type=draft.draft_type,
+                status=draft.status,
+                currency=draft.currency,
+                total_gov=draft.total_gov,
+                total_service=draft.total_service,
+                total_misc=draft.total_misc,
+                amount=draft.amount,
+                official_fee_reduction_note=draft.official_fee_reduction_note,
+                official_template_status=draft.official_template_status,
+                official_template_version=draft.official_template_version,
+                official_template_note=draft.official_template_note,
+            )
+            for draft in fee_drafts
+        ],
+        pay_lists=[
+            OfficialPayListLinkOut(
+                id=pay_list.id,
+                pay_list_no=pay_list.pay_list_no,
+                status=pay_list.status,
+                currency=pay_list.currency,
+                planned_pay_date=pay_list.planned_pay_date,
+                paid_date=pay_list.paid_date,
+                total_amount=pay_list.total_amount,
+                official_upload_template_status=pay_list.official_upload_template_status,
+                official_upload_template_name=pay_list.official_upload_template_name,
+                official_upload_batch_limit=pay_list.official_upload_batch_limit,
+                official_pay_list_boundary_note=pay_list.official_pay_list_boundary_note,
+                manual_payment_status=_manual_payment_status(
+                    payments_by_pay_list.get(pay_list.id, [])
+                ),
+                gov_payment_statuses=[
+                    payment.status for payment in payments_by_pay_list.get(pay_list.id, [])
+                ],
+            )
+            for pay_list in pay_lists
+        ],
+        checklist=[
+            OfficialFeeChecklistOut(
+                id=checklist.id,
+                fee_draft_id=checklist.fee_draft_id,
+                pay_list_id=checklist.pay_list_id,
+                checklist_code=checklist.checklist_code,
+                checklist_label=checklist.checklist_label,
+                status=checklist.status,
+                required=checklist.required,
+                blocker_reason=checklist.blocker_reason,
+                sort_order=checklist.sort_order,
+            )
+            for checklist in checklists
+        ],
+        customer_confirmation_blockers=blockers,
+    )
+
+
+def _filing_manifest_lookup(
+    manifests: list[OfficialWorkPackageManifest],
+) -> dict[str, OfficialWorkPackageManifest]:
+    return {
+        manifest.official_file_role: manifest
+        for manifest in manifests
+        if manifest.official_file_role
+    }
+
+
+def _gate_from_manifest(
+    manifest_by_role: dict[str, OfficialWorkPackageManifest],
+    *,
+    role: str,
+    required: bool,
+) -> FilingPackageGateOut:
+    manifest = manifest_by_role.get(role)
+    return FilingPackageGateOut(
+        role=role,
+        required=manifest.required if manifest else required,
+        status="READY" if manifest and manifest.present else "MISSING",
+        attachment_id=manifest.attachment_id if manifest else None,
+        file_name=None,
+    )
+
+
+def _xml_zip_from_manifest(
+    manifest_by_role: dict[str, OfficialWorkPackageManifest],
+) -> FilingPackageXmlZipOut:
+    manifest = manifest_by_role.get("FILING_XML_ZIP")
+    if manifest and manifest.present:
+        return FilingPackageXmlZipOut(
+            status="PRESENT",
+            attachment_id=manifest.attachment_id,
+            placeholder=None,
+        )
+    return FilingPackageXmlZipOut(
+        status="MISSING",
+        placeholder="P1 records XML zip readiness only; generation is out of scope.",
+    )
+
+
+def _filing_fee_summary(db: Session, *, package_id: str) -> FilingPackageFeeSummaryOut:
+    linkage = get_official_fee_linkage(db, package_id=package_id)
+    return FilingPackageFeeSummaryOut(
+        draft_count=len(linkage.fee_drafts),
+        pay_list_count=len(linkage.pay_lists),
+        official_template_ready=linkage.official_excel_template_ready,
+        blocker_count=len(linkage.customer_confirmation_blockers),
+    )
+
+
+def get_filing_preparation_package(
+    db: Session,
+    *,
+    package_id: str,
+) -> FilingPreparationPackageOut:
+    package = _get_package(db, package_id)
+    _require_filing_package(package)
+    case = _get_case(db, package.case_id)
+    manifests = (
+        db.execute(
+            select(OfficialWorkPackageManifest)
+            .where(OfficialWorkPackageManifest.package_id == package_id)
+            .order_by(OfficialWorkPackageManifest.sort_order.asc())
+        )
+        .scalars()
+        .all()
+    )
+    checklists = (
+        db.execute(
+            select(OfficialWorkPackageChecklist)
+            .where(OfficialWorkPackageChecklist.package_id == package_id)
+            .order_by(
+                OfficialWorkPackageChecklist.sort_order.asc(), OfficialWorkPackageChecklist.id.asc()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    manifest_by_role = _filing_manifest_lookup(list(manifests))
+    merged_pdf = manifest_by_role.get("FILING_MERGED_PDF")
+
+    return FilingPreparationPackageOut(
+        package=_package_out(package),
+        official_field_summary=_official_field_summary(db, case=case),
+        technical_disclosure_gate=_gate_from_manifest(
+            manifest_by_role,
+            role="TECHNICAL_DISCLOSURE",
+            required=True,
+        ),
+        commission_instruction_gate=_gate_from_manifest(
+            manifest_by_role,
+            role="COMMISSION_INSTRUCTION",
+            required=False,
+        ),
+        filing_file_roles=[_manifest_out(manifest) for manifest in manifests],
+        official_page_checklist=[_checklist_out(checklist) for checklist in checklists],
+        xml_zip=_xml_zip_from_manifest(manifest_by_role),
+        merged_pdf_archive_status="PRESENT" if merged_pdf and merged_pdf.present else "MISSING",
+        fee_summary=_filing_fee_summary(db, package_id=package_id),
+    )
+
+
+def refresh_filing_preparation_package(
+    db: Session,
+    *,
+    package_id: str,
+    require_commission_instruction: bool = False,
+) -> FilingPreparationPackageOut:
+    package = _get_package(db, package_id)
+    _require_filing_package(package)
+    attachments = _case_attachments(db, case_id=package.case_id)
+    summary = summarize_attachment_manifest(
+        attachments,
+        require_commission_instruction=require_commission_instruction,
+    )
+    items_by_role = {
+        item.official_file_role: item
+        for item in (
+            summary.intake_gate_roles
+            + summary.filing_roles
+            + summary.archive_roles
+            + summary.historical_alias_roles
+        )
+        if item.official_file_role
+    }
+    attachments_by_id = {attachment.id: attachment for attachment in attachments}
+
+    desired_roles = [
+        ("TECHNICAL_DISCLOSURE", True, 10, None),
+        (
+            "COMMISSION_INSTRUCTION",
+            require_commission_instruction,
+            20,
+            "客户明确有委托指示时必须上传；无则保持 optional gate",
+        ),
+        ("FILING_XML_ZIP", True, 30, "P1 只记录 XML zip 引用，不生成 XML"),
+        ("FILING_MERGED_PDF", False, 40, "官方提交后归档合并 PDF"),
+    ]
+    for role, required, sort_order, note in desired_roles:
+        item = items_by_role.get(role)
+        attachment = attachments_by_id.get(item.attachment_id) if item else None
+        _upsert_manifest_role(
+            db,
+            package_id=package.id,
+            role=role,
+            required=required,
+            sort_order=sort_order,
+            attachment=attachment,
+            external_upload_position=item.external_upload_position if item else None,
+            note=note,
+        )
+
+    _upsert_checklist(
+        db,
+        package_id=package.id,
+        section_code="OFFICIAL_PAGE",
+        item_code="PREVIEW_CONFIRMED",
+        item_label="官方页面预览已确认",
+        status="PENDING",
+        required=True,
+        sort_order=10,
+    )
+    _upsert_checklist(
+        db,
+        package_id=package.id,
+        section_code="OFFICIAL_PAGE",
+        item_code="SIGNATURE_CONFIRMED",
+        item_label="签名/提交由人工完成",
+        status="PENDING",
+        required=True,
+        sort_order=20,
+    )
+
+    package.status = "NEEDS_MAINTENANCE"
+    db.commit()
+    return get_filing_preparation_package(db, package_id=package_id)
+
+
+def update_filing_preparation_checklist(
+    db: Session,
+    *,
+    package_id: str,
+    item_code: str,
+    status: str,
+    evidence_note: str | None = None,
+) -> OfficialWorkPackageChecklist:
+    package = _get_package(db, package_id)
+    _require_filing_package(package)
+    checklist = _upsert_checklist(
+        db,
+        package_id=package.id,
+        section_code="OFFICIAL_PAGE",
+        item_code=_normalize_code(item_code) or item_code,
+        item_label=item_code,
+        status=status,
+        required=True,
+        evidence_note=evidence_note,
+    )
+    db.commit()
+    db.refresh(checklist)
+    return checklist
+
+
+def record_filing_preparation_external_operation(
+    db: Session,
+    *,
+    package_id: str,
+    operation_code: str,
+    occurred_at: datetime,
+    note: str | None = None,
+) -> OfficialWorkPackageChecklist:
+    evidence_parts = [f"occurred_at={occurred_at.isoformat()}"]
+    normalized_note = _normalize_text(note)
+    if normalized_note:
+        evidence_parts.append(f"note={normalized_note}")
+    return update_filing_preparation_checklist(
+        db,
+        package_id=package_id,
+        item_code=operation_code,
+        status="DONE",
+        evidence_note="; ".join(evidence_parts),
+    )
+
+
+def _document_extra_data(document: Document | None) -> dict[str, object]:
+    if not document or not document.extra_data:
+        return {}
+    try:
+        parsed = json.loads(document.extra_data)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _extra_text(extra_data: dict[str, object], *keys: str) -> str | None:
+    for key in keys:
+        value = extra_data.get(key)
+        if isinstance(value, str):
+            normalized = _normalize_text(value)
+            if normalized:
+                return normalized
+    return None
+
+
+def _extra_bool(extra_data: dict[str, object], key: str) -> bool:
+    value = extra_data.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "是"}
+    return False
+
+
+def _parse_date_value(value: object) -> date | None:
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _extra_date(extra_data: dict[str, object], *keys: str) -> date | None:
+    for key in keys:
+        parsed = _parse_date_value(extra_data.get(key))
+        if parsed:
+            return parsed
+    return None
+
+
+def _document_template_code(db: Session, document: Document | None) -> str | None:
+    if not document or not document.doc_template_id:
+        return None
+    doc_template = db.execute(
+        select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
+    ).scalar_one_or_none()
+    return doc_template.code if doc_template else None
+
+
+def _oa_document_out(db: Session, document: Document | None) -> OaReplyDocumentOut | None:
+    if not document:
+        return None
+    return OaReplyDocumentOut(
+        id=document.id,
+        title=document.title,
+        template_code=_document_template_code(db, document),
+        direction=str(document.direction),
+        doc_date=document.doc_date,
+        ref_no=document.ref_no,
+        reply_to_id=document.reply_to_id,
+        need_reply=document.need_reply,
+        reply_date=document.reply_date,
+    )
+
+
+def _first_applicant_display(db: Session, *, case_id: str) -> str | None:
+    applicant = db.execute(
+        select(T_CaseApplicant)
+        .where(T_CaseApplicant.case_id == case_id)
+        .order_by(T_CaseApplicant.is_first.desc(), T_CaseApplicant.seq.asc())
+    ).scalar_one_or_none()
+    if not applicant:
+        return None
+    return _normalize_text(applicant.name_cn) or _normalize_text(applicant.name_en)
+
+
+def _source_reply_task(db: Session, *, source_document_id: str | None) -> Task | None:
+    if not source_document_id:
+        return None
+    return db.execute(
+        select(Task)
+        .where(Task.document_id == source_document_id)
+        .order_by(Task.due_date.asc(), Task.id.asc())
+    ).scalar_one_or_none()
+
+
+def _require_oa_documents(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+) -> tuple[Document | None, Document | None]:
+    source = _get_document(db, package.source_document_id) if package.source_document_id else None
+    reply = _get_document(db, package.reply_document_id) if package.reply_document_id else None
+    return source, reply
+
+
+def _oa_attachment_lookup(attachments: list[DocAttachment]) -> dict[str, list[DocAttachment]]:
+    by_role: dict[str, list[DocAttachment]] = {}
+    for attachment in attachments:
+        role = _normalize_code(getattr(attachment, "official_file_role", None))
+        if role:
+            by_role.setdefault(role, []).append(attachment)
+    return by_role
+
+
+def _oa_attachment_out(role: str, attachment: DocAttachment | None) -> OaReplyAttachmentOut:
+    return OaReplyAttachmentOut(
+        role=role,
+        status="PRESENT" if attachment else "MISSING",
+        attachment_id=attachment.id if attachment else None,
+        file_name=attachment.file_name if attachment else None,
+        external_upload_position=attachment.external_upload_position if attachment else None,
+    )
+
+
+def _oa_reply_status(source: Document | None, reply: Document | None) -> str:
+    if not source:
+        return "SOURCE_MISSING"
+    if source.reply_date:
+        return "REPLIED"
+    if reply:
+        return "REPLY_DOCUMENT_LINKED"
+    return "WAITING_REPLY_DOCUMENT"
+
+
+def _oa_manifest_roles(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    reply_document: Document | None,
+) -> None:
+    attachments = (
+        db.execute(
+            select(DocAttachment)
+            .where(DocAttachment.document_id == reply_document.id)
+            .order_by(DocAttachment.created_at.asc(), DocAttachment.id.asc())
+        )
+        .scalars()
+        .all()
+        if reply_document
+        else []
+    )
+    summary = summarize_attachment_manifest(list(attachments))
+    items_by_role = {
+        item.official_file_role: item for item in summary.oa_roles if item.official_file_role
+    }
+    attachments_by_id = {attachment.id: attachment for attachment in attachments}
+    desired_roles = [
+        ("OA_STATEMENT_WORD", True, 10, "意见陈述 Word 源文件"),
+        ("OA_STATEMENT_PDF", True, 20, "PDF 保真附件"),
+        ("OA_MODIFIED_CLAIMS", True, 30, "修改后的权利要求书"),
+        ("OA_AMENDMENT_COMPARISON", False, 40, "修改对照页"),
+        ("OA_OTHER_PROOF", False, 50, "其他证明文件/实验数据"),
+        ("OA_ADDITIONAL_FILE", False, 60, "附加文件"),
+    ]
+    for role, required, sort_order, note in desired_roles:
+        item = items_by_role.get(role)
+        attachment = attachments_by_id.get(item.attachment_id) if item else None
+        _upsert_manifest_role(
+            db,
+            package_id=package.id,
+            role=role,
+            required=required,
+            sort_order=sort_order,
+            attachment=attachment,
+            external_upload_position=item.external_upload_position if item else None,
+            note=note,
+        )
+
+
+def _oa_checklist_defaults(db: Session, *, package_id: str) -> None:
+    defaults = [
+        ("OA_REPLY", "STATEMENT_TEXT_CONFIRMED", "陈述意见文本已确认", 10),
+        ("OA_REPLY", "PDF_FIDELITY_CONFIRMED", "PDF 保真附件已确认", 20),
+        ("OA_REPLY", "MODIFIED_CLAIMS_CONFIRMED", "修改文件已确认", 30),
+        ("OA_REPLY", "EXPERIMENT_DATA_FLAG_CONFIRMED", "补交实验数据勾选已确认", 40),
+        ("OFFICIAL_PAGE", "PREVIEW_CONFIRMED", "官方页面预览已确认", 50),
+        ("OFFICIAL_PAGE", "SIGNATURE_CONFIRMED", "签名/提交由人工完成", 60),
+    ]
+    for section_code, item_code, item_label, sort_order in defaults:
+        _upsert_checklist(
+            db,
+            package_id=package_id,
+            section_code=section_code,
+            item_code=item_code,
+            item_label=item_label,
+            status="PENDING",
+            required=True,
+            sort_order=sort_order,
+        )
+
+
+def get_oa_reply_package(
+    db: Session,
+    *,
+    package_id: str,
+) -> OaReplyPackageOut:
+    package = _get_package(db, package_id)
+    _require_oa_package(package)
+    case = _get_case(db, package.case_id)
+    source, reply = _require_oa_documents(db, package=package)
+    source_extra = _document_extra_data(source)
+    reply_extra = _document_extra_data(reply)
+    task = _source_reply_task(db, source_document_id=package.source_document_id)
+
+    reply_attachments = (
+        db.execute(
+            select(DocAttachment)
+            .where(DocAttachment.document_id == reply.id)
+            .order_by(DocAttachment.created_at.asc(), DocAttachment.id.asc())
+        )
+        .scalars()
+        .all()
+        if reply
+        else []
+    )
+    attachments_by_role = _oa_attachment_lookup(list(reply_attachments))
+    manifests = (
+        db.execute(
+            select(OfficialWorkPackageManifest)
+            .where(OfficialWorkPackageManifest.package_id == package_id)
+            .order_by(OfficialWorkPackageManifest.sort_order.asc())
+        )
+        .scalars()
+        .all()
+    )
+    checklists = (
+        db.execute(
+            select(OfficialWorkPackageChecklist)
+            .where(OfficialWorkPackageChecklist.package_id == package_id)
+            .order_by(
+                OfficialWorkPackageChecklist.sort_order.asc(), OfficialWorkPackageChecklist.id.asc()
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    official_due_date = _extra_date(
+        source_extra,
+        "official_due_date",
+        "OfficialDueDate",
+        "reply_due_date",
+    ) or (task.due_date if task else None)
+    issue_date = _extra_date(source_extra, "issue_date") or (source.doc_date if source else None)
+
+    return OaReplyPackageOut(
+        package=_package_out(package),
+        source_document=_oa_document_out(db, source),
+        reply_document=_oa_document_out(db, reply),
+        application_no=case.app_no,
+        applicant_display=_first_applicant_display(db, case_id=case.id),
+        notice_code=_extra_text(source_extra, "official_notice_code", "notice_code")
+        or (source.ref_no if source else None),
+        notice_name=_extra_text(source_extra, "official_notice_name", "notice_name")
+        or (source.title if source else None),
+        issue_sequence=_extra_text(source_extra, "issue_sequence", "issue_no"),
+        issue_date=issue_date,
+        official_due_date=official_due_date,
+        internal_due_date=task.internal_due_date if task else None,
+        reply_status=_oa_reply_status(source, reply),
+        statement_text=_extra_text(reply_extra, "reply_statement_text", "statement_text"),
+        statement_word=_oa_attachment_out(
+            "OA_STATEMENT_WORD",
+            next(iter(attachments_by_role.get("OA_STATEMENT_WORD", [])), None),
+        ),
+        statement_pdf=_oa_attachment_out(
+            "OA_STATEMENT_PDF",
+            next(iter(attachments_by_role.get("OA_STATEMENT_PDF", [])), None),
+        ),
+        modified_claim_files=[
+            _oa_attachment_out("OA_MODIFIED_CLAIMS", attachment)
+            for attachment in attachments_by_role.get("OA_MODIFIED_CLAIMS", [])
+        ],
+        comparison_page=_oa_attachment_out(
+            "OA_AMENDMENT_COMPARISON",
+            next(iter(attachments_by_role.get("OA_AMENDMENT_COMPARISON", [])), None),
+        ),
+        proof_files=[
+            _oa_attachment_out(role, attachment)
+            for role in ("OA_OTHER_PROOF", "OA_ADDITIONAL_FILE")
+            for attachment in attachments_by_role.get(role, [])
+        ],
+        experiment_data_submitted=_extra_bool(reply_extra, "experiment_data_submitted"),
+        official_page_checklist=[_checklist_out(checklist) for checklist in checklists],
+        oa_file_roles=[_manifest_out(manifest) for manifest in manifests],
+    )
+
+
+def refresh_oa_reply_package(
+    db: Session,
+    *,
+    package_id: str,
+    experiment_data_submitted: bool | None = None,
+) -> OaReplyPackageOut:
+    package = _get_package(db, package_id)
+    _require_oa_package(package)
+    _, reply = _require_oa_documents(db, package=package)
+    if experiment_data_submitted is not None and reply:
+        extra_data = _document_extra_data(reply)
+        extra_data["experiment_data_submitted"] = experiment_data_submitted
+        reply.extra_data = json.dumps(extra_data, ensure_ascii=False)
+    _oa_manifest_roles(db, package=package, reply_document=reply)
+    _oa_checklist_defaults(db, package_id=package.id)
+    package.status = "NEEDS_MAINTENANCE"
+    db.commit()
+    return get_oa_reply_package(db, package_id=package_id)
+
+
+def update_oa_reply_checklist(
+    db: Session,
+    *,
+    package_id: str,
+    item_code: str,
+    status: str,
+    evidence_note: str | None = None,
+) -> OfficialWorkPackageChecklist:
+    package = _get_package(db, package_id)
+    _require_oa_package(package)
+    checklist = _upsert_checklist(
+        db,
+        package_id=package.id,
+        section_code="OA_REPLY",
+        item_code=_normalize_code(item_code) or item_code,
+        item_label=item_code,
+        status=status,
+        required=True,
+        evidence_note=evidence_note,
+    )
+    db.commit()
+    db.refresh(checklist)
+    return checklist
+
+
+def link_oa_reply_document(
+    db: Session,
+    *,
+    package_id: str,
+    reply_document_id: str,
+) -> OaReplyPackageOut:
+    package = _get_package(db, package_id)
+    _require_oa_package(package)
+    reply = _get_document(db, reply_document_id)
+    if reply.case_id != package.case_id:
+        raise_business_error(
+            "OA_REPLY_DOCUMENT_CASE_MISMATCH",
+            "Reply document does not belong to the package case",
+            status_code=400,
+        )
+    package.reply_document_id = reply.id
+    if package.source_document_id:
+        reply.reply_to_id = package.source_document_id
+    db.commit()
+    return get_oa_reply_package(db, package_id=package_id)
+
+
+def _find_letter_mapping(
+    db: Session,
+    *,
+    document: Document,
+) -> FormatLetterMapping | None:
+    template_code = _document_template_code(db, document)
+    mappings = (
+        db.execute(
+            select(FormatLetterMapping)
+            .where(FormatLetterMapping.enabled.is_(True))
+            .order_by(FormatLetterMapping.created_at.asc(), FormatLetterMapping.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+    scored: list[tuple[int, FormatLetterMapping]] = []
+    for mapping in mappings:
+        score = 0
+        if (
+            document.doc_template_id
+            and mapping.official_doc_template_id == document.doc_template_id
+        ):
+            score = max(score, 100)
+        if template_code and _normalize_code(mapping.official_doc_template_code) == _normalize_code(
+            template_code
+        ):
+            score = max(score, 80)
+        pattern = _normalize_text(mapping.official_doc_name_pattern)
+        if pattern and pattern in (document.title or ""):
+            score = max(score, 60)
+        if score:
+            scored.append((score, mapping))
+
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return scored[0][1]
+
+
+def _letter_mapping_out(mapping: FormatLetterMapping | None) -> LetterHandoffMappingOut | None:
+    if not mapping:
+        return None
+    return LetterHandoffMappingOut(
+        id=mapping.id,
+        format_letter_template_id=mapping.format_letter_template_id,
+        format_letter_template_code=mapping.format_letter_template_code,
+        output_name_rule=mapping.output_name_rule,
+        contact_rule_code=mapping.contact_rule_code,
+        salutation_rule_code=mapping.salutation_rule_code,
+    )
+
+
+def _letter_template_ready(db: Session, mapping: FormatLetterMapping | None) -> bool:
+    if not mapping:
+        return False
+    if mapping.format_letter_template_id:
+        template = db.execute(
+            select(Template).where(
+                Template.id == mapping.format_letter_template_id,
+                Template.enabled.is_(True),
+            )
+        ).scalar_one_or_none()
+        return bool(template)
+    return bool(_normalize_text(mapping.format_letter_template_code))
+
+
+def _select_letter_contact(
+    db: Session,
+    *,
+    case: Case,
+    mapping: FormatLetterMapping | None,
+) -> tuple[ClientContact | None, str]:
+    if (
+        not mapping
+        or _normalize_code(mapping.contact_rule_code) != "CLIENT_PRIMARY_CONTACT"
+        or not case.client_id
+    ):
+        return None, "UNCONFIRMED"
+    contact = db.execute(
+        select(ClientContact)
+        .where(ClientContact.client_id == case.client_id)
+        .order_by(ClientContact.is_primary.desc(), ClientContact.created_at.asc())
+    ).scalar_one_or_none()
+    return contact, "CLIENT_PRIMARY_CONTACT" if contact else "CLIENT_PRIMARY_CONTACT_MISSING"
+
+
+def _letter_contact_out(contact: ClientContact | None) -> LetterHandoffContactOut | None:
+    if not contact:
+        return None
+    return LetterHandoffContactOut(
+        id=contact.id,
+        contact_name=contact.contact_name,
+        title=contact.title,
+        email=contact.email,
+    )
+
+
+def _letter_salutation(
+    *,
+    contact: ClientContact | None,
+    mapping: FormatLetterMapping | None,
+) -> tuple[str, str]:
+    if (
+        contact
+        and mapping
+        and _normalize_code(mapping.salutation_rule_code) == "PRIMARY_CONTACT_TITLE"
+    ):
+        title = _normalize_text(contact.title) or ""
+        return f"{contact.contact_name}{title}：您好", "PRIMARY_CONTACT_TITLE"
+    return "尊敬的：您好", "DEFAULT"
+
+
+def _letter_output_filename(
+    *,
+    case: Case,
+    document: Document,
+    mapping: FormatLetterMapping | None,
+) -> str:
+    default_name = f"{case.case_no}-格式函.docx"
+    rule = _normalize_text(mapping.output_name_rule if mapping else None)
+    if not rule:
+        return default_name
+    try:
+        return rule.format(
+            case_no=case.case_no,
+            app_no=case.app_no or "",
+            document_title=document.title or "",
+        )
+    except (KeyError, ValueError):
+        return default_name
+
+
+def _letter_preview_attachments(
+    db: Session,
+    *,
+    source_document_id: str,
+    generated_word_path: str | None,
+) -> list[LetterHandoffPreviewAttachmentOut]:
+    attachments: list[LetterHandoffPreviewAttachmentOut] = []
+    if generated_word_path:
+        attachments.append(
+            LetterHandoffPreviewAttachmentOut(
+                file_name=generated_word_path.rsplit("/", 1)[-1],
+                file_path=generated_word_path,
+                attachment_role="FORMAT_LETTER_WORD",
+                required=True,
+                included=True,
+                sort_order=1,
+            )
+        )
+    source_attachments = (
+        db.execute(
+            select(DocAttachment)
+            .where(DocAttachment.document_id == source_document_id)
+            .order_by(DocAttachment.created_at.asc(), DocAttachment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    for index, attachment in enumerate(source_attachments, start=2):
+        attachments.append(
+            LetterHandoffPreviewAttachmentOut(
+                attachment_id=attachment.id,
+                file_name=attachment.file_name,
+                file_path=attachment.file_path,
+                attachment_role="SOURCE_OFFICIAL_DOCUMENT",
+                required=True,
+                included=True,
+                sort_order=index,
+            )
+        )
+    return attachments
+
+
+def get_letter_handoff_preview(
+    db: Session,
+    *,
+    source_document_id: str,
+) -> LetterHandoffPreviewOut:
+    document = _get_document(db, source_document_id)
+    case = _get_case(db, document.case_id)
+    mapping = _find_letter_mapping(db, document=document)
+    contact, contact_source = _select_letter_contact(db, case=case, mapping=mapping)
+    salutation_text, salutation_source = _letter_salutation(contact=contact, mapping=mapping)
+    template_ready = _letter_template_ready(db, mapping)
+    generated_word_path = None
+    if template_ready:
+        output_filename = _letter_output_filename(case=case, document=document, mapping=mapping)
+        generated_word_path = f"letters/{case.case_no}/{output_filename}"
+
+    mail_subject = f"{case.case_no} {document.title or '官方来文'}"
+    case_title = _normalize_text(case.title_cn) or _normalize_text(case.title_en) or case.case_no
+    mail_body_draft = (
+        f"{salutation_text}\n\n请查收{case_title}相关{document.title or '官方来文'}及格式函附件。"
+    )
+
+    return LetterHandoffPreviewOut(
+        source_document_id=document.id,
+        case_id=case.id,
+        case_no=case.case_no,
+        mapping=_letter_mapping_out(mapping),
+        template_status="READY" if template_ready else "PENDING_TEMPLATE",
+        client_contact_id=contact.id if contact else None,
+        contact=_letter_contact_out(contact),
+        contact_selection_source=contact_source,
+        salutation_source=salutation_source,
+        salutation_text=salutation_text,
+        generated_word_path=generated_word_path,
+        mail_subject=mail_subject,
+        mail_body_draft=mail_body_draft,
+        attachments=_letter_preview_attachments(
+            db,
+            source_document_id=document.id,
+            generated_word_path=generated_word_path,
+        ),
+    )
+
+
+def _letter_handoff_payload(preview: LetterHandoffPreviewOut) -> str:
+    return json.dumps(
+        {
+            "source_document_id": preview.source_document_id,
+            "mail_subject": preview.mail_subject,
+            "generated_word_path": preview.generated_word_path,
+            "attachments": [
+                {
+                    "file_name": attachment.file_name,
+                    "file_path": attachment.file_path,
+                    "attachment_role": attachment.attachment_role,
+                }
+                for attachment in preview.attachments
+                if attachment.included
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+
+def _letter_handoff_out(
+    db: Session,
+    *,
+    handoff: LetterHandoff,
+) -> LetterHandoffOut:
+    attachments = (
+        db.execute(
+            select(LetterHandoffAttachment)
+            .where(LetterHandoffAttachment.handoff_id == handoff.id)
+            .order_by(LetterHandoffAttachment.sort_order.asc(), LetterHandoffAttachment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    return LetterHandoffOut(
+        id=handoff.id,
+        source_document_id=handoff.source_document_id,
+        generated_document_id=handoff.generated_document_id,
+        format_letter_mapping_id=handoff.format_letter_mapping_id,
+        format_letter_template_id=handoff.format_letter_template_id,
+        client_contact_id=handoff.client_contact_id,
+        contact_selection_source=handoff.contact_selection_source,
+        salutation_source=handoff.salutation_source,
+        salutation_text=handoff.salutation_text,
+        generated_word_path=handoff.generated_word_path,
+        mail_subject=handoff.mail_subject,
+        mail_body_draft=handoff.mail_body_draft,
+        longxia_handoff_status=handoff.longxia_handoff_status,
+        longxia_handoff_payload=handoff.longxia_handoff_payload,
+        handoff_at=handoff.handoff_at,
+        remark=handoff.remark,
+        attachments=[
+            LetterHandoffAttachmentOut(
+                id=attachment.id,
+                handoff_id=attachment.handoff_id,
+                attachment_id=attachment.attachment_id,
+                file_name=attachment.file_name,
+                file_path=attachment.file_path,
+                attachment_role=attachment.attachment_role,
+                required=attachment.required,
+                included=attachment.included,
+                sort_order=attachment.sort_order,
+            )
+            for attachment in attachments
+        ],
+    )
+
+
+def prepare_letter_handoff(
+    db: Session,
+    *,
+    source_document_id: str,
+    remark: str | None = None,
+) -> LetterHandoffResultOut:
+    preview = get_letter_handoff_preview(db, source_document_id=source_document_id)
+    handoff = LetterHandoff(
+        id=str(uuid4()),
+        source_document_id=preview.source_document_id,
+        format_letter_mapping_id=preview.mapping.id if preview.mapping else None,
+        format_letter_template_id=preview.mapping.format_letter_template_id
+        if preview.mapping
+        else None,
+        client_contact_id=preview.client_contact_id,
+        contact_selection_source=preview.contact_selection_source,
+        salutation_source=preview.salutation_source,
+        salutation_text=preview.salutation_text,
+        generated_word_path=preview.generated_word_path,
+        mail_subject=preview.mail_subject,
+        mail_body_draft=preview.mail_body_draft,
+        longxia_handoff_status="READY" if preview.template_status == "READY" else "PENDING",
+        longxia_handoff_payload=_letter_handoff_payload(preview),
+        remark=remark,
+    )
+    db.add(handoff)
+    db.flush()
+    for attachment in preview.attachments:
+        db.add(
+            LetterHandoffAttachment(
+                id=str(uuid4()),
+                handoff_id=handoff.id,
+                attachment_id=attachment.attachment_id,
+                file_name=attachment.file_name,
+                file_path=attachment.file_path,
+                attachment_role=attachment.attachment_role,
+                required=attachment.required,
+                included=attachment.included,
+                sort_order=attachment.sort_order,
+            )
+        )
+    db.commit()
+    return LetterHandoffResultOut(
+        preview=preview,
+        handoff=_letter_handoff_out(db, handoff=handoff),
+    )
+
+
+def _get_letter_handoff(db: Session, handoff_id: str) -> LetterHandoff:
+    handoff = db.execute(
+        select(LetterHandoff).where(LetterHandoff.id == handoff_id)
+    ).scalar_one_or_none()
+    if not handoff:
+        raise_business_error(
+            "LETTER_HANDOFF_NOT_FOUND",
+            "Letter handoff not found",
+            status_code=404,
+        )
+    return handoff
+
+
+def record_letter_handoff_status(
+    db: Session,
+    *,
+    source_document_id: str,
+    handoff_id: str,
+    longxia_handoff_status: str,
+    longxia_handoff_payload: str | None = None,
+    handoff_at: datetime | None = None,
+) -> LetterHandoffResultOut:
+    handoff = _get_letter_handoff(db, handoff_id)
+    if handoff.source_document_id != source_document_id:
+        raise_business_error(
+            "LETTER_HANDOFF_SOURCE_MISMATCH",
+            "Letter handoff does not belong to the source document",
+            status_code=400,
+        )
+    handoff.longxia_handoff_status = _normalize_code(longxia_handoff_status) or "PENDING"
+    if longxia_handoff_payload is not None:
+        handoff.longxia_handoff_payload = longxia_handoff_payload
+    if handoff_at is not None:
+        handoff.handoff_at = handoff_at
+    db.commit()
+    return LetterHandoffResultOut(
+        preview=None,
+        handoff=_letter_handoff_out(db, handoff=handoff),
+    )
+
+
+def evaluate_official_work_package(
+    db: Session,
+    *,
+    package_id: str,
+) -> OfficialWorkPackageStatusEvaluationOut:
+    _get_package(db, package_id)
+    checklists = (
+        db.execute(
+            select(OfficialWorkPackageChecklist).where(
+                OfficialWorkPackageChecklist.package_id == package_id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    manifests = (
+        db.execute(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package_id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    receipts = (
+        db.execute(
+            select(OfficialWorkPackageReceipt).where(
+                OfficialWorkPackageReceipt.package_id == package_id
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    blockers: list[OfficialWorkPackageBlockerOut] = []
+    for checklist in checklists:
+        status = _normalize_code(checklist.status) or "PENDING"
+        if checklist.required and status not in CHECKLIST_COMPLETE_STATUSES:
+            blockers.append(
+                OfficialWorkPackageBlockerOut(
+                    blocker_type="CHECKLIST_INCOMPLETE",
+                    item_code=checklist.item_code,
+                    item_label=checklist.item_label,
+                    status=_checklist_blocker_status(checklist),
+                    message="Required checklist item is not complete",
+                )
+            )
+
+    for manifest in manifests:
+        if manifest.required and not manifest.present:
+            blockers.append(
+                OfficialWorkPackageBlockerOut(
+                    blocker_type="MANIFEST_MISSING",
+                    item_code=manifest.official_file_role,
+                    item_label=manifest.source_role_alias,
+                    status="NEEDS_MAINTENANCE",
+                    message="Required package manifest file is missing",
+                )
+            )
+
+    receipt_hard_gate_satisfied = _has_archived_receipt(list(receipts))
+    if not receipt_hard_gate_satisfied:
+        blockers.append(
+            OfficialWorkPackageBlockerOut(
+                blocker_type="RECEIPT_MISSING",
+                status="WAITING_RECEIPT",
+                message="Receipt or archive evidence is required before archive",
+            )
+        )
+
+    if any(blocker.status == "NEEDS_MAINTENANCE" for blocker in blockers):
+        status = "NEEDS_MAINTENANCE"
+    elif any(blocker.status == "NEEDS_CONFIRMATION" for blocker in blockers):
+        status = "NEEDS_CONFIRMATION"
+    elif any(blocker.blocker_type == "RECEIPT_MISSING" for blocker in blockers):
+        status = "WAITING_RECEIPT"
+    else:
+        status = "ARCHIVED"
+
+    return OfficialWorkPackageStatusEvaluationOut(
+        package_id=package_id,
+        status=status,
+        can_archive=not blockers,
+        receipt_hard_gate_satisfied=receipt_hard_gate_satisfied,
+        blockers=blockers,
+    )
+
+
+def record_official_work_package_receipt(
+    db: Session,
+    *,
+    package_id: str,
+    receipt_kind: str,
+    receipt_attachment_id: str | None = None,
+    receiving_case_no: str | None = None,
+    submitter: str | None = None,
+    received_at: datetime | None = None,
+    received_file_list: str | None = None,
+    archive_status: str = "PENDING",
+    note: str | None = None,
+    actor_id: str | None = None,
+) -> OfficialWorkPackageReceipt:
+    _get_package(db, package_id)
+    normalized_receipt_kind = _normalize_code(receipt_kind) or "RECEIPT_PDF"
+    if normalized_receipt_kind not in OFFICIAL_WORK_PACKAGE_RECEIPT_KINDS:
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_RECEIPT_KIND_INVALID",
+            "Official work-package receipt kind is invalid",
+            details={"receipt_kind": receipt_kind},
+            status_code=400,
+        )
+
+    if receipt_attachment_id:
+        attachment = _get_attachment(db, receipt_attachment_id)
+        attachment.is_archive_evidence = True
+        attachment.is_receipt_evidence = normalized_receipt_kind != "MERGED_PDF"
+        attachment.updated_by = _normalize_text(actor_id)
+
+    receipt = OfficialWorkPackageReceipt(
+        id=str(uuid4()),
+        package_id=package_id,
+        receipt_kind=normalized_receipt_kind,
+        receipt_attachment_id=receipt_attachment_id,
+        receiving_case_no=_normalize_text(receiving_case_no),
+        submitter=_normalize_text(submitter),
+        received_at=received_at,
+        received_file_list=_normalize_text(received_file_list),
+        archive_status=_normalize_code(archive_status) or "PENDING",
+        note=_normalize_text(note),
+        created_by=_normalize_text(actor_id),
+        updated_by=_normalize_text(actor_id),
+    )
+    db.add(receipt)
+    db.commit()
+    db.refresh(receipt)
+    return receipt
+
+
+def _validate_archive_override(
+    *,
+    actor_id: str | None,
+    override_reason: str | None,
+    follow_up_owner: str | None,
+    follow_up_due_date: date | None,
+    follow_up_note: str | None,
+) -> None:
+    if not _normalize_text(actor_id):
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_OVERRIDE_INCOMPLETE",
+            "Override user is required",
+            status_code=400,
+        )
+    if not _normalize_text(override_reason):
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_OVERRIDE_INCOMPLETE",
+            "Override reason is required",
+            status_code=400,
+        )
+    if not _normalize_text(follow_up_owner):
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_OVERRIDE_INCOMPLETE",
+            "Override follow-up owner is required",
+            status_code=400,
+        )
+    if not follow_up_due_date and not _normalize_text(follow_up_note):
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_OVERRIDE_INCOMPLETE",
+            "Override follow-up responsibility is required",
+            status_code=400,
+        )
+
+
+def archive_official_work_package(
+    db: Session,
+    *,
+    package_id: str,
+    actor_id: str | None,
+    override_reason: str | None = None,
+    follow_up_owner: str | None = None,
+    follow_up_due_date: date | None = None,
+    follow_up_note: str | None = None,
+) -> OfficialWorkPackage:
+    package = _get_package(db, package_id)
+    evaluation = evaluate_official_work_package(db, package_id=package_id)
+    if evaluation.can_archive:
+        package.status = "ARCHIVED"
+        db.commit()
+        db.refresh(package)
+        return package
+
+    non_receipt_blockers = [
+        blocker for blocker in evaluation.blockers if blocker.blocker_type != "RECEIPT_MISSING"
+    ]
+    if override_reason or follow_up_owner or follow_up_due_date or follow_up_note:
+        _validate_archive_override(
+            actor_id=actor_id,
+            override_reason=override_reason,
+            follow_up_owner=follow_up_owner,
+            follow_up_due_date=follow_up_due_date,
+            follow_up_note=follow_up_note,
+        )
+        if non_receipt_blockers:
+            raise_business_error(
+                "OFFICIAL_WORK_PACKAGE_ARCHIVE_BLOCKED",
+                "Official work package still has non-receipt blockers",
+                details={
+                    "blockers": [
+                        blocker.model_dump(mode="json") for blocker in non_receipt_blockers
+                    ]
+                },
+                status_code=409,
+            )
+        db.add(
+            OfficialWorkPackageOverride(
+                id=str(uuid4()),
+                package_id=package_id,
+                override_action="ARCHIVE_WITHOUT_RECEIPT",
+                override_reason=_normalize_text(override_reason) or "",
+                override_by=_normalize_text(actor_id),
+                follow_up_owner=_normalize_text(follow_up_owner),
+                follow_up_due_date=follow_up_due_date,
+                follow_up_note=_normalize_text(follow_up_note),
+            )
+        )
+        package.status = "OVERRIDE"
+        db.commit()
+        db.refresh(package)
+        return package
+
+    raise_business_error(
+        "OFFICIAL_WORK_PACKAGE_ARCHIVE_BLOCKED",
+        "Official work package cannot be archived until checklist, manifest, and receipt gates pass",
+        details={"blockers": [blocker.model_dump(mode="json") for blocker in evaluation.blockers]},
+        status_code=409,
+    )

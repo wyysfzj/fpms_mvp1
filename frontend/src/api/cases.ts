@@ -47,8 +47,26 @@ interface BackendCase {
     require_hk?: boolean | null
     first_annuity_year?: number | null
     app_date?: string | null
-    applicants?: Array<{ seq: number; is_first?: boolean; name_cn?: string; name_en?: string; address_cn?: string; address_en?: string }>
-    inventors?: Array<{ seq: number; name_cn?: string; name_en?: string }>
+    applicants?: Array<{
+        seq: number
+        is_first?: boolean
+        name_cn?: string
+        name_en?: string
+        address_cn?: string
+        address_en?: string
+        nationality?: string | null
+        certificate_type?: string | null
+        certificate_no?: string | null
+        official_postcode?: string | null
+        official_applicant_kind?: string | null
+    }>
+    inventors?: Array<{
+        seq: number
+        name_cn?: string
+        name_en?: string
+        nationality?: string | null
+        china_id_no?: string | null
+    }>
     priorities?: Array<{ seq: number; country_code?: string | null; prio_no?: string | null; prio_date?: string | null }>
     bio_deposits?: Array<{ seq: number; deposit_no?: string | null; deposit_unit_name?: string | null; deposit_date?: string | null; name?: string | null }>
     agent_splits?: Array<{ agent_id: string; role?: string | null; share_ratio?: string | number | null }>
@@ -183,8 +201,26 @@ function mapCase(input: BackendCase): Case {
         require_hk: input.require_hk ?? undefined,
         first_annuity_year: input.first_annuity_year ?? undefined,
         app_date: input.app_date || undefined,
-        applicants: input.applicants || [],
-        inventors: input.inventors || [],
+        applicants: (input.applicants || []).map((applicant) => ({
+            seq: applicant.seq,
+            is_first: applicant.is_first,
+            name_cn: applicant.name_cn || undefined,
+            name_en: applicant.name_en || undefined,
+            address_cn: applicant.address_cn || undefined,
+            address_en: applicant.address_en || undefined,
+            nationality: applicant.nationality || undefined,
+            certificate_type: applicant.certificate_type || undefined,
+            certificate_no: applicant.certificate_no || undefined,
+            official_postcode: applicant.official_postcode || undefined,
+            official_applicant_kind: applicant.official_applicant_kind || undefined,
+        })),
+        inventors: (input.inventors || []).map((inventor) => ({
+            seq: inventor.seq,
+            name_cn: inventor.name_cn || undefined,
+            name_en: inventor.name_en || undefined,
+            nationality: inventor.nationality || undefined,
+            china_id_no: inventor.china_id_no || undefined,
+        })),
         priorities: (input.priorities || []).map((priority) => ({
             seq: priority.seq,
             country_code: priority.country_code || undefined,
@@ -310,9 +346,40 @@ function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
             name_en: trimToNull(applicant.name_en),
             address_cn: trimToNull(applicant.address_cn),
             address_en: trimToNull(applicant.address_en),
+            nationality: trimToNull(applicant.nationality),
+            certificate_type: trimToNull(applicant.certificate_type),
+            certificate_no: trimToNull(applicant.certificate_no),
+            official_postcode: trimToNull(applicant.official_postcode),
+            official_applicant_kind: trimToNull(applicant.official_applicant_kind),
         }))
         .filter((applicant) =>
-            [applicant.name_cn, applicant.name_en, applicant.address_cn, applicant.address_en].some((value) => value !== null)
+            [
+                applicant.name_cn,
+                applicant.name_en,
+                applicant.address_cn,
+                applicant.address_en,
+                applicant.nationality,
+                applicant.certificate_type,
+                applicant.certificate_no,
+                applicant.official_postcode,
+                applicant.official_applicant_kind,
+            ].some((value) => value !== null)
+        )
+    if (data.inventors !== undefined) payload.inventors = data.inventors
+        ?.map((inventor) => ({
+            seq: inventor.seq,
+            name_cn: trimToNull(inventor.name_cn),
+            name_en: trimToNull(inventor.name_en),
+            nationality: trimToNull(inventor.nationality),
+            china_id_no: trimToNull(inventor.china_id_no),
+        }))
+        .filter((inventor) =>
+            [
+                inventor.name_cn,
+                inventor.name_en,
+                inventor.nationality,
+                inventor.china_id_no,
+            ].some((value) => value !== null)
         )
     if (data.priorities !== undefined) payload.priorities = data.priorities
         ?.map((priority) => ({
@@ -523,9 +590,40 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
                 name_en: trimToUndefined(applicant.name_en),
                 address_cn: trimToUndefined(applicant.address_cn),
                 address_en: trimToUndefined(applicant.address_en),
+                nationality: trimToUndefined(applicant.nationality),
+                certificate_type: trimToUndefined(applicant.certificate_type),
+                certificate_no: trimToUndefined(applicant.certificate_no),
+                official_postcode: trimToUndefined(applicant.official_postcode),
+                official_applicant_kind: trimToUndefined(applicant.official_applicant_kind),
             }))
             .filter((applicant) =>
-                [applicant.name_cn, applicant.name_en, applicant.address_cn, applicant.address_en].some((value) => value !== undefined)
+                [
+                    applicant.name_cn,
+                    applicant.name_en,
+                    applicant.address_cn,
+                    applicant.address_en,
+                    applicant.nationality,
+                    applicant.certificate_type,
+                    applicant.certificate_no,
+                    applicant.official_postcode,
+                    applicant.official_applicant_kind,
+                ].some((value) => value !== undefined)
+            ),
+        inventors: data.inventors
+            ?.map((inventor) => ({
+                seq: inventor.seq,
+                name_cn: trimToUndefined(inventor.name_cn),
+                name_en: trimToUndefined(inventor.name_en),
+                nationality: trimToUndefined(inventor.nationality),
+                china_id_no: trimToUndefined(inventor.china_id_no),
+            }))
+            .filter((inventor) =>
+                [
+                    inventor.name_cn,
+                    inventor.name_en,
+                    inventor.nationality,
+                    inventor.china_id_no,
+                ].some((value) => value !== undefined)
             ),
         priorities: data.priorities?.map((priority) => ({
             seq: priority.seq,

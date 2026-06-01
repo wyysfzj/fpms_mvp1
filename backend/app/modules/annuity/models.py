@@ -25,6 +25,10 @@ class PayList(Base):
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    official_upload_template_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    official_upload_template_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    official_upload_batch_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    official_pay_list_boundary_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )

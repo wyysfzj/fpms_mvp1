@@ -9,6 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.pagination import PageResult
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
 
+LETTER_HANDOFF_STATUSES = (
+    "PENDING",
+    "READY",
+    "HANDED_OFF",
+    "FAILED",
+    "CANCELLED",
+)
+
 
 class DocAttachmentOut(BaseModel):
     id: str
@@ -17,6 +25,35 @@ class DocAttachmentOut(BaseModel):
     mime_type: str
     file_size: int
     uploaded_at: datetime
+    official_file_role: str | None = None
+    source_role_alias: str | None = None
+    external_upload_position: str | None = None
+    content_hash: str | None = None
+    package_usage_hint: str | None = None
+    is_archive_evidence: bool = False
+    is_receipt_evidence: bool = False
+
+
+class AttachmentManifestItemOut(BaseModel):
+    attachment_id: str
+    document_id: str
+    file_name: str
+    official_file_role: str | None = None
+    source_role_alias: str | None = None
+    external_upload_position: str | None = None
+    content_hash: str | None = None
+    package_usage_hint: str | None = None
+    is_archive_evidence: bool = False
+    is_receipt_evidence: bool = False
+
+
+class AttachmentManifestSummaryOut(BaseModel):
+    intake_gate_roles: list[AttachmentManifestItemOut] = Field(default_factory=list)
+    filing_roles: list[AttachmentManifestItemOut] = Field(default_factory=list)
+    oa_roles: list[AttachmentManifestItemOut] = Field(default_factory=list)
+    archive_roles: list[AttachmentManifestItemOut] = Field(default_factory=list)
+    historical_alias_roles: list[AttachmentManifestItemOut] = Field(default_factory=list)
+    missing_intake_gate_roles: list[str] = Field(default_factory=list)
 
 
 class DocumentCreateIn(BaseModel):
@@ -261,6 +298,42 @@ class DocumentOut(BaseModel):
 
 class DocumentListOut(PageResult[DocumentOut]):
     pass
+
+
+class LetterHandoffAttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    handoff_id: str
+    attachment_id: str | None = None
+    file_name: str
+    file_path: str | None = None
+    attachment_role: str | None = None
+    required: bool = False
+    included: bool = False
+    sort_order: int | None = None
+
+
+class LetterHandoffOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    source_document_id: str
+    generated_document_id: str | None = None
+    format_letter_mapping_id: str | None = None
+    format_letter_template_id: str | None = None
+    client_contact_id: str | None = None
+    contact_selection_source: str | None = None
+    salutation_source: str | None = None
+    salutation_text: str | None = None
+    generated_word_path: str | None = None
+    mail_subject: str | None = None
+    mail_body_draft: str | None = None
+    longxia_handoff_status: str
+    longxia_handoff_payload: str | None = None
+    handoff_at: datetime | None = None
+    remark: str | None = None
+    attachments: list[LetterHandoffAttachmentOut] = Field(default_factory=list)
 
 
 class DocumentWizardBatchRowOut(BaseModel):

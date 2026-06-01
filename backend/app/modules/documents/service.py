@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -26,6 +27,8 @@ from app.modules.documents.models import (
     Document,
 )
 from app.modules.documents.schemas import (
+    AttachmentManifestItemOut,
+    AttachmentManifestSummaryOut,
     DocTemplateCreateIn,
     DocTemplateUpdateIn,
     DocumentCreateIn,
@@ -51,6 +54,130 @@ from app.modules.tasks.service import _create_task_log
 from app.modules.tasks.task_generation_service import TaskGenerationService
 from app.modules.templates.models import Template
 from app.modules.templates.render import TemplateRenderer
+
+ATTACHMENT_ROLE_CATEGORY_INTAKE = "INTAKE_GATE"
+ATTACHMENT_ROLE_CATEGORY_FILING = "FILING"
+ATTACHMENT_ROLE_CATEGORY_OA = "OA_REPLY"
+ATTACHMENT_ROLE_CATEGORY_ARCHIVE = "ARCHIVE"
+
+_ATTACHMENT_ROLE_DEFINITIONS: dict[str, dict[str, object]] = {
+    "TECHNICAL_DISCLOSURE": {
+        "category": ATTACHMENT_ROLE_CATEGORY_INTAKE,
+        "package_usage_hint": "CASE_INTAKE",
+    },
+    "COMMISSION_INSTRUCTION": {
+        "category": ATTACHMENT_ROLE_CATEGORY_INTAKE,
+        "package_usage_hint": "CASE_INTAKE",
+    },
+    "FILING_FULL_WORD": {
+        "category": ATTACHMENT_ROLE_CATEGORY_FILING,
+        "external_upload_position": "FILING_SOURCE_WORD",
+        "package_usage_hint": "FILING_PREP",
+    },
+    "FILING_ABSTRACT": {
+        "category": ATTACHMENT_ROLE_CATEGORY_FILING,
+        "external_upload_position": "FILING_XML_ZIP_AUTO_ASSIGN",
+        "package_usage_hint": "FILING_PREP",
+    },
+    "CLAIMS": {
+        "category": ATTACHMENT_ROLE_CATEGORY_FILING,
+        "external_upload_position": "FILING_XML_ZIP_AUTO_ASSIGN",
+        "package_usage_hint": "FILING_PREP",
+    },
+    "FILING_CLAIMS": {
+        "category": ATTACHMENT_ROLE_CATEGORY_FILING,
+        "external_upload_position": "FILING_XML_ZIP_AUTO_ASSIGN",
+        "package_usage_hint": "FILING_PREP",
+    },
+    "FILING_DESCRIPTION": {
+        "category": ATTACHMENT_ROLE_CATEGORY_FILING,
+        "external_upload_position": "FILING_XML_ZIP_AUTO_ASSIGN",
+        "package_usage_hint": "FILING_PREP",
+    },
+    "FILING_DRAWINGS": {
+        "category": ATTACHMENT_ROLE_CATEGORY_FILING,
+        "external_upload_position": "FILING_XML_ZIP_AUTO_ASSIGN",
+        "package_usage_hint": "FILING_PREP",
+    },
+    "FILING_SEQUENCE_LISTING": {
+        "category": ATTACHMENT_ROLE_CATEGORY_FILING,
+        "external_upload_position": "FILING_XML_ZIP_AUTO_ASSIGN",
+        "package_usage_hint": "FILING_PREP",
+    },
+    "FILING_XML_ZIP": {
+        "category": ATTACHMENT_ROLE_CATEGORY_FILING,
+        "external_upload_position": "FILING_XML_ZIP_UPLOAD",
+        "package_usage_hint": "FILING_PREP",
+    },
+    "OA_STATEMENT_WORD": {
+        "category": ATTACHMENT_ROLE_CATEGORY_OA,
+        "external_upload_position": "OA_REPLY_STATEMENT_SOURCE",
+        "package_usage_hint": "OA_REPLY",
+    },
+    "OA_STATEMENT_PDF": {
+        "category": ATTACHMENT_ROLE_CATEGORY_OA,
+        "external_upload_position": "OA_REPLY_OTHER_PROOF_FILES",
+        "package_usage_hint": "OA_REPLY",
+    },
+    "OA_MODIFIED_CLAIMS": {
+        "category": ATTACHMENT_ROLE_CATEGORY_OA,
+        "external_upload_position": "OA_REPLY_CLAIMS",
+        "package_usage_hint": "OA_REPLY",
+    },
+    "OA_AMENDMENT_COMPARISON": {
+        "category": ATTACHMENT_ROLE_CATEGORY_OA,
+        "external_upload_position": "OA_REPLY_COMPARISON_PAGE",
+        "package_usage_hint": "OA_REPLY",
+    },
+    "OA_OTHER_PROOF": {
+        "category": ATTACHMENT_ROLE_CATEGORY_OA,
+        "external_upload_position": "OA_REPLY_OTHER_PROOF_FILES",
+        "package_usage_hint": "OA_REPLY",
+    },
+    "OA_ADDITIONAL_FILE": {
+        "category": ATTACHMENT_ROLE_CATEGORY_OA,
+        "external_upload_position": "OA_REPLY_ADDITIONAL_FILES",
+        "package_usage_hint": "OA_REPLY",
+    },
+    "FILING_MERGED_PDF": {
+        "category": ATTACHMENT_ROLE_CATEGORY_ARCHIVE,
+        "external_upload_position": "FILING_ARCHIVE",
+        "package_usage_hint": "FILING_ARCHIVE",
+        "is_archive_evidence": True,
+    },
+    "ELECTRONIC_RECEIPT": {
+        "category": ATTACHMENT_ROLE_CATEGORY_ARCHIVE,
+        "external_upload_position": "RECEIPT_ARCHIVE",
+        "package_usage_hint": "RECEIPT_ARCHIVE",
+        "is_archive_evidence": True,
+        "is_receipt_evidence": True,
+    },
+}
+
+_ATTACHMENT_ROLE_ALIASES = {
+    "技术交底书": "TECHNICAL_DISCLOSURE",
+    "委托指示": "COMMISSION_INSTRUCTION",
+    "完整递交文件": "FILING_FULL_WORD",
+    "摘要": "FILING_ABSTRACT",
+    "权利要求书": "CLAIMS",
+    "说明书": "FILING_DESCRIPTION",
+    "说明书附图": "FILING_DRAWINGS",
+    "序列表": "FILING_SEQUENCE_LISTING",
+    "xml压缩包": "FILING_XML_ZIP",
+    "XML压缩包": "FILING_XML_ZIP",
+    "合并PDF": "FILING_MERGED_PDF",
+    "合并 PDF": "FILING_MERGED_PDF",
+    "电子申请回执": "ELECTRONIC_RECEIPT",
+}
+
+_HISTORICAL_ATTACHMENT_ALIASES = {
+    "PCT 公开文本",
+    "补正后的说明书",
+    "补正后说明书",
+    "递交电子申请文件",
+    "递交的电子申请文件",
+    "客户提供原始文件",
+}
 
 
 def _apply_template_defaults(
@@ -163,6 +290,143 @@ def _normalize_text(value: str | None) -> str | None:
         return None
     text = value.strip()
     return text or None
+
+
+def _normalize_attachment_role(value: str | None) -> str | None:
+    role = _normalize_text(value)
+    if not role:
+        return None
+    return role.upper()
+
+
+def _resolve_attachment_role_from_alias(source_role_alias: str | None) -> str | None:
+    alias = _normalize_text(source_role_alias)
+    if not alias:
+        return None
+    return _ATTACHMENT_ROLE_ALIASES.get(alias)
+
+
+def _attachment_role_definition(role: str | None) -> dict[str, object] | None:
+    if not role:
+        return None
+    return _ATTACHMENT_ROLE_DEFINITIONS.get(role)
+
+
+def _resolve_attachment_manifest_metadata(
+    *,
+    official_file_role: str | None = None,
+    source_role_alias: str | None = None,
+    external_upload_position: str | None = None,
+    package_usage_hint: str | None = None,
+    is_archive_evidence: bool | None = None,
+    is_receipt_evidence: bool | None = None,
+) -> dict[str, object | None]:
+    role = _normalize_attachment_role(official_file_role)
+    alias = _normalize_text(source_role_alias)
+    if role is None:
+        role = _resolve_attachment_role_from_alias(alias)
+
+    definition = _attachment_role_definition(role)
+    if role and not definition:
+        raise_business_error(
+            "ATTACHMENT_OFFICIAL_ROLE_INVALID",
+            "Attachment official file role is invalid",
+            details={"official_file_role": role},
+            status_code=400,
+        )
+
+    archive_default = bool(definition and definition.get("is_archive_evidence"))
+    receipt_default = bool(definition and definition.get("is_receipt_evidence"))
+    return {
+        "official_file_role": role,
+        "source_role_alias": alias,
+        "external_upload_position": _normalize_text(external_upload_position)
+        or (
+            str(definition["external_upload_position"])
+            if definition and definition.get("external_upload_position")
+            else None
+        ),
+        "package_usage_hint": _normalize_text(package_usage_hint)
+        or (
+            str(definition["package_usage_hint"])
+            if definition and definition.get("package_usage_hint")
+            else None
+        ),
+        "is_archive_evidence": archive_default
+        if is_archive_evidence is None
+        else is_archive_evidence,
+        "is_receipt_evidence": receipt_default
+        if is_receipt_evidence is None
+        else is_receipt_evidence,
+    }
+
+
+def _attachment_manifest_item(attachment: DocAttachment) -> AttachmentManifestItemOut:
+    metadata = _resolve_attachment_manifest_metadata(
+        official_file_role=getattr(attachment, "official_file_role", None),
+        source_role_alias=getattr(attachment, "source_role_alias", None),
+        external_upload_position=getattr(attachment, "external_upload_position", None),
+        package_usage_hint=getattr(attachment, "package_usage_hint", None),
+        is_archive_evidence=getattr(attachment, "is_archive_evidence", None),
+        is_receipt_evidence=getattr(attachment, "is_receipt_evidence", None),
+    )
+    return AttachmentManifestItemOut(
+        attachment_id=attachment.id,
+        document_id=attachment.document_id,
+        file_name=attachment.file_name,
+        official_file_role=metadata["official_file_role"],
+        source_role_alias=metadata["source_role_alias"],
+        external_upload_position=metadata["external_upload_position"],
+        content_hash=attachment.content_hash,
+        package_usage_hint=metadata["package_usage_hint"],
+        is_archive_evidence=bool(metadata["is_archive_evidence"]),
+        is_receipt_evidence=bool(metadata["is_receipt_evidence"]),
+    )
+
+
+def summarize_attachment_manifest(
+    attachments: list[DocAttachment],
+    *,
+    require_commission_instruction: bool = False,
+) -> AttachmentManifestSummaryOut:
+    intake_gate_roles: list[AttachmentManifestItemOut] = []
+    filing_roles: list[AttachmentManifestItemOut] = []
+    oa_roles: list[AttachmentManifestItemOut] = []
+    archive_roles: list[AttachmentManifestItemOut] = []
+    historical_alias_roles: list[AttachmentManifestItemOut] = []
+
+    for attachment in attachments:
+        item = _attachment_manifest_item(attachment)
+        definition = _attachment_role_definition(item.official_file_role)
+        category = definition.get("category") if definition else None
+        if category == ATTACHMENT_ROLE_CATEGORY_INTAKE:
+            intake_gate_roles.append(item)
+        elif category == ATTACHMENT_ROLE_CATEGORY_FILING:
+            filing_roles.append(item)
+        elif category == ATTACHMENT_ROLE_CATEGORY_OA:
+            oa_roles.append(item)
+        elif category == ATTACHMENT_ROLE_CATEGORY_ARCHIVE:
+            archive_roles.append(item)
+        elif item.source_role_alias in _HISTORICAL_ATTACHMENT_ALIASES:
+            historical_alias_roles.append(item)
+
+    present_intake_roles = {
+        item.official_file_role for item in intake_gate_roles if item.official_file_role
+    }
+    missing_intake_gate_roles: list[str] = []
+    if "TECHNICAL_DISCLOSURE" not in present_intake_roles:
+        missing_intake_gate_roles.append("TECHNICAL_DISCLOSURE")
+    if require_commission_instruction and "COMMISSION_INSTRUCTION" not in present_intake_roles:
+        missing_intake_gate_roles.append("COMMISSION_INSTRUCTION")
+
+    return AttachmentManifestSummaryOut(
+        intake_gate_roles=intake_gate_roles,
+        filing_roles=filing_roles,
+        oa_roles=oa_roles,
+        archive_roles=archive_roles,
+        historical_alias_roles=historical_alias_roles,
+        missing_intake_gate_roles=missing_intake_gate_roles,
+    )
 
 
 def _resolve_case_title(case: Case) -> str | None:
@@ -1705,6 +1969,12 @@ def add_attachment(
     upload_file,
     storage_dir: str,
     actor_id: str | None = None,
+    official_file_role: str | None = None,
+    source_role_alias: str | None = None,
+    external_upload_position: str | None = None,
+    package_usage_hint: str | None = None,
+    is_archive_evidence: bool | None = None,
+    is_receipt_evidence: bool | None = None,
 ) -> DocAttachment:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
@@ -1743,6 +2013,7 @@ def add_attachment(
     ensure_dir(str(Path(dest_path).parent))
 
     size_bytes = 0
+    content_hasher = sha256()
     try:
         with open(dest_path, "wb") as f:
             while True:
@@ -1756,6 +2027,7 @@ def add_attachment(
                         "Attachment exceeds size limit",
                         status_code=400,
                     )
+                content_hasher.update(chunk)
                 f.write(chunk)
     except Exception:
         try:
@@ -1764,6 +2036,14 @@ def add_attachment(
             pass
         raise
 
+    manifest_metadata = _resolve_attachment_manifest_metadata(
+        official_file_role=official_file_role,
+        source_role_alias=source_role_alias,
+        external_upload_position=external_upload_position,
+        package_usage_hint=package_usage_hint,
+        is_archive_evidence=is_archive_evidence,
+        is_receipt_evidence=is_receipt_evidence,
+    )
     attachment = DocAttachment(
         id=str(uuid4()),
         document_id=document_id,
@@ -1771,6 +2051,13 @@ def add_attachment(
         file_path=relative_path,
         mime_type=content_type,
         file_size=size_bytes,
+        official_file_role=manifest_metadata["official_file_role"],
+        source_role_alias=manifest_metadata["source_role_alias"],
+        external_upload_position=manifest_metadata["external_upload_position"],
+        content_hash=f"sha256:{content_hasher.hexdigest()}",
+        package_usage_hint=manifest_metadata["package_usage_hint"],
+        is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
+        is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
     )
     db.add(attachment)
     db.commit()
@@ -1787,6 +2074,12 @@ def persist_generated_attachment(
     storage_dir: str,
     mime_type: str | None = None,
     commit: bool = True,
+    official_file_role: str | None = None,
+    source_role_alias: str | None = None,
+    external_upload_position: str | None = None,
+    package_usage_hint: str | None = None,
+    is_archive_evidence: bool | None = None,
+    is_receipt_evidence: bool | None = None,
 ) -> DocAttachment:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
@@ -1808,6 +2101,14 @@ def persist_generated_attachment(
     with open(dest_path, "wb") as output_file:
         output_file.write(content_bytes)
 
+    manifest_metadata = _resolve_attachment_manifest_metadata(
+        official_file_role=official_file_role,
+        source_role_alias=source_role_alias,
+        external_upload_position=external_upload_position,
+        package_usage_hint=package_usage_hint,
+        is_archive_evidence=is_archive_evidence,
+        is_receipt_evidence=is_receipt_evidence,
+    )
     attachment = DocAttachment(
         id=str(uuid4()),
         document_id=document_id,
@@ -1815,6 +2116,13 @@ def persist_generated_attachment(
         file_path=relative_path,
         mime_type=mime_type or "application/octet-stream",
         file_size=len(content_bytes),
+        official_file_role=manifest_metadata["official_file_role"],
+        source_role_alias=manifest_metadata["source_role_alias"],
+        external_upload_position=manifest_metadata["external_upload_position"],
+        content_hash=f"sha256:{sha256(content_bytes).hexdigest()}",
+        package_usage_hint=manifest_metadata["package_usage_hint"],
+        is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
+        is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
     )
     db.add(attachment)
     if commit:

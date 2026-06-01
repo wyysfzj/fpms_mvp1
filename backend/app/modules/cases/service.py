@@ -40,6 +40,7 @@ from app.modules.cases.schemas import (
     CaseClientReportCountResponse,
     CaseCreate,
     CaseDocumentGateMissingItemOut,
+    CaseInventorIn,
     CaseListItem,
     CaseListReportResponse,
     CaseReportCountResponse,
@@ -95,6 +96,7 @@ _APPLY_FEE_LIMIT_TEMPLATE_CODE = "APPLY_FEE_LIMIT"
 _APPLY_FEE_LIMIT_TEMPLATE_NAME = "申请费时限"
 _APPLY_FEE_LIMIT_DEFAULT_ADD_DAYS = 30
 _APPLY_FEE_LIMIT_DEFAULT_INNER_OFFSET_DAYS = 7
+_CHINA_NATIONALITY_VALUES = {"CN", "CHN", "CHINA", "PRC", "中国", "中华人民共和国"}
 
 
 def _normalize_required_text(value: str | None, field_name: str) -> str:
@@ -144,6 +146,24 @@ def _normalize_app_no(value: str | None, *, required: bool) -> str | None:
 
 def _is_present_text(value: str | None) -> bool:
     return bool((value or "").strip())
+
+
+def _is_china_nationality(value: str | None) -> bool:
+    normalized = (value or "").strip()
+    return normalized.upper() in _CHINA_NATIONALITY_VALUES or "中国" in normalized
+
+
+def validate_inventor_official_fields(inventors: list[CaseInventorIn]) -> None:
+    for inventor in inventors:
+        if _is_china_nationality(inventor.nationality) and not _is_present_text(
+            inventor.china_id_no
+        ):
+            raise_business_error(
+                "CASE_INVENTOR_CHINA_ID_REQUIRED",
+                "china_id_no is required for China-national inventors",
+                details={"seq": inventor.seq, "nationality": inventor.nationality},
+                status_code=400,
+            )
 
 
 def _earliest_priority_date_from_dicts(priorities: list[dict[str, Any]]) -> date | None:
@@ -987,6 +1007,32 @@ def _build_case_trend_response(
     ]
 
 
+def _serialize_applicant_official_fields(applicant: T_CaseApplicant) -> dict[str, Any]:
+    return {
+        "seq": applicant.seq,
+        "is_first": applicant.is_first,
+        "name_cn": applicant.name_cn,
+        "name_en": applicant.name_en,
+        "address_cn": applicant.address_cn,
+        "address_en": applicant.address_en,
+        "nationality": applicant.nationality,
+        "certificate_type": applicant.certificate_type,
+        "certificate_no": applicant.certificate_no,
+        "official_postcode": applicant.official_postcode,
+        "official_applicant_kind": applicant.official_applicant_kind,
+    }
+
+
+def _serialize_inventor_official_fields(inventor: T_CaseInventor) -> dict[str, Any]:
+    return {
+        "seq": inventor.seq,
+        "name_cn": inventor.name_cn,
+        "name_en": inventor.name_en,
+        "nationality": inventor.nationality,
+        "china_id_no": inventor.china_id_no,
+    }
+
+
 def validate_case_status_transition(current_status: str | None, target_status: str | None) -> None:
     if not target_status or not current_status or target_status == current_status:
         return
@@ -1060,11 +1106,36 @@ def list_cases(
 
     off, lim = offset_limit(page, page_size)
     items = query.order_by(Case.created_at.desc()).offset(off).limit(lim).all()
+    case_ids = [case.id for case in items]
     client_ids = {case.client_id for case in items if case.client_id}
     client_name_map: dict[str, str] = {}
     if client_ids:
         clients = db.query(Client.id, Client.name_cn).filter(Client.id.in_(client_ids)).all()
         client_name_map = {client.id: client.name_cn for client in clients}
+
+    applicants_by_case_id: dict[str, list[dict[str, Any]]] = {case_id: [] for case_id in case_ids}
+    inventors_by_case_id: dict[str, list[dict[str, Any]]] = {case_id: [] for case_id in case_ids}
+    if case_ids:
+        applicant_rows = (
+            db.query(T_CaseApplicant)
+            .filter(T_CaseApplicant.case_id.in_(case_ids))
+            .order_by(T_CaseApplicant.case_id.asc(), T_CaseApplicant.seq.asc())
+            .all()
+        )
+        inventor_rows = (
+            db.query(T_CaseInventor)
+            .filter(T_CaseInventor.case_id.in_(case_ids))
+            .order_by(T_CaseInventor.case_id.asc(), T_CaseInventor.seq.asc())
+            .all()
+        )
+        for applicant in applicant_rows:
+            applicants_by_case_id.setdefault(applicant.case_id, []).append(
+                _serialize_applicant_official_fields(applicant)
+            )
+        for inventor in inventor_rows:
+            inventors_by_case_id.setdefault(inventor.case_id, []).append(
+                _serialize_inventor_official_fields(inventor)
+            )
 
     list_items = [
         CaseListItem(
@@ -1082,6 +1153,8 @@ def list_cases(
             recv_date=str(case.recv_date) if case.recv_date else None,
             patent_no=case.patent_no,
             primary_agent_id=case.primary_agent_id,
+            applicants=applicants_by_case_id.get(case.id, []),
+            inventors=inventors_by_case_id.get(case.id, []),
         )
         for case in items
     ]
@@ -1596,6 +1669,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
     priorities_dict = [priority.model_dump() for priority in data.priorities]
     bio_deposits_dict = [bio_deposit.model_dump() for bio_deposit in data.bio_deposits]
     validate_applicants(applicants_dict)
+    validate_inventor_official_fields(data.inventors)
     validate_case_applicant_links(db, applicants)
     first_applicant = next((applicant for applicant in applicants if applicant.is_first), None)
     validate_case_applicant_kind_mismatch(
@@ -1730,6 +1804,11 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
                 name_en=applicant.name_en,
                 address_cn=applicant.address_cn,
                 address_en=applicant.address_en,
+                nationality=applicant.nationality,
+                certificate_type=applicant.certificate_type,
+                certificate_no=applicant.certificate_no,
+                official_postcode=applicant.official_postcode,
+                official_applicant_kind=applicant.official_applicant_kind,
             )
         )
 
@@ -1741,6 +1820,8 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
                 seq=inventor.seq,
                 name_cn=inventor.name_cn,
                 name_en=inventor.name_en,
+                nationality=inventor.nationality,
+                china_id_no=inventor.china_id_no,
             )
         )
 
@@ -2100,6 +2181,11 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
                     name_en=applicant.name_en,
                     address_cn=applicant.address_cn,
                     address_en=applicant.address_en,
+                    nationality=applicant.nationality,
+                    certificate_type=applicant.certificate_type,
+                    certificate_no=applicant.certificate_no,
+                    official_postcode=applicant.official_postcode,
+                    official_applicant_kind=applicant.official_applicant_kind,
                 )
             )
     elif "applicant_kind" in provided_fields:
@@ -2116,6 +2202,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         )
 
     if data.inventors is not None:
+        validate_inventor_official_fields(data.inventors)
         db.query(T_CaseInventor).filter(T_CaseInventor.case_id == case_id).delete()
         for inventor in data.inventors:
             db.add(
@@ -2125,6 +2212,8 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
                     seq=inventor.seq,
                     name_cn=inventor.name_cn,
                     name_en=inventor.name_en,
+                    nationality=inventor.nationality,
+                    china_id_no=inventor.china_id_no,
                 )
             )
 
@@ -2203,6 +2292,7 @@ def update_case_limited(db: Session, case_id: str, data: CaseUpdateLimited, user
     case.updated_by = user_id
 
     if data.inventors is not None:
+        validate_inventor_official_fields(data.inventors)
         db.query(T_CaseInventor).filter(T_CaseInventor.case_id == case_id).delete()
         for inventor in data.inventors:
             db.add(
@@ -2212,6 +2302,8 @@ def update_case_limited(db: Session, case_id: str, data: CaseUpdateLimited, user
                     seq=inventor.seq,
                     name_cn=inventor.name_cn,
                     name_en=inventor.name_en,
+                    nationality=inventor.nationality,
+                    china_id_no=inventor.china_id_no,
                 )
             )
 

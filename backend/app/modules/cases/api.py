@@ -79,6 +79,11 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
             T_CaseApplicant.name_en,
             T_CaseApplicant.address_cn,
             T_CaseApplicant.address_en,
+            T_CaseApplicant.nationality,
+            T_CaseApplicant.certificate_type,
+            T_CaseApplicant.certificate_no,
+            T_CaseApplicant.official_postcode,
+            T_CaseApplicant.official_applicant_kind,
         )
         .filter(T_CaseApplicant.case_id == case.id)
         .order_by(T_CaseApplicant.seq)
@@ -89,6 +94,8 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
             T_CaseInventor.seq,
             T_CaseInventor.name_cn,
             T_CaseInventor.name_en,
+            T_CaseInventor.nationality,
+            T_CaseInventor.china_id_no,
         )
         .filter(T_CaseInventor.case_id == case.id)
         .order_by(T_CaseInventor.seq)
@@ -213,6 +220,11 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
                 "name_en": applicant.name_en,
                 "address_cn": applicant.address_cn,
                 "address_en": applicant.address_en,
+                "nationality": applicant.nationality,
+                "certificate_type": applicant.certificate_type,
+                "certificate_no": applicant.certificate_no,
+                "official_postcode": applicant.official_postcode,
+                "official_applicant_kind": applicant.official_applicant_kind,
             }
             for applicant in applicants
         ],
@@ -221,6 +233,8 @@ def _serialize_case(db: Session, case: Case) -> dict[str, Any]:
                 "seq": inventor.seq,
                 "name_cn": inventor.name_cn,
                 "name_en": inventor.name_en,
+                "nationality": inventor.nationality,
+                "china_id_no": inventor.china_id_no,
             }
             for inventor in inventors
         ],

@@ -60,6 +60,36 @@ const routes = [
       { path: 'documents/:id/edit', name: 'document_edit', component: () => import('../modules/documents/pages/DocumentEdit.vue') },
       { path: 'documents/:id', name: 'document_detail', component: () => import('../modules/documents/pages/DocumentDetail.vue') },
 
+      // Official Workflows
+      {
+        path: 'official-workflows/filing-preparation',
+        name: 'official_work_filing_preparation',
+        component: () => import('../modules/cases/pages/FilingPreparation.vue'),
+      },
+      {
+        path: 'official-workflows/oa-reply',
+        name: 'official_work_oa_reply',
+        component: () => import('../modules/documents/pages/OAReplyPackage.vue'),
+      },
+      {
+        path: 'official-workflows/fee-linkage',
+        name: 'official_work_fee_linkage',
+        component: () => import('../modules/officialWorkflows/pages/OfficialWorkflowPlaceholder.vue'),
+        props: { title: '费用联动核对', description: '请选择具体费用工作包。' },
+      },
+      {
+        path: 'official-workflows/receipt-archive',
+        name: 'official_work_receipt_archive',
+        component: () => import('../modules/officialWorkflows/pages/OfficialWorkflowPlaceholder.vue'),
+        props: { title: '回执归档', description: '请选择具体回执归档工作包。' },
+      },
+      {
+        path: 'official-workflows/letter-handoff',
+        name: 'official_document_letter_handoff',
+        component: () => import('../modules/officialWorkflows/pages/OfficialWorkflowPlaceholder.vue'),
+        props: { title: '信函交接', description: '请选择具体信函交接工作包。' },
+      },
+
       // Tasks
       { path: 'tasks', name: 'tasks', component: () => import('../modules/tasks/pages/TaskList.vue') },
       { path: 'tasks/new', name: 'task_new', component: () => import('../modules/tasks/pages/TaskCreate.vue') },

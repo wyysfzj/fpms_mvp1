@@ -16,6 +16,11 @@ class CaseApplicantIn(BaseModel):
     name_en: str | None = None
     address_cn: str | None = None
     address_en: str | None = None
+    nationality: str | None = Field(None, max_length=64)
+    certificate_type: str | None = Field(None, max_length=32)
+    certificate_no: str | None = Field(None, max_length=128)
+    official_postcode: str | None = Field(None, max_length=32)
+    official_applicant_kind: str | None = Field(None, max_length=32)
 
     @field_validator("applicant_id", mode="before")
     @classmethod
@@ -30,6 +35,8 @@ class CaseInventorIn(BaseModel):
     seq: int = Field(..., ge=1)
     name_cn: str | None = None
     name_en: str | None = None
+    nationality: str | None = Field(None, max_length=64)
+    china_id_no: str | None = Field(None, max_length=64)
 
 
 class PriorityIn(BaseModel):
@@ -321,6 +328,8 @@ class CaseListItem(BaseModel):
     # A3 — key list fields
     patent_no: str | None = None
     primary_agent_id: str | None = None
+    applicants: list[dict] = Field(default_factory=list)
+    inventors: list[dict] = Field(default_factory=list)
 
 
 class CaseReportCountResponse(BaseModel):

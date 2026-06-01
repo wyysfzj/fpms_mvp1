@@ -214,6 +214,81 @@
                   <el-input v-model="applicant.address_en" type="textarea" :rows="2" placeholder="申请人英文地址" />
                 </el-col>
               </el-row>
+              <div class="official-field-group">官方提交字段</div>
+              <el-row :gutter="16" class="applicant-address-row">
+                <el-col :span="8">
+                  <el-form-item label="国籍">
+                    <el-input v-model="applicant.nationality" placeholder="例如：中国 / CN" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="8">
+                  <el-form-item label="证件类型">
+                    <el-input v-model="applicant.certificate_type" placeholder="例如：统一社会信用代码" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="8">
+                  <el-form-item label="证件号">
+                    <el-input v-model="applicant.certificate_no" placeholder="请输入官方证件号" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="8">
+                  <el-form-item label="官方邮编">
+                    <el-input v-model="applicant.official_postcode" placeholder="请输入官方邮编" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="8">
+                  <el-form-item label="官方申请人类型">
+                    <el-input v-model="applicant.official_applicant_kind" placeholder="例如：企业 / 个人" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+          </el-collapse-item>
+
+          <el-collapse-item v-if="!isConsultingCase" title="发明人信息" name="inventor">
+            <div class="section-toolbar">
+              <div class="field-hint">维护官方递交所需的发明人姓名、国籍和中国籍身份证号。</div>
+              <el-button text type="primary" @click="addInventor">新增发明人</el-button>
+            </div>
+            <div v-if="fieldErrors.get('inventors')?.length" class="section-error">
+              {{ fieldErrors.get('inventors')?.join('，') }}
+            </div>
+            <div v-if="!form.inventors?.length" class="field-hint">当前未维护发明人信息。</div>
+            <div
+              v-for="(inventor, index) in form.inventors"
+              :key="inventor.seq"
+              class="priority-card"
+            >
+              <div class="priority-card-header">
+                <span>发明人 {{ index + 1 }}</span>
+                <el-button text type="danger" @click="removeInventor(index)">删除</el-button>
+              </div>
+              <el-row :gutter="16">
+                <el-col :span="8">
+                  <el-form-item label="中文姓名">
+                    <el-input v-model="inventor.name_cn" placeholder="请输入发明人中文姓名" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="8">
+                  <el-form-item label="英文姓名">
+                    <el-input v-model="inventor.name_en" placeholder="请输入发明人英文姓名" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="8">
+                  <el-form-item label="国籍">
+                    <el-input v-model="inventor.nationality" placeholder="例如：中国 / CN" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="16">
+                <el-col :span="8">
+                  <el-form-item label="中国籍身份证号">
+                    <el-input v-model="inventor.china_id_no" placeholder="中国籍发明人需维护" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
             </div>
           </el-collapse-item>
 
@@ -742,7 +817,29 @@
 
           <div class="intake-gate-grid">
             <div class="intake-gate-card">
-              <div class="intake-card-title">收案文件包</div>
+              <div class="intake-card-title">客户反馈收案门禁</div>
+              <table class="intake-table intake-stable-gate-table">
+                <thead>
+                  <tr>
+                    <th>文件</th>
+                    <th>要求</th>
+                    <th>说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>技术交底书</td>
+                    <td><el-tag type="danger" size="small">必传</el-tag></td>
+                    <td>作为新申请内容准备和后续官方递交文件生成的稳定来源。</td>
+                  </tr>
+                  <tr>
+                    <td>委托指示（如有）</td>
+                    <td><el-tag type="warning" size="small">条件项</el-tag></td>
+                    <td>客户提供时必须入库；未提供时不阻止建案。</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="intake-card-title intake-upload-title">收案文件包</div>
               <div class="intake-drop-zone">
                 <strong>上传客户邮件、压缩包或申请文件</strong>
                 <span>文件先作为收案证据保存；当前页面只读取门禁预览，不调用上传接口。</span>
@@ -928,6 +1025,7 @@ import type {
   CaseDocumentGateCheck,
   CaseDocumentGateConclusion,
   CaseDocumentGatePreview,
+  CaseInventor,
   CasePriority,
 } from '../../../api/cases.types'
 import type { Client, ClientCreatePayload } from '../../../api/clients.types'
@@ -1022,6 +1120,7 @@ const form = reactive<CaseCreatePayload>({
   flow_dir: 'CN_DOMESTIC',
   app_no: '',
   applicants: [],
+  inventors: [],
   priorities: [],
   bio_deposits: [],
   foreign_agent_id: '',
@@ -1218,6 +1317,7 @@ watch(
       form.require_hk = false
       form.first_annuity_year = undefined
       form.bio_deposits = []
+      form.inventors = []
       form.ro = ''
       form.isa = ''
       form.ipea = ''
@@ -1322,6 +1422,21 @@ function createEmptyApplicant(seq: number): CaseApplicant {
     name_en: '',
     address_cn: '',
     address_en: '',
+    nationality: '',
+    certificate_type: '',
+    certificate_no: '',
+    official_postcode: '',
+    official_applicant_kind: '',
+  }
+}
+
+function createEmptyInventor(seq: number): CaseInventor {
+  return {
+    seq,
+    name_cn: '',
+    name_en: '',
+    nationality: '',
+    china_id_no: '',
   }
 }
 
@@ -1344,6 +1459,12 @@ function addApplicant() {
   const nextSeq = (form.applicants?.length || 0) + 1
   form.applicants = [...(form.applicants || []), createEmptyApplicant(nextSeq)]
   expandedSections.value = Array.from(new Set([...expandedSections.value, 'applicant']))
+}
+
+function addInventor() {
+  const nextSeq = (form.inventors?.length || 0) + 1
+  form.inventors = [...(form.inventors || []), createEmptyInventor(nextSeq)]
+  expandedSections.value = Array.from(new Set([...expandedSections.value, 'inventor']))
 }
 
 function addBioDeposit() {
@@ -1369,6 +1490,12 @@ function removeApplicant(index: number) {
   if ((form.applicants || []).length === 1) {
     form.applicants[0].is_first = true
   }
+}
+
+function removeInventor(index: number) {
+  const nextInventors = [...(form.inventors || [])]
+  nextInventors.splice(index, 1)
+  form.inventors = nextInventors.map((inventor, seq) => ({ ...inventor, seq: seq + 1 }))
 }
 
 function applyClientToApplicant(index: number, client: Client) {
@@ -1482,6 +1609,30 @@ function normalizeAgentSplitRows(agentSplits: CaseAgentSplit[] | null | undefine
     )
 }
 
+function hasApplicantValue(applicant: CaseApplicant) {
+  return [
+    applicant.name_cn,
+    applicant.name_en,
+    applicant.address_cn,
+    applicant.address_en,
+    applicant.nationality,
+    applicant.certificate_type,
+    applicant.certificate_no,
+    applicant.official_postcode,
+    applicant.official_applicant_kind,
+  ].some((value) => String(value || '').trim())
+}
+
+function hasInventorValue(inventor: CaseInventor) {
+  return [inventor.name_cn, inventor.name_en, inventor.nationality, inventor.china_id_no]
+    .some((value) => String(value || '').trim())
+}
+
+function isChinaNationality(value?: string | null) {
+  const normalized = String(value || '').trim().toUpperCase()
+  return ['CN', 'CHN', 'CHINA', 'PRC'].includes(normalized) || normalized.includes('中国')
+}
+
 function runCustomValidation(): ValidationItem[] {
   const items: ValidationItem[] = []
   const seen = new Set<string>()
@@ -1501,9 +1652,7 @@ function runCustomValidation(): ValidationItem[] {
     add('foreign_agent_id', '涉外流程方向下必须选择外方代理。', 'foreign_agent')
   }
 
-  const filledApplicants = (form.applicants || []).filter((applicant) =>
-    [applicant.name_cn, applicant.name_en, applicant.address_cn, applicant.address_en].some((value) => String(value || '').trim())
-  )
+  const filledApplicants = (form.applicants || []).filter(hasApplicantValue)
   if (filledApplicants.length) {
     const firstCount = filledApplicants.filter((applicant) => applicant.is_first).length
     if (firstCount !== 1) {
@@ -1515,6 +1664,16 @@ function runCustomValidation(): ValidationItem[] {
       }
     })
   }
+
+  const filledInventors = (form.inventors || []).filter(hasInventorValue)
+  filledInventors.forEach((inventor, index) => {
+    if (![inventor.name_cn, inventor.name_en].some((value) => String(value || '').trim())) {
+      add('inventors', `发明人 ${index + 1} 至少填写中文名或英文名。`, 'inventor')
+    }
+    if (isChinaNationality(inventor.nationality) && !String(inventor.china_id_no || '').trim()) {
+      add('inventors', `发明人 ${index + 1} 为中国籍时需填写身份证号。`, 'inventor')
+    }
+  })
 
   if (showPrioritySection.value) {
     ;(form.priorities || []).forEach((priority, index) => {
@@ -1632,11 +1791,15 @@ async function handleSave() {
       ...form,
       patent_category: isConsultingCase.value ? undefined : form.patent_category,
       applicants: form.applicants
-        ?.filter((applicant) =>
-          [applicant.name_cn, applicant.name_en, applicant.address_cn, applicant.address_en].some((value) => String(value || '').trim())
-        )
+        ?.filter(hasApplicantValue)
         .map((applicant, index) => ({
           ...applicant,
+          seq: index + 1,
+        })),
+      inventors: form.inventors
+        ?.filter(hasInventorValue)
+        .map((inventor, index) => ({
+          ...inventor,
           seq: index + 1,
         })),
       priorities: form.priorities?.filter((priority) =>
@@ -1848,6 +2011,17 @@ onMounted(() => {
   color: var(--text-main);
 }
 
+.intake-upload-title {
+  margin-top: 16px;
+}
+
+.official-field-group {
+  margin-top: 14px;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .intake-drop-zone {
   display: grid;
   gap: 8px;
@@ -1895,6 +2069,10 @@ onMounted(() => {
 
 .intake-missing-table {
   margin-top: 12px;
+}
+
+.intake-stable-gate-table {
+  margin-bottom: 4px;
 }
 
 .intake-empty {

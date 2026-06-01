@@ -147,6 +147,10 @@ export interface FeeDraftDetail {
     total_service?: FeeMoney
     total_misc?: FeeMoney
     amount?: FeeMoney
+    official_fee_reduction_note?: string | null
+    official_template_status?: string | null
+    official_template_version?: string | null
+    official_template_note?: string | null
     created_at?: string
     updated_at?: string
 }

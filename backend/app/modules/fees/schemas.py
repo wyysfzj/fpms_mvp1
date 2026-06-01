@@ -8,6 +8,13 @@ from pydantic import BaseModel, ConfigDict
 
 from app.modules.fees.enums import CalcMode, FeeDraftStatus, FeeType
 
+OFFICIAL_FEE_TEMPLATE_STATUSES = (
+    "UNCONFIRMED",
+    "NOT_APPLICABLE",
+    "READY",
+    "BLOCKED",
+)
+
 
 class FeeDraftCreateIn(BaseModel):
     case_id: str
@@ -42,8 +49,26 @@ class FeeDraftOut(BaseModel):
     total_service: Decimal
     total_misc: Decimal
     amount: Decimal
+    official_fee_reduction_note: str | None = None
+    official_template_status: str | None = None
+    official_template_version: str | None = None
+    official_template_note: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class OfficialFeeChecklistOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    fee_draft_id: str | None = None
+    pay_list_id: int | None = None
+    checklist_code: str
+    checklist_label: str
+    status: str
+    required: bool = True
+    blocker_reason: str | None = None
+    sort_order: int | None = None
 
 
 class FeeDraftListItemOut(BaseModel):

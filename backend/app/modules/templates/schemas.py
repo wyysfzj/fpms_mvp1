@@ -43,6 +43,22 @@ class TemplateListItemOut(BaseModel):
     enabled: bool
 
 
+class FormatLetterMappingOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    official_doc_template_id: str | None = None
+    official_doc_template_code: str | None = None
+    official_doc_name_pattern: str | None = None
+    format_letter_template_id: str | None = None
+    format_letter_template_code: str | None = None
+    output_name_rule: str | None = None
+    salutation_rule_code: str | None = None
+    contact_rule_code: str | None = None
+    enabled: bool
+    remark: str | None = None
+
+
 class LetterHeadCreateIn(BaseModel):
     name: str
     locale: str | None = None

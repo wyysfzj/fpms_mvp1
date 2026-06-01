@@ -106,6 +106,51 @@ const caseBatchFilingItem: MenuItem = {
     requiredPerms: [Perms.CASES_READ, Perms.CASES_WRITE],
 }
 
+const officialFilingPreparationItem: MenuItem = {
+    key: 'official_work_filing_preparation',
+    label: '新申请递交准备',
+    shortLabel: '准',
+    icon: '🧭',
+    route: '/official-workflows/filing-preparation',
+    requiredPerms: [Perms.CASES_READ, Perms.DOCUMENTS_READ],
+}
+
+const officialOAReplyItem: MenuItem = {
+    key: 'official_work_oa_reply',
+    label: 'OA答复工作包',
+    shortLabel: 'OA',
+    icon: '📝',
+    route: '/official-workflows/oa-reply',
+    requiredPerms: [Perms.DOCUMENTS_READ],
+}
+
+const officialFeeLinkageItem: MenuItem = {
+    key: 'official_work_fee_linkage',
+    label: '费用联动核对',
+    shortLabel: '核',
+    icon: '🔗',
+    route: '/official-workflows/fee-linkage',
+    requiredPerms: [Perms.FEES_READ, Perms.PAY_LIST_READ],
+}
+
+const officialReceiptArchiveItem: MenuItem = {
+    key: 'official_work_receipt_archive',
+    label: '回执归档',
+    shortLabel: '执',
+    icon: '🗄️',
+    route: '/official-workflows/receipt-archive',
+    requiredPerms: [Perms.DOCUMENTS_READ],
+}
+
+const officialLetterHandoffItem: MenuItem = {
+    key: 'official_document_letter_handoff',
+    label: '信函交接',
+    shortLabel: '函',
+    icon: '✉️',
+    route: '/official-workflows/letter-handoff',
+    requiredPerms: [Perms.DOCUMENTS_READ],
+}
+
 const documentsItem: MenuItem = {
     key: 'documents',
     label: '往来文件',
@@ -460,6 +505,27 @@ export const MENU_GROUPS: MenuGroup[] = [
                 requiredPerms: [Perms.CASES_READ, Perms.CASES_WRITE],
             },
             {
+                key: 'official_work_filing_preparation',
+                label: '新申请递交准备',
+                icon: '🧭',
+                route: '/official-workflows/filing-preparation',
+                requiredPerms: [Perms.CASES_READ, Perms.DOCUMENTS_READ],
+            },
+            {
+                key: 'official_work_oa_reply',
+                label: 'OA答复工作包',
+                icon: '📝',
+                route: '/official-workflows/oa-reply',
+                requiredPerms: [Perms.DOCUMENTS_READ],
+            },
+            {
+                key: 'official_work_receipt_archive',
+                label: '回执归档',
+                icon: '🗄️',
+                route: '/official-workflows/receipt-archive',
+                requiredPerms: [Perms.DOCUMENTS_READ],
+            },
+            {
                 key: 'grant_fee_tasks_case_lifecycle',
                 label: '授权费任务',
                 icon: '🧾',
@@ -532,6 +598,13 @@ export const MENU_GROUPS: MenuGroup[] = [
         children: [
             { key: 'fees', label: '费用草稿', icon: '💰', route: '/fees/drafts', requiredPerms: [Perms.FEES_READ] },
             { key: 'fee_rates', label: '费率管理', icon: '💱', route: '/fees/rates', requiredPerms: [Perms.FEE_RATE_READ] },
+            {
+                key: 'official_work_fee_linkage',
+                label: '费用联动核对',
+                icon: '🔗',
+                route: '/official-workflows/fee-linkage',
+                requiredPerms: [Perms.FEES_READ, Perms.PAY_LIST_READ],
+            },
             { key: 'grant_fee_tasks', label: '授权费任务', icon: '🧾', route: '/grant-fee/tasks', requiredPerms: ['GrantFeeTask.Read'] },
             { key: 'fee_management_pay_lists', label: '官费清单', icon: '📑', route: '/fee-management/pay-lists', requiredPerms: [Perms.PAY_LIST_READ] },
             { key: 'bills', label: '账单管理', icon: '🧾', route: '/billing/bills', requiredPerms: [Perms.BILLING_READ] },
@@ -587,6 +660,13 @@ export const MENU_GROUPS: MenuGroup[] = [
             { key: 'doc_templates', label: '文件模板', icon: '📄', route: '/system/doc-templates', requiredPerms: [Perms.SETTINGS_READ] },
             { key: 'system_templates', label: '模板文件源', icon: '🧾', route: '/system/templates', requiredPerms: [Perms.TEMPLATE_READ] },
             { key: 'letterheads', label: '信纸抬头', icon: '🏷️', route: '/system/letterheads', requiredPerms: [Perms.LETTERHEAD_READ] },
+            {
+                key: 'official_document_letter_handoff',
+                label: '信函交接',
+                icon: '✉️',
+                route: '/official-workflows/letter-handoff',
+                requiredPerms: [Perms.DOCUMENTS_READ],
+            },
         ],
     },
 ]
@@ -610,6 +690,19 @@ export const PRODUCT_NAV_GROUPS: ProductMenuGroup[] = [
         label: '案件生命周期',
         description: '主流程',
         children: [casesItem, caseNewItem, documentsItem, caseBatchFilingItem],
+    },
+    {
+        mode: 'work',
+        key: 'official-workflow',
+        label: '官方工作包',
+        description: '递交与答复',
+        children: [
+            officialFilingPreparationItem,
+            officialOAReplyItem,
+            officialReceiptArchiveItem,
+            officialFeeLinkageItem,
+            officialLetterHandoffItem,
+        ],
     },
     {
         mode: 'work',
@@ -648,7 +741,13 @@ export const PRODUCT_NAV_GROUPS: ProductMenuGroup[] = [
         mode: 'module',
         key: 'documents-tasks',
         label: '文件与任务',
-        children: [documentsItem],
+        children: [documentsItem, officialOAReplyItem, officialReceiptArchiveItem, officialLetterHandoffItem],
+    },
+    {
+        mode: 'module',
+        key: 'official-workflow',
+        label: '官方工作包',
+        children: [officialFilingPreparationItem, officialOAReplyItem, officialFeeLinkageItem, officialReceiptArchiveItem],
     },
     {
         mode: 'module',

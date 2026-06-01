@@ -159,6 +159,11 @@ class T_CaseApplicant(UUIDPrimaryKeyMixin, AuditMixin, Base):
     name_en: Mapped[str | None] = mapped_column(String(200), nullable=True)
     address_cn: Mapped[str | None] = mapped_column(Text, nullable=True)
     address_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    nationality: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    certificate_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    certificate_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    official_postcode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    official_applicant_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (UniqueConstraint("case_id", "seq", name="uq_case_applicant_seq"),)
 
@@ -177,6 +182,8 @@ class T_CaseInventor(UUIDPrimaryKeyMixin, AuditMixin, Base):
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     name_cn: Mapped[str | None] = mapped_column(String(200), nullable=True)
     name_en: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    nationality: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    china_id_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (UniqueConstraint("case_id", "seq", name="uq_case_inventor_seq"),)
 
