@@ -15,6 +15,19 @@
       <ApiErrorBanner :error="pageError" @dismiss="pageError = null" />
     </div>
 
+    <div class="page-toolbar">
+      <el-input
+        v-model.trim="searchQuery"
+        clearable
+        placeholder="搜索申请人名称或编码"
+        class="search-input"
+        @clear="handleSearch"
+        @keyup.enter="handleSearch"
+      />
+      <el-button type="primary" @click="handleSearch">搜索</el-button>
+      <el-button :disabled="!searchQuery" @click="handleClearSearch">重置</el-button>
+    </div>
+
     <LoadingBlock v-if="loading && applicants.length === 0" :rows="8" />
 
     <div v-else-if="isEmpty" class="page-empty">
@@ -40,6 +53,11 @@
         <el-table-column label="英文名称" min-width="180">
           <template #default="{ row }">
             {{ row.name_en || '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="总委托书备案编号" min-width="180">
+          <template #default="{ row }">
+            {{ row.total_power_of_attorney_no || '—' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100">
@@ -124,6 +142,14 @@
         <el-form-item label="英文名称" prop="name_en" :error="fieldErrors.get('name_en')?.join('，')">
           <el-input v-model.trim="form.name_en" placeholder="请输入英文名称（可选）" />
         </el-form-item>
+
+        <el-form-item
+          label="总委托书备案编号"
+          prop="total_power_of_attorney_no"
+          :error="fieldErrors.get('total_power_of_attorney_no')?.join('，')"
+        >
+          <el-input v-model.trim="form.total_power_of_attorney_no" placeholder="请输入总委托书备案编号（可选）" />
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -160,8 +186,9 @@ const pageError = ref<ApiError | null>(null)
 const dialogError = ref<ApiError | null>(null)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const searchQuery = ref('')
 const total = ref(0)
-const isEmpty = computed(() => !loading.value && !pageError.value && applicants.value.length === 0)
+const isEmpty = computed(() => !searchQuery.value && !loading.value && !pageError.value && applicants.value.length === 0)
 
 const showDialog = ref(false)
 const isEdit = ref(false)
@@ -176,6 +203,7 @@ const form = reactive({
   code: '',
   name_cn: '',
   name_en: '',
+  total_power_of_attorney_no: '',
   is_active: true,
 })
 
@@ -188,6 +216,7 @@ function toListParams() {
   return {
     page: currentPage.value,
     page_size: pageSize.value,
+    q: searchQuery.value || undefined,
   }
 }
 
@@ -210,6 +239,7 @@ function resetForm() {
   form.code = ''
   form.name_cn = ''
   form.name_en = ''
+  form.total_power_of_attorney_no = ''
   form.is_active = true
 }
 
@@ -229,6 +259,7 @@ function openEdit(row: Applicant) {
   form.code = row.code
   form.name_cn = row.name_cn
   form.name_en = row.name_en || ''
+  form.total_power_of_attorney_no = row.total_power_of_attorney_no || ''
   form.is_active = row.is_active
   showDialog.value = true
 }
@@ -255,6 +286,7 @@ async function handleSave() {
         code: form.code,
         name_cn: form.name_cn,
         name_en: form.name_en,
+        total_power_of_attorney_no: form.total_power_of_attorney_no,
         is_active: form.is_active,
       })
       ElMessage.success('申请人更新成功')
@@ -263,6 +295,7 @@ async function handleSave() {
         code: form.code,
         name_cn: form.name_cn,
         name_en: form.name_en,
+        total_power_of_attorney_no: form.total_power_of_attorney_no,
         is_active: form.is_active,
       })
       ElMessage.success('申请人创建成功')
@@ -351,6 +384,17 @@ function handleRefresh() {
   void fetchApplicants()
 }
 
+function handleSearch() {
+  currentPage.value = 1
+  void fetchApplicants()
+}
+
+function handleClearSearch() {
+  searchQuery.value = ''
+  currentPage.value = 1
+  void fetchApplicants()
+}
+
 function handleCurrentChange(page: number) {
   currentPage.value = page
   void fetchApplicants()
@@ -409,6 +453,16 @@ onMounted(() => {
   min-width: 0;
 }
 
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-input {
+  max-width: 360px;
+}
+
 .page-table {
   display: grid;
   gap: 16px;
@@ -434,6 +488,15 @@ onMounted(() => {
   .page-header-right {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .page-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search-input {
+    max-width: none;
   }
 
   .pagination-wrap {

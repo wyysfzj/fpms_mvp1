@@ -36,6 +36,7 @@ export interface Applicant {
     code: string
     name_cn: string
     name_en?: string
+    total_power_of_attorney_no?: string
     is_active: boolean
 }
 
@@ -50,6 +51,7 @@ export interface ApplicantCreatePayload {
     code: string
     name_cn: string
     name_en?: string
+    total_power_of_attorney_no?: string
     is_active?: boolean
 }
 
@@ -57,5 +59,6 @@ export interface ApplicantUpdatePayload {
     code?: string
     name_cn?: string
     name_en?: string
+    total_power_of_attorney_no?: string
     is_active?: boolean
 }

@@ -330,6 +330,10 @@ export interface OfficialFeeDraftLink {
     total_misc: OfficialMoney
     amount: OfficialMoney
     official_fee_reduction_note?: string | null
+    customer_fee_reduction_ratio?: string | null
+    payable_fee_ratio?: string | null
+    fee_reduction_conversion_status?: string | null
+    fee_reduction_conversion_note?: string | null
     official_template_status?: string | null
     official_template_version?: string | null
     official_template_note?: string | null

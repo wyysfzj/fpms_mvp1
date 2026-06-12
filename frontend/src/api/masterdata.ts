@@ -24,6 +24,7 @@ interface BackendApplicant {
     code: string
     name_cn: string
     name_en?: string | null
+    total_power_of_attorney_no?: string | null
     is_active?: boolean | null
 }
 
@@ -43,6 +44,7 @@ function mapApplicant(input: BackendApplicant): Applicant {
         code: input.code,
         name_cn: input.name_cn,
         name_en: input.name_en || undefined,
+        total_power_of_attorney_no: input.total_power_of_attorney_no || undefined,
         is_active: input.is_active ?? true,
     }
 }
@@ -82,6 +84,7 @@ function toApplicantCreatePayload(data: ApplicantCreatePayload): Record<string, 
         code: data.code.trim(),
         name_cn: data.name_cn.trim(),
         name_en: normalizeOptionalText(data.name_en),
+        total_power_of_attorney_no: normalizeOptionalText(data.total_power_of_attorney_no),
         is_active: data.is_active ?? true,
     }
 }
@@ -92,6 +95,9 @@ function toApplicantUpdatePayload(data: ApplicantUpdatePayload): Record<string, 
     if (data.code !== undefined) payload.code = data.code.trim()
     if (data.name_cn !== undefined) payload.name_cn = data.name_cn.trim()
     if (data.name_en !== undefined) payload.name_en = normalizeNullableText(data.name_en)
+    if (data.total_power_of_attorney_no !== undefined) {
+        payload.total_power_of_attorney_no = normalizeNullableText(data.total_power_of_attorney_no)
+    }
     if (data.is_active !== undefined) payload.is_active = data.is_active
 
     return payload

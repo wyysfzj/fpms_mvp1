@@ -25,7 +25,7 @@
           {{ getAttachmentStatusText(statementPdf.status) }}
         </el-tag>
         <strong>{{ getAttachmentName(statementPdf) }}</strong>
-        <small>{{ statementPdf.external_upload_position || '附加文件类别待确认' }}</small>
+        <small>{{ statementPdf.external_upload_position || '附加文件：其他证明文件' }}</small>
       </div>
       <div class="attachment-card">
         <span>修改对照页</span>

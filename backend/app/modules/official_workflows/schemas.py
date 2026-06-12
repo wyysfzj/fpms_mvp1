@@ -324,6 +324,10 @@ class OfficialFeeDraftLinkOut(BaseModel):
     total_misc: Decimal
     amount: Decimal
     official_fee_reduction_note: str | None = None
+    customer_fee_reduction_ratio: str | None = None
+    payable_fee_ratio: str | None = None
+    fee_reduction_conversion_status: str | None = None
+    fee_reduction_conversion_note: str | None = None
     official_template_status: str | None = None
     official_template_version: str | None = None
     official_template_note: str | None = None

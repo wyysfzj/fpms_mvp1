@@ -10,6 +10,13 @@ from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.applicants.schemas import ApplicantCreateIn, ApplicantUpdateIn
 
 
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
 def list_applicants(
     db: Session,
     *,
@@ -80,6 +87,7 @@ def create_applicant(db: Session, *, data: ApplicantCreateIn) -> Applicant:
         code=data.code,
         name_cn=data.name_cn,
         name_en=data.name_en,
+        total_power_of_attorney_no=_normalize_optional_text(data.total_power_of_attorney_no),
         is_active=data.is_active,
     )
     db.add(applicant)
@@ -120,6 +128,8 @@ def update_applicant(
         )
 
     for field, value in updates.items():
+        if field == "total_power_of_attorney_no":
+            value = _normalize_optional_text(value)
         setattr(applicant, field, value)
 
     db.commit()

@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select
 
 import app.api.deps as deps
+from app.modules.annuity.models import PayList  # noqa: F401
 from app.modules.masterdata.applicants.models import Applicant
 
 
@@ -50,10 +51,19 @@ def test_create_applicant_returns_object_shape_and_defaults_active(
 
     assert response.status_code == 201
     body = response.json()
-    assert set(body) == {"id", "code", "name_cn", "name_en", "is_active", "applicant_type"}
+    assert set(body) == {
+        "id",
+        "code",
+        "name_cn",
+        "name_en",
+        "total_power_of_attorney_no",
+        "is_active",
+        "applicant_type",
+    }
     assert body["code"] == code
     assert body["name_cn"] == "测试申请人甲"
     assert body["name_en"] == "Applicant A"
+    assert body["total_power_of_attorney_no"] is None
     assert body["is_active"] is True
     assert body["applicant_type"] == "ENTITY"
 

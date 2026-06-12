@@ -147,7 +147,10 @@ def test_fee_linkage_api_exposes_internal_fee_and_official_template_boundaries(
 
     assert body["fee_drafts"][0]["id"] == draft_id
     assert body["fee_drafts"][0]["official_template_status"] == "UNCONFIRMED"
-    assert "0 / 0.7 / 0.85" in body["fee_drafts"][0]["official_fee_reduction_note"]
+    assert "待确认" not in body["fee_drafts"][0]["official_fee_reduction_note"]
+    assert body["fee_drafts"][0]["customer_fee_reduction_ratio"] == "0.85"
+    assert body["fee_drafts"][0]["payable_fee_ratio"] == "0.15"
+    assert body["fee_drafts"][0]["fee_reduction_conversion_status"] == "CONFIRMED"
 
     assert body["pay_lists"][0]["id"] == pay_list_id
     assert body["pay_lists"][0]["official_upload_template_name"] == "补充缴费信息模板"
@@ -159,7 +162,7 @@ def test_fee_linkage_api_exposes_internal_fee_and_official_template_boundaries(
     assert "OFFICIAL_EXCEL_TEMPLATE_COLUMNS" in checklist_codes
 
     blocker_codes = {item["blocker_code"] for item in body["customer_confirmation_blockers"]}
-    assert "FEE_REDUCTION_RATE" in blocker_codes
+    assert "FEE_REDUCTION_RATE" not in blocker_codes
     assert "OFFICIAL_EXCEL_TEMPLATE_COLUMNS" in blocker_codes
     assert "FEE_RATE_SOURCE_UNCONFIRMED" in blocker_codes
 

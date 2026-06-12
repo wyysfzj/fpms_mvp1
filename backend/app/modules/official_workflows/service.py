@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
 from sqlalchemy import or_, select
@@ -20,6 +21,7 @@ from app.modules.documents.models import (
 from app.modules.documents.schemas import LetterHandoffAttachmentOut, LetterHandoffOut
 from app.modules.documents.service import summarize_attachment_manifest
 from app.modules.fees.models import FeeDraft, OfficialFeeChecklist
+from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import ClientContact
 from app.modules.official_workflows.models import (
     OfficialWorkPackage,
@@ -216,13 +218,20 @@ def _case_attachments(db: Session, *, case_id: str) -> list[DocAttachment]:
 def _official_field_summary(db: Session, *, case: Case) -> OfficialFieldSummaryOut:
     items: list[OfficialFieldCheckOut] = []
 
-    def add_check(code: str, label: str, present: bool, message: str | None = None) -> None:
+    def add_check(
+        code: str,
+        label: str,
+        present: bool,
+        message: str | None = None,
+        status: str | None = None,
+    ) -> None:
+        resolved_status = status or ("READY" if present else "MISSING")
         items.append(
             OfficialFieldCheckOut(
                 code=code,
                 label=label,
-                status="READY" if present else "MISSING",
-                message=None if present else message,
+                status=resolved_status,
+                message=None if resolved_status == "READY" else message,
             )
         )
 
@@ -253,6 +262,21 @@ def _official_field_summary(db: Session, *, case: Case) -> OfficialFieldSummaryO
     )
     if not applicants:
         add_check("APPLICANT_REQUIRED", "申请人", False, "至少需要一个申请人")
+    applicant_master_ids = [
+        applicant.applicant_id
+        for applicant in applicants
+        if _normalize_text(applicant.applicant_id)
+    ]
+    applicant_master_by_id = (
+        {
+            applicant.id: applicant
+            for applicant in db.execute(
+                select(Applicant).where(Applicant.id.in_(applicant_master_ids))
+            ).scalars()
+        }
+        if applicant_master_ids
+        else {}
+    )
     for applicant in applicants:
         prefix = f"APPLICANT_{applicant.seq}"
         add_check(
@@ -285,6 +309,26 @@ def _official_field_summary(db: Session, *, case: Case) -> OfficialFieldSummaryO
             bool(_normalize_text(applicant.official_postcode)),
             "申请人官方邮编缺失",
         )
+        applicant_master = (
+            applicant_master_by_id.get(applicant.applicant_id) if applicant.applicant_id else None
+        )
+        if not applicant.applicant_id:
+            add_check(
+                f"{prefix}_TOTAL_POWER_OF_ATTORNEY_NO",
+                "总委托书备案编号",
+                False,
+                "申请人主数据映射待确认，需先关联官方申请人后复用总委托书备案编号",
+                status="NEEDS_CONFIRMATION",
+            )
+        else:
+            add_check(
+                f"{prefix}_TOTAL_POWER_OF_ATTORNEY_NO",
+                "总委托书备案编号",
+                bool(_normalize_text(applicant_master.total_power_of_attorney_no))
+                if applicant_master
+                else False,
+                "总委托书备案编号缺失，请到申请人主数据维护",
+            )
 
     inventors = (
         db.execute(
@@ -446,9 +490,14 @@ def _is_confirmed_official_fee_checklist(checklist: OfficialFeeChecklist) -> boo
 
 def _fee_checklist_blockers(
     checklists: list[OfficialFeeChecklist],
+    *,
+    skip_codes: set[str] | None = None,
 ) -> list[OfficialFeeLinkageBlockerOut]:
     blockers: list[OfficialFeeLinkageBlockerOut] = []
+    skipped = skip_codes or set()
     for checklist in checklists:
+        if checklist.checklist_code in skipped:
+            continue
         if checklist.required and not _is_confirmed_official_fee_checklist(checklist):
             source_type = "FEE_DRAFT" if checklist.fee_draft_id else "PAY_LIST"
             source_id = checklist.fee_draft_id or (
@@ -465,6 +514,70 @@ def _fee_checklist_blockers(
                 )
             )
     return blockers
+
+
+def _format_ratio(value: Decimal) -> str:
+    if value == Decimal("1"):
+        return "1.0"
+    if value == Decimal("0"):
+        return "0"
+    return format(value.normalize(), "f")
+
+
+def _official_fee_reduction_conversion(
+    customer_reduction_ratio: str | None,
+) -> dict[str, str | None]:
+    raw_value = _normalize_text(customer_reduction_ratio)
+    if raw_value is None:
+        return {
+            "customer_fee_reduction_ratio": "0",
+            "payable_fee_ratio": "1.0",
+            "fee_reduction_conversion_status": "CONFIRMED",
+            "fee_reduction_conversion_note": "无费减时客户减免比例为 0，官方应缴比例为 1.0。",
+        }
+
+    try:
+        reduction_ratio = Decimal(raw_value)
+    except InvalidOperation:
+        return {
+            "customer_fee_reduction_ratio": raw_value,
+            "payable_fee_ratio": None,
+            "fee_reduction_conversion_status": "NEEDS_CONFIRMATION",
+            "fee_reduction_conversion_note": "费减比例不是可识别数值，需人工确认。",
+        }
+
+    if reduction_ratio not in {Decimal("0"), Decimal("0.7"), Decimal("0.85")}:
+        return {
+            "customer_fee_reduction_ratio": _format_ratio(reduction_ratio),
+            "payable_fee_ratio": None,
+            "fee_reduction_conversion_status": "NEEDS_CONFIRMATION",
+            "fee_reduction_conversion_note": "该费减值不属于客户已确认的 0 / 0.7 / 0.85 规则。",
+        }
+
+    payable_ratio = Decimal("1") - reduction_ratio
+    return {
+        "customer_fee_reduction_ratio": _format_ratio(reduction_ratio),
+        "payable_fee_ratio": _format_ratio(payable_ratio),
+        "fee_reduction_conversion_status": "CONFIRMED",
+        "fee_reduction_conversion_note": (
+            f"客户旧系统值表示减免比例 {_format_ratio(reduction_ratio)}，"
+            f"官方计费应缴比例为 {_format_ratio(payable_ratio)}。"
+        ),
+    }
+
+
+def _official_fee_reduction_note_for_response(
+    *,
+    draft_note: str | None,
+    conversion: dict[str, str | None],
+) -> str | None:
+    note = _normalize_text(draft_note)
+    conversion_note = conversion["fee_reduction_conversion_note"]
+    if conversion["fee_reduction_conversion_status"] == "CONFIRMED" and (
+        not note or "待确认" in note or "未确认" in note
+    ):
+        return conversion_note
+    return note
 
 
 def _template_status_blockers(
@@ -511,6 +624,8 @@ def get_official_fee_linkage(
     package_id: str,
 ) -> OfficialFeeLinkageOut:
     package = _get_package(db, package_id)
+    case = _get_case(db, package.case_id)
+    fee_reduction_conversion = _official_fee_reduction_conversion(case.fee_reduction)
     fee_drafts = (
         db.execute(
             select(FeeDraft)
@@ -562,7 +677,10 @@ def get_official_fee_linkage(
         else []
     )
 
-    blockers = _fee_checklist_blockers(list(checklists))
+    skip_checklist_codes: set[str] = set()
+    if fee_reduction_conversion["fee_reduction_conversion_status"] == "CONFIRMED":
+        skip_checklist_codes.add("FEE_REDUCTION_RATE")
+    blockers = _fee_checklist_blockers(list(checklists), skip_codes=skip_checklist_codes)
     blockers.extend(
         _template_status_blockers(fee_drafts=list(fee_drafts), pay_lists=list(pay_lists))
     )
@@ -607,7 +725,20 @@ def get_official_fee_linkage(
                 total_service=draft.total_service,
                 total_misc=draft.total_misc,
                 amount=draft.amount,
-                official_fee_reduction_note=draft.official_fee_reduction_note,
+                official_fee_reduction_note=_official_fee_reduction_note_for_response(
+                    draft_note=draft.official_fee_reduction_note,
+                    conversion=fee_reduction_conversion,
+                ),
+                customer_fee_reduction_ratio=fee_reduction_conversion[
+                    "customer_fee_reduction_ratio"
+                ],
+                payable_fee_ratio=fee_reduction_conversion["payable_fee_ratio"],
+                fee_reduction_conversion_status=fee_reduction_conversion[
+                    "fee_reduction_conversion_status"
+                ],
+                fee_reduction_conversion_note=fee_reduction_conversion[
+                    "fee_reduction_conversion_note"
+                ],
                 official_template_status=draft.official_template_status,
                 official_template_version=draft.official_template_version,
                 official_template_note=draft.official_template_note,

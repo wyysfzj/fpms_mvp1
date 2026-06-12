@@ -37,6 +37,7 @@ const routes = [
       { path: 'settings/masterdata', name: 'settings_masterdata_home', component: () => import('../modules/settings/pages/MasterDataHome.vue') },
       {
         path: 'settings/masterdata/applicants',
+        alias: '/settings/applicants',
         name: 'settings_masterdata_applicants',
         component: () => import('../modules/settings/pages/ApplicantList.vue'),
       },

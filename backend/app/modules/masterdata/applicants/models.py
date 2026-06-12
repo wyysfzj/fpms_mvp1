@@ -13,6 +13,7 @@ class Applicant(UUIDPrimaryKeyMixin, Base):
     code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     name_cn: Mapped[str] = mapped_column(String(256), nullable=False)
     name_en: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    total_power_of_attorney_no: Mapped[str | None] = mapped_column(String(128), nullable=True)
     applicant_type: Mapped[str] = mapped_column(
         String(16),
         nullable=False,

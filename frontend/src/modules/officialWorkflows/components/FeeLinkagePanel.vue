@@ -74,8 +74,23 @@
         <el-table-column label="金额" min-width="140" align="right">
           <template #default="{ row }">{{ formatMoney(row.amount, row.currency) }}</template>
         </el-table-column>
-        <el-table-column label="费减比例解释" min-width="220">
-          <template #default="{ row }">{{ row.official_fee_reduction_note || '待确认费减比例含义' }}</template>
+        <el-table-column label="客户减免比例" min-width="130">
+          <template #default="{ row }">{{ row.customer_fee_reduction_ratio ?? '待确认' }}</template>
+        </el-table-column>
+        <el-table-column label="系统应缴比例" min-width="130">
+          <template #default="{ row }">{{ row.payable_fee_ratio ?? '待确认' }}</template>
+        </el-table-column>
+        <el-table-column label="费减转换" min-width="150">
+          <template #default="{ row }">
+            <el-tag :type="getStatusTagType(row.fee_reduction_conversion_status)" size="small">
+              {{ getStatusText(row.fee_reduction_conversion_status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="费减说明" min-width="260">
+          <template #default="{ row }">
+            {{ row.fee_reduction_conversion_note || row.official_fee_reduction_note || '按客户答复规则核对费减比例。' }}
+          </template>
         </el-table-column>
         <el-table-column label="模板状态" min-width="180">
           <template #default="{ row }">
@@ -266,7 +281,7 @@ function getStatusText(value?: string | null): string {
   if (normalized === 'LOCKED') return '已锁定'
   if (normalized === 'EXPORTED') return '已导出'
   if (normalized === 'PAID') return '已缴费'
-  if (normalized === 'READY' || normalized === 'DONE' || normalized === 'PASS') return '已满足'
+  if (normalized === 'READY' || normalized === 'DONE' || normalized === 'PASS' || normalized === 'CONFIRMED') return '已满足'
   if (normalized === 'MISSING' || normalized === 'NEEDS_MAINTENANCE') return '需维护'
   if (normalized === 'BLOCKED' || normalized === 'EXCEPTION') return '阻止'
   if (normalized === 'PENDING' || normalized === 'NEEDS_CONFIRMATION') return '待确认'
@@ -275,7 +290,7 @@ function getStatusText(value?: string | null): string {
 
 function getStatusTagType(value?: string | null): 'success' | 'warning' | 'danger' | 'info' {
   const normalized = normalize(value)
-  if (normalized === 'READY' || normalized === 'DONE' || normalized === 'PASS' || normalized === 'PAID') return 'success'
+  if (normalized === 'READY' || normalized === 'DONE' || normalized === 'PASS' || normalized === 'PAID' || normalized === 'CONFIRMED') return 'success'
   if (normalized === 'MISSING' || normalized === 'NEEDS_MAINTENANCE' || normalized === 'BLOCKED' || normalized === 'EXCEPTION') return 'danger'
   if (normalized === 'PENDING' || normalized === 'NEEDS_CONFIRMATION' || normalized === 'EXPORTED') return 'warning'
   return 'info'
