@@ -151,6 +151,7 @@
         <div v-if="handoff" class="handoff-status-form">
           <el-select v-model="statusForm.longxia_handoff_status" placeholder="请选择交接状态">
             <el-option label="待交接" value="PENDING" />
+            <el-option label="已准备" value="READY" />
             <el-option label="已交接" value="HANDED_OFF" />
             <el-option label="需复核" value="NEEDS_REVIEW" />
           </el-select>
@@ -222,6 +223,7 @@ const handoffStatusText = computed(() => {
 
 const handoffStatusTagType = computed((): 'success' | 'warning' | 'danger' | 'info' => {
   const normalized = String(handoff.value?.longxia_handoff_status || '').toUpperCase()
+  if (normalized === 'READY') return 'success'
   if (normalized === 'HANDED_OFF') return 'success'
   if (normalized === 'NEEDS_REVIEW') return 'warning'
   if (normalized === 'FAILED') return 'danger'
@@ -329,6 +331,7 @@ function getAttachmentRoleText(value?: string | null): string {
 
 function getHandoffStatusText(value?: string | null): string {
   const normalized = String(value || '').toUpperCase()
+  if (normalized === 'READY') return '已准备'
   if (normalized === 'PENDING') return '待交接'
   if (normalized === 'HANDED_OFF') return '已交接'
   if (normalized === 'NEEDS_REVIEW') return '需复核'

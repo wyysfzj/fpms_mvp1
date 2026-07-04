@@ -702,17 +702,13 @@
           <el-collapse-item v-if="showSpecificationSection" title="控制标记" name="flags">
             <el-row :gutter="20">
               <el-col :span="8">
-                <el-form-item label="费用监控">
+                <el-form-item label="年费监视">
                   <el-switch v-model="form.is_fee_monitor" />
                 </el-form-item>
               </el-col>
               <el-col :span="8">
-                <el-form-item label="减免类型">
-                  <el-select v-model="form.fee_reduction" placeholder="请选择" clearable class="full-width">
-                    <el-option label="不减免" value="NONE" />
-                    <el-option label="部分减免" value="PARTIAL" />
-                    <el-option label="全额减免" value="FULL" />
-                  </el-select>
+                <el-form-item label="客户减免比例">
+                  <el-input v-model="form.fee_reduction" placeholder="例如：0.85" />
                 </el-form-item>
               </el-col>
               <el-col :span="8">
@@ -728,7 +724,7 @@
             </el-row>
             <el-row :gutter="20">
               <el-col :span="6">
-                <el-form-item label="减免比例" :error="fieldErrors.get('discount_rate')?.join('，')">
+                <el-form-item label="系统减免比例" :error="fieldErrors.get('discount_rate')?.join('，')">
                   <el-input v-model="form.discount_rate" placeholder="请输入 0 到 1 之间的小数" />
                 </el-form-item>
               </el-col>
@@ -750,8 +746,8 @@
             </el-row>
             <el-row :gutter="20">
               <el-col :span="8">
-                <el-form-item label="首年年费年度" :error="fieldErrors.get('first_annuity_year')?.join('，')">
-                  <el-input-number v-model="form.first_annuity_year" :min="1" controls-position="right" placeholder="请输入首年年费年度" class="full-width" />
+                <el-form-item label="首年年费序号（第几年）" :error="fieldErrors.get('first_annuity_year')?.join('，')">
+                  <el-input-number v-model="form.first_annuity_year" :min="1" controls-position="right" placeholder="请输入第几年，例如 1" class="full-width" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -936,6 +932,21 @@ const form = reactive<CaseUpdatePayload>({
   invalid_patentee: '',
   invalid_requester: '',
   invalid_role: '',
+  pub_date: '',
+  pub_no: '',
+  grant_date: '',
+  grant_no: '',
+  patent_no: '',
+  valid_until: '',
+  spec_pages: undefined,
+  claim_count: undefined,
+  has_exam_request: undefined,
+  primary_agent_id: '',
+  second_agent_id: '',
+  draftor_id: '',
+  is_fee_monitor: false,
+  fee_reduction: '',
+  applicant_kind: '',
 })
 
 const quickClientForm = reactive<ClientCreatePayload>({

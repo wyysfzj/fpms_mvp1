@@ -1,0 +1,2 @@
+# Keep the demo container entrypoint executable on Windows checkouts.
+deploy/docker/demo/entrypoint.sh text eol=lf

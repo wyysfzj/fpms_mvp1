@@ -163,10 +163,10 @@
                 自动建期限：{{ selectedTemplate.deadline_template_code }}
               </el-tag>
               <el-tag v-if="selectedTemplate.fee_draft_type" type="success" size="small">
-                自动建费用草稿：{{ selectedTemplate.fee_draft_type }}
+                自动建费用草稿：{{ getFeeDraftTypeText(selectedTemplate.fee_draft_type) }}
               </el-tag>
               <el-tag v-if="selectedTemplate.status_effect" type="info" size="small">
-                状态变更：{{ selectedTemplate.status_effect }}
+                状态变更：{{ getCaseStatusText(selectedTemplate.status_effect) }}
               </el-tag>
               <el-tag v-if="selectedTemplate.reply_to_template_code" type="info" size="small">
                 回复模板：{{ selectedTemplate.reply_to_template_code }}
@@ -274,6 +274,7 @@ import type { DocTemplate, Document as Doc } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 import { mapFieldErrors } from '../../../api/errors'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import { getCaseStatusText, getFeeDraftTypeText } from '../../../constants/displayText'
 
 const route = useRoute()
 const router = useRouter()

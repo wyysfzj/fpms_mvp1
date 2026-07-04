@@ -55,7 +55,7 @@
             <div class="attachment-official-meta">
               <span>上传位置：{{ att.external_upload_position || '未指定' }}</span>
               <span>内容哈希：{{ formatHash(att.content_hash) }}</span>
-              <span>状态：{{ att.package_usage_hint || '未标注' }}</span>
+              <span>状态：{{ getPackageUsageHintText(att.package_usage_hint) }}</span>
             </div>
           </div>
           <el-button
@@ -108,8 +108,22 @@ const OFFICIAL_ROLE_TEXT: Record<string, string> = {
   OA_AMENDMENT_COMPARISON: 'OA修改对照页',
   OA_OTHER_PROOF: 'OA其他证明文件',
   OA_ADDITIONAL_FILE: 'OA附加文件',
+  SOURCE_DOCUMENT: '来源文书',
+  SOURCE_OFFICIAL_DOCUMENT: '来源官文',
+  ELECTRONIC_RECEIPT: '电子申请回执',
+  OFFICIAL_NOTICE_PDF: '官方通知书PDF',
   RECEIPT_PDF: '回执',
   MERGED_PDF: '合并PDF',
+}
+
+const PACKAGE_USAGE_HINT_TEXT: Record<string, string> = {
+  READY: '已准备',
+  PRESENT: '已提供',
+  DONE: '已完成',
+  MISSING: '待补齐',
+  ARCHIVED: '已归档',
+  RECEIPT_EVIDENCE: '回执证据',
+  ARCHIVE_EVIDENCE: '归档证据',
 }
 
 async function fetchAttachments() {
@@ -179,7 +193,13 @@ function normalizeCode(value?: string | null): string {
 function getOfficialRoleText(role?: string | null): string {
   const normalized = normalizeCode(role)
   if (!normalized) return '未标注'
-  return OFFICIAL_ROLE_TEXT[normalized] || normalized
+  return OFFICIAL_ROLE_TEXT[normalized] || '官方文件角色待确认'
+}
+
+function getPackageUsageHintText(value?: string | null): string {
+  const normalized = normalizeCode(value)
+  if (!normalized) return '未标注'
+  return PACKAGE_USAGE_HINT_TEXT[normalized] || '待核对'
 }
 
 function getGateClassification(att: Attachment): string {

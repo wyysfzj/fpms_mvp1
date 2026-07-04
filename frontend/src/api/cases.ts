@@ -517,7 +517,7 @@ export async function getCaseByCaseNo(caseNo: string): Promise<Case> {
     if (!found) {
         throw new Error('未找到对应案件')
     }
-    return found
+    return getCase(found.id)
 }
 
 export async function getCaseIntakeDocumentGate(

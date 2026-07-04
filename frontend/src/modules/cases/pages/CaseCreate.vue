@@ -142,8 +142,8 @@
               </el-form-item>
             </el-col>
             <el-col :span="8">
-              <el-form-item label="首年年费年度" :error="fieldErrors.get('first_annuity_year')?.join('，')">
-                <el-input-number v-model="form.first_annuity_year" :min="1" controls-position="right" placeholder="请输入首年年费年度" class="full-width" />
+              <el-form-item label="首年年费序号（第几年）" :error="fieldErrors.get('first_annuity_year')?.join('，')">
+                <el-input-number v-model="form.first_annuity_year" :min="1" controls-position="right" placeholder="请输入第几年，例如 1" class="full-width" />
               </el-form-item>
             </el-col>
           </el-row>

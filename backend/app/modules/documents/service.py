@@ -211,8 +211,7 @@ def _has_required_grant_fields(case: Case) -> bool:
         (
             case.app_no,
             case.filing_date,
-            case.pub_no,
-            case.pub_date,
+            case.issue_date,
             case.grant_no,
             case.grant_date,
             case.first_annuity_year is not None,
@@ -231,8 +230,12 @@ def _advance_grant_notice_case_after_attachment(db: Session, *, document: Docume
     if not template or (template.code or "").strip().upper() != "GRANT_NOTICE":
         return
 
+    from app.modules.grant_fees.service import ensure_grant_fee_task_for_notice_document
+
+    ensure_grant_fee_task_for_notice_document(db, document=document, template=template)
+
     case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
-    if case is None or case.status != "GRANT_PENDING" or not _has_required_grant_fields(case):
+    if case is None or case.status == "GRANTED" or not _has_required_grant_fields(case):
         return
 
     validate_case_status_transition(case.status, "GRANTED")

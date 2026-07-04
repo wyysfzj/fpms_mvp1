@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>专利案件全流程演示设计 v3</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #5b667a;
+      --line: #d8dee9;
+      --blue: #1d4ed8;
+      --orange: #c2410c;
+      --green: #15803d;
+      --red: #b91c1c;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.45;
+    }
+    h1 { margin: 0 0 8px; font-size: 27px; letter-spacing: 0; }
+    h2 { margin: 26px 0 12px; font-size: 20px; letter-spacing: 0; }
+    h3 { margin: 0 0 6px; font-size: 16px; letter-spacing: 0; }
+    p { margin: 6px 0; color: var(--muted); }
+    .source { margin-bottom: 20px; color: #334155; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(126px, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+    .step {
+      min-height: 230px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fff;
+      padding: 12px;
+      position: relative;
+    }
+    .step::after {
+      content: "→";
+      position: absolute;
+      right: -13px;
+      top: 39px;
+      font-weight: 700;
+      color: #64748b;
+      z-index: 2;
+    }
+    .step:last-child::after { content: ""; }
+    .index {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #e0e7ff;
+      color: #1e3a8a;
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .legal-status {
+      display: inline-block;
+      padding: 5px 8px;
+      border-radius: 5px;
+      background: #eff6ff;
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 700;
+      margin: 4px 0 8px;
+    }
+    .legal-status.warn { background: #fff7ed; color: var(--orange); }
+    .legal-status.done { background: #ecfdf5; color: var(--green); }
+    .legal-status.stop { background: #fef2f2; color: var(--red); }
+    .tag {
+      display: inline-block;
+      margin: 4px 4px 0 0;
+      padding: 3px 6px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      color: #334155;
+      font-size: 12px;
+      background: #f8fafc;
+    }
+    .lanes {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .lane {
+      border-radius: 8px;
+      padding: 14px;
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+    .lane.case { border-top: 5px solid var(--blue); }
+    .lane.file { border-top: 5px solid var(--orange); }
+    .lane.fee { border-top: 5px solid var(--green); }
+    .runbook {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .runbook th,
+    .runbook td {
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+      padding: 10px;
+      font-size: 14px;
+    }
+    .runbook th {
+      background: #eef2ff;
+      color: #1e293b;
+      font-weight: 700;
+    }
+    .runbook tr:last-child td { border-bottom: 0; }
+    .status-change {
+      display: inline-block;
+      font-weight: 700;
+      color: #0f172a;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      padding: 4px 7px;
+    }
+    .note {
+      border-left: 4px solid #64748b;
+      background: #fff;
+      padding: 12px 14px;
+      color: #334155;
+      margin-top: 14px;
+    }
+    @media (max-width: 1380px) {
+      .flow { grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+      .step::after { display: none; }
+    }
+    @media (max-width: 900px) {
+      .flow { grid-template-columns: 1fr; }
+      .lanes { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <h1>第一阶段演示设计：一个专利案件从新申请到授权年费</h1>
+  <p class="source">设计依据：系统规格二点零的案件生命周期和法律状态流转；第一阶段功能规格的新申请递交准备、审查意见答复、回执归档、费用联动和信函交接。</p>
+
+  <section class="panel">
+    <h2>第一屏：客户先看到“同一个案件”的法律状态变化</h2>
+    <div class="flow">
+      <div class="step">
+        <div class="index">1</div>
+        <h3>新案立案</h3>
+        <div class="legal-status">未递交</div>
+        <p>维护申请人、发明人、总委托书备案编号、代理人、费减比例和技术交底书。</p>
+        <span class="tag">技术交底书必传</span><span class="tag">委托指示如有则传</span>
+      </div>
+      <div class="step">
+        <div class="index">2</div>
+        <h3>新申请递交</h3>
+        <div class="legal-status">等待受理</div>
+        <p>递交准备包核对字段和文件；人员在官方系统完成预览、签名、提交。</p>
+        <span class="tag">递交文件清单</span><span class="tag">提交回执归档</span>
+      </div>
+      <div class="step">
+        <div class="index">3</div>
+        <h3>受理后审查</h3>
+        <div class="legal-status">实审中</div>
+        <p>受理或实审相关官文入库后，案件进入审查阶段，并出现申请费或实审费提醒。</p>
+        <span class="tag">受理通知</span><span class="tag">费用草单</span>
+      </div>
+      <div class="step">
+        <div class="index">4</div>
+        <h3>收到审查意见</h3>
+        <div class="legal-status warn">一通或二通阶段</div>
+        <p>审查意见通知书入库后，生成答复任务、答复期限和答复工作包。</p>
+        <span class="tag">来文驱动</span><span class="tag">答复期限</span>
+      </div>
+      <div class="step">
+        <div class="index">5</div>
+        <h3>提交审查意见答复</h3>
+        <div class="legal-status">实审中</div>
+        <p>答复文件和电子申请回执归档后，答复任务关闭，案件回到继续审查。</p>
+        <span class="tag">答复文件</span><span class="tag">回执硬门禁</span>
+      </div>
+      <div class="step">
+        <div class="index">6</div>
+        <h3>授权通知入库</h3>
+        <div class="legal-status done">已授权</div>
+        <p>授权日、授权号、首年年费年度和有效期补齐后，法律状态转为已授权。</p>
+        <span class="tag">授权通知</span><span class="tag">授权信息补齐</span>
+      </div>
+      <div class="step">
+        <div class="index">7</div>
+        <h3>授权费处理</h3>
+        <div class="legal-status done">已授权</div>
+        <p>产生授权费任务、授权费草单、授权费官费清单和缴费登记。</p>
+        <span class="tag">授权费任务</span><span class="tag">授权费清单</span>
+      </div>
+      <div class="step">
+        <div class="index">8</div>
+        <h3>年费维护</h3>
+        <div class="legal-status done">维持有效</div>
+        <p>按首年年费年度和有效期生成年费任务；客户指示缴费后生成年费草单和年费官费清单。</p>
+        <span class="tag">年费任务</span><span class="tag">年费清单</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>讲解规则：三条线同时出现，但法律状态是主线</h2>
+    <div class="lanes">
+      <div class="lane case">
+        <h3>一、法律状态线</h3>
+        <p>未递交 → 等待受理 → 实审中 → 一通或二通阶段 → 实审中 → 已授权 → 维持有效。</p>
+        <p>可选说明：客户放弃年费或逾期未缴时，后续可能转为终止或失效。</p>
+      </div>
+      <div class="lane file">
+        <h3>二、文件驱动线</h3>
+        <p>技术交底书、递交文件、提交回执、审查意见通知书、答复文件、保真附件、授权通知、年费通知函。</p>
+      </div>
+      <div class="lane fee">
+        <h3>三、收费节点线</h3>
+        <p>申请费或实审费草单、审查意见中间费用、授权费草单与清单、年费任务、年费草单、年费官费清单。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>实际演示脚本：每一步先说预期，再操作页面</h2>
+    <table class="runbook">
+      <thead>
+        <tr>
+          <th>步骤</th>
+          <th>演示前法律状态</th>
+          <th>要操作的页面或动作</th>
+          <th>演示后应看到</th>
+          <th>客户应理解的价值</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>新案立案</td>
+          <td><span class="status-change">无 → 未递交</span></td>
+          <td>打开案件详情，展示申请人、发明人、总委托书备案编号、技术交底书。</td>
+          <td>案件为未递交；技术交底书为必备文件，委托指示为条件文件。</td>
+          <td>稳定字段在系统维护，不靠递交前临时补录。</td>
+        </tr>
+        <tr>
+          <td>递交准备</td>
+          <td><span class="status-change">未递交</span></td>
+          <td>进入新申请递交准备，核对字段、文件清单、官方页面操作清单。</td>
+          <td>递交包可人工提交；提交回执或合并文件归档后，状态进入等待受理。</td>
+          <td>工作人员不重复查字段、不重复整理文件。</td>
+        </tr>
+        <tr>
+          <td>受理与实审</td>
+          <td><span class="status-change">等待受理</span></td>
+          <td>展示受理或实审相关官文，以及申请费或实审费费用草单。</td>
+          <td>案件进入实审中；费用节点随官文或事件出现。</td>
+          <td>案件状态、官文和费用不是三套孤立记录。</td>
+        </tr>
+        <tr>
+          <td>收到审查意见</td>
+          <td><span class="status-change">实审中 → 一通或二通阶段</span></td>
+          <td>从审查意见来文进入答复工作包。</td>
+          <td>显示答复期限、待答复文件、保真附件、官方页面操作清单。</td>
+          <td>系统把答复所需材料集中，不让人员跨页面拼信息。</td>
+        </tr>
+        <tr>
+          <td>答复归档</td>
+          <td><span class="status-change">一通或二通阶段 → 实审中</span></td>
+          <td>上传答复回执，核对接收案件编号、提交人、接收时间和收到文件清单。</td>
+          <td>答复工作包归档，内部任务关闭，案件回到实审中。</td>
+          <td>不是生成内部答复文件就算完成，必须有官方回执证据。</td>
+        </tr>
+        <tr>
+          <td>授权状态变化</td>
+          <td><span class="status-change">实审中 → 已授权</span></td>
+          <td>上传或登记授权通知，补齐授权日、授权号、首年年费年度、有效期。</td>
+          <td>法律状态转为已授权；授权费任务出现。</td>
+          <td>甲方能看到文件如何驱动授权状态，而不是手工改状态。</td>
+        </tr>
+        <tr>
+          <td>授权费清单</td>
+          <td><span class="status-change">已授权</span></td>
+          <td>进入授权费或官费清单页面，展示授权费草单、清单和缴费登记字段。</td>
+          <td>授权费从任务到草单再到清单形成闭环。</td>
+          <td>收费节点跟随案件生命周期出现。</td>
+        </tr>
+        <tr>
+          <td>年费任务与清单</td>
+          <td><span class="status-change">已授权 → 维持有效</span></td>
+          <td>进入年费任务，展示客户缴费指示、年费草单、年费官费清单。</td>
+          <td>系统展示未来年费任务；缴费指示为“缴费”时形成年费清单。</td>
+          <td>授权后系统继续管理维持，不让年费变成线下表格工作。</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note">
+      演示边界：本轮只说明系统如何准备材料、集中字段、驱动状态、形成费用和归档证据；不承诺自动登录官方系统、不承诺自动扫码签名、不承诺自动缴费。
+    </div>
+  </section>
+</body>
+</html>

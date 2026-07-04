@@ -422,7 +422,7 @@
                       <span class="info-value">{{ caseData.require_hk === true ? '是' : caseData.require_hk === false ? '否' : '-' }}</span>
                     </div>
                     <div class="info-item">
-                      <span class="info-label">首年年费年度</span>
+                      <span class="info-label">首年年费序号（第几年）</span>
                       <span class="info-value">{{ caseData.first_annuity_year ?? '-' }}</span>
                     </div>
                   </div>

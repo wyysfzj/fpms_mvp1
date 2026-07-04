@@ -102,10 +102,36 @@
       </div>
     </el-form>
 
-    <el-divider content-position="left">受控 override</el-divider>
+    <div v-if="latestReceipt" class="receipt-summary">
+      <div class="receipt-summary-title">已记录回执元数据</div>
+      <div class="receipt-summary-grid">
+        <div>
+          <span>回执类型</span>
+          <strong>{{ getReceiptKindText(latestReceipt.receipt_kind) }}</strong>
+        </div>
+        <div>
+          <span>接收案件编号</span>
+          <strong>{{ latestReceipt.receiving_case_no || '待确认' }}</strong>
+        </div>
+        <div>
+          <span>提交人</span>
+          <strong>{{ latestReceipt.submitter || '待确认' }}</strong>
+        </div>
+        <div>
+          <span>接收时间</span>
+          <strong>{{ latestReceipt.received_at || '待确认' }}</strong>
+        </div>
+      </div>
+      <div class="received-file-list">
+        <span>收到文件清单</span>
+        <p>{{ latestReceipt.received_file_list || '待确认' }}</p>
+      </div>
+    </div>
+
+    <el-divider content-position="left">受控例外处理</el-divider>
 
     <el-form label-position="top" class="override-form">
-      <el-form-item label="overrideReason">
+      <el-form-item label="例外处理原因">
         <el-input
           v-model="overrideReason"
           type="textarea"
@@ -114,7 +140,7 @@
         />
       </el-form-item>
       <div class="form-grid">
-        <el-form-item label="followUpOwner">
+        <el-form-item label="跟进责任人">
           <el-input v-model.trim="followUpOwner" placeholder="请输入跟进责任人" />
         </el-form-item>
         <el-form-item label="跟进期限">
@@ -131,9 +157,9 @@
           :loading="archiving"
           @click="handleOverrideArchive"
         >
-          记录 override 并归档
+          记录例外并归档
         </el-button>
-        <span v-if="!overrideReady" class="form-warning">override 必须填写原因和跟进责任人</span>
+        <span v-if="!overrideReady" class="form-warning">例外处理必须填写原因和跟进责任人</span>
       </div>
     </el-form>
 
@@ -165,7 +191,10 @@ import {
   archiveOfficialWorkPackage,
   createOfficialWorkPackageReceipt,
 } from '../../../api/officialWorkflows'
-import type { OfficialWorkPackageStatusEvaluation } from '../../../api/officialWorkflows.types'
+import type {
+  OfficialWorkPackageReceipt,
+  OfficialWorkPackageStatusEvaluation,
+} from '../../../api/officialWorkflows.types'
 import type { ApiError } from '../../../api/types'
 
 const props = withDefaults(defineProps<{
@@ -189,6 +218,7 @@ const emit = defineEmits<{
 const savingReceipt = ref(false)
 const archiving = ref(false)
 const evaluation = ref<OfficialWorkPackageStatusEvaluation | null>(null)
+const latestReceipt = ref<OfficialWorkPackageReceipt | null>(null)
 const overrideReason = ref('')
 const followUpOwner = ref('')
 const followUpDueDate = ref('')
@@ -221,7 +251,7 @@ const overrideReady = computed(() => Boolean(overrideReason.value.trim() && foll
 const showReceiptFormWarning = computed(() => !receiptFormComplete.value && !archiveEvidenceReady.value && !overrideClosed.value)
 
 const closureText = computed(() => {
-  if (overrideClosed.value) return 'override 已记录'
+  if (overrideClosed.value) return '例外处理已记录'
   if (archiveEvidenceReady.value) return '归档证据已满足'
   if (packageClosed.value) return '关闭缺少证据'
   return '待回执归档'
@@ -235,7 +265,7 @@ const closureTagType = computed((): 'success' | 'warning' | 'danger' | 'info' =>
 
 const archiveWarning = computed(() => {
   if (packageClosed.value && !archiveEvidenceReady.value && !overrideClosed.value) {
-    return '工作包不能仅凭内部状态显示为已关闭，必须补充回执/归档证据或记录受控 override。'
+    return '工作包不能仅凭内部状态显示为已关闭，必须补充回执/归档证据或记录受控例外处理。'
   }
   return ''
 })
@@ -248,7 +278,7 @@ async function handleCreateReceipt() {
 
   savingReceipt.value = true
   try {
-    await createOfficialWorkPackageReceipt(props.packageId, {
+    latestReceipt.value = await createOfficialWorkPackageReceipt(props.packageId, {
       receipt_kind: receiptForm.receiptKind,
       receipt_attachment_id: receiptForm.receiptAttachmentId,
       receiving_case_no: receiptForm.receivingCaseNo,
@@ -259,7 +289,6 @@ async function handleCreateReceipt() {
       note: receiptForm.note || null,
     })
     ElMessage.success('回执元数据已记录')
-    emit('refresh-requested')
   } catch (err) {
     emit('error', err as ApiError)
   } finally {
@@ -283,7 +312,7 @@ async function handleArchive() {
 
 async function handleOverrideArchive() {
   if (!overrideReady.value) {
-    ElMessage.warning('override 必须填写原因和跟进责任人')
+    ElMessage.warning('例外处理必须填写原因和跟进责任人')
     return
   }
 
@@ -296,7 +325,7 @@ async function handleOverrideArchive() {
       follow_up_note: followUpNote.value || null,
     })
     evaluation.value = result.evaluation
-    ElMessage.success('override 记录已提交')
+    ElMessage.success('例外处理记录已提交')
     emit('refresh-requested')
   } catch (err) {
     emit('error', err as ApiError)
@@ -317,6 +346,14 @@ function getPackageKindText(value?: string | null): string {
   const normalized = normalize(value)
   if (normalized === 'FILING_PREP') return '新申请递交'
   if (normalized === 'OA_REPLY') return 'OA答复'
+  return value || '待确认'
+}
+
+function getReceiptKindText(value?: string | null): string {
+  const normalized = normalize(value)
+  if (normalized === 'ELECTRONIC_APPLICATION_RECEIPT') return '电子申请回执'
+  if (normalized === 'MERGED_PDF') return '合并 PDF'
+  if (normalized === 'OTHER_ARCHIVE_EVIDENCE') return '其他归档证明'
   return value || '待确认'
 }
 
@@ -413,6 +450,46 @@ function getArchiveStatusText(value?: string | null): string {
   font-size: 12px;
 }
 
+.receipt-summary {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 12px;
+  background: #eff6ff;
+}
+
+.receipt-summary-title {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.receipt-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.receipt-summary-grid > div,
+.received-file-list {
+  display: grid;
+  gap: 4px;
+}
+
+.receipt-summary span,
+.received-file-list span {
+  color: var(--text-sub);
+  font-size: 12px;
+}
+
+.receipt-summary strong,
+.received-file-list p {
+  margin: 0;
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .evaluation-block {
   display: grid;
   gap: 10px;
@@ -435,13 +512,15 @@ function getArchiveStatusText(value?: string | null): string {
 }
 
 @media (max-width: 980px) {
-  .archive-status-grid {
+  .archive-status-grid,
+  .receipt-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 720px) {
   .archive-status-grid,
+  .receipt-summary-grid,
   .form-grid {
     grid-template-columns: 1fr;
   }

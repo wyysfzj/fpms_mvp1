@@ -85,12 +85,13 @@ const saving = ref(false)
 const caseSearchLoading = ref(false)
 const caseOptions = ref<CaseOption[]>([])
 const selectedCaseNo = ref('')
+const caseSearchKeyword = ref('')
 
 const form = reactive<GenerateForm>({
   case_id: '',
 })
 
-const targetCaseNo = computed(() => selectedCaseNo.value || form.case_id.trim())
+const targetCaseNo = computed(() => selectedCaseNo.value || caseSearchKeyword.value.trim() || form.case_id.trim())
 
 const rules: FormRules<GenerateForm> = {
   case_id: [{ required: true, message: '请选择案卷', trigger: 'change' }],
@@ -111,6 +112,7 @@ watch(visible, (value) => {
 })
 
 async function searchCases(query: string) {
+  caseSearchKeyword.value = query.trim()
   if (!query || query.trim().length < 1) {
     caseOptions.value = []
     return
@@ -126,16 +128,44 @@ async function searchCases(query: string) {
   }
 }
 
+async function resolveCaseSelection(): Promise<boolean> {
+  const rawValue = form.case_id.trim() || caseSearchKeyword.value.trim() || selectedCaseNo.value.trim()
+  if (!rawValue) return false
+
+  const matched = caseOptions.value.find((item) => item.id === rawValue || item.case_no === rawValue)
+  if (matched) {
+    form.case_id = matched.id
+    selectedCaseNo.value = matched.case_no
+    return true
+  }
+
+  caseSearchLoading.value = true
+  try {
+    const result = await getCases({ page: 1, page_size: 5, case_no: rawValue } as Parameters<typeof getCases>[0])
+    const exact = result.items.find((item) => item.case_no === rawValue) || result.items[0]
+    if (!exact) return false
+    const resolved = { id: exact.id, case_no: exact.case_no }
+    caseOptions.value = [resolved]
+    form.case_id = resolved.id
+    selectedCaseNo.value = resolved.case_no
+    return true
+  } finally {
+    caseSearchLoading.value = false
+  }
+}
+
 function resetFormFromInitialCase() {
   const initialCaseNo = props.initialCaseNo?.trim() || ''
   form.case_id = initialCaseNo
   selectedCaseNo.value = initialCaseNo
+  caseSearchKeyword.value = initialCaseNo
   caseOptions.value = initialCaseNo ? [{ id: initialCaseNo, case_no: initialCaseNo }] : []
 }
 
 function handleCaseChange(value: string) {
   const matchedCase = caseOptions.value.find((item) => item.id === value)
   selectedCaseNo.value = matchedCase?.case_no || value
+  caseSearchKeyword.value = selectedCaseNo.value
 }
 
 function handleClose() {
@@ -143,6 +173,12 @@ function handleClose() {
 }
 
 async function handleSubmit() {
+  const resolved = await resolveCaseSelection()
+  if (!resolved) {
+    ElMessage.error('请先选择有效案卷')
+    return
+  }
+
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 

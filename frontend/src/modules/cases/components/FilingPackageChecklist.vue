@@ -46,7 +46,9 @@
 
     <h4 class="subsection-title">官方页面审核动作</h4>
     <el-table :data="officialPageChecklist" size="small" class="checklist-table">
-      <el-table-column prop="item_label" label="动作" min-width="180" />
+      <el-table-column label="动作" min-width="180">
+        <template #default="{ row }">{{ getChecklistItemLabel(row) }}</template>
+      </el-table-column>
       <el-table-column label="要求" width="90">
         <template #default="{ row }">
           <el-tag :type="row.required ? 'danger' : 'info'" size="small">
@@ -60,7 +62,7 @@
         </template>
       </el-table-column>
       <el-table-column prop="evidence_note" label="证据 / 时间" min-width="220">
-        <template #default="{ row }">{{ row.evidence_note || '待记录' }}</template>
+        <template #default="{ row }">{{ formatEvidenceNote(row.evidence_note, row.item_code) }}</template>
       </el-table-column>
     </el-table>
   </section>
@@ -107,7 +109,9 @@ const pageSectionRows = computed(() =>
     return {
       ...section,
       status: checklist?.status || fieldItem?.status || 'PENDING',
-      note: checklist?.evidence_note || fieldItem?.message || '按现有系统数据核对，不设置长期提交前维护区。',
+      note: checklist?.evidence_note
+        ? formatEvidenceNote(checklist.evidence_note, checklist.item_code)
+        : fieldItem?.message || '按现有系统数据核对，不设置长期提交前维护区。',
     }
   })
 )
@@ -132,6 +136,33 @@ function getStatusTagType(status?: string | null): 'success' | 'warning' | 'dang
   if (normalized === 'MISSING' || normalized === 'NEEDS_MAINTENANCE' || normalized === 'BLOCKED') return 'danger'
   if (normalized === 'NEEDS_CONFIRMATION' || normalized === 'PENDING') return 'warning'
   return 'info'
+}
+
+function getChecklistItemLabel(item: OfficialWorkPackageChecklist): string {
+  if (item.item_code === 'CNIPA_IMPORT_STARTED') return '接收类表格导入'
+  return item.item_label || item.item_code
+}
+
+function formatEvidenceNote(value?: string | null, itemCode?: string | null): string {
+  const raw = String(value || '').trim()
+  if (!raw) return '待记录'
+
+  const occurredAt = raw.match(/(?:^|;\s*)occurred_at=([^;]+)/)?.[1]
+  const note = raw.match(/(?:^|;\s*)note=([^;]+)/)?.[1]
+  if (!occurredAt && !note) return raw
+
+  const parts: string[] = []
+  if (occurredAt) parts.push(`操作时间：${formatOperationTime(occurredAt)}`)
+  if (note) {
+    parts.push(`说明：${note}`)
+  } else if (itemCode === 'CNIPA_IMPORT_STARTED') {
+    parts.push('说明：专利业务办理系统导入请求类表格')
+  }
+  return parts.join('；')
+}
+
+function formatOperationTime(value: string): string {
+  return value.trim().replace('T', ' ').replace(/\.\d+.*$/, '').replace(/Z$/, '')
 }
 </script>
 

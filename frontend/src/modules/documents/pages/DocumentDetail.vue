@@ -194,7 +194,12 @@ import RelationChainCard from '../../../components/relations/RelationChainCard.v
 import LetterHandoffPanel from '../../officialWorkflows/components/LetterHandoffPanel.vue'
 import { usePageContext } from '../../../stores/pageContext'
 import { ZH } from '../../../constants/labels.zh'
-import { getDocumentDirectionText, getDocumentDocTypeText } from '../../../constants/displayText'
+import {
+  getCaseStatusText,
+  getDocumentDirectionText,
+  getDocumentDocTypeText,
+  getFeeDraftTypeText,
+} from '../../../constants/displayText'
 
 const route = useRoute()
 const router = useRouter()
@@ -216,10 +221,10 @@ const templateHints = computed(() => {
     hints.push(`自动建期限：${docTemplate.value.deadline_template_code}`)
   }
   if (docTemplate.value.fee_draft_type) {
-    hints.push(`自动建费用草稿：${docTemplate.value.fee_draft_type}`)
+    hints.push(`自动建费用草稿：${getFeeDraftTypeText(docTemplate.value.fee_draft_type)}`)
   }
   if (docTemplate.value.status_effect) {
-    hints.push(`状态变更：${docTemplate.value.status_effect}`)
+    hints.push(`状态变更：${getCaseStatusText(docTemplate.value.status_effect)}`)
   }
   if (docTemplate.value.reply_to_template_code) {
     hints.push(`回复模板：${docTemplate.value.reply_to_template_code}`)
@@ -266,6 +271,10 @@ const OFFICIAL_ROLE_TEXT: Record<string, string> = {
   OA_AMENDMENT_COMPARISON: 'OA修改对照页',
   OA_OTHER_PROOF: 'OA其他证明文件',
   OA_ADDITIONAL_FILE: 'OA附加文件',
+  SOURCE_DOCUMENT: '来源文书',
+  SOURCE_OFFICIAL_DOCUMENT: '来源官文',
+  ELECTRONIC_RECEIPT: '电子申请回执',
+  OFFICIAL_NOTICE_PDF: '官方通知书PDF',
   RECEIPT_PDF: '回执',
   MERGED_PDF: '合并PDF',
 }
@@ -316,7 +325,7 @@ function normalizeCode(value?: string | null): string {
 function getOfficialRoleText(role?: string | null): string {
   const normalized = normalizeCode(role)
   if (!normalized) return ''
-  return OFFICIAL_ROLE_TEXT[normalized] || normalized
+  return OFFICIAL_ROLE_TEXT[normalized] || '官方文件角色待确认'
 }
 
 function getAttachmentOfficialSummary(attachment: Attachment): string {

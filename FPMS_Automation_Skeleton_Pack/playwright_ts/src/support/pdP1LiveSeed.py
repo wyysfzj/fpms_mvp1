@@ -15,8 +15,8 @@ os.chdir(BACKEND_ROOT)
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.db.session import SessionLocal  # noqa: E402
-from app.modules.annuity.models import GovPayment, PayList  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
+from app.modules.annuity.models import AnnuityTask, GovPayment, PayList  # noqa: E402
 from app.modules.auth.models import T_User  # noqa: E402,F401
 from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor  # noqa: E402
 from app.modules.documents.models import (  # noqa: E402
@@ -27,6 +27,7 @@ from app.modules.documents.models import (  # noqa: E402
     LetterHandoffAttachment,
 )
 from app.modules.fees.models import FeeDraft, FeeItem, OfficialFeeChecklist  # noqa: E402
+from app.modules.fees.models import T_GrantFeeTask  # noqa: E402
 from app.modules.masterdata.applicants.models import Applicant  # noqa: E402
 from app.modules.masterdata.clients.models import Client, ClientContact  # noqa: E402
 from app.modules.official_workflows.models import (  # noqa: E402
@@ -49,6 +50,7 @@ FILING_DOCUMENT_ID = "DOC-FILING-PD-P1-LIVE"
 SOURCE_OA_DOCUMENT_ID = "DOC-OA-IN-PD-P1-LIVE"
 REPLY_DOCUMENT_ID = "DOC-OA-OUT-PD-P1-LIVE"
 LETTER_DOCUMENT_ID = "DOC-LETTER-PD-P1-LIVE"
+GRANT_DOCUMENT_ID = "DOC-GRANT-PD-P1-LIVE"
 
 FILING_PACKAGE_ID = "FILING-PD-P1-LIVE"
 OA_PACKAGE_ID = "OA-PD-P1-LIVE"
@@ -73,8 +75,13 @@ ATTACHMENTS = {
     "letter_pdf": "ATT-PD-P1-LIVE-LETTER-PDF",
 }
 
+SAFE_FPMS_ENVS = {"dev", "development", "local", "test", "demo"}
+
 
 def main() -> None:
+    assert_safe_demo_environment()
+    from app.db.session import SessionLocal  # noqa: PLC0415
+
     db = SessionLocal()
     try:
         clear_fixture(db)
@@ -94,6 +101,7 @@ def main() -> None:
                     "replyDocumentId": REPLY_DOCUMENT_ID,
                     "receiptAttachmentId": ATTACHMENTS["oa_receipt"],
                     "letterDocumentId": LETTER_DOCUMENT_ID,
+                    "grantDocumentId": GRANT_DOCUMENT_ID,
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -103,12 +111,26 @@ def main() -> None:
         db.close()
 
 
+def assert_safe_demo_environment() -> None:
+    settings = get_settings()
+    env = (settings.fpms_env or "").strip().lower()
+    database_url = (settings.database_url or "").strip().lower()
+    if env not in SAFE_FPMS_ENVS:
+        raise RuntimeError(
+            f"P1 demo seed is blocked for FPMS_ENV={settings.fpms_env!r}; "
+            f"allowed values are {sorted(SAFE_FPMS_ENVS)}."
+        )
+    if not database_url.startswith("sqlite"):
+        raise RuntimeError("P1 demo seed is blocked for non-SQLite DATABASE_URL.")
+
+
 def clear_fixture(db) -> None:
     document_ids = [
         FILING_DOCUMENT_ID,
         SOURCE_OA_DOCUMENT_ID,
         REPLY_DOCUMENT_ID,
         LETTER_DOCUMENT_ID,
+        GRANT_DOCUMENT_ID,
     ]
     package_ids = [FILING_PACKAGE_ID, OA_PACKAGE_ID]
 
@@ -141,18 +163,66 @@ def clear_fixture(db) -> None:
         synchronize_session=False
     )
 
-    db.query(OfficialFeeChecklist).filter(OfficialFeeChecklist.fee_draft_id == FEE_DRAFT_ID).delete(
+    demo_fee_draft_ids = list(
+        db.execute(select(FeeDraft.id).where(FeeDraft.case_id == CASE_ID)).scalars()
+    )
+    if FEE_DRAFT_ID not in demo_fee_draft_ids:
+        demo_fee_draft_ids.append(FEE_DRAFT_ID)
+
+    demo_fee_item_ids = (
+        list(
+            db.execute(
+                select(FeeItem.id).where(FeeItem.draft_id.in_(demo_fee_draft_ids))
+            ).scalars()
+        )
+        if demo_fee_draft_ids
+        else []
+    )
+
+    demo_pay_list_ids = {PAY_LIST_ID}
+    demo_pay_list_ids.update(
+        db.execute(select(GovPayment.pay_list_id).where(GovPayment.case_id == CASE_ID)).scalars()
+    )
+    if demo_fee_item_ids:
+        demo_pay_list_ids.update(
+            db.execute(
+                select(GovPayment.pay_list_id).where(GovPayment.fee_item_id.in_(demo_fee_item_ids))
+            ).scalars()
+        )
+    demo_pay_list_id_list = sorted(demo_pay_list_ids)
+    assert_demo_pay_lists_are_exclusive(db, demo_pay_list_id_list, demo_fee_item_ids)
+
+    if demo_fee_draft_ids:
+        db.query(OfficialFeeChecklist).filter(
+            OfficialFeeChecklist.fee_draft_id.in_(demo_fee_draft_ids)
+        ).delete(synchronize_session=False)
+    db.query(OfficialFeeChecklist).filter(
+        OfficialFeeChecklist.pay_list_id.in_(demo_pay_list_id_list)
+    ).delete(synchronize_session=False)
+    db.query(GovPayment).filter(GovPayment.pay_list_id.in_(demo_pay_list_id_list)).delete(
         synchronize_session=False
     )
-    db.query(OfficialFeeChecklist).filter(OfficialFeeChecklist.pay_list_id == PAY_LIST_ID).delete(
+    db.query(GovPayment).filter(GovPayment.case_id == CASE_ID).delete(synchronize_session=False)
+    if demo_fee_item_ids:
+        db.query(GovPayment).filter(GovPayment.fee_item_id.in_(demo_fee_item_ids)).delete(
+            synchronize_session=False
+        )
+    db.query(PayList).filter(PayList.id.in_(demo_pay_list_id_list)).delete(
         synchronize_session=False
     )
-    db.query(GovPayment).filter(GovPayment.pay_list_id == PAY_LIST_ID).delete(
+    if demo_fee_draft_ids:
+        db.query(FeeItem).filter(FeeItem.draft_id.in_(demo_fee_draft_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(FeeDraft).filter(FeeDraft.id.in_(demo_fee_draft_ids)).delete(
+            synchronize_session=False
+        )
+    db.query(AnnuityTask).filter(AnnuityTask.case_id == CASE_ID).delete(
         synchronize_session=False
     )
-    db.query(PayList).filter(PayList.id == PAY_LIST_ID).delete(synchronize_session=False)
-    db.query(FeeItem).filter(FeeItem.draft_id == FEE_DRAFT_ID).delete(synchronize_session=False)
-    db.query(FeeDraft).filter(FeeDraft.id == FEE_DRAFT_ID).delete(synchronize_session=False)
+    db.query(T_GrantFeeTask).filter(T_GrantFeeTask.case_id == CASE_ID).delete(
+        synchronize_session=False
+    )
 
     db.query(Task).filter(Task.document_id.in_(document_ids)).delete(synchronize_session=False)
     db.query(DocAttachment).filter(DocAttachment.document_id.in_(document_ids)).delete(
@@ -178,6 +248,36 @@ def clear_fixture(db) -> None:
     )
     db.query(Client).filter(Client.id == CLIENT_ID).delete(synchronize_session=False)
     db.commit()
+
+
+def assert_demo_pay_lists_are_exclusive(
+    db,
+    pay_list_ids: list[int],
+    demo_fee_item_ids: list[str],
+) -> None:
+    if not pay_list_ids:
+        return
+
+    demo_fee_item_id_set = set(demo_fee_item_ids)
+    mixed_rows = db.execute(
+        select(GovPayment.pay_list_id, GovPayment.case_id, GovPayment.fee_item_id).where(
+            GovPayment.pay_list_id.in_(pay_list_ids)
+        )
+    ).all()
+    unsafe_rows = [
+        row
+        for row in mixed_rows
+        if row.case_id != CASE_ID and row.fee_item_id not in demo_fee_item_id_set
+    ]
+    if unsafe_rows:
+        details = ", ".join(
+            f"pay_list_id={row.pay_list_id}, case_id={row.case_id}, fee_item_id={row.fee_item_id}"
+            for row in unsafe_rows[:5]
+        )
+        raise RuntimeError(
+            "P1 demo seed refused to delete a pay-list containing non-demo payment rows: "
+            f"{details}"
+        )
 
 
 def seed_fixture(db) -> None:
@@ -229,6 +329,7 @@ def seed_fixture(db) -> None:
             app_no="CN202610000001.0",
             status="NOT_FILED",
             recv_date=date(2026, 6, 2),
+            filing_date=date(2026, 6, 2),
             spec_pages=18,
             draw_pages=3,
             claim_count=10,
@@ -272,6 +373,9 @@ def seed_fixture(db) -> None:
     client_in_template = ensure_doc_template(db, "CLIENT_IN", "客户来函", "IN")
     oa_in_template = ensure_doc_template(db, "OA_IN", "审查意见通知书（收文）", "IN")
     oa_out_template = ensure_doc_template(db, "OA_OUT", "审查意见答复书（发文）", "OUT")
+    grant_notice_template = ensure_doc_template(db, "GRANT_NOTICE", "授权通知书", "IN")
+    grant_notice_template.status_effect = "GRANT_PENDING"
+    grant_notice_template.fee_draft_type = "GRANT_FEE"
     letter_doc_template = ensure_doc_template(
         db,
         FORMAT_DOC_TEMPLATE_CODE,
@@ -378,6 +482,27 @@ def seed_fixture(db) -> None:
             reply_to_id=SOURCE_OA_DOCUMENT_ID,
             need_reply=False,
             reply_date=date(2026, 6, 2),
+        )
+    )
+    db.add(
+        Document(
+            id=GRANT_DOCUMENT_ID,
+            case_id=CASE_ID,
+            doc_template_id=grant_notice_template.id,
+            doc_type="OFFICIAL_IN",
+            direction="IN",
+            doc_date=date(2027, 3, 15),
+            title="授权通知书-电子",
+            ref_no="GRANT-PD-P1-LIVE",
+            extra_data=json.dumps(
+                {
+                    "official_notice_code": "GRANT_NOTICE",
+                    "official_notice_name": "授权通知书",
+                    "issue_date": "2027-03-15",
+                },
+                ensure_ascii=False,
+            ),
+            need_reply=False,
         )
     )
     db.flush()

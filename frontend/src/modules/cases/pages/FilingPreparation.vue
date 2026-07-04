@@ -138,8 +138,8 @@
             <div class="widget-title">外部操作时间</div>
             <div v-if="externalOperationItems.length" class="operation-list">
               <div v-for="item in externalOperationItems" :key="item.item_code" class="operation-item">
-                <strong>{{ item.item_label }}</strong>
-                <span>{{ item.evidence_note || '已记录' }}</span>
+                <strong>{{ getChecklistItemLabel(item) }}</strong>
+                <span>{{ formatEvidenceNote(item.evidence_note, '已记录', item.item_code) }}</span>
               </div>
             </div>
             <el-empty v-else description="尚未记录外部操作时间" :image-size="70" />
@@ -333,6 +333,33 @@ function getStatusText(status?: string | null): string {
 
 function isArchiveEvidenceReady(status?: string | null): boolean {
   return ['ARCHIVED', 'PRESENT', 'READY', 'DONE', 'PASS'].includes(String(status || '').toUpperCase())
+}
+
+function getChecklistItemLabel(item: OfficialWorkPackageChecklist): string {
+  if (item.item_code === 'CNIPA_IMPORT_STARTED') return '接收类表格导入'
+  return item.item_label || item.item_code
+}
+
+function formatEvidenceNote(value?: string | null, fallback = '待记录', itemCode?: string | null): string {
+  const raw = String(value || '').trim()
+  if (!raw) return fallback
+
+  const occurredAt = raw.match(/(?:^|;\s*)occurred_at=([^;]+)/)?.[1]
+  const note = raw.match(/(?:^|;\s*)note=([^;]+)/)?.[1]
+  if (!occurredAt && !note) return raw
+
+  const parts: string[] = []
+  if (occurredAt) parts.push(`操作时间：${formatOperationTime(occurredAt)}`)
+  if (note) {
+    parts.push(`说明：${note}`)
+  } else if (itemCode === 'CNIPA_IMPORT_STARTED') {
+    parts.push('说明：专利业务办理系统导入请求类表格')
+  }
+  return parts.join('；')
+}
+
+function formatOperationTime(value: string): string {
+  return value.trim().replace('T', ' ').replace(/\.\d+.*$/, '').replace(/Z$/, '')
 }
 </script>
 

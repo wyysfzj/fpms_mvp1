@@ -261,6 +261,7 @@ function formatMoney(amount: OfficialMoney, currency: string): string {
 function getPaymentExecutionModeText(value?: string | null): string {
   const normalized = normalize(value)
   if (normalized === 'INTERNAL_PLAN_ONLY') return '仅内部计划'
+  if (normalized === 'MANUAL_ONLY') return '人工官方缴费'
   if (normalized === 'MANUAL_OFFICIAL_PAYMENT') return '人工官方缴费'
   if (normalized === 'OFFICIAL_TEMPLATE_READY') return '官方模板已确认'
   return value || '待确认'
@@ -269,6 +270,7 @@ function getPaymentExecutionModeText(value?: string | null): string {
 function getTemplateStatusText(value?: string | null): string {
   const normalized = normalize(value)
   if (normalized === 'READY') return '已确认'
+  if (normalized === 'UNCONFIRMED') return '待确认'
   if (normalized === 'MISSING') return '缺失'
   if (normalized === 'BLOCKED') return '阻止'
   if (normalized === 'PENDING' || normalized === 'NEEDS_CONFIRMATION') return '待确认'
@@ -282,6 +284,7 @@ function getStatusText(value?: string | null): string {
   if (normalized === 'EXPORTED') return '已导出'
   if (normalized === 'PAID') return '已缴费'
   if (normalized === 'READY' || normalized === 'DONE' || normalized === 'PASS' || normalized === 'CONFIRMED') return '已满足'
+  if (normalized === 'UNCONFIRMED') return '待确认'
   if (normalized === 'MISSING' || normalized === 'NEEDS_MAINTENANCE') return '需维护'
   if (normalized === 'BLOCKED' || normalized === 'EXCEPTION') return '阻止'
   if (normalized === 'PENDING' || normalized === 'NEEDS_CONFIRMATION') return '待确认'
@@ -292,7 +295,7 @@ function getStatusTagType(value?: string | null): 'success' | 'warning' | 'dange
   const normalized = normalize(value)
   if (normalized === 'READY' || normalized === 'DONE' || normalized === 'PASS' || normalized === 'PAID' || normalized === 'CONFIRMED') return 'success'
   if (normalized === 'MISSING' || normalized === 'NEEDS_MAINTENANCE' || normalized === 'BLOCKED' || normalized === 'EXCEPTION') return 'danger'
-  if (normalized === 'PENDING' || normalized === 'NEEDS_CONFIRMATION' || normalized === 'EXPORTED') return 'warning'
+  if (normalized === 'PENDING' || normalized === 'NEEDS_CONFIRMATION' || normalized === 'UNCONFIRMED' || normalized === 'EXPORTED') return 'warning'
   return 'info'
 }
 

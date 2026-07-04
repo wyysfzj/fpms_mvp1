@@ -60,6 +60,13 @@ test("@P1-live 全scope：案件官方字段维护入口和递交准备 gate/che
   await expect(page.getByText("发明人信息", { exact: true })).toBeVisible();
   await expect(page.getByPlaceholder("中国籍发明人需维护")).toBeVisible();
 
+  await page.getByText("控制标记", { exact: true }).click();
+  await expect(page.getByText("年费监视", { exact: true })).toBeVisible();
+  await expect(page.getByText("客户减免比例", { exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder("例如：0.85")).toHaveValue("0.85");
+  await expect(page.getByText("系统减免比例", { exact: true })).toBeVisible();
+  await expect(page.getByPlaceholder("请输入 0 到 1 之间的小数")).toHaveValue("0.8500");
+
   await page.goto("/settings/applicants", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "申请人主数据" })).toBeVisible();
   await page.getByPlaceholder("搜索申请人名称或编码").fill("P1测试申请人有限公司");
@@ -89,6 +96,11 @@ test("@P1-live 全scope：案件官方字段维护入口和递交准备 gate/che
   await expect(page.getByText("官方页面预览已人工确认")).toBeVisible();
   await page.getByRole("button", { name: "记录导入时间" }).click();
   await expect(page.getByText("专利业务办理系统导入请求类表格").first()).toBeVisible();
+  await expect(page.getByText("操作时间").first()).toBeVisible();
+  await expect(page.getByText("说明").first()).toBeVisible();
+  await expect(page.getByText("occurred_at=")).toHaveCount(0);
+  await expect(page.getByText("note=")).toHaveCount(0);
+  await expect(page.getByText("CNIPA_IMPORT_STARTED")).toHaveCount(0);
   expectNoUnexpectedRuntimeSignals(pageErrors);
 });
 
@@ -133,6 +145,10 @@ test("@P1-live 全scope：OA答复包文件角色、人工动作、回执硬门�
   await archiveForm.getByPlaceholder("可填写归档说明").fill("P1 E2E 人工下载并上传电子申请回执");
   await page.getByRole("button", { name: "记录回执元数据" }).click();
   await expect(page.getByText("回执元数据已记录")).toBeVisible();
+  await expect(page.getByText("202606020001").first()).toBeVisible();
+  await expect(page.getByText("流程人员A").first()).toBeVisible();
+  await expect(page.getByText("意见陈述书").first()).toBeVisible();
+  await expectNoVisibleInternalCodes(page, ["READY", "UNCONFIRMED"]);
 
   await page.getByRole("button", { name: "确认回执归档" }).click();
   await expect(page.getByText("电子申请回执已归档核对").first()).toBeVisible();
@@ -169,6 +185,7 @@ test("@P1-live 全scope：费用联动、pay-list边界、信函交接和非范�
   await expect(page.getByText("补充缴费信息模板").first()).toBeVisible();
   await expect(page.getByText("500").first()).toBeVisible();
   await expect(page.getByText("人工官方缴费").or(page.getByText("仅内部计划")).first()).toBeVisible();
+  await expectNoVisibleInternalCodes(page, ["MANUAL_ONLY", "UNCONFIRMED", "READY"]);
 
   await page.goto(`/documents/${fixture.letterDocumentId}`, { waitUntil: "domcontentloaded" });
   await expect(page.getByText("格式函与龙虾交接")).toBeVisible();
@@ -179,7 +196,8 @@ test("@P1-live 全scope：费用联动、pay-list边界、信函交接和非范�
   await expect(page.getByText("第一次审查意见通知书.pdf").first()).toBeVisible();
   await page.getByRole("button", { name: "生成交接记录" }).click();
   await expect(page.getByText("交接记录已生成")).toBeVisible();
-  await expect(page.getByText("READY").first()).toBeVisible();
+  await expect(page.getByText("已准备").first()).toBeVisible();
+  await expectNoVisibleInternalCodes(page, ["READY", "MANUAL_ONLY", "UNCONFIRMED"]);
 
   assertNoForbiddenP1AutomationClaims();
   expectNoUnexpectedRuntimeSignals(pageErrors);
@@ -205,6 +223,12 @@ function collectPageErrors(page: Page): string[] {
 
 function expectNoUnexpectedRuntimeSignals(pageErrors: string[]): void {
   expect(pageErrors).toEqual([]);
+}
+
+async function expectNoVisibleInternalCodes(page: Page, codes: string[]): Promise<void> {
+  for (const code of codes) {
+    await expect(page.getByText(code, { exact: true })).toHaveCount(0);
+  }
 }
 
 function assertNoForbiddenP1AutomationClaims(): void {
