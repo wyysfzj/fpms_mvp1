@@ -98,7 +98,7 @@
         >
           提交归档检查
         </el-button>
-        <span v-if="!receiptFormComplete" class="form-warning">缺少必填回执元数据</span>
+        <span v-if="showReceiptFormWarning" class="form-warning">缺少必填回执元数据</span>
       </div>
     </el-form>
 
@@ -218,6 +218,7 @@ const receiptFormComplete = computed(() =>
   )
 )
 const overrideReady = computed(() => Boolean(overrideReason.value.trim() && followUpOwner.value.trim()))
+const showReceiptFormWarning = computed(() => !receiptFormComplete.value && !archiveEvidenceReady.value && !overrideClosed.value)
 
 const closureText = computed(() => {
   if (overrideClosed.value) return 'override 已记录'

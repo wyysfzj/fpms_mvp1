@@ -206,6 +206,39 @@ def _apply_template_defaults(
         case.status = template.status_restore
 
 
+def _has_required_grant_fields(case: Case) -> bool:
+    return all(
+        (
+            case.app_no,
+            case.filing_date,
+            case.pub_no,
+            case.pub_date,
+            case.grant_no,
+            case.grant_date,
+            case.first_annuity_year is not None,
+            case.valid_until,
+        )
+    )
+
+
+def _advance_grant_notice_case_after_attachment(db: Session, *, document: Document) -> None:
+    if document.direction != DocumentDirection.IN or not document.doc_template_id:
+        return
+
+    template = db.execute(
+        select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
+    ).scalar_one_or_none()
+    if not template or (template.code or "").strip().upper() != "GRANT_NOTICE":
+        return
+
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    if case is None or case.status != "GRANT_PENDING" or not _has_required_grant_fields(case):
+        return
+
+    validate_case_status_transition(case.status, "GRANTED")
+    case.status = "GRANTED"
+
+
 def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None) -> None:
     if not document.reply_to_id or document.direction != DocumentDirection.OUT:
         return
@@ -2060,6 +2093,7 @@ def add_attachment(
         is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
     )
     db.add(attachment)
+    _advance_grant_notice_case_after_attachment(db, document=document)
     db.commit()
     db.refresh(attachment)
     return attachment

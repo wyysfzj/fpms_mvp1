@@ -1,3 +1,4 @@
+from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.auth.models import T_Role, T_User, T_UserRole
 from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Payment, PaymentLine
 from app.modules.cases.models import Case
@@ -21,15 +22,18 @@ __all__ = [
     "ClientAddress",
     "ClientContact",
     "Applicant",
+    "AnnuityTask",
     "DocAttachment",
     "DocTemplate",
     "Document",
     "FeeDraft",
     "FeeItem",
     "FeeRate",
+    "GovPayment",
     "Country",
     "LetterHead",
     "Offset",
+    "PayList",
     "Payment",
     "PaymentLine",
     "SystemParam",

@@ -150,6 +150,7 @@ test("@P1 全scope：OA答复包文件角色、人工动作、回执硬门禁和
   await expect(page.getByText("归档检查已通过")).toBeVisible();
   await expect(page.getByText("回执依据已满足").first()).toBeVisible();
   await expect(page.getByText("归档证据已满足").first()).toBeVisible();
+  await expect(page.getByText("缺少必填回执元数据")).not.toBeVisible();
   expectNoUnexpectedRuntimeSignals(pageErrors, state);
 });
 
