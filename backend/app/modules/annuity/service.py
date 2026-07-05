@@ -16,6 +16,7 @@ from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.billing.models import CaseReceipt
 from app.modules.cases.models import Case
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+from app.modules.fees.service import fee_rate_effective_on_conditions
 from app.modules.masterdata.clients.models import Client
 
 _ALLOWED_INSTRUCTIONS = ("PAY", "ABANDON", "DEFER")
@@ -810,6 +811,7 @@ def _rate_amount(
         FeeRate.rate_group == "ANNUITY",
         FeeRate.fee_type == fee_type,
         FeeRate.currency == currency,
+        *fee_rate_effective_on_conditions(date.today()),
     ]
 
     normalized_patent_category = (patent_category or "").strip() or None

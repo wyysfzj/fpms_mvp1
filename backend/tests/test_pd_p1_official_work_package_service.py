@@ -23,6 +23,7 @@ from app.modules.official_workflows.service import (
     archive_official_work_package,
     classify_work_package_missing_item,
     evaluate_official_work_package,
+    refresh_oa_reply_package,
 )
 
 
@@ -236,6 +237,57 @@ def test_archive_package_requires_receipt_unless_complete_override_is_recorded(
         assert override.override_at is not None
         assert override.follow_up_owner == "user-2"
         assert override.follow_up_note == "流程人员明日补传电子申请回执 PDF"
+
+
+def test_refresh_oa_reply_package_preserves_multiple_other_proof_manifest_rows(
+    session_factory: sessionmaker,
+) -> None:
+    _, document_id, package_id = _create_case_document_and_package(session_factory)
+    first_attachment_id = str(uuid4())
+    second_attachment_id = str(uuid4())
+    with session_factory() as db:
+        db.add_all(
+            [
+                DocAttachment(
+                    id=first_attachment_id,
+                    document_id=document_id,
+                    file_name="实验数据1.pdf",
+                    file_path=f"attachments/{document_id}/proof-1.pdf",
+                    mime_type="application/pdf",
+                    file_size=128,
+                    official_file_role="OA_OTHER_PROOF",
+                    source_role_alias="其他证明文件",
+                    external_upload_position="OA_REPLY_OTHER_PROOF_FILES",
+                    content_hash="sha256:proof-1",
+                ),
+                DocAttachment(
+                    id=second_attachment_id,
+                    document_id=document_id,
+                    file_name="实验数据2.pdf",
+                    file_path=f"attachments/{document_id}/proof-2.pdf",
+                    mime_type="application/pdf",
+                    file_size=128,
+                    official_file_role="OA_OTHER_PROOF",
+                    source_role_alias="其他证明文件",
+                    external_upload_position="OA_REPLY_OTHER_PROOF_FILES",
+                    content_hash="sha256:proof-2",
+                ),
+            ]
+        )
+        db.commit()
+
+    with session_factory() as db:
+        package = refresh_oa_reply_package(db, package_id=package_id)
+
+    proof_manifests = [
+        item
+        for item in package.oa_file_roles
+        if item.official_file_role == "OA_OTHER_PROOF" and item.present
+    ]
+    assert {item.attachment_id for item in proof_manifests} == {
+        first_attachment_id,
+        second_attachment_id,
+    }
 
 
 def test_archive_package_with_receipt_sets_archived(

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.billing.models import Bill, BillItem
 from app.modules.cases.models import Case
+from app.modules.cases.service import has_required_granted_status_fields
 from app.modules.documents.models import DocTemplate, Document
 from app.modules.documents.service import (
     _backend_storage_dir,
@@ -20,7 +21,7 @@ from app.modules.documents.service import (
     resolve_document_template_render_source,
 )
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate, T_GrantFeeTask
-from app.modules.fees.service import recalc_fee_draft_totals
+from app.modules.fees.service import fee_rate_effective_on_conditions, recalc_fee_draft_totals
 from app.modules.templates.render import TemplateRenderer
 
 GRANT_FEE_TASK_PERMISSION_CODES = ("GrantFeeTask.Read", "GrantFeeTask.Write")
@@ -262,6 +263,7 @@ def _select_matching_gov_rate(
         FeeRate.fee_type == "GOV",
         FeeRate.currency == currency,
         FeeRate.rate_group == rate_group,
+        *fee_rate_effective_on_conditions(date.today()),
     ]
     if normalized_patent_category:
         conditions.append(
@@ -332,18 +334,7 @@ def derive_grant_fee_task_state(task: T_GrantFeeTask) -> str:
 
 
 def _case_has_required_grant_fields(case: Case) -> bool:
-    return all(
-        (
-            case.app_no,
-            case.filing_date,
-            case.pub_no,
-            case.pub_date,
-            case.grant_no,
-            case.grant_date,
-            case.first_annuity_year is not None,
-            case.valid_until,
-        )
-    )
+    return has_required_granted_status_fields(case)
 
 
 def _advance_case_to_granted_if_ready(db: Session, *, task: T_GrantFeeTask) -> None:

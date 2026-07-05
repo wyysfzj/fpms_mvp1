@@ -69,6 +69,7 @@ CONFIRMATION_MISSING_KINDS = {
     "INTEGRATION_ONLY",
 }
 RECEIPT_ARCHIVED_STATUSES = {"ARCHIVED", "CONFIRMED", "RECEIVED"}
+_MULTI_FILE_MANIFEST_ROLES = {"OA_ADDITIONAL_FILE", "OA_OTHER_PROOF"}
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -382,16 +383,55 @@ def _upsert_manifest_role(
     external_upload_position: str | None = None,
     note: str | None = None,
 ) -> OfficialWorkPackageManifest:
-    existing = (
-        db.execute(
-            select(OfficialWorkPackageManifest).where(
-                OfficialWorkPackageManifest.package_id == package_id,
-                OfficialWorkPackageManifest.official_file_role == role,
+    if role in _MULTI_FILE_MANIFEST_ROLES:
+        if attachment:
+            placeholders = (
+                db.execute(
+                    select(OfficialWorkPackageManifest).where(
+                        OfficialWorkPackageManifest.package_id == package_id,
+                        OfficialWorkPackageManifest.official_file_role == role,
+                        OfficialWorkPackageManifest.attachment_id.is_(None),
+                    )
+                )
+                .scalars()
+                .all()
             )
+            for placeholder in placeholders:
+                db.delete(placeholder)
+            existing = (
+                db.execute(
+                    select(OfficialWorkPackageManifest).where(
+                        OfficialWorkPackageManifest.package_id == package_id,
+                        OfficialWorkPackageManifest.official_file_role == role,
+                        OfficialWorkPackageManifest.attachment_id == attachment.id,
+                    )
+                )
+                .scalars()
+                .first()
+            )
+        else:
+            existing = (
+                db.execute(
+                    select(OfficialWorkPackageManifest).where(
+                        OfficialWorkPackageManifest.package_id == package_id,
+                        OfficialWorkPackageManifest.official_file_role == role,
+                        OfficialWorkPackageManifest.attachment_id.is_(None),
+                    )
+                )
+                .scalars()
+                .first()
+            )
+    else:
+        existing = (
+            db.execute(
+                select(OfficialWorkPackageManifest).where(
+                    OfficialWorkPackageManifest.package_id == package_id,
+                    OfficialWorkPackageManifest.official_file_role == role,
+                )
+            )
+            .scalars()
+            .first()
         )
-        .scalars()
-        .first()
-    )
     manifest = existing or OfficialWorkPackageManifest(
         id=str(uuid4()),
         package_id=package_id,
@@ -412,6 +452,30 @@ def _upsert_manifest_role(
     if not existing:
         db.add(manifest)
     return manifest
+
+
+def _prune_stale_multi_file_manifest_rows(
+    db: Session,
+    *,
+    package_id: str,
+    role: str,
+    current_attachment_ids: set[str],
+) -> None:
+    manifests = (
+        db.execute(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package_id,
+                OfficialWorkPackageManifest.official_file_role == role,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for manifest in manifests:
+        if manifest.attachment_id and manifest.attachment_id not in current_attachment_ids:
+            db.delete(manifest)
+        elif current_attachment_ids and manifest.attachment_id is None:
+            db.delete(manifest)
 
 
 def _upsert_checklist(
@@ -1162,9 +1226,10 @@ def _oa_manifest_roles(
         else []
     )
     summary = summarize_attachment_manifest(list(attachments))
-    items_by_role = {
-        item.official_file_role: item for item in summary.oa_roles if item.official_file_role
-    }
+    items_by_role: dict[str, list] = {}
+    for item in summary.oa_roles:
+        if item.official_file_role:
+            items_by_role.setdefault(item.official_file_role, []).append(item)
     attachments_by_id = {attachment.id: attachment for attachment in attachments}
     desired_roles = [
         ("OA_STATEMENT_WORD", True, 10, "意见陈述 Word 源文件"),
@@ -1175,7 +1240,40 @@ def _oa_manifest_roles(
         ("OA_ADDITIONAL_FILE", False, 60, "附加文件"),
     ]
     for role, required, sort_order, note in desired_roles:
-        item = items_by_role.get(role)
+        items = items_by_role.get(role, [])
+        if role in _MULTI_FILE_MANIFEST_ROLES:
+            current_attachment_ids = {item.attachment_id for item in items}
+            _prune_stale_multi_file_manifest_rows(
+                db,
+                package_id=package.id,
+                role=role,
+                current_attachment_ids=current_attachment_ids,
+            )
+            if items:
+                for offset, item in enumerate(items):
+                    attachment = attachments_by_id.get(item.attachment_id)
+                    _upsert_manifest_role(
+                        db,
+                        package_id=package.id,
+                        role=role,
+                        required=required,
+                        sort_order=sort_order + offset,
+                        attachment=attachment,
+                        external_upload_position=item.external_upload_position,
+                        note=note,
+                    )
+            else:
+                _upsert_manifest_role(
+                    db,
+                    package_id=package.id,
+                    role=role,
+                    required=required,
+                    sort_order=sort_order,
+                    note=note,
+                )
+            continue
+
+        item = next(iter(items), None)
         attachment = attachments_by_id.get(item.attachment_id) if item else None
         _upsert_manifest_role(
             db,

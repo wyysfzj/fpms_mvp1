@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -112,6 +113,121 @@ def _seed_apply_fee_rates(session_factory) -> None:
                     reduction_scope=reduction_scope,
                     calc_mode=calc_mode,
                     allow_reduction=allow_reduction,
+                    source_doc="专利收费场景-20260626.docx",
+                    source_status="CONFIRMED",
+                )
+            )
+        db.commit()
+
+
+def _seed_apply_fee_rates_with_effective_windows(session_factory) -> None:
+    today = date.today()
+    rows = [
+        (
+            "CN_INV_APPLICATION_FEE",
+            "过期发明申请费",
+            Decimal("800.00"),
+            "FIXED",
+            True,
+            "申请费",
+            "发明专利",
+            "申请费（不包括公布印刷费、申请附加费）",
+            today - timedelta(days=730),
+            today - timedelta(days=1),
+        ),
+        (
+            "CN_INV_APPLICATION_FEE",
+            "发明申请费",
+            Decimal("900.00"),
+            "FIXED",
+            True,
+            "申请费",
+            "发明专利",
+            "申请费（不包括公布印刷费、申请附加费）",
+            today - timedelta(days=1),
+            today + timedelta(days=1),
+        ),
+        (
+            "CN_INV_APPLICATION_FEE",
+            "未来发明申请费",
+            Decimal("1900.00"),
+            "FIXED",
+            True,
+            "申请费",
+            "发明专利",
+            "申请费（不包括公布印刷费、申请附加费）",
+            today + timedelta(days=1),
+            None,
+        ),
+        (
+            "CN_EXCESS_CLAIM_FEE",
+            "权利要求附加费",
+            Decimal("150.00"),
+            "PER_CLAIM",
+            False,
+            "申请附加费",
+            "权利要求第11项起每项",
+            "不可费减",
+            today - timedelta(days=1),
+            None,
+        ),
+        (
+            "CN_PUBLICATION_PRINT_FEE",
+            "公布印刷费",
+            Decimal("50.00"),
+            "FIXED",
+            False,
+            "公布印刷费",
+            "发明专利",
+            "不可费减",
+            today - timedelta(days=1),
+            None,
+        ),
+        (
+            "CN_SUBSTANTIVE_EXAM_FEE",
+            "发明实审费",
+            Decimal("2500.00"),
+            "FIXED",
+            True,
+            "发明实质审查费",
+            "发明专利",
+            "发明专利申请实质审查费",
+            today - timedelta(days=1),
+            None,
+        ),
+    ]
+    with session_factory() as db:
+        for (
+            fee_code,
+            fee_name,
+            amount,
+            calc_mode,
+            allow_reduction,
+            fee_category,
+            fee_subtype,
+            reduction_scope,
+            effective_from,
+            effective_to,
+        ) in rows:
+            db.add(
+                FeeRate(
+                    id=str(uuid4()),
+                    fee_code=fee_code,
+                    fee_name=fee_name,
+                    fee_type="GOV",
+                    currency="CNY",
+                    default_amount=amount,
+                    enabled=True,
+                    rate_group="DOMESTIC",
+                    fee_domain="PATENT",
+                    fee_section="专利收费-国内部分",
+                    fee_category=fee_category,
+                    fee_subtype=fee_subtype,
+                    reduction_scope=reduction_scope,
+                    calc_mode=calc_mode,
+                    allow_reduction=allow_reduction,
+                    effective_from=effective_from,
+                    effective_to=effective_to,
                     source_doc="专利收费场景-20260626.docx",
                     source_status="CONFIRMED",
                 )
@@ -251,6 +367,39 @@ def test_official_fee_preview_returns_candidates_without_creating_draft(
     with session_factory() as db:
         assert db.query(FeeDraft).count() == 0
         assert db.query(FeeItem).count() == 0
+
+
+def test_official_fee_preview_selects_current_effective_rate(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory,
+) -> None:
+    _seed_apply_fee_rates_with_effective_windows(session_factory)
+    client_id = _create_client(client, auth_headers)
+    applicant_id = _seed_applicant(session_factory)
+    case_data = _create_case(
+        client,
+        auth_headers,
+        client_id=client_id,
+        applicant_id=applicant_id,
+    )
+
+    response = client.post(
+        "/api/v1/fees/official-fee-preview",
+        json={
+            "case_id": case_data["id"],
+            "currency": "CNY",
+            "trigger_event": "FILING_ACCEPTED",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    candidates = {item["fee_code"]: item for item in body["candidates"]}
+    assert Decimal(body["total_gov"]) == Decimal("860.00")
+    assert Decimal(candidates["CN_INV_APPLICATION_FEE"]["unit_price"]) == Decimal("900.00")
+    assert Decimal(candidates["CN_INV_APPLICATION_FEE"]["amount"]) == Decimal("135.00")
 
 
 def test_official_fee_preview_returns_reexam_candidate_without_creating_draft(

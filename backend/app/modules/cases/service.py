@@ -681,6 +681,19 @@ def validate_status_required_fields(
             )
 
 
+def has_required_granted_status_fields(case: Case) -> bool:
+    return bool(
+        case.app_no
+        and case.filing_date
+        and _is_present_text(case.pub_no)
+        and case.pub_date
+        and _is_present_text(case.grant_no)
+        and case.grant_date
+        and case.first_annuity_year is not None
+        and case.valid_until
+    )
+
+
 def _apply_case_report_filters(
     query,
     *,

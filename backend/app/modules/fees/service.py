@@ -8,7 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Literal
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -637,9 +637,21 @@ def _official_payable_ratio_from_customer_reduction(
     return Decimal("1") - reduction_ratio
 
 
+def fee_rate_effective_on_conditions(as_of_date: date_type):
+    return (
+        or_(FeeRate.effective_from.is_(None), FeeRate.effective_from <= as_of_date),
+        or_(FeeRate.effective_to.is_(None), FeeRate.effective_to >= as_of_date),
+    )
+
+
 def _enabled_fee_rates_by_code(
-    db: Session, *, fee_codes: tuple[str, ...], currency: str
+    db: Session,
+    *,
+    fee_codes: tuple[str, ...],
+    currency: str,
+    as_of_date: date_type | None = None,
 ) -> dict[str, FeeRate]:
+    effective_on = as_of_date or date_type.today()
     rates = (
         db.execute(
             select(FeeRate).where(
@@ -647,6 +659,7 @@ def _enabled_fee_rates_by_code(
                 FeeRate.fee_type == FeeType.GOV.value,
                 FeeRate.currency == currency,
                 FeeRate.enabled.is_(True),
+                *fee_rate_effective_on_conditions(effective_on),
             )
         )
         .scalars()

@@ -139,6 +139,12 @@ Post-demo analysis, Functional Spec, demo, and fee-design documents:
 - `docs/superpowers/plans/2026-06-11-postdemo-p1-answer-delta-full-scope.md`
 - `docs/superpowers/plans/2026-07-05-official-fee-scenario-enhancement.md`
 
+Audit and remediation review documents:
+
+- `docs/reviews/fpms_functional_correctness_audit_20260705.md` - English functional completeness and implementation correctness audit.
+- `docs/reviews/fpms_functional_correctness_audit_20260705_zh.md` - Chinese version of the functional completeness and implementation correctness audit.
+- `docs/reviews/fpms_audit_remediation_design_20260705.md` - remediation design for directly executable audit findings; records skipped customer-confirmation items.
+
 Evidence families to search during audits:
 
 - `artifacts/PD-ENH-*/summary.md` - post-demo enhancement analysis and review evidence.

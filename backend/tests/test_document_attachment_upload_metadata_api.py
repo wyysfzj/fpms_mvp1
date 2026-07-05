@@ -95,3 +95,63 @@ def test_upload_attachment_rejects_official_notice_catalog_code_as_role(
 
     assert resp.status_code == 400, resp.text
     assert resp.json()["error"]["code"] == "ATTACHMENT_OFFICIAL_ROLE_INVALID"
+
+
+def test_upload_attachment_rejects_xml_zip_role_with_pdf_file(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    document_id = _create_document(session_factory)
+
+    resp = client.post(
+        f"{DOC_BASE}/{document_id}/attachments",
+        headers=auth_headers,
+        data={"official_file_role": "FILING_XML_ZIP"},
+        files={"file": ("递交压缩包.pdf", BytesIO(b"%PDF-1.4 wrong"), "application/pdf")},
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "ATTACHMENT_EXTENSION_NOT_ALLOWED"
+
+
+def test_upload_attachment_rejects_receipt_role_with_word_file(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    document_id = _create_document(session_factory)
+
+    resp = client.post(
+        f"{DOC_BASE}/{document_id}/attachments",
+        headers=auth_headers,
+        data={"official_file_role": "ELECTRONIC_RECEIPT"},
+        files={
+            "file": (
+                "电子申请回执.docx",
+                BytesIO(b"not a receipt pdf"),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "ATTACHMENT_EXTENSION_NOT_ALLOWED"
+
+
+def test_upload_attachment_rejects_statement_word_role_with_pdf_file(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    document_id = _create_document(session_factory)
+
+    resp = client.post(
+        f"{DOC_BASE}/{document_id}/attachments",
+        headers=auth_headers,
+        data={"official_file_role": "OA_STATEMENT_WORD"},
+        files={"file": ("意见陈述书.pdf", BytesIO(b"%PDF-1.4 wrong"), "application/pdf")},
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"]["code"] == "ATTACHMENT_EXTENSION_NOT_ALLOWED"

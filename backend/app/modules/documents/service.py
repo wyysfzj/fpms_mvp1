@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.errors import raise_business_error
 from app.core.storage import ensure_dir, safe_join
 from app.modules.cases.models import Case, T_CaseApplicant
-from app.modules.cases.service import validate_case_status_transition
+from app.modules.cases.service import (
+    has_required_granted_status_fields,
+    validate_case_status_transition,
+)
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.fee_linking_service import (
     create_fee_draft_from_wizard_row,
@@ -154,6 +157,73 @@ _ATTACHMENT_ROLE_DEFINITIONS: dict[str, dict[str, object]] = {
     },
 }
 
+_PDF_MIME_TYPES = {"application/pdf", "application/octet-stream"}
+_WORD_MIME_TYPES = {
+    "application/msword",
+    "application/octet-stream",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+_ZIP_MIME_TYPES = {
+    "application/octet-stream",
+    "application/x-zip-compressed",
+    "application/zip",
+}
+_IMAGE_MIME_TYPES = {"image/jpeg", "image/png"}
+_SPREADSHEET_MIME_TYPES = {
+    "application/octet-stream",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+_PROOF_MIME_TYPES = (
+    _PDF_MIME_TYPES
+    | _WORD_MIME_TYPES
+    | _IMAGE_MIME_TYPES
+    | _SPREADSHEET_MIME_TYPES
+    | _ZIP_MIME_TYPES
+)
+_ATTACHMENT_ROLE_FILE_RULES: dict[str, dict[str, set[str]]] = {
+    "FILING_FULL_WORD": {
+        "exts": {".doc", ".docx"},
+        "mimes": _WORD_MIME_TYPES,
+    },
+    "FILING_XML_ZIP": {
+        "exts": {".zip"},
+        "mimes": _ZIP_MIME_TYPES,
+    },
+    "FILING_MERGED_PDF": {
+        "exts": {".pdf"},
+        "mimes": _PDF_MIME_TYPES,
+    },
+    "ELECTRONIC_RECEIPT": {
+        "exts": {".pdf"},
+        "mimes": _PDF_MIME_TYPES,
+    },
+    "OA_STATEMENT_WORD": {
+        "exts": {".doc", ".docx"},
+        "mimes": _WORD_MIME_TYPES,
+    },
+    "OA_STATEMENT_PDF": {
+        "exts": {".pdf"},
+        "mimes": _PDF_MIME_TYPES,
+    },
+    "OA_MODIFIED_CLAIMS": {
+        "exts": {".doc", ".docx"},
+        "mimes": _WORD_MIME_TYPES,
+    },
+    "OA_AMENDMENT_COMPARISON": {
+        "exts": {".doc", ".docx", ".pdf"},
+        "mimes": _WORD_MIME_TYPES | _PDF_MIME_TYPES,
+    },
+    "OA_OTHER_PROOF": {
+        "exts": {".doc", ".docx", ".jpg", ".jpeg", ".pdf", ".png", ".xls", ".xlsx", ".zip"},
+        "mimes": _PROOF_MIME_TYPES,
+    },
+    "OA_ADDITIONAL_FILE": {
+        "exts": {".doc", ".docx", ".jpg", ".jpeg", ".pdf", ".png", ".xls", ".xlsx", ".zip"},
+        "mimes": _PROOF_MIME_TYPES,
+    },
+}
+
 _ATTACHMENT_ROLE_ALIASES = {
     "技术交底书": "TECHNICAL_DISCLOSURE",
     "委托指示": "COMMISSION_INSTRUCTION",
@@ -207,17 +277,7 @@ def _apply_template_defaults(
 
 
 def _has_required_grant_fields(case: Case) -> bool:
-    return all(
-        (
-            case.app_no,
-            case.filing_date,
-            case.issue_date,
-            case.grant_no,
-            case.grant_date,
-            case.first_annuity_year is not None,
-            case.valid_until,
-        )
-    )
+    return has_required_granted_status_fields(case)
 
 
 def _advance_grant_notice_case_after_attachment(db: Session, *, document: Document) -> None:
@@ -346,6 +406,48 @@ def _attachment_role_definition(role: str | None) -> dict[str, object] | None:
     if not role:
         return None
     return _ATTACHMENT_ROLE_DEFINITIONS.get(role)
+
+
+def _validate_attachment_file_rule(
+    *,
+    official_file_role: str | None,
+    file_name: str,
+    content_type: str,
+) -> None:
+    if not official_file_role:
+        return
+
+    rule = _ATTACHMENT_ROLE_FILE_RULES.get(official_file_role)
+    if not rule:
+        return
+
+    ext = Path(file_name).suffix.lower()
+    allowed_exts = rule["exts"]
+    if ext not in allowed_exts:
+        raise_business_error(
+            "ATTACHMENT_EXTENSION_NOT_ALLOWED",
+            "Attachment extension not allowed for selected official file role",
+            details={
+                "official_file_role": official_file_role,
+                "extension": ext,
+                "allowed_extensions": sorted(allowed_exts),
+            },
+            status_code=400,
+        )
+
+    allowed_mime_types = rule["mimes"]
+    normalized_content_type = content_type.split(";", 1)[0].strip().lower()
+    if normalized_content_type not in allowed_mime_types:
+        raise_business_error(
+            "ATTACHMENT_MIME_NOT_ALLOWED",
+            "Attachment mime type not allowed for selected official file role",
+            details={
+                "official_file_role": official_file_role,
+                "mime_type": normalized_content_type,
+                "allowed_mime_types": sorted(allowed_mime_types),
+            },
+            status_code=400,
+        )
 
 
 def _resolve_attachment_manifest_metadata(
@@ -2024,23 +2126,20 @@ def add_attachment(
             status_code=400,
         )
 
-    allowed_mime_types: set[str] | None = None
-    allowed_exts: set[str] | None = None
-
     content_type = upload_file.content_type or "application/octet-stream"
-    ext = Path(original_name).suffix.lower()
-    if allowed_mime_types and content_type not in allowed_mime_types:
-        raise_business_error(
-            "ATTACHMENT_MIME_NOT_ALLOWED",
-            "Attachment mime type not allowed",
-            status_code=400,
-        )
-    if allowed_exts and ext not in allowed_exts:
-        raise_business_error(
-            "ATTACHMENT_EXTENSION_NOT_ALLOWED",
-            "Attachment extension not allowed",
-            status_code=400,
-        )
+    manifest_metadata = _resolve_attachment_manifest_metadata(
+        official_file_role=official_file_role,
+        source_role_alias=source_role_alias,
+        external_upload_position=external_upload_position,
+        package_usage_hint=package_usage_hint,
+        is_archive_evidence=is_archive_evidence,
+        is_receipt_evidence=is_receipt_evidence,
+    )
+    _validate_attachment_file_rule(
+        official_file_role=manifest_metadata["official_file_role"],
+        file_name=original_name,
+        content_type=content_type,
+    )
 
     max_size_bytes = 25 * 1024 * 1024
     stored_name = f"{uuid4().hex}_{Path(original_name).name}"
@@ -2072,14 +2171,6 @@ def add_attachment(
             pass
         raise
 
-    manifest_metadata = _resolve_attachment_manifest_metadata(
-        official_file_role=official_file_role,
-        source_role_alias=source_role_alias,
-        external_upload_position=external_upload_position,
-        package_usage_hint=package_usage_hint,
-        is_archive_evidence=is_archive_evidence,
-        is_receipt_evidence=is_receipt_evidence,
-    )
     attachment = DocAttachment(
         id=str(uuid4()),
         document_id=document_id,

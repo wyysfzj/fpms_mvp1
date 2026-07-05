@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.modules.annuity.models import AnnuityTask
 from app.modules.cases.models import Case
-from app.modules.fees.models import FeeItem
+from app.modules.fees.models import FeeItem, FeeRate
 
 
 def _uid(prefix: str) -> str:
@@ -140,6 +140,50 @@ def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
     assert service_resp.status_code == 201, service_resp.text
 
 
+def _seed_annuity_rates_with_effective_windows(session_factory: sessionmaker) -> None:
+    today = date.today()
+    rows = [
+        (
+            "过期发明年费",
+            today - timedelta(days=730),
+            today - timedelta(days=1),
+            '{"tiers":[{"from":1,"to":3,"amount":"700.00"},{"from":4,"to":6,"amount":"1000.00"}]}',
+        ),
+        (
+            "发明年费",
+            today - timedelta(days=1),
+            today + timedelta(days=1),
+            '{"tiers":[{"from":1,"to":3,"amount":"900.00"},{"from":4,"to":6,"amount":"1200.00"}]}',
+        ),
+        (
+            "未来发明年费",
+            today + timedelta(days=1),
+            None,
+            '{"tiers":[{"from":1,"to":3,"amount":"1900.00"},{"from":4,"to":6,"amount":"2200.00"}]}',
+        ),
+    ]
+    with session_factory() as db:
+        for fee_name, effective_from, effective_to, calc_params in rows:
+            db.add(
+                FeeRate(
+                    id=str(uuid4()),
+                    fee_code=f"CN-INV-ANNUITY-{uuid4().hex[:6]}",
+                    fee_name=fee_name,
+                    fee_type="GOV",
+                    currency="CNY",
+                    default_amount=Decimal("0.00"),
+                    enabled=True,
+                    rate_group="ANNUITY",
+                    patent_category="INV",
+                    calc_mode="TIER",
+                    calc_params=calc_params,
+                    effective_from=effective_from,
+                    effective_to=effective_to,
+                )
+            )
+        db.commit()
+
+
 # --- GENERATE ---
 
 
@@ -233,6 +277,32 @@ def test_generate_prefills_fee_amounts(
     assert Decimal(by_year[3]["gov_fee_amt"]) == Decimal("900.00")
     assert Decimal(by_year[4]["gov_fee_amt"]) == Decimal("1200.00")
     assert {Decimal(item["service_fee_amt"]) for item in items} == {Decimal("0.00")}
+
+
+def test_generate_prefills_fee_amounts_from_current_effective_rate(
+    client: TestClient,
+    auth_headers: dict,
+    granted_case_id: str,
+    session_factory: sessionmaker,
+):
+    _seed_annuity_rates_with_effective_windows(session_factory)
+
+    resp = client.post(
+        "/api/v1/annuity/tasks/generate",
+        json={"case_id": granted_case_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+
+    list_resp = client.get(
+        "/api/v1/annuity/tasks",
+        params={"case_id": granted_case_id},
+        headers=auth_headers,
+    )
+    assert list_resp.status_code == 200
+    by_year = {item["year_no"]: item for item in list_resp.json()["items"]}
+    assert Decimal(by_year[3]["gov_fee_amt"]) == Decimal("900.00")
+    assert Decimal(by_year[4]["gov_fee_amt"]) == Decimal("1200.00")
 
 
 # --- LIST NEW FIELDS ---
