@@ -170,6 +170,7 @@ def test_archive_api_requires_receipt_unless_override_is_complete(
     )
     assert blocked_resp.status_code == 409, blocked_resp.text
     assert blocked_resp.json()["error"]["code"] == "OFFICIAL_WORK_PACKAGE_ARCHIVE_BLOCKED"
+    assert "归档" in blocked_resp.json()["error"]["message"]
 
     override_resp = client.post(
         f"{BASE}/{package_id}/archive",

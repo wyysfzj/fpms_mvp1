@@ -4,7 +4,10 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-const apiBaseUrl = (process.env.FPMS_API_URL || "http://localhost:8000/api/v1").replace(/\/$/, "");
+process.env.NO_PROXY = mergeNoProxy(process.env.NO_PROXY);
+process.env.no_proxy = mergeNoProxy(process.env.no_proxy);
+
+const apiBaseUrl = normalizeApiBaseUrl(process.env.FPMS_API_URL || "http://127.0.0.1:8000/api/v1");
 const repoRoot = path.resolve(process.cwd(), "../..");
 const backendPython = path.join(repoRoot, "backend", ".venv", "bin", "python");
 const liveSeedScript = path.join(process.cwd(), "src", "support", "pdP1LiveSeed.py");
@@ -55,9 +58,66 @@ type FeeItemResponse = {
   amount: string | number;
 };
 
+type CaseListResponse = {
+  items: Array<{
+    id: string;
+    case_no: string;
+    client_id?: string | null;
+    client_name?: string | null;
+    status?: string | null;
+  }>;
+  total: number;
+};
+
+type ClientListResponse = {
+  items: Array<{
+    id: string;
+    client_code?: string | null;
+    name: string;
+  }>;
+  total: number;
+};
+
+type CaseDetailResponse = {
+  id: string;
+  case_no: string;
+  client_id?: string | null;
+  title_cn?: string | null;
+  app_no?: string | null;
+  grant_no?: string | null;
+  patent_no?: string | null;
+  discount_rate?: string | number | null;
+};
+
+type ClientDetailResponse = {
+  id: string;
+  client_code?: string | null;
+  name_cn: string;
+  email?: string | null;
+};
+
+type V5Fixture = LiveFixture & {
+  preservedCaseNo: string;
+  preservedClientId: string;
+  grantDocumentId: string;
+  grantFeeTaskId: string;
+  annuityTaskIds: number[];
+};
+
+type V6Fixture = LiveFixture & {
+  preservedCaseNo: string;
+  preservedClientCode: string;
+  grantDocumentId: string;
+  grantFeeTaskId: string;
+  annuityTaskIds: number[];
+};
+
 let fixture: LiveFixture;
 
-test.beforeAll(() => {
+function ensureDefaultLiveFixtureSeed(): void {
+  if (fixture) {
+    return;
+  }
   const output = execFileSync(backendPython, [liveSeedScript], {
     cwd: path.join(repoRoot, "backend"),
     encoding: "utf8",
@@ -67,13 +127,185 @@ test.beforeAll(() => {
     },
   });
   fixture = JSON.parse(output.trim()) as LiveFixture;
-});
+}
 
-test.beforeEach(async ({ page, request }) => {
+test.beforeEach(async ({ page, request }, testInfo) => {
+  if (testInfo.title.includes("@P1-v5-seed") || testInfo.title.includes("@P1-v6-enrichment")) {
+    return;
+  }
+  ensureDefaultLiveFixtureSeed();
   const token = await login(request);
   await page.addInitScript((accessToken) => {
     window.localStorage.setItem("fpms_token", accessToken);
   }, token);
+});
+
+test("@P1-v5-seed V5 demo seed preserves old comparison data and creates new customer/case", async ({
+  request,
+}) => {
+  const output = execFileSync(backendPython, [liveSeedScript, "--variant", "v5"], {
+    cwd: path.join(repoRoot, "backend"),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PYTHONPATH: path.join(repoRoot, "backend"),
+    },
+  });
+  const v5Fixture = JSON.parse(output.trim()) as V5Fixture;
+  expect(v5Fixture.preservedCaseNo).toBe("P1E2E-LIVE");
+  expect(v5Fixture.preservedClientId).toBe("CLIENT-PD-P1-LIVE");
+  expect(v5Fixture.caseNo).toBe("P1E2E-V5-LIVE");
+  expect(v5Fixture.clientId).toBe("CLIENT-PD-P1-V5-LIVE");
+  expect(v5Fixture.filingPackageId).toBe("FILING-PD-P1-V5-LIVE");
+  expect(v5Fixture.oaPackageId).toBe("OA-PD-P1-V5-LIVE");
+  expect(v5Fixture.feeDraftId).toBe("FD-PD-P1-V5-LIVE");
+  expect(v5Fixture.letterDocumentId).toBe("DOC-LETTER-PD-P1-V5-LIVE");
+  expect(v5Fixture.grantDocumentId).toBe("DOC-GRANT-PD-P1-V5-LIVE");
+  expect(v5Fixture.grantFeeTaskId).toBe("GFT-PD-P1-V5-LIVE");
+  expect(v5Fixture.annuityTaskIds).toEqual([870501, 870502]);
+
+  const token = await login(request);
+  const oldCase = await getJson<CaseListResponse>(
+    request,
+    token,
+    "/cases?case_no=P1E2E-LIVE&page=1&page_size=1",
+  );
+  expect(oldCase.items).toHaveLength(1);
+  expect(oldCase.items[0].case_no).toBe("P1E2E-LIVE");
+
+  const newCase = await getJson<CaseListResponse>(
+    request,
+    token,
+    "/cases?case_no=P1E2E-V5-LIVE&page=1&page_size=1",
+  );
+  expect(newCase.items).toHaveLength(1);
+  expect(newCase.items[0].case_no).toBe("P1E2E-V5-LIVE");
+  expect(newCase.items[0].client_id).toBe("CLIENT-PD-P1-V5-LIVE");
+  expect(newCase.items[0].status).toBe("NOT_FILED");
+
+  const newClient = await getJson<ClientListResponse>(
+    request,
+    token,
+    "/clients?q=P1五版演示客户有限公司&page=1&page_size=10",
+  );
+  expect(newClient.items.some((item) => item.id === "CLIENT-PD-P1-V5-LIVE")).toBe(true);
+});
+
+test("@P1-v6-enrichment V6 enrichment requires UI-created customer/case and preserves their fields", async ({
+  request,
+}) => {
+  runLiveSeedVariant("v6-cleanup");
+  expectLiveSeedVariantFailure("v6-enrich", "UI-created V6 customer and case");
+
+  const token = await login(request);
+  const client = await postJsonWithStatus<ClientDetailResponse>(
+    request,
+    token,
+    "/clients",
+    {
+      client_code: "PD-P1-V6-LIVE",
+      name_cn: "P1六版演示客户有限公司",
+      name_en: "P1 V6 Demo Client Ltd.",
+      client_type: "企业客户",
+      default_currency: "CNY",
+      email: "p1-v6@example.com",
+      is_active: true,
+    },
+    201,
+  );
+  await postJsonWithStatus(
+    request,
+    token,
+    `/clients/${client.id}/contacts`,
+    {
+      contact_name: "赵六老师",
+      title: "知识产权负责人",
+      mobile: "13800060006",
+      email: "zhaoliu@example.com",
+      is_primary: true,
+    },
+    201,
+  );
+
+  const createdCase = await postJsonWithStatus<CaseDetailResponse>(
+    request,
+    token,
+    "/cases",
+    {
+      case_no: "P1E2E-V6-LIVE",
+      case_type: "NORMAL",
+      patent_category: "INV",
+      flow_dir: "CN_DOMESTIC",
+      status: "NOT_FILED",
+      client_id: client.id,
+      title_cn: "P1六版现场创建全流程演示方法及系统",
+      app_no: "CN202610000006.0",
+      recv_date: "2026-07-05",
+      issue_date: "2026-09-20",
+      grant_date: "2026-09-20",
+      grant_no: "ZL202610000006.0",
+      patent_no: "ZL202610000006.0",
+      valid_until: "2046-07-05",
+      spec_pages: 42,
+      claim_count: 12,
+      has_exam_request: true,
+      is_fee_monitor: true,
+      fee_reduction: "PARTIAL",
+      applicant_kind: "ENTITY",
+      discount_rate: "0.85",
+      first_annuity_year: 2,
+      applicants: [
+        {
+          seq: 1,
+          is_first: true,
+          name_cn: "P1六版测试申请人有限公司",
+          name_en: "P1 V6 Demo Applicant Ltd.",
+          address_cn: "北京市海淀区知春路6号",
+          nationality: "中国",
+          certificate_type: "统一社会信用代码",
+          certificate_no: "91110000P1E2EV6000X",
+          official_postcode: "100080",
+          official_applicant_kind: "企业",
+        },
+      ],
+      inventors: [
+        {
+          seq: 1,
+          name_cn: "孙六",
+          name_en: "Sun Liu",
+          nationality: "中国",
+          china_id_no: "11010119900606006X",
+        },
+      ],
+    },
+    201,
+  );
+  expect(createdCase.case_no).toBe("P1E2E-V6-LIVE");
+
+  const output = runLiveSeedVariant("v6-enrich");
+  const v6Fixture = JSON.parse(output.trim()) as V6Fixture;
+  expect(v6Fixture.preservedCaseNo).toBe("P1E2E-LIVE");
+  expect(v6Fixture.preservedClientCode).toBe("PD-P1-V6-LIVE");
+  expect(v6Fixture.caseNo).toBe("P1E2E-V6-LIVE");
+  expect(v6Fixture.clientId).toBe(client.id);
+  expect(v6Fixture.filingPackageId).toBe("FILING-PD-P1-V6-LIVE");
+  expect(v6Fixture.oaPackageId).toBe("OA-PD-P1-V6-LIVE");
+  expect(v6Fixture.feeDraftId).toBe("FD-PD-P1-V6-LIVE");
+  expect(v6Fixture.letterDocumentId).toBe("DOC-LETTER-PD-P1-V6-LIVE");
+  expect(v6Fixture.grantDocumentId).toBe("DOC-GRANT-PD-P1-V6-LIVE");
+  expect(v6Fixture.grantFeeTaskId).toBe("GFT-PD-P1-V6-LIVE");
+  expect(v6Fixture.annuityTaskIds).toEqual([870601, 870602]);
+
+  const clientAfter = await getJson<ClientDetailResponse>(request, token, `/clients/${client.id}`);
+  expect(clientAfter.name_cn).toBe("P1六版演示客户有限公司");
+  expect(clientAfter.email).toBe("p1-v6@example.com");
+
+  const caseAfter = await getJson<CaseDetailResponse>(request, token, `/cases/${createdCase.id}`);
+  expect(caseAfter.title_cn).toBe("P1六版现场创建全流程演示方法及系统");
+  expect(caseAfter.app_no).toBe("CN202610000006.0");
+  expect(caseAfter.grant_no).toBe("ZL202610000006.0");
+  expect(caseAfter.patent_no).toBe("ZL202610000006.0");
+  expect(Number(caseAfter.discount_rate)).toBe(0.85);
 });
 
 test("@P1-live 全scope：案件官方字段维护入口和递交准备 gate/checklist 对齐客户流程", async ({ page }) => {
@@ -146,6 +378,8 @@ test("@P1-live 全scope：OA答复包文件角色、人工动作、回执硬门�
   await expect(page.getByText("CN202610000001.0")).toBeVisible();
   await expect(page.getByText("第一次审查意见通知书").first()).toBeVisible();
   await expect(page.getByText("2026-08-20")).toBeVisible();
+  await expect(page.getByText("已关联答复文书")).toBeVisible();
+  await expectNoVisibleInternalCodes(page, ["REPLY_DOCUMENT_LINKED"]);
   await expect(page.getByText("详见随附 PDF 意见陈述书。")).toBeVisible();
 
   await expect(page.getByText("意见陈述 Word").first()).toBeVisible();
@@ -284,9 +518,35 @@ test("@P1-live 全scope：费用联动、pay-list边界、信函交接和非范�
   await page.getByRole("button", { name: "生成交接记录" }).click();
   await expect(page.getByText("交接记录已生成")).toBeVisible();
   await expect(page.getByText("已准备").first()).toBeVisible();
-  await expectNoVisibleInternalCodes(page, ["READY", "MANUAL_ONLY", "UNCONFIRMED"]);
+  await expectNoVisibleInternalCodes(page, [
+    "READY",
+    "MANUAL_ONLY",
+    "UNCONFIRMED",
+    "SOURCE_OFFICIAL_DOCUMENT",
+  ]);
 
   assertNoForbiddenP1AutomationClaims();
+  expectNoUnexpectedRuntimeSignals(pageErrors);
+});
+
+test("@P1-live-demo 授权费和年费节点可以按案件号稳定展示", async ({ page }) => {
+  const pageErrors = collectPageErrors(page);
+
+  await page.goto("/grant-fee/tasks", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "授权费任务看板" })).toBeVisible();
+  await page.getByPlaceholder("请输入案件编号").fill(fixture.caseNo);
+  await page.getByRole("button", { name: "查询" }).click();
+  await expect(page.getByRole("cell", { name: new RegExp(fixture.caseNo) })).toBeVisible();
+  await expect(page.getByText("以办理登记手续通知书/授权通知书载明期限为准").first()).toBeVisible();
+  await expect(page.getByText("授权阶段官费按授权费任务金额展示").first()).toBeVisible();
+
+  await page.goto("/annuity/tasks", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "年费任务列表" })).toBeVisible();
+  await page.getByPlaceholder("请输入案件编号").fill(fixture.caseNo);
+  await page.getByRole("button", { name: "查询" }).click();
+  await expect(page.getByRole("cell", { name: new RegExp(fixture.caseNo) })).toHaveCount(2);
+  await expect(page.getByText("以年费任务到期日为准").first()).toBeVisible();
+  await expect(page.getByText("第2年度年费，按专利类型和年度阶梯费率预估").first()).toBeVisible();
   expectNoUnexpectedRuntimeSignals(pageErrors);
 });
 
@@ -330,6 +590,45 @@ async function postJson<T>(
   return JSON.parse(body) as T;
 }
 
+async function postJsonWithStatus<T = unknown>(
+  request: APIRequestContext,
+  token: string,
+  pathName: string,
+  data: unknown,
+  status: number,
+): Promise<T> {
+  const response = await request.post(`${apiBaseUrl}${pathName}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data,
+  });
+  const body = await response.text();
+  expect(response.status(), body).toBe(status);
+  return JSON.parse(body) as T;
+}
+
+function runLiveSeedVariant(variant: string): string {
+  return execFileSync(backendPython, [liveSeedScript, "--variant", variant], {
+    cwd: path.join(repoRoot, "backend"),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PYTHONPATH: path.join(repoRoot, "backend"),
+    },
+  });
+}
+
+function expectLiveSeedVariantFailure(variant: string, message: string): void {
+  try {
+    runLiveSeedVariant(variant);
+  } catch (error) {
+    const failure = error as { stdout?: Buffer | string; stderr?: Buffer | string };
+    const output = `${failure.stdout?.toString() || ""}${failure.stderr?.toString() || ""}`;
+    expect(output).toContain(message);
+    return;
+  }
+  throw new Error(`Expected live seed variant ${variant} to fail with ${message}`);
+}
+
 function collectPageErrors(page: Page): string[] {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -370,4 +669,21 @@ function assertNoForbiddenP1AutomationClaims(): void {
       expect(source, `${path.relative(repoRoot, file)} must not contain ${pattern}`).not.toMatch(pattern);
     }
   }
+}
+
+function mergeNoProxy(current: string | undefined): string {
+  const entries = new Set(
+    (current || "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  );
+  entries.add("127.0.0.1");
+  entries.add("localhost");
+  return Array.from(entries).join(",");
+}
+
+function normalizeApiBaseUrl(raw: string): string {
+  const normalized = raw.replace("http://localhost:", "http://127.0.0.1:").replace(/\/$/, "");
+  return normalized.endsWith("/api") ? `${normalized}/v1` : normalized;
 }

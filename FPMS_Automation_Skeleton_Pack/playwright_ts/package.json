@@ -18,7 +18,12 @@
     "test:h": "playwright test src/tests/wave-h.consulting-search.spec.ts",
     "test:x": "playwright test src/tests/wave-x.search-report-audit.spec.ts",
     "demo:p1:seed": "cd ../../backend && PYTHONPATH=. .venv/bin/python ../FPMS_Automation_Skeleton_Pack/playwright_ts/src/support/pdP1LiveSeed.py",
+    "demo:p1:v5:seed": "cd ../../backend && PYTHONPATH=. .venv/bin/python ../FPMS_Automation_Skeleton_Pack/playwright_ts/src/support/pdP1LiveSeed.py --variant v5",
+    "demo:p1:v6:cleanup": "cd ../../backend && PYTHONPATH=. .venv/bin/python ../FPMS_Automation_Skeleton_Pack/playwright_ts/src/support/pdP1LiveSeed.py --variant v6-cleanup",
+    "demo:p1:v6:enrich": "cd ../../backend && PYTHONPATH=. .venv/bin/python ../FPMS_Automation_Skeleton_Pack/playwright_ts/src/support/pdP1LiveSeed.py --variant v6-enrich",
     "test:pd-p1": "node ./node_modules/.bin/playwright test src/tests/pd-p1.live-backend.spec.ts",
+    "test:pd-p1:v5": "node ./node_modules/.bin/playwright test src/tests/pd-p1.live-backend.spec.ts",
+    "test:pd-p1:v6": "node ./node_modules/.bin/playwright test src/tests/pd-p1.live-backend.spec.ts --grep @P1-v6-enrichment",
     "test:pd-p1:contract": "node ./node_modules/.bin/playwright test src/tests/pd-p1.full-scope.spec.ts",
     "test:boundary": "playwright test src/tests/boundary.matrix.spec.ts"
   },

@@ -383,6 +383,7 @@ function getPackageStatusText(status?: string | null): string {
 
 function getReplyStatusText(status?: string | null): string {
   const normalized = String(status || '').toUpperCase()
+  if (normalized === 'REPLY_DOCUMENT_LINKED') return '已关联答复文书'
   if (normalized === 'READY') return '已准备'
   if (normalized === 'PENDING') return '待处理'
   if (normalized === 'SUBMITTED') return '已提交'

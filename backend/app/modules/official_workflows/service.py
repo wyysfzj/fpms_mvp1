@@ -2080,7 +2080,7 @@ def archive_official_work_package(
 
     raise_business_error(
         "OFFICIAL_WORK_PACKAGE_ARCHIVE_BLOCKED",
-        "Official work package cannot be archived until checklist, manifest, and receipt gates pass",
+        "工作包不能归档：请先完成清单、文件清单和回执门禁。",
         details={"blockers": [blocker.model_dump(mode="json") for blocker in evaluation.blockers]},
         status_code=409,
     )

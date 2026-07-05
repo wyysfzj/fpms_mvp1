@@ -324,6 +324,7 @@ function getAttachmentRoleText(value?: string | null): string {
   const normalized = String(value || '').toUpperCase()
   if (normalized === 'FORMAT_LETTER_WORD') return '格式函 Word'
   if (normalized === 'SOURCE_DOCUMENT') return '源文书'
+  if (normalized === 'SOURCE_OFFICIAL_DOCUMENT') return '来源官文'
   if (normalized === 'OFFICIAL_RECEIPT') return '官方回执'
   if (normalized === 'CLIENT_ATTACHMENT') return '客户附件'
   return value || '未标注'

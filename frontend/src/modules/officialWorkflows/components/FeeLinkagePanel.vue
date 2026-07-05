@@ -75,7 +75,7 @@
           <template #default="{ row }">{{ formatMoney(row.amount, row.currency) }}</template>
         </el-table-column>
         <el-table-column label="客户减免比例" min-width="130">
-          <template #default="{ row }">{{ row.customer_fee_reduction_ratio ?? '待确认' }}</template>
+          <template #default="{ row }">{{ getFeeReductionText(row.customer_fee_reduction_ratio) }}</template>
         </el-table-column>
         <el-table-column label="系统应缴比例" min-width="130">
           <template #default="{ row }">{{ row.payable_fee_ratio ?? '待确认' }}</template>
@@ -289,6 +289,14 @@ function getStatusText(value?: string | null): string {
   if (normalized === 'BLOCKED' || normalized === 'EXCEPTION') return '阻止'
   if (normalized === 'PENDING' || normalized === 'NEEDS_CONFIRMATION') return '待确认'
   return value || '待核对'
+}
+
+function getFeeReductionText(value?: string | null): string {
+  const normalized = normalize(value)
+  if (normalized === 'NONE') return '不减免'
+  if (normalized === 'PARTIAL') return '部分减免'
+  if (normalized === 'FULL') return '全额减免'
+  return value || '待确认'
 }
 
 function getStatusTagType(value?: string | null): 'success' | 'warning' | 'danger' | 'info' {
