@@ -9,20 +9,89 @@
 
     <!-- Upload Area -->
     <div class="attachment-upload">
-      <el-upload
-        :action="''"
-        :auto-upload="false"
-        :show-file-list="false"
-        :on-change="handleFileChange"
-        :disabled="uploading"
-        class="upload-control"
+      <el-button
+        size="small"
+        :loading="uploading"
+        data-testid="attachment-open-upload"
+        @click="openUploadDialog"
       >
-        <el-button size="small" :loading="uploading">
-          <span v-if="!uploading">📎 上传文件</span>
-          <span v-else>上传中...</span>
-        </el-button>
-      </el-upload>
+        <span v-if="!uploading">上传附件</span>
+        <span v-else>上传中...</span>
+      </el-button>
     </div>
+
+    <el-dialog
+      v-model="uploadDialogVisible"
+      data-testid="attachment-upload-dialog"
+      title="上传附件"
+      width="520px"
+      @closed="resetUploadDraft"
+    >
+      <el-form label-position="top" class="attachment-upload-form">
+        <el-form-item label="选择文件">
+          <el-upload
+            :action="''"
+            :auto-upload="false"
+            :show-file-list="false"
+            :on-change="handleFileChange"
+            :disabled="uploading"
+            data-testid="attachment-file-picker"
+            class="upload-control"
+          >
+            <el-button size="small">选择文件</el-button>
+          </el-upload>
+          <span v-if="selectedUploadFileName" class="selected-file-name">
+            {{ selectedUploadFileName }}
+          </span>
+        </el-form-item>
+
+        <el-form-item label="附件角色">
+          <el-select
+            v-model="uploadDraft.official_file_role"
+            clearable
+            filterable
+            placeholder="选择附件角色"
+            class="upload-dialog-select"
+          >
+            <el-option
+              v-for="option in officialRoleOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="历史别名（可选）">
+          <el-select
+            v-model="uploadDraft.source_role_alias"
+            clearable
+            filterable
+            placeholder="选择历史别名（可选）"
+            class="upload-dialog-select"
+          >
+            <el-option
+              v-for="alias in historicalAliasOptions"
+              :key="alias"
+              :label="alias"
+              :value="alias"
+            />
+          </el-select>
+        </el-form-item>
+
+        <div class="upload-preview">
+          <span>上传位置：{{ getDraftUploadPositionText() }}</span>
+          <span>用途：{{ getDraftPackageUsageText() }}</span>
+        </div>
+      </el-form>
+
+      <template #footer>
+        <el-button :disabled="uploading" @click="cancelUploadDialog">取消</el-button>
+        <el-button type="primary" :loading="uploading" @click="handleUploadConfirm">
+          确认上传
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- Loading -->
     <div v-if="loading" class="attachment-loading">
@@ -53,7 +122,7 @@
               <el-tag v-if="att.is_receipt_evidence" size="small" type="success">回执证据</el-tag>
             </div>
             <div class="attachment-official-meta">
-              <span>上传位置：{{ att.external_upload_position || '未指定' }}</span>
+              <span>上传位置：{{ getUploadPositionText(att.external_upload_position) }}</span>
               <span>内容哈希：{{ formatHash(att.content_hash) }}</span>
               <span>状态：{{ getPackageUsageHintText(att.package_usage_hint) }}</span>
             </div>
@@ -73,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { getAttachments, uploadAttachment, downloadAttachment } from '../../../api/documents'
@@ -94,20 +163,33 @@ const loading = ref(false)
 const uploading = ref(false)
 const error = ref<ApiError | null>(null)
 const downloadingId = ref<string | null>(null)
+const uploadDialogVisible = ref(false)
+const selectedUploadFile = ref<File | null>(null)
+const selectedUploadFileName = ref('')
+const uploadDraft = reactive({
+  official_file_role: '',
+  source_role_alias: '',
+})
 
 const OFFICIAL_ROLE_TEXT: Record<string, string> = {
   TECHNICAL_DISCLOSURE: '技术交底书',
   COMMISSION_INSTRUCTION: '委托指示',
+  FILING_FULL_WORD: '完整递交文件 Word',
+  FILING_ABSTRACT: '摘要',
+  CLAIMS: '权利要求书',
   FILING_DOCUMENT: '递交文件',
   FILING_XML_ZIP: 'XML压缩包',
   FILING_MERGED_PDF: '合并PDF',
   FILING_CLAIMS: '权利要求书',
+  FILING_DESCRIPTION: '说明书',
+  FILING_DRAWINGS: '说明书附图',
+  FILING_SEQUENCE_LISTING: '序列表',
   OA_STATEMENT_WORD: 'OA意见陈述 Word',
   OA_STATEMENT_PDF: 'OA意见陈述 PDF',
-  OA_MODIFIED_CLAIMS: 'OA修改后权利要求书',
-  OA_AMENDMENT_COMPARISON: 'OA修改对照页',
-  OA_OTHER_PROOF: 'OA其他证明文件',
-  OA_ADDITIONAL_FILE: 'OA附加文件',
+  OA_MODIFIED_CLAIMS: '修改后的权利要求书',
+  OA_AMENDMENT_COMPARISON: '修改对照页',
+  OA_OTHER_PROOF: '其他证明文件',
+  OA_ADDITIONAL_FILE: '附加文件',
   SOURCE_DOCUMENT: '来源文书',
   SOURCE_OFFICIAL_DOCUMENT: '来源官文',
   ELECTRONIC_RECEIPT: '电子申请回执',
@@ -116,7 +198,34 @@ const OFFICIAL_ROLE_TEXT: Record<string, string> = {
   MERGED_PDF: '合并PDF',
 }
 
+const officialRoleOptions = [
+  { value: 'TECHNICAL_DISCLOSURE', label: '技术交底书' },
+  { value: 'COMMISSION_INSTRUCTION', label: '委托指示' },
+  { value: 'FILING_FULL_WORD', label: '完整递交文件 Word' },
+  { value: 'FILING_XML_ZIP', label: 'XML压缩包' },
+  { value: 'FILING_MERGED_PDF', label: '合并PDF' },
+  { value: 'CLAIMS', label: '权利要求书' },
+  { value: 'OA_STATEMENT_WORD', label: 'OA意见陈述 Word' },
+  { value: 'OA_STATEMENT_PDF', label: 'OA意见陈述 PDF' },
+  { value: 'OA_MODIFIED_CLAIMS', label: '修改后的权利要求书' },
+  { value: 'OA_AMENDMENT_COMPARISON', label: '修改对照页' },
+  { value: 'OA_OTHER_PROOF', label: '其他证明文件' },
+  { value: 'ELECTRONIC_RECEIPT', label: '电子申请回执' },
+]
+
+const historicalAliasOptions = [
+  'PCT 公开文本',
+  '补正后说明书',
+  '递交电子申请文件',
+  '客户提供原始文件',
+]
+
 const PACKAGE_USAGE_HINT_TEXT: Record<string, string> = {
+  CASE_INTAKE: '收案材料',
+  FILING_PREP: '新申请递交准备',
+  OA_REPLY: 'OA答复准备',
+  FILING_ARCHIVE: '新申请归档',
+  RECEIPT_ARCHIVE: '回执归档',
   READY: '已准备',
   PRESENT: '已提供',
   DONE: '已完成',
@@ -124,6 +233,47 @@ const PACKAGE_USAGE_HINT_TEXT: Record<string, string> = {
   ARCHIVED: '已归档',
   RECEIPT_EVIDENCE: '回执证据',
   ARCHIVE_EVIDENCE: '归档证据',
+}
+
+const UPLOAD_POSITION_TEXT: Record<string, string> = {
+  FILING_SOURCE_WORD: '新申请源文件',
+  FILING_XML_ZIP_AUTO_ASSIGN: 'XML压缩包自动匹配',
+  FILING_XML_ZIP_UPLOAD: 'XML压缩包上传',
+  OA_REPLY_STATEMENT_SOURCE: 'OA意见陈述源文件',
+  OA_REPLY_OTHER_PROOF_FILES: 'OA其他证明文件',
+  OA_REPLY_CLAIMS: 'OA权利要求书',
+  OA_REPLY_COMPARISON_PAGE: 'OA修改对照页',
+  OA_REPLY_ADDITIONAL_FILES: 'OA附加文件',
+  FILING_ARCHIVE: '新申请归档',
+  RECEIPT_ARCHIVE: '回执归档',
+}
+
+const ROLE_UPLOAD_POSITION: Record<string, string> = {
+  FILING_FULL_WORD: 'FILING_SOURCE_WORD',
+  FILING_XML_ZIP: 'FILING_XML_ZIP_UPLOAD',
+  FILING_MERGED_PDF: 'FILING_ARCHIVE',
+  CLAIMS: 'FILING_XML_ZIP_AUTO_ASSIGN',
+  OA_STATEMENT_WORD: 'OA_REPLY_STATEMENT_SOURCE',
+  OA_STATEMENT_PDF: 'OA_REPLY_OTHER_PROOF_FILES',
+  OA_MODIFIED_CLAIMS: 'OA_REPLY_CLAIMS',
+  OA_AMENDMENT_COMPARISON: 'OA_REPLY_COMPARISON_PAGE',
+  OA_OTHER_PROOF: 'OA_REPLY_OTHER_PROOF_FILES',
+  ELECTRONIC_RECEIPT: 'RECEIPT_ARCHIVE',
+}
+
+const ROLE_PACKAGE_USAGE_HINT: Record<string, string> = {
+  TECHNICAL_DISCLOSURE: 'CASE_INTAKE',
+  COMMISSION_INSTRUCTION: 'CASE_INTAKE',
+  FILING_FULL_WORD: 'FILING_PREP',
+  FILING_XML_ZIP: 'FILING_PREP',
+  FILING_MERGED_PDF: 'FILING_ARCHIVE',
+  CLAIMS: 'FILING_PREP',
+  OA_STATEMENT_WORD: 'OA_REPLY',
+  OA_STATEMENT_PDF: 'OA_REPLY',
+  OA_MODIFIED_CLAIMS: 'OA_REPLY',
+  OA_AMENDMENT_COMPARISON: 'OA_REPLY',
+  OA_OTHER_PROOF: 'OA_REPLY',
+  ELECTRONIC_RECEIPT: 'RECEIPT_ARCHIVE',
 }
 
 async function fetchAttachments() {
@@ -139,15 +289,45 @@ async function fetchAttachments() {
   }
 }
 
+function openUploadDialog() {
+  resetUploadDraft()
+  error.value = null
+  uploadDialogVisible.value = true
+}
+
+function cancelUploadDialog() {
+  uploadDialogVisible.value = false
+}
+
+function resetUploadDraft() {
+  selectedUploadFile.value = null
+  selectedUploadFileName.value = ''
+  uploadDraft.official_file_role = ''
+  uploadDraft.source_role_alias = ''
+}
+
 async function handleFileChange(uploadFile: UploadFile) {
   if (!uploadFile.raw) return
+  selectedUploadFile.value = uploadFile.raw
+  selectedUploadFileName.value = uploadFile.name || uploadFile.raw.name
+}
 
+async function handleUploadConfirm() {
+  if (!selectedUploadFile.value) {
+    ElMessage.warning('请先选择文件')
+    return
+  }
   uploading.value = true
   error.value = null
 
   try {
-    await uploadAttachment(props.documentId, uploadFile.raw)
-    ElMessage.success('文件上传成功')
+    await uploadAttachment(props.documentId, selectedUploadFile.value, {
+      official_file_role: uploadDraft.official_file_role || null,
+      source_role_alias: uploadDraft.source_role_alias || null,
+    })
+    ElMessage.success('附件上传成功')
+    uploadDialogVisible.value = false
+    resetUploadDraft()
     await fetchAttachments()
     emit('uploaded')
   } catch (err) {
@@ -202,6 +382,22 @@ function getPackageUsageHintText(value?: string | null): string {
   return PACKAGE_USAGE_HINT_TEXT[normalized] || '待核对'
 }
 
+function getUploadPositionText(value?: string | null): string {
+  const normalized = normalizeCode(value)
+  if (!normalized) return '未指定'
+  return UPLOAD_POSITION_TEXT[normalized] || normalized
+}
+
+function getDraftUploadPositionText(): string {
+  const role = normalizeCode(uploadDraft.official_file_role)
+  return getUploadPositionText(ROLE_UPLOAD_POSITION[role])
+}
+
+function getDraftPackageUsageText(): string {
+  const role = normalizeCode(uploadDraft.official_file_role)
+  return getPackageUsageHintText(ROLE_PACKAGE_USAGE_HINT[role])
+}
+
 function getGateClassification(att: Attachment): string {
   const role = normalizeCode(att.official_file_role)
   if (role === 'TECHNICAL_DISCLOSURE' || role === 'COMMISSION_INSTRUCTION') return '收案门禁'
@@ -238,6 +434,35 @@ onMounted(() => {
 
 .attachment-upload {
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.attachment-upload-form {
+  display: grid;
+  gap: 4px;
+}
+
+.upload-dialog-select {
+  width: 100%;
+}
+
+.selected-file-name {
+  margin-left: 12px;
+  color: #4b5563;
+  font-size: 13px;
+}
+
+.upload-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #4b5563;
+  font-size: 13px;
+  background: #f9fafb;
 }
 
 .upload-control {

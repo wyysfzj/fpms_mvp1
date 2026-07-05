@@ -26,6 +26,8 @@ from app.modules.fees.schemas import (
     FeeRateCreateIn,
     FeeRateOut,
     FeeRateUpdateIn,
+    OfficialFeePreviewIn,
+    OfficialFeePreviewOut,
     OkOut,
 )
 from app.modules.fees.service import add_fee_item, list_fee_drafts, list_fee_items, list_fee_rates
@@ -33,6 +35,7 @@ from app.modules.fees.service import create_fee_draft as create_fee_draft_servic
 from app.modules.fees.service import create_fee_rate as create_fee_rate_service
 from app.modules.fees.service import generate_apply_fee_draft as generate_apply_fee_draft_service
 from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
+from app.modules.fees.service import preview_official_fee_candidates as preview_official_fee_service
 from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
 from app.modules.fees.service import update_fee_item as update_fee_item_service
 from app.modules.fees.service import update_fee_rate as update_fee_rate_service
@@ -197,6 +200,20 @@ def generate_apply_fee_draft(
     if not created:
         response.status_code = status.HTTP_200_OK
     return FeeDraftOut.model_validate(draft)
+
+
+@router.post(
+    "/fees/official-fee-preview",
+    response_model=OfficialFeePreviewOut,
+    summary="Preview official fee candidates",
+)
+def preview_official_fee_candidates(
+    payload: OfficialFeePreviewIn,
+    _perm: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> OfficialFeePreviewOut:
+    preview = preview_official_fee_service(db, data=payload)
+    return OfficialFeePreviewOut.model_validate(preview)
 
 
 @router.post("/fees/drafts/{draft_id}/lock", response_model=OkOut, summary="Lock a fee draft")
@@ -576,6 +593,10 @@ def get_fee_rates(
     country_code: str | None = Query(default=None),
     case_type: str | None = Query(default=None),
     patent_category: str | None = Query(default=None),
+    fee_domain: str | None = Query(default=None),
+    fee_section: str | None = Query(default=None),
+    fee_category: str | None = Query(default=None),
+    fee_subtype: str | None = Query(default=None),
     calc_mode: str | None = Query(default=None),
     _perm: None = Depends(require_perm("FeeRate.Read")),
     db: Session = Depends(get_db),
@@ -607,6 +628,10 @@ def get_fee_rates(
         "country_code": country_code,
         "case_type": case_type,
         "patent_category": patent_category,
+        "fee_domain": fee_domain,
+        "fee_section": fee_section,
+        "fee_category": fee_category,
+        "fee_subtype": fee_subtype,
         "calc_mode": calc_mode,
     }
     rates, total = list_fee_rates(db, filters=filters, page=page, page_size=page_size)

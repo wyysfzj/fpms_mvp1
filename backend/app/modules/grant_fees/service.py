@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
@@ -19,7 +19,7 @@ from app.modules.documents.service import (
     persist_generated_attachment,
     resolve_document_template_render_source,
 )
-from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
+from app.modules.fees.models import FeeDraft, FeeItem, FeeRate, T_GrantFeeTask
 from app.modules.fees.service import recalc_fee_draft_totals
 from app.modules.templates.render import TemplateRenderer
 
@@ -40,6 +40,8 @@ GRANT_FEE_SERVICE_FEE_CODE = "GRANT_FEE_SERVICE"
 GRANT_FEE_NOTICE_TEMPLATE_CODE = "GRANT_FEE_NOTICE"
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 GRANT_FEE_NOTICE_DUE_DAYS = 60
+_ZERO = Decimal("0")
+_MONEY_QUANT = Decimal("0.01")
 
 _STATE_ALLOWED_ACTIONS = {
     "OPEN": ("mark_waiting_client",),
@@ -59,6 +61,12 @@ _ACTION_NEXT_STATE = {
 
 _BATCH_ALLOWED_ACTIONS = ("record_pay_instruction", "record_abandon_instruction")
 _NOTICE_ALLOWED_STATES = ("OPEN", "WAITING_CLIENT")
+_GRANT_FEE_DEADLINE_PREVIEW_FIELDS = {
+    "trigger_rule": "收到办理登记手续通知书/授权通知书",
+    "deadline_rule": "以办理登记手续通知书/授权通知书载明期限为准；当前按授权费任务到期日展示",
+    "fee_basis": "授权阶段官费按授权费任务金额展示；如无授权费率则回退授权当年年费规则",
+    "fee_node_explanation": "授权费用节点：客户确认缴费后生成官费草单，缴费登记后进入授权后年费监视。",
+}
 
 
 def get_grant_fee_module_contract() -> dict[str, object]:
@@ -201,6 +209,111 @@ def _count_fee_items_for_draft(db: Session, *, draft_id: str) -> int:
     return len(db.execute(select(FeeItem).where(FeeItem.draft_id == draft_id)).scalars().all())
 
 
+def _money_amount(value: Any) -> Decimal:
+    if value is None or value == "":
+        return _ZERO
+    try:
+        return Decimal(str(value)).quantize(_MONEY_QUANT)
+    except (InvalidOperation, ValueError):
+        return _ZERO
+
+
+def _tiered_rate_amount(rate: FeeRate, year_no: int | None) -> Decimal:
+    default_amount = _money_amount(rate.default_amount)
+    if year_no is None or (rate.calc_mode or "").strip().upper() != "TIER":
+        return default_amount
+
+    try:
+        parsed_params = json.loads(rate.calc_params or "{}")
+    except (TypeError, ValueError):
+        return default_amount
+
+    if not isinstance(parsed_params, dict):
+        return default_amount
+
+    tiers = parsed_params.get("tiers")
+    if not isinstance(tiers, list):
+        return default_amount
+
+    for tier in tiers:
+        if not isinstance(tier, dict):
+            continue
+        try:
+            start_year = int(tier.get("from"))
+            end_year = int(tier.get("to", start_year))
+        except (TypeError, ValueError):
+            continue
+        if start_year <= year_no <= end_year:
+            return _money_amount(tier.get("amount", default_amount))
+
+    return default_amount
+
+
+def _select_matching_gov_rate(
+    db: Session,
+    *,
+    rate_group: str,
+    currency: str,
+    patent_category: str | None,
+) -> FeeRate | None:
+    normalized_patent_category = (patent_category or "").strip() or None
+    conditions = [
+        FeeRate.enabled.is_(True),
+        FeeRate.fee_type == "GOV",
+        FeeRate.currency == currency,
+        FeeRate.rate_group == rate_group,
+    ]
+    if normalized_patent_category:
+        conditions.append(
+            or_(
+                FeeRate.patent_category == normalized_patent_category,
+                FeeRate.patent_category.is_(None),
+                FeeRate.patent_category == "",
+            )
+        )
+
+    rates = (
+        db.execute(select(FeeRate).where(*conditions).order_by(FeeRate.updated_at.desc()))
+        .scalars()
+        .all()
+    )
+    if not rates:
+        return None
+
+    if normalized_patent_category:
+        for rate in rates:
+            if rate.patent_category == normalized_patent_category:
+                return rate
+        for rate in rates:
+            if not rate.patent_category:
+                return rate
+        return None
+
+    return rates[0]
+
+
+def _resolve_grant_task_gov_amount(db: Session, *, case: Case | None, currency: str) -> Decimal:
+    if case is None:
+        return _ZERO
+
+    grant_rate = _select_matching_gov_rate(
+        db,
+        rate_group="GRANT",
+        currency=currency,
+        patent_category=case.patent_category,
+    )
+    if grant_rate is not None:
+        return _tiered_rate_amount(grant_rate, None)
+
+    annuity_rate = _select_matching_gov_rate(
+        db,
+        rate_group="ANNUITY",
+        currency=currency,
+        patent_category=case.patent_category,
+    )
+    return _tiered_rate_amount(annuity_rate, case.first_annuity_year) if annuity_rate else _ZERO
+
+
 def derive_grant_fee_task_state(task: T_GrantFeeTask) -> str:
     notify_count = int(task.notify_count or 0)
     client_instruction = (task.client_instruction or "").strip().upper() or "NONE"
@@ -306,12 +419,14 @@ def ensure_grant_fee_task_for_notice_document(
         return existing_task
 
     base_date = document.doc_date or date.today()
+    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    currency = "CNY"
     task = T_GrantFeeTask(
         case_id=document.case_id,
         due_date=base_date + timedelta(days=GRANT_FEE_NOTICE_DUE_DAYS),
-        gov_fee_amt=0,
+        gov_fee_amt=_resolve_grant_task_gov_amount(db, case=case, currency=currency),
         service_fee_amt=0,
-        currency="CNY",
+        currency=currency,
         client_instruction="NONE",
         notify_count=0,
         draft_generated=False,
@@ -528,8 +643,8 @@ def generate_grant_fee_draft(
     if case is None:
         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
 
-    gov_amount = Decimal(task.gov_fee_amt or 0)
-    service_amount = Decimal(task.service_fee_amt or 0)
+    gov_amount = _money_amount(task.gov_fee_amt)
+    service_amount = _ZERO
     total_amount = gov_amount + service_amount
 
     draft = FeeDraft(
@@ -552,16 +667,10 @@ def generate_grant_fee_draft(
     fee_items = [
         {
             "fee_code": GRANT_FEE_GOV_FEE_CODE,
-            "fee_name": "Grant fee government fee",
+            "fee_name": "授权官费",
             "fee_type": "GOV",
             "amount": gov_amount,
-        },
-        {
-            "fee_code": GRANT_FEE_SERVICE_FEE_CODE,
-            "fee_name": "Grant fee service fee",
-            "fee_type": "SERVICE",
-            "amount": service_amount,
-        },
+        }
     ]
     for line in fee_items:
         db.add(
@@ -614,6 +723,7 @@ def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict
         "notice_sent": bool(task.notice_sent),
         "is_overdue": bool(task.is_overdue),
         "allowed_actions": list(_STATE_ALLOWED_ACTIONS[state]),
+        **_GRANT_FEE_DEADLINE_PREVIEW_FIELDS,
     }
 
 
@@ -716,6 +826,7 @@ def _serialize_grant_fee_task_list_item(
         "billed": bool(bill_visibility.get("billed")),
         "linked_bill_id": bill_visibility.get("linked_bill_id"),
         "linked_bill_no": bill_visibility.get("linked_bill_no"),
+        **_GRANT_FEE_DEADLINE_PREVIEW_FIELDS,
     }
 
 
@@ -728,7 +839,7 @@ def _serialize_grant_fee_draft_generation_result(
     item_count: int | None = None,
     amount: Decimal | None = None,
 ) -> dict[str, Any]:
-    draft_amount = amount if amount is not None else Decimal(draft.amount or 0)
+    draft_amount = amount if amount is not None else _money_amount(draft.amount)
     if item_count is None:
         item_count = 0
 

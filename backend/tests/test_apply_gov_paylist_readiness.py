@@ -43,12 +43,12 @@ def _seed_applicant(session_factory) -> str:
 
 def _seed_apply_fee_rates(session_factory) -> None:
     rows = [
-        ("APPLY_BASE_GOV", "申请费", "GOV", Decimal("1000.00"), "FIXED"),
-        ("APPLY_EXCESS_CLAIM", "权利要求附加费", "GOV", Decimal("150.00"), "PER_CLAIM"),
-        ("APPLY_SERVICE", "申请服务费", "SERVICE", Decimal("500.00"), "FIXED"),
+        ("CN_INV_APPLICATION_FEE", "发明申请费", "GOV", Decimal("900.00"), "FIXED", True),
+        ("CN_EXCESS_CLAIM_FEE", "权利要求附加费", "GOV", Decimal("150.00"), "PER_CLAIM", False),
+        ("CN_PUBLICATION_PRINT_FEE", "公布印刷费", "GOV", Decimal("50.00"), "FIXED", False),
     ]
     with session_factory() as db:
-        for fee_code, fee_name, fee_type, amount, calc_mode in rows:
+        for fee_code, fee_name, fee_type, amount, calc_mode, allow_reduction in rows:
             rate = db.query(FeeRate).filter(FeeRate.fee_code == fee_code).one_or_none()
             if rate is None:
                 rate = FeeRate(id=str(uuid4()), fee_code=fee_code)
@@ -59,7 +59,7 @@ def _seed_apply_fee_rates(session_factory) -> None:
             rate.default_amount = amount
             rate.enabled = True
             rate.calc_mode = calc_mode
-            rate.allow_reduction = fee_type == "GOV"
+            rate.allow_reduction = allow_reduction
         db.commit()
 
 
@@ -82,7 +82,7 @@ def _create_case(
             "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0.15",
+            "fee_reduction": "0.85",
             "applicants": [
                 {
                     "seq": 1,
@@ -130,8 +130,9 @@ def test_apply_fee_gov_items_can_be_planned_and_paid(
     assert items_response.status_code == 200, items_response.text
     gov_items = [item for item in items_response.json() if item["fee_type"] == "GOV"]
     assert {item["fee_code"] for item in gov_items} == {
-        "APPLY_BASE_GOV",
-        "APPLY_EXCESS_CLAIM",
+        "CN_INV_APPLICATION_FEE",
+        "CN_EXCESS_CLAIM_FEE",
+        "CN_PUBLICATION_PRINT_FEE",
     }
 
     pay_list_response = client.post(

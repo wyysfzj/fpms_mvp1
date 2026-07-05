@@ -36,6 +36,10 @@ class AnnuityTaskListItemResponse(BaseModel):
     draft_generated: bool | None = None
     notice_sent: bool | None = None
     is_overdue: bool = False
+    trigger_rule: str
+    deadline_rule: str
+    fee_basis: str
+    fee_node_explanation: str
 
 
 class AnnuityTaskReportCountResponse(BaseModel):

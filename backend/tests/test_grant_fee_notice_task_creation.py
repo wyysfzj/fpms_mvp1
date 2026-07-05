@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from io import BytesIO
 from uuid import uuid4
 
@@ -10,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.modules.cases.models import Case
 from app.modules.documents.models import Document
-from app.modules.fees.models import T_GrantFeeTask
+from app.modules.fees.models import FeeRate, T_GrantFeeTask
 
 DOC_BASE = "/api/v1/documents"
 DOC_TEMPLATE_BASE = "/api/v1/doc-templates"
@@ -88,6 +89,43 @@ def _set_case_ready_for_granted(session_factory: sessionmaker, *, case_id: str) 
         db.commit()
 
 
+def _seed_inv_annuity_gov_rate(session_factory: sessionmaker) -> None:
+    with session_factory() as db:
+        db.add(
+            FeeRate(
+                id=str(uuid4()),
+                fee_code=_uid("GFNT-INV-ANNUITY"),
+                fee_name="发明授权当年年费",
+                fee_type="GOV",
+                currency="CNY",
+                default_amount=Decimal("0.00"),
+                enabled=True,
+                rate_group="ANNUITY",
+                patent_category="INV",
+                calc_mode="TIER",
+                calc_params=(
+                    '{"tiers":['
+                    '{"from":1,"to":3,"amount":"900.00"},'
+                    '{"from":4,"to":6,"amount":"1200.00"}'
+                    "]}"
+                ),
+            )
+        )
+        db.add(
+            FeeRate(
+                id=str(uuid4()),
+                fee_code=_uid("GFNT-SERVICE"),
+                fee_name="旧授权服务费",
+                fee_type="SERVICE",
+                currency="CNY",
+                default_amount=Decimal("50.00"),
+                enabled=True,
+                rate_group="GRANT",
+            )
+        )
+        db.commit()
+
+
 def _seed_imported_grant_notice_document(
     session_factory: sessionmaker,
     *,
@@ -148,6 +186,18 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
     assert item["status"] == "OPEN"
     assert item["due_date"] == "2026-06-09"
     assert item["currency"] == "CNY"
+    assert item["trigger_rule"] == "收到办理登记手续通知书/授权通知书"
+    assert (
+        item["deadline_rule"]
+        == "以办理登记手续通知书/授权通知书载明期限为准；当前按授权费任务到期日展示"
+    )
+    assert (
+        item["fee_basis"] == "授权阶段官费按授权费任务金额展示；如无授权费率则回退授权当年年费规则"
+    )
+    assert (
+        item["fee_node_explanation"]
+        == "授权费用节点：客户确认缴费后生成官费草单，缴费登记后进入授权后年费监视。"
+    )
 
     with session_factory() as db:
         tasks = (
@@ -161,6 +211,32 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
     assert case_resp.json()["status"] == "GRANT_PENDING"
+
+
+def test_grant_notice_document_creation_prefills_official_gov_fee_from_annuity_rate(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    case = _create_case(client, auth_headers)
+    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _seed_inv_annuity_gov_rate(session_factory)
+    template = _get_template(client, auth_headers, "GRANT_NOTICE")
+
+    _create_grant_notice(
+        client,
+        auth_headers,
+        case_id=case["id"],
+        template_id=template["id"],
+        title="授权通知书-官费预填",
+    )
+
+    with session_factory() as db:
+        task = db.execute(
+            select(T_GrantFeeTask).where(T_GrantFeeTask.case_id == case["id"])
+        ).scalar_one()
+        assert task.gov_fee_amt == Decimal("900.00")
+        assert task.service_fee_amt == Decimal("0.00")
 
 
 def test_grant_notice_attachment_upload_advances_ready_case_to_granted(

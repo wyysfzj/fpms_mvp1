@@ -34,6 +34,13 @@ class ApplyFeeDraftGenerateIn(BaseModel):
     discount_rate: Decimal | None = None
 
 
+class OfficialFeePreviewIn(BaseModel):
+    case_id: str
+    trigger_event: str
+    currency: str = "CNY"
+    source_document_id: str | None = None
+
+
 class FeeDraftOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -167,6 +174,40 @@ class FeeItemOut(BaseModel):
     remark: str | None = None
 
 
+class OfficialFeePreviewCandidateOut(BaseModel):
+    rate_id: str | None = None
+    fee_code: str
+    fee_name: str | None = None
+    fee_type: FeeType
+    quantity: Decimal
+    unit_price: Decimal
+    amount: Decimal
+    calculation_note: str | None = None
+    source_doc: str | None = None
+    source_status: str | None = None
+    fee_category: str | None = None
+    fee_subtype: str | None = None
+    trigger_rule: str | None = None
+    deadline_rule: str | None = None
+    reduction_scope: str | None = None
+    source_document_id: str | None = None
+    amount_before_reduction: Decimal | None = None
+    reduction_ratio: Decimal | None = None
+    payable_ratio: Decimal | None = None
+
+
+class OfficialFeePreviewOut(BaseModel):
+    case_id: str
+    draft_type: str
+    trigger_event: str
+    source_document_id: str | None = None
+    idempotency_key: str
+    currency: str
+    preview_only: bool = True
+    total_gov: Decimal
+    candidates: list[OfficialFeePreviewCandidateOut]
+
+
 class FeeRateCreateIn(BaseModel):
     fee_code: str
     fee_name: str
@@ -178,11 +219,21 @@ class FeeRateCreateIn(BaseModel):
     country_code: str | None = None
     case_type: str | None = None
     patent_category: str | None = None
+    fee_domain: str | None = None
+    fee_section: str | None = None
+    fee_category: str | None = None
+    fee_subtype: str | None = None
+    reduction_scope: str | None = None
     calc_mode: CalcMode | None = None
     calc_params: str | None = None
     allow_reduction: bool | None = None
     effective_from: date_type | None = None
     effective_to: date_type | None = None
+    source_doc: str | None = None
+    source_url: str | None = None
+    source_policy: str | None = None
+    source_version: str | None = None
+    source_status: str | None = None
 
 
 class FeeRateUpdateIn(BaseModel):
@@ -195,11 +246,21 @@ class FeeRateUpdateIn(BaseModel):
     country_code: str | None = None
     case_type: str | None = None
     patent_category: str | None = None
+    fee_domain: str | None = None
+    fee_section: str | None = None
+    fee_category: str | None = None
+    fee_subtype: str | None = None
+    reduction_scope: str | None = None
     calc_mode: CalcMode | None = None
     calc_params: str | None = None
     allow_reduction: bool | None = None
     effective_from: date_type | None = None
     effective_to: date_type | None = None
+    source_doc: str | None = None
+    source_url: str | None = None
+    source_policy: str | None = None
+    source_version: str | None = None
+    source_status: str | None = None
 
 
 class FeeRateOut(BaseModel):
@@ -216,11 +277,21 @@ class FeeRateOut(BaseModel):
     country_code: str | None = None
     case_type: str | None = None
     patent_category: str | None = None
+    fee_domain: str | None = None
+    fee_section: str | None = None
+    fee_category: str | None = None
+    fee_subtype: str | None = None
+    reduction_scope: str | None = None
     calc_mode: str | None = None
     calc_params: str | None = None
     allow_reduction: bool | None = None
     effective_from: date_type | None = None
     effective_to: date_type | None = None
+    source_doc: str | None = None
+    source_url: str | None = None
+    source_policy: str | None = None
+    source_version: str | None = None
+    source_status: str | None = None
 
 
 class OkOut(BaseModel):

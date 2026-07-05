@@ -68,6 +68,96 @@ Conflict rule:
 - During execution, keep changes small and reviewable; stop and replan if a hidden prerequisite, shared-file conflict, or second closure slice appears.
 - After execution, report only evidence-backed claims: modified files, commands run, observed status, evidence path, closure completed, non-closure respected, and PASS/FAIL/BLOCKED.
 
+## 0.3 Source Document Index for Reviews and Audits
+
+When reviewing FPMS requirements, post-demo feedback, workflow gaps, fee logic, demo behavior, or implementation coverage, agents MUST check the relevant source documents below before relying on memory or code inference.
+
+Rules:
+
+- Prefer original customer/source documents first, extracted text second, generated analysis/design third, and code evidence last.
+- Ignore Word temporary lock files such as `docs/postdemo/~$*.docx`.
+- For `.docx` files with screenshots or embedded images, do not rely only on extracted text when UI paths, buttons, menus, lists, or fee tables matter.
+- If an external local file is unavailable, use the extracted artifact listed below and mark the missing original as `待确认`.
+- When a new customer source file or authoritative design file is added, update this index in the same task that first relies on it.
+
+Customer and external source documents:
+
+- `docs/TXX.pdf` - original customer/source PDF; `reference/TXX.pdf` is the reference mirror.
+- `docs/postdemo/相关流程操作-20260526.docx` - customer workflow clarification, screenshots, internal official-file list, filing/OA/official document/fee/file-list details.
+- `docs/postdemo/OA答复流程.docx` - OA reply workflow and official-system interaction expectations.
+- `docs/postdemo/信函生成操作.docx` - letter generation and customer handoff workflow.
+- `docs/postdemo/专利收费场景-20260626.docx` - post-demo patent fee scenario source, trigger scenes, fee categories/subtypes, fee reduction semantics, fee-node expectations.
+- `/Users/cfcc/Documents/相关问题解答.docx` - external local customer answer file used for post-demo clarification follow-up.
+- `http://www.tianyueip.com/product/612` - customer-provided fee standard webpage; cached extraction lives at `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/tianyueip_product_612.txt`.
+
+Extracted customer-source text and review ledgers:
+
+- `artifacts/PD-ENH-ANALYSIS-20260530-01/extracted/相关流程操作-20260526.txt`
+- `artifacts/PD-ENH-ANALYSIS-20260530-01/extracted/OA答复流程.txt`
+- `artifacts/PD-ENH-ANALYSIS-20260530-01/extracted/信函生成操作.txt`
+- `artifacts/PD-ENH-ANSWER-REVIEW-20260611-01/extracted/related_answers_extracted.txt`
+- `artifacts/PD-ENH-ANSWER-REVIEW-20260611-01/analysis/answer_ledger.md`
+- `artifacts/PD-ENH-REVIEW-20260530-01/analysis/review_findings.md`
+- `artifacts/PD-ENH-FINAL-REVIEW-20260530-01/analysis/final_review_ledger.md`
+- `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/专利收费场景-20260626.txt`
+- `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/docx_inventory.txt`
+- `artifacts/PD-FEE-SCENARIO-GAP-REVIEW-20260705-01/extracted/专利收费场景-20260626.txt`
+
+Authoritative FPMS baseline and design documents:
+
+- `docs/FPMS SPEC 2.0.md` - primary FPMS lifecycle, state, workflow, fee, document, and case-management baseline; `reference/FPMS SPEC 2.0.md` and `FPMS_Automation_Skeleton_Pack/docs/source/FPMS_SPEC_2_0.md` are mirrors.
+- `docs/FPMS 架构技术设计.md` - architecture design baseline; `reference/FPMS 架构技术设计.md` is the reference mirror.
+- `docs/00_mvp1_scope.md` through `docs/07_db_ddl_and_sqlite.md` - MVP1 scope, IA, RBAC, database, backend, frontend, deployment, and SQLite baseline.
+- `docs/FPMS_Final_Enhancement_Plan_and_Task_Breakdown_SPEC_2.0_20260228.md`
+- `docs/FPMS_Final_Enhancement_Plan_Native_20260315.md`
+- `docs/FPMS_Final_Enhancement_execution_summary_20260315.md`
+- `docs/FPMS_Code_Review_Report_SPEC_2.0_20260227.md`
+- `docs/FPMS_Full_Test_Scenarios_and_Cases_SPEC_2.0_20260228.md`
+- `docs/FPMS_SPEC2_0_Test_Cases_E2E.md`
+- `docs/FPMS_SPEC2_2nd_Review.md`
+- `docs/FPMS_SPEC2_2nd_Review_REFRESH.md`
+- `docs/FPMS_SPEC2_Final_Audit_Excluding_Document_Generation_20260406.md`
+- `docs/FRMS_SPEC2_2nd_POST.md`
+- `docs/2026-04-09-spec20-process-follow-test-cases.md`
+- `docs/spec20_end_to_end_ui_testing.md`
+- `docs/spec20_tech_mitigate.md`
+- `docs/gap.md`, `docs/mvp1_gap.md`, and `docs/mvp_story_gap.md`
+
+Post-demo analysis, Functional Spec, demo, and fee-design documents:
+
+- `docs/postdemo/postdemo_enhancement_analysis_20260530.md` - main post-demo enhancement analysis.
+- `docs/postdemo/postdemo_p1_functional_spec_20260531.md` - P1 Functional Spec used for P1 application and test work.
+- `docs/postdemo/postdemo_p1_e2e_demo_20260612.md` and `docs/postdemo/postdemo_p1_e2e_demo_20260612.docx` - P1 end-to-end demo script with mock data.
+- `docs/postdemo/postdemo_p1_lifecycle_demo_design_20260704.md` - lifecycle/status/file-driven demo design.
+- `docs/postdemo/postdemo_p1_lifecycle_demo_script_20260704.md` - lifecycle demo execution script.
+- `docs/postdemo/p1_demo_engineering_checklist.md`
+- `docs/postdemo/p1_demo_execution_runbook.md`
+- `docs/postdemo/postdemo_fee_scenario_integration_design_20260704.md` - patent fee scenario integration design.
+- `docs/postdemo/postdemo_fee_scenario_gap_review_20260705.md` - fee scenario gap review.
+- `docs/postdemo/postdemo_fee_followup_trigger_design_20260705.md` - follow-up fee trigger design for reexamination and grant/annuity deadline preview.
+- `docs/superpowers/plans/2026-05-31-postdemo-p1-full-scope-development.md`
+- `docs/superpowers/plans/2026-06-11-postdemo-p1-answer-delta-full-scope.md`
+- `docs/superpowers/plans/2026-07-05-official-fee-scenario-enhancement.md`
+
+Evidence families to search during audits:
+
+- `artifacts/PD-ENH-*/summary.md` - post-demo enhancement analysis and review evidence.
+- `artifacts/PD-P1-*/summary.md` - P1 implementation, QA, demo, lifecycle, and UI E2E evidence.
+- `artifacts/PD-FEE-SCENARIO-*/summary.md` - patent fee scenario design and implementation evidence.
+- `artifacts/PD-DOC-*/summary.md` - document, official notice catalog, attachment role, and upload UX evidence.
+- `artifacts/PD-P1-E2E-UI-FULLSCOPE-20260602-01/full_scope_coverage_ledger.md`
+- `artifacts/PD-P1-FULLSCOPE-ANSWER-DELTA-PLAN-20260611-01/analysis/full_scope_delta_ledger.md`
+- `artifacts/PD-P1-QA-FULLSCOPE-ANSWER-DELTA-20260611-01/analysis/close_ledger.md`
+- `artifacts/PD-P1-QA-FULLSCOPE-E2E-01/close_ledger.md`
+
+Useful source-discovery commands:
+
+```bash
+find docs/postdemo -maxdepth 1 \( -name '*.md' -o -name '*.docx' -o -name '*.pdf' -o -name '*.txt' \) ! -name '~$*' -print | sort
+rg --files docs reference artifacts | rg '(TXX|FPMS SPEC|postdemo|专利收费|相关流程|OA答复|信函生成|相关问题|PD-ENH|PD-P1|PD-FEE|PD-DOC)'
+find artifacts -maxdepth 2 -name summary.md | rg '/(PD-ENH|PD-P1|PD-FEE|PD-DOC)-'
+```
+
 ---
 
 ## 1) Atomic Task Discipline

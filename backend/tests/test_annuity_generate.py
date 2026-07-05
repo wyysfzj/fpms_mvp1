@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.modules.annuity.models import AnnuityTask
 from app.modules.cases.models import Case
+from app.modules.fees.models import FeeItem
 
 
 def _uid(prefix: str) -> str:
@@ -98,21 +100,44 @@ def granted_no_year_case_id(client: TestClient, auth_headers: dict, client_id: s
 
 
 def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:
-    for fee_type, amount in (("GOV", "300.00"), ("SERVICE", "50.00")):
-        resp = client.post(
-            "/api/v1/fees/rates",
-            json={
-                "fee_code": f"ANN-GEN-{fee_type}-{uuid4().hex[:6]}",
-                "fee_name": f"Annuity {fee_type} Gen",
-                "fee_type": fee_type,
-                "currency": "CNY",
-                "default_amount": amount,
-                "enabled": True,
-                "rate_group": "ANNUITY",
-            },
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201
+    resp = client.post(
+        "/api/v1/fees/rates",
+        json={
+            "fee_code": f"CN-INV-ANNUITY-{uuid4().hex[:6]}",
+            "fee_name": "发明年费",
+            "fee_type": "GOV",
+            "currency": "CNY",
+            "default_amount": "0.00",
+            "enabled": True,
+            "rate_group": "ANNUITY",
+            "patent_category": "INV",
+            "calc_mode": "TIER",
+            "calc_params": (
+                '{"tiers":['
+                '{"from":1,"to":3,"amount":"900.00"},'
+                '{"from":4,"to":6,"amount":"1200.00"},'
+                '{"from":7,"to":20,"amount":"2000.00"}'
+                "]}"
+            ),
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    service_resp = client.post(
+        "/api/v1/fees/rates",
+        json={
+            "fee_code": f"ANN-GEN-SERVICE-{uuid4().hex[:6]}",
+            "fee_name": "旧服务年费",
+            "fee_type": "SERVICE",
+            "currency": "CNY",
+            "default_amount": "50.00",
+            "enabled": True,
+            "rate_group": "ANNUITY",
+        },
+        headers=auth_headers,
+    )
+    assert service_resp.status_code == 201, service_resp.text
 
 
 # --- GENERATE ---
@@ -204,10 +229,10 @@ def test_generate_prefills_fee_amounts(
     assert list_resp.status_code == 200
     items = list_resp.json()["items"]
     assert len(items) > 0
-    # At least some should have amounts (may be 0 if rates don't match year_no)
-    for item in items:
-        assert "gov_fee_amt" in item
-        assert "service_fee_amt" in item
+    by_year = {item["year_no"]: item for item in items}
+    assert Decimal(by_year[3]["gov_fee_amt"]) == Decimal("900.00")
+    assert Decimal(by_year[4]["gov_fee_amt"]) == Decimal("1200.00")
+    assert {Decimal(item["service_fee_amt"]) for item in items} == {Decimal("0.00")}
 
 
 # --- LIST NEW FIELDS ---
@@ -232,8 +257,22 @@ def test_list_includes_new_fields(client: TestClient, auth_headers: dict, grante
         "draft_generated",
         "notice_sent",
         "is_overdue",
+        "trigger_rule",
+        "deadline_rule",
+        "fee_basis",
+        "fee_node_explanation",
     ):
         assert field in item, f"Missing field: {field}"
+    assert item["trigger_rule"] == "年费节点到期"
+    assert (
+        item["deadline_rule"]
+        == "以年费任务到期日为准；滞纳金按每超过规定缴费时间 1 个月加收当年全额年费 5% 提示"
+    )
+    assert item["fee_basis"] == f"第{item['year_no']}年度年费，按专利类型和年度阶梯费率预估"
+    assert (
+        item["fee_node_explanation"]
+        == "年费费用节点：客户指示缴费后生成官费草单，进入官费清单并登记官方缴费回执。"
+    )
 
 
 def test_list_is_overdue_computed(
@@ -332,6 +371,51 @@ def test_draft_generated_flag_set(client: TestClient, auth_headers: dict, grante
         for item in list_resp2.json()["items"]:
             if item["id"] == task_ids[0]:
                 assert item["draft_generated"] is True
+
+
+def test_annuity_draft_generation_creates_gov_only_items(
+    client: TestClient,
+    auth_headers: dict,
+    granted_case_id: str,
+    session_factory: sessionmaker,
+):
+    _seed_annuity_rates(client, auth_headers)
+    client.post(
+        "/api/v1/annuity/tasks/generate",
+        json={"case_id": granted_case_id},
+        headers=auth_headers,
+    )
+    list_resp = client.get(
+        "/api/v1/annuity/tasks",
+        params={"case_id": granted_case_id, "annuity_year": 3},
+        headers=auth_headers,
+    )
+    assert list_resp.status_code == 200, list_resp.text
+    task = list_resp.json()["items"][0]
+
+    client.put(
+        f"/api/v1/annuity/tasks/{task['id']}/instruction",
+        json={"instruction": "PAY"},
+        headers=auth_headers,
+    )
+    draft_resp = client.post(
+        "/api/v1/annuity/tasks/generate-drafts",
+        json={"task_ids": [task["id"]]},
+        headers=auth_headers,
+    )
+    assert draft_resp.status_code in (200, 201), draft_resp.text
+    payload = draft_resp.json()
+    assert payload["summary"]["success"] == 1
+
+    with session_factory() as db:
+        items = (
+            db.query(FeeItem).filter(FeeItem.draft_id == payload["success"][0]["draft_id"]).all()
+        )
+
+    assert len(items) == 1
+    assert items[0].fee_type == "GOV"
+    assert items[0].fee_code == "ANNUITY_GOV"
+    assert Decimal(items[0].amount) == Decimal("900.00")
 
 
 # --- PERMISSIONS ---

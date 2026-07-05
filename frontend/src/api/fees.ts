@@ -17,6 +17,8 @@ import type {
     FeeRateCreatePayload,
     FeeRateListParams,
     FeeRateUpdatePayload,
+    OfficialFeePreview,
+    OfficialFeePreviewPayload,
 } from './fees.types'
 
 interface BackendFeeRate {
@@ -58,6 +60,7 @@ interface BackendFeeDraftListItem {
     case_no?: string | null
     client_id?: string | null
     client_name?: string | null
+    draft_type?: string | null
     currency: string
     status: 'OPEN' | 'LOCKED'
     amount: string | number
@@ -131,6 +134,29 @@ interface BackendFeeDraftDetail {
     updated_at?: string
 }
 
+interface BackendOfficialFeePreview {
+    case_id: string
+    draft_type: string
+    trigger_event: string
+    source_document_id?: string | null
+    idempotency_key: string
+    currency: string
+    preview_only: boolean
+    total_gov: string | number
+    candidates: {
+        rate_id?: string | null
+        fee_code: string
+        fee_name?: string | null
+        fee_type: string
+        quantity: string | number
+        unit_price: string | number
+        amount: string | number
+        calculation_note?: string | null
+        source_doc?: string | null
+        source_status?: string | null
+    }[]
+}
+
 function mapFeeRate(input: BackendFeeRate): FeeRate {
     return {
         id: input.id,
@@ -175,6 +201,7 @@ function mapFeeDraftListItem(input: BackendFeeDraftListItem): FeeDraftListItem {
         case_no: input.case_no ?? null,
         client_id: input.client_id ?? null,
         client_name: input.client_name ?? null,
+        draft_type: input.draft_type ?? null,
         currency: input.currency,
         status: input.status,
         amount: Number(input.amount || 0),
@@ -201,6 +228,31 @@ function mapFeeDraftDetail(input: BackendFeeDraftDetail): FeeDraftDetail {
         official_template_note: input.official_template_note ?? null,
         created_at: input.created_at,
         updated_at: input.updated_at,
+    }
+}
+
+function mapOfficialFeePreview(input: BackendOfficialFeePreview): OfficialFeePreview {
+    return {
+        case_id: input.case_id,
+        draft_type: input.draft_type,
+        trigger_event: input.trigger_event,
+        source_document_id: input.source_document_id ?? null,
+        idempotency_key: input.idempotency_key,
+        currency: input.currency,
+        preview_only: input.preview_only,
+        total_gov: Number(input.total_gov || 0),
+        candidates: input.candidates.map((item) => ({
+            rate_id: item.rate_id ?? null,
+            fee_code: item.fee_code,
+            fee_name: item.fee_name ?? null,
+            fee_type: item.fee_type,
+            quantity: Number(item.quantity || 0),
+            unit_price: Number(item.unit_price || 0),
+            amount: Number(item.amount || 0),
+            calculation_note: item.calculation_note ?? null,
+            source_doc: item.source_doc ?? null,
+            source_status: item.source_status ?? null,
+        })),
     }
 }
 
@@ -410,6 +462,21 @@ export async function generateApplyFeeDraft(data: ApplyFeeDraftGeneratePayload):
         discount_rate: data.discount_rate ?? undefined,
     })
     return mapFeeDraftDetail(response.data)
+}
+
+/**
+ * Preview official fee candidates without creating a fee draft.
+ */
+export async function previewOfficialFeeCandidates(
+    data: OfficialFeePreviewPayload,
+): Promise<OfficialFeePreview> {
+    const response = await http.post<BackendOfficialFeePreview>('/fees/official-fee-preview', {
+        case_id: data.case_id,
+        trigger_event: data.trigger_event,
+        currency: data.currency || 'CNY',
+        source_document_id: data.source_document_id ?? undefined,
+    })
+    return mapOfficialFeePreview(response.data)
 }
 
 /**

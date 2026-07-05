@@ -33,6 +33,10 @@ interface BackendGrantFeeTaskListItem {
     billed?: boolean
     linked_bill_id?: string | null
     linked_bill_no?: string | null
+    trigger_rule?: string | null
+    deadline_rule?: string | null
+    fee_basis?: string | null
+    fee_node_explanation?: string | null
 }
 
 interface BackendGrantFeeTaskListResponse {
@@ -65,6 +69,10 @@ interface BackendGrantFeeTaskStateResponse {
     notice_sent: boolean
     is_overdue: boolean
     allowed_actions: string[]
+    trigger_rule?: string | null
+    deadline_rule?: string | null
+    fee_basis?: string | null
+    fee_node_explanation?: string | null
 }
 
 interface BackendGrantFeeTaskBatchInstructionResponse {
@@ -125,6 +133,10 @@ function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListIt
         billed: Boolean(input.billed),
         linked_bill_id: input.linked_bill_id || undefined,
         linked_bill_no: input.linked_bill_no || undefined,
+        trigger_rule: input.trigger_rule || '收到办理登记手续通知书/授权通知书',
+        deadline_rule: input.deadline_rule || '以办理登记手续通知书/授权通知书载明期限为准',
+        fee_basis: input.fee_basis || '授权阶段官费按授权费任务金额展示',
+        fee_node_explanation: input.fee_node_explanation || '授权费用节点：客户确认缴费后生成官费草单。',
     }
 }
 
@@ -174,6 +186,10 @@ function mapGrantFeeTaskStateResult(
         allowed_actions: Array.isArray(input.allowed_actions)
             ? input.allowed_actions.map(normalizeAction)
             : [],
+        trigger_rule: input.trigger_rule || '收到办理登记手续通知书/授权通知书',
+        deadline_rule: input.deadline_rule || '以办理登记手续通知书/授权通知书载明期限为准',
+        fee_basis: input.fee_basis || '授权阶段官费按授权费任务金额展示',
+        fee_node_explanation: input.fee_node_explanation || '授权费用节点：客户确认缴费后生成官费草单。',
     }
 }
 

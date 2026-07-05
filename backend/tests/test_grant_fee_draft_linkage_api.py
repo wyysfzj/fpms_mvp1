@@ -118,6 +118,11 @@ def _count_fee_items_for_draft(session_factory: sessionmaker, draft_id: str) -> 
         )
 
 
+def _load_fee_items_for_draft(session_factory: sessionmaker, draft_id: str) -> list[FeeItem]:
+    with session_factory() as db:
+        return list(db.execute(select(FeeItem).where(FeeItem.draft_id == draft_id)).scalars().all())
+
+
 def test_grant_fee_generate_draft_creates_fee_draft_and_items_and_marks_task_generated(
     client: TestClient,
     auth_headers: dict[str, str],
@@ -125,7 +130,12 @@ def test_grant_fee_generate_draft_creates_fee_draft_and_items_and_marks_task_gen
 ) -> None:
     client_row = _create_client(client, auth_headers)
     case = _create_case(client, auth_headers, client_id=client_row["id"])
-    task_id = _insert_task(session_factory, case_id=case["id"])
+    task_id = _insert_task(
+        session_factory,
+        case_id=case["id"],
+        gov_fee_amt=Decimal("900.00"),
+        service_fee_amt=Decimal("50.00"),
+    )
 
     resp = client.post(f"{STATE_BASE}/{task_id}{GENERATE_PATH_SUFFIX}", headers=auth_headers)
     assert resp.status_code == 200, resp.text
@@ -150,8 +160,8 @@ def test_grant_fee_generate_draft_creates_fee_draft_and_items_and_marks_task_gen
     assert data["state"] == "DRAFT_GENERATED"
     assert data["draft_generated"] is True
     assert data["currency"] == "CNY"
-    assert Decimal(str(data["amount"])) == Decimal("0")
-    assert data["item_count"] == 2
+    assert Decimal(str(data["amount"])) == Decimal("900.00")
+    assert data["item_count"] == 1
     assert data["reused"] is False
 
     with session_factory() as db:
@@ -174,8 +184,14 @@ def test_grant_fee_generate_draft_creates_fee_draft_and_items_and_marks_task_gen
     draft = drafts[0]
     assert draft.client_id == client_row["id"]
     assert draft.currency == "CNY"
-    assert draft.amount == Decimal("0")
-    assert _count_fee_items_for_draft(session_factory, draft.id) == 2
+    assert draft.amount == Decimal("900.00")
+    assert draft.total_gov == Decimal("900.00")
+    assert draft.total_service == Decimal("0.00")
+    items = _load_fee_items_for_draft(session_factory, draft.id)
+    assert len(items) == 1
+    assert items[0].fee_type == "GOV"
+    assert items[0].fee_code == "GRANT_FEE_GOV"
+    assert items[0].amount == Decimal("900.00")
 
 
 def test_grant_fee_generate_draft_is_idempotent_for_same_task(
@@ -221,6 +237,33 @@ def test_grant_fee_generate_draft_rejects_non_ready_task(
     assert resp.status_code == 400, resp.text
     body = resp.json()
     assert body["error"]["code"] == "GRANT_FEE_DRAFT_PRECONDITION_FAILED"
+
+
+def test_grant_fee_task_state_includes_deadline_preview_fields(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    case = _create_case(client, auth_headers)
+    task_id = _insert_task(session_factory, case_id=case["id"])
+
+    resp = client.get(f"{STATE_BASE}/{task_id}/state", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["task_id"] == task_id
+    assert data["trigger_rule"] == "收到办理登记手续通知书/授权通知书"
+    assert (
+        data["deadline_rule"]
+        == "以办理登记手续通知书/授权通知书载明期限为准；当前按授权费任务到期日展示"
+    )
+    assert (
+        data["fee_basis"] == "授权阶段官费按授权费任务金额展示；如无授权费率则回退授权当年年费规则"
+    )
+    assert (
+        data["fee_node_explanation"]
+        == "授权费用节点：客户确认缴费后生成官费草单，缴费登记后进入授权后年费监视。"
+    )
 
 
 def test_grant_fee_generate_draft_requires_write_permission(

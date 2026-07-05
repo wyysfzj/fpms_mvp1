@@ -30,6 +30,14 @@ from app.modules.cases.models import Case
 
 router = APIRouter()
 
+_ANNUITY_TRIGGER_RULE = "年费节点到期"
+_ANNUITY_DEADLINE_RULE = (
+    "以年费任务到期日为准；滞纳金按每超过规定缴费时间 1 个月加收当年全额年费 5% 提示"
+)
+_ANNUITY_FEE_NODE_EXPLANATION = (
+    "年费费用节点：客户指示缴费后生成官费草单，进入官费清单并登记官方缴费回执。"
+)
+
 
 class AnnuityInstructionUpdateIn(BaseModel):
     instruction: str = Field(..., min_length=1, max_length=24)
@@ -79,6 +87,15 @@ class ManualGovPaymentCreateIn(BaseModel):
 
 class PayListMarkPaidIn(BaseModel):
     paid_date: date
+
+
+def _annuity_deadline_preview_fields(year_no: int) -> dict[str, str]:
+    return {
+        "trigger_rule": _ANNUITY_TRIGGER_RULE,
+        "deadline_rule": _ANNUITY_DEADLINE_RULE,
+        "fee_basis": f"第{year_no}年度年费，按专利类型和年度阶梯费率预估",
+        "fee_node_explanation": _ANNUITY_FEE_NODE_EXPLANATION,
+    }
 
 
 @router.get("/annuity/tasks", response_model=AnnuityTaskListResponse, summary="List annuity tasks")
@@ -151,6 +168,7 @@ def get_annuity_tasks(
             "draft_generated": task.draft_generated,
             "notice_sent": task.notice_sent,
             "is_overdue": task.due_date < date.today() and task.status == "OPEN",
+            **_annuity_deadline_preview_fields(task.year_no),
         }
         for task in tasks
     ]

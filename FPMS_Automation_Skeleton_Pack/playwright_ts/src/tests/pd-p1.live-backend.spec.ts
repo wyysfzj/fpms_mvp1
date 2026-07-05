@@ -23,6 +23,38 @@ type LiveFixture = {
   letterDocumentId: string;
 };
 
+type OfficialFeePreviewResponse = {
+  case_id: string;
+  draft_type: string;
+  trigger_event: string;
+  idempotency_key: string;
+  currency: string;
+  preview_only: boolean;
+  total_gov: string | number;
+  candidates: Array<{
+    fee_code: string;
+    fee_type: string;
+    quantity: string | number;
+    amount: string | number;
+    source_doc?: string | null;
+  }>;
+};
+
+type FeeDraftDetailResponse = {
+  id: string;
+  draft_type: string;
+  total_gov: string | number;
+  total_service: string | number;
+  total_misc: string | number;
+  amount: string | number;
+};
+
+type FeeItemResponse = {
+  fee_code?: string | null;
+  fee_type?: string | null;
+  amount: string | number;
+};
+
 let fixture: LiveFixture;
 
 test.beforeAll(() => {
@@ -160,8 +192,48 @@ test("@P1-live 全scope：OA答复包文件角色、人工动作、回执硬门�
   expectNoUnexpectedRuntimeSignals(pageErrors);
 });
 
-test("@P1-live 全scope：费用联动、pay-list边界、信函交接和非范围声明", async ({ page }) => {
+test("@P1-live 全scope：费用联动、pay-list边界、信函交接和非范围声明", async ({ page, request }) => {
   const pageErrors = collectPageErrors(page);
+  const token = await login(request);
+
+  const preview = await postJson<OfficialFeePreviewResponse>(
+    request,
+    token,
+    "/fees/official-fee-preview",
+    {
+      case_id: fixture.caseId,
+      trigger_event: "FILING_ACCEPTED",
+      currency: "CNY",
+    },
+  );
+  expect(preview.case_id).toBe(fixture.caseId);
+  expect(preview.trigger_event).toBe("FILING_ACCEPTED");
+  expect(preview.preview_only).toBe(true);
+  expect(preview.idempotency_key).toBe(`${fixture.caseId}:FILING_ACCEPTED:NO_SOURCE`);
+  expect(Number(preview.total_gov)).toBe(560);
+  expect(new Set(preview.candidates.map((item) => item.fee_type))).toEqual(new Set(["GOV"]));
+  expect(new Set(preview.candidates.map((item) => item.fee_code))).toEqual(
+    new Set([
+      "CN_INV_APPLICATION_FEE",
+      "CN_PUBLICATION_PRINT_FEE",
+      "CN_SUBSTANTIVE_EXAM_FEE",
+    ]),
+  );
+
+  const draft = await getJson<FeeDraftDetailResponse>(request, token, `/fees/drafts/${fixture.feeDraftId}`);
+  expect(draft.draft_type).toBe("APPLY_FEE");
+  expect(Number(draft.total_gov)).toBe(560);
+  expect(Number(draft.total_service)).toBe(0);
+  expect(Number(draft.total_misc)).toBe(0);
+  expect(Number(draft.amount)).toBe(560);
+
+  const draftItems = await getJson<FeeItemResponse[]>(
+    request,
+    token,
+    `/fees/drafts/${fixture.feeDraftId}/items`,
+  );
+  expect(draftItems).toHaveLength(3);
+  expect(new Set(draftItems.map((item) => item.fee_type))).toEqual(new Set(["GOV"]));
 
   await page.goto(`/fees/drafts/${fixture.feeDraftId}?package_id=${fixture.filingPackageId}`, {
     waitUntil: "domcontentloaded",
@@ -177,6 +249,21 @@ test("@P1-live 全scope：费用联动、pay-list边界、信函交接和非范�
   await expect(page.getByText("旧系统 0 / 0.7 / 0.85 语义待客户确认")).not.toBeVisible();
   await expect(page.getByText("补充缴费信息模板字段待确认").first()).toBeVisible();
   await expect(page.getByText("内部 pay-list 不是官方上传 Excel").first()).toBeVisible();
+
+  await page.goto(`/cases/no/${fixture.caseNo}`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("tab", { name: "费用" }).click();
+  await expect(page.getByRole("heading", { name: "官费节点线" })).toBeVisible();
+  await expect(page.getByText("申请/受理官费候选")).toBeVisible();
+  await expect(page.getByText("候选待确认").or(page.getByText("已有费用草稿"))).toBeVisible();
+  await expect(page.getByText("候选官费合计")).toBeVisible();
+  await expect(page.getByText("¥560.00")).toBeVisible();
+  await expect(page.getByText("费用草稿状态")).toBeVisible();
+  await expect(page.getByText("已有 1 个费用草稿").first()).toBeVisible();
+  await expect(page.getByText("去重键")).toBeVisible();
+  await expect(page.getByText(`${fixture.caseId}:FILING_ACCEPTED:NO_SOURCE`)).toBeVisible();
+  await expect(page.getByText("发明申请费").first()).toBeVisible();
+  await expect(page.getByText("发明公布印刷费").first()).toBeVisible();
+  await expect(page.getByText("发明实质审查费").first()).toBeVisible();
 
   await page.goto(`/fee-management/pay-lists/${fixture.payListId}?package_id=${fixture.filingPackageId}`, {
     waitUntil: "domcontentloaded",
@@ -213,6 +300,34 @@ async function login(request: APIRequestContext): Promise<string> {
   const body = await response.text();
   expect(response.status(), body).toBe(200);
   return (JSON.parse(body) as { access_token: string }).access_token;
+}
+
+async function getJson<T>(
+  request: APIRequestContext,
+  token: string,
+  pathName: string,
+): Promise<T> {
+  const response = await request.get(`${apiBaseUrl}${pathName}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const body = await response.text();
+  expect(response.status(), body).toBe(200);
+  return JSON.parse(body) as T;
+}
+
+async function postJson<T>(
+  request: APIRequestContext,
+  token: string,
+  pathName: string,
+  data: unknown,
+): Promise<T> {
+  const response = await request.post(`${apiBaseUrl}${pathName}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data,
+  });
+  const body = await response.text();
+  expect(response.status(), body).toBe(200);
+  return JSON.parse(body) as T;
 }
 
 function collectPageErrors(page: Page): string[] {

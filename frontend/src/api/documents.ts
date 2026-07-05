@@ -19,6 +19,7 @@ import type {
     DocumentImpactPreviewResult,
     DocumentListParams,
     DocumentUpdatePayload,
+    AttachmentUploadMetadata,
     DocumentWizardAttachmentPreviewResult,
     DocumentWizardBatchCreatePayload,
     DocumentWizardBatchCreateResult,
@@ -352,9 +353,19 @@ export async function getAttachments(docId: string | number): Promise<Attachment
 /**
  * Upload an attachment to a document (multipart/form-data)
  */
-export async function uploadAttachment(docId: string | number, file: File): Promise<Attachment> {
+export async function uploadAttachment(
+    docId: string | number,
+    file: File,
+    metadata: AttachmentUploadMetadata = {}
+): Promise<Attachment> {
     const formData = new FormData()
     formData.append('file', file)
+    if (metadata.official_file_role) {
+        formData.append('official_file_role', metadata.official_file_role)
+    }
+    if (metadata.source_role_alias) {
+        formData.append('source_role_alias', metadata.source_role_alias)
+    }
     const response = await http.post<BackendAttachment>(`/documents/${docId}/attachments`, formData, {
         headers: {
             'Content-Type': 'multipart/form-data'

@@ -24,6 +24,10 @@ export interface AnnuityTask {
     draft_generated?: boolean | null
     notice_sent?: boolean | null
     is_overdue?: boolean
+    trigger_rule: string
+    deadline_rule: string
+    fee_basis: string
+    fee_node_explanation: string
 }
 
 export type AnnuityPendingMode = 'pending' | 'processed'

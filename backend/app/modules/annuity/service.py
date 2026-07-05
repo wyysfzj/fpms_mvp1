@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import uuid4
 
@@ -756,12 +757,53 @@ def _annuity_marker(task_id: int, year_no: int) -> str:
     return f"ANNUITY_TASK:{task_id};YEAR:{year_no}"
 
 
+def _money_amount(value: Any) -> Decimal:
+    if value is None or value == "":
+        return _ZERO
+    try:
+        return Decimal(str(value)).quantize(_MONEY_QUANT)
+    except (InvalidOperation, ValueError):
+        return _ZERO
+
+
+def _rate_amount_for_year(rate: FeeRate, year_no: int | None) -> Decimal:
+    default_amount = _money_amount(rate.default_amount)
+    if year_no is None or (rate.calc_mode or "").strip().upper() != "TIER":
+        return default_amount
+
+    try:
+        parsed_params = json.loads(rate.calc_params or "{}")
+    except (TypeError, ValueError):
+        return default_amount
+
+    if not isinstance(parsed_params, dict):
+        return default_amount
+
+    tiers = parsed_params.get("tiers")
+    if not isinstance(tiers, list):
+        return default_amount
+
+    for tier in tiers:
+        if not isinstance(tier, dict):
+            continue
+        try:
+            start_year = int(tier.get("from"))
+            end_year = int(tier.get("to", start_year))
+        except (TypeError, ValueError):
+            continue
+        if start_year <= year_no <= end_year:
+            return _money_amount(tier.get("amount", default_amount))
+
+    return default_amount
+
+
 def _rate_amount(
     db: Session,
     *,
     fee_type: str,
     currency: str,
     year_no: int | None = None,
+    patent_category: str | None = None,
 ) -> Decimal:
     conditions = [
         FeeRate.enabled.is_(True),
@@ -769,14 +811,35 @@ def _rate_amount(
         FeeRate.fee_type == fee_type,
         FeeRate.currency == currency,
     ]
-    rate = (
+
+    normalized_patent_category = (patent_category or "").strip() or None
+    if normalized_patent_category:
+        conditions.append(
+            or_(
+                FeeRate.patent_category == normalized_patent_category,
+                FeeRate.patent_category.is_(None),
+                FeeRate.patent_category == "",
+            )
+        )
+
+    rates = (
         db.execute(select(FeeRate).where(*conditions).order_by(FeeRate.updated_at.desc()))
         .scalars()
-        .first()
+        .all()
     )
-    if not rate or rate.default_amount is None:
-        return Decimal("0")
-    return Decimal(rate.default_amount)
+    if not rates:
+        return _ZERO
+
+    if normalized_patent_category:
+        for rate in rates:
+            if rate.patent_category == normalized_patent_category:
+                return _rate_amount_for_year(rate, year_no)
+        for rate in rates:
+            if not rate.patent_category:
+                return _rate_amount_for_year(rate, year_no)
+        return _ZERO
+
+    return _rate_amount_for_year(rates[0], year_no)
 
 
 def _draft_exists_for_target(
@@ -963,8 +1026,8 @@ def generate_fee_drafts_from_annuity_tasks(
                     status_code=409,
                 )
 
-            gov_amount = _rate_amount(db, fee_type="GOV", currency=normalized_currency)
-            service_amount = _rate_amount(db, fee_type="SERVICE", currency=normalized_currency)
+            gov_amount = _money_amount(task.gov_fee_amt)
+            service_amount = _ZERO
             total_amount = gov_amount + service_amount
             marker = _annuity_marker(task_id, year_no)
 
@@ -1001,24 +1064,6 @@ def generate_fee_drafts_from_annuity_tasks(
                     updated_by=actor_id,
                 )
             )
-            db.add(
-                FeeItem(
-                    id=str(uuid4()),
-                    draft_id=draft.id,
-                    case_id=task.case_id,
-                    fee_code="ANNUITY_SERVICE",
-                    fee_name="Annuity Service Fee",
-                    fee_type="SERVICE",
-                    year_no=year_no,
-                    quantity=Decimal("1"),
-                    unit_price=service_amount,
-                    amount=service_amount,
-                    remark=marker,
-                    created_by=actor_id,
-                    updated_by=actor_id,
-                )
-            )
-
             task.draft_generated = True
             db.commit()
             success.append(
@@ -2005,9 +2050,14 @@ def generate_annuity_tasks_for_case(
         else:
             due = date.today()
 
-        # Look up fee rates (with year_no for year-specific rates)
-        gov_amt = _rate_amount(db, fee_type="GOV", currency="CNY", year_no=year_no)
-        svc_amt = _rate_amount(db, fee_type="SERVICE", currency="CNY", year_no=year_no)
+        gov_amt = _rate_amount(
+            db,
+            fee_type="GOV",
+            currency="CNY",
+            year_no=year_no,
+            patent_category=case.patent_category,
+        )
+        svc_amt = _ZERO
 
         task = AnnuityTask(
             case_id=resolved_case_id,

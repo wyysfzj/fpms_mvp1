@@ -43,12 +43,12 @@ def _seed_applicant(session_factory) -> str:
 
 def _seed_apply_fee_rates(session_factory) -> None:
     rows = [
-        ("APPLY_BASE_GOV", "申请费", "GOV", Decimal("1000.00"), "FIXED"),
-        ("APPLY_EXCESS_CLAIM", "权利要求附加费", "GOV", Decimal("150.00"), "PER_CLAIM"),
-        ("APPLY_SERVICE", "申请服务费", "SERVICE", Decimal("500.00"), "FIXED"),
+        ("CN_INV_APPLICATION_FEE", "发明申请费", "GOV", Decimal("900.00"), "FIXED", True),
+        ("CN_EXCESS_CLAIM_FEE", "权利要求附加费", "GOV", Decimal("150.00"), "PER_CLAIM", False),
+        ("CN_PUBLICATION_PRINT_FEE", "公布印刷费", "GOV", Decimal("50.00"), "FIXED", False),
     ]
     with session_factory() as db:
-        for fee_code, fee_name, fee_type, amount, calc_mode in rows:
+        for fee_code, fee_name, fee_type, amount, calc_mode, allow_reduction in rows:
             rate = db.query(FeeRate).filter(FeeRate.fee_code == fee_code).one_or_none()
             if rate is None:
                 rate = FeeRate(id=str(uuid4()), fee_code=fee_code)
@@ -59,7 +59,7 @@ def _seed_apply_fee_rates(session_factory) -> None:
             rate.default_amount = amount
             rate.enabled = True
             rate.calc_mode = calc_mode
-            rate.allow_reduction = fee_type == "GOV"
+            rate.allow_reduction = allow_reduction
         db.commit()
 
 
@@ -82,7 +82,7 @@ def _create_case(
             "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0.15",
+            "fee_reduction": "0.85",
             "applicants": [
                 {
                     "seq": 1,
@@ -184,8 +184,8 @@ def test_payment_offset_updates_bill_and_case_receipts(
     assert bill_detail_response.status_code == 200, bill_detail_response.text
     bill_detail = bill_detail_response.json()
     assert bill_detail["status"] == "PARTIALLY_SETTLED"
-    assert bill_detail["amount"] == "695.00"
-    assert bill_detail["balance"] == "395.00"
+    assert bill_detail["amount"] == "485.00"
+    assert bill_detail["balance"] == "185.00"
 
     payment_detail_response = client.get(f"/api/v1/payments/{payment['id']}", headers=auth_headers)
     assert payment_detail_response.status_code == 200, payment_detail_response.text
@@ -207,6 +207,6 @@ def test_payment_offset_updates_bill_and_case_receipts(
     assert receipt["currency"] == "CNY"
     assert receipt["received_amt"] == "300.00"
     assert receipt["last_receipt_date"] == "2026-04-21"
-    assert Decimal(receipt["receivable_amt"]) == Decimal("695.00")
+    assert Decimal(receipt["receivable_amt"]) == Decimal("485.00")
     assert Decimal(receipt["receivable_amt"]) > Decimal(receipt["received_amt"])
     assert receipt["bills"][0]["id"] == bill["id"]

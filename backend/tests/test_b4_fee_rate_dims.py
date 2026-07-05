@@ -66,6 +66,68 @@ def test_create_fee_rate_with_dimensions(client, auth_headers):
     assert data["effective_to"] == "2026-12-31"
 
 
+def test_create_fee_rate_with_source_metadata(client, auth_headers):
+    data = _create_rate(
+        client,
+        auth_headers,
+        fee_code=_unique("CNMETA"),
+        fee_type="GOV",
+        rate_group="DOMESTIC",
+        source_doc="docs/postdemo/专利收费场景-20260626.docx",
+        source_url="http://www.tianyueip.com/product/612",
+        source_policy="国家知识产权局第594号公告",
+        source_version="2024-08-06",
+        source_status="CONFIRMED",
+    )
+
+    assert data["source_doc"] == "docs/postdemo/专利收费场景-20260626.docx"
+    assert data["source_url"] == "http://www.tianyueip.com/product/612"
+    assert data["source_policy"] == "国家知识产权局第594号公告"
+    assert data["source_version"] == "2024-08-06"
+    assert data["source_status"] == "CONFIRMED"
+
+    resp = client.get(RATE_URL, params={"fee_code": data["fee_code"]}, headers=auth_headers)
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["source_doc"] == "docs/postdemo/专利收费场景-20260626.docx"
+    assert items[0]["source_status"] == "CONFIRMED"
+
+
+def test_create_fee_rate_with_structured_category_metadata(client, auth_headers):
+    data = _create_rate(
+        client,
+        auth_headers,
+        fee_code=_unique("CNCAT"),
+        fee_type="GOV",
+        fee_domain="PATENT",
+        fee_section="专利收费-国内部分",
+        fee_category="申请费",
+        fee_subtype="发明专利",
+        reduction_scope="申请费（不包括公布印刷费、申请附加费）",
+    )
+
+    assert data["fee_domain"] == "PATENT"
+    assert data["fee_section"] == "专利收费-国内部分"
+    assert data["fee_category"] == "申请费"
+    assert data["fee_subtype"] == "发明专利"
+    assert data["reduction_scope"] == "申请费（不包括公布印刷费、申请附加费）"
+
+    resp = client.get(
+        RATE_URL,
+        params={"fee_domain": "PATENT", "fee_category": "申请费"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert any(
+        item["fee_code"] == data["fee_code"]
+        and item["fee_category"] == "申请费"
+        and item["fee_subtype"] == "发明专利"
+        for item in items
+    )
+
+
 # ---------------------------------------------------------------------------
 # T2 — Backward compatibility: create rate without new fields
 # ---------------------------------------------------------------------------
@@ -85,6 +147,11 @@ def test_create_fee_rate_without_dimensions(client, auth_headers):
     assert data["calc_params"] is None
     assert data["effective_from"] is None
     assert data["effective_to"] is None
+    assert data["fee_domain"] is None
+    assert data["fee_section"] is None
+    assert data["fee_category"] is None
+    assert data["fee_subtype"] is None
+    assert data["reduction_scope"] is None
 
     # calc_mode: service passes None when not provided; DB server_default
     # is 'FIXED' but explicit None in constructor overrides it.
@@ -125,6 +192,55 @@ def test_update_fee_rate_dimensions(client, auth_headers):
     assert data["allow_reduction"] is False
     assert data["effective_from"] == "2026-06-01"
     assert data["effective_to"] == "2027-05-31"
+
+
+def test_update_fee_rate_source_metadata(client, auth_headers):
+    created = _create_rate(client, auth_headers)
+    rate_id = created["id"]
+
+    resp = client.put(
+        f"{RATE_URL}/{rate_id}",
+        json={
+            "source_doc": "客户确认Excel-20260705.xlsx",
+            "source_url": "https://www.cnipa.gov.cn/",
+            "source_policy": "客户确认版本",
+            "source_version": "2026-P1",
+            "source_status": "DRAFT",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, f"Update failed: {resp.text}"
+    data = resp.json()
+
+    assert data["source_doc"] == "客户确认Excel-20260705.xlsx"
+    assert data["source_url"] == "https://www.cnipa.gov.cn/"
+    assert data["source_policy"] == "客户确认版本"
+    assert data["source_version"] == "2026-P1"
+    assert data["source_status"] == "DRAFT"
+
+
+def test_update_fee_rate_structured_category_metadata(client, auth_headers):
+    created = _create_rate(client, auth_headers)
+
+    resp = client.put(
+        f"{RATE_URL}/{created['id']}",
+        json={
+            "fee_domain": "PATENT",
+            "fee_section": "专利收费-PCT申请收费",
+            "fee_category": "PCT 国际阶段费用",
+            "fee_subtype": "检索费",
+            "reduction_scope": "不可费减",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, f"Update failed: {resp.text}"
+    data = resp.json()
+
+    assert data["fee_domain"] == "PATENT"
+    assert data["fee_section"] == "专利收费-PCT申请收费"
+    assert data["fee_category"] == "PCT 国际阶段费用"
+    assert data["fee_subtype"] == "检索费"
+    assert data["reduction_scope"] == "不可费减"
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +437,7 @@ def test_calc_fee_amount_none_default_amount():
 
 
 # ---------------------------------------------------------------------------
-# T11 — FeeRateOut schema includes all 9 new fields
+# T11 — FeeRateOut schema includes dimension and source metadata fields
 # ---------------------------------------------------------------------------
 def test_fee_rate_out_schema_has_new_fields():
     from app.modules.fees.schemas import FeeRateOut
@@ -336,6 +452,16 @@ def test_fee_rate_out_schema_has_new_fields():
         "allow_reduction",
         "effective_from",
         "effective_to",
+        "source_doc",
+        "source_url",
+        "source_policy",
+        "source_version",
+        "source_status",
+        "fee_domain",
+        "fee_section",
+        "fee_category",
+        "fee_subtype",
+        "reduction_scope",
     }
     actual_fields = set(FeeRateOut.model_fields.keys())
     missing = expected_fields - actual_fields

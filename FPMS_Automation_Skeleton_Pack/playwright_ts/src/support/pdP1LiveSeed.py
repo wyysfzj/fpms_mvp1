@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import sys
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 BACKEND_ROOT = REPO_ROOT / "backend"
@@ -26,7 +26,7 @@ from app.modules.documents.models import (  # noqa: E402
     LetterHandoff,
     LetterHandoffAttachment,
 )
-from app.modules.fees.models import FeeDraft, FeeItem, OfficialFeeChecklist  # noqa: E402
+from app.modules.fees.models import FeeDraft, FeeItem, FeeRate, OfficialFeeChecklist  # noqa: E402
 from app.modules.fees.models import T_GrantFeeTask  # noqa: E402
 from app.modules.masterdata.applicants.models import Applicant  # noqa: E402
 from app.modules.masterdata.clients.models import Client, ClientContact  # noqa: E402
@@ -56,8 +56,37 @@ FILING_PACKAGE_ID = "FILING-PD-P1-LIVE"
 OA_PACKAGE_ID = "OA-PD-P1-LIVE"
 
 FEE_DRAFT_ID = "FD-PD-P1-LIVE"
-FEE_ITEM_ID = "FI-PD-P1-LIVE-GOV"
+FEE_ITEM_ID = "FI-PD-P1-LIVE-GOV-APP"
+FEE_PUBLICATION_ITEM_ID = "FI-PD-P1-LIVE-GOV-PUB"
+FEE_EXAM_ITEM_ID = "FI-PD-P1-LIVE-GOV-EXAM"
 PAY_LIST_ID = 860612
+
+FEE_RATE_ROWS = [
+    (
+        "RATE-PD-P1-LIVE-INV-APP",
+        "CN_INV_APPLICATION_FEE",
+        "发明申请费",
+        Decimal("900.00"),
+        "FIXED",
+        True,
+    ),
+    (
+        "RATE-PD-P1-LIVE-PUB-PRINT",
+        "CN_PUBLICATION_PRINT_FEE",
+        "发明公布印刷费",
+        Decimal("50.00"),
+        "FIXED",
+        False,
+    ),
+    (
+        "RATE-PD-P1-LIVE-SUB-EXAM",
+        "CN_SUBSTANTIVE_EXAM_FEE",
+        "发明实质审查费",
+        Decimal("2500.00"),
+        "FIXED",
+        True,
+    ),
+]
 
 FORMAT_DOC_TEMPLATE_CODE = "FORMAT_LETTER_OA1"
 FORMAT_TEMPLATE_ID = "TPL-PD-P1-LIVE-FMT"
@@ -84,6 +113,7 @@ def main() -> None:
 
     db = SessionLocal()
     try:
+        ensure_live_fee_rate_schema(db)
         clear_fixture(db)
         seed_fixture(db)
         db.commit()
@@ -122,6 +152,27 @@ def assert_safe_demo_environment() -> None:
         )
     if not database_url.startswith("sqlite"):
         raise RuntimeError("P1 demo seed is blocked for non-SQLite DATABASE_URL.")
+
+
+def ensure_live_fee_rate_schema(db) -> None:
+    """Patch old local SQLite demo DBs that predate fee-rate source metadata."""
+
+    existing_columns = {
+        row[1] for row in db.execute(text("PRAGMA table_info(t_fee_rate)")).all()
+    }
+    needed_columns = {
+        "source_doc": "VARCHAR(256)",
+        "source_url": "VARCHAR(512)",
+        "source_policy": "VARCHAR(256)",
+        "source_version": "VARCHAR(64)",
+        "source_status": "VARCHAR(32)",
+    }
+    for column_name, column_type in needed_columns.items():
+        if column_name not in existing_columns:
+            db.execute(
+                text(f"ALTER TABLE t_fee_rate ADD COLUMN {column_name} {column_type}")
+            )
+    db.commit()
 
 
 def clear_fixture(db) -> None:
@@ -861,6 +912,7 @@ def seed_oa_work_package(db) -> None:
 
 
 def seed_fees(db) -> None:
+    rates_by_code = seed_fee_rates(db)
     db.add(
         FeeDraft(
             id=FEE_DRAFT_ID,
@@ -869,10 +921,10 @@ def seed_fees(db) -> None:
             draft_type="APPLY_FEE",
             currency="CNY",
             status="OPEN",
-            total_gov=Decimal("950.00"),
-            total_service=Decimal("3000.00"),
+            total_gov=Decimal("560.00"),
+            total_service=Decimal("0.00"),
             total_misc=Decimal("0.00"),
-            amount=Decimal("3950.00"),
+            amount=Decimal("560.00"),
             official_fee_reduction_note="客户已确认旧系统数值为减免比例，系统转换为官方应缴比例。",
             official_template_status="UNCONFIRMED",
             official_template_note="补充缴费信息模板字段待确认",
@@ -883,13 +935,44 @@ def seed_fees(db) -> None:
             id=FEE_ITEM_ID,
             draft_id=FEE_DRAFT_ID,
             case_id=CASE_ID,
-            fee_code="APPLY_FEE",
-            fee_name="申请费",
+            rate_id=rates_by_code["CN_INV_APPLICATION_FEE"].id,
+            fee_code="CN_INV_APPLICATION_FEE",
+            fee_name="发明申请费",
             fee_type="GOV",
             quantity=Decimal("1"),
-            unit_price=Decimal("950.00"),
-            amount=Decimal("950.00"),
-            remark="申请费",
+            unit_price=Decimal("900.00"),
+            amount=Decimal("135.00"),
+            remark="申请费，按客户确认费减比例 0.85 计算",
+        )
+    )
+    db.add(
+        FeeItem(
+            id=FEE_PUBLICATION_ITEM_ID,
+            draft_id=FEE_DRAFT_ID,
+            case_id=CASE_ID,
+            rate_id=rates_by_code["CN_PUBLICATION_PRINT_FEE"].id,
+            fee_code="CN_PUBLICATION_PRINT_FEE",
+            fee_name="发明公布印刷费",
+            fee_type="GOV",
+            quantity=Decimal("1"),
+            unit_price=Decimal("50.00"),
+            amount=Decimal("50.00"),
+            remark="公布印刷费不适用费减",
+        )
+    )
+    db.add(
+        FeeItem(
+            id=FEE_EXAM_ITEM_ID,
+            draft_id=FEE_DRAFT_ID,
+            case_id=CASE_ID,
+            rate_id=rates_by_code["CN_SUBSTANTIVE_EXAM_FEE"].id,
+            fee_code="CN_SUBSTANTIVE_EXAM_FEE",
+            fee_name="发明实质审查费",
+            fee_type="GOV",
+            quantity=Decimal("1"),
+            unit_price=Decimal("2500.00"),
+            amount=Decimal("375.00"),
+            remark="实质审查费，按客户确认费减比例 0.85 计算",
         )
     )
     db.add(
@@ -900,7 +983,7 @@ def seed_fees(db) -> None:
             status="EXPORTED",
             currency="CNY",
             planned_pay_date=date(2026, 6, 5),
-            total_amount=Decimal("950.00"),
+            total_amount=Decimal("560.00"),
             remark="补充缴费信息模板字段待确认；内部清单不等同官方 Excel。",
             official_upload_template_status="UNCONFIRMED",
             official_upload_template_name="补充缴费信息模板",
@@ -916,7 +999,7 @@ def seed_fees(db) -> None:
             fee_item_id=FEE_ITEM_ID,
             status="PENDING",
             currency="CNY",
-            paid_amount=Decimal("950.00"),
+            paid_amount=Decimal("560.00"),
             remark="人工官方缴费后登记",
         )
     )
@@ -944,6 +1027,51 @@ def seed_fees(db) -> None:
             sort_order=20,
         )
     )
+
+
+def seed_fee_rates(db) -> dict[str, FeeRate]:
+    rates_by_code: dict[str, FeeRate] = {}
+    for (
+        rate_id,
+        fee_code,
+        fee_name,
+        amount,
+        calc_mode,
+        allow_reduction,
+    ) in FEE_RATE_ROWS:
+        rate = (
+            db.execute(
+                select(FeeRate).where(
+                    FeeRate.fee_code == fee_code,
+                    FeeRate.fee_type == "GOV",
+                    FeeRate.currency == "CNY",
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if rate is None:
+            rate = FeeRate(id=rate_id, fee_code=fee_code)
+            db.add(rate)
+        rate.fee_name = fee_name
+        rate.fee_type = "GOV"
+        rate.currency = "CNY"
+        rate.default_amount = amount
+        rate.enabled = True
+        rate.rate_group = "DOMESTIC"
+        rate.country_code = "CN"
+        rate.case_type = "NORMAL"
+        rate.patent_category = "INV"
+        rate.calc_mode = calc_mode
+        rate.allow_reduction = allow_reduction
+        rate.source_doc = "docs/postdemo/专利收费场景-20260626.docx"
+        rate.source_url = "http://www.tianyueip.com/product/612"
+        rate.source_policy = "客户补充收费场景与客户官网费用清单"
+        rate.source_version = "2026-07-05-postdemo"
+        rate.source_status = "CONFIRMED"
+        rates_by_code[fee_code] = rate
+    db.flush()
+    return rates_by_code
 
 
 def seed_task(db) -> None:

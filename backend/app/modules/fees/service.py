@@ -24,6 +24,7 @@ from app.modules.fees.schemas import (
     FeeItemUpdateIn,
     FeeRateCreateIn,
     FeeRateUpdateIn,
+    OfficialFeePreviewIn,
 )
 from app.modules.masterdata.clients.models import Client
 
@@ -38,14 +39,24 @@ _CONSULTING_MODES = {"FIXED", "HOURLY", "HYBRID"}
 _MONEY_QUANT = Decimal("0.01")
 _QTY_QUANT = Decimal("0.0001")
 _APPLY_FEE_DRAFT_TYPE = "APPLY_FEE"
-_APPLY_FEE_BASE_GOV_CODE = "APPLY_BASE_GOV"
-_APPLY_FEE_EXCESS_CLAIM_CODE = "APPLY_EXCESS_CLAIM"
-_APPLY_FEE_SERVICE_CODE = "APPLY_SERVICE"
-_APPLY_FEE_REQUIRED_CODES = (
-    _APPLY_FEE_BASE_GOV_CODE,
-    _APPLY_FEE_EXCESS_CLAIM_CODE,
-    _APPLY_FEE_SERVICE_CODE,
-)
+_APPLY_FEE_BASE_GOV_CODES_BY_PATENT_CATEGORY = {
+    "INV": "CN_INV_APPLICATION_FEE",
+    "UM": "CN_UM_APPLICATION_FEE",
+    "DES": "CN_DES_APPLICATION_FEE",
+}
+_APPLY_FEE_EXCESS_CLAIM_CODE = "CN_EXCESS_CLAIM_FEE"
+_APPLY_FEE_PUBLICATION_PRINT_CODE = "CN_PUBLICATION_PRINT_FEE"
+_APPLY_FEE_SUBSTANTIVE_EXAM_CODE = "CN_SUBSTANTIVE_EXAM_FEE"
+_FILING_ACCEPTED_TRIGGER_RULE = "提交申请/收到受理通知"
+_FILING_ACCEPTED_DEADLINE_RULE = "申请日/受理通知起 2 个月"
+_REEXAM_FEE_DRAFT_TYPE = "REEXAM_FEE"
+_REEXAM_FEE_CODES_BY_PATENT_CATEGORY = {
+    "INV": "CN_REEXAM_FEE_INV",
+    "UM": "CN_REEXAM_FEE_UM",
+    "DES": "CN_REEXAM_FEE_DES",
+}
+_REEXAM_REQUESTED_TRIGGER_RULE = "收到驳回决定且决定复审"
+_REEXAM_REQUESTED_DEADLINE_RULE = "驳回决定起 3 个月"
 
 
 def _normalize_optional_text(value: str | None) -> str | None:
@@ -617,6 +628,15 @@ def _normalize_ratio(value: Decimal | str | None, *, default: Decimal) -> Decima
     return ratio
 
 
+def _official_payable_ratio_from_customer_reduction(
+    value: Decimal | str | None,
+) -> Decimal:
+    reduction_ratio = _normalize_ratio(value, default=Decimal("0"))
+    if reduction_ratio == Decimal("0"):
+        return Decimal("1")
+    return Decimal("1") - reduction_ratio
+
+
 def _enabled_fee_rates_by_code(
     db: Session, *, fee_codes: tuple[str, ...], currency: str
 ) -> dict[str, FeeRate]:
@@ -624,6 +644,7 @@ def _enabled_fee_rates_by_code(
         db.execute(
             select(FeeRate).where(
                 FeeRate.fee_code.in_(fee_codes),
+                FeeRate.fee_type == FeeType.GOV.value,
                 FeeRate.currency == currency,
                 FeeRate.enabled.is_(True),
             )
@@ -638,11 +659,11 @@ def _assert_apply_fee_supported_case(case: Case) -> None:
     if (
         case.case_type != "NORMAL"
         or case.flow_dir != "CN_DOMESTIC"
-        or case.patent_category != "INV"
+        or case.patent_category not in _APPLY_FEE_BASE_GOV_CODES_BY_PATENT_CATEGORY
     ):
         raise_business_error(
             "APPLY_FEE_UNSUPPORTED_CASE",
-            "Apply fee draft generation only supports domestic invention cases",
+            "Apply fee draft generation only supports domestic application cases",
             details={
                 "case_id": case.id,
                 "case_type": case.case_type,
@@ -668,6 +689,116 @@ def _existing_open_apply_fee_draft(db: Session, *, case_id: str, currency: str) 
         .scalars()
         .first()
     )
+
+
+def _assert_reexam_fee_supported_case(case: Case) -> None:
+    if (
+        case.case_type != "NORMAL"
+        or case.flow_dir != "CN_DOMESTIC"
+        or case.patent_category not in _REEXAM_FEE_CODES_BY_PATENT_CATEGORY
+    ):
+        raise_business_error(
+            "REEXAM_FEE_UNSUPPORTED_CASE",
+            "Reexamination fee preview supports domestic normal patent cases only",
+            details={
+                "case_type": case.case_type,
+                "flow_dir": case.flow_dir,
+                "patent_category": case.patent_category,
+            },
+            status_code=400,
+        )
+
+
+def _apply_fee_required_rate_codes(case: Case) -> tuple[str, ...]:
+    rate_codes = [
+        _APPLY_FEE_BASE_GOV_CODES_BY_PATENT_CATEGORY[str(case.patent_category)],
+    ]
+
+    claim_count = Decimal(case.claim_count or 0)
+    if claim_count > Decimal("10"):
+        rate_codes.append(_APPLY_FEE_EXCESS_CLAIM_CODE)
+
+    if case.patent_category == "INV":
+        rate_codes.append(_APPLY_FEE_PUBLICATION_PRINT_CODE)
+        if case.has_exam_request:
+            rate_codes.append(_APPLY_FEE_SUBSTANTIVE_EXAM_CODE)
+
+    return tuple(rate_codes)
+
+
+def _official_amount(rate: FeeRate, *, quantity: Decimal, payable_ratio: Decimal) -> Decimal:
+    unit_price = Decimal(rate.default_amount or 0)
+    amount = unit_price * quantity
+    if rate.allow_reduction:
+        amount *= payable_ratio
+    return _money(amount)
+
+
+def _build_apply_fee_item_specs(
+    case: Case, *, rates_by_code: dict[str, FeeRate]
+) -> list[tuple[FeeRate, Decimal, Decimal, str]]:
+    fee_reduction_ratio = _official_payable_ratio_from_customer_reduction(case.fee_reduction)
+    claim_count = Decimal(case.claim_count or 0)
+    excess_claim_count = max(claim_count - Decimal("10"), Decimal("0"))
+
+    item_specs: list[tuple[FeeRate, Decimal, Decimal, str]] = []
+    base_rate = rates_by_code[
+        _APPLY_FEE_BASE_GOV_CODES_BY_PATENT_CATEGORY[str(case.patent_category)]
+    ]
+    item_specs.append(
+        (
+            base_rate,
+            Decimal("1"),
+            _official_amount(base_rate, quantity=Decimal("1"), payable_ratio=fee_reduction_ratio),
+            "application official fee",
+        )
+    )
+
+    if excess_claim_count > 0:
+        excess_rate = rates_by_code[_APPLY_FEE_EXCESS_CLAIM_CODE]
+        item_specs.append(
+            (
+                excess_rate,
+                excess_claim_count,
+                _official_amount(
+                    excess_rate,
+                    quantity=excess_claim_count,
+                    payable_ratio=fee_reduction_ratio,
+                ),
+                "excess claim official fee",
+            )
+        )
+
+    if case.patent_category == "INV":
+        publication_rate = rates_by_code[_APPLY_FEE_PUBLICATION_PRINT_CODE]
+        item_specs.append(
+            (
+                publication_rate,
+                Decimal("1"),
+                _official_amount(
+                    publication_rate,
+                    quantity=Decimal("1"),
+                    payable_ratio=fee_reduction_ratio,
+                ),
+                "publication printing official fee",
+            )
+        )
+        if case.has_exam_request:
+            exam_rate = rates_by_code[_APPLY_FEE_SUBSTANTIVE_EXAM_CODE]
+            item_specs.append(
+                (
+                    exam_rate,
+                    Decimal("1"),
+                    _official_amount(
+                        exam_rate,
+                        quantity=Decimal("1"),
+                        payable_ratio=fee_reduction_ratio,
+                    ),
+                    "substantive exam official fee",
+                )
+            )
+
+    return item_specs
 
 
 def _add_apply_fee_item(
@@ -713,13 +844,14 @@ def generate_apply_fee_draft(
     if existing:
         return existing, False
 
+    required_fee_codes = _apply_fee_required_rate_codes(case)
     rates_by_code = _enabled_fee_rates_by_code(
         db,
-        fee_codes=_APPLY_FEE_REQUIRED_CODES,
+        fee_codes=required_fee_codes,
         currency=currency,
     )
     missing_fee_codes = [
-        fee_code for fee_code in _APPLY_FEE_REQUIRED_CODES if fee_code not in rates_by_code
+        fee_code for fee_code in required_fee_codes if fee_code not in rates_by_code
     ]
     if missing_fee_codes:
         raise_business_error(
@@ -729,24 +861,8 @@ def generate_apply_fee_draft(
             status_code=409,
         )
 
-    fee_reduction_ratio = _normalize_ratio(case.fee_reduction, default=Decimal("1"))
-    discount_ratio = _normalize_ratio(
-        data.discount_rate or case.discount_rate, default=Decimal("0")
-    )
-    claim_count = Decimal(case.claim_count or 0)
-    excess_claim_count = max(claim_count - Decimal("10"), Decimal("0"))
-
-    base_rate = rates_by_code[_APPLY_FEE_BASE_GOV_CODE]
-    excess_rate = rates_by_code[_APPLY_FEE_EXCESS_CLAIM_CODE]
-    service_rate = rates_by_code[_APPLY_FEE_SERVICE_CODE]
-
-    base_unit = Decimal(base_rate.default_amount or 0)
-    excess_unit = Decimal(excess_rate.default_amount or 0)
-    service_unit = Decimal(service_rate.default_amount or 0)
-
-    base_amount = _money(base_unit * fee_reduction_ratio)
-    excess_amount = _money(excess_unit * excess_claim_count * fee_reduction_ratio)
-    service_amount = _money(service_unit * (Decimal("1") - discount_ratio))
+    item_specs = _build_apply_fee_item_specs(case, rates_by_code=rates_by_code)
+    total_gov = sum((amount for _rate, _quantity, amount, _remark in item_specs), Decimal("0"))
 
     draft = FeeDraft(
         id=str(uuid4()),
@@ -755,51 +871,136 @@ def generate_apply_fee_draft(
         draft_type=_APPLY_FEE_DRAFT_TYPE,
         currency=currency,
         status=FeeDraftStatus.OPEN.value,
-        total_gov=base_amount + excess_amount,
-        total_service=service_amount,
+        total_gov=total_gov,
+        total_service=Decimal("0"),
         total_misc=Decimal("0"),
-        amount=base_amount + excess_amount + service_amount,
+        amount=total_gov,
         created_by=actor_id,
         updated_by=actor_id,
     )
     db.add(draft)
     db.flush()
 
-    _add_apply_fee_item(
-        db,
-        draft=draft,
-        rate=base_rate,
-        quantity=Decimal("1"),
-        unit_price=base_unit,
-        amount=base_amount,
-        remark="apply fee base official fee",
-        actor_id=actor_id,
-    )
-    if excess_claim_count > 0:
+    for rate, quantity, amount, remark in item_specs:
+        unit_price = Decimal(rate.default_amount or 0)
         _add_apply_fee_item(
             db,
             draft=draft,
-            rate=excess_rate,
-            quantity=excess_claim_count,
-            unit_price=excess_unit,
-            amount=excess_amount,
-            remark="apply fee excess claim fee",
+            rate=rate,
+            quantity=quantity,
+            unit_price=unit_price,
+            amount=amount,
+            remark=remark,
             actor_id=actor_id,
         )
-    _add_apply_fee_item(
-        db,
-        draft=draft,
-        rate=service_rate,
-        quantity=Decimal("1"),
-        unit_price=service_unit,
-        amount=service_amount,
-        remark="apply fee service fee",
-        actor_id=actor_id,
-    )
 
     db.commit()
     db.refresh(draft)
     return draft, True
+
+
+def preview_official_fee_candidates(db: Session, *, data: OfficialFeePreviewIn) -> dict[str, Any]:
+    trigger_event = (data.trigger_event or "").strip().upper()
+    supported_triggers = {"FILING_ACCEPTED", "REEXAM_REQUESTED"}
+    if trigger_event not in supported_triggers:
+        raise_business_error(
+            "OFFICIAL_FEE_PREVIEW_TRIGGER_UNSUPPORTED",
+            "Official fee preview trigger is not supported",
+            details={"trigger_event": data.trigger_event},
+            status_code=400,
+        )
+
+    case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
+    if not case:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    currency = (data.currency or "CNY").strip().upper()
+    if trigger_event == "FILING_ACCEPTED":
+        _assert_apply_fee_supported_case(case)
+        required_fee_codes = _apply_fee_required_rate_codes(case)
+        draft_type = _APPLY_FEE_DRAFT_TYPE
+    else:
+        _assert_reexam_fee_supported_case(case)
+        required_fee_codes = (_REEXAM_FEE_CODES_BY_PATENT_CATEGORY[str(case.patent_category)],)
+        draft_type = _REEXAM_FEE_DRAFT_TYPE
+
+    rates_by_code = _enabled_fee_rates_by_code(
+        db,
+        fee_codes=required_fee_codes,
+        currency=currency,
+    )
+    missing_fee_codes = [
+        fee_code for fee_code in required_fee_codes if fee_code not in rates_by_code
+    ]
+    if missing_fee_codes:
+        raise_business_error(
+            "OFFICIAL_FEE_PREVIEW_RATE_MISSING",
+            "Required official fee preview rates are missing",
+            details={"missing_fee_codes": missing_fee_codes, "currency": currency},
+            status_code=409,
+        )
+
+    reduction_ratio = _normalize_ratio(case.fee_reduction, default=Decimal("0"))
+    payable_ratio = _official_payable_ratio_from_customer_reduction(case.fee_reduction)
+    if trigger_event == "FILING_ACCEPTED":
+        item_specs = _build_apply_fee_item_specs(case, rates_by_code=rates_by_code)
+        trigger_rule = _FILING_ACCEPTED_TRIGGER_RULE
+        deadline_rule = _FILING_ACCEPTED_DEADLINE_RULE
+    else:
+        reexam_rate = rates_by_code[required_fee_codes[0]]
+        item_specs = [
+            (
+                reexam_rate,
+                Decimal("1"),
+                _official_amount(
+                    reexam_rate,
+                    quantity=Decimal("1"),
+                    payable_ratio=payable_ratio,
+                ),
+                "reexamination official fee",
+            )
+        ]
+        trigger_rule = _REEXAM_REQUESTED_TRIGGER_RULE
+        deadline_rule = _REEXAM_REQUESTED_DEADLINE_RULE
+
+    candidates = [
+        {
+            "rate_id": rate.id,
+            "fee_code": rate.fee_code,
+            "fee_name": rate.fee_name,
+            "fee_type": rate.fee_type,
+            "quantity": quantity.quantize(_QTY_QUANT),
+            "unit_price": _money(Decimal(rate.default_amount or 0)),
+            "amount": _money(amount),
+            "calculation_note": remark,
+            "source_doc": rate.source_doc,
+            "source_status": rate.source_status,
+            "fee_category": rate.fee_category,
+            "fee_subtype": rate.fee_subtype,
+            "trigger_rule": trigger_rule,
+            "deadline_rule": deadline_rule,
+            "reduction_scope": rate.reduction_scope,
+            "source_document_id": data.source_document_id,
+            "amount_before_reduction": _money(Decimal(rate.default_amount or 0) * quantity),
+            "reduction_ratio": reduction_ratio if rate.allow_reduction else Decimal("0"),
+            "payable_ratio": payable_ratio if rate.allow_reduction else Decimal("1"),
+        }
+        for rate, quantity, amount, remark in item_specs
+    ]
+    total_gov = sum((amount for _rate, _quantity, amount, _remark in item_specs), Decimal("0"))
+    source_key = data.source_document_id or "NO_SOURCE"
+
+    return {
+        "case_id": case.id,
+        "draft_type": draft_type,
+        "trigger_event": trigger_event,
+        "source_document_id": data.source_document_id,
+        "idempotency_key": f"{case.id}:{trigger_event}:{source_key}",
+        "currency": currency,
+        "preview_only": True,
+        "total_gov": _money(total_gov),
+        "candidates": candidates,
+    }
 
 
 def update_fee_draft(
@@ -1014,6 +1215,10 @@ def list_fee_rates(
     country_code = filters.get("country_code")
     case_type = filters.get("case_type")
     patent_category = filters.get("patent_category")
+    fee_domain = filters.get("fee_domain")
+    fee_section = filters.get("fee_section")
+    fee_category = filters.get("fee_category")
+    fee_subtype = filters.get("fee_subtype")
     calc_mode = filters.get("calc_mode")
 
     if rate_group:
@@ -1024,6 +1229,14 @@ def list_fee_rates(
         stmt = stmt.where(FeeRate.case_type == case_type)
     if patent_category:
         stmt = stmt.where(FeeRate.patent_category == patent_category)
+    if fee_domain:
+        stmt = stmt.where(FeeRate.fee_domain == fee_domain)
+    if fee_section:
+        stmt = stmt.where(FeeRate.fee_section == fee_section)
+    if fee_category:
+        stmt = stmt.where(FeeRate.fee_category == fee_category)
+    if fee_subtype:
+        stmt = stmt.where(FeeRate.fee_subtype == fee_subtype)
     if calc_mode:
         stmt = stmt.where(FeeRate.calc_mode == calc_mode)
 
@@ -1049,11 +1262,21 @@ def create_fee_rate(db: Session, *, data: FeeRateCreateIn, actor_id: str | None)
         country_code=data.country_code,
         case_type=data.case_type,
         patent_category=data.patent_category,
+        fee_domain=data.fee_domain,
+        fee_section=data.fee_section,
+        fee_category=data.fee_category,
+        fee_subtype=data.fee_subtype,
+        reduction_scope=data.reduction_scope,
         calc_mode=data.calc_mode.value if data.calc_mode else None,
         calc_params=data.calc_params,
         allow_reduction=data.allow_reduction,
         effective_from=data.effective_from,
         effective_to=data.effective_to,
+        source_doc=data.source_doc,
+        source_url=data.source_url,
+        source_policy=data.source_policy,
+        source_version=data.source_version,
+        source_status=data.source_status,
     )
     db.add(rate)
     db.commit()

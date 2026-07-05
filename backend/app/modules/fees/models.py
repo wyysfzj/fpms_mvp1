@@ -102,6 +102,11 @@ class FeeRate(UUIDPrimaryKeyMixin, AuditMixin, Base):
     country_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     case_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     patent_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    fee_domain: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    fee_section: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fee_category: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fee_subtype: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    reduction_scope: Mapped[str | None] = mapped_column(String(256), nullable=True)
     calc_mode: Mapped[str | None] = mapped_column(
         String(16), nullable=True, server_default=text("'FIXED'")
     )
@@ -111,6 +116,11 @@ class FeeRate(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
     effective_from: Mapped[date | None] = mapped_column(Date, nullable=True)
     effective_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_doc: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_policy: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class T_GrantFeeTask(Base):

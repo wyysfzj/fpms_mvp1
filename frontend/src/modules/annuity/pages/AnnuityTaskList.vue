@@ -181,6 +181,14 @@
             {{ formatDate(row.due_date) }}
           </template>
         </el-table-column>
+        <el-table-column label="期限依据" min-width="280">
+          <template #default="{ row }">
+            <div class="rule-cell">
+              <span class="rule-main">{{ row.deadline_rule }}</span>
+              <span class="rule-sub">{{ row.fee_basis }}</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="任务状态" width="120">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">
@@ -715,6 +723,24 @@ onMounted(() => {
 
 .page-error {
   outline: none;
+}
+
+.rule-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.35;
+}
+
+.rule-main {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rule-sub {
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 :deep(.el-button:focus-visible),

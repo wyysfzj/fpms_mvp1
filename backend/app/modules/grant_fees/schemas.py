@@ -36,6 +36,10 @@ class GrantFeeTaskStateOut(BaseModel):
     notice_sent: bool
     is_overdue: bool
     allowed_actions: list[str] = Field(default_factory=list)
+    trigger_rule: str
+    deadline_rule: str
+    fee_basis: str
+    fee_node_explanation: str
 
 
 class GrantFeeTaskListItemResponse(BaseModel):
@@ -57,6 +61,10 @@ class GrantFeeTaskListItemResponse(BaseModel):
     billed: bool = False
     linked_bill_id: str | None = None
     linked_bill_no: str | None = None
+    trigger_rule: str
+    deadline_rule: str
+    fee_basis: str
+    fee_node_explanation: str
 
 
 class GrantFeeTaskListResponse(BaseModel):

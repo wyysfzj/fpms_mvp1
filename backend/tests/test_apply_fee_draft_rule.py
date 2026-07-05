@@ -41,16 +41,19 @@ def _seed_applicant(session_factory) -> str:
     return applicant_id
 
 
-def _seed_apply_fee_rates(session_factory, *, include_service: bool = True) -> None:
+def _seed_apply_fee_rates(session_factory, *, include_exam: bool = True) -> None:
     rows = [
-        ("APPLY_BASE_GOV", "申请费", "GOV", Decimal("1000.00"), "FIXED"),
-        ("APPLY_EXCESS_CLAIM", "权利要求附加费", "GOV", Decimal("150.00"), "PER_CLAIM"),
+        ("CN_INV_APPLICATION_FEE", "发明申请费", "GOV", Decimal("900.00"), "FIXED", True),
+        ("CN_EXCESS_CLAIM_FEE", "权利要求附加费", "GOV", Decimal("150.00"), "PER_CLAIM", False),
+        ("CN_PUBLICATION_PRINT_FEE", "公布印刷费", "GOV", Decimal("50.00"), "FIXED", False),
     ]
-    if include_service:
-        rows.append(("APPLY_SERVICE", "申请服务费", "SERVICE", Decimal("500.00"), "FIXED"))
+    if include_exam:
+        rows.append(
+            ("CN_SUBSTANTIVE_EXAM_FEE", "发明实审费", "GOV", Decimal("2500.00"), "FIXED", True)
+        )
 
     with session_factory() as db:
-        for fee_code, fee_name, fee_type, amount, calc_mode in rows:
+        for fee_code, fee_name, fee_type, amount, calc_mode, allow_reduction in rows:
             existing = db.query(FeeRate).filter(FeeRate.fee_code == fee_code).one_or_none()
             if existing is None:
                 existing = FeeRate(id=str(uuid4()), fee_code=fee_code)
@@ -61,13 +64,15 @@ def _seed_apply_fee_rates(session_factory, *, include_service: bool = True) -> N
             existing.default_amount = amount
             existing.enabled = True
             existing.calc_mode = calc_mode
-            existing.allow_reduction = fee_type == "GOV"
-        if not include_service:
-            service_rate = (
-                db.query(FeeRate).filter(FeeRate.fee_code == "APPLY_SERVICE").one_or_none()
+            existing.allow_reduction = allow_reduction
+        if not include_exam:
+            exam_rate = (
+                db.query(FeeRate)
+                .filter(FeeRate.fee_code == "CN_SUBSTANTIVE_EXAM_FEE")
+                .one_or_none()
             )
-            if service_rate is not None:
-                service_rate.enabled = False
+            if exam_rate is not None:
+                exam_rate.enabled = False
         db.commit()
 
 
@@ -90,7 +95,8 @@ def _create_case(
             "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0.15",
+            "has_exam_request": True,
+            "fee_reduction": "0.85",
             "applicants": [
                 {
                     "seq": 1,
@@ -133,9 +139,10 @@ def test_generate_apply_fee_draft_calculates_items_and_is_idempotent(
     assert draft["client_id"] == client_id
     assert draft["draft_type"] == "APPLY_FEE"
     assert draft["status"] == "OPEN"
-    assert Decimal(draft["total_gov"]) == Decimal("195.00")
-    assert Decimal(draft["total_service"]) == Decimal("450.00")
-    assert Decimal(draft["amount"]) == Decimal("645.00")
+    assert Decimal(draft["total_gov"]) == Decimal("860.00")
+    assert Decimal(draft["total_service"]) == Decimal("0.00")
+    assert Decimal(draft["total_misc"]) == Decimal("0.00")
+    assert Decimal(draft["amount"]) == Decimal("860.00")
 
     items_response = client.get(
         f"/api/v1/fees/drafts/{draft['id']}/items",
@@ -143,11 +150,18 @@ def test_generate_apply_fee_draft_calculates_items_and_is_idempotent(
     )
     assert items_response.status_code == 200, items_response.text
     items = {item["fee_code"]: item for item in items_response.json()}
-    assert set(items) == {"APPLY_BASE_GOV", "APPLY_EXCESS_CLAIM", "APPLY_SERVICE"}
-    assert Decimal(items["APPLY_BASE_GOV"]["amount"]) == Decimal("150.00")
-    assert Decimal(items["APPLY_EXCESS_CLAIM"]["quantity"]) == Decimal("2.0000")
-    assert Decimal(items["APPLY_EXCESS_CLAIM"]["amount"]) == Decimal("45.00")
-    assert Decimal(items["APPLY_SERVICE"]["amount"]) == Decimal("450.00")
+    assert set(items) == {
+        "CN_INV_APPLICATION_FEE",
+        "CN_EXCESS_CLAIM_FEE",
+        "CN_PUBLICATION_PRINT_FEE",
+        "CN_SUBSTANTIVE_EXAM_FEE",
+    }
+    assert {item["fee_type"] for item in items.values()} == {"GOV"}
+    assert Decimal(items["CN_INV_APPLICATION_FEE"]["amount"]) == Decimal("135.00")
+    assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["quantity"]) == Decimal("2.0000")
+    assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["amount"]) == Decimal("300.00")
+    assert Decimal(items["CN_PUBLICATION_PRINT_FEE"]["amount"]) == Decimal("50.00")
+    assert Decimal(items["CN_SUBSTANTIVE_EXAM_FEE"]["amount"]) == Decimal("375.00")
 
     rerun = client.post(
         "/api/v1/fees/drafts/apply-fee/generate",
@@ -175,7 +189,7 @@ def test_generate_apply_fee_draft_reports_missing_rate(
     auth_headers: dict[str, str],
     session_factory,
 ) -> None:
-    _seed_apply_fee_rates(session_factory, include_service=False)
+    _seed_apply_fee_rates(session_factory, include_exam=False)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
     case_data = _create_case(
@@ -194,4 +208,4 @@ def test_generate_apply_fee_draft_reports_missing_rate(
     assert response.status_code == 409, response.text
     body = response.json()
     assert body["error"]["code"] == "APPLY_FEE_RATE_MISSING"
-    assert body["error"]["details"]["missing_fee_codes"] == ["APPLY_SERVICE"]
+    assert body["error"]["details"]["missing_fee_codes"] == ["CN_SUBSTANTIVE_EXAM_FEE"]

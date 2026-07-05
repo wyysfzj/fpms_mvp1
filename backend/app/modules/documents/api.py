@@ -3,7 +3,17 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -653,6 +663,13 @@ def get_document(
                 "mime_type": attachment.mime_type or "",
                 "file_size": attachment.file_size or 0,
                 "uploaded_at": attachment.created_at,
+                "official_file_role": attachment.official_file_role,
+                "source_role_alias": attachment.source_role_alias,
+                "external_upload_position": attachment.external_upload_position,
+                "content_hash": attachment.content_hash,
+                "package_usage_hint": attachment.package_usage_hint,
+                "is_archive_evidence": bool(attachment.is_archive_evidence),
+                "is_receipt_evidence": bool(attachment.is_receipt_evidence),
             }
             for attachment in document.attachments
         ],
@@ -707,6 +724,8 @@ def update_document(
 def add_attachment(
     document_id: str,
     file: UploadFile = File(...),
+    official_file_role: str | None = Form(default=None),
+    source_role_alias: str | None = Form(default=None),
     _perm: None = Depends(require_perm("Doc.Attach")),
     db: Session = Depends(get_db),
 ) -> DocAttachmentOut:
@@ -721,7 +740,9 @@ def add_attachment(
     ```bash
     curl -s -X POST http://localhost:8000/api/v1/documents/DOCUMENT_ID/attachments \\
       -H "Authorization: Bearer $FPMS_TOKEN" \\
-      -F "file=@/path/to/file.pdf"
+      -F "file=@/path/to/file.pdf" \\
+      -F "official_file_role=OA_STATEMENT_PDF" \\
+      -F "source_role_alias=OA意见陈述 PDF"
     ```
     **Responses**:
     - 201: Attachment uploaded
@@ -738,6 +759,8 @@ def add_attachment(
         upload_file=file,
         storage_dir=settings.storage_dir,
         actor_id=None,
+        official_file_role=official_file_role,
+        source_role_alias=source_role_alias,
     )
     return DocAttachmentOut(
         id=attachment.id,
@@ -746,4 +769,11 @@ def add_attachment(
         mime_type=attachment.mime_type or "",
         file_size=attachment.file_size or 0,
         uploaded_at=attachment.created_at,
+        official_file_role=attachment.official_file_role,
+        source_role_alias=attachment.source_role_alias,
+        external_upload_position=attachment.external_upload_position,
+        content_hash=attachment.content_hash,
+        package_usage_hint=attachment.package_usage_hint,
+        is_archive_evidence=bool(attachment.is_archive_evidence),
+        is_receipt_evidence=bool(attachment.is_receipt_evidence),
     )

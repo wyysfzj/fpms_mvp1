@@ -64,26 +64,21 @@ def _seed_applicant(session_factory) -> str:
     return applicant_id
 
 
-def _seed_apply_fee_rates(session_factory) -> None:
-    rows = [
-        ("APPLY_BASE_GOV", "申请费", "GOV", Decimal("1000.00"), "FIXED"),
-        ("APPLY_EXCESS_CLAIM", "权利要求附加费", "GOV", Decimal("150.00"), "PER_CLAIM"),
-        ("APPLY_SERVICE", "申请服务费", "SERVICE", Decimal("500.00"), "FIXED"),
-    ]
+def _seed_service_fee_rate(session_factory) -> str:
     with session_factory() as db:
-        for fee_code, fee_name, fee_type, amount, calc_mode in rows:
-            rate = db.query(FeeRate).filter(FeeRate.fee_code == fee_code).one_or_none()
-            if rate is None:
-                rate = FeeRate(id=str(uuid4()), fee_code=fee_code)
-                db.add(rate)
-            rate.fee_name = fee_name
-            rate.fee_type = fee_type
-            rate.currency = "CNY"
-            rate.default_amount = amount
-            rate.enabled = True
-            rate.calc_mode = calc_mode
-            rate.allow_reduction = fee_type == "GOV"
+        rate = db.query(FeeRate).filter(FeeRate.fee_code == "SERVICE_APPLICATION").one_or_none()
+        if rate is None:
+            rate = FeeRate(id=str(uuid4()), fee_code="SERVICE_APPLICATION")
+            db.add(rate)
+        rate.fee_name = "申请服务费"
+        rate.fee_type = "SERVICE"
+        rate.currency = "CNY"
+        rate.default_amount = Decimal("500.00")
+        rate.enabled = True
+        rate.calc_mode = "FIXED"
+        rate.allow_reduction = False
         db.commit()
+        return rate.id
 
 
 def _create_rule(client, auth_headers, *, wait_pay: bool, force_settle: bool) -> int:
@@ -131,7 +126,7 @@ def _create_case(
             "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0.15",
+            "fee_reduction": "0.85",
             "primary_agent_id": main_agent_id,
             "applicants": [
                 {
@@ -160,14 +155,32 @@ def _create_case(
     return case_data
 
 
-def _create_bill(client, auth_headers, case_id: str) -> dict:
+def _create_bill(
+    client,
+    auth_headers,
+    *,
+    case_id: str,
+    client_id: str,
+    service_rate_id: str,
+) -> dict:
     draft_response = client.post(
-        "/api/v1/fees/drafts/apply-fee/generate",
-        json={"case_id": case_id, "currency": "CNY"},
+        "/api/v1/fees/drafts",
+        json={
+            "case_id": case_id,
+            "client_id": client_id,
+            "draft_type": "SERVICE_FEE",
+            "currency": "CNY",
+        },
         headers=auth_headers,
     )
     assert draft_response.status_code == 201, draft_response.text
     draft = draft_response.json()
+    item_response = client.post(
+        f"/api/v1/fees/drafts/{draft['id']}/items",
+        json={"rate_id": service_rate_id, "quantity": "1", "unit_price": "500.00"},
+        headers=auth_headers,
+    )
+    assert item_response.status_code == 201, item_response.text
     bill_response = client.post(
         "/api/v1/bills/from-drafts",
         json={"draft_ids": [draft["id"]], "bill_no": f"CWT-BILL-{uuid4().hex[:8]}"},
@@ -223,7 +236,7 @@ def test_waitpay_threshold_and_force_settle_readiness(
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
-    _seed_apply_fee_rates(session_factory)
+    service_rate_id = _seed_service_fee_rate(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
     main_agent_id = _create_agent_user(session_factory, "wait-main")
@@ -238,7 +251,13 @@ def test_waitpay_threshold_and_force_settle_readiness(
         main_agent_id=main_agent_id,
         co_agent_id=co_agent_id,
     )
-    _create_bill(client, auth_headers, wait_case["id"])
+    _create_bill(
+        client,
+        auth_headers,
+        case_id=wait_case["id"],
+        client_id=client_id,
+        service_rate_id=service_rate_id,
+    )
     rows = _commission_rows(client, auth_headers, wait_case["id"])
     assert {row["rule_id"] for row in rows} == {wait_rule_id}
     _assert_all_settleable(rows, False)
@@ -259,7 +278,13 @@ def test_waitpay_threshold_and_force_settle_readiness(
         main_agent_id=main_agent_id,
         co_agent_id=co_agent_id,
     )
-    _create_bill(client, auth_headers, force_case["id"])
+    _create_bill(
+        client,
+        auth_headers,
+        case_id=force_case["id"],
+        client_id=client_id,
+        service_rate_id=service_rate_id,
+    )
     force_rows = _commission_rows(client, auth_headers, force_case["id"])
     assert {row["rule_id"] for row in force_rows} == {force_rule_id}
     _assert_all_settleable(force_rows, True)

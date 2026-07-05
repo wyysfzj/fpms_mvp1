@@ -190,6 +190,11 @@ export interface Attachment {
     is_receipt_evidence?: boolean
 }
 
+export interface AttachmentUploadMetadata {
+    official_file_role?: string | null
+    source_role_alias?: string | null
+}
+
 export interface AttachmentManifestItem {
     attachment_id: string
     document_id: string

@@ -54,6 +54,10 @@ export interface GrantFeeTaskListItem {
     billed: boolean
     linked_bill_id?: string
     linked_bill_no?: string
+    trigger_rule: string
+    deadline_rule: string
+    fee_basis: string
+    fee_node_explanation: string
 }
 
 export interface GrantFeeTaskListResponse {
@@ -86,6 +90,10 @@ export interface GrantFeeTaskStateResult {
     notice_sent: boolean
     is_overdue: boolean
     allowed_actions: GrantFeeTaskStateAction[]
+    trigger_rule: string
+    deadline_rule: string
+    fee_basis: string
+    fee_node_explanation: string
 }
 
 export interface GrantFeeTaskBatchInstructionPayload {

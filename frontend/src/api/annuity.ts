@@ -37,6 +37,10 @@ interface BackendAnnuityTask {
     draft_generated?: boolean | null
     notice_sent?: boolean | null
     is_overdue?: boolean | null
+    trigger_rule?: string | null
+    deadline_rule?: string | null
+    fee_basis?: string | null
+    fee_node_explanation?: string | null
 }
 
 interface BackendAnnuityTaskReportCount {
@@ -144,6 +148,10 @@ function mapAnnuityTask(input: BackendAnnuityTask): AnnuityTask {
         draft_generated: input.draft_generated ?? undefined,
         notice_sent: input.notice_sent ?? undefined,
         is_overdue: input.is_overdue ?? false,
+        trigger_rule: input.trigger_rule || '年费节点到期',
+        deadline_rule: input.deadline_rule || '以年费任务到期日为准',
+        fee_basis: input.fee_basis || `第${input.year_no}年度年费，按专利类型和年度阶梯费率预估`,
+        fee_node_explanation: input.fee_node_explanation || '年费费用节点：客户指示缴费后生成官费草单。',
     }
 }
 

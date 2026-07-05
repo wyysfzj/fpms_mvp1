@@ -18,6 +18,11 @@ export interface FeeRate {
     country_code?: string | null
     case_type?: string | null
     patent_category?: string | null
+    fee_domain?: string | null
+    fee_section?: string | null
+    fee_category?: string | null
+    fee_subtype?: string | null
+    reduction_scope?: string | null
     calc_mode?: CalcMode | null
     calc_params?: string | null
     allow_reduction?: boolean | null
@@ -30,6 +35,19 @@ export interface FeeRate {
 export interface FeeRateListParams {
     page?: number
     page_size?: number
+    fee_code?: string
+    fee_type?: string
+    currency?: string
+    enabled?: boolean
+    rate_group?: string
+    country_code?: string
+    case_type?: string
+    patent_category?: string
+    fee_domain?: string
+    fee_section?: string
+    fee_category?: string
+    fee_subtype?: string
+    calc_mode?: string
 }
 
 export interface FeeRateCreatePayload {
@@ -43,6 +61,11 @@ export interface FeeRateCreatePayload {
     country_code?: string | null
     case_type?: string | null
     patent_category?: string | null
+    fee_domain?: string | null
+    fee_section?: string | null
+    fee_category?: string | null
+    fee_subtype?: string | null
+    reduction_scope?: string | null
     calc_mode?: CalcMode | null
     calc_params?: string | null
     allow_reduction?: boolean | null
@@ -61,6 +84,11 @@ export interface FeeRateUpdatePayload {
     country_code?: string | null
     case_type?: string | null
     patent_category?: string | null
+    fee_domain?: string | null
+    fee_section?: string | null
+    fee_category?: string | null
+    fee_subtype?: string | null
+    reduction_scope?: string | null
     calc_mode?: CalcMode | null
     calc_params?: string | null
     allow_reduction?: boolean | null
@@ -78,6 +106,7 @@ export interface FeeDraftListItem {
     case_no?: string | null
     client_id: string | null
     client_name?: string | null
+    draft_type?: string | null
     currency: string
     status: FeeDraftStatus
     amount: FeeMoney
@@ -181,6 +210,47 @@ export interface ApplyFeeDraftGeneratePayload {
     case_id: string
     currency?: string
     discount_rate?: number | string | null
+}
+
+export interface OfficialFeePreviewPayload {
+    case_id: string
+    trigger_event: 'FILING_ACCEPTED' | 'REEXAM_REQUESTED'
+    currency?: string
+    source_document_id?: string | null
+}
+
+export interface OfficialFeePreviewCandidate {
+    rate_id?: string | null
+    fee_code: string
+    fee_name?: string | null
+    fee_type: string
+    quantity: FeeMoney
+    unit_price: FeeMoney
+    amount: FeeMoney
+    calculation_note?: string | null
+    source_doc?: string | null
+    source_status?: string | null
+    fee_category?: string | null
+    fee_subtype?: string | null
+    trigger_rule?: string | null
+    deadline_rule?: string | null
+    reduction_scope?: string | null
+    source_document_id?: string | null
+    amount_before_reduction?: FeeMoney | null
+    reduction_ratio?: FeeMoney | null
+    payable_ratio?: FeeMoney | null
+}
+
+export interface OfficialFeePreview {
+    case_id: string
+    draft_type: string
+    trigger_event: string
+    source_document_id?: string | null
+    idempotency_key: string
+    currency: string
+    preview_only: boolean
+    total_gov: FeeMoney
+    candidates: OfficialFeePreviewCandidate[]
 }
 
 export interface FeeDraftUpdatePayload {

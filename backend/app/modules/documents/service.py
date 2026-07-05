@@ -2411,6 +2411,7 @@ def list_doc_templates(
             or_(
                 func.lower(DocTemplate.code).like(q_like),
                 func.lower(DocTemplate.name).like(q_like),
+                func.lower(DocTemplate.input_fields).like(q_like),
             )
         )
 
