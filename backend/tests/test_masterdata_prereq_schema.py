@@ -45,6 +45,7 @@ def test_masterdata_models_expose_frozen_minimal_columns(tmp_path) -> None:
         }
         if table_name == "t_applicant":
             expected_columns.add("applicant_type")
+            expected_columns.add("total_power_of_attorney_no")
         assert model.__tablename__ == table_name
         assert set(model.__table__.columns.keys()) == expected_columns
         assert getattr(model.__table__.c.is_active.server_default.arg, "text", None) in {"1"}
@@ -62,6 +63,7 @@ def test_masterdata_models_expose_frozen_minimal_columns(tmp_path) -> None:
         expected_columns = {"id", "code", "name_cn", "name_en", "is_active"}
         if table_name == "t_applicant":
             expected_columns.add("applicant_type")
+            expected_columns.add("total_power_of_attorney_no")
         assert db_columns == expected_columns
 
         uniques = {
@@ -96,6 +98,7 @@ def test_masterdata_prereq_migration_creates_expected_schema(tmp_path, monkeypat
         expected_columns = {"id", "code", "name_cn", "name_en", "is_active"}
         if table_name == "t_applicant":
             expected_columns.add("applicant_type")
+            expected_columns.add("total_power_of_attorney_no")
         assert db_columns == expected_columns
 
         unique_sets = {

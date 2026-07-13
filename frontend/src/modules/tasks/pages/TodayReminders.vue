@@ -7,6 +7,7 @@
       </div>
       <div class="page-header-right">
         <el-segmented v-model="viewMode" :options="modeOptions" @change="handleModeChange" />
+        <el-button :loading="printing" @click="handlePrint">打印清单</el-button>
       </div>
     </div>
 
@@ -77,7 +78,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import dayjs from 'dayjs'
-import { getTodayReminders } from '../../../api/tasks'
+import { ElMessage } from 'element-plus'
+import { getTodayReminders, printTaskList } from '../../../api/tasks'
 import type { Task } from '../../../api/tasks.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
@@ -87,6 +89,7 @@ const router = useRouter()
 
 const reminders = ref<Task[]>([])
 const loading = ref(false)
+const printing = ref(false)
 const error = ref<ApiError | null>(null)
 const viewMode = ref<'worker' | 'supervisor'>('worker')
 
@@ -105,6 +108,35 @@ async function fetchReminders() {
     error.value = err as ApiError
   } finally {
     loading.value = false
+  }
+}
+
+async function handlePrint() {
+  printing.value = true
+  error.value = null
+  try {
+    const today = dayjs().format('YYYY-MM-DD')
+    const html = await printTaskList({
+      as: viewMode.value,
+      due_from: today,
+      due_to: today,
+    })
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer')
+    if (!printWindow) {
+      ElMessage.error('浏览器拦截了打印窗口，请允许弹窗后重试。')
+      return
+    }
+    printWindow.document.open()
+    printWindow.document.write(html)
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
+    ElMessage.success('今日提醒清单已打开打印预览。')
+  } catch (err) {
+    error.value = err as ApiError
+    ElMessage.error('打印失败，请稍后重试。')
+  } finally {
+    printing.value = false
   }
 }
 

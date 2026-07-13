@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 import app.api.deps as deps
+from app.modules.documents.models import Document
 from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
 from app.modules.grant_fees.schemas import GrantFeeDraftGenerateOut
 from app.modules.grant_fees.service import derive_grant_fee_task_state
@@ -63,9 +64,21 @@ def _insert_task(
     **overrides,
 ) -> str:
     with session_factory() as db:
+        source_document = Document(
+            case_id=case_id,
+            doc_type="OFFICIAL",
+            direction="IN",
+            doc_date=date(2026, 4, 1),
+            title="授权费草单来源文书",
+        )
+        db.add(source_document)
+        db.flush()
         task = T_GrantFeeTask(
             case_id=case_id,
             due_date=overrides.pop("due_date", date(2026, 4, 30)),
+            source_document_id=source_document.id,
+            deadline_source="MANUAL_OFFICIAL_NOTICE",
+            deadline_confirmed_at=datetime(2026, 4, 1, 9, 0),
             gov_fee_amt=overrides.pop("gov_fee_amt", Decimal("0")),
             service_fee_amt=overrides.pop("service_fee_amt", Decimal("0")),
             currency=overrides.pop("currency", "CNY"),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -17,6 +18,8 @@ DOC_BASE = "/api/v1/documents"
 DOC_TEMPLATE_BASE = "/api/v1/doc-templates"
 CASE_BASE = "/api/v1/cases"
 GRANT_FEE_TASK_BASE = "/api/v1/grant-fee-tasks/list"
+GRANT_NOTICE_DUE_DATE = "2026-07-31"
+IMPORTED_GRANT_NOTICE_DUE_DATE = "2026-08-15"
 
 
 def _uid(prefix: str) -> str:
@@ -67,6 +70,9 @@ def _create_grant_notice(
             "direction": "IN",
             "doc_date": "2026-04-10",
             "title": title,
+            "official_due_date": GRANT_NOTICE_DUE_DATE,
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
         },
         headers=auth_headers,
     )
@@ -204,6 +210,13 @@ def _seed_imported_grant_notice_document(
                 direction="IN",
                 doc_date=date(2026, 4, 10),
                 title="授权通知书",
+                extra_data=json.dumps(
+                    {
+                        "OfficialDueDate": IMPORTED_GRANT_NOTICE_DUE_DATE,
+                        "OfficialDueDateSource": "IMPORTED_OFFICIAL_NOTICE",
+                        "OfficialDueDateStatus": "CONFIRMED",
+                    }
+                ),
             )
         )
         db.commit()
@@ -218,20 +231,25 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
     case = _create_case(client, auth_headers)
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
-    _create_grant_notice(
+    document = _create_grant_notice(
         client,
         auth_headers,
         case_id=case["id"],
         template_id=template["id"],
         title="授权通知书",
     )
-    _create_grant_notice(
-        client,
-        auth_headers,
-        case_id=case["id"],
-        template_id=template["id"],
-        title="授权通知书-重复登记",
+    repeat_resp = client.post(
+        f"{DOC_BASE}/{document['id']}/attachments",
+        headers=auth_headers,
+        files={
+            "file": (
+                "授权通知书-重复处理.pdf",
+                BytesIO(b"%PDF-1.4 repeated same-source grant notice"),
+                "application/pdf",
+            )
+        },
     )
+    assert repeat_resp.status_code == 201, repeat_resp.text
 
     resp = client.get(
         GRANT_FEE_TASK_BASE,
@@ -245,7 +263,7 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
     item = payload["items"][0]
     assert item["case_id"] == case["id"]
     assert item["status"] == "OPEN"
-    assert item["due_date"] == "2026-06-09"
+    assert item["due_date"] == GRANT_NOTICE_DUE_DATE
     assert item["currency"] == "CNY"
     assert item["trigger_rule"] == "收到办理登记手续通知书/授权通知书"
     assert (
@@ -267,7 +285,10 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
             .all()
         )
         assert len(tasks) == 1
-        assert tasks[0].due_date == date(2026, 6, 9)
+        assert tasks[0].due_date == date.fromisoformat(GRANT_NOTICE_DUE_DATE)
+        assert tasks[0].source_document_id == document["id"]
+        assert tasks[0].deadline_source == "MANUAL_OFFICIAL_NOTICE"
+        assert tasks[0].deadline_confirmed_at is not None
 
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
@@ -447,4 +468,12 @@ def test_imported_grant_notice_attachment_upload_advances_case_and_creates_fee_t
     assert task_resp.status_code == 200, task_resp.text
     payload = task_resp.json()
     assert payload["total"] == 1
-    assert payload["items"][0]["due_date"] == "2026-06-09"
+    assert payload["items"][0]["due_date"] == IMPORTED_GRANT_NOTICE_DUE_DATE
+
+    with session_factory() as db:
+        task = db.execute(
+            select(T_GrantFeeTask).where(T_GrantFeeTask.case_id == case["id"])
+        ).scalar_one()
+        assert task.source_document_id == document_id
+        assert task.deadline_source == "IMPORTED_OFFICIAL_NOTICE"
+        assert task.deadline_confirmed_at is not None

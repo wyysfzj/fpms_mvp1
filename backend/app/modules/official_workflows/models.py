@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -11,6 +11,7 @@ from app.db.mixins import AuditMixin, UUIDPrimaryKeyMixin
 
 class OfficialWorkPackage(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_official_work_package"
+    __table_args__ = (Index("ux_t_official_work_package_resolve_key", "resolve_key", unique=True),)
 
     case_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False, index=True
@@ -25,6 +26,7 @@ class OfficialWorkPackage(UUIDPrimaryKeyMixin, AuditMixin, Base):
     reply_document_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("t_document.id"), nullable=True, index=True
     )
+    resolve_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     external_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 

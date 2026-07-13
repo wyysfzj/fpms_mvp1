@@ -1,13 +1,17 @@
 """Spec-alignment E2E integration tests.
 
-Test 1: OA workflow — Case → Doc(OA_IN) → auto-task → Doc(OA_OUT reply) → auto-close-task
-Test 2: Billing workflow — Case → Doc(GRANT_NOTICE) → auto-fee-draft → bill → payment → offset → reverse
+Test 1: OA workflow — Case → Doc(OA_IN) → auto-task → Doc(OA_OUT reply) → task stays open
+Test 2: Billing workflow — Case → Doc(GRANT_NOTICE) → explicit fee draft → bill → payment → offset → reverse
 """
 
 from __future__ import annotations
 
 import uuid
 from decimal import Decimal
+
+from sqlalchemy import select
+
+from app.modules.fees.models import T_GrantFeeTask
 
 
 def _uid(prefix: str = "E2E") -> str:
@@ -20,7 +24,7 @@ def _uid(prefix: str = "E2E") -> str:
 
 
 def test_e2e_oa_workflow(client, auth_headers):
-    """Full OA lifecycle: Case → Doc(OA_IN) → auto-task → Doc(OA_OUT, reply) → auto-close-task."""
+    """Full OA lifecycle: Case → OA_IN → task → OA_OUT reply → task remains open."""
 
     # Step 1: Create client
     cli_resp = client.post(
@@ -81,6 +85,9 @@ def test_e2e_oa_workflow(client, auth_headers):
             "direction": "IN",
             "doc_date": "2026-01-15",
             "title": "E2E OA收文",
+            "official_due_date": "2026-05-15",
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
         },
         headers=auth_headers,
     )
@@ -127,24 +134,24 @@ def test_e2e_oa_workflow(client, auth_headers):
     )
     assert doc_out_resp.status_code == 201, f"OA_OUT doc create failed: {doc_out_resp.text}"
 
-    # Step 9: Verify task is auto-closed (DONE)
+    # Step 9: Verify task remains OPEN until official receipt archive
     tasks_resp2 = client.get(f"/api/v1/tasks?case_id={case_id}", headers=auth_headers)
     assert tasks_resp2.status_code == 200
-    done_tasks = [t for t in tasks_resp2.json()["items"] if t["id"] == task_id]
-    assert len(done_tasks) == 1
-    assert done_tasks[0]["status"] == "DONE"
+    matching_tasks = [t for t in tasks_resp2.json()["items"] if t["id"] == task_id]
+    assert len(matching_tasks) == 1
+    assert matching_tasks[0]["status"] == "OPEN"
 
     # Check done_at via the detail endpoint (TaskOut has done_at)
     task_detail = client.get(f"/api/v1/tasks/{task_id}", headers=auth_headers)
     assert task_detail.status_code == 200
     task_detail_data = task_detail.json()
-    assert task_detail_data["done_at"] is not None
+    assert task_detail_data["done_at"] is None
 
-    # Step 10: Verify task log contains AUTO_WRITEOFF
+    # Step 10: Verify task log has no completion evidence before receipt archive
     logs_resp2 = client.get(f"/api/v1/tasks/{task_id}/logs", headers=auth_headers)
     assert logs_resp2.status_code == 200
     log_actions2 = [log["action"] for log in logs_resp2.json()]
-    assert "AUTO_WRITEOFF" in log_actions2
+    assert "AUTO_WRITEOFF" not in log_actions2
 
     # Step 11: Verify original doc reply_date is set
     doc_in_check = client.get(f"/api/v1/documents/{doc_in_id}", headers=auth_headers)
@@ -165,8 +172,8 @@ def test_e2e_oa_workflow(client, auth_headers):
 # ---------------------------------------------------------------------------
 
 
-def test_e2e_billing_workflow(client, auth_headers):
-    """Financial chain: Case → Doc(GRANT_NOTICE) → auto-fee-draft → bill → payment → offset → reverse."""
+def test_e2e_billing_workflow(client, auth_headers, session_factory):
+    """Financial chain: grant source → explicit draft → bill → payment → offset → reverse."""
 
     # Step 1: Create client
     cli_resp = client.post(
@@ -214,26 +221,54 @@ def test_e2e_billing_workflow(client, auth_headers):
             "direction": "IN",
             "doc_date": "2026-02-01",
             "title": "E2E授权通知书",
+            "official_due_date": "2026-04-15",
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
         },
         headers=auth_headers,
     )
     assert doc_resp.status_code == 201, f"GRANT_NOTICE doc create failed: {doc_resp.text}"
+    document_id = doc_resp.json()["id"]
 
-    # Verify X-Auto-Fee-Draft-Created header
-    auto_draft_id = doc_resp.headers.get("X-Auto-Fee-Draft-Created")
-    assert auto_draft_id, "X-Auto-Fee-Draft-Created header missing"
+    # Grant registration creates its source-lineage task, but no generic fee draft.
+    assert doc_resp.headers.get("X-Auto-Fee-Draft-Created") is None
+    with session_factory() as db:
+        grant_tasks = list(
+            db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.case_id == case_id)).scalars()
+        )
+        assert len(grant_tasks) == 1
+        assert grant_tasks[0].source_document_id == document_id
+        assert grant_tasks[0].deadline_source == "MANUAL_OFFICIAL_NOTICE"
+        assert str(grant_tasks[0].due_date) == "2026-04-15"
+        assert grant_tasks[0].draft_generated is False
 
-    # GRANT_NOTICE has no deadline_template_code → no task should be created
-    # (The GRANT_NOTICE template does not have a matching TaskTemplate code)
+    # The grant source task is separate from the generic document-task header.
     assert doc_resp.headers.get("X-Auto-Tasks-Created") == "0"
+
+    drafts_before = client.get(f"/api/v1/fees/drafts?case_id={case_id}", headers=auth_headers)
+    assert drafts_before.status_code == 200
+    assert drafts_before.json()["items"] == []
 
     # Step 4: Verify case status changed to GRANT_PENDING
     case_check = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
     assert case_check.status_code == 200
     assert case_check.json()["status"] == "GRANT_PENDING"
 
-    # Step 5: Verify auto-created fee draft
-    draft_detail = client.get(f"/api/v1/fees/drafts/{auto_draft_id}", headers=auth_headers)
+    # Step 5: Explicitly create and verify the fee draft through the public API
+    draft_create = client.post(
+        "/api/v1/fees/drafts",
+        json={
+            "case_id": case_id,
+            "client_id": client_id,
+            "draft_type": "GRANT_FEE",
+            "currency": "CNY",
+        },
+        headers=auth_headers,
+    )
+    assert draft_create.status_code == 201, f"Fee draft create failed: {draft_create.text}"
+    fee_draft_id = draft_create.json()["id"]
+
+    draft_detail = client.get(f"/api/v1/fees/drafts/{fee_draft_id}", headers=auth_headers)
     assert draft_detail.status_code == 200
     draft_data = draft_detail.json()
     assert draft_data["draft_type"] == "GRANT_FEE"
@@ -255,9 +290,9 @@ def test_e2e_billing_workflow(client, auth_headers):
     assert rate_resp.status_code == 201, f"Fee rate create failed: {rate_resp.text}"
     rate_id = rate_resp.json()["id"]
 
-    # Step 7: Add fee item to the auto-created draft
+    # Step 7: Add fee item to the explicit draft
     item_resp = client.post(
-        f"/api/v1/fees/drafts/{auto_draft_id}/items",
+        f"/api/v1/fees/drafts/{fee_draft_id}/items",
         json={"rate_id": rate_id, "quantity": 1, "unit_price": "500.00"},
         headers=auth_headers,
     )
@@ -266,15 +301,15 @@ def test_e2e_billing_workflow(client, auth_headers):
     # Step 8: Verify draft amount via list endpoint
     drafts_list = client.get(f"/api/v1/fees/drafts?case_id={case_id}", headers=auth_headers)
     assert drafts_list.status_code == 200
-    draft_in_list = next((d for d in drafts_list.json()["items"] if d["id"] == auto_draft_id), None)
-    assert draft_in_list is not None, "Auto-draft not found in list"
+    draft_in_list = next((d for d in drafts_list.json()["items"] if d["id"] == fee_draft_id), None)
+    assert draft_in_list is not None, "Explicit draft not found in list"
     assert Decimal(str(draft_in_list["amount"])) == Decimal("500")
 
     # Step 9: Create bill from draft
     bill_no = _uid("BILL")
     bill_resp = client.post(
         "/api/v1/bills/from-drafts",
-        json={"draft_ids": [auto_draft_id], "bill_no": bill_no},
+        json={"draft_ids": [fee_draft_id], "bill_no": bill_no},
         headers=auth_headers,
     )
     assert bill_resp.status_code == 201, f"Bill create failed: {bill_resp.text}"

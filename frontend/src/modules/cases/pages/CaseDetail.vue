@@ -482,6 +482,7 @@
           <div style="margin-top: 14px;">
             <div class="related-tasks-title">{{ ZH.caseDetail.quickActions }}</div>
             <div class="quick-actions">
+              <el-button size="small" type="primary" @click="openFilingPreparation">申请前准备</el-button>
               <el-button size="small" @click="handleEdit">{{ ZH.caseDetail.editCase }}</el-button>
               <el-button size="small" @click="showLimitedEdit = true">{{ ZH.caseDetail.quickEdit }}</el-button>
             </div>
@@ -649,6 +650,14 @@ async function fetchCase() {
 
 function goBack() {
   router.push('/cases')
+}
+
+function openFilingPreparation() {
+  if (!caseData.value?.id) return
+  router.push({
+    name: 'official_work_filing_preparation',
+    query: { case_id: caseData.value.id },
+  })
 }
 
 function handleEdit() {

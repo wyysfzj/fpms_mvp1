@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -65,9 +65,21 @@ def _insert_task(
     **overrides,
 ) -> str:
     with session_factory() as db:
+        source_document = Document(
+            case_id=case_id,
+            doc_type="OFFICIAL",
+            direction="IN",
+            doc_date=date(2026, 4, 1),
+            title=_uid("GFN-SOURCE"),
+        )
+        db.add(source_document)
+        db.flush()
         task = T_GrantFeeTask(
             case_id=case_id,
             due_date=overrides.pop("due_date", date(2026, 5, 20)),
+            source_document_id=source_document.id,
+            deadline_source="MANUAL_OFFICIAL_NOTICE",
+            deadline_confirmed_at=datetime(2026, 4, 1, 9, 0),
             gov_fee_amt=overrides.pop("gov_fee_amt", Decimal("120.00")),
             service_fee_amt=overrides.pop("service_fee_amt", Decimal("80.00")),
             currency=overrides.pop("currency", "CNY"),
@@ -195,7 +207,12 @@ def test_grant_fee_notice_generation_creates_document_and_attachment(
 
     with session_factory() as db:
         task = db.execute(select(T_GrantFeeTask).where(T_GrantFeeTask.id == task_id)).scalar_one()
-        document = db.execute(select(Document).where(Document.case_id == case["id"])).scalar_one()
+        document = db.execute(
+            select(Document).where(
+                Document.case_id == case["id"],
+                Document.direction == "OUT",
+            )
+        ).scalar_one()
         attachment = db.execute(
             select(DocAttachment).where(DocAttachment.document_id == document.id)
         ).scalar_one()

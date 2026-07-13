@@ -63,6 +63,7 @@ def test_masterdata_prereq_list_contract(
     expected_fields = {"id", "code", "name_cn", "name_en", "is_active"}
     if path.endswith("/applicants"):
         expected_fields.add("applicant_type")
+        expected_fields.add("total_power_of_attorney_no")
     assert expected_fields == set(seeded_items[0])
 
     def _no_perms(_db, _user_id) -> set[str]:
@@ -84,7 +85,10 @@ def test_applicant_and_country_contract_shapes_match(client, auth_headers) -> No
     country_items = country_payload["items"]
 
     if applicant_items and country_items:
-        assert set(applicant_items[0]) == set(country_items[0]) | {"applicant_type"}
+        assert set(applicant_items[0]) == set(country_items[0]) | {
+            "applicant_type",
+            "total_power_of_attorney_no",
+        }
 
 
 def test_masterdata_permission_namespaces_are_frozen(session_factory) -> None:

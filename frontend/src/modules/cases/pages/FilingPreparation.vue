@@ -23,7 +23,7 @@
     </div>
 
     <el-alert
-      v-if="!packageId"
+      v-if="!packageId && !caseId && !loading"
       type="info"
       :closable="false"
       title="请选择具体工作包"
@@ -168,6 +168,7 @@ import {
   getFilingPreparationPackage,
   recordFilingPreparationExternalOperation,
   refreshFilingPreparationPackage,
+  resolveFilingPreparationPackage,
   updateFilingPreparationChecklist,
 } from '../../../api/officialWorkflows'
 import type {
@@ -191,6 +192,7 @@ const reviewingCode = ref('')
 const error = ref<ApiError | null>(null)
 
 const packageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
+const caseId = computed(() => String(route.query.case_id || route.query.caseId || '').trim())
 
 const externalOperationItems = computed(() =>
   (filingPackage.value?.official_page_checklist || []).filter((item) =>
@@ -200,13 +202,45 @@ const externalOperationItems = computed(() =>
   )
 )
 
-watch(packageId, () => {
+watch(packageId, (nextPackageId) => {
+  if (nextPackageId && nextPackageId === filingPackage.value?.package.id) return
   void fetchPackage()
 })
 
 onMounted(() => {
-  void fetchPackage()
+  void initializePackage()
 })
+
+async function initializePackage() {
+  if (packageId.value) {
+    await fetchPackage()
+    return
+  }
+  if (!caseId.value) {
+    filingPackage.value = null
+    return
+  }
+
+  loading.value = true
+  error.value = null
+  try {
+    const resolved = await resolveFilingPreparationPackage(caseId.value)
+    filingPackage.value = resolved
+    const query = { ...route.query }
+    delete query.case_id
+    delete query.caseId
+    await router.replace({
+      query: {
+        ...query,
+        package_id: resolved.package.id,
+      },
+    })
+  } catch (err) {
+    error.value = localizeResolveError(err)
+  } finally {
+    loading.value = false
+  }
+}
 
 async function fetchPackage() {
   if (!packageId.value) {
@@ -297,6 +331,20 @@ function replaceChecklistItem(item: OfficialWorkPackageChecklist) {
 
 function goBack() {
   router.push('/cases')
+}
+
+function localizeResolveError(value: unknown): ApiError {
+  const apiError = value as ApiError
+  if (apiError.status === 404) {
+    return { ...apiError, message: '未找到对应案件，无法进入新申请递交准备。' }
+  }
+  if (apiError.status === 409) {
+    return { ...apiError, message: '当前案件状态或工作包配置不允许进入新申请递交准备。' }
+  }
+  if (apiError.status === 422) {
+    return { ...apiError, message: '案件标识格式无效，请从案件详情重新进入。' }
+  }
+  return { ...apiError, message: '解析新申请递交工作包失败，请稍后重试。' }
 }
 
 function getPackageStatusText(status?: string | null): string {

@@ -23,6 +23,11 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.modules.cases.models import Case
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.export_excel import (
+    DOCUMENT_LIST_EXPORT_MIME_TYPE,
+    build_document_list_export_xlsx,
+)
+from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.fee_linking_service import maybe_create_fee_draft
 from app.modules.documents.models import DocTemplate
 from app.modules.documents.schemas import (
@@ -89,19 +94,29 @@ router = APIRouter()
 
 
 def _build_document_out(
-    document, *, case_no: str | None = None, attachments: list | None = None
+    document,
+    *,
+    case_no: str | None = None,
+    template_code: str | None = None,
+    attachments: list | None = None,
 ) -> DocumentOut:
+    extra_data = parse_document_extra_data(document.extra_data)
     return DocumentOut(
         id=document.id,
         case_id=document.case_id,
         case_no=case_no,
         doc_template_id=document.doc_template_id,
+        template_code=template_code,
         doc_type=document.doc_type,
         direction=document.direction,
         doc_date=document.doc_date,
         title=document.title,
         ref_no=document.ref_no,
         extra_data=document.extra_data,
+        official_due_date=extra_data.official_due_date,
+        official_due_date_source=extra_data.official_due_date_source,
+        official_due_date_status=extra_data.official_due_date_status,
+        description=extra_data.description,
         reply_to_id=document.reply_to_id,
         need_reply=document.need_reply,
         reply_date=document.reply_date,
@@ -303,29 +318,116 @@ def get_documents(
         template_code_map = {t.id: t.code for t in templates}
 
     items = [
-        DocumentOut(
-            id=document.id,
-            case_id=document.case_id,
+        _build_document_out(
+            document,
             case_no=case_no_map.get(document.case_id) if document.case_id else None,
-            doc_template_id=document.doc_template_id,
             template_code=template_code_map.get(document.doc_template_id)
             if document.doc_template_id
             else None,
-            doc_type=document.doc_type,
-            direction=document.direction,
-            doc_date=document.doc_date,
-            title=document.title,
-            ref_no=document.ref_no,
-            extra_data=document.extra_data,
-            reply_to_id=document.reply_to_id,
-            need_reply=document.need_reply,
-            reply_date=document.reply_date,
-            created_at=document.created_at,
-            updated_at=document.updated_at,
         )
         for document in documents
     ]
     return DocumentListOut(items=items, page=page, page_size=page_size, total=total)
+
+
+@router.get(
+    "/documents/export",
+    summary="Export document list to Excel",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {DOCUMENT_LIST_EXPORT_MIME_TYPE: {}},
+            "description": "Document list Excel export generated",
+        }
+    },
+)
+def export_documents(
+    q: str | None = Query(default=None),
+    doc_name: str | None = Query(default=None),
+    doc_type: list[DocumentDocType] | None = Query(default=None),
+    direction: DocumentDirection | None = Query(default=None),
+    template_code: str | None = Query(default=None),
+    doc_template_id: str | None = Query(default=None),
+    case_no: str | None = Query(default=None),
+    case_id: str | None = Query(default=None),
+    client_id: str | None = Query(default=None),
+    need_reply: bool | None = Query(default=None),
+    replied: bool | None = Query(default=None),
+    has_attachment: bool | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    _perm: None = Depends(require_perm("Doc.Read")),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Export the filtered document list as an Excel file (US-WD-06)."""
+    documents, _total = list_documents(
+        db,
+        q=q,
+        doc_name=doc_name,
+        doc_types=doc_type,
+        direction=direction,
+        template_code=template_code,
+        doc_template_id=doc_template_id,
+        case_no=case_no,
+        case_id=case_id,
+        client_id=client_id,
+        need_reply=need_reply,
+        replied=replied,
+        has_attachment=has_attachment,
+        date_from=date_from,
+        date_to=date_to,
+        page=1,
+        page_size=1000,
+    )
+    case_ids = {doc.case_id for doc in documents if doc.case_id}
+    case_no_map: dict[str, str] = {}
+    if case_ids:
+        cases = db.query(Case.id, Case.case_no).filter(Case.id.in_(case_ids)).all()
+        case_no_map = {c.id: c.case_no for c in cases}
+    template_ids = {doc.doc_template_id for doc in documents if doc.doc_template_id}
+    template_name_map: dict[str, str] = {}
+    if template_ids:
+        templates = (
+            db.query(DocTemplate.id, DocTemplate.name)
+            .filter(DocTemplate.id.in_(template_ids))
+            .all()
+        )
+        template_name_map = {t.id: t.name for t in templates}
+
+    direction_labels = {"IN": "收文", "OUT": "发文"}
+    rows: list[list[object]] = [
+        ["文书清单导出"],
+        [],
+        ["文书标题", "案号", "方向", "文书类型", "文书日期", "文号", "需答复", "答复日期"],
+    ]
+    for document in documents:
+        direction_value = (
+            document.direction.value
+            if hasattr(document.direction, "value")
+            else document.direction
+        )
+        rows.append(
+            [
+                document.title or "",
+                case_no_map.get(document.case_id) if document.case_id else "",
+                direction_labels.get(str(direction_value or ""), direction_value or ""),
+                template_name_map.get(document.doc_template_id)
+                if document.doc_template_id
+                else "",
+                document.doc_date,
+                document.ref_no or "",
+                "是" if document.need_reply else "否",
+                document.reply_date,
+            ]
+        )
+    content = build_document_list_export_xlsx(rows=rows)
+    return Response(
+        content=content,
+        media_type=DOCUMENT_LIST_EXPORT_MIME_TYPE,
+        headers={
+            "Content-Disposition": 'attachment; filename="document-list.xlsx"',
+        },
+    )
 
 
 @router.post(

@@ -116,6 +116,7 @@ interface BackendPayListDetailResult {
         id: number
         pay_list_id: number
         case_id: string
+        case_no?: string | null
         fee_item_id: string | null
         status: string
         currency: string

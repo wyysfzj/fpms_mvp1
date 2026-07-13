@@ -83,6 +83,25 @@
             <span v-else>—</span>
           </template>
         </el-table-column>
+        <el-table-column label="来源状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="sourceStatusTag(row.source_status)" size="small">
+              {{ sourceStatusLabel(row.source_status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="来源" min-width="160">
+          <template #default="{ row }">
+            <el-tooltip
+              v-if="row.source_doc || row.source_policy || row.source_url"
+              :content="sourceTooltip(row)"
+              placement="top"
+            >
+              <span class="source-cell">{{ row.source_doc || row.source_policy || row.source_url }}</span>
+            </el-tooltip>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <el-button text size="small" @click="openEdit(row)">
@@ -195,6 +214,30 @@ function unknownLabel(label: string): string {
   return `未知${label}`
 }
 
+function sourceStatusLabel(v?: string | null): string {
+  const normalized = (v || '').toUpperCase()
+  if (normalized === 'CONFIRMED') return '已确认'
+  if (normalized === 'PENDING' || normalized === 'PENDING_CONFIRMATION') return '待确认'
+  if (normalized === 'DISABLED') return '未启用'
+  return '未标记'
+}
+
+function sourceStatusTag(v?: string | null): 'success' | 'warning' | 'info' {
+  const normalized = (v || '').toUpperCase()
+  if (normalized === 'CONFIRMED') return 'success'
+  if (normalized === 'PENDING' || normalized === 'PENDING_CONFIRMATION') return 'warning'
+  return 'info'
+}
+
+function sourceTooltip(row: FeeRate): string {
+  const parts: string[] = []
+  if (row.source_doc) parts.push(`来源文件：${row.source_doc}`)
+  if (row.source_policy) parts.push(`政策依据：${row.source_policy}`)
+  if (row.source_url) parts.push(`来源链接：${row.source_url}`)
+  if (row.source_version) parts.push(`版本：${row.source_version}`)
+  return parts.join('；') || '—'
+}
+
 watch([page, pageSize], () => {
   fetchRates()
 })
@@ -208,5 +251,14 @@ onMounted(() => {
 .rate-value {
   font-family: var(--font-mono);
   font-weight: 500;
+}
+
+.source-cell {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 </style>

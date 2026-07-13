@@ -24,6 +24,9 @@ export interface Document {
     reply_to_id?: string
     need_reply?: boolean
     reply_date?: string
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | 'LEGACY_UNVERIFIED' | null
 }
 
 export interface DocumentListParams {
@@ -123,6 +126,9 @@ export interface DocumentCreatePayload {
     doc_type?: 'OFFICIAL_IN' | 'OFFICIAL_OUT' | 'CLIENT_IN' | 'CLIENT_OUT'
     description?: string
     reply_to_id?: string | null
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | null
 }
 
 export interface DocumentImpactPreviewPayload {
@@ -135,6 +141,10 @@ export interface DocumentImpactPreviewPayload {
     ref_no?: string | null
     extra_data?: string | null
     reply_to_id?: string | null
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | null
+    description?: string | null
 }
 
 export interface DocumentImpactItem {
@@ -151,6 +161,10 @@ export interface DocumentImpactPreviewResult {
     case_id: string
     case_no?: string | null
     template_code?: string | null
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | 'LEGACY_UNVERIFIED' | null
+    description?: string | null
     status_impacts: DocumentImpactItem[]
     deadline_impacts: DocumentImpactItem[]
     task_impacts: DocumentImpactItem[]
@@ -172,6 +186,9 @@ export interface DocumentUpdatePayload {
     reply_to_id?: string | null
     need_reply?: boolean | null
     reply_date?: string | null
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | null
 }
 
 export interface Attachment {
@@ -221,6 +238,9 @@ export interface DocumentWizardBatchDefaults {
     direction: 'IN' | 'OUT'
     doc_date: string
     doc_template_id: string | null
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | null
 }
 
 export interface DocumentWizardBatchRowDraft {
@@ -231,6 +251,9 @@ export interface DocumentWizardBatchRowDraft {
     need_reply?: boolean
     reply_to_id?: string
     extra_data?: string
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | null
 }
 
 export interface DocumentWizardTaskFinalRowDraft {

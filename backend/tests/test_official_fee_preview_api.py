@@ -402,6 +402,63 @@ def test_official_fee_preview_selects_current_effective_rate(
     assert Decimal(candidates["CN_INV_APPLICATION_FEE"]["amount"]) == Decimal("135.00")
 
 
+def test_official_fee_preview_excludes_pending_confirmation_rates_even_if_enabled(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory,
+) -> None:
+    """待确认来源的费率即使被误启用也不得参与自动预览/草单（启用门禁）。"""
+    _seed_apply_fee_rates(session_factory)
+    with session_factory() as db:
+        db.add(
+            FeeRate(
+                id=str(uuid4()),
+                fee_code="CN_INV_APPLICATION_FEE",
+                fee_name="待确认发明申请费",
+                fee_type="GOV",
+                currency="CNY",
+                default_amount=Decimal("9999.00"),
+                enabled=True,
+                rate_group="DOMESTIC",
+                fee_domain="PATENT",
+                fee_section="专利收费-国内部分",
+                fee_category="申请费",
+                fee_subtype="发明专利",
+                calc_mode="FIXED",
+                allow_reduction=True,
+                source_doc="tianyueip_product_612",
+                source_status="PENDING_CONFIRMATION",
+            )
+        )
+        db.commit()
+
+    client_id = _create_client(client, auth_headers)
+    applicant_id = _seed_applicant(session_factory)
+    case_data = _create_case(
+        client,
+        auth_headers,
+        client_id=client_id,
+        applicant_id=applicant_id,
+    )
+
+    response = client.post(
+        "/api/v1/fees/official-fee-preview",
+        json={
+            "case_id": case_data["id"],
+            "currency": "CNY",
+            "trigger_event": "FILING_ACCEPTED",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    candidates = {item["fee_code"]: item for item in body["candidates"]}
+    # 待确认条目不得被选中：金额必须来自 CONFIRMED 的 900 元费率。
+    assert Decimal(candidates["CN_INV_APPLICATION_FEE"]["unit_price"]) == Decimal("900.00")
+    assert candidates["CN_INV_APPLICATION_FEE"]["source_status"] == "CONFIRMED"
+
+
 def test_official_fee_preview_returns_reexam_candidate_without_creating_draft(
     client: TestClient,
     auth_headers: dict[str, str],

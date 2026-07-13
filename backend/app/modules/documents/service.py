@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
@@ -17,6 +18,12 @@ from app.modules.cases.service import (
     validate_case_status_transition,
 )
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.extra_data import (
+    DocumentExtraDataBusinessError,
+    DocumentExtraDataShapeError,
+    merge_document_extra_data,
+    parse_document_extra_data,
+)
 from app.modules.documents.fee_linking_service import (
     create_fee_draft_from_wizard_row,
     maybe_create_fee_draft,
@@ -50,6 +57,7 @@ from app.modules.documents.schemas import (
     DocumentWizardFeePreviewIn,
     DocumentWizardTaskFinalRowIn,
 )
+from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.masterdata.clients.models import Client, ClientAddress
 from app.modules.tasks.enums import TaskAction, TaskStatus
 from app.modules.tasks.models import Task, TaskTemplate
@@ -250,6 +258,98 @@ _HISTORICAL_ATTACHMENT_ALIASES = {
 }
 
 
+def _merge_document_create_extra_data(
+    data: DocumentCreateIn | DocumentImpactPreviewIn,
+) -> str | None:
+    structured_fields = (
+        "official_due_date",
+        "official_due_date_source",
+        "official_due_date_status",
+        "description",
+    )
+    updates = {
+        field: getattr(data, field) for field in structured_fields if field in data.model_fields_set
+    }
+    try:
+        if not updates:
+            parsed = parse_document_extra_data(data.extra_data)
+            if parsed.official_due_date_status == "LEGACY_UNVERIFIED":
+                raise DocumentExtraDataBusinessError(
+                    "OfficialDueDate",
+                    "writes require date, source, and write status together",
+                )
+            return data.extra_data
+        return merge_document_extra_data(data.extra_data, **updates)
+    except DocumentExtraDataShapeError as exc:
+        raise_business_error(
+            "DOCUMENT_EXTRA_DATA_INVALID",
+            "Document extra data has an invalid shape",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=422,
+        )
+    except DocumentExtraDataBusinessError as exc:
+        raise_business_error(
+            "DOCUMENT_DEADLINE_INVALID",
+            "Document deadline fields are incomplete or inconsistent",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=400,
+        )
+
+
+def _is_official_notice_catalog_template(template: DocTemplate) -> bool:
+    template_code = (_normalize_text(template.code) or "").upper()
+    if template_code.startswith("OFFICIAL_NOTICE_"):
+        return True
+    try:
+        metadata = json.loads(template.input_fields or "null")
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return bool(
+        isinstance(metadata, dict)
+        and (_normalize_text(metadata.get("catalog_kind")) or "").upper() == "OFFICIAL_NOTICE"
+    )
+
+
+def _validate_document_template_execution_gate(template: DocTemplate) -> None:
+    if not _is_official_notice_catalog_template(template):
+        return
+    semantics = resolve_document_semantics(template)
+    if semantics.catalog_status == "EXECUTABLE":
+        return
+    raise_business_error(
+        "DOCUMENT_TEMPLATE_REFERENCE_ONLY",
+        "Official notice catalog template is reference-only",
+        details={
+            "template_id": template.id,
+            "template_code": template.code,
+            "catalog_status": semantics.catalog_status,
+        },
+        status_code=409,
+    )
+
+
+def _is_oa_out_template(template: DocTemplate | None) -> bool:
+    return bool(template and (template.code or "").strip().upper() == "OA_OUT")
+
+
+def _reply_source_waits_for_receipt_archive(
+    db: Session,
+    source_document: Document,
+) -> bool:
+    if not source_document.doc_template_id:
+        return False
+    source_template = db.execute(
+        select(DocTemplate).where(DocTemplate.id == source_document.doc_template_id)
+    ).scalar_one_or_none()
+    if not source_template:
+        return False
+    semantics = resolve_document_semantics(source_template)
+    return (
+        semantics.execution_behavior == "OA_REPLY"
+        and semantics.completion_event == "OFFICIAL_RECEIPT_ARCHIVED"
+    )
+
+
 def _apply_template_defaults(
     *,
     case: Case,
@@ -260,17 +360,19 @@ def _apply_template_defaults(
     if not template:
         return
 
-    if not need_reply_overridden and getattr(template, "need_reply", None) is not None:
-        document.need_reply = template.need_reply
+    semantics = resolve_document_semantics(template)
+    if not need_reply_overridden:
+        document.need_reply = semantics.requires_reply
 
-    if getattr(template, "status_effect", None) and document.direction == DocumentDirection.IN:
-        validate_case_status_transition(case.status, template.status_effect)
-        case.status = template.status_effect
+    if semantics.case_status_effect and document.direction == DocumentDirection.IN:
+        validate_case_status_transition(case.status, semantics.case_status_effect)
+        case.status = semantics.case_status_effect
 
     if (
         getattr(template, "status_restore", None)
         and document.direction == DocumentDirection.OUT
         and document.reply_to_id
+        and not _is_oa_out_template(template)
     ):
         validate_case_status_transition(case.status, template.status_restore)
         case.status = template.status_restore
@@ -302,7 +404,12 @@ def _advance_grant_notice_case_after_attachment(db: Session, *, document: Docume
     case.status = "GRANTED"
 
 
-def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None) -> None:
+def _apply_reply_chain(
+    db: Session,
+    *,
+    document: Document,
+    doc_date: date | None,
+) -> None:
     if not document.reply_to_id or document.direction != DocumentDirection.OUT:
         return
 
@@ -313,6 +420,10 @@ def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None
         raise_business_error(
             "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
         )
+
+    original_doc.reply_date = doc_date
+    if _reply_source_waits_for_receipt_archive(db, original_doc):
+        return
 
     open_tasks = (
         db.execute(
@@ -336,8 +447,6 @@ def _apply_reply_chain(db: Session, *, document: Document, doc_date: date | None
             to_status=TaskStatus.DONE.value,
             remark=f"Auto write-off: reply document {document.id}",
         )
-
-    original_doc.reply_date = doc_date
 
 
 def _validate_reply_to_document(
@@ -367,13 +476,25 @@ def _validate_reply_to_document(
 
     expected_template_code = _normalize_text(getattr(template, "reply_to_template_code", None))
     if expected_template_code:
+        original_template = None
         original_template_code = None
         if original_doc.doc_template_id:
             original_template = db.execute(
                 select(DocTemplate).where(DocTemplate.id == original_doc.doc_template_id)
             ).scalar_one_or_none()
             original_template_code = _normalize_text(getattr(original_template, "code", None))
-        if original_template_code != expected_template_code:
+        matches_expected_template = original_template_code == expected_template_code
+        if (
+            not matches_expected_template
+            and expected_template_code.upper() == "OA_IN"
+            and original_template is not None
+        ):
+            original_semantics = resolve_document_semantics(original_template)
+            matches_expected_template = (
+                original_semantics.catalog_status == "EXECUTABLE"
+                and original_semantics.execution_behavior == "OA_REPLY"
+            )
+        if not matches_expected_template:
             raise_business_error(
                 "REPLY_TO_TEMPLATE_MISMATCH",
                 "Reply-to document template does not match reply template rule",
@@ -710,6 +831,7 @@ def _create_document_record(
             raise_business_error(
                 "DOC_TEMPLATE_NOT_FOUND", "Doc template not found", status_code=404
             )
+        _validate_document_template_execution_gate(template)
 
     _validate_reply_to_document(
         db,
@@ -718,6 +840,7 @@ def _create_document_record(
         template=template,
     )
 
+    extra_data = _merge_document_create_extra_data(data)
     document = Document(
         id=str(uuid4()),
         case_id=data.case_id,
@@ -727,14 +850,18 @@ def _create_document_record(
         doc_date=data.doc_date,
         title=data.title,
         ref_no=data.ref_no,
-        extra_data=data.extra_data,
+        extra_data=extra_data,
         reply_to_id=data.reply_to_id,
     )
     db.add(document)
     db.flush()
 
     _apply_template_defaults(case=case, document=document, template=template)
-    _apply_reply_chain(db, document=document, doc_date=data.doc_date)
+    _apply_reply_chain(
+        db,
+        document=document,
+        doc_date=data.doc_date,
+    )
 
     if commit:
         db.commit()
@@ -831,7 +958,7 @@ def list_documents(
 
 
 def create_document(db: Session, data: DocumentCreateIn) -> Document:
-    return _create_document_record(db, data, commit=True)
+    return _create_document_record(db, data, commit=False)
 
 
 def preview_document_impact(
@@ -859,16 +986,18 @@ def preview_document_impact(
     file_status_impacts: list[DocumentImpactItemOut] = []
     confirmation_items: list[str] = []
     risk_tips: list[str] = []
+    deadline = parse_document_extra_data(_merge_document_create_extra_data(data))
 
     if template:
-        if data.direction == DocumentDirection.IN and _normalize_text(template.status_effect):
+        semantics = resolve_document_semantics(template)
+        if data.direction == DocumentDirection.IN and semantics.case_status_effect:
             status_impacts.append(
                 DocumentImpactItemOut(
                     kind="CASE_STATUS",
                     title="案件状态影响",
-                    effect=template.status_effect,
+                    effect=semantics.case_status_effect,
                     requires_confirmation=True,
-                    detail=f"登记后案件状态预计变更为 {template.status_effect}",
+                    detail=f"登记后案件状态预计变更为 {semantics.case_status_effect}",
                 )
             )
             confirmation_items.append("案件状态将受模板影响")
@@ -888,7 +1017,48 @@ def preview_document_impact(
             )
             confirmation_items.append("案件状态将受模板影响")
 
-        if _normalize_text(template.deadline_template_code):
+        if semantics.deadline_source_policy == "EXPLICIT_OFFICIAL_DUE_REQUIRED" and (
+            deadline.official_due_date is None or deadline.official_due_date_status != "CONFIRMED"
+        ):
+            error_code = {
+                "OA_REPLY": "OA_OFFICIAL_DUE_DATE_REQUIRED",
+                "GRANT_NOTICE": "GRANT_OFFICIAL_DUE_DATE_REQUIRED",
+            }.get(
+                semantics.execution_behavior,
+                "DOCUMENT_OFFICIAL_DUE_DATE_REQUIRED",
+            )
+            raise_business_error(
+                error_code,
+                "Executable notice preview requires a confirmed explicit official due date",
+                details={"status": deadline.official_due_date_status},
+                status_code=409,
+            )
+
+        if semantics.deadline_source_policy == "EXPLICIT_OFFICIAL_DUE_REQUIRED":
+            assert deadline.official_due_date is not None
+            deadline_impacts.append(
+                DocumentImpactItemOut(
+                    kind="OFFICIAL_DUE_DATE",
+                    title="官方期限",
+                    effect=deadline.official_due_date.isoformat(),
+                    detail=(
+                        f"来源 {deadline.official_due_date_source}；"
+                        f"确认状态 {deadline.official_due_date_status}"
+                    ),
+                )
+            )
+            if semantics.task_template_code:
+                task_impacts.append(
+                    DocumentImpactItemOut(
+                        kind="AUTO_TASK",
+                        title="任务影响",
+                        effect=semantics.task_template_code,
+                        requires_confirmation=True,
+                        detail="登记后将按已确认官方期限生成或更新期限任务",
+                    )
+                )
+                confirmation_items.append("期限任务将受已确认官方期限影响")
+        elif _normalize_text(template.deadline_template_code):
             deadline_impacts.append(
                 DocumentImpactItemOut(
                     kind="DEADLINE_TEMPLATE",
@@ -909,7 +1079,14 @@ def preview_document_impact(
             )
             confirmation_items.append("期限任务将受模板影响")
 
-        if _normalize_text(template.fee_draft_type):
+        suppress_grant_auto_draft = (
+            _normalize_text(template.code) or ""
+        ).upper() == "GRANT_NOTICE" or (
+            semantics.catalog_status == "EXECUTABLE"
+            and semantics.execution_behavior == "GRANT_NOTICE"
+            and semantics.fee_trigger == "GRANT_FEE"
+        )
+        if _normalize_text(template.fee_draft_type) and not suppress_grant_auto_draft:
             fee_impacts.append(
                 DocumentImpactItemOut(
                     kind="FEE_DRAFT",
@@ -921,7 +1098,7 @@ def preview_document_impact(
             )
             confirmation_items.append("费用草稿将受模板影响")
 
-        if template.need_reply and data.direction == DocumentDirection.IN:
+        if semantics.requires_reply and data.direction == DocumentDirection.IN:
             file_status_impacts.append(
                 DocumentImpactItemOut(
                     kind="NEED_REPLY",
@@ -965,6 +1142,10 @@ def preview_document_impact(
         case_id=case.id,
         case_no=case.case_no,
         template_code=template.code if template else None,
+        official_due_date=deadline.official_due_date,
+        official_due_date_source=deadline.official_due_date_source,
+        official_due_date_status=deadline.official_due_date_status,
+        description=deadline.description,
         status_impacts=status_impacts,
         deadline_impacts=deadline_impacts,
         task_impacts=task_impacts,
@@ -1084,7 +1265,7 @@ def preview_document_wizard_tasks(
             doc_date=payload.doc_date,
             direction=getattr(payload.direction, "value", payload.direction),
             doc_template_id=payload.doc_template_id,
-            extra_data=payload.extra_data,
+            extra_data=_merge_document_create_extra_data(payload),
             title=payload.title,
             case=case,
         )
@@ -1852,7 +2033,7 @@ def _build_document_wizard_payload(
     row: DocumentWizardBatchRowIn,
     template: DocTemplate,
 ) -> DocumentCreateIn:
-    data = defaults.model_dump()
+    data = defaults.model_dump(exclude_unset=True)
     row_data = row.model_dump(exclude_unset=True)
     data.update(row_data)
     data["case_id"] = _normalize_text(row.case_id)
@@ -2043,6 +2224,107 @@ def _apply_reply_task_update_controls(
         )
 
 
+def _merge_document_update_extra_data(
+    document: Document,
+    updates: dict,
+) -> date | None:
+    structured_fields = (
+        "official_due_date",
+        "official_due_date_source",
+        "official_due_date_status",
+        "description",
+    )
+    structured_updates = {
+        field: updates.pop(field) for field in structured_fields if field in updates
+    }
+    raw_was_updated = "extra_data" in updates
+    if not structured_updates and not raw_was_updated:
+        return None
+
+    raw = updates.pop("extra_data", document.extra_data)
+    deadline_was_updated = raw_was_updated or any(
+        field in structured_updates
+        for field in (
+            "official_due_date",
+            "official_due_date_source",
+            "official_due_date_status",
+        )
+    )
+    try:
+        existing = parse_document_extra_data(document.extra_data)
+        existing_deadline_fields = {
+            "official_due_date": existing.official_due_date,
+            "official_due_date_source": existing.official_due_date_source,
+            "official_due_date_status": existing.official_due_date_status,
+        }
+        confirmed_structured_override = existing.official_due_date_status == "CONFIRMED" and any(
+            field in structured_updates
+            and structured_updates[field] != existing_deadline_fields[field]
+            for field in existing_deadline_fields
+        )
+        if confirmed_structured_override:
+            raise_business_error(
+                "DOCUMENT_DEADLINE_OVERRIDE_REQUIRED",
+                "A confirmed official due date cannot be changed by ordinary edit",
+                status_code=409,
+            )
+        merged = merge_document_extra_data(raw, **structured_updates) if structured_updates else raw
+        proposed = parse_document_extra_data(merged)
+
+        existing_identity = (
+            existing.official_due_date,
+            existing.official_due_date_source,
+            existing.official_due_date_status,
+        )
+        proposed_identity = (
+            proposed.official_due_date,
+            proposed.official_due_date_source,
+            proposed.official_due_date_status,
+        )
+        confirmed_override = (
+            existing.official_due_date_status == "CONFIRMED"
+            and proposed_identity != existing_identity
+        )
+        legacy_date_change = (
+            existing.official_due_date_status == "LEGACY_UNVERIFIED"
+            and deadline_was_updated
+            and proposed.official_due_date != existing.official_due_date
+        )
+        if confirmed_override or legacy_date_change:
+            raise_business_error(
+                "DOCUMENT_DEADLINE_OVERRIDE_REQUIRED",
+                "A confirmed or legacy official due date cannot be changed by ordinary edit",
+                status_code=409,
+            )
+        if deadline_was_updated and proposed.official_due_date_status == "LEGACY_UNVERIFIED":
+            raise DocumentExtraDataBusinessError(
+                "OfficialDueDate",
+                "writes require date, source, and write status together",
+            )
+        updates["extra_data"] = merged
+        if (
+            deadline_was_updated
+            and existing.official_due_date_status in (None, "LEGACY_UNVERIFIED")
+            and proposed.official_due_date_status == "CONFIRMED"
+        ):
+            return proposed.official_due_date
+        return None
+    except DocumentExtraDataShapeError as exc:
+        raise_business_error(
+            "DOCUMENT_EXTRA_DATA_INVALID",
+            "Document extra data has an invalid shape",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=422,
+        )
+    except DocumentExtraDataBusinessError as exc:
+        raise_business_error(
+            "DOCUMENT_DEADLINE_INVALID",
+            "Document deadline fields are incomplete or inconsistent",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=400,
+        )
+
+
 def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Document:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
@@ -2074,6 +2356,17 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
             select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
         ).scalar_one_or_none()
 
+    confirmed_legacy_due_date = _merge_document_update_extra_data(document, updates)
+    if confirmed_legacy_due_date is not None and template is not None:
+        semantics = resolve_document_semantics(template)
+        if semantics.execution_behavior == "OA_REPLY" and semantics.task_template_code:
+            TaskGenerationService().synchronize_confirmed_oa_deadline(
+                db,
+                document=document,
+                case_id=case.id,
+                task_template_code=semantics.task_template_code,
+                due_date=confirmed_legacy_due_date,
+            )
     for field, value in updates.items():
         setattr(document, field, value)
 
@@ -2094,7 +2387,11 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
     if "reply_to_id" in updates or (
         "doc_template_id" in updates and getattr(template, "status_restore", None)
     ):
-        _apply_reply_chain(db, document=document, doc_date=document.doc_date)
+        _apply_reply_chain(
+            db,
+            document=document,
+            doc_date=document.doc_date,
+        )
 
     db.commit()
     db.refresh(document)

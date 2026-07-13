@@ -87,8 +87,14 @@ Customer and external source documents:
 - `docs/postdemo/OA答复流程.docx` - OA reply workflow and official-system interaction expectations.
 - `docs/postdemo/信函生成操作.docx` - letter generation and customer handoff workflow.
 - `docs/postdemo/专利收费场景-20260626.docx` - post-demo patent fee scenario source, trigger scenes, fee categories/subtypes, fee reduction semantics, fee-node expectations.
+- `docs/postdemo/相关问题解答.docx` - repo-local customer answer file confirming master power-of-attorney numbering, OA replies containing non-copyable content, and fee-reduction ratio semantics; prefer this original over the historical external copy below.
+- `docs/postdemo/标准费率.XLS` - customer internal fee-code/rate workbook containing official-fee and service-fee columns; treat it as a customer pricing/configuration source, not as the current legal authority for official fee rates.
+- `docs/postdemo/补充缴费信息模板.xlsm` - customer-provided macro-enabled supplementary payment workbook with a visible upload sheet and hidden fee/business-type dictionaries; preserve its provenance, macros, hidden sheets, field order, and validation behavior when assessing compatibility, and do not assume it is a clean or currently accepted official template without upload verification.
+- `docs/postdemo/文件样例及模版/**` - customer-provided filing draft, official-document, OA-response, email-template, XML-handling, and archive examples; classify legacy forms separately from current official forms and inspect rendered pages when layout or attachments matter.
 - `/Users/cfcc/Documents/相关问题解答.docx` - external local customer answer file used for post-demo clarification follow-up.
-- `http://www.tianyueip.com/product/612` - customer-provided fee standard webpage; cached extraction lives at `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/tianyueip_product_612.txt`.
+- `http://www.tianyueip.com/product/612` - customer-provided law-firm fee-standard webpage; use as a secondary customer/business reference, not as the primary legal fee authority; cached extraction lives at `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/tianyueip_product_612.txt`.
+- `https://www.cnipa.gov.cn/art/2024/8/6/art_1518_155983.html` - CNIPA primary webpage for current patent and integrated-circuit layout-design fee standards; verify the effective policy/version when activating rates.
+- `https://www.cnipa.gov.cn/attach/0/b2d5a31081404b83a36c0df1ebe591e7.pdf` - CNIPA patent and integrated-circuit layout-design payment service guide, updated 2026-03-30; primary operational source for payment channels, fee types, reduction, late fees, and ticket rules.
 
 Extracted customer-source text and review ledgers:
 
@@ -102,6 +108,7 @@ Extracted customer-source text and review ledgers:
 - `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/专利收费场景-20260626.txt`
 - `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/docx_inventory.txt`
 - `artifacts/PD-FEE-SCENARIO-GAP-REVIEW-20260705-01/extracted/专利收费场景-20260626.txt`
+- `artifacts/PD-NEW-CUSTOMER-SOURCE-INDEX-20260712-01/analysis/source_ledger.md`
 
 Authoritative FPMS baseline and design documents:
 
@@ -138,6 +145,8 @@ Post-demo analysis, Functional Spec, demo, and fee-design documents:
 - `docs/superpowers/plans/2026-05-31-postdemo-p1-full-scope-development.md`
 - `docs/superpowers/plans/2026-06-11-postdemo-p1-answer-delta-full-scope.md`
 - `docs/superpowers/plans/2026-07-05-official-fee-scenario-enhancement.md`
+- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md` - canonical V8 mitigation design for subsequent planning and implementation; inherits accepted Additional-GAP Tasks 01–70, supersedes conflicting V7 business semantics without rewriting V7 history, and keeps unresolved customer choices behind explicit decision gates.
+- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md` - comprehensive V8 implementation plan and 283-path atomic task catalog; preserves Tasks 01–70, serializes migrations/shared files/SQLite verification, starts with a 197-path foundation manifest, and defers 86 customer-dependent/full-only paths into independent gate lanes plus the eventual full manifest.
 
 Audit and remediation review documents:
 
@@ -159,8 +168,8 @@ Evidence families to search during audits:
 Useful source-discovery commands:
 
 ```bash
-find docs/postdemo -maxdepth 1 \( -name '*.md' -o -name '*.docx' -o -name '*.pdf' -o -name '*.txt' \) ! -name '~$*' -print | sort
-rg --files docs reference artifacts | rg '(TXX|FPMS SPEC|postdemo|专利收费|相关流程|OA答复|信函生成|相关问题|PD-ENH|PD-P1|PD-FEE|PD-DOC)'
+find docs/postdemo \( -name '*.md' -o -name '*.doc' -o -name '*.docx' -o -name '*.pdf' -o -name '*.PDF' -o -name '*.txt' -o -name '*.xls' -o -name '*.XLS' -o -name '*.xlsm' \) ! -name '~$*' -print | sort
+rg --files docs reference artifacts | rg '(TXX|FPMS SPEC|postdemo|专利收费|标准费率|补充缴费|文件样例|相关流程|OA答复|信函生成|相关问题|PD-ENH|PD-P1|PD-FEE|PD-DOC)'
 find artifacts -maxdepth 2 -name summary.md | rg '/(PD-ENH|PD-P1|PD-FEE|PD-DOC)-'
 ```
 
@@ -658,6 +667,35 @@ SQLite test concurrency rule:
 - Agents MUST NOT run concurrent test jobs that write to the same SQLite database.
 - If a test suite is known or likely to perform writes, it must run in serialized ownership.
 - When “database is locked” risk exists, prefer targeted tests and serialized execution over parallel full-suite execution.
+
+### 13.5 `READY FOR HIGH DEVELOPMENT` Handoff Gate (MANDATORY)
+
+A task or wave may enter High implementation only when the lead completes this mechanical checklist:
+
+- [ ] Freeze the exact materialized task file path(s), exact closure slice, explicit non-closure boundary, and remaining follow-up task IDs.
+- [ ] Freeze each task allowlist, dependencies, Story Shape Classification, chosen runbook, targeted verification commands, and evidence path.
+- [ ] Build conflict-free waves and record every serialized shared-file owner; unresolved legal, business, customer, or product choices remain behind named decision gates and outside implementation scope.
+- [ ] Complete the materialization/dependency preflight: every task file exists and passes the atomic task check, every prerequisite is closed or explicitly ordered, and no hidden shared prerequisite or unreachable state transition remains.
+
+Reasoning and execution lanes:
+
+- Ultra/highest-capability work MUST be limited to design freeze, unresolved legal/business or cross-module architecture decisions, high-risk escalation, and Foundation/Full/Release close audits.
+- High implementation (balanced/high reasoning) is the default lane for frozen atomic tasks and MUST proceed through tracer TDD (one behavior at a time through public interfaces where tests are appropriate) and scoped evidence.
+- An implementation worker MUST NOT perform broad source-document reanalysis unless it demonstrates a genuine contract ambiguity; it must stop the affected lane and escalate that ambiguity instead.
+- Load only the minimal relevant skill stack in repository precedence order. Overlapping workflow skills MUST NOT be loaded mechanically.
+- Give an independent reviewer only the task contract, baseline-subtracted diff, targeted results, and task evidence. Expand review context only when the reviewer identifies a concrete ambiguity that those inputs cannot resolve.
+- Shared files, migrations, SQLite-writing verification, repo-wide checks, and release gates remain serialized under the existing ownership and gate rules.
+
+No-progress takeover:
+
+- A lead or monitor may declare a worker stalled only after two consecutive observations show no allowlist-diff growth, no artifact timestamp advancement, and no running verification.
+- Any takeover MUST be bounded to evidence completion, verification, or the unfinished work inside the same exact closure slice. It MUST preserve the original allowlist and non-closure boundary and MUST NOT absorb a second slice.
+
+Automatic escalation and fallback:
+
+- Escalate the affected lane for a demonstrated contract ambiguity, unresolved legal/business/customer decision, cross-module architecture decision, hidden shared prerequisite, ownership conflict, closure-slice change, or high-risk/contradictory gate result.
+- When the runtime exposes no programmatic model switching or reasoning-tier control, record an explicit escalation handoff with the task path, blocker, evidence, decision needed, and recommended capability tier; ask the lead or user to re-route it and never claim that a switch occurred.
+- Unaffected conflict-free lanes MAY continue safely when their frozen contracts and dependencies do not cross the escalation boundary.
 
 ———
 

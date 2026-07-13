@@ -49,8 +49,8 @@ def test_generate_from_document_uses_template_deadline_and_reminder_bases() -> N
 
     template = SimpleNamespace(
         id=str(uuid4()),
-        code="OA_REPLY",
-        name="OA答复期限",
+        code="GENERIC_DEADLINE",
+        name="通用期限",
         enabled=True,
         deadline_base=TaskDeadlineBase.RECEIVE_DATE,
         add_days=30,
@@ -74,8 +74,8 @@ def test_generate_from_document_uses_template_deadline_and_reminder_bases() -> N
         case_id=case.id,
         doc_date=date(2025, 1, 10),
         direction="IN",
-        doc_type="OA_REPLY",
-        title="第一次审查意见通知书",
+        doc_type="GENERIC_DEADLINE",
+        title="通用期限文件",
         case=None,
     )
     db = _FakeDB(template=template, case=case)
@@ -100,8 +100,8 @@ def test_generate_from_document_uses_deadline_reminder_base_when_configured() ->
 
     template = SimpleNamespace(
         id=str(uuid4()),
-        code="OA_REPLY",
-        name="OA答复期限",
+        code="GENERIC_DEADLINE",
+        name="通用期限",
         enabled=True,
         deadline_base=TaskDeadlineBase.RECEIVE_DATE,
         add_days=30,
@@ -122,8 +122,8 @@ def test_generate_from_document_uses_deadline_reminder_base_when_configured() ->
         case_id=case.id,
         doc_date=date(2025, 1, 10),
         direction="IN",
-        doc_type="OA_REPLY",
-        title="第一次审查意见通知书",
+        doc_type="GENERIC_DEADLINE",
+        title="通用期限文件",
         case=None,
     )
     db = _FakeDB(template=template, case=case)
@@ -162,8 +162,8 @@ def test_generate_from_document_uses_each_supported_deadline_base(
 
     template = SimpleNamespace(
         id=str(uuid4()),
-        code="OA_REPLY",
-        name="OA答复期限",
+        code="GENERIC_DEADLINE",
+        name="通用期限",
         enabled=True,
         deadline_base=deadline_base,
         add_days=30,
@@ -187,8 +187,8 @@ def test_generate_from_document_uses_each_supported_deadline_base(
         case_id=case.id,
         doc_date=date(2025, 1, 10),
         direction="IN",
-        doc_type="OA_REPLY",
-        title="第一次审查意见通知书",
+        doc_type="GENERIC_DEADLINE",
+        title="通用期限文件",
         case=None,
     )
     db = _FakeDB(template=template, case=case)
@@ -204,8 +204,8 @@ def test_generate_from_document_raises_when_deadline_base_case_date_missing() ->
 
     template = SimpleNamespace(
         id=str(uuid4()),
-        code="OA_REPLY",
-        name="OA答复期限",
+        code="GENERIC_DEADLINE",
+        name="通用期限",
         enabled=True,
         deadline_base=TaskDeadlineBase.RECEIVE_DATE,
         add_days=30,
@@ -226,8 +226,8 @@ def test_generate_from_document_raises_when_deadline_base_case_date_missing() ->
         case_id=case.id,
         doc_date=date(2025, 1, 10),
         direction="IN",
-        doc_type="OA_REPLY",
-        title="第一次审查意见通知书",
+        doc_type="GENERIC_DEADLINE",
+        title="通用期限文件",
         case=None,
     )
     db = _FakeDB(template=template, case=case)
@@ -241,8 +241,8 @@ def test_generate_from_document_raises_on_unsupported_deadline_or_remind_base() 
 
     template = SimpleNamespace(
         id=str(uuid4()),
-        code="OA_REPLY",
-        name="OA答复期限",
+        code="GENERIC_DEADLINE",
+        name="通用期限",
         enabled=True,
         deadline_base=TaskDeadlineBase.RECEIVE_DATE,
         add_days=30,
@@ -263,8 +263,8 @@ def test_generate_from_document_raises_on_unsupported_deadline_or_remind_base() 
         case_id=case.id,
         doc_date=date(2025, 1, 10),
         direction="IN",
-        doc_type="OA_REPLY",
-        title="第一次审查意见通知书",
+        doc_type="GENERIC_DEADLINE",
+        title="通用期限文件",
         case=None,
     )
     db = _FakeDB(template=template, case=case)

@@ -1,27 +1,40 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+import time
+from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.billing.models import Bill, BillItem
 from app.modules.cases.models import Case
 from app.modules.cases.service import has_required_granted_status_fields
+from app.modules.documents.enums import DocumentDirection
+from app.modules.documents.extra_data import DocumentExtraDataError, parse_document_extra_data
 from app.modules.documents.models import DocTemplate, Document
+from app.modules.documents.schemas import DocumentCreateIn
+from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.documents.service import (
     _backend_storage_dir,
+    _merge_document_create_extra_data,
     build_document_template_render_context,
+    create_document,
     persist_generated_attachment,
     resolve_document_template_render_source,
 )
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate, T_GrantFeeTask
-from app.modules.fees.service import fee_rate_effective_on_conditions, recalc_fee_draft_totals
+from app.modules.fees.service import (
+    fee_rate_effective_on_conditions,
+    fee_rate_source_enabled_condition,
+    recalc_fee_draft_totals,
+)
 from app.modules.templates.render import TemplateRenderer
 
 GRANT_FEE_TASK_PERMISSION_CODES = ("GrantFeeTask.Read", "GrantFeeTask.Write")
@@ -40,9 +53,10 @@ GRANT_FEE_GOV_FEE_CODE = "GRANT_FEE_GOV"
 GRANT_FEE_SERVICE_FEE_CODE = "GRANT_FEE_SERVICE"
 GRANT_FEE_NOTICE_TEMPLATE_CODE = "GRANT_FEE_NOTICE"
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-GRANT_FEE_NOTICE_DUE_DAYS = 60
 _ZERO = Decimal("0")
 _MONEY_QUANT = Decimal("0.01")
+_SQLITE_LOCK_RETRY_ATTEMPTS = 10
+_SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.05
 
 _STATE_ALLOWED_ACTIONS = {
     "OPEN": ("mark_waiting_client",),
@@ -68,6 +82,14 @@ _GRANT_FEE_DEADLINE_PREVIEW_FIELDS = {
     "fee_basis": "授权阶段官费按授权费任务金额展示；如无授权费率则回退授权当年年费规则",
     "fee_node_explanation": "授权费用节点：客户确认缴费后生成官费草单，缴费登记后进入授权后年费监视。",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class GrantFeeTaskReplacementResult:
+    document: Document
+    replacement_task: T_GrantFeeTask
+    superseded_task_id: str
+    reused: bool
 
 
 def get_grant_fee_module_contract() -> dict[str, object]:
@@ -263,6 +285,7 @@ def _select_matching_gov_rate(
         FeeRate.fee_type == "GOV",
         FeeRate.currency == currency,
         FeeRate.rate_group == rate_group,
+        fee_rate_source_enabled_condition(),
         *fee_rate_effective_on_conditions(date.today()),
     ]
     if normalized_patent_category:
@@ -333,6 +356,26 @@ def derive_grant_fee_task_state(task: T_GrantFeeTask) -> str:
     return "OPEN"
 
 
+def _derive_grant_fee_task_lineage_status(task: T_GrantFeeTask) -> str:
+    if task.superseded_by_task_id:
+        return "SUPERSEDED"
+    if task.source_document_id and task.deadline_source and task.deadline_confirmed_at:
+        return "CONFIRMED"
+    return "LEGACY_UNVERIFIED"
+
+
+def _require_grant_fee_task_actionable(task: T_GrantFeeTask) -> str:
+    lineage_status = _derive_grant_fee_task_lineage_status(task)
+    if lineage_status != "CONFIRMED":
+        raise_business_error(
+            "GRANT_FEE_TASK_LINEAGE_NOT_ACTIONABLE",
+            "Grant fee task lineage is not actionable",
+            details={"task_id": task.id, "lineage_status": lineage_status},
+            status_code=409,
+        )
+    return lineage_status
+
+
 def _case_has_required_grant_fields(case: Case) -> bool:
     return has_required_granted_status_fields(case)
 
@@ -358,8 +401,10 @@ def apply_grant_fee_task_action(
     action: str,
 ) -> dict[str, Any]:
     task = _load_grant_fee_task(db, task_id=task_id)
-    current_state = derive_grant_fee_task_state(task)
     normalized_action = _normalize_action(action)
+    _require_grant_fee_task_actionable(task)
+
+    current_state = derive_grant_fee_task_state(task)
     allowed_actions = _STATE_ALLOWED_ACTIONS[current_state]
 
     if normalized_action not in allowed_actions:
@@ -384,37 +429,151 @@ def apply_grant_fee_task_action(
     return _serialize_grant_fee_task_state(task, state=derive_grant_fee_task_state(task))
 
 
+def _raise_active_grant_source_conflict(
+    active_task: T_GrantFeeTask,
+    *,
+    requested_source_document_id: str,
+) -> None:
+    raise_business_error(
+        "GRANT_FEE_TASK_ACTIVE_SOURCE_CONFLICT",
+        "A different active grant notice source requires explicit replacement",
+        details={
+            "task_id": active_task.id,
+            "active_source_document_id": active_task.source_document_id,
+            "requested_source_document_id": requested_source_document_id,
+        },
+        status_code=409,
+    )
+
+
+def _ensure_sqlite_grant_write_transaction(db: Session) -> None:
+    connection = db.connection()
+    if connection.dialect.name != "sqlite":
+        return
+    driver_connection = connection.connection.driver_connection
+    if driver_connection.in_transaction:
+        return
+
+    for attempt in range(_SQLITE_LOCK_RETRY_ATTEMPTS + 1):
+        try:
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+            return
+        except OperationalError as exc:
+            message = str(exc).lower()
+            if "database is locked" not in message and "database is busy" not in message:
+                raise
+            if attempt == _SQLITE_LOCK_RETRY_ATTEMPTS:
+                if not driver_connection.in_transaction:
+                    connection.exec_driver_sql("BEGIN")
+                raise_business_error(
+                    "GRANT_FEE_TASK_CONCURRENCY_CONFLICT",
+                    "Grant fee task creation is busy; retry the request",
+                    status_code=409,
+                )
+            time.sleep(_SQLITE_LOCK_RETRY_DELAY_SECONDS)
+
+
 def ensure_grant_fee_task_for_notice_document(
     db: Session,
     *,
     document: Document,
     template: DocTemplate,
+    superseding_task_id: str | None = None,
 ) -> T_GrantFeeTask | None:
+    semantics = resolve_document_semantics(template)
     if (
-        (template.code or "").strip().upper() != "GRANT_NOTICE"
-        or (template.fee_draft_type or "").strip().upper() != GRANT_FEE_DRAFT_TYPE
-        or not str(document.case_id or "").strip()
+        semantics.catalog_status != "EXECUTABLE"
+        or semantics.execution_behavior != "GRANT_NOTICE"
+        or semantics.deadline_source_policy != "EXPLICIT_OFFICIAL_DUE_REQUIRED"
+        or semantics.fee_trigger != GRANT_FEE_DRAFT_TYPE
     ):
         return None
 
-    existing_task = (
+    source_document_id = str(document.id or "").strip()
+    case_id = str(document.case_id or "").strip()
+    if not source_document_id or not case_id:
+        raise_business_error(
+            "GRANT_FEE_TASK_SOURCE_REQUIRED",
+            "Grant fee task requires a persisted source document and case",
+            details={
+                "source_document_id": source_document_id or None,
+                "case_id": case_id or None,
+            },
+            status_code=409,
+        )
+
+    try:
+        deadline = parse_document_extra_data(document.extra_data)
+    except DocumentExtraDataError as exc:
+        raise_business_error(
+            "GRANT_OFFICIAL_DUE_DATE_CONFLICT",
+            "Executable grant notice requires a consistent official due date tuple",
+            details={"field": exc.field, "reason": exc.reason},
+            status_code=409,
+        )
+    if (
+        deadline.official_due_date_status != "CONFIRMED"
+        or deadline.official_due_date is None
+        or deadline.official_due_date_source is None
+    ):
+        raise_business_error(
+            "GRANT_OFFICIAL_DUE_DATE_REQUIRED",
+            "Executable grant notice requires a confirmed explicit official due date",
+            details={"status": deadline.official_due_date_status},
+            status_code=409,
+        )
+
+    _ensure_sqlite_grant_write_transaction(db)
+
+    same_source_task = (
+        db.execute(
+            select(T_GrantFeeTask).where(T_GrantFeeTask.source_document_id == source_document_id)
+        )
+        .scalars()
+        .one_or_none()
+    )
+    if same_source_task is not None:
+        if same_source_task.case_id != case_id:
+            raise_business_error(
+                "GRANT_FEE_TASK_SOURCE_IDENTITY_CONFLICT",
+                "Grant fee task source belongs to a different case",
+                details={
+                    "task_id": same_source_task.id,
+                    "source_document_id": source_document_id,
+                    "task_case_id": same_source_task.case_id,
+                    "source_case_id": case_id,
+                },
+                status_code=409,
+            )
+        return same_source_task
+
+    active_tasks = list(
         db.execute(
             select(T_GrantFeeTask)
-            .where(T_GrantFeeTask.case_id == document.case_id)
+            .where(
+                T_GrantFeeTask.case_id == case_id,
+                T_GrantFeeTask.superseded_by_task_id.is_(None),
+            )
             .order_by(T_GrantFeeTask.created_at.asc(), T_GrantFeeTask.id.asc())
         )
         .scalars()
-        .first()
+        .all()
     )
-    if existing_task is not None:
-        return existing_task
+    conflicting_active_tasks = [task for task in active_tasks if task.id != superseding_task_id]
+    if conflicting_active_tasks:
+        _raise_active_grant_source_conflict(
+            conflicting_active_tasks[0],
+            requested_source_document_id=source_document_id,
+        )
 
-    base_date = document.doc_date or date.today()
-    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
+    case = db.execute(select(Case).where(Case.id == case_id)).scalar_one_or_none()
     currency = "CNY"
     task = T_GrantFeeTask(
-        case_id=document.case_id,
-        due_date=base_date + timedelta(days=GRANT_FEE_NOTICE_DUE_DAYS),
+        case_id=case_id,
+        source_document_id=source_document_id,
+        due_date=deadline.official_due_date,
+        deadline_source=deadline.official_due_date_source,
+        deadline_confirmed_at=datetime.now(),
         gov_fee_amt=_resolve_grant_task_gov_amount(db, case=case, currency=currency),
         service_fee_amt=0,
         currency=currency,
@@ -424,9 +583,346 @@ def ensure_grant_fee_task_for_notice_document(
         notice_sent=False,
         is_overdue=False,
     )
-    db.add(task)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(task)
+            db.flush()
+            competing_tasks = list(
+                db.execute(
+                    select(T_GrantFeeTask)
+                    .where(
+                        T_GrantFeeTask.case_id == case_id,
+                        T_GrantFeeTask.superseded_by_task_id.is_(None),
+                        T_GrantFeeTask.id != task.id,
+                        T_GrantFeeTask.id != superseding_task_id,
+                    )
+                    .order_by(T_GrantFeeTask.created_at.asc(), T_GrantFeeTask.id.asc())
+                )
+                .scalars()
+                .all()
+            )
+            if competing_tasks:
+                _raise_active_grant_source_conflict(
+                    competing_tasks[0],
+                    requested_source_document_id=source_document_id,
+                )
+    except IntegrityError:
+        winner = (
+            db.execute(
+                select(T_GrantFeeTask).where(
+                    T_GrantFeeTask.source_document_id == source_document_id
+                )
+            )
+            .scalars()
+            .one_or_none()
+        )
+        if winner is not None and winner.case_id == case_id:
+            return winner
+        competing_task = (
+            db.execute(
+                select(T_GrantFeeTask)
+                .where(
+                    T_GrantFeeTask.case_id == case_id,
+                    T_GrantFeeTask.superseded_by_task_id.is_(None),
+                )
+                .order_by(T_GrantFeeTask.created_at.asc(), T_GrantFeeTask.id.asc())
+            )
+            .scalars()
+            .first()
+        )
+        if competing_task is not None:
+            _raise_active_grant_source_conflict(
+                competing_task,
+                requested_source_document_id=source_document_id,
+            )
+        raise_business_error(
+            "GRANT_FEE_TASK_SOURCE_IDENTITY_CONFLICT",
+            "Grant fee task source identity conflicted during creation",
+            details={"source_document_id": source_document_id, "case_id": case_id},
+            status_code=409,
+        )
     return task
+
+
+def _normalize_replacement_text(
+    value: str | None,
+    *,
+    field: str,
+    max_length: int | None = None,
+) -> str:
+    normalized = str(value or "").strip()
+    if not normalized or (max_length is not None and len(normalized) > max_length):
+        raise_business_error(
+            "GRANT_REPLACEMENT_INVALID",
+            f"{field} is required and must use the supported length",
+            details={"field": field, "max_length": max_length},
+            status_code=400,
+        )
+    return normalized
+
+
+def _validate_replacement_template(template: DocTemplate | None) -> DocTemplate:
+    if template is None:
+        raise_business_error(
+            "GRANT_REPLACEMENT_TEMPLATE_INVALID",
+            "Replacement notice requires an executable grant template",
+            status_code=409,
+        )
+    semantics = resolve_document_semantics(template)
+    if (
+        semantics.catalog_status != "EXECUTABLE"
+        or semantics.execution_behavior != "GRANT_NOTICE"
+        or semantics.deadline_source_policy != "EXPLICIT_OFFICIAL_DUE_REQUIRED"
+        or semantics.fee_trigger != GRANT_FEE_DRAFT_TYPE
+    ):
+        raise_business_error(
+            "GRANT_REPLACEMENT_TEMPLATE_INVALID",
+            "Replacement notice requires executable grant semantics",
+            details={"template_id": template.id, "template_code": template.code},
+            status_code=409,
+        )
+    return template
+
+
+def _validate_replacement_document_shape(
+    *,
+    old_task: T_GrantFeeTask,
+    replacement_document: DocumentCreateIn,
+) -> None:
+    direction = getattr(replacement_document.direction, "value", replacement_document.direction)
+    if (
+        replacement_document.case_id != old_task.case_id
+        or direction != DocumentDirection.IN.value
+        or replacement_document.reply_to_id is not None
+        or not str(replacement_document.title or "").strip()
+        or not str(replacement_document.ref_no or "").strip()
+    ):
+        raise_business_error(
+            "GRANT_REPLACEMENT_DOCUMENT_INVALID",
+            "Replacement notice must be an incoming document for the old task case",
+            details={
+                "task_case_id": old_task.case_id,
+                "document_case_id": replacement_document.case_id,
+                "direction": direction,
+                "reply_to_id": replacement_document.reply_to_id,
+                "title": replacement_document.title,
+                "ref_no": replacement_document.ref_no,
+            },
+            status_code=400,
+        )
+
+
+def _replacement_document_matches(
+    document: Document,
+    *,
+    replacement_document: DocumentCreateIn,
+    expected_extra_data: str | None,
+) -> bool:
+    direction = getattr(replacement_document.direction, "value", replacement_document.direction)
+    doc_type = getattr(replacement_document.doc_type, "value", replacement_document.doc_type)
+    return (
+        document.case_id == replacement_document.case_id
+        and document.doc_template_id == replacement_document.doc_template_id
+        and document.doc_type == doc_type
+        and document.direction == direction
+        and document.doc_date == replacement_document.doc_date
+        and document.title == replacement_document.title
+        and document.ref_no == replacement_document.ref_no
+        and document.extra_data == expected_extra_data
+        and document.reply_to_id == replacement_document.reply_to_id
+    )
+
+
+def _existing_replacement_result(
+    db: Session,
+    *,
+    old_task: T_GrantFeeTask,
+    request_key: str,
+    reason: str,
+    replacement_document: DocumentCreateIn,
+    expected_extra_data: str | None,
+) -> GrantFeeTaskReplacementResult | None:
+    request_owner = db.execute(
+        select(T_GrantFeeTask).where(T_GrantFeeTask.supersede_request_key == request_key)
+    ).scalar_one_or_none()
+    if request_owner is None:
+        return None
+    if request_owner.id != old_task.id or request_owner.superseded_by_task_id is None:
+        raise_business_error(
+            "GRANT_REPLACEMENT_IDEMPOTENCY_CONFLICT",
+            "Replacement request key is already bound to a different operation",
+            details={"request_key": request_key},
+            status_code=409,
+        )
+    replacement_task = db.get(T_GrantFeeTask, request_owner.superseded_by_task_id)
+    replacement_source = (
+        db.get(Document, replacement_task.source_document_id)
+        if replacement_task is not None and replacement_task.source_document_id
+        else None
+    )
+    if (
+        request_owner.supersede_reason != reason
+        or replacement_task is None
+        or replacement_task.case_id != old_task.case_id
+        or replacement_source is None
+        or not _replacement_document_matches(
+            replacement_source,
+            replacement_document=replacement_document,
+            expected_extra_data=expected_extra_data,
+        )
+    ):
+        raise_business_error(
+            "GRANT_REPLACEMENT_IDEMPOTENCY_CONFLICT",
+            "Replacement request key conflicts with the existing payload",
+            details={"request_key": request_key, "task_id": old_task.id},
+            status_code=409,
+        )
+    return GrantFeeTaskReplacementResult(
+        document=replacement_source,
+        replacement_task=replacement_task,
+        superseded_task_id=old_task.id,
+        reused=True,
+    )
+
+
+def replace_grant_fee_task_with_notice(
+    db: Session,
+    *,
+    task_id: str,
+    request_key: str,
+    reason: str,
+    replacement_document: DocumentCreateIn,
+    actor_id: str,
+) -> GrantFeeTaskReplacementResult:
+    normalized_request_key = _normalize_replacement_text(
+        request_key,
+        field="request_key",
+        max_length=64,
+    )
+    normalized_reason = _normalize_replacement_text(reason, field="reason")
+    normalized_actor_id = _normalize_replacement_text(
+        actor_id,
+        field="actor_id",
+        max_length=36,
+    )
+
+    _ensure_sqlite_grant_write_transaction(db)
+    try:
+        old_task = _load_grant_fee_task(db, task_id=task_id)
+        _validate_replacement_document_shape(
+            old_task=old_task,
+            replacement_document=replacement_document,
+        )
+        if (
+            not old_task.source_document_id
+            or not old_task.deadline_source
+            or old_task.deadline_confirmed_at is None
+        ):
+            raise_business_error(
+                "GRANT_REPLACEMENT_LINEAGE_CONFLICT",
+                "Only an active grant task with confirmed source lineage can be replaced",
+                details={"task_id": old_task.id},
+                status_code=409,
+            )
+        source_document = db.get(Document, old_task.source_document_id)
+        if source_document is None or source_document.case_id != old_task.case_id:
+            raise_business_error(
+                "GRANT_REPLACEMENT_LINEAGE_CONFLICT",
+                "Old grant task source lineage is missing or inconsistent",
+                details={"task_id": old_task.id},
+                status_code=409,
+            )
+
+        expected_extra_data = _merge_document_create_extra_data(replacement_document)
+        expected_deadline = parse_document_extra_data(expected_extra_data)
+        if (
+            expected_deadline.official_due_date_status != "CONFIRMED"
+            or expected_deadline.official_due_date is None
+            or expected_deadline.official_due_date_source is None
+        ):
+            raise_business_error(
+                "GRANT_OFFICIAL_DUE_DATE_REQUIRED",
+                "Replacement grant notice requires a confirmed official due date",
+                status_code=409,
+            )
+
+        existing = _existing_replacement_result(
+            db,
+            old_task=old_task,
+            request_key=normalized_request_key,
+            reason=normalized_reason,
+            replacement_document=replacement_document,
+            expected_extra_data=expected_extra_data,
+        )
+        if existing is not None:
+            db.commit()
+            return existing
+        if old_task.superseded_by_task_id is not None or old_task.supersede_request_key is not None:
+            raise_business_error(
+                "GRANT_REPLACEMENT_LINEAGE_CONFLICT",
+                "Grant fee task has already been superseded",
+                details={"task_id": old_task.id},
+                status_code=409,
+            )
+
+        template = _validate_replacement_template(
+            db.get(DocTemplate, replacement_document.doc_template_id)
+            if replacement_document.doc_template_id
+            else None
+        )
+
+        replacement_source = create_document(db, replacement_document)
+        replacement_task = ensure_grant_fee_task_for_notice_document(
+            db,
+            document=replacement_source,
+            template=template,
+            superseding_task_id=old_task.id,
+        )
+        if replacement_task is None:
+            raise_business_error(
+                "GRANT_REPLACEMENT_TEMPLATE_INVALID",
+                "Replacement notice did not create a grant fee task",
+                status_code=409,
+            )
+
+        old_task.superseded_by_task_id = replacement_task.id
+        old_task.supersede_reason = normalized_reason
+        old_task.superseded_at = datetime.now()
+        old_task.superseded_by = normalized_actor_id
+        old_task.supersede_request_key = normalized_request_key
+        db.flush()
+        db.commit()
+        db.refresh(replacement_source)
+        db.refresh(replacement_task)
+        return GrantFeeTaskReplacementResult(
+            document=replacement_source,
+            replacement_task=replacement_task,
+            superseded_task_id=old_task.id,
+            reused=False,
+        )
+    except IntegrityError:
+        db.rollback()
+        old_task = db.get(T_GrantFeeTask, task_id)
+        if old_task is not None:
+            existing = _existing_replacement_result(
+                db,
+                old_task=old_task,
+                request_key=normalized_request_key,
+                reason=normalized_reason,
+                replacement_document=replacement_document,
+                expected_extra_data=_merge_document_create_extra_data(replacement_document),
+            )
+            if existing is not None:
+                return existing
+        raise_business_error(
+            "GRANT_REPLACEMENT_IDEMPOTENCY_CONFLICT",
+            "Replacement request conflicted during atomic creation",
+            details={"request_key": normalized_request_key},
+            status_code=409,
+        )
+    except Exception:
+        db.rollback()
+        raise
 
 
 def apply_grant_fee_batch_instruction(
@@ -470,6 +966,9 @@ def apply_grant_fee_batch_instruction(
             details={"task_ids": missing_task_ids},
             status_code=404,
         )
+
+    for task_id in unique_task_ids:
+        _require_grant_fee_task_actionable(task_by_id[task_id])
 
     invalid_tasks: list[dict[str, str]] = []
     for task_id in unique_task_ids:
@@ -528,6 +1027,9 @@ def generate_grant_fee_notice_documents(
             details={"task_ids": missing_task_ids},
             status_code=404,
         )
+
+    for task_id in unique_task_ids:
+        _require_grant_fee_task_actionable(task_by_id[task_id])
 
     doc_template = db.execute(
         select(DocTemplate).where(
@@ -590,6 +1092,7 @@ def generate_grant_fee_draft(
     actor_id: str | None,
 ) -> dict[str, Any]:
     task = _load_grant_fee_task(db, task_id=task_id)
+    _require_grant_fee_task_actionable(task)
     state = derive_grant_fee_task_state(task)
     marker = _draft_marker(task_id)
     existing_draft = _find_existing_grant_fee_draft(db, marker=marker)
@@ -704,16 +1207,23 @@ def generate_grant_fee_draft(
 
 
 def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict[str, Any]:
+    lineage_status = _derive_grant_fee_task_lineage_status(task)
     return {
         "task_id": task.id,
         "case_id": task.case_id,
         "state": state,
+        "lineage_status": lineage_status,
+        "source_document_id": task.source_document_id,
+        "deadline_source": task.deadline_source,
+        "deadline_confirmed_at": task.deadline_confirmed_at,
         "client_instruction": (task.client_instruction or "NONE").strip().upper() or "NONE",
         "notify_count": int(task.notify_count or 0),
         "draft_generated": bool(task.draft_generated),
         "notice_sent": bool(task.notice_sent),
         "is_overdue": bool(task.is_overdue),
-        "allowed_actions": list(_STATE_ALLOWED_ACTIONS[state]),
+        "allowed_actions": list(_STATE_ALLOWED_ACTIONS[state])
+        if lineage_status == "CONFIRMED"
+        else [],
         **_GRANT_FEE_DEADLINE_PREVIEW_FIELDS,
     }
 
@@ -805,6 +1315,10 @@ def _serialize_grant_fee_task_list_item(
         "case_id": task.case_id,
         "case_no": case_no,
         "status": state,
+        "lineage_status": _derive_grant_fee_task_lineage_status(task),
+        "source_document_id": task.source_document_id,
+        "deadline_source": task.deadline_source,
+        "deadline_confirmed_at": task.deadline_confirmed_at,
         "due_date": task.due_date,
         "client_instruction": (task.client_instruction or "NONE").strip().upper() or "NONE",
         "gov_fee_amt": task.gov_fee_amt,

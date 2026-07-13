@@ -38,6 +38,11 @@ interface BackendFeeRate {
     allow_reduction?: boolean | null
     effective_from?: string | null
     effective_to?: string | null
+    source_doc?: string | null
+    source_url?: string | null
+    source_policy?: string | null
+    source_version?: string | null
+    source_status?: string | null
 }
 
 interface BackendFeeItem {
@@ -175,6 +180,11 @@ function mapFeeRate(input: BackendFeeRate): FeeRate {
         allow_reduction: input.allow_reduction ?? null,
         effective_from: input.effective_from ?? null,
         effective_to: input.effective_to ?? null,
+        source_doc: input.source_doc ?? null,
+        source_url: input.source_url ?? null,
+        source_policy: input.source_policy ?? null,
+        source_version: input.source_version ?? null,
+        source_status: input.source_status ?? null,
     }
 }
 

@@ -20,6 +20,15 @@ import type {
     OfficialWorkPackageReceiptCreatePayload,
 } from './officialWorkflows.types'
 
+export async function resolveFilingPreparationPackage(
+    caseId: string
+): Promise<FilingPreparationPackage> {
+    const response = await http.post<FilingPreparationPackage>(
+        `/cases/${caseId}/official-work-packages/filing-preparation/resolve`
+    )
+    return response.data
+}
+
 export async function getFilingPreparationPackage(
     packageId: string
 ): Promise<FilingPreparationPackage> {
@@ -59,6 +68,13 @@ export async function recordFilingPreparationExternalOperation(
     const response = await http.post<FilingPreparationChecklistResult>(
         `/official-work-packages/${packageId}/filing-preparation/external-operations`,
         payload
+    )
+    return response.data
+}
+
+export async function resolveOaReplyPackage(documentId: string): Promise<OaReplyPackage> {
+    const response = await http.post<OaReplyPackage>(
+        `/official-documents/${documentId}/official-work-packages/oa-reply/resolve`
     )
     return response.data
 }

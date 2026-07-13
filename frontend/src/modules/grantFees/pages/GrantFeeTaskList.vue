@@ -144,7 +144,7 @@
         class="compact-table"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="48" />
+        <el-table-column type="selection" width="48" :selectable="isOrdinaryMutationSelectable" />
         <el-table-column label="案件" min-width="180">
           <template #default="{ row }">
             <router-link v-if="row.case_no" :to="{ name: 'case_detail_by_no', params: { caseNo: row.case_no } }" class="case-link">
@@ -158,6 +158,18 @@
             <el-tag :type="statusTagType(row.status)" size="small">
               {{ statusText(row.status) }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="沿革" min-width="260">
+          <template #default="{ row }">
+            <div class="lineage-cell">
+              <el-tag :type="lineageTagType(row.lineage_status)" size="small">
+                {{ lineageStatusText(row.lineage_status) }}
+              </el-tag>
+              <span><strong>来源文书：</strong>{{ displayLineageValue(row.source_document_id) }}</span>
+              <span><strong>期限来源：</strong>{{ deadlineSourceText(row.deadline_source) }}</span>
+              <span><strong>确认时间：</strong>{{ confirmedAtText(row.deadline_confirmed_at) }}</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="到期日" width="130">
@@ -225,9 +237,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="动作入口" min-width="180" fixed="right">
+        <el-table-column label="动作入口" min-width="240" fixed="right">
           <template #default="{ row }">
             <el-space wrap>
+              <span v-if="row.lineage_status !== 'CONFIRMED'" class="ordinary-mutation-unavailable">
+                来源未确认或已被替代，不能执行授权费操作
+              </span>
               <el-button
                 size="small"
                 type="primary"
@@ -246,6 +261,26 @@
               >
                 标记完成
               </el-button>
+              <template v-if="canSeeReplacementAction(row)">
+                <el-button
+                  type="warning"
+                  size="small"
+                  :title="replacementDisabledReason"
+                  :disabled="Boolean(replacementDisabledReason)"
+                  @click="openReplacementDialog(row)"
+                >
+                  更正通知
+                </el-button>
+                <span v-if="replacementDisabledReason" class="replacement-unavailable">
+                  {{ replacementDisabledReason }}
+                </span>
+              </template>
+              <span v-else-if="row.lineage_status === 'LEGACY_UNVERIFIED'" class="replacement-unavailable">
+                历史数据待核验，不能发起更正通知
+              </span>
+              <span v-else-if="row.lineage_status === 'SUPERSEDED'" class="replacement-unavailable">
+                该任务已被替代，不能再次发起更正通知
+              </span>
             </el-space>
           </template>
         </el-table-column>
@@ -253,6 +288,117 @@
 
       <PaginationBar v-model:page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[20, 50, 100]" />
     </div>
+
+    <el-dialog
+      v-model="replacementDialogVisible"
+      title="登记更正授权通知"
+      width="620px"
+      :close-on-click-modal="false"
+      @closed="resetReplacementForm"
+    >
+      <el-alert
+        v-if="replacementTemplateError"
+        :title="replacementTemplateError"
+        type="error"
+        show-icon
+        :closable="false"
+        class="replacement-alert"
+      />
+      <el-form label-position="top" :model="replacementForm">
+        <el-form-item label="文书模板">
+          <el-select
+            v-model="replacementForm.doc_template_id"
+            class="replacement-full-width"
+            filterable
+            :loading="replacementTemplatesLoading"
+            :disabled="replacementTemplatesLoading || Boolean(replacementTemplateError)"
+            placeholder="请选择更正通知模板"
+          >
+            <el-option
+              v-for="template in replacementTemplates"
+              :key="template.id"
+              :label="`${template.code} — ${template.name}`"
+              :value="template.id"
+            />
+          </el-select>
+        </el-form-item>
+        <div class="replacement-grid">
+          <el-form-item label="文书日期">
+            <el-date-picker
+              v-model="replacementForm.doc_date"
+              type="date"
+              value-format="YYYY-MM-DD"
+              format="YYYY-MM-DD"
+              placeholder="请选择文书日期"
+              class="replacement-full-width"
+            />
+          </el-form-item>
+          <el-form-item label="文号">
+            <el-input v-model="replacementForm.ref_no" placeholder="请输入文号" />
+          </el-form-item>
+        </div>
+        <el-form-item label="标题">
+          <el-input v-model="replacementForm.title" placeholder="请输入文书标题" />
+        </el-form-item>
+        <div class="replacement-grid">
+          <el-form-item label="官方期限">
+            <el-date-picker
+              v-model="replacementForm.official_due_date"
+              type="date"
+              value-format="YYYY-MM-DD"
+              format="YYYY-MM-DD"
+              placeholder="请选择官方期限"
+              class="replacement-full-width"
+            />
+          </el-form-item>
+          <el-form-item label="期限来源">
+            <el-select
+              v-model="replacementForm.official_due_date_source"
+              class="replacement-full-width"
+              placeholder="请选择期限来源"
+            >
+              <el-option label="人工核对官方通知" value="MANUAL_OFFICIAL_NOTICE" />
+              <el-option label="导入官方通知" value="IMPORTED_OFFICIAL_NOTICE" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item label="确认状态">
+          <el-tag type="success">已确认</el-tag>
+        </el-form-item>
+        <el-form-item label="替换原因">
+          <el-input
+            v-model="replacementForm.reason"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入替换原因"
+          />
+        </el-form-item>
+        <el-form-item label="去重键">
+          <el-input v-model="replacementForm.idempotency_key" placeholder="请输入去重键" />
+        </el-form-item>
+        <el-form-item label="说明（可选）">
+          <el-input
+            v-model="replacementForm.description"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入可选说明"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="replacementSubmitting" @click="replacementDialogVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="replacementSubmitting"
+          :disabled="!replacementCanSubmit"
+          @click="submitReplacementNotice"
+        >
+          提交更正通知
+        </el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>
 
@@ -262,13 +408,17 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   applyGrantFeeBatchInstruction,
   applyGrantFeeTaskAction,
+  createGrantFeeTaskReplacementNotice,
   generateGrantFeeDraft,
   generateGrantFeeNoticeDocuments,
   getGrantFeeTasks,
 } from '../../../api/grantFees'
+import { getDocTemplates } from '../../../api/documents'
+import type { DocTemplate } from '../../../api/documents.types'
 import type {
   GrantFeeTaskBatchInstructionAction,
   GrantFeeTaskClientInstruction,
+  GrantFeeTaskLineageStatus,
   GrantFeeTaskListItem,
   GrantFeeTaskListResponse,
   GrantFeeTaskStatus,
@@ -278,7 +428,21 @@ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import EmptyState from '../../../components/state/EmptyState.vue'
 import LoadingBlock from '../../../components/state/LoadingBlock.vue'
 import PaginationBar from '../../../components/state/PaginationBar.vue'
+import { useAuthStore } from '../../../stores/auth'
 
+interface ReplacementForm {
+  doc_template_id: string
+  doc_date: string
+  title: string
+  ref_no: string
+  official_due_date: string
+  official_due_date_source: '' | 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE'
+  reason: string
+  idempotency_key: string
+  description: string
+}
+
+const authStore = useAuthStore()
 const tasks = ref<GrantFeeTaskListItem[]>([])
 const loading = ref(false)
 const error = ref<ApiError | null>(null)
@@ -290,6 +454,13 @@ const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const selectedTaskIds = ref<string[]>([])
+const replacementDialogVisible = ref(false)
+const replacementTask = ref<GrantFeeTaskListItem | null>(null)
+const replacementTemplates = ref<DocTemplate[]>([])
+const replacementTemplatesLoading = ref(false)
+const replacementTemplateError = ref('')
+const replacementSubmitting = ref(false)
+const replacementForm = reactive<ReplacementForm>(emptyReplacementForm())
 const filters = reactive<{
   status: '' | GrantFeeTaskStatus
   client_instruction: '' | GrantFeeTaskClientInstruction
@@ -319,6 +490,39 @@ const overdueText = computed({
     filters.is_overdue = value
   },
 })
+const replacementDisabledReason = computed(() => (
+  authStore.hasPermission('DocTemplate.Read')
+    ? ''
+    : '缺少文书模板读取权限，无法选择更正通知模板'
+))
+const replacementCanSubmit = computed(() => (
+  !replacementSubmitting.value
+  && !replacementTemplatesLoading.value
+  && !replacementTemplateError.value
+  && Boolean(replacementTask.value)
+  && Boolean(replacementForm.doc_template_id)
+  && Boolean(replacementForm.doc_date)
+  && Boolean(replacementForm.title.trim())
+  && Boolean(replacementForm.ref_no.trim())
+  && Boolean(replacementForm.official_due_date)
+  && Boolean(replacementForm.official_due_date_source)
+  && Boolean(replacementForm.reason.trim())
+  && Boolean(replacementForm.idempotency_key.trim())
+))
+
+function emptyReplacementForm(): ReplacementForm {
+  return {
+    doc_template_id: '',
+    doc_date: '',
+    title: '',
+    ref_no: '',
+    official_due_date: '',
+    official_due_date_source: '',
+    reason: '',
+    idempotency_key: crypto.randomUUID(),
+    description: '',
+  }
+}
 
 function formatAmount(input: number | string, currency: string): string {
   const parsed = Number(input || 0)
@@ -342,6 +546,38 @@ function statusTagType(status: GrantFeeTaskStatus): 'info' | 'warning' | 'succes
   if (status === 'READY_TO_DRAFT') return 'warning'
   if (status === 'DRAFT_GENERATED') return 'info'
   return 'warning'
+}
+
+function lineageStatusText(status: GrantFeeTaskLineageStatus): string {
+  const labels: Record<GrantFeeTaskLineageStatus, string> = {
+    CONFIRMED: '来源已确认',
+    LEGACY_UNVERIFIED: '历史数据待核验',
+    SUPERSEDED: '已被替代',
+  }
+  return labels[status]
+}
+
+function lineageTagType(status: GrantFeeTaskLineageStatus): 'info' | 'warning' | 'success' {
+  if (status === 'CONFIRMED') return 'success'
+  if (status === 'SUPERSEDED') return 'info'
+  return 'warning'
+}
+
+function displayLineageValue(input?: string | null): string {
+  return input || '未记录'
+}
+
+function deadlineSourceText(input?: string | null): string {
+  if (!input) return '未记录'
+  const labels: Record<string, string> = {
+    MANUAL_OFFICIAL_NOTICE: '人工核对官方通知',
+    IMPORTED_OFFICIAL_NOTICE: '导入官方通知',
+  }
+  return labels[input] || input
+}
+
+function confirmedAtText(input?: string | null): string {
+  return input ? input.replace('T', ' ').replace(/Z$/, '') : '未记录'
 }
 
 function clientInstructionText(input: GrantFeeTaskClientInstruction): string {
@@ -369,11 +605,116 @@ function formatBillDisplay(row: GrantFeeTaskListItem): string {
 }
 
 function canGenerateDraft(row: GrantFeeTaskListItem): boolean {
-  return row.status === 'READY_TO_DRAFT' && !row.draft_generated && generatingTaskId.value !== row.task_id
+  return row.lineage_status === 'CONFIRMED'
+    && row.status === 'READY_TO_DRAFT'
+    && !row.draft_generated
+    && generatingTaskId.value !== row.task_id
 }
 
 function canMarkDone(row: GrantFeeTaskListItem): boolean {
-  return row.status === 'DRAFT_GENERATED' && completingTaskId.value !== row.task_id
+  return row.lineage_status === 'CONFIRMED'
+    && row.status === 'DRAFT_GENERATED'
+    && completingTaskId.value !== row.task_id
+}
+
+function isOrdinaryMutationSelectable(row: GrantFeeTaskListItem): boolean {
+  return row.lineage_status === 'CONFIRMED'
+}
+
+function canSeeReplacementAction(row: GrantFeeTaskListItem): boolean {
+  return row.lineage_status === 'CONFIRMED'
+    && authStore.hasPermission('GrantFeeTask.Write')
+    && authStore.hasPermission('Doc.Create')
+}
+
+function isExecutableGrantTemplate(template: DocTemplate): boolean {
+  if (!template.input_fields) return false
+  try {
+    const metadata = JSON.parse(template.input_fields) as Record<string, unknown>
+    return metadata.catalog_status === 'EXECUTABLE'
+      && metadata.execution_behavior === 'GRANT_NOTICE'
+  } catch {
+    return false
+  }
+}
+
+async function loadReplacementTemplates() {
+  replacementTemplatesLoading.value = true
+  replacementTemplateError.value = ''
+  replacementTemplates.value = []
+  try {
+    const response = await getDocTemplates({ direction: 'IN', enabled: true, page_size: 100 })
+    replacementTemplates.value = response.items.filter(isExecutableGrantTemplate)
+    if (!replacementTemplates.value.length) {
+      replacementTemplateError.value = '未找到可执行的授权通知模板，无法提交'
+    }
+  } catch {
+    replacementTemplateError.value = '更正通知模板加载失败，无法提交'
+  } finally {
+    replacementTemplatesLoading.value = false
+  }
+}
+
+function resetReplacementForm() {
+  Object.assign(replacementForm, emptyReplacementForm())
+  replacementTask.value = null
+  replacementTemplates.value = []
+  replacementTemplateError.value = ''
+  replacementTemplatesLoading.value = false
+  replacementSubmitting.value = false
+}
+
+function openReplacementDialog(row: GrantFeeTaskListItem) {
+  if (!canSeeReplacementAction(row) || replacementDisabledReason.value) return
+  Object.assign(replacementForm, emptyReplacementForm())
+  replacementTask.value = row
+  replacementDialogVisible.value = true
+  void loadReplacementTemplates()
+}
+
+function replacementErrorMessage(apiError: ApiError | undefined): string {
+  if (apiError?.status === 400) return '更正通知内容不符合业务规则，请核对后重试'
+  if (apiError?.status === 404) return '授权费任务不存在或已被移除'
+  if (apiError?.status === 409) {
+    return apiError.code === 'GRANT_REPLACEMENT_IDEMPOTENCY_CONFLICT'
+      ? '去重键已用于不同内容，请核对后重试'
+      : '当前任务无法发起更正通知，请刷新后重试'
+  }
+  if (apiError?.status === 422) return '更正通知信息校验失败，请检查必填项'
+  if (apiError?.status === 401) return '登录状态已失效，请重新登录'
+  if (apiError?.status === 403) return '缺少发起更正通知所需权限'
+  return '更正通知提交失败，请重试'
+}
+
+async function submitReplacementNotice() {
+  const task = replacementTask.value
+  if (!task || !replacementCanSubmit.value || replacementSubmitting.value) return
+  replacementSubmitting.value = true
+  try {
+    const result = await createGrantFeeTaskReplacementNotice(task.task_id, {
+      idempotency_key: replacementForm.idempotency_key.trim(),
+      reason: replacementForm.reason.trim(),
+      document: {
+        doc_template_id: replacementForm.doc_template_id,
+        doc_date: replacementForm.doc_date,
+        title: replacementForm.title.trim(),
+        ref_no: replacementForm.ref_no.trim(),
+        official_due_date: replacementForm.official_due_date,
+        official_due_date_source: replacementForm.official_due_date_source as 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE',
+        official_due_date_status: 'CONFIRMED',
+        ...(replacementForm.description.trim()
+          ? { description: replacementForm.description.trim() }
+          : {}),
+      },
+    })
+    ElMessage.success(result.reused ? '已复用同一更正通知结果' : '更正通知创建成功')
+    replacementDialogVisible.value = false
+    await fetchTasks()
+  } catch (err) {
+    ElMessage.error(replacementErrorMessage(err as ApiError | undefined))
+  } finally {
+    replacementSubmitting.value = false
+  }
 }
 
 function buildParams() {
@@ -652,6 +993,44 @@ onMounted(() => {
   color: #64748b;
   font-size: 12px;
   line-height: 1.2;
+}
+
+.replacement-unavailable {
+  max-width: 180px;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ordinary-mutation-unavailable {
+  max-width: 180px;
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.replacement-alert {
+  margin-bottom: 16px;
+}
+
+.replacement-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.replacement-full-width {
+  width: 100%;
+}
+
+.lineage-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .rule-cell {

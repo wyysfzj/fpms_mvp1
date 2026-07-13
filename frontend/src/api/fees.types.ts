@@ -28,6 +28,11 @@ export interface FeeRate {
     allow_reduction?: boolean | null
     effective_from?: string | null
     effective_to?: string | null
+    source_doc?: string | null
+    source_url?: string | null
+    source_policy?: string | null
+    source_version?: string | null
+    source_status?: string | null
     created_at?: string
     updated_at?: string
 }

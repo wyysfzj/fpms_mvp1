@@ -21,7 +21,10 @@ from app.models.system_param import SystemParam  # noqa: E402
 from app.modules.auth.models import T_Role, T_User, T_UserRole  # noqa: E402
 from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor  # noqa: E402
 from app.modules.documents.models import DocTemplate  # noqa: E402
-from app.modules.documents.official_notice_catalog import seed_official_notice_catalog  # noqa: E402
+from app.modules.documents.official_notice_catalog import (  # noqa: E402
+    seed_grant_official_notice_catalog,
+    seed_official_letter_out_catalog,
+)
 from app.modules.fees.models import FeeRate  # noqa: E402
 from app.modules.masterdata.applicants.models import Applicant  # noqa: E402
 from app.modules.masterdata.clients.models import Client  # noqa: E402
@@ -1142,6 +1145,13 @@ def seed_task_templates(db: Session) -> None:
             "description": "审查意见通知书答复期限自动任务",
         },
         {
+            "code": "OA_REPLY_SUBSEQUENT",
+            "name": "后续审查意见答复期限",
+            "add_days": None,
+            "inner_offset_days": None,
+            "description": "第二次及以后审查意见答复任务；截止日必须使用官文载明的明确期限",
+        },
+        {
             "code": "GRANT_FEE",
             "name": "授权登记费",
             "add_days": 60,
@@ -1246,14 +1256,24 @@ def seed_doc_templates(db: Session) -> None:
         if not existing:
             db.add(DocTemplate(id=str(uuid4()), **t))
             created += 1
-    official_notice_catalog_changed = seed_official_notice_catalog(db)
+    official_notice_catalog_changed = seed_grant_official_notice_catalog(db)
+    official_letter_out_changed = seed_official_letter_out_catalog(db)
     grant_fee_notice_changed = seed_grant_fee_notice_template_source(db)
+    format_letter_mapping_changed = seed_format_letter_mappings(db)
     db.commit()
-    if created or official_notice_catalog_changed or grant_fee_notice_changed:
+    if (
+        created
+        or official_notice_catalog_changed
+        or official_letter_out_changed
+        or grant_fee_notice_changed
+        or format_letter_mapping_changed
+    ):
         print(
             "Created/updated "
             f"{created} doc templates, "
             f"{official_notice_catalog_changed} official notice catalog entries, "
+            f"{official_letter_out_changed} official letter-out catalog entries, "
+            f"{format_letter_mapping_changed} format letter mappings, "
             "and grant fee notice source"
         )
     else:
@@ -1342,6 +1362,108 @@ def _ensure_grant_fee_notice_docx_template() -> Path:
     document.add_paragraph("请根据授权通知要求确认缴费指示。")
     document.save(template_path)
     return template_path
+
+
+# 客户"国内客户天下先格式函对应官文"8 行（信函生成操作 P0007 TABLE 001）。
+FORMAT_LETTER_MAPPING_CATALOG: tuple[tuple[str, str], ...] = (
+    ("官文转发-国内客户-驳回通知", "驳回决定"),
+    ("官文转发-国内客户-初审合格", "初步审查合格"),
+    ("官文转发-国内客户-公布通知", "公布通知书"),
+    ("官文转发-国内客户-实审通知", "进入实审通知"),
+    ("官文转发-国内客户-受通", "受理通知-电子"),
+    ("官文转发-国内客户-授权通知", "授权通知书-电子"),
+    ("官文转发-国内客户-一通", "第一次审查意见通知书"),
+    ("官文转发-专利证书", "专利证书"),
+)
+FORMAT_LETTER_TEMPLATE_GROUP = "FORMAT_LETTER"
+# 客户命名规则（信函生成操作 P0004）：{案号}-给{申请人名称}的邮件.docx
+FORMAT_LETTER_OUTPUT_NAME_RULE = "{case_no}-给{applicant_name}的邮件.docx"
+
+
+def _format_letter_template_code(index: int) -> str:
+    return f"FORMAT_LETTER_{index:03d}"
+
+
+def _ensure_format_letter_docx_template(code: str, letter_name: str) -> str:
+    relative_path = f"templates/format_letters/{code.lower()}.docx"
+    template_path = BASE_DIR / "storage" / relative_path
+    if not template_path.exists():
+        template_path.parent.mkdir(parents=True, exist_ok=True)
+        document = DocxDocument()
+        document.add_heading(letter_name, level=1)
+        document.add_paragraph("{{ salutation_text }}")
+        document.add_paragraph("案件编号：{{ case_no }}")
+        document.add_paragraph("申请号：{{ app_no }}")
+        document.add_paragraph("请查收所附官方文件，并按期限完成后续事项。")
+        document.save(template_path)
+    return relative_path
+
+
+def seed_format_letter_mappings(db: Session) -> int:
+    """Seed the customer's 8-row official-notice -> format-letter mapping. Idempotent."""
+    from app.modules.templates.models import FormatLetterMapping  # noqa: PLC0415
+
+    changed = 0
+    for index, (letter_name, official_doc_name) in enumerate(
+        FORMAT_LETTER_MAPPING_CATALOG, start=1
+    ):
+        template_code = _format_letter_template_code(index)
+        template_path = _ensure_format_letter_docx_template(template_code, letter_name)
+
+        template = (
+            db.query(Template)
+            .filter(
+                Template.group == FORMAT_LETTER_TEMPLATE_GROUP,
+                Template.name == template_code,
+            )
+            .order_by(Template.created_at.asc(), Template.id.asc())
+            .first()
+        )
+        template_values = {
+            "name": template_code,
+            "group": FORMAT_LETTER_TEMPLATE_GROUP,
+            "language": "zh-CN",
+            "file_path": template_path,
+            "enabled": True,
+        }
+        if template is None:
+            template = Template(id=str(uuid4()), **template_values)
+            db.add(template)
+            db.flush()
+            changed += 1
+        else:
+            for field, value in template_values.items():
+                if getattr(template, field) != value:
+                    setattr(template, field, value)
+                    changed += 1
+
+        mapping = (
+            db.query(FormatLetterMapping)
+            .filter(FormatLetterMapping.format_letter_template_code == template_code)
+            .order_by(FormatLetterMapping.created_at.asc(), FormatLetterMapping.id.asc())
+            .first()
+        )
+        mapping_values = {
+            "official_doc_template_id": None,
+            "official_doc_template_code": None,
+            "official_doc_name_pattern": official_doc_name,
+            "format_letter_template_id": template.id,
+            "format_letter_template_code": template_code,
+            "output_name_rule": FORMAT_LETTER_OUTPUT_NAME_RULE,
+            "salutation_rule_code": "PRIMARY_CONTACT_TITLE",
+            "contact_rule_code": "CLIENT_PRIMARY_CONTACT",
+            "enabled": True,
+            "remark": f"{letter_name}（信函生成操作 P0007 TABLE 001）",
+        }
+        if mapping is None:
+            db.add(FormatLetterMapping(id=str(uuid4()), **mapping_values))
+            changed += 1
+            continue
+        for field, value in mapping_values.items():
+            if getattr(mapping, field) != value:
+                setattr(mapping, field, value)
+                changed += 1
+    return changed
 
 
 def seed_official_fee_rate_catalog(db: Session) -> None:

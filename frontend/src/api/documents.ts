@@ -68,6 +68,10 @@ interface BackendDocument {
     case_no?: string | null
     outgoing_reg_no?: string | null
     forward_date?: string | null
+    description?: string | null
+    official_due_date?: string | null
+    official_due_date_source?: 'MANUAL_OFFICIAL_NOTICE' | 'IMPORTED_OFFICIAL_NOTICE' | null
+    official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | 'LEGACY_UNVERIFIED' | null
 }
 
 function mapAttachment(input: BackendAttachment): Attachment {
@@ -101,7 +105,7 @@ function mapDocument(input: BackendDocument): Document {
         doc_date: input.doc_date || undefined,
         title: input.title || 'Untitled Document',
         doc_type: input.doc_type || undefined,
-        description: input.extra_data || undefined,
+        description: input.description ?? input.extra_data ?? undefined,
         created_at: input.created_at,
         updated_at: input.updated_at,
         reply_to_id: input.reply_to_id || undefined,
@@ -110,6 +114,9 @@ function mapDocument(input: BackendDocument): Document {
         case_no: input.case_no || undefined,
         outgoing_reg_no: input.outgoing_reg_no || undefined,
         forward_date: input.forward_date || undefined,
+        official_due_date: input.official_due_date ?? null,
+        official_due_date_source: input.official_due_date_source ?? null,
+        official_due_date_status: input.official_due_date_status ?? null,
         attachments: (input.attachments || []).map(mapAttachment),
     }
 }
@@ -124,6 +131,9 @@ function toCreatePayload(data: DocumentCreatePayload): Record<string, unknown> {
         title: data.title,
         extra_data: data.description || null,
         reply_to_id: data.reply_to_id || null,
+        official_due_date: data.official_due_date || null,
+        official_due_date_source: data.official_due_date_source || null,
+        official_due_date_status: data.official_due_date_status || null,
     }
 }
 
@@ -140,6 +150,15 @@ function toUpdatePayload(data: DocumentUpdatePayload): Record<string, unknown> {
     if (data.reply_to_id !== undefined) payload.reply_to_id = data.reply_to_id || null
     if (data.need_reply !== undefined) payload.need_reply = data.need_reply
     if (data.reply_date !== undefined) payload.reply_date = data.reply_date || null
+    if (data.official_due_date !== undefined) {
+        payload.official_due_date = data.official_due_date || null
+    }
+    if (data.official_due_date_source !== undefined) {
+        payload.official_due_date_source = data.official_due_date_source || null
+    }
+    if (data.official_due_date_status !== undefined) {
+        payload.official_due_date_status = data.official_due_date_status || null
+    }
 
     return payload
 }
@@ -156,6 +175,15 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
             doc_template_id: data.defaults.doc_template_id,
             direction: data.defaults.direction,
             doc_date: data.defaults.doc_date,
+            ...(trimToUndefined(data.defaults.official_due_date ?? undefined)
+                ? { official_due_date: trimToUndefined(data.defaults.official_due_date ?? undefined) }
+                : {}),
+            ...(data.defaults.official_due_date_source
+                ? { official_due_date_source: data.defaults.official_due_date_source }
+                : {}),
+            ...(data.defaults.official_due_date_status
+                ? { official_due_date_status: data.defaults.official_due_date_status }
+                : {}),
         },
         rows: data.rows.map((row) => ({
             case_id: row.case_id,
@@ -165,6 +193,15 @@ function toWizardBatchPayload(data: DocumentWizardBatchCreatePayload): Record<st
             ...(row.need_reply !== undefined ? { need_reply: row.need_reply } : {}),
             ...(trimToUndefined(row.reply_to_id) ? { reply_to_id: trimToUndefined(row.reply_to_id) } : {}),
             ...(trimToUndefined(row.extra_data) ? { extra_data: trimToUndefined(row.extra_data) } : {}),
+            ...(trimToUndefined(row.official_due_date ?? undefined)
+                ? { official_due_date: trimToUndefined(row.official_due_date ?? undefined) }
+                : {}),
+            ...(row.official_due_date_source
+                ? { official_due_date_source: row.official_due_date_source }
+                : {}),
+            ...(row.official_due_date_status
+                ? { official_due_date_status: row.official_due_date_status }
+                : {}),
         })),
         task_rows: (data.task_rows || []).map((row) => ({
             row_index: row.row_index,
@@ -262,6 +299,53 @@ export async function getDocuments(params: DocumentListParams = {}): Promise<Pag
         ...response.data,
         items: response.data.items.map(mapDocument),
     }
+}
+
+/**
+ * Export the filtered document list as an Excel blob (US-WD-06)
+ */
+export async function exportDocuments(
+    params: Omit<DocumentListParams, 'page' | 'page_size'> = {},
+): Promise<Blob> {
+    const {
+        q,
+        doc_name,
+        doc_type,
+        case_no,
+        template_code,
+        direction,
+        doc_template_id,
+        case_id,
+        client_id,
+        need_reply,
+        replied,
+        has_attachment,
+        date_from,
+        date_to,
+    } = params
+    const query = new URLSearchParams()
+    if (q) query.set('q', q)
+    if (doc_name) query.set('doc_name', doc_name)
+    if (case_no) query.set('case_no', case_no)
+    if (template_code) query.set('template_code', template_code)
+    if (direction) query.set('direction', direction)
+    if (doc_template_id) query.set('doc_template_id', doc_template_id)
+    if (case_id) query.set('case_id', case_id)
+    if (client_id) query.set('client_id', client_id)
+    if (need_reply !== undefined) query.set('need_reply', String(need_reply))
+    if (replied !== undefined) query.set('replied', String(replied))
+    if (has_attachment !== undefined) query.set('has_attachment', String(has_attachment))
+    if (date_from) query.set('date_from', date_from)
+    if (date_to) query.set('date_to', date_to)
+    for (const value of doc_type || []) {
+        query.append('doc_type', value)
+    }
+
+    const response = await http.get<Blob>('/documents/export', {
+        params: query,
+        responseType: 'blob',
+    })
+    return response.data
 }
 
 /**

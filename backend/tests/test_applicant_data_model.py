@@ -40,6 +40,7 @@ def test_applicant_model_exposes_applicant_type_with_entity_default(tmp_path) ->
         "name_en",
         "is_active",
         "applicant_type",
+        "total_power_of_attorney_no",
     }
     assert getattr(Applicant.__table__.c.applicant_type.server_default.arg, "text", None) in {
         "'ENTITY'"
@@ -54,6 +55,7 @@ def test_applicant_model_exposes_applicant_type_with_entity_default(tmp_path) ->
         "name_en",
         "is_active",
         "applicant_type",
+        "total_power_of_attorney_no",
     }
 
     engine.dispose()
@@ -100,6 +102,7 @@ def test_masterdata_prereq_migration_creates_applicant_type_column(tmp_path, mon
         "name_en",
         "is_active",
         "applicant_type",
+        "total_power_of_attorney_no",
     }
 
     engine.dispose()

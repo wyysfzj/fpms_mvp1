@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
@@ -31,6 +33,8 @@ from app.modules.official_workflows.schemas import (
 )
 from app.modules.official_workflows.service import (
     archive_official_work_package,
+    ensure_filing_preparation_package,
+    ensure_oa_reply_package,
     evaluate_official_work_package,
     get_filing_preparation_package,
     get_letter_handoff_preview,
@@ -102,6 +106,20 @@ def record_letter_handoff_status_endpoint(
         longxia_handoff_payload=payload.longxia_handoff_payload,
         handoff_at=payload.handoff_at,
     )
+
+
+@router.post(
+    "/official-documents/{document_id}/official-work-packages/oa-reply/resolve",
+    status_code=status.HTTP_200_OK,
+    response_model=OaReplyPackageOut,
+    summary="Resolve OA reply package",
+)
+def resolve_oa_reply_package_endpoint(
+    document_id: UUID,
+    _perm: None = Depends(require_perm("OfficialWorkflow.Update")),
+    db: Session = Depends(get_db),
+) -> OaReplyPackageOut:
+    return ensure_oa_reply_package(db, source_document_id=str(document_id))
 
 
 @router.get(
@@ -179,6 +197,20 @@ def update_oa_reply_checklist_endpoint(
             from_attributes=True,
         ),
     )
+
+
+@router.post(
+    "/cases/{case_id}/official-work-packages/filing-preparation/resolve",
+    status_code=status.HTTP_200_OK,
+    response_model=FilingPreparationPackageOut,
+    summary="Resolve filing preparation package",
+)
+def resolve_filing_preparation_package_endpoint(
+    case_id: UUID,
+    _perm: None = Depends(require_perm("OfficialWorkflow.Update")),
+    db: Session = Depends(get_db),
+) -> FilingPreparationPackageOut:
+    return ensure_filing_preparation_package(db, case_id=str(case_id))
 
 
 @router.get(

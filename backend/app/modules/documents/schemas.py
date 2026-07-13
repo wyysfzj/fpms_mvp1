@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.pagination import PageResult
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.extra_data import DeadlineReadStatus, DeadlineSource, DeadlineWriteStatus
 
 LETTER_HANDOFF_STATUSES = (
     "PENDING",
@@ -65,6 +66,10 @@ class DocumentCreateIn(BaseModel):
     title: str
     ref_no: str | None = None
     extra_data: str | None = None
+    official_due_date: date | None = None
+    official_due_date_source: DeadlineSource | None = None
+    official_due_date_status: DeadlineWriteStatus | None = None
+    description: str | None = None
     reply_to_id: str | None = None
 
 
@@ -77,6 +82,10 @@ class DocumentImpactPreviewIn(BaseModel):
     title: str = Field(..., min_length=1)
     ref_no: str | None = None
     extra_data: str | None = None
+    official_due_date: date | None = None
+    official_due_date_source: DeadlineSource | None = None
+    official_due_date_status: DeadlineWriteStatus | None = None
+    description: str | None = None
     reply_to_id: str | None = None
 
 
@@ -94,6 +103,10 @@ class DocumentImpactPreviewOut(BaseModel):
     case_id: str
     case_no: str | None = None
     template_code: str | None = None
+    official_due_date: date | None = None
+    official_due_date_source: DeadlineSource | None = None
+    official_due_date_status: DeadlineReadStatus | None = None
+    description: str | None = None
     status_impacts: list[DocumentImpactItemOut] = Field(default_factory=list)
     deadline_impacts: list[DocumentImpactItemOut] = Field(default_factory=list)
     task_impacts: list[DocumentImpactItemOut] = Field(default_factory=list)
@@ -111,6 +124,9 @@ class DocumentWizardBatchDefaultsIn(BaseModel):
     title: str | None = None
     ref_no: str | None = None
     extra_data: str | None = None
+    official_due_date: date | None = None
+    official_due_date_source: DeadlineSource | None = None
+    official_due_date_status: DeadlineWriteStatus | None = None
     reply_to_id: str | None = None
 
 
@@ -120,6 +136,9 @@ class DocumentWizardBatchRowIn(BaseModel):
     doc_date: date | None = None
     ref_no: str | None = None
     extra_data: str | None = None
+    official_due_date: date | None = None
+    official_due_date_source: DeadlineSource | None = None
+    official_due_date_status: DeadlineWriteStatus | None = None
     reply_to_id: str | None = None
 
 
@@ -265,6 +284,10 @@ class DocumentUpdateIn(BaseModel):
     title: str | None = None
     ref_no: str | None = None
     extra_data: str | None = None
+    official_due_date: date | None = None
+    official_due_date_source: DeadlineSource | None = None
+    official_due_date_status: DeadlineWriteStatus | None = None
+    description: str | None = None
     reply_to_id: str | None = None
     need_reply: bool | None = None
     reply_date: date | None = None
@@ -288,6 +311,10 @@ class DocumentOut(BaseModel):
     title: str | None
     ref_no: str | None
     extra_data: str | None
+    official_due_date: date | None = None
+    official_due_date_source: DeadlineSource | None = None
+    official_due_date_status: DeadlineReadStatus | None = None
+    description: str | None = None
     reply_to_id: str | None = None
     need_reply: bool | None = None
     reply_date: date | None = None

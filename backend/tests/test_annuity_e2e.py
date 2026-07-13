@@ -90,6 +90,7 @@ def _insert_annuity_task(
     status: str = "OPEN",
     notice_status: str = "PENDING",
     client_instruction: str | None = None,
+    gov_fee_amt: Decimal = Decimal("100.00"),
 ) -> int:
     with session_factory() as db:
         task = AnnuityTask(
@@ -100,11 +101,37 @@ def _insert_annuity_task(
             status=status,
             notice_status=notice_status,
             client_instruction=client_instruction,
+            gov_fee_amt=gov_fee_amt,
         )
         db.add(task)
         db.commit()
         db.refresh(task)
         return task.id
+
+
+def _insert_service_fee_item(
+    session_factory: sessionmaker,
+    *,
+    draft_id: str,
+    case_id: str,
+    amount: Decimal = Decimal("20.00"),
+) -> str:
+    """Insert a non-GOV fee item; annuity drafts only carry GOV items now."""
+    with session_factory() as db:
+        item = FeeItem(
+            id=str(uuid4()),
+            draft_id=draft_id,
+            case_id=case_id,
+            fee_code="ANNUITY_SERVICE",
+            fee_name="Annuity Service Fee",
+            fee_type="SERVICE",
+            quantity=Decimal("1"),
+            unit_price=amount,
+            amount=amount,
+        )
+        db.add(item)
+        db.commit()
+        return item.id
 
 
 def _create_annuity_rates(client: TestClient, auth_headers: dict[str, str], tag: str) -> None:
@@ -297,7 +324,9 @@ def test_gov_payment_register_generated_planned_chain(
 
     draft_id = generate_payload["success"][0]["draft_id"]
     gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
-    service_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "SERVICE")
+    service_fee_item_id = _insert_service_fee_item(
+        session_factory, draft_id=draft_id, case_id=case_id
+    )
 
     pay_list_resp = client.post(
         "/api/v1/pay-lists/from-fee-items",
@@ -596,7 +625,9 @@ def test_pay_list_from_fee_items_keeps_valid_same_scope_candidates_when_other_it
     draft_id = draft_resp.json()["success"][0]["draft_id"]
 
     gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
-    service_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "SERVICE")
+    service_fee_item_id = _insert_service_fee_item(
+        session_factory, draft_id=draft_id, case_id=case_id
+    )
 
     pay_list_resp = client.post(
         "/api/v1/pay-lists/from-fee-items",
@@ -678,6 +709,90 @@ def test_historical_pay_list_create_requires_client_and_round_trips_supported_fi
     assert pay_list.created_by == payload["created_by"]
     assert pay_list.updated_by == payload["updated_by"]
     assert len(gov_payments) == 0
+
+
+def test_pay_list_structural_fields_round_trip_and_filter(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    """FRFE04-BLOCK-01/02/03: pay-list type/flow/invoice range and gov-payment
+    fee_code/year_no/planned/voucher/invoice columns persist and filter."""
+    client_id, case_id = _create_client_and_case(client, auth_headers)
+
+    create_resp = client.post(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        json={
+            "client_id": client_id,
+            "currency": "CNY",
+            "planned_pay_date": "2026-09-01",
+            "remark": "结构字段清单",
+            "list_type": "ANNUITY",
+            "flow_dir": "CN_DOMESTIC",
+            "invoice_no_from": "INV-0001",
+            "invoice_no_to": "INV-0100",
+        },
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    header = create_resp.json()
+    assert header["list_type"] == "ANNUITY"
+    assert header["flow_dir"] == "CN_DOMESTIC"
+    assert header["invoice_no_from"] == "INV-0001"
+    assert header["invoice_no_to"] == "INV-0100"
+    pay_list_id = header["id"]
+
+    manual_resp = client.post(
+        f"/api/v1/pay-lists/{pay_list_id}/manual-items",
+        headers=auth_headers,
+        json={
+            "case_id": case_id,
+            "paid_date": "2026-09-02",
+            "paid_amount": "600.00",
+            "official_receipt_no": _uid("OCR"),
+            "fee_code": "CN_ANNUITY_FEE_INV",
+            "year_no": 4,
+            "paid_currency": "CNY",
+            "voucher_no": "VCH-2026-01",
+            "invoice_no": "INV-0055",
+        },
+    )
+    assert manual_resp.status_code == 200, manual_resp.text
+    gov_payment = manual_resp.json()["gov_payment"]
+    assert gov_payment["fee_code"] == "CN_ANNUITY_FEE_INV"
+    assert gov_payment["year_no"] == 4
+    assert gov_payment["paid_currency"] == "CNY"
+    assert gov_payment["voucher_no"] == "VCH-2026-01"
+    assert gov_payment["invoice_no"] == "INV-0055"
+
+    detail_resp = client.get(f"/api/v1/pay-lists/{pay_list_id}", headers=auth_headers)
+    assert detail_resp.status_code == 200, detail_resp.text
+    detail = detail_resp.json()
+    assert detail["pay_list"]["list_type"] == "ANNUITY"
+    assert detail["pay_list"]["invoice_no_to"] == "INV-0100"
+    detail_payment = detail["gov_payments"][0]
+    assert detail_payment["fee_code"] == "CN_ANNUITY_FEE_INV"
+    assert detail_payment["voucher_no"] == "VCH-2026-01"
+
+    # BLOCK-03: enhanced filters on the new structural fields
+    filtered_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={"list_type": "ANNUITY", "voucher_no": "VCH-2026-01"},
+    )
+    assert filtered_resp.status_code == 200, filtered_resp.text
+    filtered = filtered_resp.json()
+    assert filtered["total"] == 1
+    assert filtered["items"][0]["id"] == pay_list_id
+    assert filtered["items"][0]["list_type"] == "ANNUITY"
+
+    miss_resp = client.get(
+        "/api/v1/pay-lists",
+        headers=auth_headers,
+        params={"list_type": "ANNUITY", "voucher_no": "VCH-NONE"},
+    )
+    assert miss_resp.status_code == 200, miss_resp.text
+    assert miss_resp.json()["total"] == 0
 
 
 def test_pay_list_manual_item_accepts_null_fee_item_id_and_updates_total_amount(
@@ -1092,6 +1207,10 @@ def test_pay_list_detail_returns_header_and_associated_gov_payments(
         "paid_date",
         "total_amount",
         "remark",
+        "list_type",
+        "flow_dir",
+        "invoice_no_from",
+        "invoice_no_to",
         "created_at",
         "updated_at",
         "created_by",
@@ -1110,6 +1229,7 @@ def test_pay_list_detail_returns_header_and_associated_gov_payments(
         "id",
         "pay_list_id",
         "case_id",
+        "case_no",
         "fee_item_id",
         "status",
         "currency",
@@ -1117,6 +1237,13 @@ def test_pay_list_detail_returns_header_and_associated_gov_payments(
         "paid_amount",
         "official_receipt_no",
         "remark",
+        "fee_code",
+        "year_no",
+        "planned_amt",
+        "planned_currency",
+        "paid_currency",
+        "voucher_no",
+        "invoice_no",
         "created_at",
         "updated_at",
         "created_by",
@@ -1125,11 +1252,15 @@ def test_pay_list_detail_returns_header_and_associated_gov_payments(
     assert gov_payment_payload["fee_item_id"] == gov_fee_item_id
     assert gov_payment_payload["pay_list_id"] == pay_list_id
     assert gov_payment_payload["case_id"] == case_id
+    assert gov_payment_payload["case_no"]
     assert gov_payment_payload["status"] == "PLANNED"
     assert gov_payment_payload["currency"] == "CNY"
     assert gov_payment_payload["paid_date"] is None
     assert gov_payment_payload["paid_amount"] == "100.00"
     assert gov_payment_payload["official_receipt_no"] is None
+    assert gov_payment_payload["fee_code"] == "ANNUITY_GOV"
+    assert gov_payment_payload["planned_amt"] == "100.00"
+    assert gov_payment_payload["planned_currency"] == "CNY"
 
     not_found_resp = client.get("/api/v1/pay-lists/999999", headers=auth_headers)
     _assert_error(not_found_resp, 404, "PAY_LIST_NOT_FOUND")
@@ -1469,6 +1600,65 @@ def test_calculate_fee_amount_per_claim_with_reduction_and_discount() -> None:
     assert amount == Decimal("108.00")
 
 
+def test_calculate_fee_amount_per_page_tiers() -> None:
+    """PER_PAGE 说明书附加费：31-300 页每页 50，301 页起每页 100（页数=spec+draw）。"""
+    tier_low = FeeRate(
+        fee_code=_uid("RATE"),
+        fee_name="说明书附加费 31-300",
+        fee_type="GOV",
+        currency="CNY",
+        default_amount=Decimal("50.00"),
+        calc_mode="PER_PAGE",
+        calc_params='{"from_page": 31, "to_page": 300, "unit_amount": "50.00"}',
+        allow_reduction=False,
+    )
+    tier_high = FeeRate(
+        fee_code=_uid("RATE"),
+        fee_name="说明书附加费 301+",
+        fee_type="GOV",
+        currency="CNY",
+        default_amount=Decimal("100.00"),
+        calc_mode="PER_PAGE",
+        calc_params='{"from_page": 301, "unit_amount": "100.00"}',
+        allow_reduction=False,
+    )
+
+    # 40 pages total (30 spec + 10 draw): pages 31-40 billable in low tier = 10 * 50
+    case_small = Case(
+        case_no=_uid("CASE"),
+        case_type="NORMAL",
+        patent_category="INV",
+        flow_dir="CN_DOMESTIC",
+        spec_pages=30,
+        draw_pages=10,
+    )
+    assert calculate_fee_amount(tier_low, case_small) == Decimal("500.00")
+    assert calculate_fee_amount(tier_high, case_small) == Decimal("0.00")
+
+    # 320 pages total: low tier bills 270 pages (31-300), high tier bills 20 pages (301-320)
+    case_large = Case(
+        case_no=_uid("CASE"),
+        case_type="NORMAL",
+        patent_category="INV",
+        flow_dir="CN_DOMESTIC",
+        spec_pages=300,
+        draw_pages=20,
+    )
+    assert calculate_fee_amount(tier_low, case_large) == Decimal("13500.00")
+    assert calculate_fee_amount(tier_high, case_large) == Decimal("2000.00")
+
+    # under 31 pages: no surcharge
+    case_tiny = Case(
+        case_no=_uid("CASE"),
+        case_type="NORMAL",
+        patent_category="INV",
+        flow_dir="CN_DOMESTIC",
+        spec_pages=20,
+        draw_pages=5,
+    )
+    assert calculate_fee_amount(tier_low, case_tiny) == Decimal("0.00")
+
+
 def test_case_receipt_endpoint_returns_batch3_receipt_fields(
     client: TestClient,
     auth_headers: dict[str, str],
@@ -1604,4 +1794,5 @@ def test_annuity_generate_drafts_normalizes_currency_case(
     assert payload["summary"]["success"] == 1
     assert payload["summary"]["failed"] == 0
     assert payload["success"][0]["currency"] == "CNY"
-    assert payload["success"][0]["amount"] == "120.00"
+    # Annuity drafts carry the task-held gov fee amount only (no service fee).
+    assert payload["success"][0]["amount"] == "100.00"

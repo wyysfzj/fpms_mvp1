@@ -16,7 +16,10 @@ from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.billing.models import CaseReceipt
 from app.modules.cases.models import Case
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
-from app.modules.fees.service import fee_rate_effective_on_conditions
+from app.modules.fees.service import (
+    fee_rate_effective_on_conditions,
+    fee_rate_source_enabled_condition,
+)
 from app.modules.masterdata.clients.models import Client
 
 _ALLOWED_INSTRUCTIONS = ("PAY", "ABANDON", "DEFER")
@@ -811,6 +814,7 @@ def _rate_amount(
         FeeRate.rate_group == "ANNUITY",
         FeeRate.fee_type == fee_type,
         FeeRate.currency == currency,
+        fee_rate_source_enabled_condition(),
         *fee_rate_effective_on_conditions(date.today()),
     ]
 
@@ -1272,6 +1276,10 @@ def create_pay_list_from_fee_items(
                 paid_amount=amount,
                 official_receipt_no=None,
                 remark=f"from_fee_item:{item.id}",
+                fee_code=item.fee_code,
+                year_no=item.year_no,
+                planned_amt=amount,
+                planned_currency=baseline_currency,
                 created_by=actor_id,
                 updated_by=actor_id,
             )
@@ -1317,6 +1325,10 @@ def create_historical_pay_list(
     currency: str = "CNY",
     planned_pay_date: date | None = None,
     remark: str | None = None,
+    list_type: str | None = None,
+    flow_dir: str | None = None,
+    invoice_no_from: str | None = None,
+    invoice_no_to: str | None = None,
     actor_id: str | None = None,
 ) -> dict[str, Any]:
     normalized_client_id = (client_id or "").strip()
@@ -1341,6 +1353,10 @@ def create_historical_pay_list(
         planned_pay_date=planned_pay_date,
         total_amount=Decimal("0"),
         remark=remark,
+        list_type=_normalize_optional_text(list_type),
+        flow_dir=_normalize_optional_text(flow_dir),
+        invoice_no_from=_normalize_optional_text(invoice_no_from),
+        invoice_no_to=_normalize_optional_text(invoice_no_to),
         created_by=actor_id,
         updated_by=actor_id,
     )
@@ -1361,6 +1377,10 @@ def create_historical_pay_list(
         "paid_date": pay_list.paid_date,
         "total_amount": str(pay_list.total_amount),
         "remark": pay_list.remark,
+        "list_type": pay_list.list_type,
+        "flow_dir": pay_list.flow_dir,
+        "invoice_no_from": pay_list.invoice_no_from,
+        "invoice_no_to": pay_list.invoice_no_to,
         "created_at": pay_list.created_at,
         "updated_at": pay_list.updated_at,
         "created_by": pay_list.created_by,
@@ -1549,6 +1569,24 @@ def list_pay_lists(
         stmt = stmt.where(PayList.planned_pay_date >= planned_from)
     if planned_to:
         stmt = stmt.where(PayList.planned_pay_date <= planned_to)
+    list_type = _normalize_optional_text(filters.get("list_type"))
+    if list_type:
+        stmt = stmt.where(func.upper(PayList.list_type) == list_type.upper())
+    flow_dir = _normalize_optional_text(filters.get("flow_dir"))
+    if flow_dir:
+        stmt = stmt.where(func.upper(PayList.flow_dir) == flow_dir.upper())
+    fee_code = _normalize_optional_text(filters.get("fee_code"))
+    voucher_no = _normalize_optional_text(filters.get("voucher_no"))
+    invoice_no = _normalize_optional_text(filters.get("invoice_no"))
+    if fee_code or voucher_no or invoice_no:
+        gov_stmt = select(GovPayment.id).where(GovPayment.pay_list_id == PayList.id)
+        if fee_code:
+            gov_stmt = gov_stmt.where(GovPayment.fee_code == fee_code)
+        if voucher_no:
+            gov_stmt = gov_stmt.where(GovPayment.voucher_no == voucher_no)
+        if invoice_no:
+            gov_stmt = gov_stmt.where(GovPayment.invoice_no == invoice_no)
+        stmt = stmt.where(gov_stmt.exists())
     if case_no or app_no:
         case_stmt = (
             select(GovPayment.id)
@@ -1591,6 +1629,16 @@ def get_pay_list_detail(db: Session, *, pay_list_id: int) -> dict[str, Any]:
         .all()
     )
 
+    case_ids = {gov_payment.case_id for gov_payment in gov_payments if gov_payment.case_id}
+    case_no_by_id: dict[str, str | None] = {}
+    if case_ids:
+        case_no_by_id = {
+            row[0]: row[1]
+            for row in db.execute(
+                select(Case.id, Case.case_no).where(Case.id.in_(case_ids))
+            ).all()
+        }
+
     return {
         "pay_list": {
             "id": pay_list.id,
@@ -1602,6 +1650,10 @@ def get_pay_list_detail(db: Session, *, pay_list_id: int) -> dict[str, Any]:
             "paid_date": pay_list.paid_date,
             "total_amount": str(pay_list.total_amount),
             "remark": pay_list.remark,
+            "list_type": pay_list.list_type,
+            "flow_dir": pay_list.flow_dir,
+            "invoice_no_from": pay_list.invoice_no_from,
+            "invoice_no_to": pay_list.invoice_no_to,
             "created_at": pay_list.created_at,
             "updated_at": pay_list.updated_at,
             "created_by": pay_list.created_by,
@@ -1612,6 +1664,7 @@ def get_pay_list_detail(db: Session, *, pay_list_id: int) -> dict[str, Any]:
                 "id": gov_payment.id,
                 "pay_list_id": gov_payment.pay_list_id,
                 "case_id": gov_payment.case_id,
+                "case_no": case_no_by_id.get(gov_payment.case_id),
                 "fee_item_id": gov_payment.fee_item_id,
                 "status": gov_payment.status,
                 "currency": gov_payment.currency,
@@ -1619,6 +1672,15 @@ def get_pay_list_detail(db: Session, *, pay_list_id: int) -> dict[str, Any]:
                 "paid_amount": str(gov_payment.paid_amount),
                 "official_receipt_no": gov_payment.official_receipt_no,
                 "remark": gov_payment.remark,
+                "fee_code": gov_payment.fee_code,
+                "year_no": gov_payment.year_no,
+                "planned_amt": (
+                    str(gov_payment.planned_amt) if gov_payment.planned_amt is not None else None
+                ),
+                "planned_currency": gov_payment.planned_currency,
+                "paid_currency": gov_payment.paid_currency,
+                "voucher_no": gov_payment.voucher_no,
+                "invoice_no": gov_payment.invoice_no,
                 "created_at": gov_payment.created_at,
                 "updated_at": gov_payment.updated_at,
                 "created_by": gov_payment.created_by,
@@ -1674,6 +1736,9 @@ def register_gov_payment(
     paid_amount: Decimal | None = None,
     official_receipt_no: str | None = None,
     remark: str | None = None,
+    paid_currency: str | None = None,
+    voucher_no: str | None = None,
+    invoice_no: str | None = None,
     actor_id: str | None = None,
 ) -> dict[str, Any]:
     """Register official payment with duplicate protection and pay-list status recompute."""
@@ -1780,6 +1845,13 @@ def register_gov_payment(
             paid_amount=resolved_paid_amount,
             official_receipt_no=official_receipt_no,
             remark=remark,
+            fee_code=fee_item.fee_code,
+            year_no=fee_item.year_no,
+            planned_amt=Decimal(fee_item.amount or 0),
+            planned_currency=pay_list.currency,
+            paid_currency=_normalize_optional_text(paid_currency) or pay_list.currency,
+            voucher_no=_normalize_optional_text(voucher_no),
+            invoice_no=_normalize_optional_text(invoice_no),
             created_by=actor_id,
             updated_by=actor_id,
         )
@@ -1817,6 +1889,14 @@ def register_gov_payment(
             target.official_receipt_no = official_receipt_no
         if remark is not None:
             target.remark = remark
+        if paid_currency is not None:
+            target.paid_currency = _normalize_optional_text(paid_currency)
+        elif not target.paid_currency:
+            target.paid_currency = pay_list.currency
+        if voucher_no is not None:
+            target.voucher_no = _normalize_optional_text(voucher_no)
+        if invoice_no is not None:
+            target.invoice_no = _normalize_optional_text(invoice_no)
         target.updated_by = actor_id
 
     db.flush()
@@ -1848,6 +1928,13 @@ def register_gov_payment(
             "paid_amount": str(target.paid_amount),
             "official_receipt_no": target.official_receipt_no,
             "remark": target.remark,
+            "fee_code": target.fee_code,
+            "year_no": target.year_no,
+            "planned_amt": str(target.planned_amt) if target.planned_amt is not None else None,
+            "planned_currency": target.planned_currency,
+            "paid_currency": target.paid_currency,
+            "voucher_no": target.voucher_no,
+            "invoice_no": target.invoice_no,
         },
         "pay_list": {
             "id": pay_list.id,
@@ -1871,6 +1958,11 @@ def add_manual_gov_payment(
     paid_amount: Decimal,
     official_receipt_no: str | None = None,
     remark: str | None = None,
+    fee_code: str | None = None,
+    year_no: int | None = None,
+    paid_currency: str | None = None,
+    voucher_no: str | None = None,
+    invoice_no: str | None = None,
     actor_id: str | None = None,
 ) -> dict[str, Any]:
     """Add a manual/historical gov-payment row under an existing pay list."""
@@ -1954,6 +2046,13 @@ def add_manual_gov_payment(
         paid_amount=resolved_paid_amount,
         official_receipt_no=official_receipt_no,
         remark=remark,
+        fee_code=_normalize_optional_text(fee_code),
+        year_no=year_no,
+        planned_amt=resolved_paid_amount,
+        planned_currency=pay_list.currency,
+        paid_currency=_normalize_optional_text(paid_currency) or pay_list.currency,
+        voucher_no=_normalize_optional_text(voucher_no),
+        invoice_no=_normalize_optional_text(invoice_no),
         created_by=actor_id,
         updated_by=actor_id,
     )
@@ -1988,6 +2087,13 @@ def add_manual_gov_payment(
             "paid_amount": str(target.paid_amount),
             "official_receipt_no": target.official_receipt_no,
             "remark": target.remark,
+            "fee_code": target.fee_code,
+            "year_no": target.year_no,
+            "planned_amt": str(target.planned_amt) if target.planned_amt is not None else None,
+            "planned_currency": target.planned_currency,
+            "paid_currency": target.paid_currency,
+            "voucher_no": target.voucher_no,
+            "invoice_no": target.invoice_no,
         },
         "pay_list": {
             "id": pay_list.id,

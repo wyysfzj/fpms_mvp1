@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
 from app.modules.cases.models import Case
+from app.modules.documents.extra_data import DocumentExtraDataError, parse_document_extra_data
 from app.modules.documents.models import DocTemplate
-from app.modules.tasks.enums import TaskDeadlineBase, TaskRemindBase
+from app.modules.tasks.enums import TaskAction, TaskDeadlineBase, TaskRemindBase, TaskStatus
 from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 
 
@@ -185,6 +186,10 @@ class TaskGenerationService:
 
     def _compute_due_date(self, document, case, template) -> date:
         """Compute due date from the template deadline base plus add_days/add_months."""
+        confirmed_oa_due_date = self._resolve_confirmed_oa_due_date(document, template)
+        if confirmed_oa_due_date is not None:
+            return confirmed_oa_due_date
+
         official_due_date = self._resolve_official_due_date(document)
         if official_due_date is not None:
             return official_due_date
@@ -208,6 +213,28 @@ class TaskGenerationService:
         if add_days:
             result = result + timedelta(days=add_days)
         return result
+
+    def _resolve_confirmed_oa_due_date(self, document, template) -> date | None:
+        if getattr(template, "code", None) not in {"OA_REPLY", "OA_REPLY_SUBSEQUENT"}:
+            return None
+
+        try:
+            parsed = parse_document_extra_data(getattr(document, "extra_data", None))
+        except DocumentExtraDataError as exc:
+            raise_business_error(
+                "OA_OFFICIAL_DUE_DATE_CONFLICT",
+                "Executable OA task generation requires a consistent official due date tuple",
+                details={"field": exc.field, "reason": exc.reason},
+                status_code=409,
+            )
+        if parsed.official_due_date_status != "CONFIRMED":
+            raise_business_error(
+                "OA_OFFICIAL_DUE_DATE_REQUIRED",
+                "Executable OA task generation requires a confirmed explicit official due date",
+                details={"status": parsed.official_due_date_status},
+                status_code=409,
+            )
+        return parsed.official_due_date
 
     def _resolve_official_due_date(self, document) -> date | None:
         raw_extra_data = getattr(document, "extra_data", None)
@@ -281,6 +308,109 @@ class TaskGenerationService:
             daily_remind_from = None
 
         return remind1, remind2, remind3, daily_remind_from
+
+    def synchronize_confirmed_oa_deadline(
+        self,
+        db: Session,
+        *,
+        document,
+        case_id: str,
+        task_template_code: str,
+        due_date: date,
+    ) -> Task:
+        matching_rows = (
+            db.query(Task, TaskTemplate)
+            .join(TaskTemplate, Task.task_template_id == TaskTemplate.id)
+            .filter(
+                Task.case_id == case_id,
+                Task.document_id == document.id,
+                Task.status == TaskStatus.OPEN.value,
+                TaskTemplate.code == task_template_code,
+            )
+            .all()
+        )
+        if len(matching_rows) != 1:
+            raise_business_error(
+                "OA_DEADLINE_TASK_MATCH_INVALID",
+                "Deadline confirmation requires exactly one matching open OA task",
+                details={
+                    "source_document_id": document.id,
+                    "task_template_code": task_template_code,
+                    "matching_open_task_count": len(matching_rows),
+                    "matching_open_task_ids": [task.id for task, _ in matching_rows],
+                },
+                status_code=409,
+            )
+
+        task, template = matching_rows[0]
+        inner_offset = getattr(template, "inner_offset_days", None)
+        internal_due_date = (
+            due_date - timedelta(days=inner_offset) if inner_offset is not None else None
+        )
+        try:
+            remind1, remind2, remind3, daily_remind_from = self._compute_reminders(
+                due_date,
+                internal_due_date,
+                template,
+            )
+        except RuntimeError as exc:
+            raise_business_error(
+                "OA_DEADLINE_TASK_SYNC_CONFLICT",
+                "OA task reminder configuration cannot be recalculated",
+                details={
+                    "source_document_id": document.id,
+                    "task_id": task.id,
+                    "task_template_code": task_template_code,
+                    "reason": str(exc),
+                },
+                status_code=409,
+            )
+
+        def _iso(value: date | None) -> str | None:
+            return value.isoformat() if value is not None else None
+
+        evidence = json.dumps(
+            {
+                "event": "OFFICIAL_DEADLINE_CONFIRMED",
+                "previous": {
+                    "daily_remind_from": _iso(task.daily_remind_from),
+                    "due_date": _iso(task.due_date),
+                    "internal_due_date": _iso(task.internal_due_date),
+                    "remind1": _iso(task.remind1),
+                    "remind2": _iso(task.remind2),
+                    "remind3": _iso(task.remind3),
+                },
+                "source_document_id": document.id,
+                "task_template_code": task_template_code,
+                "updated": {
+                    "daily_remind_from": _iso(daily_remind_from),
+                    "due_date": due_date.isoformat(),
+                    "internal_due_date": _iso(internal_due_date),
+                    "remind1": _iso(remind1),
+                    "remind2": _iso(remind2),
+                    "remind3": _iso(remind3),
+                },
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        task.due_date = due_date
+        task.internal_due_date = internal_due_date
+        task.remind1 = remind1
+        task.remind2 = remind2
+        task.remind3 = remind3
+        task.daily_remind_from = daily_remind_from
+        db.add(
+            TaskLog(
+                id=str(uuid4()),
+                task_id=task.id,
+                action=TaskAction.UPDATE.value,
+                from_status=task.status,
+                to_status=task.status,
+                remark=evidence,
+            )
+        )
+        return task
 
     def _task_exists(
         self,

@@ -120,7 +120,7 @@
               </el-table-column>
               <el-table-column prop="case_id" label="案件" min-width="180">
                 <template #default="{ row }">
-                  {{ formatCaseDisplay(row.case_id) }}
+                  {{ formatCaseDisplay(row) }}
                 </template>
               </el-table-column>
               <el-table-column label="状态" width="110">
@@ -441,8 +441,9 @@ function formatFeeItemDisplay(value?: string | null): string {
   return value ? '已关联费用项' : '手工补录'
 }
 
-function formatCaseDisplay(value?: string | null): string {
-  return value ? '已关联案件' : '未关联案件'
+function formatCaseDisplay(row: { case_id?: string | null; case_no?: string | null }): string {
+  if (row.case_no) return row.case_no
+  return row.case_id ? '已关联案件' : '未关联案件'
 }
 
 function buildExportFileName(target: NonNullable<typeof payList.value>): string {

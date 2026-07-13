@@ -44,7 +44,7 @@ def _get_template(client, auth_headers, code: str) -> dict:
     return matches[0]
 
 
-def test_ui_generic_doc_type_uses_template_deadline_and_reply_writeoff(client, auth_headers):
+def test_ui_generic_doc_type_uses_template_deadline_and_reply_keeps_task_open(client, auth_headers):
     case_id = _create_case(client, auth_headers)
     oa_in = _get_template(client, auth_headers, "OA_IN")
     oa_out = _get_template(client, auth_headers, "OA_OUT")
@@ -57,6 +57,9 @@ def test_ui_generic_doc_type_uses_template_deadline_and_reply_writeoff(client, a
             "doc_type": "OFFICIAL_IN",
             "direction": "IN",
             "doc_date": "2026-02-01",
+            "official_due_date": "2026-06-01",
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
             "title": "UI路径OA来文",
         },
         headers=auth_headers,
@@ -90,4 +93,4 @@ def test_ui_generic_doc_type_uses_template_deadline_and_reply_writeoff(client, a
     done_resp = client.get(f"/api/v1/tasks?case_id={case_id}", headers=auth_headers)
     assert done_resp.status_code == 200, done_resp.text
     done_task = next(task for task in done_resp.json()["items"] if task["id"] == oa_tasks[0]["id"])
-    assert done_task["status"] == "DONE"
+    assert done_task["status"] == "OPEN"

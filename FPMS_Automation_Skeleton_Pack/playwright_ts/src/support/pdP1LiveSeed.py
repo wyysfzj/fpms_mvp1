@@ -493,6 +493,21 @@ def clear_fixture(db) -> None:
     db.query(Applicant).filter(Applicant.id == APPLICANT_MASTER_ID).delete(
         synchronize_session=False
     )
+    # Detach any dynamically created handoffs (V5/V6 runs) that still reference the
+    # shared demo mapping/template before deleting them, otherwise the FK on
+    # t_letter_handoff.format_letter_mapping_id / format_letter_template_id fails.
+    db.query(LetterHandoff).filter(
+        LetterHandoff.format_letter_mapping_id == FORMAT_MAPPING_ID
+    ).update(
+        {"format_letter_mapping_id": None},
+        synchronize_session=False,
+    )
+    db.query(LetterHandoff).filter(
+        LetterHandoff.format_letter_template_id == FORMAT_TEMPLATE_ID
+    ).update(
+        {"format_letter_template_id": None},
+        synchronize_session=False,
+    )
     db.query(FormatLetterMapping).filter(FormatLetterMapping.id == FORMAT_MAPPING_ID).delete(
         synchronize_session=False
     )

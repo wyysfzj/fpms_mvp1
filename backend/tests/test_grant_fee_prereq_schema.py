@@ -47,6 +47,14 @@ def _expected_columns() -> set[str]:
         "updated_at",
         "created_by",
         "updated_by",
+        "source_document_id",
+        "deadline_source",
+        "deadline_confirmed_at",
+        "superseded_by_task_id",
+        "supersede_reason",
+        "superseded_at",
+        "superseded_by",
+        "supersede_request_key",
     }
 
 

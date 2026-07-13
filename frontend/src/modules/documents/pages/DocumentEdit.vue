@@ -135,6 +135,73 @@
               </el-tag>
             </div>
           </div>
+
+          <div class="deadline-lineage-card">
+            <div class="deadline-lineage-title">官方截止日来源记录</div>
+            <el-descriptions :column="3" border size="small">
+              <el-descriptions-item label="官方截止日">
+                {{ form.official_due_date || '未记录' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="截止日来源">
+                {{ deadlineSourceLabel }}
+              </el-descriptions-item>
+              <el-descriptions-item label="确认状态">
+                <el-tag :type="deadlineStatusTagType" size="small">{{ deadlineStatusLabel }}</el-tag>
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <el-row :gutter="20" class="deadline-confirm-fields">
+              <el-col :span="12">
+                <el-form-item label="官方截止日">
+                  <el-date-picker
+                    v-model="form.official_due_date"
+                    type="date"
+                    format="YYYY-MM-DD"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择官方截止日"
+                    :disabled="deadlineDateReadOnly"
+                    clearable
+                    class="full-width"
+                    @change="clearDeadlineConfirmationRequest"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="截止日来源">
+                  <el-select
+                    v-model="form.official_due_date_source"
+                    placeholder="请选择截止日来源"
+                    :disabled="isDeadlineConfirmed"
+                    clearable
+                    class="full-width"
+                    @change="clearDeadlineConfirmationRequest"
+                  >
+                    <el-option label="人工核对官方通知" value="MANUAL_OFFICIAL_NOTICE" />
+                    <el-option label="从官方通知导入" value="IMPORTED_OFFICIAL_NOTICE" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+
+            <el-alert
+              :type="isDeadlineConfirmed ? 'success' : 'info'"
+              :closable="false"
+              :title="deadlineReadOnlyReason"
+              show-icon
+            />
+            <div v-if="!isDeadlineConfirmed" class="deadline-confirm-actions">
+              <el-button
+                type="primary"
+                :disabled="!canConfirmDeadline"
+                @click="confirmOfficialDeadline"
+              >
+                确认官方截止日
+              </el-button>
+              <span v-if="deadlineConfirmationRequested" class="deadline-confirmed-hint">
+                已标记为待保存的确认信息
+              </span>
+            </div>
+          </div>
         </div>
 
         <div class="form-section">
@@ -180,8 +247,13 @@ const docTemplates = ref<DocTemplate[]>([])
 const fieldErrors = ref<Map<string, string[]>>(new Map())
 const caseOptionsLoading = ref(false)
 const caseOptions = ref<Case[]>([])
+const deadlineConfirmationRequested = ref(false)
 
-const form = reactive<DocumentUpdatePayload>({
+interface DocumentEditForm extends Omit<DocumentUpdatePayload, 'official_due_date_status'> {
+  official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | 'LEGACY_UNVERIFIED' | null
+}
+
+const form = reactive<DocumentEditForm>({
   title: '',
   direction: undefined,
   case_id: '',
@@ -189,6 +261,9 @@ const form = reactive<DocumentUpdatePayload>({
   doc_date: '',
   doc_type: undefined,
   description: '',
+  official_due_date: null,
+  official_due_date_source: null,
+  official_due_date_status: null,
 })
 const filteredTemplates = computed(() =>
   docTemplates.value.filter((t) => !form.direction || t.direction === form.direction)
@@ -196,6 +271,42 @@ const filteredTemplates = computed(() =>
 const selectedTemplate = computed(
   () => docTemplates.value.find((t) => t.id === form.doc_template_id) || null
 )
+const isDeadlineConfirmed = computed(() => docData.value?.official_due_date_status === 'CONFIRMED')
+const isLegacyDeadline = computed(
+  () => docData.value?.official_due_date_status === 'LEGACY_UNVERIFIED'
+)
+const deadlineDateReadOnly = computed(
+  () => isDeadlineConfirmed.value || Boolean(docData.value?.official_due_date)
+)
+const canConfirmDeadline = computed(
+  () => Boolean(form.official_due_date && form.official_due_date_source)
+)
+const deadlineSourceLabel = computed(() => {
+  if (form.official_due_date_source === 'MANUAL_OFFICIAL_NOTICE') return '人工核对官方通知'
+  if (form.official_due_date_source === 'IMPORTED_OFFICIAL_NOTICE') return '从官方通知导入'
+  return '未记录'
+})
+const deadlineStatusLabel = computed(() => {
+  if (isDeadlineConfirmed.value) return '已确认'
+  if (deadlineConfirmationRequested.value) return '待保存确认'
+  if (isLegacyDeadline.value) return '历史待确认'
+  if (docData.value?.official_due_date_status === 'NEEDS_CONFIRMATION') return '待确认'
+  return '未记录'
+})
+const deadlineStatusTagType = computed<'success' | 'warning' | 'info'>(() => {
+  if (isDeadlineConfirmed.value) return 'success'
+  if (isLegacyDeadline.value || deadlineConfirmationRequested.value) return 'warning'
+  return 'info'
+})
+const deadlineReadOnlyReason = computed(() => {
+  if (isDeadlineConfirmed.value) {
+    return '已确认的官方截止日保持只读；本页面不提供覆盖或改期操作。'
+  }
+  if (isLegacyDeadline.value) {
+    return '历史截止日只能按原日期确认，请选择来源后保存。'
+  }
+  return '当前未确认官方截止日，请填写日期和来源后执行确认。'
+})
 
 const rules: FormRules = {
   title: [
@@ -229,6 +340,10 @@ async function fetchDocument() {
     form.doc_date = docData.value.doc_date || ''
     form.doc_type = docData.value.doc_type || undefined
     form.description = docData.value.description || ''
+    form.official_due_date = docData.value.official_due_date || null
+    form.official_due_date_source = docData.value.official_due_date_source || null
+    form.official_due_date_status = docData.value.official_due_date_status || null
+    deadlineConfirmationRequested.value = false
     await ensureCurrentCaseOption(form.case_id)
   } catch (err) {
     error.value = err as ApiError
@@ -283,7 +398,21 @@ async function handleSave() {
   error.value = null
 
   try {
-    await updateDocument(id, form)
+    const payload: DocumentUpdatePayload = {
+      title: form.title,
+      direction: form.direction,
+      case_id: form.case_id,
+      doc_template_id: form.doc_template_id,
+      doc_date: form.doc_date,
+      doc_type: form.doc_type,
+      description: form.description,
+    }
+    if (deadlineConfirmationRequested.value) {
+      payload.official_due_date = form.official_due_date
+      payload.official_due_date_source = form.official_due_date_source
+      payload.official_due_date_status = 'CONFIRMED'
+    }
+    await updateDocument(id, payload)
     ElMessage.success('文档更新成功')
     router.push(`/documents/${id}`)
   } catch (err) {
@@ -297,6 +426,19 @@ async function handleSave() {
   } finally {
     saving.value = false
   }
+}
+
+function clearDeadlineConfirmationRequest() {
+  deadlineConfirmationRequested.value = false
+  if (!isDeadlineConfirmed.value) {
+    form.official_due_date_status = docData.value?.official_due_date_status || null
+  }
+}
+
+function confirmOfficialDeadline() {
+  if (!canConfirmDeadline.value || isDeadlineConfirmed.value) return
+  deadlineConfirmationRequested.value = true
+  form.official_due_date_status = 'CONFIRMED'
 }
 
 function handleCancel() {
@@ -347,5 +489,34 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.deadline-lineage-card {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
+}
+
+.deadline-lineage-title {
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.deadline-confirm-fields {
+  margin-top: 16px;
+}
+
+.deadline-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.deadline-confirmed-hint {
+  color: var(--el-color-success);
+  font-size: 13px;
 }
 </style>

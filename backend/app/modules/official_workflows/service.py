@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
 from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -19,6 +20,7 @@ from app.modules.documents.models import (
     LetterHandoffAttachment,
 )
 from app.modules.documents.schemas import LetterHandoffAttachmentOut, LetterHandoffOut
+from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.documents.service import summarize_attachment_manifest
 from app.modules.fees.models import FeeDraft, OfficialFeeChecklist
 from app.modules.masterdata.applicants.models import Applicant
@@ -57,7 +59,8 @@ from app.modules.official_workflows.schemas import (
     OfficialWorkPackageOut,
     OfficialWorkPackageStatusEvaluationOut,
 )
-from app.modules.tasks.models import Task
+from app.modules.tasks.enums import TaskAction, TaskStatus
+from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 from app.modules.templates.models import FormatLetterMapping, Template
 
 CHECKLIST_COMPLETE_STATUSES = {"DONE", "NOT_APPLICABLE", "OVERRIDDEN"}
@@ -901,6 +904,79 @@ def _filing_fee_summary(db: Session, *, package_id: str) -> FilingPackageFeeSumm
     )
 
 
+def ensure_filing_preparation_package(
+    db: Session,
+    *,
+    case_id: str,
+) -> FilingPreparationPackageOut:
+    case = _get_case(db, case_id)
+    resolve_key = f"FILING_PREP:{case.id}"
+    existing = (
+        db.execute(
+            select(OfficialWorkPackage)
+            .where(
+                OfficialWorkPackage.case_id == case.id,
+                OfficialWorkPackage.package_kind == "FILING_PREP",
+            )
+            .order_by(OfficialWorkPackage.created_at.asc(), OfficialWorkPackage.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if existing and (len(existing) != 1 or existing[0].resolve_key != resolve_key):
+        raise_business_error(
+            "FILING_PREPARATION_IDENTITY_CONFLICT",
+            "Filing preparation package identity is inconsistent",
+            details={
+                "case_id": case.id,
+                "expected_resolve_key": resolve_key,
+                "packages": [
+                    {"id": package.id, "resolve_key": package.resolve_key} for package in existing
+                ],
+            },
+            status_code=409,
+        )
+    if existing:
+        return get_filing_preparation_package(db, package_id=existing[0].id)
+
+    if _normalize_code(case.status) != "NOT_FILED":
+        raise_business_error(
+            "FILING_PREPARATION_CASE_STATE_INVALID",
+            "Filing preparation package can only be created for a NOT_FILED case",
+            details={"case_id": case.id, "case_status": case.status},
+            status_code=409,
+        )
+
+    package = OfficialWorkPackage(
+        id=str(uuid4()),
+        case_id=case.id,
+        package_kind="FILING_PREP",
+        status="PREPARING",
+        resolve_key=resolve_key,
+    )
+    db.add(package)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        winner = db.execute(
+            select(OfficialWorkPackage).where(
+                OfficialWorkPackage.resolve_key == resolve_key,
+                OfficialWorkPackage.case_id == case.id,
+                OfficialWorkPackage.package_kind == "FILING_PREP",
+            )
+        ).scalar_one_or_none()
+        if winner:
+            return get_filing_preparation_package(db, package_id=winner.id)
+        raise_business_error(
+            "FILING_PREPARATION_IDENTITY_CONFLICT",
+            "Filing preparation package identity is inconsistent",
+            details={"case_id": case.id, "expected_resolve_key": resolve_key},
+            status_code=409,
+        )
+    return refresh_filing_preparation_package(db, package_id=package.id)
+
+
 def get_filing_preparation_package(
     db: Session,
     *,
@@ -1309,6 +1385,135 @@ def _oa_checklist_defaults(db: Session, *, package_id: str) -> None:
         )
 
 
+def ensure_oa_reply_package(
+    db: Session,
+    *,
+    source_document_id: str,
+) -> OaReplyPackageOut:
+    source = _get_document(db, source_document_id)
+    resolve_key = f"OA_REPLY:{source.id}"
+    existing = (
+        db.execute(
+            select(OfficialWorkPackage)
+            .where(
+                OfficialWorkPackage.source_document_id == source.id,
+                OfficialWorkPackage.package_kind == "OA_REPLY",
+            )
+            .order_by(OfficialWorkPackage.created_at.asc(), OfficialWorkPackage.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if existing and (
+        len(existing) != 1
+        or existing[0].case_id != source.case_id
+        or existing[0].resolve_key != resolve_key
+    ):
+        raise_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            "OA reply package identity is inconsistent",
+            details={
+                "source_document_id": source.id,
+                "expected_case_id": source.case_id,
+                "expected_resolve_key": resolve_key,
+                "packages": [
+                    {
+                        "id": package.id,
+                        "case_id": package.case_id,
+                        "resolve_key": package.resolve_key,
+                    }
+                    for package in existing
+                ],
+            },
+            status_code=409,
+        )
+    if _normalize_code(source.direction) != "IN":
+        raise_business_error(
+            "OA_REPLY_SOURCE_DIRECTION_INVALID",
+            "OA reply package source must be an incoming document",
+            details={"source_document_id": source.id, "direction": source.direction},
+            status_code=400,
+        )
+
+    template = (
+        db.execute(select(DocTemplate).where(DocTemplate.id == source.doc_template_id))
+        .scalars()
+        .one_or_none()
+        if source.doc_template_id
+        else None
+    )
+    semantics = resolve_document_semantics(template)
+    expected_case_status = _normalize_code(semantics.case_status_effect)
+    if (
+        semantics.catalog_status != "EXECUTABLE"
+        or semantics.execution_behavior != "OA_REPLY"
+        or expected_case_status not in {"OA1", "OA2"}
+    ):
+        raise_business_error(
+            "OA_REPLY_SOURCE_SEMANTICS_INVALID",
+            "Document does not have executable OA reply semantics",
+            details={
+                "source_document_id": source.id,
+                "catalog_status": semantics.catalog_status,
+                "execution_behavior": semantics.execution_behavior,
+                "case_status_effect": semantics.case_status_effect,
+            },
+            status_code=409,
+        )
+
+    if existing:
+        return get_oa_reply_package(db, package_id=existing[0].id)
+
+    case = _get_case(db, source.case_id)
+    if _normalize_code(case.status) != expected_case_status:
+        raise_business_error(
+            "OA_REPLY_CASE_STATE_INVALID",
+            "OA reply package case state does not match the source document semantics",
+            details={
+                "source_document_id": source.id,
+                "case_id": case.id,
+                "case_status": case.status,
+                "expected_case_status": expected_case_status,
+            },
+            status_code=409,
+        )
+
+    package = OfficialWorkPackage(
+        id=str(uuid4()),
+        case_id=case.id,
+        package_kind="OA_REPLY",
+        status="PREPARING",
+        source_document_id=source.id,
+        resolve_key=resolve_key,
+    )
+    db.add(package)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        winner = db.execute(
+            select(OfficialWorkPackage).where(
+                OfficialWorkPackage.resolve_key == resolve_key,
+                OfficialWorkPackage.case_id == source.case_id,
+                OfficialWorkPackage.package_kind == "OA_REPLY",
+                OfficialWorkPackage.source_document_id == source.id,
+            )
+        ).scalar_one_or_none()
+        if winner:
+            return get_oa_reply_package(db, package_id=winner.id)
+        raise_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            "OA reply package identity is inconsistent",
+            details={
+                "source_document_id": source.id,
+                "expected_case_id": source.case_id,
+                "expected_resolve_key": resolve_key,
+            },
+            status_code=409,
+        )
+    return refresh_oa_reply_package(db, package_id=package.id)
+
+
 def get_oa_reply_package(
     db: Session,
     *,
@@ -1586,13 +1791,35 @@ def _letter_salutation(
     return "尊敬的：您好", "DEFAULT"
 
 
+def _letter_first_applicant_name(db: Session, *, case: Case) -> str:
+    """First applicant display name for letter filenames (信函生成 P0004)."""
+    first_applicant = (
+        db.execute(
+            select(T_CaseApplicant)
+            .where(T_CaseApplicant.case_id == case.id)
+            .order_by(T_CaseApplicant.seq.asc())
+        )
+        .scalars()
+        .first()
+    )
+    if first_applicant is None:
+        return ""
+    return _normalize_text(first_applicant.name_cn) or _normalize_text(first_applicant.name_en) or ""
+
+
 def _letter_output_filename(
+    db: Session,
     *,
     case: Case,
     document: Document,
     mapping: FormatLetterMapping | None,
 ) -> str:
-    default_name = f"{case.case_no}-格式函.docx"
+    applicant_name = _letter_first_applicant_name(db, case=case)
+    # 客户口径（信函生成操作 P0004）：{案号}-给{申请人名称}的邮件.docx
+    if applicant_name:
+        default_name = f"{case.case_no}-给{applicant_name}的邮件.docx"
+    else:
+        default_name = f"{case.case_no}-格式函.docx"
     rule = _normalize_text(mapping.output_name_rule if mapping else None)
     if not rule:
         return default_name
@@ -1601,6 +1828,7 @@ def _letter_output_filename(
             case_no=case.case_no,
             app_no=case.app_no or "",
             document_title=document.title or "",
+            applicant_name=applicant_name,
         )
     except (KeyError, ValueError):
         return default_name
@@ -1661,7 +1889,9 @@ def get_letter_handoff_preview(
     template_ready = _letter_template_ready(db, mapping)
     generated_word_path = None
     if template_ready:
-        output_filename = _letter_output_filename(case=case, document=document, mapping=mapping)
+        output_filename = _letter_output_filename(
+            db, case=case, document=document, mapping=mapping
+        )
         generated_word_path = f"letters/{case.case_no}/{output_filename}"
 
     mail_subject = f"{case.case_no} {document.title or '官方来文'}"
@@ -1951,7 +2181,7 @@ def record_official_work_package_receipt(
     note: str | None = None,
     actor_id: str | None = None,
 ) -> OfficialWorkPackageReceipt:
-    _get_package(db, package_id)
+    package = _get_package(db, package_id)
     normalized_receipt_kind = _normalize_code(receipt_kind) or "RECEIPT_PDF"
     if normalized_receipt_kind not in OFFICIAL_WORK_PACKAGE_RECEIPT_KINDS:
         raise_business_error(
@@ -1963,6 +2193,44 @@ def record_official_work_package_receipt(
 
     if receipt_attachment_id:
         attachment = _get_attachment(db, receipt_attachment_id)
+        attachment_document = _get_document(db, attachment.document_id)
+        if attachment_document.case_id != package.case_id:
+            raise_business_error(
+                "OFFICIAL_WORK_PACKAGE_RECEIPT_CASE_MISMATCH",
+                "Receipt attachment belongs to another case",
+                details={
+                    "package_id": package.id,
+                    "package_case_id": package.case_id,
+                    "attachment_id": attachment.id,
+                    "attachment_case_id": attachment_document.case_id,
+                },
+                status_code=400,
+            )
+        if (
+            _normalize_code(package.package_kind) == "OA_REPLY"
+            and attachment.document_id != package.reply_document_id
+        ):
+            manifest_id = db.execute(
+                select(OfficialWorkPackageManifest.id)
+                .where(
+                    OfficialWorkPackageManifest.package_id == package.id,
+                    OfficialWorkPackageManifest.attachment_id == attachment.id,
+                    OfficialWorkPackageManifest.present.is_(True),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if manifest_id is None:
+                raise_business_error(
+                    "OA_RECEIPT_ATTACHMENT_SOURCE_INVALID",
+                    "OA receipt attachment is not linked to the reply package",
+                    details={
+                        "package_id": package.id,
+                        "reply_document_id": package.reply_document_id,
+                        "attachment_id": attachment.id,
+                        "attachment_document_id": attachment.document_id,
+                    },
+                    status_code=400,
+                )
         attachment.is_archive_evidence = True
         attachment.is_receipt_evidence = normalized_receipt_kind != "MERGED_PDF"
         attachment.updated_by = _normalize_text(actor_id)
@@ -1985,6 +2253,257 @@ def record_official_work_package_receipt(
     db.commit()
     db.refresh(receipt)
     return receipt
+
+
+def _raise_oa_receipt_archive_evidence_invalid(
+    *,
+    package: OfficialWorkPackage,
+    receipt: OfficialWorkPackageReceipt,
+    reason: str,
+    attachment_id: str | None = None,
+) -> None:
+    raise_business_error(
+        "OA_RECEIPT_ARCHIVE_EVIDENCE_INVALID",
+        "OA receipt archive evidence is invalid",
+        details={
+            "package_id": package.id,
+            "receipt_id": receipt.id,
+            "attachment_id": attachment_id or receipt.receipt_attachment_id,
+            "reason": reason,
+        },
+        status_code=409,
+    )
+
+
+def _revalidate_oa_archived_receipts(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+) -> list[str]:
+    archived_receipts = [
+        receipt
+        for receipt in (
+            db.execute(
+                select(OfficialWorkPackageReceipt)
+                .where(OfficialWorkPackageReceipt.package_id == package.id)
+                .order_by(
+                    OfficialWorkPackageReceipt.created_at.asc(),
+                    OfficialWorkPackageReceipt.id.asc(),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if _normalize_code(receipt.archive_status) in RECEIPT_ARCHIVED_STATUSES
+    ]
+    if not archived_receipts:
+        raise_business_error(
+            "OA_RECEIPT_ARCHIVE_EVIDENCE_INVALID",
+            "OA receipt archive evidence is missing",
+            details={"package_id": package.id, "reason": "ARCHIVED_RECEIPT_MISSING"},
+            status_code=409,
+        )
+
+    receipt_ids: list[str] = []
+    for receipt in archived_receipts:
+        if not receipt.receipt_attachment_id:
+            _raise_oa_receipt_archive_evidence_invalid(
+                package=package,
+                receipt=receipt,
+                reason="RECEIPT_ATTACHMENT_MISSING",
+            )
+        attachment = db.execute(
+            select(DocAttachment).where(DocAttachment.id == receipt.receipt_attachment_id)
+        ).scalar_one_or_none()
+        if attachment is None:
+            _raise_oa_receipt_archive_evidence_invalid(
+                package=package,
+                receipt=receipt,
+                reason="RECEIPT_ATTACHMENT_NOT_FOUND",
+            )
+        attachment_document = db.execute(
+            select(Document).where(Document.id == attachment.document_id)
+        ).scalar_one_or_none()
+        if attachment_document is None:
+            _raise_oa_receipt_archive_evidence_invalid(
+                package=package,
+                receipt=receipt,
+                attachment_id=attachment.id,
+                reason="RECEIPT_DOCUMENT_NOT_FOUND",
+            )
+        if attachment_document.case_id != package.case_id:
+            _raise_oa_receipt_archive_evidence_invalid(
+                package=package,
+                receipt=receipt,
+                attachment_id=attachment.id,
+                reason="RECEIPT_CASE_MISMATCH",
+            )
+        if attachment.document_id != package.reply_document_id:
+            manifest_id = db.execute(
+                select(OfficialWorkPackageManifest.id)
+                .where(
+                    OfficialWorkPackageManifest.package_id == package.id,
+                    OfficialWorkPackageManifest.attachment_id == attachment.id,
+                    OfficialWorkPackageManifest.present.is_(True),
+                )
+                .limit(1)
+            ).scalar_one_or_none()
+            if manifest_id is None:
+                _raise_oa_receipt_archive_evidence_invalid(
+                    package=package,
+                    receipt=receipt,
+                    attachment_id=attachment.id,
+                    reason="OA_RECEIPT_SOURCE_INVALID",
+                )
+        receipt_ids.append(receipt.id)
+    return receipt_ids
+
+
+def _prepare_oa_receipt_archive_event(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+) -> tuple[Case, Document, Task, str, list[str]] | None:
+    receipt_ids = _revalidate_oa_archived_receipts(db, package=package)
+    if not package.source_document_id:
+        return None
+
+    source = db.execute(
+        select(Document).where(Document.id == package.source_document_id)
+    ).scalar_one_or_none()
+    template = (
+        db.execute(select(DocTemplate).where(DocTemplate.id == source.doc_template_id))
+        .scalars()
+        .one_or_none()
+        if source and source.doc_template_id
+        else None
+    )
+    semantics = resolve_document_semantics(template)
+    expected_case_status = _normalize_code(semantics.case_status_effect)
+    restore_status = _normalize_code(semantics.archive_status_restore)
+    if (
+        source is None
+        or source.case_id != package.case_id
+        or _normalize_code(source.direction) != "IN"
+        or semantics.catalog_status != "EXECUTABLE"
+        or semantics.execution_behavior != "OA_REPLY"
+        or semantics.completion_event != "OFFICIAL_RECEIPT_ARCHIVED"
+        or expected_case_status not in {"OA1", "OA2"}
+        or restore_status != "SUB_EXAM"
+        or not semantics.task_template_code
+    ):
+        raise_business_error(
+            "OA_RECEIPT_ARCHIVE_SOURCE_INVALID",
+            "OA receipt archive source semantics are invalid",
+            details={
+                "package_id": package.id,
+                "source_document_id": package.source_document_id,
+                "catalog_status": semantics.catalog_status,
+                "execution_behavior": semantics.execution_behavior,
+                "completion_event": semantics.completion_event,
+                "case_status_effect": semantics.case_status_effect,
+                "archive_status_restore": semantics.archive_status_restore,
+            },
+            status_code=409,
+        )
+
+    task_template_id = db.execute(
+        select(TaskTemplate.id).where(TaskTemplate.code == semantics.task_template_code)
+    ).scalar_one_or_none()
+    matching_tasks = (
+        db.execute(
+            select(Task)
+            .where(
+                Task.case_id == package.case_id,
+                Task.document_id == source.id,
+                Task.task_template_id == task_template_id,
+                Task.status == TaskStatus.OPEN.value,
+            )
+            .order_by(Task.created_at.asc(), Task.id.asc())
+        )
+        .scalars()
+        .all()
+        if task_template_id
+        else []
+    )
+    if len(matching_tasks) != 1:
+        raise_business_error(
+            "OA_RECEIPT_ARCHIVE_TASK_MATCH_INVALID",
+            "OA receipt archive requires exactly one matching open task",
+            details={
+                "package_id": package.id,
+                "source_document_id": source.id,
+                "task_template_code": semantics.task_template_code,
+                "matching_open_task_count": len(matching_tasks),
+                "matching_open_task_ids": [task.id for task in matching_tasks],
+            },
+            status_code=409,
+        )
+
+    case = _get_case(db, package.case_id)
+    if _normalize_code(case.status) != expected_case_status:
+        raise_business_error(
+            "OA_RECEIPT_ARCHIVE_CASE_STATE_INVALID",
+            "OA receipt archive case state does not match source semantics",
+            details={
+                "package_id": package.id,
+                "case_id": case.id,
+                "case_status": case.status,
+                "expected_case_status": expected_case_status,
+            },
+            status_code=409,
+        )
+    return case, source, matching_tasks[0], restore_status, receipt_ids
+
+
+def _apply_oa_receipt_archive_event(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    actor_id: str | None,
+    event_context: tuple[Case, Document, Task, str, list[str]],
+) -> None:
+    case, source, task, restore_status, receipt_ids = event_context
+    from_case_status = case.status
+    evidence_note = json.dumps(
+        {
+            "actor_id": _normalize_text(actor_id),
+            "case_transition": {
+                "from_status": from_case_status,
+                "to_status": restore_status,
+            },
+            "closed_task_id": task.id,
+            "event": "OFFICIAL_RECEIPT_ARCHIVED",
+            "receipt_ids": receipt_ids,
+            "source_document_id": source.id,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    task.status = TaskStatus.DONE.value
+    task.done_at = datetime.utcnow()
+    case.status = restore_status
+    db.add(
+        TaskLog(
+            id=str(uuid4()),
+            task_id=task.id,
+            action=TaskAction.CLOSE.value,
+            from_status=TaskStatus.OPEN.value,
+            to_status=TaskStatus.DONE.value,
+            remark=evidence_note,
+        )
+    )
+    _upsert_checklist(
+        db,
+        package_id=package.id,
+        section_code="ARCHIVE",
+        item_code="OFFICIAL_RECEIPT_ARCHIVED",
+        item_label="官方回执已归档",
+        status="DONE",
+        required=False,
+        sort_order=70,
+        evidence_note=evidence_note,
+    )
 
 
 def _validate_archive_override(
@@ -2032,8 +2551,20 @@ def archive_official_work_package(
     follow_up_note: str | None = None,
 ) -> OfficialWorkPackage:
     package = _get_package(db, package_id)
+    if _normalize_code(package.status) == "ARCHIVED":
+        return package
     evaluation = evaluate_official_work_package(db, package_id=package_id)
     if evaluation.can_archive:
+        event_context = None
+        if _normalize_code(package.package_kind) == "OA_REPLY":
+            event_context = _prepare_oa_receipt_archive_event(db, package=package)
+        if event_context is not None:
+            _apply_oa_receipt_archive_event(
+                db,
+                package=package,
+                actor_id=actor_id,
+                event_context=event_context,
+            )
         package.status = "ARCHIVED"
         db.commit()
         db.refresh(package)

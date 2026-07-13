@@ -65,6 +65,10 @@ class HistoricalPayListCreateIn(BaseModel):
     currency: str = Field(default="CNY", min_length=1, max_length=8)
     planned_pay_date: date | None = None
     remark: str | None = None
+    list_type: str | None = Field(default=None, max_length=32)
+    flow_dir: str | None = Field(default=None, max_length=32)
+    invoice_no_from: str | None = Field(default=None, max_length=64)
+    invoice_no_to: str | None = Field(default=None, max_length=64)
 
 
 class GovPaymentCreateIn(BaseModel):
@@ -74,6 +78,9 @@ class GovPaymentCreateIn(BaseModel):
     paid_amount: Decimal | None = None
     official_receipt_no: str | None = Field(default=None, max_length=64)
     remark: str | None = None
+    paid_currency: str | None = Field(default=None, max_length=8)
+    voucher_no: str | None = Field(default=None, max_length=64)
+    invoice_no: str | None = Field(default=None, max_length=64)
 
 
 class ManualGovPaymentCreateIn(BaseModel):
@@ -83,6 +90,11 @@ class ManualGovPaymentCreateIn(BaseModel):
     paid_amount: Decimal = Field(..., gt=0)
     official_receipt_no: str | None = Field(default=None, max_length=64)
     remark: str | None = None
+    fee_code: str | None = Field(default=None, max_length=64)
+    year_no: int | None = Field(default=None, ge=1)
+    paid_currency: str | None = Field(default=None, max_length=8)
+    voucher_no: str | None = Field(default=None, max_length=64)
+    invoice_no: str | None = Field(default=None, max_length=64)
 
 
 class PayListMarkPaidIn(BaseModel):
@@ -272,6 +284,11 @@ def get_pay_lists(
     currency: str | None = Query(default=None),
     case_no: str | None = Query(default=None),
     app_no: str | None = Query(default=None),
+    list_type: str | None = Query(default=None),
+    flow_dir: str | None = Query(default=None),
+    fee_code: str | None = Query(default=None),
+    voucher_no: str | None = Query(default=None),
+    invoice_no: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     _perm: None = Depends(require_perm("PayList.Read")),
@@ -287,6 +304,11 @@ def get_pay_lists(
         "currency": currency,
         "case_no": case_no,
         "app_no": app_no,
+        "list_type": list_type,
+        "flow_dir": flow_dir,
+        "fee_code": fee_code,
+        "voucher_no": voucher_no,
+        "invoice_no": invoice_no,
     }
     pay_lists, total = list_pay_lists(db, filters=filters, page=page, page_size=page_size)
 
@@ -310,6 +332,10 @@ def get_pay_lists(
             "paid_date": pay_list.paid_date,
             "total_amount": str(pay_list.total_amount),
             "remark": pay_list.remark,
+            "list_type": pay_list.list_type,
+            "flow_dir": pay_list.flow_dir,
+            "invoice_no_from": pay_list.invoice_no_from,
+            "invoice_no_to": pay_list.invoice_no_to,
             "created_at": pay_list.created_at,
             "updated_at": pay_list.updated_at,
             "created_by": pay_list.created_by,
@@ -389,6 +415,10 @@ def post_pay_lists(
         currency=payload.currency,
         planned_pay_date=payload.planned_pay_date,
         remark=payload.remark,
+        list_type=payload.list_type,
+        flow_dir=payload.flow_dir,
+        invoice_no_from=payload.invoice_no_from,
+        invoice_no_to=payload.invoice_no_to,
         actor_id=current_user.id,
     )
 
@@ -407,6 +437,9 @@ def post_gov_payments(
         paid_amount=payload.paid_amount,
         official_receipt_no=payload.official_receipt_no,
         remark=payload.remark,
+        paid_currency=payload.paid_currency,
+        voucher_no=payload.voucher_no,
+        invoice_no=payload.invoice_no,
     )
 
 
@@ -427,5 +460,10 @@ def post_pay_list_manual_items(
         paid_amount=payload.paid_amount,
         official_receipt_no=payload.official_receipt_no,
         remark=payload.remark,
+        fee_code=payload.fee_code,
+        year_no=payload.year_no,
+        paid_currency=payload.paid_currency,
+        voucher_no=payload.voucher_no,
+        invoice_no=payload.invoice_no,
         actor_id=current_user.id,
     )

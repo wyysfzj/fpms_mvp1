@@ -24,6 +24,9 @@ def _create_oa_in_document_with_task(
         direction="IN",
         doc_template_id=template["id"],
         title="NeedReply edit source",
+        official_due_date="2026-04-15",
+        official_due_date_source="MANUAL_OFFICIAL_NOTICE",
+        official_due_date_status="CONFIRMED",
     )
     tasks = _get_tasks_for_document(client, auth_headers, case["id"], document["id"])
     assert len(tasks) == 1

@@ -8,9 +8,12 @@ import type {
     GrantFeeMoney,
     GrantFeeDraftGenerateResult,
     GrantFeeTaskClientInstruction,
+    GrantFeeTaskLineageStatus,
     GrantFeeTaskListItem,
     GrantFeeTaskListParams,
     GrantFeeTaskListResponse,
+    GrantFeeTaskReplacementNoticePayload,
+    GrantFeeTaskReplacementNoticeResult,
     GrantFeeTaskStateAction,
     GrantFeeTaskStateResult,
     GrantFeeTaskStatus,
@@ -37,6 +40,10 @@ interface BackendGrantFeeTaskListItem {
     deadline_rule?: string | null
     fee_basis?: string | null
     fee_node_explanation?: string | null
+    lineage_status: string
+    source_document_id: string | null
+    deadline_source: string | null
+    deadline_confirmed_at: string | null
 }
 
 interface BackendGrantFeeTaskListResponse {
@@ -44,6 +51,13 @@ interface BackendGrantFeeTaskListResponse {
     page: number
     page_size: number
     total: number
+}
+
+interface BackendGrantFeeTaskReplacementNoticeResponse {
+    document: { id: string }
+    replacement_task: BackendGrantFeeTaskListItem
+    superseded_task_id: string
+    reused: boolean
 }
 
 interface BackendGrantFeeDraftGenerateResponse {
@@ -73,6 +87,10 @@ interface BackendGrantFeeTaskStateResponse {
     deadline_rule?: string | null
     fee_basis?: string | null
     fee_node_explanation?: string | null
+    lineage_status: string
+    source_document_id: string | null
+    deadline_source: string | null
+    deadline_confirmed_at: string | null
 }
 
 interface BackendGrantFeeTaskBatchInstructionResponse {
@@ -115,6 +133,14 @@ function normalizeInstruction(input: string): GrantFeeTaskClientInstruction {
         : 'NONE'
 }
 
+function normalizeLineageStatus(input: string): GrantFeeTaskLineageStatus {
+    const normalized = (input || '').trim().toUpperCase()
+    const valid: GrantFeeTaskLineageStatus[] = ['CONFIRMED', 'LEGACY_UNVERIFIED', 'SUPERSEDED']
+    return valid.includes(normalized as GrantFeeTaskLineageStatus)
+        ? (normalized as GrantFeeTaskLineageStatus)
+        : 'LEGACY_UNVERIFIED'
+}
+
 function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListItem {
     return {
         task_id: input.task_id,
@@ -137,6 +163,10 @@ function mapGrantFeeTask(input: BackendGrantFeeTaskListItem): GrantFeeTaskListIt
         deadline_rule: input.deadline_rule || '以办理登记手续通知书/授权通知书载明期限为准',
         fee_basis: input.fee_basis || '授权阶段官费按授权费任务金额展示',
         fee_node_explanation: input.fee_node_explanation || '授权费用节点：客户确认缴费后生成官费草单。',
+        lineage_status: normalizeLineageStatus(input.lineage_status),
+        source_document_id: input.source_document_id || null,
+        deadline_source: input.deadline_source || null,
+        deadline_confirmed_at: input.deadline_confirmed_at || null,
     }
 }
 
@@ -190,6 +220,10 @@ function mapGrantFeeTaskStateResult(
         deadline_rule: input.deadline_rule || '以办理登记手续通知书/授权通知书载明期限为准',
         fee_basis: input.fee_basis || '授权阶段官费按授权费任务金额展示',
         fee_node_explanation: input.fee_node_explanation || '授权费用节点：客户确认缴费后生成官费草单。',
+        lineage_status: normalizeLineageStatus(input.lineage_status),
+        source_document_id: input.source_document_id || null,
+        deadline_source: input.deadline_source || null,
+        deadline_confirmed_at: input.deadline_confirmed_at || null,
     }
 }
 
@@ -230,6 +264,25 @@ export async function getGrantFeeTasks(
     return {
         ...response.data,
         items: response.data.items.map(mapGrantFeeTask),
+    }
+}
+
+/**
+ * Replace a confirmed grant-fee task with a corrected official notice
+ */
+export async function createGrantFeeTaskReplacementNotice(
+    taskId: string,
+    payload: GrantFeeTaskReplacementNoticePayload,
+): Promise<GrantFeeTaskReplacementNoticeResult> {
+    const response = await http.post<BackendGrantFeeTaskReplacementNoticeResponse>(
+        `/grant-fee-tasks/${taskId}/replacement-notice`,
+        payload,
+    )
+    return {
+        document: response.data.document,
+        replacement_task: mapGrantFeeTask(response.data.replacement_task),
+        superseded_task_id: response.data.superseded_task_id,
+        reused: Boolean(response.data.reused),
     }
 }
 

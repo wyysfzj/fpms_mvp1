@@ -233,7 +233,7 @@ function formatCalculationNote(note?: string | null): string {
 function formatSourceStatus(status?: string | null): string {
   const normalized = (status || '').toUpperCase()
   if (normalized === 'CONFIRMED') return '来源状态：已确认'
-  if (normalized === 'PENDING') return '来源状态：待确认'
+  if (normalized === 'PENDING' || normalized === 'PENDING_CONFIRMATION') return '来源状态：待确认'
   if (normalized === 'DISABLED') return '来源状态：未启用'
   return '来源状态：未标记'
 }

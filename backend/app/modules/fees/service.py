@@ -644,6 +644,17 @@ def fee_rate_effective_on_conditions(as_of_date: date_type):
     )
 
 
+# 待确认/停用来源的费率不得参与自动生成草单或预览（GAP-AUDIT-006 启用门禁）。
+_BLOCKED_SOURCE_STATUSES = ("PENDING_CONFIRMATION", "PENDING", "DISABLED")
+
+
+def fee_rate_source_enabled_condition():
+    return or_(
+        FeeRate.source_status.is_(None),
+        FeeRate.source_status.not_in(_BLOCKED_SOURCE_STATUSES),
+    )
+
+
 def _enabled_fee_rates_by_code(
     db: Session,
     *,
@@ -659,6 +670,7 @@ def _enabled_fee_rates_by_code(
                 FeeRate.fee_type == FeeType.GOV.value,
                 FeeRate.currency == currency,
                 FeeRate.enabled.is_(True),
+                fee_rate_source_enabled_condition(),
                 *fee_rate_effective_on_conditions(effective_on),
             )
         )
@@ -1652,6 +1664,8 @@ def calculate_fee_amount(rate: FeeRate, case: Case | None = None) -> Decimal:
     Batch 3 slice:
     - FIXED keeps default amount behavior
     - PER_CLAIM supports calc_params + optional reduction/discount percentages
+    - PER_PAGE bills the pages falling inside [from_page, to_page] at unit_amount
+      (page basis: spec_pages + draw_pages, i.e. 说明书含附图页数)
     - Other modes still fall back to default amount
     """
     amount = rate.default_amount if rate.default_amount is not None else Decimal("0")
@@ -1712,6 +1726,50 @@ def calculate_fee_amount(rate: FeeRate, case: Case | None = None) -> Decimal:
             computed = computed * (Decimal("100") - discount_pct) / Decimal("100")
 
         return _quantize_money(computed)
+
+    if calc_mode == "PER_PAGE":
+        calc_params_raw = getattr(rate, "calc_params", None)
+        calc_params = {}
+        if calc_params_raw:
+            try:
+                parsed = json.loads(calc_params_raw)
+                if isinstance(parsed, dict):
+                    calc_params = parsed
+            except (TypeError, ValueError):
+                logger.warning(
+                    "calculate_fee_amount: invalid calc_params for rate=%s, raw=%r",
+                    rate.fee_code,
+                    calc_params_raw,
+                )
+
+        try:
+            unit_amount = Decimal(calc_params.get("unit_amount", amount))
+        except (InvalidOperation, TypeError, ValueError):
+            unit_amount = amount
+
+        # 页数口径：说明书含附图页数（spec_pages + draw_pages）。
+        total_pages = 0
+        if case is not None:
+            total_pages = int(case.spec_pages or 0) + int(case.draw_pages or 0)
+        if total_pages <= 0:
+            try:
+                total_pages = int(calc_params.get("total_pages", 0))
+            except (TypeError, ValueError):
+                total_pages = 0
+
+        try:
+            from_page = int(calc_params.get("from_page", 1))
+        except (TypeError, ValueError):
+            from_page = 1
+        to_page_raw = calc_params.get("to_page")
+        try:
+            to_page = int(to_page_raw) if to_page_raw is not None else None
+        except (TypeError, ValueError):
+            to_page = None
+
+        upper = min(total_pages, to_page) if to_page is not None else total_pages
+        billable_pages = max(0, upper - from_page + 1) if total_pages >= from_page else 0
+        return _quantize_money(unit_amount * Decimal(billable_pages))
 
     logger.warning(
         "calculate_fee_amount: calc_mode=%s not yet implemented for rate=%s, "

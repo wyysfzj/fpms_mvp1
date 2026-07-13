@@ -4,7 +4,18 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -125,6 +136,15 @@ class FeeRate(UUIDPrimaryKeyMixin, AuditMixin, Base):
 
 class T_GrantFeeTask(Base):
     __tablename__ = "t_grant_fee_task"
+    __table_args__ = (
+        Index("ux_t_grant_fee_task_source_document_id", "source_document_id", unique=True),
+        Index(
+            "ux_t_grant_fee_task_supersede_request_key",
+            "supersede_request_key",
+            unique=True,
+        ),
+        Index("ix_t_grant_fee_task_superseded_by_task_id", "superseded_by_task_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36),
@@ -136,6 +156,27 @@ class T_GrantFeeTask(Base):
     )
     type: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'GRANT'"))
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    source_document_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("t_document.id", name="fk_t_grant_fee_task_source_document_id"),
+        nullable=True,
+    )
+    deadline_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    deadline_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True
+    )
+    superseded_by_task_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_grant_fee_task.id",
+            name="fk_t_grant_fee_task_superseded_by_task_id",
+        ),
+        nullable=True,
+    )
+    supersede_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    superseded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    supersede_request_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     gov_fee_amt: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )

@@ -73,28 +73,100 @@ OFFICIAL_NOTICE_CATALOG: tuple[tuple[str, str], ...] = (
     ("无其他可适用表格时的通知书", ""),
 )
 
+OFFICIAL_NOTICE_OA_ACCEPTANCE_ACTIVATIONS: dict[str, tuple[str, str, str, str | None, bool]] = {
+    "受理通知-电子": ("ACCEPTANCE_NOTICE", "ACCEPTANCE_NOTICE", "ACCEPTED", None, False),
+    "第一次审查意见通知书": ("OA_REPLY", "OA_IN", "OA1", "OA_REPLY", True),
+    "第二次审查意见通知书": (
+        "OA_REPLY",
+        "OA_IN",
+        "OA2",
+        "OA_REPLY_SUBSEQUENT",
+        True,
+    ),
+    "第三次审查意见通知书": (
+        "OA_REPLY",
+        "OA_IN",
+        "OA2",
+        "OA_REPLY_SUBSEQUENT",
+        True,
+    ),
+    "第四次审查意见通知书": (
+        "OA_REPLY",
+        "OA_IN",
+        "OA2",
+        "OA_REPLY_SUBSEQUENT",
+        True,
+    ),
+    "第五次审查意见通知书": (
+        "OA_REPLY",
+        "OA_IN",
+        "OA2",
+        "OA_REPLY_SUBSEQUENT",
+        True,
+    ),
+}
+OFFICIAL_NOTICE_GRANT_ACTIVATIONS = {
+    **OFFICIAL_NOTICE_OA_ACCEPTANCE_ACTIVATIONS,
+    "授权通知书-电子": (
+        "GRANT_NOTICE",
+        "GRANT_NOTICE",
+        "GRANT_PENDING",
+        None,
+        False,
+    ),
+}
+
 
 def _split_official_codes(code_text: str) -> list[str]:
     return [part.strip() for part in re.split(r"[,，;；]", code_text or "") if part.strip()]
 
 
-def _official_notice_input_fields(name: str, code_text: str) -> str:
-    return json.dumps(
-        {
-            "catalog_kind": "OFFICIAL_NOTICE",
-            "official_notice_name": name,
-            "official_doc_codes": _split_official_codes(code_text),
-            "official_doc_code_text": code_text,
-            "source": OFFICIAL_NOTICE_CATALOG_SOURCE,
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-    )
+def _official_notice_input_fields(
+    name: str,
+    code_text: str,
+    activation: tuple[str, str, str, str | None, bool] | None = None,
+) -> str:
+    metadata = {
+        "archive_status_restore": None,
+        "canonical_template_code": None,
+        "catalog_kind": "OFFICIAL_NOTICE",
+        "catalog_status": "REFERENCE_ONLY",
+        "completion_event": None,
+        "deadline_source_policy": None,
+        "execution_behavior": None,
+        "official_notice_name": name,
+        "official_doc_codes": _split_official_codes(code_text),
+        "official_doc_code_text": code_text,
+        "source": OFFICIAL_NOTICE_CATALOG_SOURCE,
+    }
+    if activation is not None:
+        behavior, canonical_code, _status_effect, _task_code, _need_reply = activation
+        metadata.update(
+            {
+                "canonical_template_code": canonical_code,
+                "catalog_status": "EXECUTABLE",
+                "execution_behavior": behavior,
+            }
+        )
+        if behavior in {"OA_REPLY", "GRANT_NOTICE"}:
+            metadata["deadline_source_policy"] = "EXPLICIT_OFFICIAL_DUE_REQUIRED"
+        if behavior == "OA_REPLY":
+            metadata.update(
+                {
+                    "archive_status_restore": "SUB_EXAM",
+                    "completion_event": "OFFICIAL_RECEIPT_ARCHIVED",
+                }
+            )
+    return json.dumps(metadata, ensure_ascii=False, sort_keys=True)
 
 
-def seed_official_notice_catalog(db: Session) -> int:
+def _seed_official_notice_catalog(
+    db: Session,
+    activations: dict[str, tuple[str, str, str, str | None, bool]],
+) -> int:
     changed = 0
     for index, (name, code_text) in enumerate(OFFICIAL_NOTICE_CATALOG, start=1):
+        activation = activations.get(name)
         values = {
             "code": f"OFFICIAL_NOTICE_{index:03d}",
             "name": name,
@@ -107,7 +179,103 @@ def seed_official_notice_catalog(db: Session) -> int:
             "fee_item_list": None,
             "need_reply": False,
             "reply_to_template_code": None,
-            "input_fields": _official_notice_input_fields(name, code_text),
+            "input_fields": _official_notice_input_fields(name, code_text, activation),
+        }
+        if activation is not None:
+            behavior, _canonical_code, status_effect, task_code, need_reply = activation
+            values.update(
+                {
+                    "status_effect": status_effect,
+                    "deadline_template_code": task_code,
+                    "need_reply": need_reply,
+                }
+            )
+            if behavior == "GRANT_NOTICE":
+                values["fee_draft_type"] = "GRANT_FEE"
+        existing = db.query(DocTemplate).filter(DocTemplate.code == values["code"]).first()
+        if existing is None:
+            db.add(DocTemplate(id=str(uuid4()), **values))
+            changed += 1
+            continue
+        row_changed = False
+        for field, value in values.items():
+            if getattr(existing, field) != value:
+                setattr(existing, field, value)
+                row_changed = True
+        if row_changed:
+            changed += 1
+    return changed
+
+
+def seed_official_notice_catalog(db: Session) -> int:
+    return _seed_official_notice_catalog(db, {})
+
+
+def seed_oa_acceptance_official_notice_catalog(db: Session) -> int:
+    return _seed_official_notice_catalog(db, OFFICIAL_NOTICE_OA_ACCEPTANCE_ACTIVATIONS)
+
+
+def seed_grant_official_notice_catalog(db: Session) -> int:
+    return _seed_official_notice_catalog(db, OFFICIAL_NOTICE_GRANT_ACTIVATIONS)
+
+
+OFFICIAL_LETTER_OUT_CATALOG_SOURCE = "相关流程操作-20260526.docx [P0102] TABLE 002"
+
+# 客户"致函官方文件清单"22 行（相关流程操作 TABLE 002），作为 OUT 方向文书目录。
+OFFICIAL_LETTER_OUT_CATALOG: tuple[str, ...] = (
+    "补正答复",
+    "一通意见陈述",
+    "提前公开请求",
+    "实审请求",
+    "主动撤回",
+    "主动放弃",
+    "著录项目变更",
+    "复审请求",
+    "主动补正",
+    "恢复权利请求",
+    "复审、无效程序中的意见陈述",
+    "复审中的补正",
+    "纸件申请转电子申请请求书",
+    "费用减缓请求书",
+    "改正译文错误请求书",
+    "PPH请求",
+    "发明主动修改",
+    "延长期限请求",
+    "二通意见陈述",
+    "三通意见陈述",
+    "四通意见陈述",
+    "办理文件副本请求书",
+)
+
+
+def _official_letter_out_input_fields(name: str) -> str:
+    return json.dumps(
+        {
+            "catalog_kind": "OFFICIAL_LETTER_OUT",
+            "official_letter_name": name,
+            "source": OFFICIAL_LETTER_OUT_CATALOG_SOURCE,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def seed_official_letter_out_catalog(db: Session) -> int:
+    changed = 0
+    for index, name in enumerate(OFFICIAL_LETTER_OUT_CATALOG, start=1):
+        values = {
+            "code": f"OFFICIAL_LETTER_OUT_{index:03d}",
+            "name": name,
+            "direction": "OUT",
+            "enabled": True,
+            "status_effect": None,
+            "status_restore": None,
+            "deadline_template_code": None,
+            "fee_draft_type": None,
+            "fee_item_list": None,
+            "need_reply": False,
+            "reply_to_template_code": None,
+            "input_fields": _official_letter_out_input_fields(name),
         }
         existing = db.query(DocTemplate).filter(DocTemplate.code == values["code"]).first()
         if existing is None:

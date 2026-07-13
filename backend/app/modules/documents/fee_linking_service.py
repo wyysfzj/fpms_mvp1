@@ -13,6 +13,7 @@ from app.core.errors import raise_business_error
 from app.modules.cases.models import Case
 from app.modules.documents.models import DocTemplate, Document
 from app.modules.documents.schemas import DocumentWizardFeeFinalRowIn
+from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.fees.models import FeeDraft, FeeItem
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,13 @@ def maybe_create_fee_draft(
     """
     fee_draft_type = getattr(template, "fee_draft_type", None)
     if not fee_draft_type:
+        return None
+    semantics = resolve_document_semantics(template)
+    if str(getattr(template, "code", "")).strip().upper() == "GRANT_NOTICE" or (
+        semantics.catalog_status == "EXECUTABLE"
+        and semantics.execution_behavior == "GRANT_NOTICE"
+        and semantics.fee_trigger == "GRANT_FEE"
+    ):
         return None
 
     # Load case to get client_id

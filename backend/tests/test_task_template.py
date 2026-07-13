@@ -519,8 +519,8 @@ def test_task_generation_creates_task_with_due_date() -> None:
     svc = TaskGenerationService()
 
     template = MagicMock()
-    template.code = "OA_REPLY"
-    template.name = "OA答复期限"
+    template.code = "GENERIC_DEADLINE"
+    template.name = "通用期限"
     template.enabled = True
     template.add_days = 120
     template.add_months = 0
@@ -532,8 +532,8 @@ def test_task_generation_creates_task_with_due_date() -> None:
     doc.case_id = str(uuid4())
     doc.doc_date = date(2025, 1, 10)
     doc.direction = "IN"
-    doc.doc_type = "OA_REPLY"
-    doc.title = "第一次审查意见"
+    doc.doc_type = "GENERIC_DEADLINE"
+    doc.title = "通用期限文件"
 
     db = MagicMock()
     db.query.return_value.filter.return_value.all.return_value = [template]

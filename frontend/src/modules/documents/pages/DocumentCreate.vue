@@ -74,8 +74,9 @@
                   <el-option
                     v-for="t in filteredTemplates"
                     :key="t.id"
-                    :label="`${t.code} — ${t.name}`"
+                    :label="getTemplateOptionLabel(t)"
                     :value="t.id"
+                    :disabled="isReferenceOnlyTemplate(t)"
                   />
                 </el-select>
               </el-form-item>
@@ -172,6 +173,57 @@
                 回复模板：{{ selectedTemplate.reply_to_template_code }}
               </el-tag>
             </div>
+          </div>
+
+          <div class="official-deadline-fields">
+            <el-row :gutter="20">
+              <el-col :span="8">
+                <el-form-item label="官方截止日">
+                  <el-date-picker
+                    v-model="form.official_due_date"
+                    type="date"
+                    placeholder="请选择官方截止日"
+                    format="YYYY-MM-DD"
+                    value-format="YYYY-MM-DD"
+                    clearable
+                    class="full-width"
+                  />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="截止日来源">
+                  <el-select
+                    v-model="form.official_due_date_source"
+                    placeholder="请选择截止日来源"
+                    clearable
+                    class="full-width"
+                  >
+                    <el-option label="人工核对官方通知" value="MANUAL_OFFICIAL_NOTICE" />
+                    <el-option label="从官方通知导入" value="IMPORTED_OFFICIAL_NOTICE" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="确认状态">
+                  <el-select
+                    v-model="form.official_due_date_status"
+                    placeholder="请选择确认状态"
+                    clearable
+                    class="full-width"
+                  >
+                    <el-option label="已确认" value="CONFIRMED" />
+                    <el-option label="待确认" value="NEEDS_CONFIRMATION" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-alert
+              type="info"
+              :closable="false"
+              title="官方截止日影响提示"
+              :description="officialDeadlineHint"
+              show-icon
+            />
           </div>
 
           <el-form-item label="描述" prop="description" :error="fieldErrors.get('description')?.join(', ')">
@@ -302,6 +354,9 @@ const form = reactive<DocumentCreatePayload>({
   description: '',
   doc_template_id: null as string | null,
   reply_to_id: null as string | null,
+  official_due_date: null,
+  official_due_date_source: null,
+  official_due_date_status: null,
 })
 
 // FC2: Template and reply chain
@@ -366,6 +421,16 @@ const confirmationDescription = computed(() =>
     ? impactPreview.value.confirmation_items.join('；')
     : '登记前请确认本次影响预览。'
 )
+const officialDeadlineHint = computed(() => {
+  if (
+    form.official_due_date &&
+    form.official_due_date_source &&
+    form.official_due_date_status === 'CONFIRMED'
+  ) {
+    return `影响预览将按已确认的官方截止日 ${form.official_due_date} 展示期限与任务影响。`
+  }
+  return '可执行官方来文必须填写截止日、来源并选择“已确认”，最终以后台校验结果为准。'
+})
 
 function formatImpactItem(item: DocumentImpactItem) {
   const effect = item.effect ? `：${item.effect}` : ''
@@ -384,6 +449,31 @@ function getQueryParam(value: unknown): string {
     return typeof value[0] === 'string' ? value[0].trim() : ''
   }
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function getOfficialNoticeCatalogStatus(template: DocTemplate): 'EXECUTABLE' | 'REFERENCE_ONLY' | null {
+  try {
+    const metadata: unknown = JSON.parse(template.input_fields || 'null')
+    if (typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata)) {
+      const fields = metadata as Record<string, unknown>
+      if (fields.catalog_kind === 'OFFICIAL_NOTICE') {
+        return fields.catalog_status === 'EXECUTABLE' ? 'EXECUTABLE' : 'REFERENCE_ONLY'
+      }
+    }
+  } catch {
+    // Official-notice metadata fails closed below.
+  }
+  return template.code.startsWith('OFFICIAL_NOTICE_') ? 'REFERENCE_ONLY' : null
+}
+
+function getTemplateOptionLabel(template: DocTemplate): string {
+  const status = getOfficialNoticeCatalogStatus(template)
+  const statusLabel = status === 'EXECUTABLE' ? '可执行' : status === 'REFERENCE_ONLY' ? '仅供参考' : ''
+  return `${template.code} — ${template.name}${statusLabel ? `（${statusLabel}）` : ''}`
+}
+
+function isReferenceOnlyTemplate(template: DocTemplate): boolean {
+  return getOfficialNoticeCatalogStatus(template) === 'REFERENCE_ONLY'
 }
 
 function onTemplateChange(templateId: string | null) {
@@ -422,6 +512,9 @@ async function fetchImpactPreview() {
       title: form.title.trim(),
       extra_data: form.description?.trim() || null,
       reply_to_id: form.reply_to_id || null,
+      official_due_date: form.official_due_date || null,
+      official_due_date_source: form.official_due_date_source || null,
+      official_due_date_status: form.official_due_date_status || null,
     })
     if (requestSeq !== impactPreviewRequestSeq) return
     impactPreview.value = result
@@ -460,6 +553,9 @@ watch(
     form.title,
     form.description,
     form.reply_to_id,
+    form.official_due_date,
+    form.official_due_date_source,
+    form.official_due_date_status,
   ],
   () => {
     void fetchImpactPreview()
@@ -580,6 +676,13 @@ async function handleSave() {
     if (form.description) payload.description = form.description
     if (form.doc_template_id) payload.doc_template_id = form.doc_template_id
     if (form.reply_to_id) payload.reply_to_id = form.reply_to_id
+    if (form.official_due_date) payload.official_due_date = form.official_due_date
+    if (form.official_due_date_source) {
+      payload.official_due_date_source = form.official_due_date_source
+    }
+    if (form.official_due_date_status) {
+      payload.official_due_date_status = form.official_due_date_status
+    }
 
     await createDocument(payload)
     ElMessage.success('往来文件登记成功')
@@ -663,6 +766,14 @@ function handleCancel() {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.official-deadline-fields {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
 }
 
 .document-impact-section {

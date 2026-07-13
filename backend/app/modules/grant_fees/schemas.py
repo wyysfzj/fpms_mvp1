@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.modules.documents.enums import DocumentDocType
+from app.modules.documents.extra_data import DeadlineSource, DeadlineWriteStatus
+from app.modules.documents.schemas import DocumentOut
 
 
 class GrantFeeTaskModuleOut(BaseModel):
@@ -19,6 +24,29 @@ class GrantFeeTaskStateActionIn(BaseModel):
     action: str = Field(..., min_length=1, max_length=32)
 
 
+class GrantFeeReplacementDocumentIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    doc_template_id: str
+    doc_type: DocumentDocType | None = None
+    doc_date: date
+    title: str
+    ref_no: str
+    extra_data: str | None = None
+    official_due_date: date | None = None
+    official_due_date_source: DeadlineSource | None = None
+    official_due_date_status: DeadlineWriteStatus | None = None
+    description: str | None = None
+
+
+class GrantFeeTaskReplacementNoticeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    idempotency_key: str
+    reason: str
+    document: GrantFeeReplacementDocumentIn
+
+
 class GrantFeeTaskBatchInstructionIn(BaseModel):
     task_ids: list[str] = Field(..., min_length=1)
     action: str = Field(..., min_length=1, max_length=32)
@@ -30,6 +58,10 @@ class GrantFeeTaskStateOut(BaseModel):
     task_id: str
     case_id: str
     state: str
+    lineage_status: Literal["SUPERSEDED", "LEGACY_UNVERIFIED", "CONFIRMED"]
+    source_document_id: str | None = None
+    deadline_source: str | None = None
+    deadline_confirmed_at: datetime | None = None
     client_instruction: str
     notify_count: int
     draft_generated: bool
@@ -49,6 +81,10 @@ class GrantFeeTaskListItemResponse(BaseModel):
     case_id: str
     case_no: str | None = None
     status: str
+    lineage_status: Literal["SUPERSEDED", "LEGACY_UNVERIFIED", "CONFIRMED"]
+    source_document_id: str | None = None
+    deadline_source: str | None = None
+    deadline_confirmed_at: datetime | None = None
     due_date: date
     client_instruction: str
     gov_fee_amt: Decimal
@@ -65,6 +101,13 @@ class GrantFeeTaskListItemResponse(BaseModel):
     deadline_rule: str
     fee_basis: str
     fee_node_explanation: str
+
+
+class GrantFeeTaskReplacementNoticeOut(BaseModel):
+    document: DocumentOut
+    replacement_task: GrantFeeTaskListItemResponse
+    superseded_task_id: str
+    reused: bool
 
 
 class GrantFeeTaskListResponse(BaseModel):

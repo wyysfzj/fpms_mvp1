@@ -55,6 +55,10 @@ export interface TaskListParams {
     case_id?: string
     client_id?: string
     as?: 'worker' | 'supervisor'
+    due_from?: string
+    due_to?: string
+    worker_id?: string
+    supervisor_id?: string
 }
 
 export interface TaskSpecialSearchItem {
