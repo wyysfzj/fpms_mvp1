@@ -1,6 +1,6 @@
 # FPMS-V8-ANNUITY-PAYABLE-AMOUNT-RULE-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS / INDEPENDENT REREVIEW APPROVED 2026-07-15
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `12. Wave 4 — fee-obligation module and fixed rules`
 Catalog ordinal: `132`

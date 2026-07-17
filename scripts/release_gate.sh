@@ -85,9 +85,30 @@ fi
 
 PASS=0
 FAIL=0
+EXPECTED_ACTIVATION_TASK=REPO-GOVERNANCE-RESET-ACTIVATION-20260716-01
+
+[ -f docs/agents/manifest.json ] || {
+  echo "Active governance manifest is missing"
+  exit 1
+}
+ACTIVATION_TASK=$(python3 -c 'import json,sys; value=json.load(open(sys.argv[1], encoding="utf-8")); task=value.get("activation_task"); print(task if isinstance(task, str) else "")' docs/agents/manifest.json)
+case "$ACTIVATION_TASK" in
+  *[!A-Za-z0-9._-]*|"")
+    echo "Active governance manifest has an invalid activation task"
+    exit 1
+    ;;
+esac
+[ "$ACTIVATION_TASK" = "$EXPECTED_ACTIVATION_TASK" ] || {
+  echo "Active governance manifest names an unexpected activation task"
+  exit 1
+}
+if ! python3 scripts/evidence_validate.py "$ACTIVATION_TASK" --acceptance-mode release; then
+  echo "Active governance activation is not accepted PASS"
+  exit 1
+fi
 
 for TASK_ID in "${TASK_IDS[@]}"; do
-  if ./scripts/task_validate.sh "$TASK_ID"; then
+  if python3 scripts/evidence_validate.py "$TASK_ID" --acceptance-mode release; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))

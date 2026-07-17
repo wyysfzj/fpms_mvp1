@@ -1,6 +1,6 @@
 # FPMS-V8-ANNUITY-INSTRUCTION-OBLIGATION-ADAPTER-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-15 / NOT STARTED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `12. Wave 4 — fee-obligation module and fixed rules`
 Catalog ordinal: `121`
@@ -92,3 +92,66 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 ## Done Definition
 
 The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-ANNUITY-INSTRUCTION-OBLIGATION-ADAPTER-20260712-01` pass. Only then may this task be reported PASS.
+
+## Delta-4 Ultra Contract Freeze — 2026-07-15
+
+### Latest-wins authority and prerequisites
+
+- Authority: `docs/superpowers/specs/2026-07-15-fpms-v8-ultra-contract-freeze-delta-4.md`
+  lines 643–660 and supplemental batch row `24 / M4-F / H4-5`.
+- Risk is `HIGH`; `chosen_runbook: P0-prereq-heavy-story` is latest-wins. The inherited
+  body remains history, and the existing Allowed Files list is unchanged.
+- Exact `backend/app/modules/annuity/service.py` execution order is D4-11 carrier PASS →
+  Task 133 `FPMS-V8-FUTURE-ANNUITY-OBLIGATION-20260712-01` PASS → this Task 121.
+- D4-11 is exactly `FPMS-V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-20260715-01`; the
+  accepted `FPMS-V8-FO-CLIENT-INSTRUCTION-20260712-01` deep service must also PASS.
+- No owner may overlap `annuity/service.py`; SQLite-writing verification remains globally
+  serialized with maximum writer one.
+
+### Exact obligation-instruction adapter closure
+
+- Implement only `record_annuity_task_instruction(command, transaction)` with command
+  fields exactly `annuity_task_id`, `instruction`, `actor_id`, `idempotency_key`.
+- Accepted instruction mapping is identity-preserving and exhaustive: `PAY` → `PAY`,
+  `HOLD` → `HOLD`, and `ABANDON` → `ABANDON`. `DEFER` is invalid 400 and must never map
+  to `HOLD`; missing, unknown, coerced or legacy values are not accepted.
+- Resolve only the named persisted annuity task and its exact `fee_obligation_id`; never
+  select latest, infer from case/year/source, inspect legacy `client_instruction`, or
+  create an obligation.
+- Require the D4-11 carrier's six fields all non-null and mutually consistent:
+  `source_activity_id`, `source_document_id`, `source_evidence_version_id`,
+  `source_evidence_content_hash`, `fee_obligation_id`, and `grant_fee_year_key`.
+- The linked obligation, recognition activity and document evidence must be exactly the
+  same-case Task 133 facts: obligation type `FUTURE_ANNUITY`, matching fee year, exact
+  source activity/document/version/hash, and full lowercase `sha256:<64-hex>` hash.
+- Zero/multiple/missing links use the accepted 404; cross-case, wrong obligation type/year,
+  partial carrier, malformed hash, mismatched source/evidence or contradictory identity
+  uses the accepted 409. Every failure occurs before delegation or durable mutation.
+- Delegate exactly once to `record_client_instruction()` with the resolved obligation ID,
+  exact mapped instruction, unchanged nonblank authenticated `actor_id`, and unchanged
+  `idempotency_key`; do not synthesize actor, evidence, timestamp or another key.
+- The accepted deep service's empty instruction evidence tuple remains exact. Its unique
+  recognition source activity, actor and append-only `FEE_CLIENT_INSTRUCTION_RECORDED`
+  activity are the audit facts; this adapter adds no attachment or evidence reference.
+
+### Replay, transaction and fail-closed boundary
+
+- Exact replay of the same task/link/obligation/instruction/actor/key delegates to the deep
+  replay contract, reuses the original activity/result and writes nothing.
+- Same key with changed task, obligation, instruction, actor, lineage, source/evidence or
+  activity facts is 409. A new key targeting the current instruction remains the accepted
+  same-state 409; no conflict is remapped to success.
+- The caller owns one transaction. The adapter and delegated service perform no internal
+  commit or outer rollback; caller rollback removes every instruction header/activity/
+  revision effect, and no partial or duplicate activity survives.
+- Never mutate legacy `client_instruction`, annuity source/rate/lineage, obligation facts
+  other than the accepted instruction header, case lifecycle/status, draft, payment,
+  evidence, document, PayList or fee calculation state.
+
+### Materialization non-closure
+
+- This materialization changes only Status and this EOF appendix. No adapter/product/test,
+  migration, evidence bundle, allowlist, prior task bytes or dependency implementation is
+  edited or initialized.
+- Only atomic `check-task` runs now; TDD, targeted tests/lint, Evidence 1.1, independent
+  review, task gates and all product execution remain deferred to High.

@@ -1,6 +1,6 @@
 # FPMS-V8-LC-APPLY-EVENT-SEAM-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS — HIGH IMPLEMENTATION + INDEPENDENT REVIEW 2026-07-14
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `9. Wave 2A — lifecycle foundation`
 Catalog ordinal: `17`
@@ -10,6 +10,7 @@ Executor role: Backend Developer / worker
 
 - `AGENTS.md`
 - `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
+- `docs/superpowers/specs/2026-07-13-fpms-v8-ultra-contract-freeze-delta.md`
 - `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
 - Source catalog line: `373`
 - Expected manifest phase: `foundation`
@@ -18,10 +19,10 @@ Executor role: Backend Developer / worker
 ## Story Shape Classification
 
 - `shared_file_density`: low
-- `prereq_dependency_density`: low
+- `prereq_dependency_density`: medium
 - `be_fe_coupling`: low
 - `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+- `chosen_runbook`: `P0-prereq-heavy-story`
 
 ## Task Contract Profile
 
@@ -33,6 +34,58 @@ Task Contract Profile: `TC-SERVICE`
 ## Exact Closure Slice
 
 Implement generic `apply_lifecycle_event()` orchestration without adding a generic HTTP endpoint or absorbing any event rule.
+
+## Ultra Contract Freeze — 2026-07-13
+
+This section is the complete High implementation contract for the generic lifecycle
+orchestrator. It does not change the exact closure slice: event-specific decisions and the
+registry implementation remain outside this task.
+
+### Public seam and exact rule boundary
+
+- `lifecycle_service.py` exposes
+  `apply_lifecycle_event(command, transaction) -> LifecycleTransitionResult`.
+- The same module defines the frozen, slots, keyword-only decision type
+  `LifecycleRuleDecision(current_projection, oa_sequence=None)`. The exact rule callable is
+  `(command, previous_projection, transaction) -> LifecycleRuleDecision`.
+- Resolve the event-specific rule by lazily loading
+  `lifecycle_rules.get_lifecycle_rule(command.event_type)`. This task neither implements nor
+  eagerly imports the registry and does not absorb a concrete event rule.
+- The public seam accepts only `lane=LIFECYCLE` with
+  `confirmation_status=CONFIRMED`. `LEGACY_IMPORT/LEGACY_UNVERIFIED` remains exclusively on
+  its independent import task and the append seam; it is not accepted by this orchestrator.
+- A resolved rule remains event-specific and read-only. It returns the exact frozen
+  `LifecycleRuleDecision`; it does not append an activity or mutate, flush, commit or roll
+  back the caller-owned transaction.
+
+### Projection, compatibility and stable replay
+
+- For a new event, first read the same-case current projection and compatibility status,
+  then invoke the read-only rule. Derive compatibility only in the forward direction with
+  `project_legacy_case_status()` from the rule's `current_projection`, the event type and the
+  rule's `oa_sequence`; never reverse-infer lifecycle axes from `Case.status`.
+- OA sequence comes only from the rule decision. For an OA event, the canonical activity
+  payload passed to `append_case_activity()` must persist that same `oa_sequence`, so replay
+  can reproduce the original projection decision.
+- A `RETAINED_CONFLICT` result raises HTTP 409
+  `LIFECYCLE_LEGACY_PROJECTION_CONFLICT` before append. The complete call is write-free; it
+  must not guess a replacement status, retain the old status and continue a central
+  projection change, or increment lifecycle revision.
+- A same-case, same-idempotency-key replay first reads the stored activity, reconstructs its
+  stored previous and current projections, and derives the original compatibility status
+  from the stored event and canonical payload. It then delegates to
+  `append_case_activity()` for the complete fact/evidence comparison. Later advancement of
+  the Case must not make that original request unreplayable.
+
+### Fail-closed errors and transaction boundary
+
+- Invalid command shape, lane or confirmation status returns HTTP 400. An unregistered event
+  returns HTTP 409 `LIFECYCLE_RULE_NOT_REGISTERED`; rule resolution failure or a return value
+  other than the exact `LifecycleRuleDecision` type also returns HTTP 409.
+- Preserve the append seam's HTTP 404, HTTP 409, CAS, idempotency and caller-owned transaction
+  semantics unchanged. This service may use the supplied transaction but must not commit,
+  roll back or close it.
+- Do not add a generic lifecycle-write HTTP endpoint.
 
 ## Explicit Non-Closure
 
@@ -57,7 +110,7 @@ No endpoint/UI/schema and no adjacent service rule or second dataset beyond the 
 
 ## Remaining Follow-Up Task IDs
 
-- None
+- `FPMS-V8-LC-CASE-OPENED-20260712-01` — first `lifecycle_rules.py` registry and event rule owner
 
 ## Allowed Files
 
@@ -78,7 +131,7 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 
 - RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_lifecycle_apply_event.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
 - GREEN and scoped checks:
-- `cd backend && .venv/bin/pytest -q tests/test_v8_lifecycle_apply_event.py`
+- `cd backend && .venv/bin/pytest -q tests/test_v8_lifecycle_apply_event.py tests/test_v8_lifecycle_activity_append.py tests/test_v8_lifecycle_legacy_projection.py`
 - `cd backend && .venv/bin/ruff check --fix app/modules/cases/lifecycle_service.py tests/test_v8_lifecycle_apply_event.py && .venv/bin/ruff format app/modules/cases/lifecycle_service.py tests/test_v8_lifecycle_apply_event.py && .venv/bin/ruff check app/modules/cases/lifecycle_service.py tests/test_v8_lifecycle_apply_event.py`
 - `git diff --check -- backend/app/modules/cases/lifecycle_service.py backend/tests/test_v8_lifecycle_apply_event.py tasks/postdemo/v8/FPMS-V8-LC-APPLY-EVENT-SEAM-20260712-01.md`
 - `./scripts/task_validate.sh FPMS-V8-LC-APPLY-EVENT-SEAM-20260712-01`

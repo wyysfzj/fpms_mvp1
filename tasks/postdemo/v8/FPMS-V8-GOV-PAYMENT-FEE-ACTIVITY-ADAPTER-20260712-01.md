@@ -1,6 +1,6 @@
 # FPMS-V8-GOV-PAYMENT-FEE-ACTIVITY-ADAPTER-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `12. Wave 4 — fee-obligation module and fixed rules`
 Catalog ordinal: `124`

@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import re
 from datetime import date as date_type
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 from app.modules.fees.enums import CalcMode, FeeDraftStatus, FeeType
+from app.modules.fees.obligation_contracts import (
+    FeeDifferenceReviewState,
+    FeeEstimateStatus,
+    FeeSourceStatus,
+)
 
 OFFICIAL_FEE_TEMPLATE_STATUSES = (
     "UNCONFIRMED",
@@ -34,11 +41,29 @@ class ApplyFeeDraftGenerateIn(BaseModel):
     discount_rate: Decimal | None = None
 
 
+class OfficialFeePreviewTriggerContextIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trigger: str
+    source_document_id: str | None
+
+
 class OfficialFeePreviewIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     case_id: str
-    trigger_event: str
-    currency: str = "CNY"
-    source_document_id: str | None = None
+    trigger_context: OfficialFeePreviewTriggerContextIn
+    currency: Literal["CNY"]
+    rate_effective_on: date_type
+
+    @field_validator("rate_effective_on", mode="before")
+    @classmethod
+    def validate_iso_calendar_date(cls, value: object) -> object:
+        if isinstance(value, date_type) and not isinstance(value, datetime):
+            return value
+        if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+            raise ValueError("rate_effective_on must be an ISO calendar date")
+        return value
 
 
 class FeeDraftOut(BaseModel):
@@ -174,38 +199,67 @@ class FeeItemOut(BaseModel):
     remark: str | None = None
 
 
-class OfficialFeePreviewCandidateOut(BaseModel):
-    rate_id: str | None = None
+class OfficialFeePreviewLineOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     fee_code: str
-    fee_name: str | None = None
-    fee_type: FeeType
-    quantity: Decimal
-    unit_price: Decimal
-    amount: Decimal
-    calculation_note: str | None = None
+    fee_name: str
+    fee_year_key: int
+    official_full_amount: Decimal | None
+    reduction_ratio: Decimal
+    payable_amount: Decimal
+    source_amount: Decimal | None
+    source_date: date_type | None
+    difference_review_state: FeeDifferenceReviewState
+
+    @field_serializer("official_full_amount", "payable_amount", "source_amount")
+    def serialize_money(self, value: Decimal | None) -> str | None:
+        return format(value, ".2f") if value is not None else None
+
+    @field_serializer("reduction_ratio")
+    def serialize_reduction_ratio(self, value: Decimal) -> str:
+        return format(value, ".4f")
+
+
+class OfficialFeePreviewSourceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    rate_id: str | None
+    source_document_id: str | None
     source_doc: str | None = None
-    source_status: str | None = None
-    fee_category: str | None = None
-    fee_subtype: str | None = None
-    trigger_rule: str | None = None
-    deadline_rule: str | None = None
-    reduction_scope: str | None = None
-    source_document_id: str | None = None
-    amount_before_reduction: Decimal | None = None
-    reduction_ratio: Decimal | None = None
-    payable_ratio: Decimal | None = None
+    source_url: str | None
+    source_policy: str | None
+    source_version: str | None
+    status: FeeSourceStatus
+
+
+class OfficialFeePreviewCandidateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    line: OfficialFeePreviewLineOut
+    source: OfficialFeePreviewSourceOut
+
+
+class OfficialFeePreviewTriggerContextOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    trigger: str
+    source_document_id: str | None
 
 
 class OfficialFeePreviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     case_id: str
-    draft_type: str
-    trigger_event: str
-    source_document_id: str | None = None
-    idempotency_key: str
-    currency: str
-    preview_only: bool = True
-    total_gov: Decimal
+    estimate_status: FeeEstimateStatus
+    trigger_context: OfficialFeePreviewTriggerContextOut
+    currency: Literal["CNY"]
     candidates: list[OfficialFeePreviewCandidateOut]
+    total_payable_amount: Decimal
+
+    @field_serializer("total_payable_amount")
+    def serialize_total_payable_amount(self, value: Decimal) -> str:
+        return format(value, ".2f")
 
 
 class FeeRateCreateIn(BaseModel):

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -22,6 +23,13 @@ from app.modules.cases.document_gate_service import (
     evaluate_material_gate,
 )
 from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    ConfirmationStatus,
+    EvidenceReference,
+    LifecycleEventCommand,
+)
+from app.modules.cases.lifecycle_service import apply_lifecycle_event
 from app.modules.cases.models import (
     Case,
     T_BioDeposit,
@@ -1707,12 +1715,11 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
     validate_bio_deposits(bio_deposits_dict)
     normalized_app_no = _normalize_app_no(
         data.app_no,
-        required=(data.status.value if data.status else None)
-        in {CaseStatus.PUBLISHED.value, CaseStatus.GRANTED.value},
+        required=False,
     )
     if "applicants" in data.model_fields_set:
         validate_status_required_fields(
-            status=data.status.value if data.status else None,
+            status=None,
             app_no=normalized_app_no,
             filing_date=data.filing_date,
             pub_no=data.pub_no,
@@ -1751,7 +1758,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         title_cn=data.title_cn,
         title_en=data.title_en,
         app_no=normalized_app_no,
-        status=data.status.value if data.status else "NOT_FILED",
+        status="NOT_FILED",
         filing_date=data.filing_date,
         recv_date=data.recv_date,
         # A3 — Publication / Grant
@@ -1863,6 +1870,50 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
             )
         )
 
+    source_snapshot = {
+        "case_id": case.id,
+        "case_no": case.case_no,
+        "case_type": case.case_type,
+        "client_id": case.client_id,
+    }
+    source_snapshot_bytes = json.dumps(
+        source_snapshot,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    source_snapshot_hash = f"sha256:{hashlib.sha256(source_snapshot_bytes).hexdigest()}"
+    opened_at = datetime.now(UTC).replace(tzinfo=None)
+    apply_lifecycle_event(
+        LifecycleEventCommand(
+            case_id=case.id,
+            event_type="CASE_OPENED",
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=opened_at,
+            occurred_at=opened_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=case.id,
+                    evidence_kind="CASE_RECORD",
+                    object_type="Case",
+                    object_id=case.id,
+                    content_hash=source_snapshot_hash,
+                    captured_at=opened_at,
+                ),
+            ),
+            actor_id=user_id,
+            idempotency_key=f"case-opened:{case.id}",
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={
+                "evidence_schema": "FPMS_CASE_OPENED_EVIDENCE_V1",
+                "source_snapshot": source_snapshot,
+                "source_snapshot_hash": source_snapshot_hash,
+            },
+        ),
+        db,
+    )
+
     db.commit()
     db.refresh(case)
     return case
@@ -1932,7 +1983,37 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
 
     provided_fields = data.model_fields_set
-    target_status = data.status.value if data.status is not None else case.status
+    original_status = case.status
+    requested_status = data.status.value if data.status is not None else None
+    status_change_requested = (
+        "status" in provided_fields
+        and requested_status is not None
+        and requested_status != original_status
+    )
+    lifecycle_protected = any(
+        value is not None
+        for value in (
+            case.business_stage,
+            case.official_procedure_stage,
+            case.legal_status,
+            case.lifecycle_verification_status,
+            case.lifecycle_revision,
+        )
+    )
+    if status_change_requested and lifecycle_protected:
+        raise_business_error(
+            "CASE_STATUS_MANAGED_BY_LIFECYCLE",
+            "案件状态已由生命周期管理，不能直接修改",
+            details={
+                "case_id": case.id,
+                "current_status": original_status,
+                "requested_status": requested_status,
+                "lifecycle_revision": case.lifecycle_revision,
+            },
+            status_code=409,
+        )
+
+    target_status = requested_status if status_change_requested else original_status
     target_app_no = data.app_no if "app_no" in provided_fields else case.app_no
     target_filing_date = data.filing_date if "filing_date" in provided_fields else case.filing_date
     target_case_type = (
@@ -2045,6 +2126,80 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
             earliest_priority_date=earliest_priority_date,
         )
 
+    if data.applicants is not None:
+        applicants_dict = [applicant.model_dump() for applicant in data.applicants]
+        if applicants_dict:
+            validate_applicants(applicants_dict)
+            validate_case_applicant_links(db, data.applicants)
+            first_applicant = next(
+                (applicant for applicant in data.applicants if applicant.is_first), None
+            )
+            validate_case_applicant_kind_mismatch(
+                db,
+                applicant_kind=(
+                    data.applicant_kind
+                    if "applicant_kind" in provided_fields
+                    else case.applicant_kind
+                ),
+                first_applicant_id=first_applicant.applicant_id if first_applicant else None,
+            )
+    elif "applicant_kind" in provided_fields:
+        first_applicant = (
+            db.query(T_CaseApplicant.applicant_id)
+            .filter(T_CaseApplicant.case_id == case_id)
+            .order_by(T_CaseApplicant.seq)
+            .first()
+        )
+        validate_case_applicant_kind_mismatch(
+            db,
+            applicant_kind=data.applicant_kind,
+            first_applicant_id=first_applicant.applicant_id if first_applicant else None,
+        )
+
+    if data.inventors is not None:
+        validate_inventor_official_fields(data.inventors)
+    if data.bio_deposits is not None:
+        validate_bio_deposits([bio_deposit.model_dump() for bio_deposit in data.bio_deposits])
+    if data.agent_splits is not None:
+        validate_case_agent_splits(db, data.agent_splits)
+
+    if status_change_requested:
+        status_update = db.execute(
+            update(Case)
+            .where(
+                Case.id == case_id,
+                Case.status == original_status,
+                Case.business_stage.is_(None),
+                Case.official_procedure_stage.is_(None),
+                Case.legal_status.is_(None),
+                Case.lifecycle_verification_status.is_(None),
+                Case.lifecycle_revision.is_(None),
+            )
+            .values(status=requested_status)
+            .execution_options(synchronize_session=False)
+        )
+        if status_update.rowcount != 1:
+            current_carriers = db.execute(
+                select(Case.status, Case.lifecycle_revision).where(Case.id == case_id)
+            ).one_or_none()
+            raise_business_error(
+                "CASE_STATUS_MANAGED_BY_LIFECYCLE",
+                "案件状态已由生命周期管理，不能直接修改",
+                details={
+                    "case_id": case.id,
+                    "current_status": (
+                        current_carriers.status if current_carriers else original_status
+                    ),
+                    "requested_status": requested_status,
+                    "lifecycle_revision": (
+                        current_carriers.lifecycle_revision
+                        if current_carriers
+                        else case.lifecycle_revision
+                    ),
+                },
+                status_code=409,
+            )
+
     if "case_type" in provided_fields and data.case_type is not None:
         case.case_type = data.case_type
     if "flow_dir" in provided_fields and data.flow_dir is not None:
@@ -2071,8 +2226,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         case.doc_address_id = data.doc_address_id
     if "bill_address_id" in provided_fields:
         case.bill_address_id = data.bill_address_id
-    if data.status is not None:
-        case.status = data.status
     # A3 — Publication / Grant
     if "pub_date" in provided_fields:
         case.pub_date = data.pub_date
@@ -2163,23 +2316,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     case.updated_by = user_id
 
     if data.applicants is not None:
-        applicants_dict = [applicant.model_dump() for applicant in data.applicants]
-        if applicants_dict:
-            validate_applicants(applicants_dict)
-            validate_case_applicant_links(db, data.applicants)
-            first_applicant = next(
-                (applicant for applicant in data.applicants if applicant.is_first), None
-            )
-            validate_case_applicant_kind_mismatch(
-                db,
-                applicant_kind=(
-                    data.applicant_kind
-                    if "applicant_kind" in provided_fields
-                    else case.applicant_kind
-                ),
-                first_applicant_id=first_applicant.applicant_id if first_applicant else None,
-            )
-
         db.query(T_CaseApplicant).filter(T_CaseApplicant.case_id == case_id).delete()
 
         for applicant in data.applicants:
@@ -2201,21 +2337,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
                     official_applicant_kind=applicant.official_applicant_kind,
                 )
             )
-    elif "applicant_kind" in provided_fields:
-        first_applicant = (
-            db.query(T_CaseApplicant.applicant_id)
-            .filter(T_CaseApplicant.case_id == case_id)
-            .order_by(T_CaseApplicant.seq)
-            .first()
-        )
-        validate_case_applicant_kind_mismatch(
-            db,
-            applicant_kind=data.applicant_kind,
-            first_applicant_id=first_applicant.applicant_id if first_applicant else None,
-        )
-
     if data.inventors is not None:
-        validate_inventor_official_fields(data.inventors)
         db.query(T_CaseInventor).filter(T_CaseInventor.case_id == case_id).delete()
         for inventor in data.inventors:
             db.add(
@@ -2245,8 +2367,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
             )
 
     if data.bio_deposits is not None:
-        bio_deposits_dict = [bio_deposit.model_dump() for bio_deposit in data.bio_deposits]
-        validate_bio_deposits(bio_deposits_dict)
         db.query(T_BioDeposit).filter(T_BioDeposit.case_id == case_id).delete()
         for bio_deposit in data.bio_deposits:
             db.add(
@@ -2262,7 +2382,6 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
             )
 
     if data.agent_splits is not None:
-        validate_case_agent_splits(db, data.agent_splits)
         db.query(T_CaseAgentSplit).filter(T_CaseAgentSplit.case_id == case_id).delete()
         for split in data.agent_splits:
             db.add(

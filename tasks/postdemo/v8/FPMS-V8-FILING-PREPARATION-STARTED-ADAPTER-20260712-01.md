@@ -1,6 +1,6 @@
 # FPMS-V8-FILING-PREPARATION-STARTED-ADAPTER-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-15 / NOT STARTED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `11. Wave 2C/3 — document evidence and existing workflow adapters`
 Catalog ordinal: `59`
@@ -66,6 +66,7 @@ No change to the underlying deep-module rule, no second entrypoint and no unrela
 
 - `tasks/postdemo/v8/FPMS-V8-FILING-PREPARATION-STARTED-ADAPTER-20260712-01.md`
 - `backend/app/modules/official_workflows/service.py`
+- `backend/app/modules/official_workflows/api.py`
 - `backend/tests/test_v8_filing_preparation_started_adapter.py`
 - `artifacts/FPMS-V8-FILING-PREPARATION-STARTED-ADAPTER-20260712-01/**`
 
@@ -96,3 +97,44 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 ## Done Definition
 
 The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-FILING-PREPARATION-STARTED-ADAPTER-20260712-01` pass. Only then may this task be reported PASS.
+
+## Delta-4 Ultra Contract Freeze — 2026-07-15
+
+### Latest-wins authority
+
+- Authoritative contract: `docs/superpowers/specs/2026-07-15-fpms-v8-ultra-contract-freeze-delta-4.md`, Task 59 lines 227–246.
+- Supplemental authority: batch row `16 / M4-D / H4-2` in `tasks/batches/FPMS-POSTDEMO-V8-ULTRA-CONTRACT-DELTA-4-20260715-01.md`.
+- Risk remains `HIGH`; product work and evidence are `NOT STARTED`.
+- `chosen_runbook: P0-prereq-heavy-story` supersedes the historical runbook above for Delta-4 execution.
+- This appendix is latest-wins only for the exact closure, dependencies, allowlist, serialization and verification below; all other inherited bytes remain history.
+
+### Exact actor, snapshot, replay and transaction contract
+
+- Close only the existing filing-preparation adapter that ensures the package and records `FILING_PREPARATION_STARTED` exactly once.
+- The existing API injects and propagates exact `current_user.id`; the service requires nonblank `actor_id`.
+- A new package writes `created_by=actor_id` and `updated_by=actor_id`. An existing package must already have a stable nonblank creator or fail `409`; never infer the current user as its historical creator.
+- The package snapshot has exactly `case_id`, `id`, `package_kind`, `resolve_key`; its canonical JSON hash is the `FILING_WORK_PACKAGE` / `OfficialWorkPackage` evidence hash.
+- Activity payload is exactly `{"evidence_schema":"FPMS_FILING_PREPARATION_EVIDENCE_V1","source_snapshot":{"case_id":"<package.case_id>","id":"<package.id>","package_kind":"<package.package_kind>","resolve_key":"<package.resolve_key>"},"source_snapshot_hash":"sha256:<64-lower-hex>"}`.
+- Serialize both nested snapshot and full payload as UTF-8, sorted-key, compact JSON with no ASCII escaping.
+- `captured_at`, `effective_at` and `occurred_at` are exact package `created_at`; idempotency key is exact `filing-preparation-started:<package.id>`.
+- Exact replay compares persisted payload and evidence bytes; it never reconstructs truth from a later mutable package.
+- Ensure, refresh and event write stay in the caller transaction with no internal commit or rollback. Fresh execution and exact replay return the same package; changed provenance fails `409`.
+
+### Dependencies and shared ownership
+
+- `FPMS-V8-FILING-SUBMISSION-EVIDENCE-RESOLVER-20260715-01` (`D4-05`) must have independently accepted PASS evidence before High starts this row.
+- Official-workflow shared execution is strict: row 16 → row 18 → row 19. Each predecessor must be independently accepted and release ownership.
+- Rows 16 and 18 alone add `backend/app/modules/official_workflows/api.py`; they never edit or verify that shared API concurrently.
+
+### Explicit non-closure
+
+- Do not implement or change D4-05, final-submission evidence, external-submission state, receipt state, lifecycle rule semantics or another V8 row.
+- Do not add or change a router, schema, migration, seed, endpoint shape or UI; current-user injection uses the existing API seam.
+- Do not refactor adjacent official-workflow behavior or alter inherited Tasks 05–09 regression inputs.
+
+### TDD, verification and Evidence 1.1
+
+- Initialize through `./scripts/evidence_init.sh FPMS-V8-FILING-PREPARATION-STARTED-ADAPTER-20260712-01 --task-file tasks/postdemo/v8/FPMS-V8-FILING-PREPARATION-STARTED-ADAPTER-20260712-01.md` with every exact allowlist path before product/test edits.
+- RED first through the public adapter/API seam must prove missing actor propagation, exact creator rules, snapshot/hash/payload/timestamps/idempotency, exact replay, `409` provenance rejection and caller-owned rollback behavior.
+- GREEN is the smallest allowlisted implementation; run the inherited task-local pytest, Tasks 05–09 targeted regressions, scoped Ruff/diff checks and SQLite-writing verification serially.
+- PASS requires latest required-result/log validation, scoped baseline-subtracted diff, dirty-baseline artifacts when applicable, independent approved zero-finding review, `./scripts/task_validate.sh`, and `scripts/atomic_evidence_validate.py` through the shared Evidence 1.1 consumer.

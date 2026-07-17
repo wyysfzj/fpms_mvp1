@@ -45,6 +45,13 @@
       >
         <div class="form-section">
           <h3 class="form-section-title">基础信息</h3>
+          <el-alert
+            title="创建成功后，系统将自动初始化案件生命周期；后续状态由业务事件推进，不能在新建页面直接指定。"
+            type="info"
+            show-icon
+            :closable="false"
+            class="lifecycle-init-alert"
+          />
 
           <el-row :gutter="20">
             <el-col :span="8">
@@ -1906,6 +1913,10 @@ onMounted(() => {
 }
 
 .validation-summary {
+  margin-bottom: 20px;
+}
+
+.lifecycle-init-alert {
   margin-bottom: 20px;
 }
 

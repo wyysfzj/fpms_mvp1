@@ -18,9 +18,11 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
 from app.core.config import get_settings
+from app.core.errors import BusinessError
 from app.db.session import get_db
+from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.export_excel import (
@@ -58,9 +60,7 @@ from app.modules.documents.schemas import (
     DocumentWizardTaskPreviewOut,
 )
 from app.modules.documents.service import (
-    add_attachment as add_attachment_service,
-)
-from app.modules.documents.service import (
+    _remove_managed_attachment_file,
     batch_register_document_mailing,
     create_doc_template,
     create_document_dispatch,
@@ -76,6 +76,9 @@ from app.modules.documents.service import (
     preview_document_wizard_fee_candidates,
     preview_document_wizard_tasks,
     update_doc_template,
+)
+from app.modules.documents.service import (
+    add_attachment as add_attachment_service,
 )
 from app.modules.documents.service import (
     create_document as create_document_service,
@@ -829,6 +832,7 @@ def add_attachment(
     official_file_role: str | None = Form(default=None),
     source_role_alias: str | None = Form(default=None),
     _perm: None = Depends(require_perm("Doc.Attach")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> DocAttachmentOut:
     """
@@ -855,15 +859,32 @@ def add_attachment(
     - 422: VALIDATION_ERROR
     """
     settings = get_settings()
-    attachment = add_attachment_service(
-        db,
-        document_id,
-        upload_file=file,
-        storage_dir=settings.storage_dir,
-        actor_id=None,
-        official_file_role=official_file_role,
-        source_role_alias=source_role_alias,
-    )
+    try:
+        pending = add_attachment_service(
+            db,
+            document_id,
+            upload_file=file,
+            storage_dir=settings.storage_dir,
+            actor_id=current_user.id,
+            official_file_role=official_file_role,
+            source_role_alias=source_role_alias,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        _remove_managed_attachment_file(pending.managed_file_path, original_error=exc)
+        raise BusinessError(
+            "ATTACHMENT_PERSIST_FAILED",
+            "Attachment persistence failed",
+            status_code=500,
+        ) from exc
+
+    attachment = pending.attachment
     return DocAttachmentOut(
         id=attachment.id,
         document_id=attachment.document_id,

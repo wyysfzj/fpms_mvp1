@@ -1,6 +1,6 @@
 # FPMS-V8-W1-L1-CASE-LIFECYCLE-PROJECTION-CARRIER-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `8. Wave 1 — schema spine, globally serialized`
 Catalog ordinal: `3`
@@ -27,16 +27,41 @@ Executor role: Backend Developer / worker
 
 Task Contract Profile: `TC-SCHEMA`
 
-- RED expectation: Exact schema test fails because the named table/column/index is absent.
-- GREEN expectation: Exact schema test, task-scoped Ruff, unique-head check and clean temporary SQLite `upgrade head` pass.
+- RED expectation: Exact schema test fails because the five named `t_case` columns are absent from both the ORM table and the migrated SQLite schema.
+- GREEN expectation: Exact schema test proves the five frozen names, physical types, nullability and absence of defaults/indexes/checks; task-scoped Ruff, unique-head check and clean temporary SQLite `upgrade head` pass.
 
 ## Exact Closure Slice
 
-Add only five nullable lifecycle projection/revision/verification columns to `t_case`.
+Add only these five nullable lifecycle projection/revision/verification columns to `t_case`: `String(32)` code carriers named `business_stage`, `legal_status` and `lifecycle_verification_status`, one `String(64)` code carrier named `official_procedure_stage`, plus one `Integer` revision carrier named `lifecycle_revision`.
 
 ## Explicit Non-Closure
 
 No backfill, service, endpoint, seed, UI or second table/carrier. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
+
+## Ultra Contract Freeze — 2026-07-13
+
+Execution stopped before RED and before any source, test or migration edit because the approved design and plan froze the five names and nullability but did not state their physical types. The closure slice did not change. Story Shape Classification remains unchanged and `chosen_runbook` remains `P0-prereq-heavy-story`.
+
+The following physical contract is now frozen for this task:
+
+| `t_case` column | SQLAlchemy / Alembic type | ORM annotation | Nullable | Server/client default | New index / unique / CHECK / FK |
+|---|---|---|---:|---|---|
+| `business_stage` | `String(32)` / `sa.String(length=32)` | `Mapped[str | None]` | yes | none | none |
+| `official_procedure_stage` | `String(64)` / `sa.String(length=64)` | `Mapped[str | None]` | yes | none | none |
+| `legal_status` | `String(32)` / `sa.String(length=32)` | `Mapped[str | None]` | yes | none | none |
+| `lifecycle_revision` | `Integer` / `sa.Integer()` | `Mapped[int | None]` | yes | none | none |
+| `lifecycle_verification_status` | `String(32)` / `sa.String(length=32)` | `Mapped[str | None]` | yes | none | none |
+
+Frozen invariants:
+
+- All five columns remain nullable so existing cases can stay uninitialized until separately authorized projection/backfill work runs.
+- No Python default, SQL server default or data backfill is authorized; in particular, do not silently initialize `lifecycle_revision` to `0`.
+- The local `Case` model uses `String(32)` for status codes. That width covers the frozen business-stage, legal-status and known verification-status codes; `official_procedure_stage` uses `String(64)` because its frozen vocabulary includes the 39-character `SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE` value.
+- Do not add database enums, value-level `CHECK` constraints or application validation. The later lifecycle-contract task owns state vocabulary and transition validation.
+- Do not add an index, uniqueness constraint or foreign key. This task owns carriers only.
+- `lifecycle_revision` is an application-maintained integer revision in later work; this task does not increment or interpret it.
+- Persist the database column as `lifecycle_verification_status`; the shorter overlay response name `center_snapshot.verification_status` is not a database alias.
+- Legacy `t_case.status` remains untouched and is not one of the five columns.
 
 ## Dependencies
 

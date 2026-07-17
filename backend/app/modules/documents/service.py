@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
@@ -10,7 +12,7 @@ from uuid import uuid4
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.errors import raise_business_error
+from app.core.errors import BusinessError, raise_business_error
 from app.core.storage import ensure_dir, safe_join
 from app.modules.cases.models import Case, T_CaseApplicant
 from app.modules.cases.service import (
@@ -18,6 +20,13 @@ from app.modules.cases.service import (
     validate_case_status_transition,
 )
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.evidence_contracts import (
+    EvidenceRole,
+    EvidenceVersionResult,
+    EvidenceVersionState,
+    RegisterEvidenceVersionCommand,
+)
+from app.modules.documents.evidence_service import register_evidence_version
 from app.modules.documents.extra_data import (
     DocumentExtraDataBusinessError,
     DocumentExtraDataShapeError,
@@ -65,6 +74,8 @@ from app.modules.tasks.service import _create_task_log
 from app.modules.tasks.task_generation_service import TaskGenerationService
 from app.modules.templates.models import Template
 from app.modules.templates.render import TemplateRenderer
+
+logger = logging.getLogger(__name__)
 
 ATTACHMENT_ROLE_CATEGORY_INTAKE = "INTAKE_GATE"
 ATTACHMENT_ROLE_CATEGORY_FILING = "FILING"
@@ -2398,6 +2409,40 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
     return document
 
 
+@dataclass(frozen=True, slots=True)
+class PendingAttachmentEvidenceUpload:
+    attachment: DocAttachment
+    evidence_version: EvidenceVersionResult
+    managed_file_path: Path
+
+
+def _remove_managed_attachment_file(
+    managed_file_path: Path,
+    *,
+    original_error: Exception,
+) -> None:
+    try:
+        managed_file_path.unlink()
+    except FileNotFoundError:
+        return
+    except Exception as cleanup_error:
+        logger.error(
+            "Attachment compensation failed; residual_path=%s; original_error=%r",
+            managed_file_path,
+            original_error,
+            exc_info=(
+                type(original_error),
+                original_error,
+                original_error.__traceback__,
+            ),
+        )
+        raise BusinessError(
+            "ATTACHMENT_STORAGE_COMPENSATION_FAILED",
+            "Attachment storage compensation failed",
+            status_code=500,
+        ) from cleanup_error
+
+
 def add_attachment(
     db: Session,
     document_id: str,
@@ -2410,10 +2455,18 @@ def add_attachment(
     package_usage_hint: str | None = None,
     is_archive_evidence: bool | None = None,
     is_receipt_evidence: bool | None = None,
-) -> DocAttachment:
+) -> PendingAttachmentEvidenceUpload:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
         raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
+
+    creator_id = (actor_id or "").strip()
+    if not creator_id:
+        raise_business_error(
+            "ATTACHMENT_ACTOR_REQUIRED",
+            "Authenticated attachment creator is required",
+            status_code=400,
+        )
 
     original_name = (upload_file.filename or "").strip()
     if not original_name:
@@ -2441,13 +2494,13 @@ def add_attachment(
     max_size_bytes = 25 * 1024 * 1024
     stored_name = f"{uuid4().hex}_{Path(original_name).name}"
     relative_path = f"attachments/{document_id}/{stored_name}"
-    dest_path = safe_join(storage_dir, relative_path)
-    ensure_dir(str(Path(dest_path).parent))
+    managed_file_path = Path(safe_join(storage_dir, relative_path))
 
     size_bytes = 0
     content_hasher = sha256()
     try:
-        with open(dest_path, "wb") as f:
+        ensure_dir(str(managed_file_path.parent))
+        with open(managed_file_path, "wb") as f:
             while True:
                 chunk = upload_file.file.read(1024 * 1024)
                 if not chunk:
@@ -2461,33 +2514,68 @@ def add_attachment(
                     )
                 content_hasher.update(chunk)
                 f.write(chunk)
-    except Exception:
-        try:
-            Path(dest_path).unlink()
-        except FileNotFoundError:
-            pass
-        raise
+    except Exception as exc:
+        _remove_managed_attachment_file(managed_file_path, original_error=exc)
+        if isinstance(exc, BusinessError):
+            raise
+        raise_business_error(
+            "ATTACHMENT_STORAGE_WRITE_FAILED",
+            "Attachment storage write failed",
+            status_code=500,
+        )
 
-    attachment = DocAttachment(
-        id=str(uuid4()),
-        document_id=document_id,
-        file_name=original_name,
-        file_path=relative_path,
-        mime_type=content_type,
-        file_size=size_bytes,
-        official_file_role=manifest_metadata["official_file_role"],
-        source_role_alias=manifest_metadata["source_role_alias"],
-        external_upload_position=manifest_metadata["external_upload_position"],
-        content_hash=f"sha256:{content_hasher.hexdigest()}",
-        package_usage_hint=manifest_metadata["package_usage_hint"],
-        is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
-        is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
-    )
-    db.add(attachment)
-    _advance_grant_notice_case_after_attachment(db, document=document)
-    db.commit()
-    db.refresh(attachment)
-    return attachment
+    try:
+        attachment = DocAttachment(
+            id=str(uuid4()),
+            document_id=document_id,
+            file_name=original_name,
+            file_path=relative_path,
+            mime_type=content_type,
+            file_size=size_bytes,
+            official_file_role=manifest_metadata["official_file_role"],
+            source_role_alias=manifest_metadata["source_role_alias"],
+            external_upload_position=manifest_metadata["external_upload_position"],
+            content_hash=f"sha256:{content_hasher.hexdigest()}",
+            package_usage_hint=manifest_metadata["package_usage_hint"],
+            is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
+            is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
+        )
+        db.add(attachment)
+        db.flush()
+        evidence_role = (
+            EvidenceRole.FILING_FULL_WORD
+            if official_file_role == EvidenceRole.FILING_FULL_WORD.value
+            else EvidenceRole.RAW_ATTACHMENT
+        )
+        evidence_version = register_evidence_version(
+            RegisterEvidenceVersionCommand(
+                case_id=document.case_id,
+                document_id=document_id,
+                attachment_id=attachment.id,
+                lineage_key=f"attachment:{attachment.id}",
+                role=evidence_role,
+                state=EvidenceVersionState.DRAFT,
+                creator_id=creator_id,
+                content_hash=attachment.content_hash,
+            ),
+            db,
+        )
+        _advance_grant_notice_case_after_attachment(db, document=document)
+        db.flush()
+        return PendingAttachmentEvidenceUpload(
+            attachment=attachment,
+            evidence_version=evidence_version,
+            managed_file_path=managed_file_path,
+        )
+    except Exception as exc:
+        _remove_managed_attachment_file(managed_file_path, original_error=exc)
+        if isinstance(exc, BusinessError):
+            raise
+        raise_business_error(
+            "ATTACHMENT_PERSIST_FAILED",
+            "Attachment persistence failed",
+            status_code=500,
+        )
 
 
 def persist_generated_attachment(

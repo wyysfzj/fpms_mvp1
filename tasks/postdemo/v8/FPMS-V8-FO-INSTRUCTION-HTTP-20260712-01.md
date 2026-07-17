@@ -1,6 +1,6 @@
 # FPMS-V8-FO-INSTRUCTION-HTTP-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `12. Wave 4 — fee-obligation module and fixed rules`
 Catalog ordinal: `108`
@@ -10,6 +10,7 @@ Executor role: Backend Developer / worker
 
 - `AGENTS.md`
 - `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
+- `docs/superpowers/specs/2026-07-14-fpms-v8-ultra-contract-freeze-delta-2.md`
 - `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
 - Source catalog line: `536`
 - Expected manifest phase: `foundation`
@@ -18,21 +19,124 @@ Executor role: Backend Developer / worker
 ## Story Shape Classification
 
 - `shared_file_density`: high
-- `prereq_dependency_density`: low
+- `prereq_dependency_density`: high
 - `be_fe_coupling`: low
 - `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+- `chosen_runbook`: `P0-prereq-heavy-story`
 
 ## Task Contract Profile
 
 Task Contract Profile: `TC-API`
 
-- RED expectation: Exact API test fails with route/shape/permission/status mismatch.
-- GREEN expectation: Exact API test passes named 200/201/400/401/403/404/409/422 semantics and response envelope.
+- RED expectation: Exact API test fails because the sole route, strict schemas, actor
+  ownership, direct replay response or transaction boundary is missing.
+- GREEN expectation: Exact API test passes the direct 200 success/replay response, exact
+  400/401/403/404/409/422 matrix and no-second-route contract.
 
 ## Exact Closure Slice
 
 One POST obligation-instruction endpoint using `Fee.Edit`; 200 idempotent, 409 non-actionable/conflicting instruction and no draft side effect.
+
+## Ultra Contract Freeze — 2026-07-14
+
+This section is authoritative for High implementation. It materializes section 5 of
+`docs/superpowers/specs/2026-07-14-fpms-v8-ultra-contract-freeze-delta-2.md`
+without widening this task beyond one HTTP adapter.
+
+### Frozen route, permission and request
+
+The sole route is:
+
+```text
+POST /api/v1/fees/obligations/{obligation_id}/instruction
+```
+
+`obligation_id` is a required `str` path parameter and appears nowhere in the request
+body. Preserve parameter-injected `Fee.Edit` permission enforcement and obtain the
+authenticated actor through `current_user_dep`.
+
+`FeeObligationInstructionIn` is strict with `ConfigDict(extra="forbid")` and has exactly
+these required fields in this order:
+
+```python
+instruction: FeeClientInstruction  # PAY | HOLD | ABANDON
+idempotency_key: str
+```
+
+`actor_id` is not a request field: the API supplies `current_user.id`. Client-supplied
+`obligation_id`, `actor_id` or any other extra field returns 422. The schema owns only JSON
+shape, type and enum validation; well-typed business-invalid values remain the accepted
+service's 400/409 responsibility. Do not add a collection-action route, a legacy request
+shape or any overload.
+
+### Frozen direct response and 200 semantics
+
+`FeeObligationInstructionOut` has no success envelope and has exactly these fields in this
+order:
+
+```python
+obligation_id: str
+client_instruction_status: FeeClientInstructionStatus
+activity_id: str
+idempotency_key: str
+reused: bool
+```
+
+Map `obligation_id` and `client_instruction_status` from
+`result.obligation.id` and `result.obligation.statuses.client_instruction_status`; map the
+other three fields directly from the accepted `RecordFeeObligationInstructionResult`.
+Both a new accepted instruction (`reused=False`) and an exact replay (`reused=True`) return
+200. An exact replay preserves the service-returned activity ID, idempotency key and current
+instruction status.
+
+### Frozen adapter and transaction boundary
+
+Construct one `RecordFeeObligationInstructionCommand` from the path ID, the two request
+fields and server-owned `actor_id=current_user.id`, then call
+`record_client_instruction(command, db)` exactly once. The adapter does not duplicate
+eligibility, transition, replay, idempotency, concurrency or stored-state rules.
+
+After any accepted service result, including `reused=True`, call `db.commit()` exactly once
+and return the direct output. A service `BusinessError` triggers one `db.rollback()` and is
+re-raised unchanged. A commit failure triggers one `db.rollback()` and the original failure
+is re-raised. Do not refresh, issue a second SELECT, retry or perform a second business
+write. In particular, the adapter must not create or modify a draft, PayList, payment,
+official-payment evidence or case lifecycle/legal state.
+
+### Frozen HTTP error matrix
+
+| Status | Exact API behavior |
+| --- | --- |
+| 400 | Pass through service business validation, including `FEE_CLIENT_INSTRUCTION_COMMAND_INVALID`, unchanged. |
+| 401 | Existing authentication dependency rejects a missing or invalid authenticated user. |
+| 403 | Parameter-injected `Fee.Edit` permission dependency rejects the caller. |
+| 404 | Pass through the accepted service's missing-obligation result, including `FEE_OBLIGATION_NOT_FOUND`, unchanged. |
+| 409 | Pass through non-actionable/stored-state, same-state-new-key, idempotency, current-state and concurrency conflicts unchanged. |
+| 422 | Request validation only: invalid path/body shape, missing fields, extra fields or invalid `instruction` enum. |
+
+The API does not remap any service `BusinessError` code, message, details or status.
+
+### Frozen RED / GREEN test contract
+
+The exact RED is the missing route/schema/adapter behavior, not a deliberately malformed
+fixture. `backend/tests/test_v8_fee_obligation_instruction_api.py` must prove:
+
+1. the sole path-ID route, parameter-injected `Fee.Edit` permission and authenticated
+   server-owned actor;
+2. exact input/output field names, order and annotations, strict extras, path-only
+   `obligation_id` and the exact `PAY/HOLD/ABANDON` enum;
+3. one exact command projection and exactly one call to the already accepted
+   `record_client_instruction()` seam, with no draft, PayList, payment or legal-state write;
+4. direct five-field 200 responses for both new success and exact replay, preserving the
+   service-returned replay facts;
+5. exactly one commit for each accepted result, rollback on service `BusinessError` and
+   commit failure, and no refresh, second SELECT or retry; and
+6. the exact 400/401/403/404/409/422 matrix, absence of a collection-action/second route,
+   and rejection of the legacy body-ID/actor request shape.
+
+RED and GREEN execute only this exact API test. GREEN then runs only the task-scoped Ruff,
+whitespace, task gate and evidence checks listed below; no inherited or broader product
+suite is part of this task's RED/GREEN.
 
 ## Explicit Non-Closure
 

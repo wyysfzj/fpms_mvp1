@@ -1,6 +1,6 @@
 # FPMS-V8-OA-EXTERNAL-SUBMISSION-EVIDENCE-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-14 / NOT STARTED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `11. Wave 2C/3 — document evidence and existing workflow adapters`
 Catalog ordinal: `69`
@@ -10,7 +10,9 @@ Executor role: Backend Developer / worker
 
 - `AGENTS.md`
 - `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
+- `docs/superpowers/specs/2026-07-14-fpms-v8-ultra-contract-freeze-delta-3.md`
 - `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
+- `tasks/batches/FPMS-POSTDEMO-V8-ULTRA-CONTRACT-DELTA-3-20260714-01.md`
 - Source catalog line: `455`
 - Expected manifest phase: `foundation`
 - Customer gate requirement: `None`
@@ -18,10 +20,10 @@ Executor role: Backend Developer / worker
 ## Story Shape Classification
 
 - `shared_file_density`: high
-- `prereq_dependency_density`: low
+- `prereq_dependency_density`: high
 - `be_fe_coupling`: low
 - `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+- `chosen_runbook`: `P0-prereq-heavy-story`
 
 ## Task Contract Profile
 
@@ -43,6 +45,7 @@ No change to the underlying deep-module rule, no second entrypoint and no unrela
 ### Canonical V8 task dependencies
 
 - `FPMS-V8-DE-FINALIZE-EXTERNAL-SUBMISSION-SEAM-20260712-01`
+- `FPMS-V8-DE-EXTERNAL-SUBMISSION-ROLE-ALLOWLIST-20260714-01` — direct prerequisite
 - `FPMS-V8-OA-OUT-PACKAGE-ATOMIC-LINK-20260712-01`
 
 ### External, gate and inherited prerequisites
@@ -82,7 +85,11 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 - `cd backend && .venv/bin/ruff check --fix app/modules/official_workflows/service.py tests/test_v8_oa_external_submission_evidence.py && .venv/bin/ruff format app/modules/official_workflows/service.py tests/test_v8_oa_external_submission_evidence.py && .venv/bin/ruff check app/modules/official_workflows/service.py tests/test_v8_oa_external_submission_evidence.py`
 - `git diff --check -- backend/app/modules/official_workflows/service.py backend/tests/test_v8_oa_external_submission_evidence.py tasks/postdemo/v8/FPMS-V8-OA-EXTERNAL-SUBMISSION-EVIDENCE-20260712-01.md`
 - `./scripts/task_validate.sh FPMS-V8-OA-EXTERNAL-SUBMISSION-EVIDENCE-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-OA-EXTERNAL-SUBMISSION-EVIDENCE-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- Evidence validation (single lane): `python3 scripts/atomic_evidence_validate.py FPMS-V8-OA-EXTERNAL-SUBMISSION-EVIDENCE-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- Any declared-peer run must append exactly one
+  `--manifest <COMMON-EXECUTION-BATCH-MANIFEST>` and one
+  `--concurrent-task <PEER-TASK-ID>` for every declared peer; that common manifest must
+  list this task and every peer per the delta-3 G2 mandatory execution rule.
 
 ## Evidence Path
 

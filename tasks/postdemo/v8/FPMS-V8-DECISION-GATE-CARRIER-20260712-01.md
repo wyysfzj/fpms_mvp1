@@ -1,6 +1,6 @@
 # FPMS-V8-DECISION-GATE-CARRIER-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `14. Wave 6 — customer decision gates`
 Catalog ordinal: `165`

@@ -1,6 +1,6 @@
 # FPMS-V8-OA-COPYABLE-ATTACHMENT-POLICY-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-15 / CORRECTION REQUIRED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `11. Wave 2C/3 — document evidence and existing workflow adapters`
 Catalog ordinal: `72`
@@ -91,3 +91,36 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 ## Done Definition
 
 The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-OA-COPYABLE-ATTACHMENT-POLICY-20260712-01` pass. Only then may this task be reported PASS.
+
+## Delta-4 Ultra Contract Freeze — 2026-07-15
+
+### Latest-wins authority
+
+- Authoritative contract: `docs/superpowers/specs/2026-07-15-fpms-v8-ultra-contract-freeze-delta-4.md`, lines 423–441.
+- Supplemental authority: row `20 / M4-E / H4-1` of `tasks/batches/FPMS-POSTDEMO-V8-ULTRA-CONTRACT-DELTA-4-20260715-01.md`.
+- Risk remains `HIGH`; `chosen_runbook: P0-prereq-heavy-story` supersedes the historical runbook above for Delta-4 execution.
+- This appendix is latest-wins only for the corrected policy closure, prerequisites and serialization below. The rejected review, candidate patch, evidence and every other inherited byte remain immutable history, not acceptance authority.
+
+### Exact corrected policy closure
+
+- Correct only the existing public copyable-OA policy in `backend/app/modules/documents/evidence_policy.py`; its input is a frozen DTO carrying both typed evidence-version identity/hash and the exact manifest role/link.
+- Discard the rejected candidate's ORM-role shortcut. Never infer typed evidence from `DocAttachment.official_file_role`, a filename, extension, display label or attachment order.
+- Require exactly one `OA_STATEMENT_WORD` and exactly one `OA_MODIFIED_CLAIMS`.
+- Permit at most one `OA_AMENDMENT_COMPARISON` and zero or more `OA_OTHER_PROOF` and `OA_ADDITIONAL_FILE` entries.
+- Every supplied version must be `OA_STRUCTURED_ATTACHMENT`, current, independently `APPROVED`, and exactly linked by its same-case manifest.
+- Duplicate evidence ID, duplicate manifest ID, cross-case/package identity, RAW or non-promoted evidence, hash/link/state/review mismatch, unknown role, missing required singleton or excess optional singleton fails closed.
+- Do not select a candidate, collapse duplicates, trust an ORM role, reconstruct a missing link or infer a role from a filename.
+
+### Dependencies and serialization
+
+- D4-06 `FPMS-V8-DE-DELTA4-EVIDENCE-ROLE-EXTENSION-20260715-01` must first reach independently accepted PASS.
+- D4-07 `FPMS-V8-DE-DELTA4-REGISTRATION-MATRIX-CORRECTION-20260715-01` follows D4-06 and must reach independently accepted PASS.
+- D4-08 `FPMS-V8-DE-OA-STRUCTURED-ATTACHMENT-PROMOTION-20260715-01` follows D4-07 and must reach independently accepted PASS before this correction starts.
+- Document-chain ownership is strict D4-06 → D4-07 → D4-08 → row 20 / Task 72 → row 21 / Task 73. Each owner releases shared verification only after independent acceptance; no shared edit or verification runs concurrently.
+- Row 21 may consume only this corrected manifest/version policy after row 20 independently passes; it must not bypass the policy or infer typed evidence itself.
+
+### Explicit non-closure
+
+- Keep the existing Allowed Files list exact; add no source, test, task, manifest or artifact path.
+- Do not implement or alter D4-06, D4-07, D4-08, promotion/derivation/registration behavior, Task 73's DRAFT OA reply seam, external submission, lifecycle, API/router/schema/model/migration/seed/UI or customer policy.
+- This Ultra materialization performs no product/test edit, candidate-patch rewrite, rejected-evidence rewrite or evidence initialization and runs only the repository atomic task check.

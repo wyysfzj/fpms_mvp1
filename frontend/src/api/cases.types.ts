@@ -213,7 +213,6 @@ export interface CaseCreatePayload {
     require_hk?: boolean
     first_annuity_year?: number
     filing_date?: string
-    status?: string
     bio_deposits?: CaseBioDeposit[]
     ro?: string
     isa?: string
@@ -255,7 +254,6 @@ export interface CaseCreatePayload {
 
 export interface CaseUpdatePayload {
     title?: string
-    status?: string
     filing_date?: string
     recv_date?: string | null
     foreign_agent_id?: string | null

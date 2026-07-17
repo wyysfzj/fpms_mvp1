@@ -2,11 +2,27 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.mixins import UUIDPrimaryKeyMixin
 
 
 class PayList(Base):
@@ -41,6 +57,90 @@ class PayList(Base):
     )
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     updated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class PayListExportArtifact(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "t_pay_list_export_artifact"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    pay_list_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    managed_storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    template_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    generated_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    official_acceptance_evidence_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    official_acceptance_evidence_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    official_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["pay_list_id"],
+            ["t_pay_list.id"],
+            name="fk_t_pay_list_export_artifact_pay_list_id",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["generated_by"],
+            ["t_user.id"],
+            name="fk_t_pay_list_export_artifact_generated_by",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "pay_list_id",
+            "idempotency_key",
+            name="uq_t_pay_list_export_artifact_pay_list_idempotency_key",
+        ),
+        CheckConstraint(
+            "kind IN ('INTERNAL_XLSX', 'OFFICIAL_XLSM')",
+            name="ck_t_pay_list_export_artifact_kind",
+        ),
+        CheckConstraint(
+            "status IN ('GENERATED', 'OFFICIAL_SITE_ACCEPTED')",
+            name="ck_t_pay_list_export_artifact_status",
+        ),
+        CheckConstraint(
+            "length(content_sha256) = 64",
+            name="ck_t_pay_list_export_artifact_content_sha256",
+        ),
+        CheckConstraint(
+            "official_acceptance_evidence_hash IS NULL "
+            "OR length(official_acceptance_evidence_hash) = 64",
+            name="ck_t_pay_list_export_artifact_acceptance_hash",
+        ),
+        CheckConstraint(
+            "(kind = 'INTERNAL_XLSX' AND template_version IS NULL) "
+            "OR (kind = 'OFFICIAL_XLSM' AND template_version IS NOT NULL)",
+            name="ck_t_pay_list_export_artifact_kind_payload",
+        ),
+        CheckConstraint(
+            "(status = 'GENERATED' "
+            "AND official_acceptance_evidence_ref IS NULL "
+            "AND official_acceptance_evidence_hash IS NULL "
+            "AND official_accepted_at IS NULL) "
+            "OR (status = 'OFFICIAL_SITE_ACCEPTED' "
+            "AND kind = 'OFFICIAL_XLSM' "
+            "AND official_acceptance_evidence_ref IS NOT NULL "
+            "AND official_acceptance_evidence_hash IS NOT NULL "
+            "AND official_accepted_at IS NOT NULL)",
+            name="ck_t_pay_list_export_artifact_acceptance_tuple",
+        ),
+        Index(
+            "ix_t_pay_list_export_artifact_pay_list_generated_at",
+            "pay_list_id",
+            "generated_at",
+        ),
+    )
 
 
 class GovPayment(Base):
@@ -128,4 +228,61 @@ class AnnuityTask(Base):
     )
     notice_sent: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, server_default=text("0")
+    )
+    source_activity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_evidence_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_evidence_content_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fee_obligation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    grant_fee_year_key: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["source_activity_id"],
+            ["t_case_activity_event.id"],
+            name="fk_t_annuity_task_source_activity_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_document_id"],
+            ["t_document.id"],
+            name="fk_t_annuity_task_source_document_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_evidence_version_id"],
+            ["t_document_evidence_version.id"],
+            name="fk_t_annuity_task_source_evidence_version_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["fee_obligation_id"],
+            ["t_fee_obligation.id"],
+            name="fk_t_annuity_task_fee_obligation_id",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "fee_obligation_id",
+            name="uq_t_annuity_task_fee_obligation_id",
+        ),
+        CheckConstraint(
+            "(source_activity_id IS NULL AND source_document_id IS NULL "
+            "AND source_evidence_version_id IS NULL "
+            "AND source_evidence_content_hash IS NULL "
+            "AND fee_obligation_id IS NULL AND grant_fee_year_key IS NULL) "
+            "OR (source_activity_id IS NOT NULL AND source_document_id IS NOT NULL "
+            "AND source_evidence_version_id IS NOT NULL "
+            "AND source_evidence_content_hash IS NOT NULL "
+            "AND fee_obligation_id IS NOT NULL "
+            "AND grant_fee_year_key IS NOT NULL AND grant_fee_year_key >= 1)",
+            name="ck_t_annuity_task_lineage_tuple",
+        ),
+        CheckConstraint(
+            "source_evidence_content_hash IS NULL OR "
+            "(length(source_evidence_content_hash) = 71 "
+            "AND substr(source_evidence_content_hash, 1, 7) = 'sha256:' "
+            "AND substr(source_evidence_content_hash, 8) "
+            "NOT GLOB '*[^0-9a-f]*')",
+            name="ck_t_annuity_task_source_evidence_hash",
+        ),
     )

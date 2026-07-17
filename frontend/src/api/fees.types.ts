@@ -217,45 +217,60 @@ export interface ApplyFeeDraftGeneratePayload {
     discount_rate?: number | string | null
 }
 
-export interface OfficialFeePreviewPayload {
+export interface OfficialFeeEstimateContext {
     case_id: string
-    trigger_event: 'FILING_ACCEPTED' | 'REEXAM_REQUESTED'
-    currency?: string
-    source_document_id?: string | null
+    trigger_context: {
+        trigger: string
+        source_document_id: string | null
+    }
+    currency: 'CNY'
+    rate_effective_on: string
 }
 
-export interface OfficialFeePreviewCandidate {
-    rate_id?: string | null
-    fee_code: string
-    fee_name?: string | null
-    fee_type: string
-    quantity: FeeMoney
-    unit_price: FeeMoney
-    amount: FeeMoney
-    calculation_note?: string | null
-    source_doc?: string | null
-    source_status?: string | null
-    fee_category?: string | null
-    fee_subtype?: string | null
-    trigger_rule?: string | null
-    deadline_rule?: string | null
-    reduction_scope?: string | null
-    source_document_id?: string | null
-    amount_before_reduction?: FeeMoney | null
-    reduction_ratio?: FeeMoney | null
-    payable_ratio?: FeeMoney | null
+export interface OfficialFeeEstimateResult {
+    case_id: string
+    estimate_status: 'ESTIMATE'
+    trigger_context: {
+        trigger: string
+        source_document_id: string | null
+    }
+    currency: 'CNY'
+    candidates: {
+        line: {
+            fee_code: string
+            fee_name: string
+            fee_year_key: number
+            official_full_amount: string | null
+            reduction_ratio: string
+            payable_amount: string
+            source_amount: string | null
+            source_date: string | null
+            difference_review_state: 'MATCHED' | 'SOURCE_PENDING' | 'REVIEW_REQUIRED'
+        }
+        source: {
+            rate_id: string | null
+            source_document_id: string | null
+            source_doc: string | null
+            source_url: string | null
+            source_policy: string | null
+            source_version: string | null
+            status: 'VERIFIED' | 'REVIEW_REQUIRED' | 'LEGACY_UNVERIFIED'
+        }
+    }[]
+    total_payable_amount: string
 }
 
-export interface OfficialFeePreview {
-    case_id: string
-    draft_type: string
-    trigger_event: string
-    source_document_id?: string | null
+export interface FeeObligationInstructionPayload {
+    instruction: 'PAY' | 'HOLD' | 'ABANDON'
     idempotency_key: string
-    currency: string
-    preview_only: boolean
-    total_gov: FeeMoney
-    candidates: OfficialFeePreviewCandidate[]
+}
+
+export interface FeeObligationInstructionResult {
+    obligation_id: string
+    client_instruction_status: 'PENDING' | 'PAY' | 'HOLD' | 'ABANDON'
+    activity_id: string
+    idempotency_key: string
+    reused: boolean
 }
 
 export interface FeeDraftUpdatePayload {

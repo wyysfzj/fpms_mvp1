@@ -1,6 +1,6 @@
 # FPMS-V8-LC-FILING-EXTERNAL-SUBMISSION-RECORDED-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `10. Wave 2B — one lifecycle event per task`
 Catalog ordinal: `20`

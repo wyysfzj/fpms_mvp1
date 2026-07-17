@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
     Date,
+    DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     Numeric,
     String,
@@ -54,6 +56,11 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=text("'NOT_FILED'")
     )
+    business_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    official_procedure_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    legal_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    lifecycle_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lifecycle_verification_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     recv_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     submitted_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     filing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -116,6 +123,104 @@ class Case(UUIDPrimaryKeyMixin, AuditMixin, Base):
     no_prio_text: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     require_hk: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     first_annuity_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class CaseActivityEvent(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "t_case_activity_event"
+
+    case_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_case.id",
+            name="fk_t_case_activity_event_case_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    lane: Mapped[str] = mapped_column(String(16), nullable=False)
+    activity_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_activity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    confirmation_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    old_business_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    new_business_stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    old_official_procedure_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    new_official_procedure_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    old_legal_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    new_legal_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reviewer_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    supersedes_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "case_id",
+            "sequence",
+            name="uq_t_case_activity_event_case_sequence",
+        ),
+        UniqueConstraint(
+            "case_id",
+            "idempotency_key",
+            name="uq_t_case_activity_event_case_idempotency_key",
+        ),
+        UniqueConstraint(
+            "case_id",
+            "id",
+            name="uq_t_case_activity_event_case_id",
+        ),
+        ForeignKeyConstraint(
+            ["case_id", "source_activity_id"],
+            ["t_case_activity_event.case_id", "t_case_activity_event.id"],
+            name="fk_t_case_activity_event_source_same_case",
+        ),
+    )
+
+
+class CaseActivityEventEvidence(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "t_case_activity_event_evidence"
+
+    case_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    activity_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    evidence_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    object_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["case_id", "activity_id"],
+            ["t_case_activity_event.case_id", "t_case_activity_event.id"],
+            name="fk_t_case_activity_event_evidence_activity_same_case",
+        ),
+        UniqueConstraint(
+            "case_id",
+            "activity_id",
+            "evidence_kind",
+            "object_type",
+            "object_id",
+            name="uq_t_case_activity_event_evidence_link",
+        ),
+    )
 
 
 class T_CaseAgentSplit(UUIDPrimaryKeyMixin, AuditMixin, Base):

@@ -1,0 +1,2358 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
+from enum import Enum
+from typing import Protocol, cast
+from uuid import UUID, uuid4
+
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.core.errors import BusinessError
+from app.modules.annuity.models import GovPayment
+from app.modules.cases.lifecycle_activity_service import append_case_activity
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    BusinessStage,
+    ConfirmationStatus,
+    EvidenceReference,
+    LegalStatus,
+    LifecycleEventCommand,
+    LifecycleProjection,
+    OfficialProcedureStage,
+)
+from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
+from app.modules.documents.models import Document
+from app.modules.fees.fee_reduction import (
+    FeeReductionApprovalContext,
+    FeeReductionEvaluationContext,
+    FeeReductionInput,
+    validate_fee_reduction,
+)
+from app.modules.fees.models import FeeObligation as FeeObligationModel
+from app.modules.fees.models import FeeObligationLine as FeeObligationLineModel
+from app.modules.fees.models import FeeObligationPaymentEvidenceLink
+from app.modules.fees.obligation_contracts import (
+    FeeClientInstruction,
+    FeeClientInstructionStatus,
+    FeeDifferenceReviewState,
+    FeeDomain,
+    FeeEstimate,
+    FeeEstimateCandidate,
+    FeeEstimateContext,
+    FeeEstimateSource,
+    FeeEstimateStatus,
+    FeeObligation,
+    FeeObligationDraftStatus,
+    FeeObligationLine,
+    FeeObligationLineInput,
+    FeeObligationSource,
+    FeeObligationStatus,
+    FeeObligationStatuses,
+    FeeOfficialEvidenceStatus,
+    FeePayListStatus,
+    FeePaymentEvidenceLinkResult,
+    FeePaymentStatus,
+    FeeSourceStatus,
+    PreviewFeeEstimateCommand,
+    RecognizeFeeObligationCommand,
+    RecognizeFeeObligationResult,
+    RecordFeeObligationInstructionCommand,
+    RecordFeeObligationInstructionResult,
+    RecordFeePaymentEvidenceCommand,
+    RecordFeePaymentEvidenceResult,
+)
+
+__all__ = (
+    "AnnuityPayableAmountResult",
+    "FeeEstimatePreviewErrorCode",
+    "FeeEstimatePreviewError",
+    "OfficialFeeEstimateRateCandidate",
+    "OfficialFeeEstimateRateProvider",
+    "calculate_annuity_payable_amount",
+    "preview_estimate",
+    "recognize_obligation",
+    "record_client_instruction",
+    "record_payment_evidence",
+)
+
+_ACTIVITY_TYPE = "FEE_OBLIGATION_RECOGNIZED"
+_PAYLOAD_SCHEMA = "FPMS_FEE_OBLIGATION_RECOGNIZED_V1"
+_INSTRUCTION_ACTIVITY_TYPE = "FEE_CLIENT_INSTRUCTION_RECORDED"
+_INSTRUCTION_PAYLOAD_SCHEMA = "FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1"
+_MAX_AMOUNT = Decimal("9999999999999999.99")
+_TWO_PLACES = Decimal("0.01")
+
+
+@dataclass(frozen=True, slots=True)
+class AnnuityPayableAmountResult:
+    full_annual_fee: Decimal
+    eligible_ratio: Decimal
+    payable_amount: Decimal
+    late_fee_base: Decimal
+
+
+def calculate_annuity_payable_amount(
+    *,
+    full_annual_fee: Decimal,
+    eligible_ratio: Decimal,
+) -> AnnuityPayableAmountResult:
+    if (
+        type(full_annual_fee) is not Decimal
+        or not full_annual_fee.is_finite()
+        or full_annual_fee <= 0
+        or full_annual_fee > _MAX_AMOUNT
+    ):
+        raise ValueError("ANNUITY_FULL_ANNUAL_FEE_INVALID")
+    if (
+        type(eligible_ratio) is not Decimal
+        or not eligible_ratio.is_finite()
+        or not Decimal("0") < eligible_ratio <= Decimal("1")
+    ):
+        raise ValueError("ANNUITY_ELIGIBLE_RATIO_INVALID")
+
+    with localcontext() as context:
+        context.prec = max(
+            len(full_annual_fee.as_tuple().digits) + len(eligible_ratio.as_tuple().digits),
+            full_annual_fee.adjusted() + 3,
+            1,
+        )
+        payable_amount = (full_annual_fee * eligible_ratio).quantize(
+            _TWO_PLACES,
+            rounding=ROUND_HALF_UP,
+        )
+    return AnnuityPayableAmountResult(
+        full_annual_fee=full_annual_fee,
+        eligible_ratio=eligible_ratio,
+        payable_amount=payable_amount,
+        late_fee_base=full_annual_fee,
+    )
+
+
+class FeeEstimatePreviewErrorCode(str, Enum):
+    INVALID_COMMAND = "FEE_ESTIMATE_INVALID_COMMAND"
+    TRIGGER_UNSUPPORTED = "FEE_ESTIMATE_TRIGGER_UNSUPPORTED"
+    RATE_MISSING = "FEE_ESTIMATE_RATE_MISSING"
+    RATE_SOURCE_UNAPPROVED = "FEE_ESTIMATE_RATE_SOURCE_UNAPPROVED"
+    RATE_SOURCE_AMBIGUOUS = "FEE_ESTIMATE_RATE_SOURCE_AMBIGUOUS"
+    RATE_SOURCE_INVALID = "FEE_ESTIMATE_RATE_SOURCE_INVALID"
+    CANDIDATE_INVALID = "FEE_ESTIMATE_CANDIDATE_INVALID"
+
+
+class FeeEstimatePreviewError(ValueError):
+    def __init__(
+        self,
+        code: FeeEstimatePreviewErrorCode,
+        details: dict[str, str | int | bool | None],
+    ) -> None:
+        self.code = code
+        self._details = dict(details)
+        super().__init__(code.value)
+
+    @property
+    def details(self) -> dict[str, str | int | bool | None]:
+        return dict(self._details)
+
+
+@dataclass(frozen=True, slots=True)
+class OfficialFeeEstimateRateCandidate:
+    fee_code: str
+    fee_name: str
+    fee_year_key: int
+    official_full_amount: Decimal
+    source: FeeEstimateSource
+    reduction_input: FeeReductionInput
+    reduction_context: FeeReductionEvaluationContext
+    reduction_approval: FeeReductionApprovalContext | None
+
+
+class OfficialFeeEstimateRateProvider(Protocol):
+    def select_rate_candidates(
+        self,
+        *,
+        command: PreviewFeeEstimateCommand,
+        rate_effective_on: date,
+    ) -> tuple[OfficialFeeEstimateRateCandidate, ...]: ...
+
+
+def preview_estimate(
+    *,
+    command: PreviewFeeEstimateCommand,
+    rate_effective_on: date,
+    rate_provider: OfficialFeeEstimateRateProvider,
+) -> FeeEstimate:
+    _validate_preview_command(command, rate_effective_on)
+    selections = rate_provider.select_rate_candidates(
+        command=command,
+        rate_effective_on=rate_effective_on,
+    )
+    if type(selections) is not tuple:
+        _candidate_invalid(None, 0, "rate_provider_result")
+    if not selections:
+        raise FeeEstimatePreviewError(
+            FeeEstimatePreviewErrorCode.RATE_MISSING,
+            {
+                "fee_code": None,
+                "fee_year_key": 0,
+                "rate_effective_on": rate_effective_on.isoformat(),
+            },
+        )
+
+    identities: set[tuple[str, int]] = set()
+    candidates: list[FeeEstimateCandidate] = []
+    total = Decimal("0.00")
+    for selection in selections:
+        fee_code, fee_year_key = _candidate_identity_details(selection)
+        if type(selection) is not OfficialFeeEstimateRateCandidate:
+            _candidate_invalid(fee_code, fee_year_key, "candidate")
+        if not _preview_string(selection.fee_code):
+            _candidate_invalid(fee_code, fee_year_key, "fee_code")
+        if not _preview_string(selection.fee_name):
+            _candidate_invalid(fee_code, fee_year_key, "fee_name")
+        if type(selection.fee_year_key) is not int or selection.fee_year_key < 0:
+            _candidate_invalid(fee_code, fee_year_key, "fee_year_key")
+        if not _valid_preview_amount(selection.official_full_amount):
+            _candidate_invalid(fee_code, fee_year_key, "official_full_amount")
+
+        identity = (selection.fee_code, selection.fee_year_key)
+        if identity in identities:
+            raise FeeEstimatePreviewError(
+                FeeEstimatePreviewErrorCode.RATE_SOURCE_AMBIGUOUS,
+                {
+                    "fee_code": selection.fee_code,
+                    "fee_year_key": selection.fee_year_key,
+                    "rate_effective_on": rate_effective_on.isoformat(),
+                },
+            )
+        identities |= {identity}
+
+        _validate_preview_source(selection, command)
+        _validate_preview_reduction(selection, command, rate_effective_on)
+        reduction = validate_fee_reduction(
+            reduction_input=selection.reduction_input,
+            context=selection.reduction_context,
+            approval=selection.reduction_approval,
+        )
+        payable_amount = (selection.official_full_amount * reduction.payable_ratio).quantize(
+            _TWO_PLACES, rounding=ROUND_HALF_UP
+        )
+        candidates.append(
+            FeeEstimateCandidate(
+                line=FeeObligationLineInput(
+                    fee_code=selection.fee_code,
+                    fee_name=selection.fee_name,
+                    fee_year_key=selection.fee_year_key,
+                    official_full_amount=selection.official_full_amount,
+                    reduction_ratio=reduction.reduction_ratio,
+                    payable_amount=payable_amount,
+                    source_amount=None,
+                    source_date=rate_effective_on,
+                    difference_review_state=FeeDifferenceReviewState.SOURCE_PENDING,
+                ),
+                source=selection.source,
+            )
+        )
+        total += payable_amount
+
+    return FeeEstimate(
+        case_id=command.case_id,
+        estimate_status=FeeEstimateStatus.ESTIMATE,
+        trigger_context=command.trigger_context,
+        currency=command.currency,
+        candidates=tuple(candidates),
+        total_payable_amount=total.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP),
+    )
+
+
+def _validate_preview_command(
+    command: PreviewFeeEstimateCommand,
+    rate_effective_on: date,
+) -> None:
+    if type(command) is not PreviewFeeEstimateCommand:
+        _invalid_preview_command("command")
+    if not _preview_string(command.case_id):
+        _invalid_preview_command("case_id")
+    if type(command.trigger_context) is not FeeEstimateContext:
+        _invalid_preview_command("trigger_context")
+    if not _preview_string(command.trigger_context.trigger):
+        _invalid_preview_command("trigger")
+    source_document_id = command.trigger_context.source_document_id
+    if source_document_id is not None and not _preview_string(source_document_id):
+        _invalid_preview_command("source_document_id")
+    if (
+        type(command.currency) is not str
+        or re.fullmatch(r"[A-Z]{3}", command.currency, flags=re.ASCII) is None
+    ):
+        _invalid_preview_command("currency")
+    if type(rate_effective_on) is not date:
+        _invalid_preview_command("rate_effective_on")
+
+
+def _validate_preview_source(
+    selection: OfficialFeeEstimateRateCandidate,
+    command: PreviewFeeEstimateCommand,
+) -> None:
+    source = selection.source
+    if type(source) is not FeeEstimateSource:
+        _rate_source_invalid(selection, "source")
+    if source.status is not FeeSourceStatus.VERIFIED:
+        rate_id = source.rate_id if type(source.rate_id) is str else None
+        raise FeeEstimatePreviewError(
+            FeeEstimatePreviewErrorCode.RATE_SOURCE_UNAPPROVED,
+            {
+                "fee_code": selection.fee_code,
+                "fee_year_key": selection.fee_year_key,
+                "rate_id": rate_id,
+            },
+        )
+    for field in (
+        "rate_id",
+        "source_doc",
+        "source_url",
+        "source_policy",
+        "source_version",
+    ):
+        if not _preview_string(getattr(source, field)):
+            _rate_source_invalid(selection, field)
+    if source.source_document_id != command.trigger_context.source_document_id:
+        _rate_source_invalid(selection, "source_document_id")
+
+
+def _validate_preview_reduction(
+    selection: OfficialFeeEstimateRateCandidate,
+    command: PreviewFeeEstimateCommand,
+    rate_effective_on: date,
+) -> None:
+    if type(selection.reduction_input) is not FeeReductionInput:
+        _candidate_invalid(selection.fee_code, selection.fee_year_key, "reduction_input")
+    if type(selection.reduction_context) is not FeeReductionEvaluationContext:
+        _candidate_invalid(selection.fee_code, selection.fee_year_key, "reduction_context")
+    if selection.reduction_approval is not None and (
+        type(selection.reduction_approval) is not FeeReductionApprovalContext
+    ):
+        _candidate_invalid(selection.fee_code, selection.fee_year_key, "reduction_approval")
+
+    context = selection.reduction_context
+    expected = (
+        ("case_id", command.case_id, str),
+        ("fee_code", selection.fee_code, str),
+        ("fee_year_key", selection.fee_year_key, int),
+        ("as_of_date", rate_effective_on, date),
+    )
+    for field, expected_value, expected_type in expected:
+        value = getattr(context, field)
+        if type(value) is not expected_type or value != expected_value:
+            _candidate_invalid(
+                selection.fee_code,
+                selection.fee_year_key,
+                f"reduction_context.{field}",
+            )
+
+
+def _preview_string(value: object) -> bool:
+    return type(value) is str and bool(value) and value == value.strip()
+
+
+def _valid_preview_amount(value: object) -> bool:
+    if type(value) is not Decimal or not value.is_finite() or value < 0:
+        return False
+    try:
+        return value == value.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        return False
+
+
+def _candidate_identity_details(selection: object) -> tuple[str | None, int]:
+    if type(selection) is not OfficialFeeEstimateRateCandidate:
+        return None, 0
+    fee_code = selection.fee_code if type(selection.fee_code) is str else None
+    fee_year_key = (
+        selection.fee_year_key
+        if type(selection.fee_year_key) is int and type(selection.fee_year_key) is not bool
+        else 0
+    )
+    return fee_code, fee_year_key
+
+
+def _invalid_preview_command(field: str) -> None:
+    raise FeeEstimatePreviewError(
+        FeeEstimatePreviewErrorCode.INVALID_COMMAND,
+        {"field": field},
+    )
+
+
+def _candidate_invalid(fee_code: str | None, fee_year_key: int, field: str) -> None:
+    raise FeeEstimatePreviewError(
+        FeeEstimatePreviewErrorCode.CANDIDATE_INVALID,
+        {"fee_code": fee_code, "fee_year_key": fee_year_key, "field": field},
+    )
+
+
+def _rate_source_invalid(
+    selection: OfficialFeeEstimateRateCandidate,
+    field: str,
+) -> None:
+    raise FeeEstimatePreviewError(
+        FeeEstimatePreviewErrorCode.RATE_SOURCE_INVALID,
+        {
+            "fee_code": selection.fee_code,
+            "fee_year_key": selection.fee_year_key,
+            "field": field,
+        },
+    )
+
+
+def recognize_obligation(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+) -> RecognizeFeeObligationResult:
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _fail(
+            "FEE_OBLIGATION_TRANSACTION_DIRTY",
+            "调用方事务包含未刷新的变更",
+            status_code=409,
+        )
+    lines = _validate_command(command)
+
+    with transaction.no_autoflush:
+        case = _case_or_fail(transaction, command.case_id)
+        existing_activity = _activity_by_key(
+            transaction,
+            case_id=command.case_id,
+            idempotency_key=command.idempotency_key,
+        )
+        if existing_activity is not None:
+            return _replay_existing(command, transaction, case, existing_activity, lines)
+
+        source_activity = _source_activity_or_fail(command, transaction)
+        _validate_source_confirmation(command, source_activity)
+        _validate_document(command, transaction)
+        prior = _validate_supersede(command, transaction, lines)
+        _validate_current_identities(command, transaction, lines, prior=prior)
+
+    obligation_id = str(uuid4())
+    payload = _payload(command, lines, obligation_id)
+    _ensure_sqlite_outer_transaction(transaction)
+    try:
+        with transaction.begin_nested():
+            if prior is not None:
+                _release_prior(prior, lines=prior.lines, actor_id=command.actor_id)
+                transaction.flush()
+
+            activity_result = append_case_activity(
+                _activity_command(
+                    command,
+                    transaction,
+                    source_activity=source_activity,
+                    payload=payload,
+                    supersedes_event_id=None if prior is None else prior.activity_id,
+                ),
+                transaction,
+                previous_projection=_case_projection(case),
+                current_projection=_case_projection(case),
+                legacy_case_status=case.status,
+                conflict_codes=(),
+            )
+            header = _new_header(command, obligation_id)
+            transaction.add(header)
+            transaction.add_all(_new_line(command, line, obligation_id) for line in lines)
+            transaction.flush()
+    except BusinessError as exc:
+        if exc.code != "LIFECYCLE_IDEMPOTENCY_CONFLICT":
+            raise
+        return _recover_recognized_race(command, transaction, lines)
+    except IntegrityError as exc:
+        if not _recognized_unique_failure(exc):
+            raise
+        return _recover_recognized_race(command, transaction, lines)
+
+    return _result(
+        transaction,
+        header,
+        activity_id=activity_result.activity_id,
+        idempotency_key=command.idempotency_key,
+        reused=False,
+        superseded_obligation_id=(None if prior is None else prior.header.id),
+    )
+
+
+def record_client_instruction(
+    command: RecordFeeObligationInstructionCommand,
+    transaction: Session,
+) -> RecordFeeObligationInstructionResult:
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _fail(
+            "FEE_OBLIGATION_TRANSACTION_DIRTY",
+            "调用方事务包含未刷新的变更",
+            status_code=409,
+        )
+    if type(command) is not RecordFeeObligationInstructionCommand:
+        _instruction_command_invalid("command")
+    _required_string(
+        command.obligation_id,
+        36,
+        "obligation_id",
+        _instruction_command_invalid,
+    )
+    if type(command.instruction) is not FeeClientInstruction:
+        _instruction_command_invalid("instruction")
+    _required_string(command.actor_id, 36, "actor_id", _instruction_command_invalid)
+    _required_string(
+        command.idempotency_key,
+        128,
+        "idempotency_key",
+        _instruction_command_invalid,
+    )
+
+    with transaction.no_autoflush:
+        header = transaction.get(FeeObligationModel, command.obligation_id)
+        if header is None:
+            _fail("FEE_OBLIGATION_NOT_FOUND", "费用义务不存在", status_code=404)
+        case = _case_or_fail(transaction, header.case_id)
+        existing = _activity_by_key(
+            transaction,
+            case_id=header.case_id,
+            idempotency_key=command.idempotency_key,
+        )
+        if existing is not None:
+            return _instruction_replay_existing(
+                command,
+                transaction,
+                case,
+                header,
+                existing,
+            )
+        recognition = _instruction_recognition(transaction, header)
+        previous, current_activity = _instruction_stored_chain(
+            transaction,
+            header,
+            recognition,
+        )
+        _instruction_eligible(header)
+        if previous.value == command.instruction.value:
+            _instruction_same_state()
+
+    occurred_at = datetime.now(UTC).replace(tzinfo=None)
+    projection = _case_projection(case)
+    activity_command = LifecycleEventCommand(
+        case_id=header.case_id,
+        event_type=_INSTRUCTION_ACTIVITY_TYPE,
+        lane=ActivityLane.FEE,
+        effective_at=occurred_at,
+        occurred_at=occurred_at,
+        evidence_refs=(),
+        actor_id=command.actor_id,
+        reviewer_id=None,
+        idempotency_key=command.idempotency_key,
+        source_activity_id=recognition.id,
+        supersedes_event_id=(None if current_activity is None else current_activity.id),
+        payload={
+            "actor_id": command.actor_id,
+            "instruction": command.instruction.value,
+            "obligation_id": command.obligation_id,
+            "previous_instruction_status": previous.value,
+            "schema": _INSTRUCTION_PAYLOAD_SCHEMA,
+        },
+        confirmation_status=ConfirmationStatus.CONFIRMED,
+    )
+    _ensure_sqlite_outer_transaction(transaction)
+    try:
+        with transaction.begin_nested():
+            activity = append_case_activity(
+                activity_command,
+                transaction,
+                previous_projection=projection,
+                current_projection=projection,
+                legacy_case_status=case.status,
+                conflict_codes=(),
+            )
+            changed = transaction.execute(
+                update(FeeObligationModel)
+                .where(
+                    FeeObligationModel.id == header.id,
+                    FeeObligationModel.client_instruction_status == previous.value,
+                    FeeObligationModel.obligation_status == FeeObligationStatus.RECOGNIZED.value,
+                    FeeObligationModel.draft_status == FeeObligationDraftStatus.NOT_CREATED.value,
+                    FeeObligationModel.payment_status == FeePaymentStatus.UNPAID.value,
+                    FeeObligationModel.official_evidence_status
+                    != FeeOfficialEvidenceStatus.VERIFIED.value,
+                )
+                .values(
+                    client_instruction_status=command.instruction.value,
+                    updated_by=command.actor_id,
+                    updated_at=occurred_at,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if changed.rowcount != 1:
+                raise _InstructionCasMiss
+            transaction.flush()
+    except _InstructionCasMiss:
+        return _instruction_recover_cas(command, transaction)
+    except BusinessError as exc:
+        if exc.code != "LIFECYCLE_IDEMPOTENCY_CONFLICT":
+            raise
+        return _instruction_recover_activity_race(command, transaction)
+    except IntegrityError as exc:
+        if not _instruction_activity_unique_failure(exc):
+            raise
+        return _instruction_recover_activity_race(command, transaction)
+    transaction.expire(header)
+    return _instruction_result(
+        transaction,
+        header,
+        activity_id=activity.activity_id,
+        idempotency_key=command.idempotency_key,
+        reused=False,
+    )
+
+
+def record_payment_evidence(
+    command: RecordFeePaymentEvidenceCommand,
+    transaction: Session,
+) -> RecordFeePaymentEvidenceResult:
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _fail(
+            "FEE_OBLIGATION_TRANSACTION_DIRTY",
+            "调用方事务包含未刷新的变更",
+            status_code=409,
+        )
+    _validate_payment_evidence_command(command)
+
+    with transaction.no_autoflush:
+        header = transaction.get(FeeObligationModel, command.obligation_id)
+        if header is None:
+            _fail("FEE_OBLIGATION_NOT_FOUND", "费用义务不存在", status_code=404)
+        payment = transaction.get(GovPayment, command.gov_payment_id)
+        if payment is None:
+            _fail("FEE_PAYMENT_EVIDENCE_NOT_FOUND", "支付证据不存在", status_code=404)
+        lines_by_id = {
+            line.id: line
+            for line in transaction.scalars(
+                select(FeeObligationLineModel).where(
+                    FeeObligationLineModel.id.in_(command.obligation_line_ids)
+                )
+            )
+        }
+        lines = tuple(lines_by_id.get(line_id) for line_id in command.obligation_line_ids)
+        if any(line is None for line in lines):
+            _fail("FEE_OBLIGATION_LINE_NOT_FOUND", "费用义务分项不存在", status_code=404)
+        if any(line.obligation_id != header.id for line in lines if line is not None):
+            _fail(
+                "FEE_PAYMENT_EVIDENCE_OBLIGATION_MISMATCH",
+                "支付证据分项不属于指定费用义务",
+                status_code=409,
+            )
+        if payment.case_id != header.case_id or any(
+            line.case_id != header.case_id for line in lines if line is not None
+        ):
+            _fail(
+                "FEE_PAYMENT_EVIDENCE_CASE_MISMATCH",
+                "支付证据与费用义务不属于同一案件",
+                status_code=409,
+            )
+        existing_by_line_id = {
+            link.obligation_line_id: link
+            for link in transaction.scalars(
+                select(FeeObligationPaymentEvidenceLink).where(
+                    FeeObligationPaymentEvidenceLink.obligation_line_id.in_(
+                        command.obligation_line_ids
+                    ),
+                    FeeObligationPaymentEvidenceLink.gov_payment_id == command.gov_payment_id,
+                )
+            )
+        }
+
+    occurred_at = datetime.now(UTC).replace(tzinfo=None)
+    links: list[tuple[FeeObligationPaymentEvidenceLink, bool]] = []
+    for line_id in command.obligation_line_ids:
+        link = existing_by_line_id.get(line_id)
+        reused = link is not None
+        if link is None:
+            link = FeeObligationPaymentEvidenceLink(
+                obligation_line_id=line_id,
+                gov_payment_id=command.gov_payment_id,
+                created_by=command.actor_id,
+                updated_by=command.actor_id,
+            )
+            transaction.add(link)
+        links.append((link, reused))
+    header.payment_status = FeePaymentStatus.PAID.value
+    header.updated_by = command.actor_id
+    header.updated_at = occurred_at
+    transaction.flush()
+
+    obligation = _result(
+        transaction,
+        header,
+        activity_id="",
+        idempotency_key="",
+        reused=False,
+        superseded_obligation_id=header.supersedes_obligation_id,
+    ).obligation
+    return RecordFeePaymentEvidenceResult(
+        obligation=obligation,
+        links=tuple(
+            FeePaymentEvidenceLinkResult(
+                id=link.id,
+                obligation_line_id=link.obligation_line_id,
+                gov_payment_id=link.gov_payment_id,
+                reused=reused,
+            )
+            for link, reused in links
+        ),
+    )
+
+
+def _validate_payment_evidence_command(command: RecordFeePaymentEvidenceCommand) -> None:
+    if type(command) is not RecordFeePaymentEvidenceCommand:
+        _payment_evidence_command_invalid("command")
+    _required_string(
+        command.obligation_id,
+        36,
+        "obligation_id",
+        _payment_evidence_command_invalid,
+    )
+    if (
+        type(command.obligation_line_ids) is not tuple
+        or not command.obligation_line_ids
+        or len(set(command.obligation_line_ids)) != len(command.obligation_line_ids)
+    ):
+        _payment_evidence_command_invalid("obligation_line_ids")
+    for index, line_id in enumerate(command.obligation_line_ids):
+        _required_string(
+            line_id,
+            36,
+            f"obligation_line_ids[{index}]",
+            _payment_evidence_command_invalid,
+        )
+    if (
+        type(command.gov_payment_id) is not int
+        or type(command.gov_payment_id) is bool
+        or command.gov_payment_id <= 0
+    ):
+        _payment_evidence_command_invalid("gov_payment_id")
+    _required_string(command.actor_id, 36, "actor_id", _payment_evidence_command_invalid)
+
+
+def _payment_evidence_command_invalid(field: str) -> None:
+    _fail(
+        "FEE_PAYMENT_EVIDENCE_COMMAND_INVALID",
+        "支付证据命令无效",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _instruction_recognition(
+    transaction: Session,
+    header: FeeObligationModel,
+) -> CaseActivityEvent:
+    rows = tuple(
+        transaction.scalars(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == header.case_id,
+                CaseActivityEvent.lane == ActivityLane.FEE.value,
+                CaseActivityEvent.activity_type == _ACTIVITY_TYPE,
+            )
+        )
+    )
+    matches: list[CaseActivityEvent] = []
+    for activity in rows:
+        try:
+            payload = _strict_json_loads(activity.payload_json)
+        except (TypeError, ValueError):
+            _instruction_recognition_invalid()
+        if type(payload) is not dict or payload.get("schema") != _PAYLOAD_SCHEMA:
+            _instruction_recognition_invalid()
+        if payload.get("obligation_id") == header.id:
+            matches.append(activity)
+    if len(matches) != 1 or matches[0].id != header.source_activity_id:
+        _instruction_recognition_invalid()
+    return matches[0]
+
+
+def _instruction_stored_chain(
+    transaction: Session,
+    header: FeeObligationModel,
+    recognition: CaseActivityEvent,
+) -> tuple[FeeClientInstructionStatus, CaseActivityEvent | None]:
+    try:
+        current = FeeClientInstructionStatus(header.client_instruction_status)
+    except ValueError:
+        _instruction_stored_state_invalid()
+    rows = tuple(
+        transaction.scalars(
+            select(CaseActivityEvent)
+            .where(
+                CaseActivityEvent.case_id == header.case_id,
+                CaseActivityEvent.lane == ActivityLane.FEE.value,
+                CaseActivityEvent.activity_type == _INSTRUCTION_ACTIVITY_TYPE,
+            )
+            .order_by(CaseActivityEvent.sequence)
+        )
+    )
+    chain: list[tuple[CaseActivityEvent, dict[str, object]]] = []
+    for activity in rows:
+        payload = _instruction_payload_or_fail(activity)
+        if payload["obligation_id"] == header.id:
+            _instruction_activity_shape_or_fail(
+                transaction,
+                activity,
+                payload,
+                recognition_id=recognition.id,
+            )
+            chain.append((activity, payload))
+    previous_activity: CaseActivityEvent | None = None
+    previous_instruction = FeeClientInstructionStatus.PENDING
+    for activity, payload in chain:
+        if (
+            payload["previous_instruction_status"] != previous_instruction.value
+            or activity.supersedes_event_id
+            != (None if previous_activity is None else previous_activity.id)
+            or payload["instruction"] == previous_instruction.value
+        ):
+            _instruction_stored_state_invalid()
+        previous_activity = activity
+        previous_instruction = FeeClientInstructionStatus(cast(str, payload["instruction"]))
+    if current is FeeClientInstructionStatus.PENDING:
+        if chain:
+            _instruction_stored_state_invalid()
+        return current, None
+    if not chain or previous_instruction is not current:
+        _instruction_stored_state_invalid()
+    return current, previous_activity
+
+
+def _instruction_payload_or_fail(activity: CaseActivityEvent) -> dict[str, object]:
+    try:
+        payload = _strict_json_loads(activity.payload_json)
+    except (TypeError, ValueError):
+        _instruction_stored_state_invalid()
+    if (
+        type(payload) is not dict
+        or set(payload)
+        != {
+            "actor_id",
+            "instruction",
+            "obligation_id",
+            "previous_instruction_status",
+            "schema",
+        }
+        or payload.get("schema") != _INSTRUCTION_PAYLOAD_SCHEMA
+        or payload.get("instruction") not in {item.value for item in FeeClientInstruction}
+        or payload.get("previous_instruction_status")
+        not in {item.value for item in FeeClientInstructionStatus}
+        or type(payload.get("actor_id")) is not str
+        or type(payload.get("obligation_id")) is not str
+        or activity.payload_json
+        != json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    ):
+        _instruction_stored_state_invalid()
+    return payload
+
+
+def _instruction_activity_shape_or_fail(
+    transaction: Session,
+    activity: CaseActivityEvent,
+    payload: dict[str, object],
+    *,
+    recognition_id: str,
+) -> None:
+    evidence_count = transaction.scalar(
+        select(func.count())
+        .select_from(CaseActivityEventEvidence)
+        .where(CaseActivityEventEvidence.activity_id == activity.id)
+    )
+    if (
+        activity.source_activity_id != recognition_id
+        or activity.actor_id != payload["actor_id"]
+        or activity.reviewer_id is not None
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or evidence_count != 0
+    ):
+        _instruction_stored_state_invalid()
+
+
+def _instruction_replay_existing(
+    command: RecordFeeObligationInstructionCommand,
+    transaction: Session,
+    case: Case,
+    header: FeeObligationModel,
+    activity: CaseActivityEvent,
+) -> RecordFeeObligationInstructionResult:
+    _instruction_replay_recognition_source(transaction, header)
+    payload = _instruction_payload_or_idempotency_conflict(activity)
+    if (
+        payload.get("obligation_id") != command.obligation_id
+        or payload.get("instruction") != command.instruction.value
+        or payload.get("actor_id") != command.actor_id
+    ):
+        _instruction_idempotency_conflict()
+    _instruction_replay_activity_shape(
+        transaction,
+        activity,
+        header,
+        payload,
+    )
+    previous = cast(str, payload["previous_instruction_status"])
+    if previous == FeeClientInstructionStatus.PENDING.value:
+        if (
+            activity.supersedes_event_id is not None
+            or _instruction_latest_prior_fact(
+                transaction,
+                activity,
+                obligation_id=command.obligation_id,
+            )
+            is not None
+        ):
+            _instruction_idempotency_conflict()
+    else:
+        _instruction_replay_prior_fact(
+            transaction,
+            activity,
+            header,
+            expected_instruction=previous,
+        )
+    try:
+        projection = _activity_projection(activity)
+    except BusinessError:
+        _instruction_idempotency_conflict()
+    replay_command = LifecycleEventCommand(
+        case_id=header.case_id,
+        event_type=_INSTRUCTION_ACTIVITY_TYPE,
+        lane=ActivityLane.FEE,
+        effective_at=activity.effective_at,
+        occurred_at=activity.occurred_at,
+        evidence_refs=(),
+        actor_id=command.actor_id,
+        reviewer_id=None,
+        idempotency_key=command.idempotency_key,
+        source_activity_id=activity.source_activity_id,
+        supersedes_event_id=activity.supersedes_event_id,
+        payload=payload,
+        confirmation_status=ConfirmationStatus.CONFIRMED,
+    )
+    try:
+        replay = append_case_activity(
+            replay_command,
+            transaction,
+            previous_projection=projection,
+            current_projection=projection,
+            legacy_case_status=case.status,
+            conflict_codes=(),
+        )
+    except BusinessError as exc:
+        if exc.code == "LIFECYCLE_IDEMPOTENCY_CONFLICT":
+            _instruction_idempotency_conflict()
+        raise
+    if not replay.reused or replay.activity_id != activity.id:
+        _instruction_stored_state_invalid()
+    return _instruction_result(
+        transaction,
+        header,
+        activity_id=activity.id,
+        idempotency_key=command.idempotency_key,
+        reused=True,
+    )
+
+
+def _instruction_replay_activity_shape(
+    transaction: Session,
+    activity: CaseActivityEvent,
+    header: FeeObligationModel,
+    payload: dict[str, object],
+) -> None:
+    evidence_count = transaction.scalar(
+        select(func.count())
+        .select_from(CaseActivityEventEvidence)
+        .where(CaseActivityEventEvidence.activity_id == activity.id)
+    )
+    if (
+        activity.case_id != header.case_id
+        or activity.activity_type != _INSTRUCTION_ACTIVITY_TYPE
+        or activity.lane != ActivityLane.FEE.value
+        or activity.source_activity_id != header.source_activity_id
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or activity.actor_id != payload.get("actor_id")
+        or activity.reviewer_id is not None
+        or activity.occurred_at is None
+        or activity.effective_at != activity.occurred_at
+        or activity.old_business_stage != activity.new_business_stage
+        or activity.old_official_procedure_stage != activity.new_official_procedure_stage
+        or activity.old_legal_status != activity.new_legal_status
+        or evidence_count != 0
+    ):
+        _instruction_idempotency_conflict()
+
+
+def _instruction_replay_prior_fact(
+    transaction: Session,
+    activity: CaseActivityEvent,
+    header: FeeObligationModel,
+    *,
+    expected_instruction: str,
+) -> None:
+    prior = transaction.get(CaseActivityEvent, activity.supersedes_event_id)
+    if prior is None:
+        _instruction_idempotency_conflict()
+    prior_payload = _instruction_payload_or_idempotency_conflict(prior)
+    if (
+        prior_payload.get("obligation_id") != header.id
+        or prior_payload.get("instruction") != expected_instruction
+        or prior.sequence >= activity.sequence
+    ):
+        _instruction_idempotency_conflict()
+    latest = _instruction_latest_prior_fact(
+        transaction,
+        activity,
+        obligation_id=header.id,
+    )
+    if latest is None or latest.id != prior.id:
+        _instruction_idempotency_conflict()
+    _instruction_replay_activity_shape(
+        transaction,
+        prior,
+        header,
+        prior_payload,
+    )
+    prior_previous = cast(str, prior_payload["previous_instruction_status"])
+    if prior_previous == FeeClientInstructionStatus.PENDING.value:
+        if (
+            prior.supersedes_event_id is not None
+            or _instruction_latest_prior_fact(
+                transaction,
+                prior,
+                obligation_id=header.id,
+            )
+            is not None
+        ):
+            _instruction_idempotency_conflict()
+        return
+    _instruction_replay_prior_fact(
+        transaction,
+        prior,
+        header,
+        expected_instruction=prior_previous,
+    )
+
+
+def _instruction_latest_prior_fact(
+    transaction: Session,
+    activity: CaseActivityEvent,
+    *,
+    obligation_id: str,
+) -> CaseActivityEvent | None:
+    candidates = transaction.scalars(
+        select(CaseActivityEvent)
+        .where(
+            CaseActivityEvent.case_id == activity.case_id,
+            CaseActivityEvent.sequence < activity.sequence,
+        )
+        .order_by(CaseActivityEvent.sequence.desc())
+    )
+    for candidate in candidates:
+        try:
+            payload = _strict_json_loads(candidate.payload_json)
+        except (TypeError, ValueError):
+            if candidate.activity_type == _INSTRUCTION_ACTIVITY_TYPE:
+                _instruction_idempotency_conflict()
+            continue
+        if (
+            type(payload) is dict
+            and payload.get("schema") == _INSTRUCTION_PAYLOAD_SCHEMA
+            and payload.get("obligation_id") == obligation_id
+        ):
+            return candidate
+    return None
+
+
+def _instruction_replay_recognition_source(
+    transaction: Session,
+    header: FeeObligationModel,
+) -> None:
+    recognition = transaction.get(CaseActivityEvent, header.source_activity_id)
+    if recognition is None:
+        _instruction_idempotency_conflict()
+    try:
+        payload = _strict_json_loads(recognition.payload_json)
+    except (TypeError, ValueError):
+        _instruction_idempotency_conflict()
+    if (
+        recognition.case_id != header.case_id
+        or recognition.lane != ActivityLane.FEE.value
+        or recognition.activity_type != _ACTIVITY_TYPE
+        or type(payload) is not dict
+        or payload.get("schema") != _PAYLOAD_SCHEMA
+        or payload.get("obligation_id") != header.id
+    ):
+        _instruction_idempotency_conflict()
+
+
+def _instruction_payload_or_idempotency_conflict(
+    activity: CaseActivityEvent,
+) -> dict[str, object]:
+    try:
+        payload = _strict_json_loads(activity.payload_json)
+    except (TypeError, ValueError):
+        _instruction_idempotency_conflict()
+    if (
+        type(payload) is not dict
+        or set(payload)
+        != {
+            "actor_id",
+            "instruction",
+            "obligation_id",
+            "previous_instruction_status",
+            "schema",
+        }
+        or payload.get("schema") != _INSTRUCTION_PAYLOAD_SCHEMA
+        or payload.get("instruction") not in {item.value for item in FeeClientInstruction}
+        or payload.get("previous_instruction_status")
+        not in {item.value for item in FeeClientInstructionStatus}
+        or activity.payload_json
+        != json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    ):
+        _instruction_idempotency_conflict()
+    return payload
+
+
+def _instruction_eligible(header: FeeObligationModel) -> None:
+    values = (
+        header.obligation_status,
+        header.draft_status,
+        header.payment_status,
+        header.official_evidence_status,
+    )
+    try:
+        obligation_status = FeeObligationStatus(values[0])
+        draft_status = FeeObligationDraftStatus(values[1])
+        payment_status = FeePaymentStatus(values[2])
+        official_status = FeeOfficialEvidenceStatus(values[3])
+    except ValueError:
+        _instruction_stored_state_invalid()
+    if (
+        obligation_status is not FeeObligationStatus.RECOGNIZED
+        or draft_status is not FeeObligationDraftStatus.NOT_CREATED
+        or payment_status is not FeePaymentStatus.UNPAID
+        or official_status is FeeOfficialEvidenceStatus.VERIFIED
+    ):
+        _fail(
+            "FEE_CLIENT_INSTRUCTION_LOCKED",
+            "当前费用义务已锁定，不能修改客户指示",
+            details={
+                "obligation_id": header.id,
+                "obligation_status": header.obligation_status,
+                "draft_status": header.draft_status,
+                "payment_status": header.payment_status,
+                "official_evidence_status": header.official_evidence_status,
+            },
+            status_code=409,
+        )
+
+
+def _instruction_result(
+    transaction: Session,
+    header: FeeObligationModel,
+    *,
+    activity_id: str,
+    idempotency_key: str,
+    reused: bool,
+) -> RecordFeeObligationInstructionResult:
+    try:
+        obligation = _result(
+            transaction,
+            header,
+            activity_id=activity_id,
+            idempotency_key=idempotency_key,
+            reused=reused,
+            superseded_obligation_id=header.supersedes_obligation_id,
+        ).obligation
+    except BusinessError as exc:
+        if exc.code == "FEE_OBLIGATION_STORED_STATE_INVALID":
+            _instruction_stored_state_invalid()
+        raise
+    return RecordFeeObligationInstructionResult(
+        obligation=obligation,
+        activity_id=activity_id,
+        idempotency_key=idempotency_key,
+        reused=reused,
+    )
+
+
+def _instruction_command_invalid(field: str) -> None:
+    _fail(
+        "FEE_CLIENT_INSTRUCTION_COMMAND_INVALID",
+        "客户费用指示命令无效",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _instruction_recognition_invalid() -> None:
+    _fail(
+        "FEE_CLIENT_INSTRUCTION_RECOGNITION_INVALID",
+        "费用义务识别活动无效",
+        status_code=409,
+    )
+
+
+def _instruction_stored_state_invalid() -> None:
+    _fail(
+        "FEE_CLIENT_INSTRUCTION_STORED_STATE_INVALID",
+        "客户费用指示存量状态无效",
+        status_code=409,
+    )
+
+
+def _instruction_same_state() -> None:
+    _fail(
+        "FEE_CLIENT_INSTRUCTION_SAME_STATE",
+        "客户费用指示已处于目标状态",
+        status_code=409,
+    )
+
+
+def _instruction_idempotency_conflict() -> None:
+    _fail(
+        "FEE_CLIENT_INSTRUCTION_IDEMPOTENCY_CONFLICT",
+        "幂等键已用于不同的客户费用指示事实",
+        status_code=409,
+    )
+
+
+class _InstructionCasMiss(Exception):
+    pass
+
+
+def _instruction_activity_unique_failure(exc: IntegrityError) -> bool:
+    message = str(exc.orig).lower()
+    return (
+        "t_case_activity_event.case_id, t_case_activity_event.idempotency_key" in message
+        or "uq_t_case_activity_event_case_idempotency_key" in message
+    )
+
+
+def _instruction_recover_activity_race(
+    command: RecordFeeObligationInstructionCommand,
+    transaction: Session,
+) -> RecordFeeObligationInstructionResult:
+    with transaction.no_autoflush:
+        header = transaction.get(FeeObligationModel, command.obligation_id)
+        if header is None:
+            _fail("FEE_OBLIGATION_NOT_FOUND", "费用义务不存在", status_code=404)
+        case = _case_or_fail(transaction, header.case_id)
+        activity = _activity_by_key(
+            transaction,
+            case_id=header.case_id,
+            idempotency_key=command.idempotency_key,
+        )
+        if activity is not None:
+            return _instruction_replay_existing(
+                command,
+                transaction,
+                case,
+                header,
+                activity,
+            )
+    _instruction_concurrency_conflict()
+
+
+def _instruction_recover_cas(
+    command: RecordFeeObligationInstructionCommand,
+    transaction: Session,
+) -> RecordFeeObligationInstructionResult:
+    transaction.expire_all()
+    header = transaction.get(FeeObligationModel, command.obligation_id)
+    if header is None:
+        _instruction_concurrency_conflict()
+    _instruction_eligible(header)
+    try:
+        current = FeeClientInstructionStatus(header.client_instruction_status)
+    except ValueError:
+        _instruction_stored_state_invalid()
+    if current.value == command.instruction.value:
+        _instruction_same_state()
+    _instruction_concurrency_conflict()
+
+
+def _instruction_concurrency_conflict() -> None:
+    _fail(
+        "FEE_CLIENT_INSTRUCTION_CONCURRENCY_CONFLICT",
+        "并发客户费用指示尚不可见，请重试完整事务",
+        status_code=409,
+    )
+
+
+class _Prior:
+    def __init__(
+        self,
+        header: FeeObligationModel,
+        lines: tuple[FeeObligationLineModel, ...],
+        activity_id: str,
+    ) -> None:
+        self.header = header
+        self.lines = lines
+        self.activity_id = activity_id
+
+
+def _ensure_sqlite_outer_transaction(transaction: Session) -> None:
+    connection = transaction.connection()
+    if connection.dialect.name != "sqlite":
+        return
+    driver_connection = connection.connection.driver_connection
+    if not driver_connection.in_transaction:
+        connection.exec_driver_sql("BEGIN")
+
+
+def _validate_command(
+    command: RecognizeFeeObligationCommand,
+) -> tuple[FeeObligationLineInput, ...]:
+    if type(command) is not RecognizeFeeObligationCommand:
+        _invalid_command("command")
+    _required_string(command.case_id, 36, "case_id", _invalid_command)
+    _required_string(
+        command.source_activity_id,
+        36,
+        "source_activity_id",
+        _invalid_command,
+    )
+    _optional_string(
+        command.source_document_id,
+        36,
+        "source_document_id",
+        _invalid_command,
+    )
+    _required_string(command.actor_id, 36, "actor_id", _invalid_command)
+    _required_string(
+        command.obligation_type,
+        64,
+        "obligation_type",
+        _invalid_command,
+    )
+    _required_string(
+        command.idempotency_key,
+        128,
+        "idempotency_key",
+        _invalid_command,
+    )
+    if type(command.fee_domain) is not FeeDomain:
+        _invalid_command("fee_domain")
+    if type(command.source_status) is not FeeSourceStatus:
+        _invalid_command("source_status")
+    if not _valid_date(command.due_date, optional=True):
+        _invalid_line_field("due_date")
+    if (
+        type(command.currency) is not str
+        or re.fullmatch(r"[A-Z]{3}", command.currency, flags=re.ASCII) is None
+    ):
+        _fail(
+            "FEE_OBLIGATION_CURRENCY_INVALID",
+            "币种代码无效",
+            details={"field": "currency"},
+            status_code=400,
+        )
+    if type(command.lines) is not tuple or not command.lines:
+        _invalid_command("lines")
+
+    validated: list[FeeObligationLineInput] = []
+    identities: set[tuple[str, int]] = set()
+    for index, line in enumerate(command.lines):
+        if type(line) is not FeeObligationLineInput:
+            _invalid_line(index, "line")
+        _required_string(
+            line.fee_code,
+            64,
+            f"lines[{index}].fee_code",
+            _invalid_line_field,
+        )
+        _required_string(
+            line.fee_name,
+            256,
+            f"lines[{index}].fee_name",
+            _invalid_line_field,
+        )
+        if type(line.fee_year_key) is not int or not 0 <= line.fee_year_key <= 2147483647:
+            _invalid_line(index, "fee_year_key")
+        if not _valid_amount(line.official_full_amount, optional=True):
+            _invalid_line(index, "official_full_amount")
+        if not _valid_ratio(line.reduction_ratio):
+            _invalid_line(index, "reduction_ratio")
+        if not _valid_amount(line.payable_amount, optional=False):
+            _invalid_line(index, "payable_amount")
+        if not _valid_amount(line.source_amount, optional=True):
+            _invalid_line(index, "source_amount")
+        if not _valid_date(line.source_date, optional=True):
+            _invalid_line(index, "source_date")
+        if type(line.difference_review_state) is not FeeDifferenceReviewState:
+            _invalid_line(index, "difference_review_state")
+        identity = (line.fee_code, line.fee_year_key)
+        if identity in identities:
+            _fail(
+                "FEE_OBLIGATION_LINE_DUPLICATE",
+                "费用明细身份重复",
+                details={"field": f"lines[{index}]"},
+                status_code=400,
+            )
+        identities.add(identity)
+        validated.append(line)
+
+    has_supersedes = command.supersedes_obligation_id is not None
+    has_reason = command.supersede_reason is not None
+    if has_supersedes != has_reason:
+        _supersede_pair_invalid()
+    if has_supersedes:
+        if (
+            type(command.supersedes_obligation_id) is not str
+            or not command.supersedes_obligation_id.strip()
+            or len(command.supersedes_obligation_id) > 36
+            or type(command.supersede_reason) is not str
+            or not command.supersede_reason.strip()
+        ):
+            _supersede_pair_invalid()
+    if command.fee_domain is FeeDomain.GOV and command.source_document_id is None:
+        _fail(
+            "FEE_OBLIGATION_GOV_SOURCE_DOCUMENT_REQUIRED",
+            "官费义务必须引用来源文件",
+            status_code=409,
+        )
+    return tuple(sorted(validated, key=lambda item: (item.fee_code, item.fee_year_key)))
+
+
+def _valid_amount(value: object, *, optional: bool) -> bool:
+    if value is None:
+        return optional
+    return (
+        type(value) is Decimal
+        and value.is_finite()
+        and Decimal(0) <= value <= _MAX_AMOUNT
+        and _fractional_digits(value) <= 2
+    )
+
+
+def _valid_ratio(value: object) -> bool:
+    return (
+        type(value) is Decimal
+        and value.is_finite()
+        and Decimal(0) <= value <= Decimal(1)
+        and _fractional_digits(value) <= 4
+    )
+
+
+def _fractional_digits(value: Decimal) -> int:
+    return max(-value.as_tuple().exponent, 0)
+
+
+def _valid_date(value: object, *, optional: bool) -> bool:
+    return (value is None and optional) or (type(value) is date)
+
+
+def _case_or_fail(transaction: Session, case_id: str) -> Case:
+    case = transaction.execute(select(Case).where(Case.id == case_id)).scalar_one_or_none()
+    if case is None:
+        _fail("CASE_NOT_FOUND", "案件不存在", status_code=404)
+    return case
+
+
+def _activity_by_key(
+    transaction: Session,
+    *,
+    case_id: str,
+    idempotency_key: str,
+) -> CaseActivityEvent | None:
+    return transaction.execute(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == case_id,
+            CaseActivityEvent.idempotency_key == idempotency_key,
+        )
+    ).scalar_one_or_none()
+
+
+def _source_activity_or_fail(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+) -> CaseActivityEvent:
+    source = transaction.execute(
+        select(CaseActivityEvent).where(CaseActivityEvent.id == command.source_activity_id)
+    ).scalar_one_or_none()
+    if source is None:
+        _fail(
+            "FEE_OBLIGATION_SOURCE_ACTIVITY_NOT_FOUND",
+            "费用义务来源活动不存在",
+            status_code=409,
+        )
+    if source.case_id != command.case_id:
+        _fail(
+            "FEE_OBLIGATION_SOURCE_ACTIVITY_CASE_MISMATCH",
+            "费用义务来源活动不属于当前案件",
+            status_code=409,
+        )
+    return source
+
+
+def _validate_source_confirmation(
+    command: RecognizeFeeObligationCommand,
+    source: CaseActivityEvent,
+) -> None:
+    expected = (
+        ConfirmationStatus.LEGACY_UNVERIFIED.value
+        if command.source_status is FeeSourceStatus.LEGACY_UNVERIFIED
+        else ConfirmationStatus.CONFIRMED.value
+    )
+    if source.confirmation_status != expected:
+        _fail(
+            "FEE_OBLIGATION_SOURCE_NOT_CONFIRMED",
+            "费用义务来源活动未达到所需确认状态",
+            status_code=409,
+        )
+
+
+def _validate_document(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+) -> None:
+    if command.source_document_id is None:
+        return
+    document = transaction.execute(
+        select(Document).where(Document.id == command.source_document_id)
+    ).scalar_one_or_none()
+    if document is None:
+        _fail(
+            "FEE_OBLIGATION_SOURCE_DOCUMENT_NOT_FOUND",
+            "费用义务来源文件不存在",
+            status_code=409,
+        )
+    if document.case_id != command.case_id:
+        _fail(
+            "FEE_OBLIGATION_SOURCE_DOCUMENT_CASE_MISMATCH",
+            "费用义务来源文件不属于当前案件",
+            status_code=409,
+        )
+
+
+def _validate_supersede(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+    lines: tuple[FeeObligationLineInput, ...],
+) -> _Prior | None:
+    del lines
+    prior_id = command.supersedes_obligation_id
+    if prior_id is None:
+        return None
+    header = transaction.execute(
+        select(FeeObligationModel).where(FeeObligationModel.id == prior_id)
+    ).scalar_one_or_none()
+    if header is None:
+        _fail(
+            "FEE_OBLIGATION_SUPERSEDED_NOT_FOUND",
+            "被替代费用义务不存在",
+            status_code=409,
+        )
+    if header.case_id != command.case_id:
+        _fail(
+            "FEE_OBLIGATION_SUPERSEDED_CASE_MISMATCH",
+            "被替代费用义务不属于当前案件",
+            status_code=409,
+        )
+    prior_lines = tuple(
+        transaction.execute(
+            select(FeeObligationLineModel)
+            .where(FeeObligationLineModel.obligation_id == header.id)
+            .order_by(FeeObligationLineModel.fee_code, FeeObligationLineModel.fee_year_key)
+        ).scalars()
+    )
+    child = (
+        transaction.execute(
+            select(FeeObligationModel.id).where(
+                FeeObligationModel.supersedes_obligation_id == header.id
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if (
+        header.obligation_status != FeeObligationStatus.RECOGNIZED.value
+        or not prior_lines
+        or child is not None
+        or any(
+            line.current_identity_key
+            != _identity_key(
+                line.case_id,
+                line.source_activity_id,
+                line.fee_code,
+                line.fee_year_key,
+            )
+            for line in prior_lines
+        )
+    ):
+        _fail(
+            "FEE_OBLIGATION_SUPERSEDED_NOT_CURRENT",
+            "被替代费用义务不是当前有效义务",
+            status_code=409,
+        )
+    if (
+        header.fee_domain != command.fee_domain.value
+        or header.obligation_type != command.obligation_type
+        or header.currency != command.currency
+        or header.source_activity_id == command.source_activity_id
+    ):
+        _fail(
+            "FEE_OBLIGATION_SUPERSEDE_SCOPE_MISMATCH",
+            "费用义务更正范围不匹配",
+            status_code=409,
+        )
+    activities = _activities_naming_header(transaction, command.case_id, header.id)
+    if len(activities) != 1:
+        _fail(
+            "FEE_OBLIGATION_PRIOR_ACTIVITY_INVALID",
+            "被替代费用义务的识别活动无效",
+            status_code=409,
+        )
+    return _Prior(header, prior_lines, activities[0].id)
+
+
+def _activities_naming_header(
+    transaction: Session,
+    case_id: str,
+    obligation_id: str,
+) -> tuple[CaseActivityEvent, ...]:
+    activities = transaction.execute(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == case_id,
+            CaseActivityEvent.lane == ActivityLane.FEE.value,
+            CaseActivityEvent.activity_type == _ACTIVITY_TYPE,
+        )
+    ).scalars()
+    matches: list[CaseActivityEvent] = []
+    for activity in activities:
+        try:
+            payload = _strict_json_loads(activity.payload_json)
+        except (TypeError, ValueError):
+            _stored_state_invalid()
+        if (
+            type(payload) is dict
+            and payload.get("schema") == _PAYLOAD_SCHEMA
+            and payload.get("obligation_id") == obligation_id
+        ):
+            matches.append(activity)
+    return tuple(matches)
+
+
+def _validate_current_identities(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+    lines: tuple[FeeObligationLineInput, ...],
+    *,
+    prior: _Prior | None,
+) -> None:
+    owners = _identity_owners(command, transaction, lines)
+    if not owners:
+        return
+    if prior is not None:
+        if any(owner != prior.header.id for owner in owners.values()):
+            _identity_conflict()
+        return
+    if len(owners) == len(lines) and len(set(owners.values())) == 1:
+        _identity_conflict()
+    _mixed_identity_conflict()
+
+
+def _identity_owners(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+    lines: tuple[FeeObligationLineInput, ...],
+) -> dict[str, str]:
+    keys = tuple(
+        _identity_key(
+            command.case_id,
+            command.source_activity_id,
+            line.fee_code,
+            line.fee_year_key,
+        )
+        for line in lines
+    )
+    return dict(
+        transaction.execute(
+            select(
+                FeeObligationLineModel.current_identity_key,
+                FeeObligationLineModel.obligation_id,
+            ).where(FeeObligationLineModel.current_identity_key.in_(keys))
+        ).all()
+    )
+
+
+def _release_prior(
+    prior: _Prior,
+    *,
+    lines: tuple[FeeObligationLineModel, ...],
+    actor_id: str,
+) -> None:
+    now = datetime.now()
+    prior.header.obligation_status = FeeObligationStatus.SUPERSEDED.value
+    prior.header.updated_by = actor_id
+    prior.header.updated_at = now
+    for line in lines:
+        line.current_identity_key = None
+        line.updated_by = actor_id
+        line.updated_at = now
+
+
+def _activity_command(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+    *,
+    source_activity: CaseActivityEvent,
+    payload: dict[str, object],
+    supersedes_event_id: str | None,
+) -> LifecycleEventCommand:
+    return LifecycleEventCommand(
+        case_id=command.case_id,
+        event_type=_ACTIVITY_TYPE,
+        lane=ActivityLane.FEE,
+        effective_at=source_activity.effective_at,
+        occurred_at=source_activity.occurred_at,
+        evidence_refs=_source_evidence(transaction, source_activity.id),
+        actor_id=command.actor_id,
+        reviewer_id=source_activity.reviewer_id,
+        idempotency_key=command.idempotency_key,
+        source_activity_id=command.source_activity_id,
+        supersedes_event_id=supersedes_event_id,
+        payload=payload,
+        confirmation_status=_fee_confirmation(command.source_status),
+    )
+
+
+def _source_evidence(
+    transaction: Session,
+    source_activity_id: str,
+) -> tuple[EvidenceReference, ...]:
+    rows = transaction.execute(
+        select(CaseActivityEventEvidence)
+        .where(CaseActivityEventEvidence.activity_id == source_activity_id)
+        .order_by(
+            CaseActivityEventEvidence.case_id,
+            CaseActivityEventEvidence.evidence_kind,
+            CaseActivityEventEvidence.object_type,
+            CaseActivityEventEvidence.object_id,
+            CaseActivityEventEvidence.content_hash,
+            CaseActivityEventEvidence.captured_at,
+        )
+    ).scalars()
+    return tuple(
+        EvidenceReference(
+            case_id=row.case_id,
+            evidence_kind=row.evidence_kind,
+            object_type=row.object_type,
+            object_id=row.object_id,
+            content_hash=row.content_hash,
+            captured_at=row.captured_at,
+        )
+        for row in rows
+    )
+
+
+def _fee_confirmation(source_status: FeeSourceStatus) -> ConfirmationStatus:
+    if source_status is FeeSourceStatus.VERIFIED:
+        return ConfirmationStatus.CONFIRMED
+    if source_status is FeeSourceStatus.REVIEW_REQUIRED:
+        return ConfirmationStatus.NEEDS_REVIEW
+    return ConfirmationStatus.LEGACY_UNVERIFIED
+
+
+def _new_header(
+    command: RecognizeFeeObligationCommand,
+    obligation_id: str,
+) -> FeeObligationModel:
+    return FeeObligationModel(
+        id=obligation_id,
+        case_id=command.case_id,
+        source_activity_id=command.source_activity_id,
+        source_document_id=command.source_document_id,
+        fee_domain=command.fee_domain.value,
+        obligation_type=command.obligation_type,
+        obligation_status=FeeObligationStatus.RECOGNIZED.value,
+        due_date=command.due_date,
+        currency=command.currency,
+        source_status=command.source_status.value,
+        client_instruction_status=FeeClientInstructionStatus.PENDING.value,
+        draft_status=FeeObligationDraftStatus.NOT_CREATED.value,
+        payment_status=FeePaymentStatus.UNPAID.value,
+        official_evidence_status=(
+            FeeOfficialEvidenceStatus.PENDING.value
+            if command.fee_domain is FeeDomain.GOV
+            else FeeOfficialEvidenceStatus.NOT_APPLICABLE.value
+        ),
+        supersedes_obligation_id=command.supersedes_obligation_id,
+        supersede_reason=command.supersede_reason,
+        created_by=command.actor_id,
+        updated_by=command.actor_id,
+    )
+
+
+def _new_line(
+    command: RecognizeFeeObligationCommand,
+    line: FeeObligationLineInput,
+    obligation_id: str,
+) -> FeeObligationLineModel:
+    return FeeObligationLineModel(
+        id=str(uuid4()),
+        obligation_id=obligation_id,
+        case_id=command.case_id,
+        source_activity_id=command.source_activity_id,
+        fee_code=line.fee_code,
+        fee_name=line.fee_name,
+        fee_year_key=line.fee_year_key,
+        official_full_amount=line.official_full_amount,
+        reduction_ratio=line.reduction_ratio,
+        payable_amount=line.payable_amount,
+        source_amount=line.source_amount,
+        source_date=line.source_date,
+        difference_review_state=line.difference_review_state.value,
+        current_identity_key=_identity_key(
+            command.case_id,
+            command.source_activity_id,
+            line.fee_code,
+            line.fee_year_key,
+        ),
+        created_by=command.actor_id,
+        updated_by=command.actor_id,
+    )
+
+
+def _payload(
+    command: RecognizeFeeObligationCommand,
+    lines: tuple[FeeObligationLineInput, ...],
+    obligation_id: str,
+) -> dict[str, object]:
+    return {
+        "schema": _PAYLOAD_SCHEMA,
+        "obligation_id": obligation_id,
+        "obligation": {
+            "actor_id": command.actor_id,
+            "case_id": command.case_id,
+            "currency": command.currency,
+            "due_date": None if command.due_date is None else command.due_date.isoformat(),
+            "fee_domain": command.fee_domain.value,
+            "lines": [
+                {
+                    "difference_review_state": line.difference_review_state.value,
+                    "fee_code": line.fee_code,
+                    "fee_name": line.fee_name,
+                    "fee_year_key": line.fee_year_key,
+                    "official_full_amount": _amount_text(line.official_full_amount),
+                    "payable_amount": _amount_text(line.payable_amount),
+                    "reduction_ratio": format(line.reduction_ratio, ".4f"),
+                    "source_amount": _amount_text(line.source_amount),
+                    "source_date": (
+                        None if line.source_date is None else line.source_date.isoformat()
+                    ),
+                }
+                for line in lines
+            ],
+            "obligation_type": command.obligation_type,
+            "source_activity_id": command.source_activity_id,
+            "source_document_id": command.source_document_id,
+            "source_status": command.source_status.value,
+            "supersede_reason": command.supersede_reason,
+            "supersedes_obligation_id": command.supersedes_obligation_id,
+        },
+    }
+
+
+def _amount_text(value: Decimal | None) -> str | None:
+    return None if value is None else format(value, ".2f")
+
+
+def _identity_key(
+    case_id: str,
+    source_activity_id: str,
+    fee_code: str,
+    fee_year_key: int,
+) -> str:
+    raw = f"{case_id}|{source_activity_id}|{fee_code}|{fee_year_key}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _replay_existing(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+    case: Case,
+    activity: CaseActivityEvent,
+    lines: tuple[FeeObligationLineInput, ...],
+) -> RecognizeFeeObligationResult:
+    if activity.activity_type != _ACTIVITY_TYPE or activity.lane != ActivityLane.FEE.value:
+        _idempotency_conflict()
+    try:
+        stored_payload = _strict_json_loads(activity.payload_json)
+    except (TypeError, ValueError):
+        _stored_state_invalid()
+    if type(stored_payload) is not dict or stored_payload.get("schema") != _PAYLOAD_SCHEMA:
+        _stored_state_invalid()
+    if activity.payload_json != json.dumps(
+        stored_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ):
+        _stored_state_invalid()
+    obligation_id = stored_payload.get("obligation_id")
+    if not _valid_uuid(obligation_id):
+        _stored_state_invalid()
+    if stored_payload != _payload(command, lines, cast(str, obligation_id)):
+        _idempotency_conflict()
+
+    header = transaction.execute(
+        select(FeeObligationModel).where(FeeObligationModel.id == obligation_id)
+    ).scalar_one_or_none()
+    if header is None:
+        _stored_state_invalid()
+    if header.case_id != command.case_id:
+        _idempotency_conflict()
+    _validate_replay_header(command, transaction, header, lines)
+
+    source_activity = transaction.execute(
+        select(CaseActivityEvent).where(CaseActivityEvent.id == command.source_activity_id)
+    ).scalar_one_or_none()
+    if source_activity is None or source_activity.case_id != command.case_id:
+        _stored_state_invalid()
+    supersedes_event_id = _replay_supersedes_event_id(
+        command,
+        transaction,
+        activity,
+    )
+    stored_projection = _activity_projection(activity)
+    try:
+        transition = append_case_activity(
+            _activity_command(
+                command,
+                transaction,
+                source_activity=source_activity,
+                payload=cast(dict[str, object], stored_payload),
+                supersedes_event_id=supersedes_event_id,
+            ),
+            transaction,
+            previous_projection=stored_projection,
+            current_projection=stored_projection,
+            legacy_case_status=case.status,
+            conflict_codes=(),
+        )
+    except BusinessError as exc:
+        if exc.code == "LIFECYCLE_IDEMPOTENCY_CONFLICT":
+            _idempotency_conflict()
+        raise
+    if not transition.reused or transition.activity_id != activity.id:
+        _stored_state_invalid()
+    return _result(
+        transaction,
+        header,
+        activity_id=activity.id,
+        idempotency_key=command.idempotency_key,
+        reused=True,
+        superseded_obligation_id=command.supersedes_obligation_id,
+    )
+
+
+def _validate_replay_header(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+    header: FeeObligationModel,
+    command_lines: tuple[FeeObligationLineInput, ...],
+) -> None:
+    immutable = (
+        (header.source_activity_id, command.source_activity_id),
+        (header.source_document_id, command.source_document_id),
+        (header.fee_domain, command.fee_domain.value),
+        (header.obligation_type, command.obligation_type),
+        (header.due_date, command.due_date),
+        (header.currency, command.currency),
+        (header.source_status, command.source_status.value),
+        (header.supersedes_obligation_id, command.supersedes_obligation_id),
+        (header.supersede_reason, command.supersede_reason),
+    )
+    if any(stored != expected for stored, expected in immutable):
+        _idempotency_conflict()
+    if header.obligation_status not in {
+        FeeObligationStatus.RECOGNIZED.value,
+        FeeObligationStatus.SUPERSEDED.value,
+    }:
+        _stored_state_invalid()
+    stored_lines = tuple(
+        transaction.execute(
+            select(FeeObligationLineModel)
+            .where(FeeObligationLineModel.obligation_id == header.id)
+            .order_by(FeeObligationLineModel.fee_code, FeeObligationLineModel.fee_year_key)
+        ).scalars()
+    )
+    if len(stored_lines) != len(command_lines):
+        _idempotency_conflict()
+    for stored, expected in zip(stored_lines, command_lines, strict=True):
+        snapshots = (
+            (stored.obligation_id, header.id),
+            (stored.case_id, command.case_id),
+            (stored.source_activity_id, command.source_activity_id),
+            (stored.fee_code, expected.fee_code),
+            (stored.fee_name, expected.fee_name),
+            (stored.fee_year_key, expected.fee_year_key),
+            (stored.official_full_amount, expected.official_full_amount),
+            (stored.reduction_ratio, expected.reduction_ratio),
+            (stored.payable_amount, expected.payable_amount),
+            (stored.source_amount, expected.source_amount),
+            (stored.source_date, expected.source_date),
+            (stored.difference_review_state, expected.difference_review_state.value),
+        )
+        if any(value != supplied for value, supplied in snapshots):
+            _idempotency_conflict()
+        expected_key = _identity_key(
+            stored.case_id,
+            stored.source_activity_id,
+            stored.fee_code,
+            stored.fee_year_key,
+        )
+        if header.obligation_status == FeeObligationStatus.RECOGNIZED.value:
+            if stored.current_identity_key != expected_key:
+                _idempotency_conflict()
+        elif stored.current_identity_key is not None:
+            _stored_state_invalid()
+
+
+def _replay_supersedes_event_id(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+    activity: CaseActivityEvent,
+) -> str | None:
+    if command.supersedes_obligation_id is None:
+        if activity.supersedes_event_id is not None:
+            _idempotency_conflict()
+        return None
+    prior_activity = transaction.execute(
+        select(CaseActivityEvent).where(CaseActivityEvent.id == activity.supersedes_event_id)
+    ).scalar_one_or_none()
+    if prior_activity is None:
+        _stored_state_invalid()
+    try:
+        payload = _strict_json_loads(prior_activity.payload_json)
+    except (TypeError, ValueError):
+        _stored_state_invalid()
+    if (
+        type(payload) is not dict
+        or payload.get("schema") != _PAYLOAD_SCHEMA
+        or payload.get("obligation_id") != command.supersedes_obligation_id
+    ):
+        _stored_state_invalid()
+    return prior_activity.id
+
+
+def _result(
+    transaction: Session,
+    header: FeeObligationModel,
+    *,
+    activity_id: str,
+    idempotency_key: str,
+    reused: bool,
+    superseded_obligation_id: str | None,
+) -> RecognizeFeeObligationResult:
+    lines = tuple(
+        transaction.execute(
+            select(FeeObligationLineModel)
+            .where(FeeObligationLineModel.obligation_id == header.id)
+            .order_by(FeeObligationLineModel.fee_code, FeeObligationLineModel.fee_year_key)
+        ).scalars()
+    )
+    return RecognizeFeeObligationResult(
+        obligation=FeeObligation(
+            id=header.id,
+            case_id=header.case_id,
+            source=FeeObligationSource(
+                source_activity_id=header.source_activity_id,
+                source_document_id=header.source_document_id,
+                status=_stored_enum(FeeSourceStatus, header.source_status),
+            ),
+            fee_domain=_stored_enum(FeeDomain, header.fee_domain),
+            obligation_type=header.obligation_type,
+            due_date=header.due_date,
+            currency=header.currency,
+            statuses=FeeObligationStatuses(
+                estimate_status=None,
+                obligation_status=_stored_enum(
+                    FeeObligationStatus,
+                    header.obligation_status,
+                ),
+                client_instruction_status=_stored_enum(
+                    FeeClientInstructionStatus,
+                    header.client_instruction_status,
+                ),
+                draft_status=_stored_enum(
+                    FeeObligationDraftStatus,
+                    header.draft_status,
+                ),
+                pay_list_status=FeePayListStatus.NOT_CREATED,
+                payment_status=_stored_enum(FeePaymentStatus, header.payment_status),
+                official_evidence_status=_stored_enum(
+                    FeeOfficialEvidenceStatus,
+                    header.official_evidence_status,
+                ),
+            ),
+            lines=tuple(_line_value(line) for line in lines),
+            supersedes_obligation_id=header.supersedes_obligation_id,
+            supersede_reason=header.supersede_reason,
+        ),
+        activity_id=activity_id,
+        idempotency_key=idempotency_key,
+        reused=reused,
+        superseded_obligation_id=superseded_obligation_id,
+    )
+
+
+def _line_value(line: FeeObligationLineModel) -> FeeObligationLine:
+    return FeeObligationLine(
+        id=line.id,
+        obligation_id=line.obligation_id,
+        case_id=line.case_id,
+        source_activity_id=line.source_activity_id,
+        fee_code=line.fee_code,
+        fee_name=line.fee_name,
+        fee_year_key=line.fee_year_key,
+        official_full_amount=line.official_full_amount,
+        reduction_ratio=line.reduction_ratio,
+        payable_amount=line.payable_amount,
+        source_amount=line.source_amount,
+        source_date=line.source_date,
+        difference_review_state=_stored_enum(
+            FeeDifferenceReviewState,
+            line.difference_review_state,
+        ),
+        current_identity_key=line.current_identity_key,
+    )
+
+
+def _stored_enum(enum_type, value: str):
+    try:
+        return enum_type(value)
+    except ValueError:
+        _stored_state_invalid()
+
+
+def _case_projection(case: Case) -> LifecycleProjection:
+    try:
+        return LifecycleProjection(
+            business_stage=(
+                None if case.business_stage is None else BusinessStage(case.business_stage)
+            ),
+            official_procedure_stage=(
+                None
+                if case.official_procedure_stage is None
+                else OfficialProcedureStage(case.official_procedure_stage)
+            ),
+            legal_status=None if case.legal_status is None else LegalStatus(case.legal_status),
+            lifecycle_verification_status=(
+                None
+                if case.lifecycle_verification_status is None
+                else ConfirmationStatus(case.lifecycle_verification_status)
+            ),
+        )
+    except ValueError:
+        _fail(
+            "LIFECYCLE_PROJECTION_CONFLICT",
+            "案件存量生命周期投影无效",
+            status_code=409,
+        )
+
+
+def _activity_projection(activity: CaseActivityEvent) -> LifecycleProjection:
+    try:
+        if (
+            activity.old_business_stage != activity.new_business_stage
+            or activity.old_official_procedure_stage != activity.new_official_procedure_stage
+            or activity.old_legal_status != activity.new_legal_status
+        ):
+            _stored_state_invalid()
+        return LifecycleProjection(
+            business_stage=(
+                None
+                if activity.old_business_stage is None
+                else BusinessStage(activity.old_business_stage)
+            ),
+            official_procedure_stage=(
+                None
+                if activity.old_official_procedure_stage is None
+                else OfficialProcedureStage(activity.old_official_procedure_stage)
+            ),
+            legal_status=(
+                None
+                if activity.old_legal_status is None
+                else LegalStatus(activity.old_legal_status)
+            ),
+            lifecycle_verification_status=None,
+        )
+    except ValueError:
+        _stored_state_invalid()
+
+
+def _recognized_unique_failure(exc: IntegrityError) -> bool:
+    message = str(exc.orig).lower()
+    return (
+        "t_case_activity_event.case_id, t_case_activity_event.idempotency_key" in message
+        or "uq_t_case_activity_event_case_idempotency_key" in message
+        or "t_fee_obligation_line.current_identity_key" in message
+        or "uq_t_fee_obligation_line_current_identity_key" in message
+    )
+
+
+def _recover_recognized_race(
+    command: RecognizeFeeObligationCommand,
+    transaction: Session,
+    lines: tuple[FeeObligationLineInput, ...],
+) -> RecognizeFeeObligationResult:
+    with transaction.no_autoflush:
+        case = _case_or_fail(transaction, command.case_id)
+        activity = _activity_by_key(
+            transaction,
+            case_id=command.case_id,
+            idempotency_key=command.idempotency_key,
+        )
+        owners = _identity_owners(command, transaction, lines)
+        if activity is not None:
+            return _replay_existing(command, transaction, case, activity, lines)
+        if owners:
+            if len(owners) == len(lines) and len(set(owners.values())) == 1:
+                _identity_conflict()
+            _mixed_identity_conflict()
+    _fail(
+        "FEE_OBLIGATION_CONCURRENCY_CONFLICT",
+        "并发费用义务尚不可见，请重试完整事务",
+        status_code=409,
+    )
+
+
+def _valid_uuid(value: object) -> bool:
+    if type(value) is not str or len(value) != 36:
+        return False
+    try:
+        return str(UUID(value)) == value
+    except ValueError:
+        return False
+
+
+def _strict_json_loads(value: str) -> object:
+    return json.loads(value, parse_constant=_reject_non_finite_json_constant)
+
+
+def _reject_non_finite_json_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON constant: {value}")
+
+
+def _required_string(
+    value: object,
+    limit: int,
+    field: str,
+    invalid: Callable[[str], None],
+) -> None:
+    if type(value) is not str or not value.strip() or len(value) > limit:
+        invalid(field)
+
+
+def _optional_string(
+    value: object,
+    limit: int,
+    field: str,
+    invalid: Callable[[str], None],
+) -> None:
+    if value is not None:
+        _required_string(value, limit, field, invalid)
+
+
+def _invalid_command(field: str) -> None:
+    _fail(
+        "FEE_OBLIGATION_COMMAND_INVALID",
+        "费用义务识别命令无效",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _invalid_line(index: int, field: str) -> None:
+    _invalid_line_field(f"lines[{index}].{field}")
+
+
+def _invalid_line_field(field: str) -> None:
+    _fail(
+        "FEE_OBLIGATION_LINE_INVALID",
+        "费用义务明细无效",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _supersede_pair_invalid() -> None:
+    _fail(
+        "FEE_OBLIGATION_SUPERSEDE_PAIR_INVALID",
+        "被替代义务与更正原因必须同时提供",
+        status_code=409,
+    )
+
+
+def _identity_conflict() -> None:
+    _fail(
+        "FEE_OBLIGATION_IDENTITY_CONFLICT",
+        "费用义务当前身份已被其他识别占用",
+        status_code=409,
+    )
+
+
+def _mixed_identity_conflict() -> None:
+    _fail(
+        "FEE_OBLIGATION_MIXED_IDENTITY_CONFLICT",
+        "费用义务当前身份集合不完整或跨越多个义务",
+        status_code=409,
+    )
+
+
+def _idempotency_conflict() -> None:
+    _fail(
+        "FEE_OBLIGATION_IDEMPOTENCY_CONFLICT",
+        "幂等键已用于不同的费用义务事实",
+        status_code=409,
+    )
+
+
+def _stored_state_invalid() -> None:
+    _fail(
+        "FEE_OBLIGATION_STORED_STATE_INVALID",
+        "费用义务存量识别状态无效",
+        status_code=409,
+    )
+
+
+def _fail(
+    code: str,
+    message: str,
+    *,
+    details: dict | None = None,
+    status_code: int,
+) -> None:
+    raise BusinessError(
+        code=code,
+        message=message,
+        details=details,
+        status_code=status_code,
+    )

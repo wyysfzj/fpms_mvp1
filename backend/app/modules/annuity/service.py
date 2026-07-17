@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import uuid4
@@ -14,8 +14,27 @@ from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.export_excel import build_pay_list_export_xlsx
 from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.billing.models import CaseReceipt
+from app.modules.cases.lifecycle_activity_service import append_case_activity
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    BusinessStage,
+    ConfirmationStatus,
+    LegalStatus,
+    LifecycleEventCommand,
+    LifecycleProjection,
+    OfficialProcedureStage,
+)
 from app.modules.cases.models import Case
-from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+from app.modules.fees.models import (
+    FeeDraft,
+    FeeItem,
+    FeeObligation,
+    FeeObligationDraftItemLink,
+    FeeObligationLine,
+    FeeRate,
+)
+from app.modules.fees.obligation_contracts import RecordFeePaymentEvidenceCommand
+from app.modules.fees.obligation_service import record_payment_evidence
 from app.modules.fees.service import (
     fee_rate_effective_on_conditions,
     fee_rate_source_enabled_condition,
@@ -1727,6 +1746,112 @@ def _recompute_pay_list_status(pay_list: PayList, payments: list[GovPayment]) ->
     )
 
 
+def _gov_payment_obligation_context(
+    db: Session,
+    *,
+    fee_item_id: str,
+) -> tuple[FeeObligation, tuple[str, ...]] | None:
+    rows = db.execute(
+        select(FeeObligation, FeeObligationLine.id)
+        .join(FeeObligationLine, FeeObligationLine.obligation_id == FeeObligation.id)
+        .join(
+            FeeObligationDraftItemLink,
+            FeeObligationDraftItemLink.obligation_line_id == FeeObligationLine.id,
+        )
+        .where(FeeObligationDraftItemLink.fee_item_id == fee_item_id)
+        .order_by(FeeObligationLine.id)
+    ).all()
+    if not rows:
+        return None
+
+    obligations = {row[0].id: row[0] for row in rows}
+    if len(obligations) != 1:
+        raise_business_error(
+            "GOV_PAYMENT_OBLIGATION_LINK_CONFLICT",
+            "Fee item is linked to multiple fee obligations",
+            status_code=409,
+        )
+    obligation = next(iter(obligations.values()))
+    return obligation, tuple(row[1] for row in rows)
+
+
+def _gov_payment_projection(case: Case) -> LifecycleProjection:
+    try:
+        return LifecycleProjection(
+            business_stage=(
+                BusinessStage(case.business_stage) if case.business_stage is not None else None
+            ),
+            official_procedure_stage=(
+                OfficialProcedureStage(case.official_procedure_stage)
+                if case.official_procedure_stage is not None
+                else None
+            ),
+            legal_status=LegalStatus(case.legal_status) if case.legal_status is not None else None,
+            lifecycle_verification_status=(
+                ConfirmationStatus(case.lifecycle_verification_status)
+                if case.lifecycle_verification_status is not None
+                else None
+            ),
+        )
+    except ValueError:
+        raise_business_error(
+            "GOV_PAYMENT_CASE_PROJECTION_INVALID",
+            "Case lifecycle projection is invalid",
+            status_code=409,
+        )
+
+
+def _record_gov_payment_activity(
+    db: Session,
+    *,
+    payment: GovPayment,
+    obligation: FeeObligation,
+    obligation_line_ids: tuple[str, ...],
+    actor_id: str,
+) -> None:
+    record_payment_evidence(
+        RecordFeePaymentEvidenceCommand(
+            obligation_id=obligation.id,
+            obligation_line_ids=obligation_line_ids,
+            gov_payment_id=payment.id,
+            actor_id=actor_id,
+        ),
+        db,
+    )
+    case = db.get(Case, payment.case_id)
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+    projection = _gov_payment_projection(case)
+    payment_at = datetime.combine(payment.paid_date or date.today(), time.min)
+    append_case_activity(
+        LifecycleEventCommand(
+            case_id=payment.case_id,
+            event_type="PAYMENT_RECORDED",
+            lane=ActivityLane.FEE,
+            effective_at=payment_at,
+            occurred_at=payment_at,
+            evidence_refs=(),
+            actor_id=actor_id,
+            reviewer_id=None,
+            idempotency_key=f"gov-payment:{payment.id}:recorded",
+            source_activity_id=obligation.source_activity_id,
+            supersedes_event_id=None,
+            payload={
+                "gov_payment_id": payment.id,
+                "obligation_id": obligation.id,
+                "obligation_line_ids": list(obligation_line_ids),
+                "schema": "FPMS_GOV_PAYMENT_RECORDED_V1",
+            },
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+        ),
+        db,
+        previous_projection=projection,
+        current_projection=projection,
+        legacy_case_status=case.status,
+        conflict_codes=(),
+    )
+
+
 def register_gov_payment(
     db: Session,
     *,
@@ -1749,6 +1874,11 @@ def register_gov_payment(
     normalized_fee_item_id = (fee_item_id or "").strip()
     if not normalized_fee_item_id:
         raise_business_error("FEE_ITEM_REQUIRED", "fee_item_id is required", status_code=400)
+
+    obligation_context = _gov_payment_obligation_context(
+        db,
+        fee_item_id=normalized_fee_item_id,
+    )
 
     target = (
         db.execute(
@@ -1900,6 +2030,28 @@ def register_gov_payment(
         target.updated_by = actor_id
 
     db.flush()
+    if obligation_context is not None:
+        obligation, obligation_line_ids = obligation_context
+        resolved_actor_id = (
+            actor_id
+            or target.updated_by
+            or target.created_by
+            or pay_list.updated_by
+            or pay_list.created_by
+        )
+        if not resolved_actor_id:
+            raise_business_error(
+                "GOV_PAYMENT_ACTOR_REQUIRED",
+                "actor_id is required for obligation-linked payment registration",
+                status_code=409,
+            )
+        _record_gov_payment_activity(
+            db,
+            payment=target,
+            obligation=obligation,
+            obligation_line_ids=obligation_line_ids,
+            actor_id=resolved_actor_id,
+        )
     payments = (
         db.execute(
             select(GovPayment)

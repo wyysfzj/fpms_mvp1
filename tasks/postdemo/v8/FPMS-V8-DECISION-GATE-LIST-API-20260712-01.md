@@ -1,6 +1,6 @@
 # FPMS-V8-DECISION-GATE-LIST-API-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-15 / NOT STARTED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `14. Wave 6 — customer decision gates`
 Catalog ordinal: `169`
@@ -94,3 +94,39 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 ## Done Definition
 
 The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-DECISION-GATE-LIST-API-20260712-01` pass. Only then may this task be reported PASS.
+
+## Delta-4 Ultra Contract Freeze — 2026-07-15
+
+### Latest-wins authority
+
+- Authoritative contract: `docs/superpowers/specs/2026-07-15-fpms-v8-ultra-contract-freeze-delta-4.md`, Task 169 lines 473–485.
+- Supplemental authority: row `28 / M4-G / H4-4` of `tasks/batches/FPMS-POSTDEMO-V8-ULTRA-CONTRACT-DELTA-4-20260715-01.md`.
+- Risk remains `HIGH`; product work and evidence remain `NOT STARTED`.
+- `chosen_runbook: P0-prereq-heavy-story` supersedes the historical runbook above for Delta-4 execution.
+- This appendix is latest-wins only for the exact audit-list contract below; every other inherited byte and the exact Allowed Files list remain binding.
+
+### Exact bodyless route, permission and response
+
+- Add exactly `GET /api/v1/system/decision-gates`; its route signature and OpenAPI contract declare no request body, query parameter, path parameter, filter, page or as-of input.
+- Enforce the existing parameter-injected `SystemParam.Read` permission and authentication dependencies. Success is HTTP 200, including an empty bare JSON list `[]`; missing/invalid authentication remains 401 and missing permission remains 403.
+- Return one direct bare list of persisted audit-row DTOs, with no success/data wrapper, pagination envelope or effective-behavior result.
+- Each item preserves persisted gate identity/code/value, source reference/version, scope, decision status, current identity, actor, effective/recorded time and supersedes identity verbatim. It adds no computed authority, fallback, precedence, currentness or effective-status field.
+
+### Exact audit query, order and visibility
+
+- Execute one explicit selected-column SELECT inside `transaction.no_autoflush`, ordered exactly by `recorded_at ASC, gate_id ASC`.
+- Return all stored history: current, superseded, revoked and future-effective rows are equally visible. Do not filter by current identity, decision status, effective time or business scope.
+- Perform zero writes and no clock read, add, flush, refresh, expire, commit, rollback or identity-map mutation.
+- Do not call `resolve_decision_gate()`: the accepted read service resolves effective business behavior and cannot represent complete audit history.
+- This bodyless audit route introduces no 400/404/409 business branch or authority-resolution error. Existing framework request-shape handling and authentication/permission errors remain unchanged; do not invent or remap errors.
+
+### Dependencies and non-closure
+
+- The accepted `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01` remains a prerequisite contract, but this list route never delegates to its resolver. Preserve the inherited serialization after the confirm API and exclusive ownership of the allowlisted system API/schema files.
+- Add no second endpoint, router rewire, persistence schema/model/migration, write service, authority inference, customer-decision activation, frontend or adjacent cleanup.
+
+### Scoped TDD, evidence and gates
+
+- RED through the public HTTP route must prove the missing exact path/method, bodyless signature, `SystemParam.Read`, bare-list shape, 200/401/403 behavior, complete visibility, stable order, one-SELECT/no-autoflush boundary and prohibition on resolver/write calls.
+- GREEN is the smallest allowlisted API/schema/test implementation. Existing task-local pytest, scoped Ruff/format/diff, serialized SQLite verification, Evidence 1.1 initialization/finalization, independent review, repository task gate, atomic evidence validation and Done Definition remain binding for later High execution.
+- This Ultra materialization performs no router/schema/product/test edit or evidence initialization and runs only the atomic task-file check.

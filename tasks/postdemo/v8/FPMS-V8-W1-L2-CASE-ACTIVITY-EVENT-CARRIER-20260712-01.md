@@ -1,6 +1,6 @@
 # FPMS-V8-W1-L2-CASE-ACTIVITY-EVENT-CARRIER-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `8. Wave 1 — schema spine, globally serialized`
 Catalog ordinal: `4`
@@ -27,16 +27,75 @@ Executor role: Backend Developer / worker
 
 Task Contract Profile: `TC-SCHEMA`
 
-- RED expectation: Exact schema test fails because the named table/column/index is absent.
-- GREEN expectation: Exact schema test, task-scoped Ruff, unique-head check and clean temporary SQLite `upgrade head` pass.
+- RED expectation: Exact schema test fails because `CaseActivityEvent`, revision `v8_w1_l2_case_activity_event_01`, the 23 frozen columns or the named constraints are absent.
+- GREEN expectation: Exact ORM and migrated-SQLite tests prove the frozen columns, physical types, nullability/defaults, three UNIQUE constraints, case FK and nullable same-case source composite FK; NULL/same-case sources succeed, missing/cross-case sources fail; task-scoped Ruff, unique-head check and clean temporary SQLite `upgrade head` pass.
 
 ## Exact Closure Slice
 
-Add only `t_case_activity_event`, sequence/idempotency uniqueness, composite parent key `(case_id,id)` and nullable same-case composite self-FK `(case_id,source_activity_id) → (case_id,id)`; SQLite test accepts NULL/same-case and rejects missing/cross-case sources.
+Add only the frozen `CaseActivityEvent` / `t_case_activity_event` carrier with its 23 columns, sequence/idempotency uniqueness, composite parent key `(case_id,id)` and nullable same-case composite self-FK `(case_id,source_activity_id) → (case_id,id)`; SQLite test accepts NULL/same-case and rejects missing/cross-case sources.
 
 ## Explicit Non-Closure
 
 No backfill, service, endpoint, seed, UI or second table/carrier. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
+
+## Ultra Contract Freeze — 2026-07-13
+
+High stopped before evidence initialization, RED, and any L2 source/test/migration edit because the canonical design named field categories but did not freeze a complete physical table. The closure slice did not change. Story Shape Classification remains unchanged and `chosen_runbook` remains `P0-prereq-heavy-story`.
+
+ORM/table identity:
+
+- ORM class: `CaseActivityEvent`.
+- Table: `t_case_activity_event`.
+- ORM base: `UUIDPrimaryKeyMixin, Base`; do not use `AuditMixin` because its application/timezone defaults conflict with the V8 `CURRENT_TIMESTAMP` contract.
+- Alembic revision: `v8_w1_l2_case_activity_event_01`.
+- Alembic down revision: `v8_w1_l1_case_lifecycle_01`; recheck the unique head immediately before implementation.
+
+Frozen columns:
+
+| Column | SQLAlchemy / Alembic type | ORM annotation | Nullable | Default / FK |
+|---|---|---|---:|---|
+| `id` | `String(36)` | `Mapped[str]` | no | application `uuid4`; no migration/server default |
+| `case_id` | `String(36)` | `Mapped[str]` | no | FK `t_case.id`, `ondelete="CASCADE"`; no default |
+| `sequence` | `Integer` | `Mapped[int]` | no | none |
+| `lane` | `String(16)` | `Mapped[str]` | no | none |
+| `activity_type` | `String(64)` | `Mapped[str]` | no | none |
+| `source_activity_id` | `String(36)` | `Mapped[str | None]` | yes | no standalone FK/default; governed by the composite FK below |
+| `occurred_at` | `DateTime(timezone=False)` | `Mapped[datetime | None]` | yes | none |
+| `effective_at` | `DateTime(timezone=False)` | `Mapped[datetime]` | no | none |
+| `recorded_at` | `DateTime(timezone=False)` | `Mapped[datetime]` | no | `server_default=text("CURRENT_TIMESTAMP")` |
+| `confirmation_status` | `String(32)` | `Mapped[str]` | no | none |
+| `old_business_stage` | `String(32)` | `Mapped[str | None]` | yes | none |
+| `new_business_stage` | `String(32)` | `Mapped[str | None]` | yes | none |
+| `old_official_procedure_stage` | `String(64)` | `Mapped[str | None]` | yes | none |
+| `new_official_procedure_stage` | `String(64)` | `Mapped[str | None]` | yes | none |
+| `old_legal_status` | `String(32)` | `Mapped[str | None]` | yes | none |
+| `new_legal_status` | `String(32)` | `Mapped[str | None]` | yes | none |
+| `actor_id` | `String(36)` | `Mapped[str]` | no | no user FK/default |
+| `reviewer_id` | `String(36)` | `Mapped[str | None]` | yes | no user FK/default |
+| `idempotency_key` | `String(128)` | `Mapped[str]` | no | none |
+| `supersedes_event_id` | `String(36)` | `Mapped[str | None]` | yes | no FK/default in L2 |
+| `payload_json` | `Text` | `Mapped[str]` | no | no default; service must persist canonical JSON text |
+| `created_at` | `DateTime(timezone=False)` | `Mapped[datetime]` | no | `server_default=text("CURRENT_TIMESTAMP")` |
+| `updated_at` | `DateTime(timezone=False)` | `Mapped[datetime]` | no | `server_default=text("CURRENT_TIMESTAMP")`; no `onupdate` |
+
+Frozen constraints:
+
+| Name | Contract |
+|---|---|
+| `fk_t_case_activity_event_case_id` | simple `case_id → t_case.id`, `ondelete="CASCADE"` |
+| `uq_t_case_activity_event_case_sequence` | UNIQUE `(case_id, sequence)` |
+| `uq_t_case_activity_event_case_idempotency_key` | UNIQUE `(case_id, idempotency_key)` |
+| `uq_t_case_activity_event_case_id` | UNIQUE `(case_id, id)`, required as the SQLite composite parent key |
+| `fk_t_case_activity_event_source_same_case` | nullable composite FK `(case_id, source_activity_id) → t_case_activity_event(case_id, id)` with no delete action or deferrable behavior |
+
+Frozen invariants and exclusions:
+
+- `source_activity_id` is the causal/source-activity link exposed by the overlay. `supersedes_event_id` is the separate correction target named by the canonical design; do not merge them.
+- Only `source_activity_id` receives the L2 composite self-FK. Do not add an unapproved FK for `supersedes_event_id`; its service validation belongs to downstream lifecycle work.
+- `occurred_at` is nullable because the approved command requires `effective_at`, not an independently proven occurrence time. Do not copy or invent another timestamp to satisfy it.
+- Do not add `created_by`/`updated_by`; `actor_id` and conditional `reviewer_id` are the frozen event principals.
+- Do not add enum/CHECK constraints, business indexes, extra defaults, a `center_changes` column or a second payload column. Later lifecycle-contract/service tasks own value validation and behavior.
+- The exact test must enable SQLite foreign keys and assert reflected constrained/referred composite-column order, not only ORM metadata.
 
 ## Dependencies
 

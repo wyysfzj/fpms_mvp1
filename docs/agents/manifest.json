@@ -1,0 +1,130 @@
+{
+  "schema_version": 2,
+  "active_version": "2.0.0",
+  "adapter_version": "2.0.0",
+  "activation_task": "REPO-GOVERNANCE-RESET-ACTIVATION-20260716-01",
+  "required_closure_tags": [
+    "api",
+    "auth",
+    "customer-decision",
+    "data",
+    "fee",
+    "governance",
+    "legacy",
+    "legal",
+    "lifecycle",
+    "lineage",
+    "migration",
+    "permission",
+    "security",
+    "source-authority",
+    "sqlite",
+    "ui"
+  ],
+  "rule_owners": {
+    "GOV-API-UI-001": "docs/agents/domain-safety.md",
+    "GOV-AUTH-001": "docs/agents/domain-safety.md",
+    "GOV-BEHAVIOR-001": "AGENTS.md",
+    "GOV-CUSTOMER-001": "AGENTS.md",
+    "GOV-DATA-001": "docs/agents/domain-safety.md",
+    "GOV-EVIDENCE-001": "docs/agents/evidence.md",
+    "GOV-FEE-001": "docs/agents/domain-safety.md",
+    "GOV-LEGACY-001": "docs/agents/legacy-mvp1.md",
+    "GOV-LIFECYCLE-001": "docs/agents/domain-safety.md",
+    "GOV-LINEAGE-001": "docs/agents/domain-safety.md",
+    "GOV-LINT-001": "docs/agents/execution.md",
+    "GOV-LIVENESS-001": "docs/agents/execution.md",
+    "GOV-MODULES-001": "docs/agents/README.md",
+    "GOV-MULTIAGENT-001": "docs/agents/execution.md",
+    "GOV-RELEASE-001": "AGENTS.md",
+    "GOV-REPORT-001": "docs/agents/execution.md",
+    "GOV-RISK-RUNTIME-001": "docs/agents/execution.md",
+    "GOV-RUNBOOK-001": "docs/agents/execution.md",
+    "GOV-SCOPE-001": "docs/agents/execution.md",
+    "GOV-SKILLS-001": "AGENTS.md",
+    "GOV-SOURCE-001": "docs/agents/source-authority.md",
+    "GOV-SQLITE-001": "docs/agents/domain-safety.md"
+  },
+  "modules": [
+    {
+      "path": "docs/agents/README.md",
+      "always": true,
+      "selectors": []
+    },
+    {
+      "path": "docs/agents/evidence.md",
+      "always": true,
+      "selectors": []
+    },
+    {
+      "path": "docs/agents/execution.md",
+      "always": true,
+      "selectors": []
+    },
+    {
+      "path": "docs/agents/domain-safety.md",
+      "always": false,
+      "selectors": [
+        {
+          "risk_any": [
+            "HIGH"
+          ]
+        },
+        {
+          "closure_tag_any": [
+            "api",
+            "auth",
+            "data",
+            "fee",
+            "legal",
+            "lifecycle",
+            "lineage",
+            "migration",
+            "permission",
+            "security",
+            "sqlite",
+            "ui"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "docs/agents/legacy-mvp1.md",
+      "always": false,
+      "selectors": [
+        {
+          "closure_tag_any": [
+            "legacy"
+          ]
+        },
+        {
+          "task_path_any": [
+            "tasks/backend/**"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "docs/agents/source-authority.md",
+      "always": false,
+      "selectors": [
+        {
+          "closure_tag_any": [
+            "customer-decision",
+            "fee",
+            "governance",
+            "legal",
+            "lifecycle",
+            "lineage",
+            "source-authority"
+          ]
+        },
+        {
+          "task_path_any": [
+            "tasks/postdemo/**"
+          ]
+        }
+      ]
+    }
+  ]
+}

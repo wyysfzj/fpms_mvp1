@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -95,6 +105,103 @@ class Document(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
     reply_to_doc: Mapped["Document | None"] = relationship(
         "Document", back_populates="replies", remote_side="Document.id", foreign_keys=[reply_to_id]
+    )
+
+
+class DocumentEvidenceVersion(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "t_document_evidence_version"
+
+    case_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_case.id",
+            name="fk_t_document_evidence_version_case_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    document_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_document.id",
+            name="fk_t_document_evidence_version_document_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    attachment_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_doc_attachment.id",
+            name="fk_t_document_evidence_version_attachment_id",
+        ),
+        nullable=False,
+    )
+    lineage_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    role: Mapped[str] = mapped_column(String(64), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    creator_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    review_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    reviewer_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    final_submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True
+    )
+    content_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    current_identity_key: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "current_identity_key",
+            name="uq_t_document_evidence_version_current_identity_key",
+        ),
+    )
+
+
+class DocumentEvidenceDerivation(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "t_document_evidence_derivation"
+
+    case_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_case.id",
+            name="fk_t_document_evidence_derivation_case_id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    parent_evidence_version_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_document_evidence_version.id",
+            name="fk_t_document_evidence_derivation_parent_evidence_version_id",
+        ),
+        nullable=False,
+    )
+    child_evidence_version_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_document_evidence_version.id",
+            name="fk_t_document_evidence_derivation_child_evidence_version_id",
+        ),
+        nullable=False,
+    )
+    derivation_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    derived_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    source_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
 
 

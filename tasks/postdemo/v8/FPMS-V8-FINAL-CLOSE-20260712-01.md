@@ -1,6 +1,6 @@
 # FPMS-V8-FINAL-CLOSE-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-15 / NOT STARTED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `17. Wave 8 — real paths and release close`
 Catalog ordinal: `283`
@@ -11,6 +11,12 @@ Executor role: Independent Reviewer / explorer
 - `AGENTS.md`
 - `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
 - `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
+- `docs/superpowers/specs/2026-07-14-fpms-v8-ultra-contract-freeze-delta-2.md`
+- `docs/superpowers/plans/2026-07-14-fpms-v8-ultra-contract-materialization-2.md`
+- `docs/superpowers/specs/2026-07-14-fpms-v8-ultra-contract-freeze-delta-3.md`
+- `tasks/batches/FPMS-POSTDEMO-V8-ULTRA-CONTRACT-DELTA-3-20260714-01.md`
+- `tasks/postdemo/FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-3-20260714-01.md`
+- `artifacts/FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-3-20260714-01/analysis/validate_delta3_overlay.py`
 - Source catalog line: `828`
 - Expected manifest phase: `deferred`
 - Customer gate requirement: `None`
@@ -327,7 +333,26 @@ No product fix, schema change or test-assertion weakening. Do not absorb another
 
 ### External, gate and inherited prerequisites
 
-- None
+Audit-only materialization controllers (outside product counts):
+
+- `FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-20260713-01`
+- `FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-2-20260714-01`
+- `FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-3-20260714-01`
+
+Product external prerequisites (seven additive product-graph nodes):
+
+- `FPMS-V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-20260713-01`
+- `FPMS-V8-OFFICIAL-FEE-ESTIMATE-RATE-PROVIDER-20260713-01`
+- `FPMS-V8-OFFICIAL-FEE-PREVIEW-LEGACY-TEST-MIGRATION-20260713-01`
+- `FPMS-V8-LC-RULE-REGISTRY-LEGACY-TEST-MIGRATION-20260714-01`
+- `FPMS-V8-DE-RAW-ATTACHMENT-REGISTRATION-GUARD-20260714-01`
+- `FPMS-V8-DE-EXTERNAL-SUBMISSION-ROLE-ALLOWLIST-20260714-01`
+- `FPMS-V8-DE-RAW-ATTACHMENT-EVIDENCE-ROLE-20260714-01`
+
+Audit-only governance gates (outside product counts):
+
+- `REPO-TASK-GATE-JSONL-STRUCTURAL-VALIDATION-20260714-01`
+- `REPO-CONCURRENT-WAVE-ATOMIC-EVIDENCE-VALIDATION-20260714-01`
 
 - Approved source dependency cell (verbatim): full ledger, every other catalog task
 
@@ -355,11 +380,58 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 - Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
 - All SQLite-writing tests and shared-file verification run through the global serialized queue.
 - Follow the frozen foundation/full close order; QA tasks report failures and never repair product code.
+- Before the existing full-manifest coverage gate or either release gate runs, do not
+  rerun the delta-1 or delta-2 overlay validators. Their accepted outputs, return codes,
+  evidence and overlay hashes are pinned read-only historical inputs. The cumulative
+  delta-3 validator must validate those pinned parent overlay hashes plus the corresponding
+  historical controller task/evidence gate results, fail closed on parent or task hash
+  drift, and prove an acyclic effective product graph of `290` unique nodes plus `204`
+  effective Foundation product requirements while the immutable catalog remains exactly
+  `283` rows, the immutable Foundation manifest remains exactly `197` rows and deferred
+  remains exactly `86`. G1/G2 and all three controllers are audit-only governance gates
+  and must never be counted as product nodes or Foundation product requirements. Only the
+  cumulative delta-3 validator is run as the current overlay gate; the pinned delta-1 and
+  delta-2 historical validator inputs are neither rerun nor required to report a current
+  PASS for Foundation, Full or Release closure. Then validate the task and atomic-evidence
+  gates for all seven product external prerequisites and audit-only G1/G2.
+- After G2 passes, every atomic-evidence validation in this final-close run, including a
+  single-lane validation with no peers, must use the repository G2 wrapper
+  `python3 scripts/atomic_evidence_validate.py`; direct external-helper validation is not
+  permitted. All SQLite-writing tests and shared-file verification remain serialized.
+- The final item-to-slice ledger must map all three additive controller/overlay families,
+  all seven product external prerequisite tasks and audit-only G1/G2 evidence without
+  representing controllers or governance gates as product slices. It must also prove all
+  `29` scoped decision-gate composite identities propagate through contracts, join,
+  keyset, HTTP, frontend, UI, fixture, real UI E2E and Full activation. A
+  representative-slice pass is never sufficient for Full or Release closure.
+- This final-close task alone owns repository-wide backend Ruff/pytest, frontend
+  lint/typecheck/build and full real-path Playwright verification. Keep the final close
+  audit shared-file order key `2`, require independent reviewer approval, and do not move,
+  duplicate, edit or weaken either existing release-gate command.
 
 ## Verification Commands
 
 - RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_final_close_contract.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
 - GREEN and scoped checks:
+- `./scripts/task_validate.sh FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-20260713-01`
+- `python3 scripts/atomic_evidence_validate.py FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-20260713-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- `./scripts/task_validate.sh FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-2-20260714-01`
+- `python3 scripts/atomic_evidence_validate.py FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-2-20260714-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- `./scripts/task_validate.sh FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-3-20260714-01`
+- `python3 scripts/atomic_evidence_validate.py FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-3-20260714-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- `python3 artifacts/FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-3-20260714-01/analysis/validate_delta3_overlay.py`
+- `./scripts/task_validate.sh REPO-TASK-GATE-JSONL-STRUCTURAL-VALIDATION-20260714-01`
+- `python3 scripts/atomic_evidence_validate.py REPO-TASK-GATE-JSONL-STRUCTURAL-VALIDATION-20260714-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- `./scripts/task_validate.sh REPO-CONCURRENT-WAVE-ATOMIC-EVIDENCE-VALIDATION-20260714-01`
+- `python3 scripts/atomic_evidence_validate.py REPO-CONCURRENT-WAVE-ATOMIC-EVIDENCE-VALIDATION-20260714-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- `for task in FPMS-V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-20260713-01 FPMS-V8-OFFICIAL-FEE-ESTIMATE-RATE-PROVIDER-20260713-01 FPMS-V8-OFFICIAL-FEE-PREVIEW-LEGACY-TEST-MIGRATION-20260713-01; do ./scripts/task_validate.sh "$task"; done`
+- `for task in FPMS-V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-20260713-01 FPMS-V8-OFFICIAL-FEE-ESTIMATE-RATE-PROVIDER-20260713-01 FPMS-V8-OFFICIAL-FEE-PREVIEW-LEGACY-TEST-MIGRATION-20260713-01; do python3 scripts/atomic_evidence_validate.py "$task" --required-step lint --required-step test --required-step independent_review --required-step scope; done`
+- `./scripts/task_validate.sh FPMS-V8-LC-RULE-REGISTRY-LEGACY-TEST-MIGRATION-20260714-01`
+- `python3 scripts/atomic_evidence_validate.py FPMS-V8-LC-RULE-REGISTRY-LEGACY-TEST-MIGRATION-20260714-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- `for task in FPMS-V8-DE-RAW-ATTACHMENT-REGISTRATION-GUARD-20260714-01 FPMS-V8-DE-EXTERNAL-SUBMISSION-ROLE-ALLOWLIST-20260714-01; do ./scripts/task_validate.sh "$task"; done`
+- `for task in FPMS-V8-DE-RAW-ATTACHMENT-REGISTRATION-GUARD-20260714-01 FPMS-V8-DE-EXTERNAL-SUBMISSION-ROLE-ALLOWLIST-20260714-01; do python3 scripts/atomic_evidence_validate.py "$task" --required-step lint --required-step test --required-step independent_review --required-step scope; done`
+- `./scripts/task_validate.sh FPMS-V8-DE-RAW-ATTACHMENT-EVIDENCE-ROLE-20260714-01`
+- `python3 scripts/atomic_evidence_validate.py FPMS-V8-DE-RAW-ATTACHMENT-EVIDENCE-ROLE-20260714-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
 - `python3 scripts/v8_catalog_manifest_gate.py --phase full --manifest tasks/batches/FPMS-POSTDEMO-V8-MITIGATION-20260712-01.md --self-pending FPMS-V8-FINAL-CLOSE-20260712-01`
 - `for task in $(python3 -c "import json; print(*(row['task_id'] for row in json.load(open('artifacts/PD-POSTDEMO-V8-MITIGATION-TASK-MANIFEST-20260712-01/materialization/catalog.json'))['tasks']))"); do [ "$task" = "FPMS-V8-FINAL-CLOSE-20260712-01" ] || ./scripts/task_validate.sh "$task"; done`
 - `cd backend && PYTHONPATH=. .venv/bin/alembic heads`
@@ -371,8 +443,8 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 - `cd backend && .venv/bin/pytest -q tests/test_v8_final_close_contract.py`
 - `git diff --check -- docs/reviews/fpms_postdemo_v8_mitigation_close_audit_20260712.md backend/tests/test_v8_final_close_contract.py tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md`
 - `./scripts/task_validate.sh FPMS-V8-FINAL-CLOSE-20260712-01`
+- Evidence validation: `python3 scripts/atomic_evidence_validate.py FPMS-V8-FINAL-CLOSE-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
 - `./scripts/release_gate.sh --manifest tasks/batches/FPMS-POSTDEMO-V8-MITIGATION-20260712-01.md  # lead-only after the final-close task gate passes`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-FINAL-CLOSE-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
 
 ## Evidence Path
 
@@ -381,4 +453,86 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 
 ## Done Definition
 
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-FINAL-CLOSE-20260712-01` pass. Only then may this task be reported PASS.
+All three controller task/evidence gates, all seven product external task/evidence gates
+and audit-only G1/G2 gates must pass before the existing manifest and release sequence
+begins. The current cumulative delta-3 validator must validate the pinned delta-1/delta-2
+historical validator outputs/evidence, parent overlay hashes and corresponding controller
+task/evidence gate results. The historical validators are not rerun and are not required
+to report a current PASS.
+Immutable-parent `283/197/86` counts, effective product/Foundation `290/204` counts and the
+complete three-family plus 29-composite-gate item-to-slice ledger must validate without
+counting controllers or G1/G2 as product slices. The exact RED is preserved; the minimum
+allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped
+lint/format/scope checks pass; shared files and SQLite verification were serialized; every
+atomic-evidence validation used the G2 wrapper, including single-lane validation;
+dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer
+approves the exact closure and non-closure; atomic evidence validation and
+`./scripts/task_validate.sh FPMS-V8-FINAL-CLOSE-20260712-01` pass. Only then may this task
+be reported PASS.
+
+## Delta-4 Ultra Contract Freeze — 2026-07-15
+
+### Latest-wins authority and controller gate
+
+- Authority: `docs/superpowers/specs/2026-07-15-fpms-v8-ultra-contract-freeze-delta-4.md`,
+  its 34-row supplemental manifest, and row `33 / M4-I / FINAL-CLOSE`.
+- Risk is `HIGH`; `chosen_runbook: P0-prereq-heavy-story` is latest-wins. Every inherited
+  Delta overlay, Allowed Files entry and verification/release command remains unchanged.
+- The Delta-4 controller
+  `FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-4-20260715-01` must first reach
+  independent accepted PASS with task gate, Evidence 1.1 and both required review axes.
+- Delta-1/2/3 controllers, their pinned overlays/hashes and all inherited audit/governance
+  gates remain mandatory accepted parents; Delta-4 does not rerun or rewrite their history.
+
+### Cumulative Delta-4 graph and hash gate
+
+- Run the accepted current validator
+  `artifacts/FPMS-V8-ULTRA-CONTRACT-TASK-MATERIALIZATION-BATCH-4-20260715-01/analysis/
+  validate_delta4_overlay.py` only after the controller PASS.
+- It must hash-lock every immutable parent, pinned prior overlay and normalized task anchor
+  and validate the deterministic cumulative Delta-4 manifest/overlay hashes.
+- It must prove exactly 302 unique product nodes, 216 effective Foundation nodes,
+  86 deferred nodes, zero unresolved dependency and zero cycle; governance controllers,
+  reviews and audit gates remain excluded from all product/Foundation counts.
+- It must also prove all twelve Delta-4 additions, seventeen re-freezes, four close
+  propagations, exact allowlists/dependencies, migration heads, shared-owner ordering,
+  SQLite serialization and unchanged final release-gate position.
+- Any missing, duplicate, stale, drifted, unresolved, cyclic, miscounted or self-approved
+  fact fails final close closed. No inference, waiver, repair or representative slice is
+  accepted.
+
+### Thirty-three row gates and immutable close order
+
+- Each Delta-4 row 01–33 requires its separate independent materialization verdict
+  `APPROVED/P0=P1=P2=0`; the controller's aggregate reviews never substitute for a row.
+- Every applicable row/product task must independently pass its exact targeted checks,
+  repository task gate, Evidence 1.1 scope/evidence gate and zero-finding review. The final
+  close consumes recorded results; it does not repair product code or approve itself.
+- Close order is exact and serialized:
+  `Foundation close → Full activation → item-to-slice ledger → final close → release`.
+- Row 30 must first prove all 216 Foundation product nodes and required audit gates. Row 31
+  may then pass only after the accepted customer-decision gates. Row 32 must then map all
+  302 product nodes, twelve Delta-4 additions, seventeen re-freezes and all four overlays
+  without counting governance as product. Only then may this Row 33 execute.
+- Full/catalog/ledger/final audit assertions, inherited real-path regressions and all
+  required task/evidence gates remain complete; no early or partial close is authoritative.
+
+### Shared verification and release boundary
+
+- Respect every shared-file ownership order. Alembic/SQLite-writing verification uses
+  `GLOBAL_SQLITE_SERIAL_QUEUE`, maximum writer one; real Playwright verification keeps its
+  inherited single-worker boundary. Final-close shared verification remains exclusive.
+- The existing repository-wide backend Ruff/pytest, frontend lint/typecheck/build and
+  full real-path Playwright commands remain owned only by this final-close task and run
+  only at their inherited manifest-defined close point.
+- Preserve both inherited release-gate command lines byte-for-byte and in place. The
+  lead-only final release gate runs only after this final-close task gate and independent
+  evidence/review acceptance; never move, duplicate, omit, weaken or run it early.
+
+### Materialization non-execution
+
+- This materialization changes only Status and this EOF appendix. It initializes no final
+  evidence, runs no controller/validator/product/repo-wide/close/release command, edits no
+  audit/test/product file and changes no inherited allowlist or release command.
+- Only atomic `check-task` runs now. Foundation, Full, ledger, final-close and release
+  execution remain deferred until every prerequisite above is durably accepted PASS.

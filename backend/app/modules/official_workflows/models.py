@@ -63,6 +63,15 @@ class OfficialWorkPackageManifest(UUIDPrimaryKeyMixin, AuditMixin, Base):
     attachment_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("t_doc_attachment.id"), nullable=True, index=True
     )
+    evidence_version_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "t_document_evidence_version.id",
+            name="fk_t_official_work_package_manifest_evidence_version_id",
+        ),
+        nullable=True,
+        index=True,
+    )
     official_file_role: Mapped[str | None] = mapped_column(String(64), nullable=True)
     source_role_alias: Mapped[str | None] = mapped_column(String(128), nullable=True)
     external_upload_position: Mapped[str | None] = mapped_column(String(128), nullable=True)

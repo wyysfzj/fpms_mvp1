@@ -77,24 +77,10 @@
 
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="法律状态" prop="status" :error="fieldErrors.get('status')?.join('，')">
-                <el-select
-                  v-model="form.status"
-                  placeholder="请选择法律状态"
-                  clearable
-                  class="full-width"
-                  :disabled="isReadonlyWorkflowStatus"
-                >
-                  <el-option
-                    v-for="option in statusOptions"
-                    :key="option.value"
-                    :label="option.label"
-                    :value="option.value"
-                    :disabled="option.disabled"
-                  />
-                </el-select>
-                <div v-if="showReadonlyStatusHint" class="field-hint">
-                  当前状态由流程或文书联动生成，此处仅展示，不建议手工修改。
+              <el-form-item label="法律状态">
+                <el-input :model-value="compatibilityStatusText" disabled />
+                <div class="field-hint">
+                  兼容状态由案件生命周期维护，此处仅供查看，保存时不会提交。
                 </div>
               </el-form-item>
             </el-col>
@@ -868,7 +854,6 @@ const EDITABLE_STATUS_VALUES = [
   'INVALIDATED',
   'INVALIDATED_PARTIAL',
 ]
-const READONLY_STATUS_VALUES = ['ACCEPTED', 'GRANT_PENDING'] as const
 const STATUSES_REQUIRING_APP_FIELDS = EDITABLE_STATUS_VALUES.filter((status) => status !== 'NOT_FILED')
 
 const route = useRoute()
@@ -891,7 +876,6 @@ const quickClientMode = ref<'applicant' | 'foreign_agent'>('applicant')
 
 const form = reactive<CaseUpdatePayload>({
   title: '',
-  status: '',
   app_no: '',
   filing_date: '',
   recv_date: '',
@@ -1042,35 +1026,11 @@ const quickClientDialogTitle = computed(() =>
   quickClientMode.value === 'foreign_agent' ? '快速新建外方代理' : '快速新建申请人主数据'
 )
 
-const statusOptions = computed(() => {
-  const editableOptions = EDITABLE_STATUS_VALUES.map((value) => ({
-    value,
-    label: CASE_STATUS_TEXT[value] || value,
-    disabled: false,
-  }))
-
-  const currentStatus = form.status?.trim()
-  if (currentStatus && READONLY_STATUS_VALUES.includes(currentStatus as typeof READONLY_STATUS_VALUES[number])) {
-    return [
-      {
-        value: currentStatus,
-        label: `${CASE_STATUS_TEXT[currentStatus] || currentStatus}（流程状态，只读）`,
-        disabled: true,
-      },
-      ...editableOptions,
-    ]
-  }
-
-  return editableOptions
+const compatibilityStatus = computed(() => (caseData.value?.status || '').trim())
+const compatibilityStatusText = computed(() => {
+  const status = compatibilityStatus.value
+  return CASE_STATUS_TEXT[status] || status || '未设置'
 })
-
-const showReadonlyStatusHint = computed(() =>
-  READONLY_STATUS_VALUES.includes((form.status || '').trim() as typeof READONLY_STATUS_VALUES[number])
-)
-
-const isReadonlyWorkflowStatus = computed(() =>
-  READONLY_STATUS_VALUES.includes((caseData.value?.status || form.status || '').trim() as typeof READONLY_STATUS_VALUES[number])
-)
 
 function createEmptyPriority(seq: number): CasePriority {
   return {
@@ -1177,7 +1137,6 @@ async function fetchCase() {
       await router.replace({ name: 'case_edit_by_no', params: { caseNo: caseData.value.case_no } })
     }
     form.title = caseData.value.title || ''
-    form.status = caseData.value.status || ''
     form.app_no = caseData.value.app_no || ''
     form.filing_date = caseData.value.filing_date || ''
     form.recv_date = caseData.value.recv_date || ''
@@ -1385,7 +1344,7 @@ function runCustomValidation(): ValidationItem[] {
     items.push({ key, message, section })
   }
 
-  const status = (form.status || '').trim()
+  const status = compatibilityStatus.value
   if (status && STATUSES_REQUIRING_APP_FIELDS.includes(status)) {
     if (!String(form.app_no || '').trim()) {
       add('app_no', '当前法律状态要求填写申请号。', 'pub_grant')
@@ -1562,10 +1521,6 @@ async function handleSave() {
         [bioDeposit.deposit_no, bioDeposit.deposit_unit_name, bioDeposit.deposit_date, bioDeposit.name].some((value) => String(value || '').trim())
       ),
       agent_splits: normalizeAgentSplitRows(form.agent_splits),
-    }
-
-    if (isReadonlyWorkflowStatus.value) {
-      delete payload.status
     }
 
     const updated = await updateCase(id, payload)

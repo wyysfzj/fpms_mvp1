@@ -315,7 +315,6 @@ function toUpdatePayload(data: CaseUpdatePayload): Record<string, unknown> {
     const payload: Record<string, unknown> = {}
 
     if (data.title !== undefined) payload.title = trimToNull(data.title)
-    if (data.status !== undefined) payload.status = trimToNull(data.status)
     if (data.filing_date !== undefined) payload.filing_date = trimToNull(data.filing_date)
     if (data.recv_date !== undefined) payload.recv_date = trimToNull(data.recv_date)
     if (data.foreign_agent_id !== undefined) payload.foreign_agent_id = trimToNull(data.foreign_agent_id)

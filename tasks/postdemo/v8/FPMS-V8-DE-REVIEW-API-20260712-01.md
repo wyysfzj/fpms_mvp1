@@ -1,6 +1,6 @@
 # FPMS-V8-DE-REVIEW-API-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-15 / NOT STARTED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `11. Wave 2C/3 — document evidence and existing workflow adapters`
 Catalog ordinal: `51`
@@ -93,3 +93,16 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 ## Done Definition
 
 The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-DE-REVIEW-API-20260712-01` pass. Only then may this task be reported PASS.
+
+## Delta-4 Ultra Contract Freeze — 2026-07-15
+
+- Latest-wins authority is `docs/superpowers/specs/2026-07-15-fpms-v8-ultra-contract-freeze-delta-4.md`, lines 444–457. Delta-4 selects `chosen_runbook: P0-prereq-heavy-story`; the historical runbook line above remains unchanged and is superseded only for this execution.
+- Task 51 owns exactly `POST /api/v1/documents/evidence-versions/{evidence_version_id}/review` with function parameter `_perm: None = Depends(require_perm("Doc.Edit"))`.
+- The strict body field order is exactly `case_id`, `decision`, `reviewed_at`, `idempotency_key`; `decision` is exactly `APPROVE | REJECT`, `reviewed_at` is naive, the evidence-version ID is path-only, and unknown, extra or missing fields return 422.
+- The reviewer is the server-owned current user. No client body or other input may supply or replace that actor; maker/reviewer separation remains in the service.
+- Delegate exactly once to `review_evidence_version()` and return its direct result with no invented envelope. Fresh success and exact replay return 200.
+- The outer adapter commits once on fresh or replay success and rolls back once on every service error.
+- Exact errors are 400 for invalid input or path/case mismatch, 404 for missing case or evidence version, and 409 for state, review, idempotency or self-review conflict, plus 401, 403 and 422. No 201 or 204 is allowed.
+- This task depends on Task 50, `FPMS-V8-DE-GENERATED-ATTACHMENT-EVIDENCE-ADAPTER-20260712-01`, reaching independently accepted PASS. Shared `backend/app/modules/documents/api.py` ownership is serialized in exact order Task 50 → Task 51; they must not execute concurrently.
+- This materialization performs no router, service or product implementation and does not broaden the task allowlist or closure slice.
+- The existing task-owned RED/GREEN, targeted checks, serialized SQLite verification, evidence artifacts, independent review, task gate, atomic validation and Done Definition remain unchanged.

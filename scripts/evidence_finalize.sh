@@ -8,19 +8,9 @@ fi
 
 TASK_ID=$1
 ART_DIR="artifacts/$TASK_ID"
-GIT_DIR="$ART_DIR/git"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-mkdir -p "$GIT_DIR"
-
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git diff >"$GIT_DIR/diff.patch"
-  git status -sb >"$GIT_DIR/status.txt"
-  git rev-parse HEAD >"$GIT_DIR/rev.txt"
-else
-  echo "Not a git repository" >"$GIT_DIR/diff.patch"
-  echo "Not a git repository" >"$GIT_DIR/status.txt"
-  echo "unknown" >"$GIT_DIR/rev.txt"
-fi
+python3 "$SCRIPT_DIR/evidence_scope.py" finalize "$TASK_ID"
 
 SUMMARY_PATH="$ART_DIR/summary.md"
 if [ ! -f "$SUMMARY_PATH" ]; then

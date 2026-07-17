@@ -8,11 +8,28 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
-from app.core.errors import raise_business_error
+from app.core.errors import BusinessError, raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
+from app.modules.fees.fee_reduction import FeeReductionValidationError
 from app.modules.fees.models import FeeDraft, FeeItem
+from app.modules.fees.obligation_contracts import (
+    FeeEstimateContext,
+    PreviewFeeEstimateCommand,
+    RecordFeeObligationInstructionCommand,
+)
+from app.modules.fees.obligation_schemas import (
+    FeeObligationInstructionIn,
+    FeeObligationInstructionOut,
+)
+from app.modules.fees.obligation_service import (
+    FeeEstimatePreviewError,
+    FeeEstimatePreviewErrorCode,
+    preview_estimate,
+    record_client_instruction,
+)
+from app.modules.fees.official_rate_book import SqlAlchemyOfficialFeeEstimateRateProvider
 from app.modules.fees.schemas import (
     ApplyFeeDraftGenerateIn,
     FeeDraftCreateIn,
@@ -35,7 +52,6 @@ from app.modules.fees.service import create_fee_draft as create_fee_draft_servic
 from app.modules.fees.service import create_fee_rate as create_fee_rate_service
 from app.modules.fees.service import generate_apply_fee_draft as generate_apply_fee_draft_service
 from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
-from app.modules.fees.service import preview_official_fee_candidates as preview_official_fee_service
 from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
 from app.modules.fees.service import update_fee_item as update_fee_item_service
 from app.modules.fees.service import update_fee_rate as update_fee_rate_service
@@ -204,6 +220,7 @@ def generate_apply_fee_draft(
 
 @router.post(
     "/fees/official-fee-preview",
+    status_code=status.HTTP_200_OK,
     response_model=OfficialFeePreviewOut,
     summary="Preview official fee candidates",
 )
@@ -212,8 +229,90 @@ def preview_official_fee_candidates(
     _perm: None = Depends(require_perm("Fee.Read")),
     db: Session = Depends(get_db),
 ) -> OfficialFeePreviewOut:
-    preview = preview_official_fee_service(db, data=payload)
-    return OfficialFeePreviewOut.model_validate(preview)
+    with db.no_autoflush:
+        case = db.execute(select(Case).where(Case.id == payload.case_id)).scalar_one_or_none()
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+    command = PreviewFeeEstimateCommand(
+        case_id=payload.case_id,
+        trigger_context=FeeEstimateContext(
+            trigger=payload.trigger_context.trigger,
+            source_document_id=payload.trigger_context.source_document_id,
+        ),
+        currency=payload.currency,
+    )
+    try:
+        estimate = preview_estimate(
+            command=command,
+            rate_effective_on=payload.rate_effective_on,
+            rate_provider=SqlAlchemyOfficialFeeEstimateRateProvider(db),
+        )
+    except FeeEstimatePreviewError as exc:
+        status_code = (
+            400
+            if exc.code
+            in {
+                FeeEstimatePreviewErrorCode.INVALID_COMMAND,
+                FeeEstimatePreviewErrorCode.TRIGGER_UNSUPPORTED,
+            }
+            else 409
+        )
+        raise_business_error(
+            exc.code.value,
+            exc.code.value,
+            details=exc.details,
+            status_code=status_code,
+        )
+    except FeeReductionValidationError as exc:
+        raise_business_error(
+            exc.code.value,
+            exc.code.value,
+            details=exc.details,
+            status_code=409,
+        )
+
+    return OfficialFeePreviewOut.model_validate(estimate)
+
+
+@router.post(
+    "/fees/obligations/{obligation_id}/instruction",
+    status_code=status.HTTP_200_OK,
+    response_model=FeeObligationInstructionOut,
+    summary="Record a fee obligation client instruction",
+)
+def record_fee_obligation_instruction(
+    obligation_id: str,
+    payload: FeeObligationInstructionIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> FeeObligationInstructionOut:
+    command = RecordFeeObligationInstructionCommand(
+        obligation_id=obligation_id,
+        instruction=payload.instruction,
+        actor_id=current_user.id,
+        idempotency_key=payload.idempotency_key,
+    )
+    try:
+        result = record_client_instruction(command, db)
+    except BusinessError:
+        db.rollback()
+        raise
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return FeeObligationInstructionOut(
+        obligation_id=result.obligation.id,
+        client_instruction_status=result.obligation.statuses.client_instruction_status,
+        activity_id=result.activity_id,
+        idempotency_key=result.idempotency_key,
+        reused=result.reused,
+    )
 
 
 @router.post("/fees/drafts/{draft_id}/lock", response_model=OkOut, summary="Lock a fee draft")

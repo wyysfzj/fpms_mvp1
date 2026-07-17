@@ -1,6 +1,6 @@
 # FPMS-V8-W1-F3-OBLIGATION-DRAFT-LINK-CARRIER-20260712-01
 
-Status: READY / NOT STARTED
+Status: PASS
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `8. Wave 1 — schema spine, globally serialized`
 Catalog ordinal: `11`
@@ -27,12 +27,66 @@ Executor role: Backend Developer / worker
 
 Task Contract Profile: `TC-SCHEMA`
 
-- RED expectation: Exact schema test fails because the named table/column/index is absent.
-- GREEN expectation: Exact schema test, task-scoped Ruff, unique-head check and clean temporary SQLite `upgrade head` pass.
+- RED expectation: Exact schema test fails because `FeeObligationDraftItemLink` / `t_fee_obligation_draft_item_link`, revision `v8_w1_f3_draft_item_link_01`, the seven frozen columns or the three named constraints are absent.
+- GREEN expectation: Exact ORM and migrated-SQLite tests prove the seven frozen columns, physical types, nullability/defaults, exact link uniqueness, both endpoint FKs and cascade behavior; task-scoped Ruff, unique-head check and clean temporary SQLite `upgrade head` pass.
+
+## Ultra Replan Record — 2026-07-13
+
+- Blocker found before RED/source edits: the canonical design and plan froze an obligation-line to draft-item link carrier, but not its physical column names, types, nullability, audit defaults, link cardinality or delete actions.
+- Resolution: the physical contract below is frozen from the canonical V8 fee design, frozen F2 line contract and existing `FeeDraft`/`FeeItem` endpoint conventions. The exact closure remains one relationship carrier; no draft creation, service behavior or target-table prerequisite is absorbed.
+- Story Shape Classification remains unchanged: shared fee-model ownership and the globally serialized Alembic/SQLite chain still make this a high-cost prerequisite.
+- `chosen_runbook` remains `P0-prereq-heavy-story`.
+- Implementation resumes only after dependency `FPMS-V8-W1-F2-FEE-OBLIGATION-LINE-CARRIER-20260712-01` is PASS and the unique Alembic head is `v8_w1_f2_fee_obligation_line_01`.
+
+## Frozen Physical Schema Contract
+
+ORM class and table:
+
+- Class: `FeeObligationDraftItemLink`
+- Table: `t_fee_obligation_draft_item_link`
+- Migration revision: `v8_w1_f3_draft_item_link_01`
+- Migration `down_revision`: `v8_w1_f2_fee_obligation_line_01`
+- Migration policy: forward-only; `downgrade()` raises `NotImplementedError`.
+
+The table has exactly these seven columns:
+
+| Column | SQLAlchemy / Alembic type | ORM annotation | Nullable | Server default | Meaning |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `String(36)` | `Mapped[str]` | no | none; application UUID | link identity |
+| `obligation_line_id` | `String(36)` | `Mapped[str]` | no | none | exact F2 obligation line represented by the draft item |
+| `fee_item_id` | `String(36)` | `Mapped[str]` | no | none | exact existing `FeeItem` row |
+| `created_at` | `DateTime(timezone=False)` | `Mapped[datetime]` | no | `CURRENT_TIMESTAMP` | link creation time |
+| `updated_at` | `DateTime(timezone=False)` | `Mapped[datetime]` | no | `CURRENT_TIMESTAMP` | audit update time; later writes update it explicitly |
+| `created_by` | `String(36)` | `Mapped[str \| None]` | yes | none | link creator snapshot; no user FK |
+| `updated_by` | `String(36)` | `Mapped[str \| None]` | yes | none | link updater snapshot; no user FK |
+
+Exact named keys and constraints:
+
+| Name | Contract |
+| --- | --- |
+| primary key | `PRIMARY KEY (id)`; repository-default unnamed PK |
+| `fk_t_fee_obligation_draft_item_link_obligation_line_id` | `obligation_line_id -> t_fee_obligation_line.id`, `ON DELETE CASCADE` |
+| `fk_t_fee_obligation_draft_item_link_fee_item_id` | `fee_item_id -> t_fee_item.id`, `ON DELETE CASCADE` |
+| `uq_t_fee_obligation_draft_item_link_pair` | `UNIQUE (obligation_line_id, fee_item_id)` in exactly this order |
+
+Frozen invariants and exclusions:
+
+- F3 freezes relationship identity, not draft-generation policy. The exact pair is idempotent; the carrier does not invent a stronger one-to-one rule because no such cardinality is approved by the canonical design. Any stricter allocation rule belongs to the later service contract.
+- `ON DELETE CASCADE` removes a relationship whose endpoint is removed. It does not authorize a later service to delete obligation truth or financial history; deletion policy remains outside F3.
+- There is no `case_id`. Both endpoints lack an approved composite parent-key path that would enforce the full same-case invariant without modifying F2 or legacy `t_fee_item`; a redundant case column would therefore provide only partial/misleading integrity. `FPMS-V8-FO-PREPARE-DRAFT-20260712-01` must validate that the obligation line, `FeeItem` and owning `FeeDraft` belong to the same case before inserting the link.
+- There is no `draft_id`: `fee_item_id -> t_fee_item.draft_id` is the existing authoritative draft association. Duplicating it would create an avoidable consistency surface.
+- Do not use `AuditMixin`: its application-side timezone defaults do not satisfy the frozen migration-level `CURRENT_TIMESTAMP` contract.
+- No activity id, amount, status, source, payload, idempotency key, enum/CHECK, business index, extra UNIQUE or extra FK is added. F3 does not create a `FeeDraft`/`FeeItem`, append an activity or update F1/F2 status.
+
+## Frozen RED / GREEN Contract
+
+- RED must assert `FeeObligationDraftItemLink` / `t_fee_obligation_draft_item_link`, revision/down-revision identity, the exact seven columns, their physical types/nullability/defaults and the three named constraints above; before implementation it fails because the model/table/migration is absent.
+- GREEN must prove ORM and reflected migrated-SQLite metadata match exactly, an application UUID survives `flush()`, a valid obligation-line/item pair succeeds, missing obligation-line or fee-item references fail, and an exact duplicate pair fails.
+- GREEN must prove deleting either endpoint cascades only its link, multiple distinct items may link to the same obligation line, multiple distinct obligation lines may link to the same item at carrier level, audit timestamps use `CURRENT_TIMESTAMP`, and no `case_id`, `draft_id`, service behavior or unapproved field is present.
 
 ## Exact Closure Slice
 
-Add only obligation-line to draft-item linkage.
+Add only the frozen seven-column `FeeObligationDraftItemLink` / `t_fee_obligation_draft_item_link` carrier with exact obligation-line and existing `FeeItem` FKs, pair uniqueness, SQLite-safe audit fields and endpoint-delete cascades; no draft creation or same-case service behavior.
 
 ## Explicit Non-Closure
 

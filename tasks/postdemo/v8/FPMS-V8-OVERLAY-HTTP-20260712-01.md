@@ -1,6 +1,6 @@
 # FPMS-V8-OVERLAY-HTTP-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-14 / NOT STARTED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `16. Wave 7 — lifecycle overlay and centered UI`
 Catalog ordinal: `265`
@@ -10,6 +10,7 @@ Executor role: Backend Developer / worker
 
 - `AGENTS.md`
 - `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
+- `docs/superpowers/specs/2026-07-14-fpms-v8-ultra-contract-freeze-delta-2.md`
 - `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
 - Source catalog line: `796`
 - Expected manifest phase: `foundation`
@@ -18,21 +19,102 @@ Executor role: Backend Developer / worker
 ## Story Shape Classification
 
 - `shared_file_density`: low
-- `prereq_dependency_density`: low
+- `prereq_dependency_density`: high
 - `be_fe_coupling`: low
 - `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+- `chosen_runbook`: `P0-prereq-heavy-story`
 
 ## Task Contract Profile
 
 Task Contract Profile: `TC-API`
 
-- RED expectation: Exact API test fails with route/shape/permission/status mismatch.
-- GREEN expectation: Exact API test passes named 200/201/400/401/403/404/409/422 semantics and response envelope.
+- RED expectation: Exact API test fails on the route, four-permission contract, direct
+  response, 29-entry serialization or unchanged status matrix.
+- GREEN expectation: Exact API test passes the direct 200 response and exact
+  401/403/404/409/422 semantics without a new response envelope.
 
 ## Exact Closure Slice
 
 Bodyless GET `/cases/{case_id}/lifecycle-overlay`; permissions as four function parameters; no router edit.
+
+## Ultra Contract Freeze — 2026-07-14
+
+This section is authoritative for High implementation. It materializes the delta-2 HTTP
+serialization contract without changing this task's one-endpoint closure, duplicating
+overlay business rules or reopening the accepted keyset service.
+
+### Frozen route, permissions and direct response
+
+- Keep the bodyless `GET /cases/{case_id}/lifecycle-overlay` route exactly as frozen.
+  Path and query parameters are not a request body, and no body schema is introduced.
+- Inject `Case.Read`, `Doc.Read`, `Task.Read` and `Fee.Read` as four separate handler
+  function parameters using `Depends(require_perm(...))`; do not place them in decorator
+  `dependencies`. Missing any one permission returns 403 rather than a partial snapshot.
+- Use the already-wired cases router. Do not edit router wiring, add a second endpoint or
+  create a partial-visibility variant.
+- A successful request returns 200 and serializes the accepted `LifecycleOverlay`
+  result directly. Do not wrap it in a new success envelope, rename fields, reconstruct
+  the result, invoke a second resolver path or duplicate service rules in the adapter.
+
+### Frozen 29-entry decision-gate serialization
+
+- `decision_gates` contains exactly 29 ordered entries unchanged from the keyset result:
+  the seven non-legacy codes in accepted enum order, each with
+  `requested_scope_key=case:{case_id}`, followed by 22
+  `DG-LEGACY-FORM-CLASS` entries requested as ascending `form-001..form-022`.
+- Those 29 entries cover eight distinct gate codes. The legacy gate code intentionally
+  repeats 22 times, and entry identity remains exactly
+  `(gate_code, requested_scope_key)`. The HTTP adapter must not key, merge, replace or
+  deduplicate entries by `gate_code` alone.
+- Every cursor page returns the same complete ordered gate snapshot. Milestone paging
+  must not truncate the tuple, omit it after the first page or otherwise apply
+  `after_sequence`, `limit`, `has_more` or `next_cursor` to decision gates.
+- No returned entry may have `requested_scope_key=ALL-22`, and the HTTP adapter must not
+  issue such a request. A legacy fallback is preserved unchanged as
+  `requested_scope_key=form-NNN` with `resolved_scope_key=ALL-22`, including its exact
+  extracted value and source provenance.
+- `generated_at`, `lifecycle_revision`, `next_cursor` and `has_more` are serialized
+  unchanged from the keyset result. Timestamp capture, frozen revision, milestone cursor
+  calculation and the complete-per-page gate snapshot remain inherited from
+  `FPMS-V8-OVERLAY-KEYSET-REVISION-20260712-01`; the HTTP layer reads no new clock and
+  calculates no cursor.
+
+### Frozen unchanged HTTP status matrix
+
+| Status | Exact API behavior |
+| --- | --- |
+| 200 | Return the direct complete `LifecycleOverlay`, including all 29 ordered decision-gate entries. |
+| 401 | Existing authentication rejects an unauthenticated request. |
+| 403 | Any missing `Case.Read`, `Doc.Read`, `Task.Read` or `Fee.Read` permission rejects the whole request. |
+| 404 | Preserve the existing case-not-found behavior. |
+| 409 | Preserve unreconstructable revision/configuration conflict behavior; representable conflicts stay in warnings and never truncate the snapshot. |
+| 422 | Preserve query/path validation behavior. |
+
+No status, error code, detail shape or module response convention is remapped or newly
+enveloped by this adapter.
+
+### Frozen RED / GREEN API test contract
+
+`backend/tests/test_v8_lifecycle_overlay_api.py` MUST prove:
+
+1. the sole bodyless GET route, four parameter-injected permissions, no partial response
+   and no router-wiring or second-route requirement;
+2. a direct 200 response contains exactly 29 ordered gate entries, exactly eight distinct
+   gate codes and all 22 repeated legacy-code entries;
+3. all 29 `(gate_code, requested_scope_key)` identities are distinct and preserve the
+   seven `case:{case_id}` plus 22 ascending form scopes without code-only deduplication;
+4. no entry requests `ALL-22`, while a fixture fallback preserves requested `form-NNN`
+   separately from resolved `ALL-22` and keeps the remaining value/source fields
+   unchanged;
+5. every tested cursor page includes the complete same gate snapshot, while
+   `generated_at`, `lifecycle_revision`, `next_cursor` and `has_more` remain exact
+   keyset-service values; and
+6. 401/403/404/409/422 behavior remains unchanged and success has no invented response
+   envelope.
+
+The RED is missing HTTP serialization or any route/permission/status mismatch. GREEN
+does not authorize changes to keyset logic, decision-gate resolution, schemas, router
+wiring, frontend behavior or any second endpoint.
 
 ## Explicit Non-Closure
 

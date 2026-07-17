@@ -1,6 +1,6 @@
 # FPMS-V8-FEE-REDUCTION-APPROVAL-CREATE-API-20260712-01
 
-Status: READY / NOT STARTED
+Status: READY FOR HIGH / ULTRA CONTRACT FROZEN 2026-07-15 / NOT STARTED
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `12. Wave 4 — fee-obligation module and fixed rules`
 Catalog ordinal: `95`
@@ -93,3 +93,40 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 ## Done Definition
 
 The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-FEE-REDUCTION-APPROVAL-CREATE-API-20260712-01` pass. Only then may this task be reported PASS.
+
+## Delta-4 Ultra Contract Freeze — 2026-07-15
+
+### Latest-wins authority
+
+- Authoritative contract: `docs/superpowers/specs/2026-07-15-fpms-v8-ultra-contract-freeze-delta-4.md`, lines 458–472.
+- Supplemental authority: row `22 / M4-F / H4-4` of `tasks/batches/FPMS-POSTDEMO-V8-ULTRA-CONTRACT-DELTA-4-20260715-01.md`.
+- Risk remains `HIGH`; product work and evidence remain `NOT STARTED`.
+- `chosen_runbook: P0-prereq-heavy-story` supersedes the historical runbook above for Delta-4 execution.
+- This appendix is latest-wins only for the exact HTTP contract, dependency, transaction and acceptance rules below; every other inherited byte and the existing allowlist remain unchanged history.
+
+### Exact fee-reduction approval create HTTP contract
+
+- Route is exact `POST /api/v1/fees/cases/{case_id}/reduction-approvals`; permission is exact `Fee.Edit` through the existing permission dependency.
+- The strict request body has this exact field order: `case_id`, `scope_type`, `applicant_ids`, `eligibility_attributes_version`, `eligibility_attributes_json`, `reduction_ratio`, `fee_codes`, `fee_year_from`, `fee_year_to`, `effective_from`, `effective_to`, `source_evidence_version_id`, `expected_source_content_hash`, `confirmed_at`.
+- Body `case_id` is intentionally retained. A path/body mismatch fails before service invocation with 400 `FEE_REDUCTION_APPROVAL_CASE_MISMATCH` and both IDs in details.
+- The confirmed actor is the server-owned current user. Never accept, infer or substitute a client, stored-evidence, fallback or system actor.
+- `confirmed_at` is the exact naive, client-stable value; do not replace it with a server clock or timezone conversion.
+- Delegate exactly once to accepted `record_fee_reduction_approval()` and return direct `{"approval_id":"<service.approval_id>"}` with no invented response envelope.
+- Service result `CREATED` maps to 201; `REUSED` maps to 200. Commit once on either success and roll back once on error.
+- Preserve 401/403 permission semantics, 404 missing-resource semantics, service evidence-case mismatch as 409, every other accepted 409 conflict, and strict 422 validation for missing, extra or malformed input.
+- There is no client idempotency field in the body, path, query or header contract. Do not invent one; reuse remains the accepted service's deterministic identity/result behavior.
+
+### Dependency and non-closure
+
+- `FPMS-V8-FEE-REDUCTION-APPROVAL-RECORD-SERVICE-20260712-01` must retain independently accepted PASS evidence before High starts this API task.
+- Keep business validation, snapshot/evidence identity, reuse and conflict decisions inside that accepted service; do not duplicate or weaken them in the API/schema adapter.
+- Keep the existing Allowed Files list exact. Do not add or rewire a router, add a model/migration/seed/endpoint, alter fee truth or customer policy, or absorb another V8 row.
+- This Ultra materialization changes no API, schema, router, test or product file and initializes no evidence.
+
+### Scoped TDD, evidence and gates
+
+- After the prerequisite is accepted, initialize Evidence 1.1 through the repository `./scripts/evidence_init.sh` entrypoint with this task file and every exact existing allowlist path before product/test edits.
+- RED first through the public HTTP seam must prove route/permission, strict body, server actor, path/body 400 details, no client idempotency input, direct response, CREATED 201/REUSED 200, error mapping and commit/rollback behavior.
+- GREEN is the smallest allowlisted API/schema/test change; run only the inherited targeted pytest, scoped Ruff/format/diff checks and serialized SQLite-writing verification named above.
+- PASS requires latest required results/logs, scoped baseline-subtracted diff, dirty-baseline artifacts when applicable, independent approved zero-finding review, `./scripts/task_validate.sh`, and `scripts/atomic_evidence_validate.py` through the shared Evidence 1.1 consumer.
+- This contract-freeze turn runs only the repository atomic task check; it does not execute RED/GREEN, task/evidence gates, broad verification or release work.
