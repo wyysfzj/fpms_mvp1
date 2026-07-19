@@ -85,24 +85,27 @@ peer-artifact reconstruction exceeds that threat model.
 - No task that has not started may select legacy-adopt or any post-checkpoint compatibility
   profile.
 
-### 5.2 Two-stage activation and new work
+### 5.2 Shadow canary, atomic activation and new work
 
-- The single governance implementation task owns both activation stages and remains
-  nonterminal between them. Stage 1 installs and hash-binds the reviewed fast-close bytes,
-  transitions that governance task to `STAGED_PENDING_CANARY`, and leaves the existing
-  protocol as the repository default. It permits `fast-close-1` only for the exact named
-  product canary task.
-- The canary state records `acceptance_protocol: "fast-close-1"` and no other task may
-  select that protocol during Stage 1.
-- Canary PASS is a prerequisite for the Stage 2 default-switch receipt. Stage 2 changes
-  only the default-selection marker to `fast-close-1`; the same still-nonterminal
-  governance task writes that receipt, performs its final activation checks and then reaches
-  terminal PASS. Stage 2 does not change executable bytes, recapture any baseline or create
-  a second governance task.
-- A canary failure leaves the old protocol as default and records rollback without changing
-  historical evidence or product code; the governance task closes BLOCKED/FAIL rather than
-  claiming PASS.
-- After the Stage 2 receipt, every newly started eligible ordinary HIGH task records
+- The single governance implementation task builds, tests, hash-binds and independently
+  reviews the candidate fast-close bytes without making them active authority.
+- The exact named product canary remains governed and accepted only by the current terminal
+  v2 authority. Its state records the current protocol and it closes through the current v2
+  chain.
+- A read-only candidate fast-close evaluator consumes the canary's frozen terminal bundle
+  and writes a non-authoritative shadow receipt only inside the governance task artifact.
+  It must not edit the canary state, task, evidence bundle or terminal receipt and cannot
+  claim product acceptance.
+- Current-v2 canary PASS and a matching successful shadow receipt are both prerequisites for
+  activation. A mismatch or failure leaves current v2 active and prevents the governance
+  task from claiming PASS.
+- The governance task then uses the current v2 governance-activation authority to install
+  the already reviewed candidate bytes and default-selection marker in one activation,
+  performs its final checks, and reaches terminal PASS under the current v2 acceptance
+  chain. No product task relies on nonterminal governance and no second governance task is
+  created.
+- Only after that governance task's terminal PASS does every newly started eligible
+  ordinary HIGH task record
   `acceptance_protocol: "fast-close-1"`. Existing states keep their recorded protocol.
   Foundation, Full, Final, Release, governance activation, hostile-builder and any task
   whose exact contract requires expanded or multi-axis close never inherit this ordinary
@@ -268,25 +271,25 @@ The implementation task uses targeted TDD and proves:
     expanded/multi-axis close profiles cannot select the ordinary fast close;
 12. generated summary cannot override terminal state.
 
-After focused tests, one real frozen HIGH product task is the canary. It must close with:
+After focused tests, one real frozen HIGH product task is the canary. Under current v2 it
+must close with:
 
 - exactly one successful final scope candidate;
 - exactly one independent review generation unless the reviewer finds a real defect;
-- exactly one terminal accept action;
-- no compatibility task;
-- no scope rebuild caused solely by unrelated peer evidence.
+- no compatibility task.
 
-Only the Stage 2 default-switch receipt, written by the still-nonterminal governance task
-after canary PASS, makes the new protocol the default for remaining eligible ordinary HIGH
-V8 work. The governance task then performs its final checks and reaches terminal PASS.
+The candidate evaluator then proves against that frozen terminal bundle that fast-close
+would produce exactly one matching shadow accept receipt and no scope rebuild caused solely
+by unrelated peer evidence. The shadow is non-authoritative. Only the subsequent atomic
+activation and terminal PASS of the governance task make the new protocol the default for
+remaining eligible ordinary HIGH V8 work.
 
 ## 11. Failure handling
 
 - A real contract or domain ambiguity pauses only the affected product lane.
-- A fast-close implementation defect blocks Stage 1 activation and leaves governance v2
-  active.
-- A canary failure leaves Stage 1 installed bytes inactive for general work, keeps the
-  existing close protocol as default, records rollback without changing historical
+- A fast-close implementation defect leaves governance v2 active.
+- A current-v2 canary failure or shadow mismatch leaves candidate bytes inactive, keeps the
+  existing close protocol as default, records the failure without changing historical
   evidence or product code, and prevents the governance task from reaching PASS.
 - A legacy edge case after activation is archived as evidence; it does not automatically
   authorize a compatibility implementation.
