@@ -85,10 +85,20 @@ peer-artifact reconstruction exceeds that threat model.
 - No task that has not started may select legacy-adopt or any post-checkpoint compatibility
   profile.
 
-### 5.2 New work
+### 5.2 Two-stage activation and new work
 
-- After activation, every new task state records
-  `acceptance_protocol: "fast-close-1"`.
+- Stage 1 activation installs and hash-binds the reviewed fast-close bytes but leaves the
+  existing protocol as the repository default. It permits `fast-close-1` only for the exact
+  named canary task.
+- The canary state records `acceptance_protocol: "fast-close-1"` and no other task may
+  select that protocol during Stage 1.
+- Canary PASS is a prerequisite for the Stage 2 default-switch receipt. Stage 2 changes
+  only the default-selection marker to `fast-close-1`; it does not change executable bytes,
+  recapture any baseline or rerun the implementation closure.
+- A canary failure leaves the old protocol as default and records rollback without changing
+  historical evidence or product code.
+- After the Stage 2 receipt, every newly started task state records
+  `acceptance_protocol: "fast-close-1"`. Existing states keep their recorded protocol.
 - New fast-close work begins only from an explicit integration checkpoint. The checkpoint
   is committed locally and is not pushed.
 - A maximal safe wave registers all task owners before product edits begin. Changes owned
@@ -119,8 +129,9 @@ change fails closed.
 ### 6.2 Required work
 
 The implementer records the task's exact RED, canonical GREEN/test and scoped lint or other
-contract-required checks. Diagnostic reruns may exist, but only the latest required
-successful results are candidate inputs.
+contract-required checks. Diagnostic reruns may exist, but the latest matching result for
+each required step must itself be executed, log-bound and `rc=0`. An earlier success never
+masks a later matching failure.
 
 No manual `scope` result is required before review preparation.
 
@@ -216,10 +227,11 @@ It must satisfy all of the following:
 - no new risk-classification subsystem;
 - no product task edits;
 - no manual status-summary authority;
-- active non-test governance execution line count across `taskctl`,
-  `evidence_scope.py`, `evidence_validate.py`, `task_validate.sh` and
-  `atomic_evidence_validate.py` must not increase from the captured implementation-task
-  baseline;
+- the implementation task captures the complete repository inventory and line count of all
+  active non-test governance execution code selected by the manifest or invoked by its
+  consumers, including shell entry points; the accepted result must have a smaller total;
+- governance execution logic may not be moved to a file outside that captured inventory to
+  evade the reduction, and no new executable/module is permitted;
 - duplicated validation removed or replaced by one canonical receipt;
 - existing terminal PASS and release consumers remain accepted;
 - negative tests prove stale scope, self-review, nonzero findings, missing results,
@@ -241,7 +253,8 @@ The implementation task uses targeted TDD and proves:
 6. an intersecting owner/path change does invalidate it;
 7. tracked and untracked unowned drift fails;
 8. stale or self-authored review fails;
-9. missing/nonzero required results fail;
+9. missing/nonzero required results fail, including success followed by a later matching
+   failure;
 10. concurrent manifest peer checks remain fail closed;
 11. Foundation/Full/Final/Release profiles cannot select the ordinary fast close;
 12. generated summary cannot override terminal state.
@@ -254,15 +267,17 @@ After focused tests, one real frozen HIGH product task is the canary. It must cl
 - no compatibility task;
 - no scope rebuild caused solely by unrelated peer evidence.
 
-Only after the canary PASS does the new protocol become the default for remaining unstarted
-V8 work.
+Only the Stage 2 default-switch receipt after canary PASS makes the new protocol the default
+for remaining unstarted V8 work.
 
 ## 11. Failure handling
 
 - A real contract or domain ambiguity pauses only the affected product lane.
-- A fast-close implementation defect blocks activation and leaves governance v2 active.
-- A canary failure rolls back selection to the existing close protocol without changing
-  historical evidence or product code.
+- A fast-close implementation defect blocks Stage 1 activation and leaves governance v2
+  active.
+- A canary failure leaves Stage 1 installed bytes inactive for general work, keeps the
+  existing close protocol as default and records rollback without changing historical
+  evidence or product code.
 - A legacy edge case after activation is archived as evidence; it does not automatically
   authorize a compatibility implementation.
 - Governance work ends after activation/canary PASS or a documented rollback. It may not
