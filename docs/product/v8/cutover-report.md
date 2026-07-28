@@ -1,7 +1,7 @@
 # FPMS C3.1 Lean Cutover Report
 
-- Date: 2026-07-28
-- Status: lean-governance adoption candidate; product adoption has not started
+- Date: 2026-07-29
+- Status: `TERMINAL PASS`; rolling product adoption is enabled
 - Active branch: `codex/c3-lean-integration-20260728`
 - Fixed clean parent: `afa58429e6b6e80b85f76055139e18fbe38ec9e8`
 
@@ -57,6 +57,21 @@ It contains 197 Foundation rows and 86 deferred/full-only rows. The initial ledg
 No historical receipt or archive checkpoint is treated as current integrated-tree
 acceptance.
 
+After the three canaries, the same 283-row ledger contains:
+
+| Current disposition | Count |
+| --- | ---: |
+| `CURRENT_VERIFIED` | 17 |
+| `SUPERSEDED_BY_STORY` | 5 |
+| `PENDING` | 84 |
+| `HISTORICAL_PASS_CANDIDATE` | 85 |
+| `WIP` | 6 |
+| `DEFERRED_FULL_ONLY` | 86 |
+| Total | 283 |
+
+`SUPERSEDED_BY_STORY` rows resolve only to reachable `CURRENT_VERIFIED` stories. Inventory
+validation against the current integration `HEAD` passes.
+
 ## Dirty-path disposition
 
 `cutover-dirty-path-disposition.json` contains every quarantined visible dirty path exactly
@@ -80,8 +95,40 @@ inventory is a preservation and routing proof, not a product PASS.
 whitespace/end-of-file findings. Those bytes were intentionally preserved rather than
 silently repaired. The active lean adoption must pass its own scoped `git diff --check`.
 
-## Next gate
+## Governance review and canaries
 
-The governance adoption commit requires focused checker tests, inventory validation,
-scoped lint/diff checks, and independent High review of the exact commit. Only after that
-gate passes may the three product adoption canaries start.
+Lean-governance adoption and the stateless checker correction each received independent
+High review with zero P0, P1, or P2 findings. The three canaries are:
+
+| Canary | Current reviewed commit/range | Decisive verification |
+| --- | --- | --- |
+| Schema spine | `38e3e6b` | 53 serialized schema/migration tests |
+| Lifecycle evidence-kind adoption | `7bb54ce` | 190 serialized lifecycle/migration tests |
+| Case-status UI vertical | `8640bca..dfd3ead` | 45 backend tests and 2 serialized Chromium tests |
+
+Each canary has an exact story card, reachable Git scope, current-tree fingerprint,
+independent `APPROVED` review, zero P0/P1/P2 findings, and explicit ledger mapping. Scoped
+Ruff/diff checks passed for backend canaries; targeted ESLint/diff checks passed for the UI
+vertical. No custom owner/scope scan, new taskctl state, canonical-scope artifact, or
+per-task accept engine was used. Git scope/diff and the stateless inventory check complete
+in seconds rather than minutes.
+
+One UI reviewer lane exhibited a tool-level liveness failure before producing decisive
+output. It was stopped at the bounded liveness threshold; durable commits and successful
+checks were not repeated. A minimal independent command-only lane then produced the fresh
+decisive results used by the approving reviewer. This is a runtime transport/tool issue,
+not a product or governance-contract failure, and the Lean recovery rule handled it without
+creating another governance subsystem.
+
+## Cutover conclusion and next delivery gate
+
+All C3.1 governance cutover completion conditions are satisfied: quarantine and archive
+remain preserved; every original dirty path has one disposition; the active branch begins
+from the fixed clean parent; Lean fail-closed domain/source rules are active; old
+taskctl/evidence/scope machinery is read-only history; the governance bytes and all three
+canaries have independent zero-finding acceptance; and no push, reset, clean, stash, or
+user-change discard occurred.
+
+This terminal cutover PASS does **not** claim the V8 product Goal is complete. Rolling
+Git-native product story waves may now continue. Foundation, eligible Full, Final, and
+Release remain pending and Release remains last.
