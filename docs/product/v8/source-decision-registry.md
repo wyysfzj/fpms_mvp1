@@ -1,0 +1,172 @@
+# FPMS V8 Source and Decision Registry
+
+## Source precedence
+
+For requirements, post-demo feedback, workflow, fees, demo behavior, and implementation
+coverage, prefer original customer or primary authority first, extracted text second,
+approved analysis/design third, and code evidence last. Ignore Word lock files such as
+`docs/postdemo/~$*.docx`. When screenshots, layout, buttons, menus, lists, fee tables, or
+attachments matter, inspect rendered pages and embedded images rather than extracted text
+alone. If an external local original is unavailable, use its indexed extraction and mark
+the source `待确认`. Verify the effective version before activating law, fee, rate, form, or
+workflow truth. The task that first relies on a new customer or authoritative design source
+updates this index.
+
+## Customer and external sources
+
+- `docs/TXX.pdf`; mirror: `reference/TXX.pdf`.
+- `docs/postdemo/相关流程操作-20260526.docx`.
+- `docs/postdemo/OA答复流程.docx`.
+- `docs/postdemo/信函生成操作.docx`.
+- `docs/postdemo/专利收费场景-20260626.docx`.
+- `docs/postdemo/相关问题解答.docx`; prefer it over the historical external copy.
+- `docs/postdemo/标准费率.XLS`; customer pricing/configuration, not current legal authority.
+- `docs/postdemo/补充缴费信息模板.xlsm`; preserve provenance, macros, hidden sheets, order,
+  and validation; do not assume current acceptance without upload verification.
+- `docs/postdemo/文件样例及模版/**`; distinguish legacy/current forms and render when needed.
+- `/Users/cfcc/Documents/相关问题解答.docx`; external local customer answer copy.
+- `http://www.tianyueip.com/product/612`; secondary customer/business reference; cached at
+  `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/tianyueip_product_612.txt`.
+- `https://www.cnipa.gov.cn/art/2024/8/6/art_1518_155983.html`; CNIPA primary fee page.
+- **Current reviewed CNIPA annuity source (D4-10 authority)**:
+  - Metadata article:
+    `https://www.cnipa.gov.cn/art/2026/3/30/art_1518_205552.html`.
+  - Exact PDF:
+    `https://www.cnipa.gov.cn/module/download/down.jsp?i_ID=205552&colID=1518`.
+  - Title: `专利和集成电路布图设计缴费服务指南`.
+  - Published/reviewed snapshot date: `2026-03-30`.
+  - Size: `32 pages`; `2478214 bytes`.
+  - PDF SHA-256:
+    `3792384f32e782c96e5630a6ac42892d8b8cd272a219a7d674ceebf16ec7cdce`.
+  - Retrieved at UTC: `2026-07-19T03:55:57Z`.
+  - PDF creation/modification: `2026-03-30 16:00:48 CST`.
+  - Exact canonical `CNIPA_RATE_SOURCE_V1` snapshot:
+    `{"schema_version":"CNIPA_RATE_SOURCE_V1","sources":[{"content_sha256":"3792384f32e782c96e5630a6ac42892d8b8cd272a219a7d674ceebf16ec7cdce","document_no":null,"published_on":"2026-03-30","retrieved_at":"2026-07-19T03:55:57Z","title":"专利和集成电路布图设计缴费服务指南","url":"https://www.cnipa.gov.cn/module/download/down.jsp?i_ID=205552&colID=1518"}]}`.
+  - Canonical snapshot SHA-256:
+    `e8599a13429e3f536312eaeed0ec1a09b5f91533caacf2d8514dbeef1533d544`.
+  - Annex 2 reviewed full annual fee tiers:
+    - INV: years 1–3 `900.00`; 4–6 `1200.00`; 7–9 `2000.00`;
+      10–12 `4000.00`; 13–15 `6000.00`; 16–20 `8000.00`.
+    - UM: years 1–3 `600.00`; 4–5 `900.00`; 6–8 `1200.00`;
+      9–10 `2000.00`.
+    - DES: years 1–3 `600.00`; 4–5 `900.00`; 6–8 `1200.00`;
+      9–10 `2000.00`; 11–15 `3000.00`.
+  - This reviewed snapshot records source authority only. It does not infer fee amount
+    activation, legal effect before `2026-03-30`, or runtime rate-book activation.
+- **Superseded history (31 pages; not current D4-10 authority)**:
+  `https://www.cnipa.gov.cn/attach/0/b2d5a31081404b83a36c0df1ebe591e7.pdf`;
+  retained only as historical index context.
+
+## Extracted customer text and review ledgers
+
+- `artifacts/PD-ENH-ANALYSIS-20260530-01/extracted/相关流程操作-20260526.txt`
+- `artifacts/PD-ENH-ANALYSIS-20260530-01/extracted/OA答复流程.txt`
+- `artifacts/PD-ENH-ANALYSIS-20260530-01/extracted/信函生成操作.txt`
+- `artifacts/PD-ENH-ANSWER-REVIEW-20260611-01/extracted/related_answers_extracted.txt`
+- `artifacts/PD-ENH-ANSWER-REVIEW-20260611-01/analysis/answer_ledger.md`
+- `artifacts/PD-ENH-REVIEW-20260530-01/analysis/review_findings.md`
+- `artifacts/PD-ENH-FINAL-REVIEW-20260530-01/analysis/final_review_ledger.md`
+- `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/专利收费场景-20260626.txt`
+- `artifacts/PD-FEE-SCENARIO-DESIGN-20260704-01/extracted/docx_inventory.txt`
+- `artifacts/PD-FEE-SCENARIO-GAP-REVIEW-20260705-01/extracted/专利收费场景-20260626.txt`
+- `artifacts/PD-NEW-CUSTOMER-SOURCE-INDEX-20260712-01/analysis/source_ledger.md`
+
+## Authoritative FPMS baselines and designs
+
+- `docs/FPMS SPEC 2.0.md`; mirrors: `reference/FPMS SPEC 2.0.md` and
+  `FPMS_Automation_Skeleton_Pack/docs/source/FPMS_SPEC_2_0.md`.
+- `docs/FPMS 架构技术设计.md` and `reference/FPMS 架构技术设计.md`.
+- `docs/00_mvp1_scope.md` through `docs/07_db_ddl_and_sqlite.md`.
+- `docs/FPMS_Final_Enhancement_Plan_and_Task_Breakdown_SPEC_2.0_20260228.md`
+- `docs/FPMS_Final_Enhancement_Plan_Native_20260315.md`
+- `docs/FPMS_Final_Enhancement_execution_summary_20260315.md`
+- `docs/FPMS_Code_Review_Report_SPEC_2.0_20260227.md`
+- `docs/FPMS_Full_Test_Scenarios_and_Cases_SPEC_2.0_20260228.md`
+- `docs/FPMS_SPEC2_0_Test_Cases_E2E.md`
+- `docs/FPMS_SPEC2_2nd_Review.md`
+- `docs/FPMS_SPEC2_2nd_Review_REFRESH.md`
+- `docs/FPMS_SPEC2_Final_Audit_Excluding_Document_Generation_20260406.md`
+- `docs/FRMS_SPEC2_2nd_POST.md`
+- `docs/2026-04-09-spec20-process-follow-test-cases.md`
+- `docs/spec20_end_to_end_ui_testing.md`
+- `docs/spec20_tech_mitigate.md`
+- `docs/gap.md`, `docs/mvp1_gap.md`, and `docs/mvp_story_gap.md`.
+
+## Post-demo, audit, and remediation authority
+
+- `docs/postdemo/postdemo_enhancement_analysis_20260530.md`
+- `docs/postdemo/postdemo_p1_functional_spec_20260531.md`
+- `docs/postdemo/postdemo_p1_e2e_demo_20260612.md` and `.docx`
+- `docs/postdemo/postdemo_p1_lifecycle_demo_design_20260704.md`
+- `docs/postdemo/postdemo_p1_lifecycle_demo_script_20260704.md`
+- `docs/postdemo/p1_demo_engineering_checklist.md`
+- `docs/postdemo/p1_demo_execution_runbook.md`
+- `docs/postdemo/postdemo_fee_scenario_integration_design_20260704.md`
+- `docs/postdemo/postdemo_fee_scenario_gap_review_20260705.md`
+- `docs/postdemo/postdemo_fee_followup_trigger_design_20260705.md`
+- `docs/superpowers/plans/2026-05-31-postdemo-p1-full-scope-development.md`
+- `docs/superpowers/plans/2026-06-11-postdemo-p1-answer-delta-full-scope.md`
+- `docs/superpowers/plans/2026-07-05-official-fee-scenario-enhancement.md`
+- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
+- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
+- `docs/reviews/fpms_functional_correctness_audit_20260705.md`
+- `docs/reviews/fpms_functional_correctness_audit_20260705_zh.md`
+- `docs/reviews/fpms_audit_remediation_design_20260705.md`
+
+## Evidence families for audits
+
+- `artifacts/PD-ENH-*/summary.md`
+- `artifacts/PD-P1-*/summary.md`
+- `artifacts/PD-FEE-SCENARIO-*/summary.md`
+- `artifacts/PD-DOC-*/summary.md`
+- `artifacts/PD-P1-E2E-UI-FULLSCOPE-20260602-01/full_scope_coverage_ledger.md`
+- `artifacts/PD-P1-FULLSCOPE-ANSWER-DELTA-PLAN-20260611-01/analysis/full_scope_delta_ledger.md`
+- `artifacts/PD-P1-QA-FULLSCOPE-ANSWER-DELTA-20260611-01/analysis/close_ledger.md`
+- `artifacts/PD-P1-QA-FULLSCOPE-E2E-01/close_ledger.md`
+
+## Active source records
+
+| Record | Status | Exact effect |
+| --- | --- | --- |
+| `SRC-CNIPA-ANNUITY-20260330` | Source metadata reviewed | The 32-page CNIPA payment guide and hashes above are the current reviewed D4-10 annuity source. This does not by itself activate runtime rates or infer earlier legal effect. |
+| Historical 31-page CNIPA guide | Superseded source history | Read-only comparison input; never current D4-10 authority. |
+| Customer `标准费率.XLS` | Customer pricing/configuration | Never automatic legal or official-fee authority. |
+| Customer `补充缴费信息模板.xlsm` | Unverified operational template | Preserve provenance/macros/hidden sheets; controlled upload remains gated. |
+
+## Customer and authority decision gates
+
+The following statuses are the cutover snapshot. `PENDING` means no sufficient reviewed
+decision is present in the approved source record. Missing or conflicting input blocks
+only the named lane; it never activates a default.
+
+| Gate | Status | Fail-closed behavior |
+| --- | --- | --- |
+| `DG-FEE-APPLICATION-DRAFT` | `PENDING` | Application obligation may exist; wait for explicit `PAY`, no automatic draft. |
+| `DG-FEE-GRANT-YEAR-DRAFT` | `PENDING` | Grant-year obligation may exist; no automatic draft. |
+| `DG-FEE-FUTURE-ANNUITY` | `PENDING` | Each future annuity waits for explicit instruction. |
+| `DG-GRANT-EVIDENCE-SOURCE` | `PENDING` | Archive candidate evidence as unverified; do not enter patent in force. |
+| `DG-GRANT-MANUAL-REVIEW` | `PENDING` | Manual override remains disabled. |
+| `DG-PAYMENT-WORKBOOK` | `PENDING` | Only internal workbook output is allowed; official adapter remains fail-closed. |
+| `DG-SERVICE-RATE-VERSION` | `PENDING` | No service quote/receivable activation; official obligations remain separate. |
+| `DG-LEGACY-FORM-CLASS` | `PENDING` for each `form-001`–`form-022` | Every form remains reference-only until its own source-backed classification. |
+| `DG-APPLICATION-FEE-NOTICE-PREVIEW-SOURCE` | `PENDING` | Do not dispatch the application-fee notice or accept its official-fee obligation from guessed page/priority counts. |
+
+### Application-fee notice preview source questions
+
+The pending record
+`docs/postdemo/postdemo_application_fee_notice_preview_source_decision_20260721.md`
+requires customer confirmation of:
+
+1. the exact reviewed source/version for specification page count;
+2. whether and how drawing pages enter the 31/300/301 thresholds;
+3. the exact current priority-record source and deduplication rule.
+
+The system must not infer these quantities from fee amounts, case type, filenames or
+mutable current data. Missing, conflicting, ambiguous or stale inputs block only this
+dispatch lane.
+
+## Registry update rule
+
+The first story that relies on a new or changed source/decision must update this registry
+with source/version/hash, decision value, actor, effective scope/time and rollback impact.
+Official/legal/fee/customer truth remains `PROTECTED` and requires independent review.
