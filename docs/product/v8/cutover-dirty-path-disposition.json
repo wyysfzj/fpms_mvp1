@@ -9,9 +9,10 @@
     "ARCHIVE_ONLY_HISTORY": 283,
     "V8-ADOPT-FEE-REDUCTION-UI": 6,
     "V8-ADOPT-DOCUMENT-REVIEW-UI": 5,
-    "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 2,
+    "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
+    "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
     "V8-ADOPT-ANNUITY-RATE-SOURCES": 38,
-    "V8-ADOPT-LIFECYCLE-CENTER": 29,
+    "V8-ADOPT-LIFECYCLE-CENTER": 26,
     "V8-ADOPT-DOCUMENT-EVIDENCE": 54,
     "V8-ADOPT-FEE-OBLIGATION": 25,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
@@ -54,8 +55,8 @@
     {
       "path": "backend/alembic/versions/v8_delta4_evidence_kind_capacity.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION",
-      "rationale": "schema and durable-lineage migration"
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "rationale": "evidence-kind capacity migration, model, validation and decisive regression"
     },
     {
       "path": "backend/app/modules/annuity/api.py",
@@ -78,8 +79,8 @@
     {
       "path": "backend/app/modules/cases/lifecycle_activity_service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
-      "rationale": "central case lifecycle carrier and service"
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "rationale": "evidence-kind capacity migration, model, validation and decisive regression"
     },
     {
       "path": "backend/app/modules/cases/lifecycle_rules.py",
@@ -96,8 +97,8 @@
     {
       "path": "backend/app/modules/cases/models.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
-      "rationale": "central case lifecycle carrier and service"
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "rationale": "evidence-kind capacity migration, model, validation and decisive regression"
     },
     {
       "path": "backend/app/modules/cases/schemas.py",
@@ -786,8 +787,8 @@
     {
       "path": "backend/tests/test_v8_lifecycle_evidence_kind_capacity.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
-      "rationale": "case lifecycle behavior"
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "rationale": "evidence-kind capacity migration, model, validation and decisive regression"
     },
     {
       "path": "backend/tests/test_v8_lifecycle_grant_announcement.py",

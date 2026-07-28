@@ -194,7 +194,7 @@ class CaseActivityEventEvidence(UUIDPrimaryKeyMixin, Base):
 
     case_id: Mapped[str] = mapped_column(String(36), nullable=False)
     activity_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    evidence_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    evidence_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     object_type: Mapped[str] = mapped_column(String(64), nullable=False)
     object_id: Mapped[str] = mapped_column(String(36), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(128), nullable=False)

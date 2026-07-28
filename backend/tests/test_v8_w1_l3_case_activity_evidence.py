@@ -32,7 +32,7 @@ COLUMN_SPECS = {
     "id": (String, 36, False, None),
     "case_id": (String, 36, False, None),
     "activity_id": (String, 36, False, None),
-    "evidence_kind": (String, 32, False, None),
+    "evidence_kind": (String, 64, False, None),
     "object_type": (String, 64, False, None),
     "object_id": (String, 36, False, None),
     "content_hash": (String, 128, False, None),

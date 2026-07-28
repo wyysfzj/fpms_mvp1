@@ -355,7 +355,7 @@ def _validate_and_sort_evidence(
             _evidence_invalid()
         checks = (
             (reference.case_id, 36),
-            (reference.evidence_kind, 32),
+            (reference.evidence_kind, 64),
             (reference.object_type, 64),
             (reference.object_id, 36),
             (reference.content_hash, 128),
