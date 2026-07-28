@@ -268,7 +268,8 @@ def validate(
             ).stdout.strip()
         except subprocess.CalledProcessError as exc:
             raise ValidationError("integration SHA cannot be resolved") from exc
-        if ledger.get("integration_sha") != resolved_integration_sha:
+        recorded_integration_sha = ledger.get("integration_sha")
+        if recorded_integration_sha not in (None, resolved_integration_sha):
             raise ValidationError("ledger integration_sha does not match current input")
 
     for catalog_id, row in rows_by_id.items():

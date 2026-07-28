@@ -293,3 +293,40 @@ def test_current_verified_accepts_reachable_unchanged_story(tmp_path: Path) -> N
         repo_root=repo,
         integration_sha=integration_sha,
     )
+
+
+def test_explicit_integration_head_does_not_require_self_referential_ledger_sha(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    repo, integration_sha = _git_repo(tmp_path)
+    tree_sha = checker.compute_tree_fingerprint(repo, integration_sha, ["owned.txt"])
+    catalog_path = tmp_path / "catalog.json"
+    ledger_path = tmp_path / "ledger.json"
+    digest = _write_json(catalog_path, _catalog(["A"]))
+    row = _row("A", "CURRENT_VERIFIED")
+    row["story_id"] = "STORY-A"
+    ledger = _ledger(digest, [row])
+    ledger["stories"] = [
+        {
+            "story_id": "STORY-A",
+            "status": "CURRENT_VERIFIED",
+            "commits": [integration_sha],
+            "paths": ["owned.txt"],
+            "tree_sha256": tree_sha,
+            "tests": ["pytest focused"],
+            "review_class": "PROTECTED",
+            "review_ref": "reviews/protected.md",
+            "verification_ref": "verification/protected.md",
+        }
+    ]
+    _write_json(ledger_path, ledger)
+
+    checker.validate(
+        catalog_path=catalog_path,
+        ledger_path=ledger_path,
+        expected_catalog_sha256=digest,
+        milestone="foundation",
+        repo_root=repo,
+        integration_sha=integration_sha,
+    )

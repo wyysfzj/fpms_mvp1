@@ -21,7 +21,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Optional pinned integration SHA. Null means the current integration SHA is supplied explicitly to the stateless checker; a non-null value must match it."
     },
     "rows": {
       "type": "array",
