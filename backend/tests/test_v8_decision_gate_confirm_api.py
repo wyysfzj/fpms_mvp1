@@ -135,7 +135,9 @@ def _route() -> APIRoute:
     matching = [
         route
         for route in system_api.router.routes
-        if isinstance(route, APIRoute) and route.path == ROUTER_PATH
+        if isinstance(route, APIRoute)
+        and route.path == ROUTER_PATH
+        and route.methods == {"POST"}
     ]
     assert len(matching) == 1
     return matching[0]

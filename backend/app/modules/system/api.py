@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Response, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
@@ -8,6 +9,7 @@ from app.core.errors import BusinessError
 from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.system.decision_gate_schemas import (
+    DecisionGateAuditOut,
     DecisionGateRecordIn,
     DecisionGateRecordOut,
 )
@@ -16,6 +18,7 @@ from app.modules.system.decision_gate_service import (
     RecordDecisionGateCommand,
     record_decision_gate,
 )
+from app.modules.system.models import CustomerDecisionGate
 from app.modules.system.schemas import (
     ConfigReadinessOut,
     OkOut,
@@ -137,6 +140,42 @@ def upsert_system_param(
         actor_id=current_user.id,
     )
     return OkOut()
+
+
+@router.get(
+    "/system/decision-gates",
+    response_model=list[DecisionGateAuditOut],
+    summary="List customer decision gate audit history",
+)
+def list_decision_gate_audit(
+    _perm: None = Depends(require_perm("SystemParam.Read")),
+    db: Session = Depends(get_db),
+) -> list[DecisionGateAuditOut]:
+    with db.no_autoflush:
+        rows = (
+            db.execute(
+                select(
+                    CustomerDecisionGate.id.label("gate_id"),
+                    CustomerDecisionGate.gate_code,
+                    CustomerDecisionGate.scope_key,
+                    CustomerDecisionGate.decision_value,
+                    CustomerDecisionGate.decision_status,
+                    CustomerDecisionGate.source_reference,
+                    CustomerDecisionGate.source_version,
+                    CustomerDecisionGate.confirmed_by,
+                    CustomerDecisionGate.effective_at,
+                    CustomerDecisionGate.recorded_at,
+                    CustomerDecisionGate.supersedes_gate_id,
+                    CustomerDecisionGate.current_identity_key,
+                ).order_by(
+                    CustomerDecisionGate.recorded_at.asc(),
+                    CustomerDecisionGate.id.asc(),
+                )
+            )
+            .mappings()
+            .all()
+        )
+    return [DecisionGateAuditOut.model_validate(row) for row in rows]
 
 
 @router.post(
