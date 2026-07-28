@@ -1,9 +1,11 @@
 # Story V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION
 
 - Risk: `PROTECTED`
-- Outcome: prove on the current lean tree that the frozen document-evidence contract
-  shapes remain exact and `EvidenceDerivationType` exposes exactly the seven ordinal-42
-  values, with no `OA_REPLY_PREPARATION`.
+- Outcome: prove on the current lean tree that the original ordinal-42 enums and dataclass
+  shapes remain preserved, `EvidenceRole` is current-verified through its approved additive
+  successor contracts as the exact ordered twelve-role interface, and
+  `EvidenceDerivationType` remains the original exact seven values with no
+  `OA_REPLY_PREPARATION`.
 - Change mode: current verification only; no product, test, ledger, disposition or review
   byte changes.
 - Authority: the document/evidence lineage rules in `docs/product/v8/domain-contract.md`,
@@ -16,24 +18,70 @@
 
 - `FPMS-V8-DE-CONTRACTS-20260712-01` (ordinal 42)
 
-## Exact source and test paths
+## Additive successor authority
+
+These are approved successor contracts, not additional frozen-catalog rows in this story:
+
+- `tasks/postdemo/v8/FPMS-V8-DE-RAW-ATTACHMENT-EVIDENCE-ROLE-20260714-01.md` authorizes
+  `RAW_ATTACHMENT` as the exact tenth role only behind the accepted registration and
+  external-submission guards.
+- `tasks/postdemo/v8/FPMS-V8-DE-DELTA4-EVIDENCE-ROLE-EXTENSION-20260715-01.md` authorizes
+  `GENERATED_ATTACHMENT` and `OA_STRUCTURED_ATTACHMENT` as the exact ordered suffix,
+  producing exactly twelve unique roles while preserving the inherited original-nine
+  external-submission positive allowlist.
+
+The complete current role order is:
+
+```text
+FILING_FULL_WORD
+TRACKED_REVISED_WORD
+FILING_COMPONENT
+EXTERNAL_XML_PACKAGE
+OFFICIAL_SUBMISSION_LIST
+OFFICIAL_FINAL_PDF
+SUBMITTED_XML
+OFFICIAL_RECEIPT
+CLIENT_LETTER_WORD
+RAW_ATTACHMENT
+GENERATED_ATTACHMENT
+OA_STRUCTURED_ATTACHMENT
+```
+
+## Exact verification paths
+
+### Product
 
 - `backend/app/modules/documents/evidence_contracts.py`
+- `backend/app/modules/documents/evidence_service.py`
+- `backend/app/modules/documents/evidence_workflow_service.py`
+
+### Tests
+
 - `backend/tests/test_v8_document_evidence_contracts.py`
+- `backend/tests/test_v8_delta4_evidence_role_extension.py`
+- `backend/tests/test_v8_raw_attachment_registration_guard.py`
+- `backend/tests/test_v8_external_submission_role_allowlist.py`
 
 ## Verification
 
-From this worktree's `backend` directory, run:
+From this worktree's `backend` directory, run the two pure contract tests:
 
 ```text
-/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/.venv/bin/pytest -q tests/test_v8_document_evidence_contracts.py
-/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/.venv/bin/ruff check app/modules/documents/evidence_contracts.py tests/test_v8_document_evidence_contracts.py
+/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/.venv/bin/pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_delta4_evidence_role_extension.py
 ```
 
-Also prove the current source and exact test contain the same seven ordered
-`EvidenceDerivationType` values, contain no `OA_REPLY_PREPARATION`, and pass exact
-diff-check. The independent High reviewer reruns the same decisive checks on the exact
-story commit.
+After controller grant, run the full four-test tranche in one serialized invocation with
+maximum writers `1`:
+
+```text
+/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/.venv/bin/pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_delta4_evidence_role_extension.py tests/test_v8_raw_attachment_registration_guard.py tests/test_v8_external_submission_role_allowlist.py
+```
+
+Run scoped Ruff on all seven exact paths and exact diff-check. Prove the role tests enforce
+the twelve-role sequence and inherited positive allowlist, while current source and test
+contain the same seven ordered `EvidenceDerivationType` values and contain no
+`OA_REPLY_PREPARATION`. The independent High reviewer reruns the same decisive checks on
+the exact story correction range.
 
 ## Later-hunk exclusion and supersession boundary
 
@@ -44,13 +92,17 @@ OA-reply lane, whose catalog story
 deliberately excluded from this ordinal-42 verification.
 
 A future independently reviewed current-verification story for that later lane may
-supersede the derivation vocabulary only through its own explicit authority, product/test
-change, coverage mapping and exact commit/range. Until then, ordinal 42 remains verified
-with exactly seven derivation values.
+supersede only the derivation vocabulary through its own explicit authority, matching
+product/test change, coverage mapping and exact commit/range. It must preserve or explicitly
+supersede the separately authorized twelve-role interface and its guard boundaries. Until
+then, the current contract remains twelve evidence roles and exactly seven derivation
+values.
 
 ## Non-goals and rollback
 
-No persistence, business adapter, endpoint, UI, OA-reply implementation, later-task enum
+No new role, role reorder, positive-allowlist expansion, registration-policy change,
+persistence, business adapter, endpoint, UI, OA-reply implementation, later-task derivation
 adoption, schema/migration, old taskctl/evidence mutation or Foundation claim. Rollback
-removes only this story record and its later coverage-ledger mapping; current product/test
-bytes remain unchanged.
+removes only this story record, its correction and its later coverage-ledger mapping;
+current product/test bytes and the independently approved successor contracts remain
+unchanged.
