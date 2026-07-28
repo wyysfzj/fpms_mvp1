@@ -746,8 +746,8 @@
     {
       "catalog_id": "FPMS-V8-FEE-REDUCTION-VALIDATOR-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-FOUNDATION-CONTRACTS-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -822,8 +822,8 @@
     {
       "catalog_id": "FPMS-V8-FO-CONTRACTS-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-FOUNDATION-CONTRACTS-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -1338,8 +1338,8 @@
     {
       "catalog_id": "FPMS-V8-DECISION-GATE-CARRIER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DECISION-GATE-CARRIER-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2422,6 +2422,45 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-FEE-FOUNDATION-CONTRACTS-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "c2c45134fdf38602617fedf0f56ecadba0f3f8c6"
+      ],
+      "paths": [
+        "backend/app/modules/fees/fee_reduction.py",
+        "backend/app/modules/fees/obligation_contracts.py",
+        "backend/tests/test_v8_fee_obligation_contracts.py",
+        "backend/tests/test_v8_fee_reduction_validator.py"
+      ],
+      "tree_sha256": "ac469c144917d321822845b3ae148598f3ec1b2c074faea3b236ed148b7af7f2",
+      "tests": [
+        "pytest -q tests/test_v8_fee_reduction_validator.py tests/test_v8_fee_obligation_contracts.py from backend cwd (85 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-FOUNDATION-CONTRACTS-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-FOUNDATION-CONTRACTS-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-DECISION-GATE-CARRIER-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "f0da54ef4e31f2f50330d5b11846479138677fb5"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_post_w1_customer_decision_gate.py",
+        "backend/app/modules/system/models.py",
+        "backend/tests/test_v8_customer_decision_gate_schema.py"
+      ],
+      "tree_sha256": "be470e18cd9cc9935f6079b92eb892ea80506962f68ad9fb9fb37a1c10ea97c0",
+      "tests": [
+        "pytest -q tests/test_v8_customer_decision_gate_schema.py from backend cwd (5 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DECISION-GATE-CARRIER-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DECISION-GATE-CARRIER-CURRENT-VERIFICATION.md"
     }
   ]
 }
