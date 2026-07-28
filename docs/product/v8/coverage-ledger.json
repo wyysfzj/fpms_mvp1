@@ -22,25 +22,25 @@
     {
       "catalog_id": "FPMS-V8-W1-L1-CASE-LIFECYCLE-PROJECTION-CARRIER-20260712-01",
       "phase": "foundation",
-      "disposition": "CURRENT_VERIFIED",
-      "story_id": "V8-CANARY-SCHEMA-SPINE-CURRENT-VERIFICATION",
-      "successor_story_id": null,
+      "disposition": "SUPERSEDED_BY_STORY",
+      "story_id": null,
+      "successor_story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-W1-L2-CASE-ACTIVITY-EVENT-CARRIER-20260712-01",
       "phase": "foundation",
-      "disposition": "CURRENT_VERIFIED",
-      "story_id": "V8-CANARY-SCHEMA-SPINE-CURRENT-VERIFICATION",
-      "successor_story_id": null,
+      "disposition": "SUPERSEDED_BY_STORY",
+      "story_id": null,
+      "successor_story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-W1-L3-CASE-ACTIVITY-EVIDENCE-CARRIER-20260712-01",
       "phase": "foundation",
-      "disposition": "CURRENT_VERIFIED",
-      "story_id": "V8-CANARY-SCHEMA-SPINE-CURRENT-VERIFICATION",
-      "successor_story_id": null,
+      "disposition": "SUPERSEDED_BY_STORY",
+      "story_id": null,
+      "successor_story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
       "blocker": null
     },
     {
@@ -110,32 +110,32 @@
     {
       "catalog_id": "FPMS-V8-LC-CONTRACTS-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-ACTIVITY-APPEND-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-LEGACY-PROJECTION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-APPLY-EVENT-SEAM-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2352,10 +2352,6 @@
         "backend/alembic/versions/v8_w1_f3_obligation_draft_link.py",
         "backend/alembic/versions/v8_w1_f4_obligation_payment_link.py",
         "backend/alembic/versions/v8_w1_f5_fee_reduction_approval.py",
-        "backend/alembic/versions/v8_w1_l1_case_lifecycle_projection.py",
-        "backend/alembic/versions/v8_w1_l2_case_activity_event.py",
-        "backend/alembic/versions/v8_w1_l3_case_activity_evidence.py",
-        "backend/app/modules/cases/models.py",
         "backend/app/modules/documents/models.py",
         "backend/app/modules/fees/models.py",
         "backend/app/modules/official_workflows/models.py",
@@ -2366,18 +2362,36 @@
         "backend/tests/test_v8_w1_f2_fee_obligation_line.py",
         "backend/tests/test_v8_w1_f3_obligation_draft_link.py",
         "backend/tests/test_v8_w1_f4_obligation_payment_link.py",
-        "backend/tests/test_v8_w1_f5_fee_reduction_approval.py",
-        "backend/tests/test_v8_w1_l1_case_lifecycle_projection.py",
-        "backend/tests/test_v8_w1_l2_case_activity_event.py",
-        "backend/tests/test_v8_w1_l3_case_activity_evidence.py"
+        "backend/tests/test_v8_w1_f5_fee_reduction_approval.py"
       ],
-      "tree_sha256": "b4566534741418fe062c07a1680e42f0d69560237540ab1d782ea402fd4cf134",
+      "tree_sha256": "50d49bd547e9cdc81109ae9b7bfbba94104fc6ead23604bb30527caff109c732",
       "tests": [
         "pytest -q backend/tests/test_v8_w1_{l1,l2,l3,d1,d2,d3,f1,f2,f3,f4,f5}_*.py (11 exact catalog primary files; 53 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CANARY-SCHEMA-SPINE-CURRENT-VERIFICATION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CANARY-SCHEMA-SPINE-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "7bb54cef0d4f8d7c10c177be54b1adddc01e1d06"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_delta4_evidence_kind_capacity.py",
+        "backend/app/modules/cases/lifecycle_activity_service.py",
+        "backend/app/modules/cases/models.py",
+        "backend/tests/test_v8_lifecycle_evidence_kind_capacity.py",
+        "backend/tests/test_v8_w1_l3_case_activity_evidence.py"
+      ],
+      "tree_sha256": "e2c83a050970b43cb20b7e29f34dccf4f5a54a2894522409355d675f0ac91307",
+      "tests": [
+        "pytest -q backend/tests/test_v8_w1_l{1,2,3}_*.py plus lifecycle contracts/activity/projection/apply/evidence-kind exact files (190 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION.md"
     }
   ]
 }
