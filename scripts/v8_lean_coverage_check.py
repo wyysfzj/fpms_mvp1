@@ -210,6 +210,8 @@ def validate(
 ) -> None:
     if milestone not in MILESTONES:
         raise ValidationError(f"unknown milestone: {milestone}")
+    if milestone != "inventory" and integration_sha is None:
+        raise ValidationError("non-inventory validation requires integration_sha")
 
     actual_catalog_sha = _sha256(catalog_path)
     if actual_catalog_sha != expected_catalog_sha256:

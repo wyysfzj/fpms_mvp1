@@ -330,3 +330,43 @@ def test_explicit_integration_head_does_not_require_self_referential_ledger_sha(
         repo_root=repo,
         integration_sha=integration_sha,
     )
+
+
+def test_non_inventory_direct_validation_requires_integration_sha(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    repo, _integration_sha = _git_repo(tmp_path)
+    catalog_path = tmp_path / "catalog.json"
+    ledger_path = tmp_path / "ledger.json"
+    digest = _write_json(catalog_path, _catalog(["A"]))
+    row = _row("A", "CURRENT_VERIFIED")
+    row["story_id"] = "STORY-A"
+    ledger = _ledger(digest, [row])
+    ledger["stories"] = [
+        {
+            "story_id": "STORY-A",
+            "status": "CURRENT_VERIFIED",
+            "commits": ["f" * 40],
+            "paths": ["owned.txt"],
+            "tree_sha256": "0" * 64,
+            "tests": ["pytest focused"],
+            "review_class": "PROTECTED",
+            "review_ref": "reviews/protected.md",
+            "verification_ref": "verification/protected.md",
+        }
+    ]
+    _write_json(ledger_path, ledger)
+
+    with pytest.raises(
+        checker.ValidationError,
+        match="non-inventory validation requires integration_sha",
+    ):
+        checker.validate(
+            catalog_path=catalog_path,
+            ledger_path=ledger_path,
+            expected_catalog_sha256=digest,
+            milestone="foundation",
+            repo_root=repo,
+            integration_sha=None,
+        )
