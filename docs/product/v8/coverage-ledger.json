@@ -142,8 +142,8 @@
     {
       "catalog_id": "FPMS-V8-LC-CASE-OPENED-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -438,32 +438,32 @@
     {
       "catalog_id": "FPMS-V8-CASE-CREATE-STATUS-INPUT-GATE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-CASE-UPDATE-STATUS-INPUT-GATE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-CASE-CREATE-STATUS-UI-GATE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-CASE-EDIT-STATUS-UI-GATE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2392,6 +2392,36 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "d25503e6be7e317c0838ce1c1cdfb2885d84f84e",
+        "dfd3ead6047a788251123b27fa91164e64e37ab2"
+      ],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-status-gate.spec.ts",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-edit-status-gate.spec.ts",
+        "backend/app/modules/cases/lifecycle_rules.py",
+        "backend/app/modules/cases/schemas.py",
+        "backend/app/modules/cases/service.py",
+        "backend/tests/test_v8_case_create_status_gate.py",
+        "backend/tests/test_v8_case_update_status_gate.py",
+        "backend/tests/test_v8_lifecycle_case_opened.py",
+        "frontend/src/api/cases.ts",
+        "frontend/src/api/cases.types.ts",
+        "frontend/src/modules/cases/pages/CaseCreate.vue",
+        "frontend/src/modules/cases/pages/CaseEdit.vue"
+      ],
+      "tree_sha256": "291c43bebf5f99459c6955aca25b533c055bad93ccea84c6854bf9c37a29110a",
+      "tests": [
+        "pytest -q tests/test_v8_lifecycle_case_opened.py tests/test_v8_case_create_status_gate.py tests/test_v8_case_update_status_gate.py from backend cwd (45 passed)",
+        "playwright test v8-case-create-status-gate.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (2 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION.md"
     }
   ]
 }
