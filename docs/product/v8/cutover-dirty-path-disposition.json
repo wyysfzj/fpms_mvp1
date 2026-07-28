@@ -1273,7 +1273,7 @@
       "path": "docs/superpowers/specs/2026-07-28-fpms-c3-git-native-lean-56-reset-design.md",
       "disposition": "ADOPTION_STORY",
       "story_id": "C3-LEAN-GOVERNANCE-ADOPTION",
-      "rationale": "approved C3.1 authority adopted verbatim"
+      "rationale": "approved C3.1 authority adopted with a status-only update reflecting subsequent user approval"
     },
     {
       "path": "frontend/src/api/cases.ts",
