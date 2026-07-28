@@ -2,9 +2,11 @@
 
 - Risk: `PROTECTED`
 - Outcome: prove on the current lean tree that case creation initializes through the
-  lifecycle seam, backend create/update reject direct legacy-status mutation, and the
-  Chinese create/edit UI neither selects nor submits status.
-- Change mode: current verification only; no backend or frontend product byte changes.
+  lifecycle seam, backend create rejects arbitrary legacy status, backend update rejects
+  direct status mutation after lifecycle management is active, and the Chinese create/edit
+  UI neither selects nor submits status.
+- Change mode: verification-only test hardening; no backend or frontend product byte
+  changes.
 - Dependencies: lifecycle core evidence-kind canary `7bb54cef0d4f8d7c10c177be54b1adddc01e1d06`.
 - Authority: lifecycle, API and Simplified-Chinese UI rules in
   `docs/product/v8/domain-contract.md`.
@@ -22,16 +24,20 @@
 - `backend/app/modules/cases/lifecycle_rules.py`
 - `backend/app/modules/cases/schemas.py`
 - `backend/app/modules/cases/service.py`
-- the three catalog primary backend tests;
+- `backend/tests/test_v8_lifecycle_case_opened.py`
+- `backend/tests/test_v8_case_create_status_gate.py`
+- `backend/tests/test_v8_case_update_status_gate.py`
 - `frontend/src/api/cases.ts`
 - `frontend/src/api/cases.types.ts`
 - `frontend/src/modules/cases/pages/CaseCreate.vue`
 - `frontend/src/modules/cases/pages/CaseEdit.vue`
-- the two catalog primary Playwright tests.
+- `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-status-gate.spec.ts`
+- `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-edit-status-gate.spec.ts`
 
 ## Verification
 
-- Run the three backend tests serially and scoped Ruff.
+- Run the three exact backend test files serially and scoped Ruff on their product/test
+  paths.
 - Start Vite from this exact worktree and run only the two mocked-API Playwright tests,
   serialized in Chromium.
 - Run targeted ESLint on the exact TypeScript/Vue paths and exact diff-check.

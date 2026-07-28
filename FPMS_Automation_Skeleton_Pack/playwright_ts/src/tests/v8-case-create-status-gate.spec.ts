@@ -40,7 +40,10 @@ test("CaseCreate explains automatic lifecycle initialization and omits status", 
   await expect(
     page.getByText("创建成功后，系统将自动初始化案件生命周期；后续状态由业务事件推进，不能在新建页面直接指定。"),
   ).toBeVisible();
-  await expect(page.locator(".el-form-item").filter({ hasText: "案件状态" })).toHaveCount(0);
+  await expect(
+    page.locator(".el-form-item").filter({ hasText: /^(案件状态|法律状态|状态)$/ }),
+  ).toHaveCount(0);
+  await expect(page.locator('[name="status"], [data-field="status"]')).toHaveCount(0);
 
   await page.getByPlaceholder("请输入案号（例如：P2024-001）").fill("V8-STATUS-GATE-001");
   await page.getByRole("combobox", { name: "*客户", exact: true }).click();
