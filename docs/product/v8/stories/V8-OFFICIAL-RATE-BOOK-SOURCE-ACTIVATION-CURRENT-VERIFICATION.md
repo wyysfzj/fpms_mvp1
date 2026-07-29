@@ -51,8 +51,9 @@ verification is required.
 - Trust only exact canonical CNIPA provenance: `CNIPA_RATE_SOURCE_V1`, exact two-level
   content/snapshot SHA-256 hashes, exact canonical JSON keys, valid source dates/timestamps
   and canonical HTTPS URLs hosted by `www.cnipa.gov.cn`.
-- Customer files, Tianyue and other commercial or malformed sources fail closed. The
-  service performs no network fetch and does not infer or activate rates or amounts.
+- Customer files, Tianyue and other commercial or malformed sources fail closed as
+  `OfficialRateBook` activation provenance. The service performs no network fetch and
+  does not infer a rate amount.
 - Both named actors must exist and be active. A pending candidate records the exact
   approval tuple; a valid pre-approved candidate preserves it. Same-actor approval and
   activation is allowed because no unapproved four-eyes rule is invented.
@@ -70,14 +71,14 @@ verification is required.
 
 ## Seed boundary
 
-`seed_official_fee_rate_catalog()` remains idempotent and may seed customer-derived
-`FeeRate` development rows only. It must not create, approve or activate an
-`OfficialRateBook`, populate `FeeRate.official_rate_book_id`, convert customer source
-status, enable a rate or change an amount/category.
+`seed_official_fee_rate_catalog()` remains idempotent and synchronizes the established
+customer-derived `FeeRate` development catalog fields. The row-157 boundary is narrower:
+the seed does not create, approve, activate or link an `OfficialRateBook`, including
+through `FeeRate.official_rate_book_id`.
 
 The reviewed CNIPA source record in the registry supplies source metadata only. It does
-not itself create a candidate, activate a runtime rate book, infer an effective interval
-or authorize any fee amount.
+not itself create, approve, activate or link an `OfficialRateBook`, and it does not infer
+runtime activation or legal effect.
 
 ## Exact decisive verification
 
@@ -104,6 +105,6 @@ independently rerun the decisive tranche; the implementer does not approve this
 
 No candidate creation/import, unreviewed source activation, rate or amount inference,
 source-metadata change, provider change, API/UI, schema/migration, adjacent service,
-customer-source enablement/linkage, ledger/disposition/review edit, old evidence mutation
+`OfficialRateBook` linkage, ledger/disposition/review edit, old evidence mutation
 or Foundation claim. Rollback removes only this story-card commit; current product, seed
 and test bytes remain unchanged.
