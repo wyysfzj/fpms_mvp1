@@ -14,6 +14,17 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import BusinessError, raise_business_error
 from app.core.storage import ensure_dir, safe_join
+from app.modules.cases.lifecycle_activity_service import append_case_activity
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    BusinessStage,
+    ConfirmationStatus,
+    EvidenceReference,
+    LegalStatus,
+    LifecycleEventCommand,
+    LifecycleProjection,
+    OfficialProcedureStage,
+)
 from app.modules.cases.models import Case, T_CaseApplicant
 from app.modules.cases.service import (
     has_required_granted_status_fields,
@@ -44,6 +55,7 @@ from app.modules.documents.models import (
     DocDispatchLine,
     DocTemplate,
     Document,
+    DocumentEvidenceVersion,
 )
 from app.modules.documents.schemas import (
     AttachmentManifestItemOut,
@@ -413,6 +425,105 @@ def _advance_grant_notice_case_after_attachment(db: Session, *, document: Docume
 
     validate_case_status_transition(case.status, "GRANTED")
     case.status = "GRANTED"
+
+
+def _is_patent_certificate_document(db: Session, document: Document) -> bool:
+    if not document.doc_template_id:
+        return False
+    template = db.get(DocTemplate, document.doc_template_id)
+    if template is None or (template.code or "").strip().upper() != "OFFICIAL_NOTICE_010":
+        return False
+    try:
+        metadata = json.loads(template.input_fields or "null")
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return bool(
+        isinstance(metadata, dict)
+        and metadata.get("catalog_kind") == "OFFICIAL_NOTICE"
+        and metadata.get("official_notice_name") == "专利证书"
+    )
+
+
+def _capture_document_activity_projection(case: Case) -> LifecycleProjection:
+    try:
+        return LifecycleProjection(
+            business_stage=(
+                BusinessStage(case.business_stage) if case.business_stage is not None else None
+            ),
+            official_procedure_stage=(
+                OfficialProcedureStage(case.official_procedure_stage)
+                if case.official_procedure_stage is not None
+                else None
+            ),
+            legal_status=LegalStatus(case.legal_status) if case.legal_status is not None else None,
+            lifecycle_verification_status=(
+                ConfirmationStatus(case.lifecycle_verification_status)
+                if case.lifecycle_verification_status is not None
+                else None
+            ),
+        )
+    except ValueError:
+        raise_business_error(
+            "LIFECYCLE_PROJECTION_CONFLICT",
+            "Stored lifecycle projection is invalid",
+            status_code=409,
+        )
+
+
+def _append_certificate_archived_activity(
+    db: Session,
+    *,
+    document: Document,
+    evidence_version: EvidenceVersionResult,
+) -> None:
+    if not _is_patent_certificate_document(db, document):
+        return
+    case = db.get(Case, document.case_id)
+    version = db.get(DocumentEvidenceVersion, evidence_version.evidence_version_id)
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+    if version is None:
+        raise_business_error(
+            "EVIDENCE_VERSION_NOT_FOUND",
+            "Evidence version not found",
+            status_code=404,
+        )
+    projection = _capture_document_activity_projection(case)
+    append_case_activity(
+        LifecycleEventCommand(
+            case_id=case.id,
+            event_type="CERTIFICATE_ARCHIVED",
+            lane=ActivityLane.DOCUMENT,
+            effective_at=version.created_at,
+            occurred_at=version.created_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=case.id,
+                    evidence_kind="DOCUMENT_EVIDENCE_VERSION",
+                    object_type="DocumentEvidenceVersion",
+                    object_id=version.id,
+                    content_hash=version.content_hash,
+                    captured_at=version.created_at,
+                ),
+            ),
+            actor_id=evidence_version.creator_id,
+            reviewer_id=None,
+            idempotency_key=f"certificate-archived:{version.id}",
+            source_activity_id=None,
+            supersedes_event_id=None,
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={
+                "attachment_id": version.attachment_id,
+                "document_id": version.document_id,
+                "evidence_version_id": version.id,
+            },
+        ),
+        db,
+        previous_projection=projection,
+        current_projection=projection,
+        legacy_case_status=case.status,
+        conflict_codes=(),
+    )
 
 
 def _apply_reply_chain(
@@ -2559,6 +2670,11 @@ def add_attachment(
                 content_hash=attachment.content_hash,
             ),
             db,
+        )
+        _append_certificate_archived_activity(
+            db,
+            document=document,
+            evidence_version=evidence_version,
         )
         _advance_grant_notice_case_after_attachment(db, document=document)
         db.flush()
