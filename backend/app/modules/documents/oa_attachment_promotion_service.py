@@ -383,6 +383,15 @@ def _replay_result(
         _conflict("Promotion replay carrier is missing")
     if package.case_id != command.case_id or package.package_kind != "OA_REPLY":
         _conflict("Promotion replay package conflicts")
+    matching_children = transaction.scalars(
+        select(DocumentEvidenceVersion).where(
+            DocumentEvidenceVersion.case_id == command.case_id,
+            DocumentEvidenceVersion.lineage_key
+            == f"{parent.lineage_key}|OA|{manifest_role}",
+        )
+    ).all()
+    if len(matching_children) != 1 or matching_children[0].id != child.id:
+        _conflict("Promotion replay child cardinality conflicts")
     if (
         manifest.package_id != command.package_id
         or manifest.evidence_version_id != child.id
@@ -399,10 +408,10 @@ def _replay_result(
         or child.lineage_key != f"{parent.lineage_key}|OA|{manifest_role}"
         or child.role != EvidenceRole.OA_STRUCTURED_ATTACHMENT.value
         or child.state != command.target_state.value
-        or child.creator_id != command.actor_id
         or child.review_state != EvidenceReviewState.PENDING.value
         or child.reviewer_id is not None
         or child.reviewed_at is not None
+        or child.final_submitted_at is not None
         or child.content_hash != payload["typed_content_hash"]
         or child.content_hash != parent.content_hash
     ):

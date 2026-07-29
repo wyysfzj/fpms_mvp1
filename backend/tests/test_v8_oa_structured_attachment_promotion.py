@@ -44,6 +44,7 @@ MANIFEST_ROLE = "OA_STATEMENT_WORD"
 IDEMPOTENCY_KEY = "oa-promotion-1"
 PREEXISTING_CHILD_ID = "00000000-0000-0000-0000-000000000009"
 PREEXISTING_DERIVATION_ID = "00000000-0000-0000-0000-000000000010"
+SECOND_CHILD_ID = "00000000-0000-0000-0000-000000000011"
 
 
 def _canonical_json(value: dict[str, str]) -> str:
@@ -374,7 +375,8 @@ def test_exact_replay_reuses_complete_carrier_without_row_growth(
     (
         "command_actor",
         "activity_payload",
-        "child_creator",
+        "child_multiple",
+        "child_final_submitted",
         "derivation_snapshot",
         "manifest_pointer",
         "reference_hash",
@@ -394,12 +396,36 @@ def test_replay_conflicts_return_409_without_promotion_row_growth(
         elif conflict == "activity_payload":
             activity = transaction.get(CaseActivityEvent, first.activity_id)
             activity.payload_json = "{}"
-        elif conflict == "child_creator":
+        elif conflict == "child_multiple":
             child = transaction.get(
                 DocumentEvidenceVersion,
                 first.typed_evidence_version_id,
             )
-            child.creator_id = CREATOR_ID
+            transaction.add(
+                DocumentEvidenceVersion(
+                    id=SECOND_CHILD_ID,
+                    case_id=child.case_id,
+                    document_id=child.document_id,
+                    attachment_id=child.attachment_id,
+                    lineage_key=child.lineage_key,
+                    role=child.role,
+                    version_number=2,
+                    state=child.state,
+                    creator_id=CREATOR_ID,
+                    review_state="PENDING",
+                    reviewer_id=None,
+                    reviewed_at=None,
+                    final_submitted_at=None,
+                    content_hash=child.content_hash,
+                    current_identity_key=None,
+                )
+            )
+        elif conflict == "child_final_submitted":
+            child = transaction.get(
+                DocumentEvidenceVersion,
+                first.typed_evidence_version_id,
+            )
+            child.final_submitted_at = PROMOTED_AT
         elif conflict == "derivation_snapshot":
             derivation = transaction.get(
                 DocumentEvidenceDerivation,
@@ -708,7 +734,7 @@ def test_caller_rollback_removes_every_partial_write_after_injected_failure(
         )
 
 
-def test_fresh_path_reuses_one_exact_same_content_typed_child(
+def test_fresh_path_reuses_same_content_child_from_another_creator_and_replays(
     session_factory: sessionmaker,
 ) -> None:
     with session_factory() as transaction:
@@ -723,7 +749,7 @@ def test_fresh_path_reuses_one_exact_same_content_typed_child(
                 role="OA_STRUCTURED_ATTACHMENT",
                 version_number=1,
                 state="FINAL",
-                creator_id=ACTOR_ID,
+                creator_id=CREATOR_ID,
                 review_state="PENDING",
                 reviewer_id=None,
                 reviewed_at=None,
@@ -737,6 +763,9 @@ def test_fresh_path_reuses_one_exact_same_content_typed_child(
         result = promote_oa_structured_attachment(_command(), transaction)
 
         assert result.typed_evidence_version_id == PREEXISTING_CHILD_ID
+        replay = promote_oa_structured_attachment(_command(), transaction)
+        assert replay.typed_evidence_version_id == PREEXISTING_CHILD_ID
+        assert replay.reused is True
         assert transaction.scalar(select(func.count()).select_from(DocumentEvidenceVersion)) == 2
         derivations = transaction.scalars(
             select(DocumentEvidenceDerivation).where(
