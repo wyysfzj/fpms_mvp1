@@ -1086,8 +1086,8 @@
     {
       "catalog_id": "FPMS-V8-ANNUITY-LATE-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-ANNUITY-LATE-FEE-RULE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -1262,8 +1262,8 @@
     {
       "catalog_id": "FPMS-V8-OFFICIAL-RATE-BOOK-CARRIER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OFFICIAL-RATE-BOOK-CARRIER-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2557,6 +2557,65 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-OFFICIAL-RATE-BOOK-CARRIER-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "c8c56a5a993760064b88d4b3da1986d52f9bec13"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_w4_official_rate_book.py",
+        "backend/app/modules/fees/models.py",
+        "backend/tests/test_v8_official_rate_book_schema.py"
+      ],
+      "tree_sha256": "afeee1695b8d9fad72a971769a273b7e7b1bc5d9d46e64cc4e3b74497f4ae07b",
+      "tests": [
+        "pytest -q tests/test_v8_official_rate_book_schema.py from backend cwd (8 passed)",
+        "alembic heads plus isolated SQLite upgrade head/current (v8_d4_evidence_kind_capacity_01 head)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-CARRIER-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-CARRIER-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-D4-07-REGISTRATION-MATRIX-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "86c6c8e3b05232a31745ebce976be7cd3330950d"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_service.py",
+        "backend/tests/test_v8_delta4_registration_matrix.py",
+        "backend/tests/test_v8_document_evidence_register_version.py",
+        "backend/tests/test_v8_external_submission_role_allowlist.py",
+        "backend/tests/test_v8_raw_attachment_registration_guard.py"
+      ],
+      "tree_sha256": "94e3cd27abdb156a10dc5e3f5198e925c131f742a169c0b61ac5112bb79f8130",
+      "tests": [
+        "pytest -q tests/test_v8_delta4_registration_matrix.py tests/test_v8_raw_attachment_registration_guard.py tests/test_v8_document_evidence_register_version.py tests/test_v8_external_submission_role_allowlist.py from backend cwd (62 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-D4-07-REGISTRATION-MATRIX-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-D4-07-REGISTRATION-MATRIX-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-ANNUITY-LATE-FEE-RULE-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "e61027fef916272a55ae428dc0dcb92895d2ad1b"
+      ],
+      "paths": [
+        "backend/app/modules/fees/late_fee.py",
+        "backend/tests/test_v8_annuity_late_fee.py"
+      ],
+      "tree_sha256": "e6c9b0a30cabdbf42a7d2be182544c92784474a5cb8ef2f855e1455c184c3097",
+      "tests": [
+        "pytest -q tests/test_v8_annuity_late_fee.py from backend cwd (45 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-ANNUITY-LATE-FEE-RULE-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-LATE-FEE-RULE-CURRENT-VERIFICATION.md"
     }
   ]
 }
