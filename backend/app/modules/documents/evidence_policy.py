@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
@@ -7,10 +9,13 @@ from app.modules.documents.evidence_contracts import (
     EvidenceDerivationType,
     EvidenceReviewState,
     EvidenceRole,
+    EvidenceVersionResult,
+    EvidenceVersionState,
 )
 from app.modules.documents.models import DocumentEvidenceDerivation, DocumentEvidenceVersion
 
 __all__ = (
+    "CopyableOaAttachmentEvidence",
     "CopyableOaAttachmentErrorCode",
     "CopyableOaAttachmentPolicyError",
     "FilingXmlDerivationErrorCode",
@@ -20,6 +25,7 @@ __all__ = (
 )
 
 
+_CONTENT_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 _COPYABLE_OA_ATTACHMENT_ROLES = frozenset(
     {
         "OA_STATEMENT_WORD",
@@ -31,14 +37,35 @@ _COPYABLE_OA_ATTACHMENT_ROLES = frozenset(
 )
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CopyableOaAttachmentEvidence:
+    evidence_version: EvidenceVersionResult
+    manifest_id: str
+    manifest_case_id: str
+    manifest_package_id: str
+    manifest_role: str
+    manifest_evidence_version_id: str
+    manifest_content_hash: str
+
+
 class CopyableOaAttachmentErrorCode(str, Enum):
     INVALID_CONTEXT = "OA_COPYABLE_ATTACHMENT_INVALID_CONTEXT"
     CASE_MISMATCH = "OA_COPYABLE_ATTACHMENT_CASE_MISMATCH"
+    PACKAGE_MISMATCH = "OA_COPYABLE_ATTACHMENT_PACKAGE_MISMATCH"
     DUPLICATE_EVIDENCE = "OA_COPYABLE_ATTACHMENT_DUPLICATE_EVIDENCE"
+    DUPLICATE_MANIFEST = "OA_COPYABLE_ATTACHMENT_DUPLICATE_MANIFEST"
     ROLE_NOT_PERMITTED = "OA_COPYABLE_ATTACHMENT_ROLE_NOT_PERMITTED"
+    NOT_STRUCTURED = "OA_COPYABLE_ATTACHMENT_NOT_STRUCTURED"
+    NOT_CURRENT = "OA_COPYABLE_ATTACHMENT_NOT_CURRENT"
+    NOT_APPROVED = "OA_COPYABLE_ATTACHMENT_NOT_APPROVED"
+    NOT_INDEPENDENTLY_REVIEWED = "OA_COPYABLE_ATTACHMENT_NOT_INDEPENDENTLY_REVIEWED"
+    STATE_MISMATCH = "OA_COPYABLE_ATTACHMENT_STATE_MISMATCH"
+    LINK_MISMATCH = "OA_COPYABLE_ATTACHMENT_LINK_MISMATCH"
+    HASH_MISMATCH = "OA_COPYABLE_ATTACHMENT_HASH_MISMATCH"
     STATEMENT_WORD_REQUIRED = "OA_COPYABLE_STATEMENT_WORD_REQUIRED"
     MULTIPLE_STATEMENT_WORDS = "OA_COPYABLE_MULTIPLE_STATEMENT_WORDS"
     MODIFIED_CLAIMS_REQUIRED = "OA_COPYABLE_MODIFIED_CLAIMS_REQUIRED"
+    MULTIPLE_MODIFIED_CLAIMS = "OA_COPYABLE_MULTIPLE_MODIFIED_CLAIMS"
     MULTIPLE_COMPARISON_PAGES = "OA_COPYABLE_MULTIPLE_COMPARISON_PAGES"
 
 
@@ -82,46 +109,142 @@ def _is_exact_text(value: object) -> bool:
     return type(value) is str and bool(value) and value == value.strip()
 
 
+def _raise_copyable(code: CopyableOaAttachmentErrorCode) -> None:
+    raise CopyableOaAttachmentPolicyError(code)
+
+
+def _has_valid_copyable_evidence_shape(evidence: object) -> bool:
+    return (
+        type(evidence) is EvidenceVersionResult
+        and _is_exact_text(evidence.evidence_version_id)
+        and _is_exact_text(evidence.case_id)
+        and _is_exact_text(evidence.document_id)
+        and _is_exact_text(evidence.attachment_id)
+        and _is_exact_text(evidence.lineage_key)
+        and type(evidence.role) is EvidenceRole
+        and type(evidence.version_number) is int
+        and evidence.version_number > 0
+        and type(evidence.state) is EvidenceVersionState
+        and _is_exact_text(evidence.creator_id)
+        and type(evidence.review_state) is EvidenceReviewState
+        and (
+            evidence.reviewer_id is None
+            or _is_exact_text(evidence.reviewer_id)
+        )
+        and (
+            evidence.reviewed_at is None
+            or type(evidence.reviewed_at) is datetime
+        )
+        and (
+            evidence.final_submitted_at is None
+            or type(evidence.final_submitted_at) is datetime
+        )
+        and _is_exact_text(evidence.content_hash)
+        and _CONTENT_HASH_PATTERN.fullmatch(evidence.content_hash) is not None
+        and type(evidence.is_current) is bool
+        and type(evidence.is_final) is bool
+    )
+
+
 def require_copyable_oa_attachment_combination(
     *,
     case_id: str,
-    attachments: tuple[DocumentEvidenceVersion, ...],
+    package_id: str,
+    attachments: tuple[CopyableOaAttachmentEvidence, ...],
 ) -> None:
-    if not _is_exact_text(case_id) or type(attachments) is not tuple:
-        raise CopyableOaAttachmentPolicyError(CopyableOaAttachmentErrorCode.INVALID_CONTEXT)
+    if (
+        not _is_exact_text(case_id)
+        or not _is_exact_text(package_id)
+        or type(attachments) is not tuple
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.INVALID_CONTEXT)
     if any(
-        type(attachment) is not DocumentEvidenceVersion
-        or not _is_exact_text(attachment.id)
-        or not _is_exact_text(attachment.case_id)
-        or not _is_exact_text(attachment.role)
+        type(attachment) is not CopyableOaAttachmentEvidence
+        or not _has_valid_copyable_evidence_shape(attachment.evidence_version)
+        or not _is_exact_text(attachment.manifest_id)
+        or not _is_exact_text(attachment.manifest_case_id)
+        or not _is_exact_text(attachment.manifest_package_id)
+        or not _is_exact_text(attachment.manifest_role)
+        or not _is_exact_text(attachment.manifest_evidence_version_id)
+        or not _is_exact_text(attachment.manifest_content_hash)
+        or _CONTENT_HASH_PATTERN.fullmatch(attachment.manifest_content_hash) is None
         for attachment in attachments
     ):
-        raise CopyableOaAttachmentPolicyError(CopyableOaAttachmentErrorCode.INVALID_CONTEXT)
-    if any(attachment.case_id != case_id for attachment in attachments):
-        raise CopyableOaAttachmentPolicyError(CopyableOaAttachmentErrorCode.CASE_MISMATCH)
+        _raise_copyable(CopyableOaAttachmentErrorCode.INVALID_CONTEXT)
+    if any(
+        attachment.evidence_version.case_id != case_id
+        or attachment.manifest_case_id != case_id
+        for attachment in attachments
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.CASE_MISMATCH)
+    if any(attachment.manifest_package_id != package_id for attachment in attachments):
+        _raise_copyable(CopyableOaAttachmentErrorCode.PACKAGE_MISMATCH)
 
-    evidence_ids = [attachment.id for attachment in attachments]
+    evidence_ids = [
+        attachment.evidence_version.evidence_version_id for attachment in attachments
+    ]
     if len(evidence_ids) != len(set(evidence_ids)):
-        raise CopyableOaAttachmentPolicyError(CopyableOaAttachmentErrorCode.DUPLICATE_EVIDENCE)
-    if any(attachment.role not in _COPYABLE_OA_ATTACHMENT_ROLES for attachment in attachments):
-        raise CopyableOaAttachmentPolicyError(CopyableOaAttachmentErrorCode.ROLE_NOT_PERMITTED)
+        _raise_copyable(CopyableOaAttachmentErrorCode.DUPLICATE_EVIDENCE)
+    manifest_ids = [attachment.manifest_id for attachment in attachments]
+    if len(manifest_ids) != len(set(manifest_ids)):
+        _raise_copyable(CopyableOaAttachmentErrorCode.DUPLICATE_MANIFEST)
+    if any(
+        attachment.manifest_role not in _COPYABLE_OA_ATTACHMENT_ROLES
+        for attachment in attachments
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.ROLE_NOT_PERMITTED)
+    if any(
+        attachment.evidence_version.role is not EvidenceRole.OA_STRUCTURED_ATTACHMENT
+        for attachment in attachments
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.NOT_STRUCTURED)
+    if any(not attachment.evidence_version.is_current for attachment in attachments):
+        _raise_copyable(CopyableOaAttachmentErrorCode.NOT_CURRENT)
+    if any(
+        attachment.evidence_version.review_state is not EvidenceReviewState.APPROVED
+        for attachment in attachments
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.NOT_APPROVED)
+    if any(
+        not _is_exact_text(attachment.evidence_version.reviewer_id)
+        or attachment.evidence_version.reviewer_id
+        == attachment.evidence_version.creator_id
+        or type(attachment.evidence_version.reviewed_at) is not datetime
+        or attachment.evidence_version.reviewed_at.tzinfo is not None
+        for attachment in attachments
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.NOT_INDEPENDENTLY_REVIEWED)
+    if any(
+        attachment.evidence_version.is_final
+        is not (attachment.evidence_version.state is EvidenceVersionState.FINAL)
+        for attachment in attachments
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.STATE_MISMATCH)
+    if any(
+        attachment.manifest_evidence_version_id
+        != attachment.evidence_version.evidence_version_id
+        for attachment in attachments
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.LINK_MISMATCH)
+    if any(
+        attachment.manifest_content_hash != attachment.evidence_version.content_hash
+        for attachment in attachments
+    ):
+        _raise_copyable(CopyableOaAttachmentErrorCode.HASH_MISMATCH)
 
-    roles = [attachment.role for attachment in attachments]
+    roles = [attachment.manifest_role for attachment in attachments]
     statement_word_count = roles.count("OA_STATEMENT_WORD")
     if statement_word_count == 0:
-        raise CopyableOaAttachmentPolicyError(CopyableOaAttachmentErrorCode.STATEMENT_WORD_REQUIRED)
+        _raise_copyable(CopyableOaAttachmentErrorCode.STATEMENT_WORD_REQUIRED)
     if statement_word_count > 1:
-        raise CopyableOaAttachmentPolicyError(
-            CopyableOaAttachmentErrorCode.MULTIPLE_STATEMENT_WORDS
-        )
-    if "OA_MODIFIED_CLAIMS" not in roles:
-        raise CopyableOaAttachmentPolicyError(
-            CopyableOaAttachmentErrorCode.MODIFIED_CLAIMS_REQUIRED
-        )
+        _raise_copyable(CopyableOaAttachmentErrorCode.MULTIPLE_STATEMENT_WORDS)
+    modified_claims_count = roles.count("OA_MODIFIED_CLAIMS")
+    if modified_claims_count == 0:
+        _raise_copyable(CopyableOaAttachmentErrorCode.MODIFIED_CLAIMS_REQUIRED)
+    if modified_claims_count > 1:
+        _raise_copyable(CopyableOaAttachmentErrorCode.MULTIPLE_MODIFIED_CLAIMS)
     if roles.count("OA_AMENDMENT_COMPARISON") > 1:
-        raise CopyableOaAttachmentPolicyError(
-            CopyableOaAttachmentErrorCode.MULTIPLE_COMPARISON_PAGES
-        )
+        _raise_copyable(CopyableOaAttachmentErrorCode.MULTIPLE_COMPARISON_PAGES)
 
 
 def require_filing_xml_reviewed_word_source(
