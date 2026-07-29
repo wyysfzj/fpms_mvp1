@@ -342,40 +342,40 @@
     {
       "catalog_id": "FPMS-V8-DE-REGISTER-VERSION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-REGISTER-DERIVATION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-CURRENT-VERSION-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-REVIEW-SERVICE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-FINALIZE-EXTERNAL-SUBMISSION-SEAM-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -830,16 +830,16 @@
     {
       "catalog_id": "FPMS-V8-FO-RECOGNIZE-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FO-PREVIEW-ESTIMATE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -918,8 +918,8 @@
     {
       "catalog_id": "FPMS-V8-FO-PAYMENT-EVIDENCE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2508,6 +2508,55 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "6672d239e4f0aa7c0575ad5392987ef954140f0f"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_service.py",
+        "backend/app/modules/documents/evidence_workflow_service.py",
+        "backend/tests/test_v8_document_evidence_contracts.py",
+        "backend/tests/test_v8_document_evidence_current_version.py",
+        "backend/tests/test_v8_document_evidence_derivation.py",
+        "backend/tests/test_v8_document_evidence_register_version.py",
+        "backend/tests/test_v8_document_evidence_review_service.py",
+        "backend/tests/test_v8_finalize_external_submission_seam.py",
+        "backend/tests/test_v8_lifecycle_activity_append.py"
+      ],
+      "tree_sha256": "255a3fadd4fd4af473cf9cbd449869f9f2c79abfd9304db55ca92192282d9e13",
+      "tests": [
+        "pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_lifecycle_activity_append.py tests/test_v8_document_evidence_register_version.py tests/test_v8_document_evidence_derivation.py tests/test_v8_document_evidence_current_version.py tests/test_v8_document_evidence_review_service.py tests/test_v8_finalize_external_submission_seam.py from backend cwd (164 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "f89d222861d6ebda88ead322cfd7254e8fb26e64"
+      ],
+      "paths": [
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/tests/test_v8_fee_estimate_read_only.py",
+        "backend/tests/test_v8_fee_obligation_contracts.py",
+        "backend/tests/test_v8_fee_obligation_payment_evidence.py",
+        "backend/tests/test_v8_fee_obligation_recognize.py",
+        "backend/tests/test_v8_lifecycle_activity_append.py",
+        "backend/tests/test_v8_w1_f1_fee_obligation.py",
+        "backend/tests/test_v8_w1_f2_fee_obligation_line.py"
+      ],
+      "tree_sha256": "0790602b59eec0f56a547716648bc3b9a514925785bad21ee4cb4a99601c615e",
+      "tests": [
+        "pytest -q tests/test_v8_fee_obligation_recognize.py tests/test_v8_fee_estimate_read_only.py tests/test_v8_fee_obligation_payment_evidence.py tests/test_v8_fee_obligation_contracts.py tests/test_v8_w1_f1_fee_obligation.py tests/test_v8_w1_f2_fee_obligation_line.py tests/test_v8_lifecycle_activity_append.py from backend cwd (170 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION.md"
     }
   ]
 }
