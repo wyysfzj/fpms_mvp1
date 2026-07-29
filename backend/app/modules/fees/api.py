@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from datetime import date
-from typing import Any
+from hashlib import sha256
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Path, Query, Response, status
+from sqlalchemy import literal, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
@@ -12,8 +14,19 @@ from app.core.errors import BusinessError, raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
+from app.modules.documents.models import DocumentEvidenceVersion
 from app.modules.fees.fee_reduction import FeeReductionValidationError
-from app.modules.fees.models import FeeDraft, FeeItem
+from app.modules.fees.fee_reduction_approval_schemas import (
+    FeeReductionApprovalCreateIn,
+    FeeReductionApprovalCreateOut,
+    FeeReductionApprovalListItemOut,
+)
+from app.modules.fees.fee_reduction_approval_service import (
+    FeeReductionApprovalRecordDisposition,
+    RecordFeeReductionApprovalCommand,
+    record_fee_reduction_approval,
+)
+from app.modules.fees.models import FeeDraft, FeeItem, FeeReductionApproval
 from app.modules.fees.obligation_contracts import (
     FeeEstimateContext,
     PreviewFeeEstimateCommand,
@@ -80,6 +93,101 @@ def _build_client_name_map(db: Session, client_ids: set[str]) -> dict[str, str]:
         for client in clients
         if _get_client_display_name(client)
     }
+
+
+def _raise_corrupt_approval_scope() -> None:
+    raise_business_error(
+        "FEE_REDUCTION_APPROVAL_SCOPE_CORRUPT",
+        "费用减免审批费用范围数据损坏",
+        status_code=status.HTTP_409_CONFLICT,
+    )
+
+
+def _fee_codes_from_approval_scope(
+    value: object,
+    expected_hash: object,
+) -> tuple[str, ...]:
+    def reject_constant(_value: str) -> None:
+        raise ValueError
+
+    def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError
+            result[key] = item
+        return result
+
+    try:
+        if type(value) is not str:
+            raise ValueError
+        snapshot = json.loads(
+            value,
+            object_pairs_hook=unique_object,
+            parse_constant=reject_constant,
+        )
+        canonical_snapshot = json.dumps(
+            snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        snapshot_bytes = value.encode("utf-8")
+    except (TypeError, ValueError, json.JSONDecodeError, UnicodeEncodeError):
+        _raise_corrupt_approval_scope()
+
+    fee_codes = snapshot.get("fee_codes") if type(snapshot) is dict else None
+    if (
+        type(snapshot) is not dict
+        or set(snapshot) != {"fee_codes", "schema"}
+        or snapshot.get("schema") != "FPMS_FEE_REDUCTION_FEE_SCOPE_V1"
+        or type(fee_codes) is not list
+        or not fee_codes
+        or any(
+            type(code) is not str
+            or not code
+            or code != code.strip()
+            or "\x00" in code
+            or len(code) > 64
+            for code in fee_codes
+        )
+        or len(set(fee_codes)) != len(fee_codes)
+        or fee_codes != sorted(fee_codes)
+        or canonical_snapshot != value
+        or type(expected_hash) is not str
+        or len(expected_hash) != 64
+        or any(character not in "0123456789abcdef" for character in expected_hash)
+        or sha256(snapshot_bytes).hexdigest() != expected_hash
+    ):
+        _raise_corrupt_approval_scope()
+    return tuple(fee_codes)
+
+
+def _validate_approval_source_identity(row: Any, case_id: str) -> None:
+    evidence_case_id = row["evidence_case_id"]
+    lineage_key = row["evidence_lineage_key"]
+    current_identity_key = row["evidence_current_identity_key"]
+    try:
+        lineage_is_utf8 = type(lineage_key) is str and bool(lineage_key.encode("utf-8"))
+    except UnicodeEncodeError:
+        lineage_is_utf8 = False
+    if (
+        evidence_case_id != case_id
+        or type(lineage_key) is not str
+        or not lineage_key
+        or lineage_key != lineage_key.strip()
+        or "\x00" in lineage_key
+        or len(lineage_key) > 128
+        or not lineage_is_utf8
+        or current_identity_key != f"{case_id}|{lineage_key}"
+        or row["is_current"] is not True
+    ):
+        raise_business_error(
+            "FEE_REDUCTION_APPROVAL_SOURCE_IDENTITY_CORRUPT",
+            "费用减免审批来源当前标识数据损坏",
+            status_code=status.HTTP_409_CONFLICT,
+        )
 
 
 @router.get("/fees/drafts", summary="List fee drafts")
@@ -273,6 +381,136 @@ def preview_official_fee_candidates(
         )
 
     return OfficialFeePreviewOut.model_validate(estimate)
+
+
+@router.get(
+    "/fees/cases/{case_id}/reduction-approvals",
+    response_model=list[FeeReductionApprovalListItemOut],
+    summary="List current fee reduction approvals for a case",
+)
+def list_fee_reduction_approvals(
+    case_id: Annotated[str, Path(min_length=1, max_length=36)],
+    _perm: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> list[FeeReductionApprovalListItemOut]:
+    with db.no_autoflush:
+        if db.get(Case, case_id) is None:
+            raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+        rows = (
+            db.execute(
+                select(
+                    FeeReductionApproval.id.label("approval_id"),
+                    FeeReductionApproval.scope_type,
+                    FeeReductionApproval.case_id,
+                    FeeReductionApproval.applicant_set_key,
+                    FeeReductionApproval.reduction_ratio,
+                    FeeReductionApproval.fee_scope_snapshot,
+                    FeeReductionApproval.fee_scope_hash,
+                    FeeReductionApproval.fee_year_from,
+                    FeeReductionApproval.fee_year_to,
+                    FeeReductionApproval.effective_from,
+                    FeeReductionApproval.effective_to,
+                    FeeReductionApproval.source_evidence_version_id,
+                    FeeReductionApproval.confirmation_status,
+                    FeeReductionApproval.confirmed_at,
+                    FeeReductionApproval.confirmed_by,
+                    DocumentEvidenceVersion.case_id.label("evidence_case_id"),
+                    DocumentEvidenceVersion.lineage_key.label("evidence_lineage_key"),
+                    DocumentEvidenceVersion.current_identity_key.label(
+                        "evidence_current_identity_key"
+                    ),
+                    (
+                        DocumentEvidenceVersion.current_identity_key
+                        == DocumentEvidenceVersion.case_id
+                        + literal("|")
+                        + DocumentEvidenceVersion.lineage_key
+                    ).label("is_current"),
+                )
+                .join(
+                    DocumentEvidenceVersion,
+                    DocumentEvidenceVersion.id == FeeReductionApproval.source_evidence_version_id,
+                )
+                .where(
+                    DocumentEvidenceVersion.case_id == case_id,
+                    FeeReductionApproval.confirmation_status == "CONFIRMED",
+                )
+                .order_by(
+                    FeeReductionApproval.confirmed_at.asc(),
+                    FeeReductionApproval.id.asc(),
+                )
+            )
+            .mappings()
+            .all()
+        )
+    result: list[FeeReductionApprovalListItemOut] = []
+    for row in rows:
+        _validate_approval_source_identity(row, case_id)
+        result.append(
+            FeeReductionApprovalListItemOut.model_validate(
+                {
+                    **row,
+                    "fee_codes": _fee_codes_from_approval_scope(
+                        row["fee_scope_snapshot"],
+                        row["fee_scope_hash"],
+                    ),
+                }
+            )
+        )
+    return result
+
+
+@router.post(
+    "/fees/cases/{case_id}/reduction-approvals",
+    status_code=status.HTTP_201_CREATED,
+    response_model=FeeReductionApprovalCreateOut,
+    summary="Create a fee reduction approval",
+)
+def create_fee_reduction_approval(
+    case_id: str,
+    payload: FeeReductionApprovalCreateIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> FeeReductionApprovalCreateOut:
+    if payload.case_id != case_id:
+        raise_business_error(
+            "FEE_REDUCTION_APPROVAL_CASE_MISMATCH",
+            "费用减免审批案件标识不匹配",
+            details={
+                "path_case_id": case_id,
+                "body_case_id": payload.case_id,
+            },
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    command = RecordFeeReductionApprovalCommand(
+        case_id=payload.case_id,
+        scope_type=payload.scope_type,
+        applicant_ids=payload.applicant_ids,
+        eligibility_attributes_version=payload.eligibility_attributes_version,
+        eligibility_attributes_json=payload.eligibility_attributes_json,
+        reduction_ratio=payload.reduction_ratio,
+        fee_codes=payload.fee_codes,
+        fee_year_from=payload.fee_year_from,
+        fee_year_to=payload.fee_year_to,
+        effective_from=payload.effective_from,
+        effective_to=payload.effective_to,
+        source_evidence_version_id=payload.source_evidence_version_id,
+        expected_source_content_hash=payload.expected_source_content_hash,
+        confirmed_at=payload.confirmed_at,
+        confirmed_by=current_user.id,
+    )
+    try:
+        result = record_fee_reduction_approval(command, db)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    if result.disposition is FeeReductionApprovalRecordDisposition.REUSED:
+        response.status_code = status.HTTP_200_OK
+    return FeeReductionApprovalCreateOut(approval_id=result.approval_id)
 
 
 @router.post(
