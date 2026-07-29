@@ -19,8 +19,9 @@
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 2,
     "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 1,
-    "V8-ADOPT-FEE-OBLIGATION": 24,
+    "V8-ADOPT-FEE-OBLIGATION": 20,
     "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION": 1,
+    "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION": 4,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
     "V8-ADOPT-DECISION-GATES": 2,
     "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
@@ -225,8 +226,8 @@
     {
       "path": "backend/app/modules/fees/api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee and obligation behavior"
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
+      "rationale": "fee-reduction approval create/list HTTP contracts"
     },
     {
       "path": "backend/app/modules/fees/cnipa_annuity_rate_candidate.py",
@@ -255,8 +256,8 @@
     {
       "path": "backend/app/modules/fees/fee_reduction_approval_schemas.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee and obligation behavior"
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
+      "rationale": "strict fee-reduction approval HTTP schemas"
     },
     {
       "path": "backend/app/modules/fees/obligation_schemas.py",
@@ -561,14 +562,14 @@
     {
       "path": "backend/tests/test_v8_fee_reduction_approval_create_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
+      "rationale": "fee-reduction approval create API decisive regression"
     },
     {
       "path": "backend/tests/test_v8_fee_reduction_approval_list_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
+      "rationale": "fee-reduction approval list API decisive regression"
     },
     {
       "path": "backend/tests/test_v8_fee_reduction_approval_notice_adapter.py",

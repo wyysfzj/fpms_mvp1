@@ -762,16 +762,16 @@
     {
       "catalog_id": "FPMS-V8-FEE-REDUCTION-APPROVAL-CREATE-API-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FEE-REDUCTION-APPROVAL-LIST-API-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2814,6 +2814,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md",
       "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md"
+    },
+    {
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "bd8590eed6ef2b0636ef54035501a61c75f7fbd9"
+      ],
+      "paths": [
+        "backend/app/modules/fees/api.py",
+        "backend/app/modules/fees/fee_reduction_approval_schemas.py",
+        "backend/tests/test_v8_fee_reduction_approval_create_api.py",
+        "backend/tests/test_v8_fee_reduction_approval_list_api.py"
+      ],
+      "tree_sha256": "1cf9bacbad739e4bcdd1f92abdc9b6b17eb5ebf21cdac81be50032fb5a4e6256",
+      "tests": [
+        "pytest -q tests/test_v8_fee_reduction_approval_create_api.py tests/test_v8_fee_reduction_approval_list_api.py from backend cwd (39 passed)",
+        "independent real SQLite malformed evidence identity probe returned deterministic 409"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION.md"
     }
   ]
 }
