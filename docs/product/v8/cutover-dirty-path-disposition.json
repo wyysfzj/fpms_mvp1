@@ -16,7 +16,8 @@
     "V8-ADOPT-DOCUMENT-EVIDENCE": 54,
     "V8-ADOPT-FEE-OBLIGATION": 25,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
-    "V8-ADOPT-DECISION-GATES": 5,
+    "V8-ADOPT-DECISION-GATES": 2,
+    "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
     "V8-ADOPT-PAYLIST-PAYMENT": 9,
     "C3-LEAN-GOVERNANCE-ADOPTION": 2
@@ -313,13 +314,13 @@
     {
       "path": "backend/app/modules/system/api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DECISION-GATES",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
       "rationale": "customer/source decision-gate API"
     },
     {
       "path": "backend/app/modules/system/decision_gate_schemas.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DECISION-GATES",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
       "rationale": "customer/source decision-gate API"
     },
     {
@@ -511,7 +512,7 @@
     {
       "path": "backend/tests/test_v8_decision_gate_list_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DECISION-GATES",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
       "rationale": "source/customer decision-gate behavior"
     },
     {

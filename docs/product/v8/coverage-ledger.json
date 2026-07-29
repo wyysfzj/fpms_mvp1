@@ -334,8 +334,8 @@
     {
       "catalog_id": "FPMS-V8-DE-CONTRACTS-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -1346,32 +1346,32 @@
     {
       "catalog_id": "FPMS-V8-DECISION-GATE-RECORD-SERVICE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DECISION-GATE-CONFIRM-API-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DECISION-GATE-LIST-API-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2461,6 +2461,53 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DECISION-GATE-CARRIER-CURRENT-VERIFICATION.md",
       "verification_ref": "docs/product/v8/reviews/V8-DECISION-GATE-CARRIER-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "d33e3f992dda142cc47d7bbd66a95846af425559",
+        "6b61f681cc0df4ff472388edd577c1633f5a6827"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_contracts.py",
+        "backend/app/modules/documents/evidence_service.py",
+        "backend/app/modules/documents/evidence_workflow_service.py",
+        "backend/tests/test_v8_document_evidence_contracts.py",
+        "backend/tests/test_v8_delta4_evidence_role_extension.py",
+        "backend/tests/test_v8_external_submission_role_allowlist.py",
+        "backend/tests/test_v8_raw_attachment_registration_guard.py"
+      ],
+      "tree_sha256": "a929310a6e8bea81f1d5d085ea86fe1828da0a0cbd0dd3c73bff5638adfd77dc",
+      "tests": [
+        "pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_delta4_evidence_role_extension.py tests/test_v8_raw_attachment_registration_guard.py tests/test_v8_external_submission_role_allowlist.py from backend cwd (52 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "1ac9edb8304f3cd0c9b512331dae7d56710856fb"
+      ],
+      "paths": [
+        "backend/app/modules/system/api.py",
+        "backend/app/modules/system/decision_gate_schemas.py",
+        "backend/app/modules/system/decision_gate_service.py",
+        "backend/tests/test_v8_decision_gate_confirm_api.py",
+        "backend/tests/test_v8_decision_gate_list_api.py",
+        "backend/tests/test_v8_decision_gate_read_service.py",
+        "backend/tests/test_v8_decision_gate_record_service.py"
+      ],
+      "tree_sha256": "f07a911490016f38ea1ce6cd60fa66429ef6ede2df090aecaf00075175cc9a89",
+      "tests": [
+        "pytest -q tests/test_v8_decision_gate_record_service.py tests/test_v8_decision_gate_read_service.py tests/test_v8_decision_gate_confirm_api.py tests/test_v8_decision_gate_list_api.py from backend cwd (170 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION.md"
     }
   ]
 }
