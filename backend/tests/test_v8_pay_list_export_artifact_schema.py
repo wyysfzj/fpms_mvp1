@@ -29,6 +29,7 @@ from app.modules.annuity import models as annuity_models
 
 REVISION = "v8_w5_pay_list_export_artifact_01"
 DOWN_REVISION = "v8_w4_official_rate_book_01"
+CURRENT_HEAD = "v8_d4_evidence_kind_capacity_01"
 TABLE = "t_pay_list_export_artifact"
 COLUMNS = (
     "id",
@@ -249,7 +250,10 @@ def test_frozen_model_and_revision_contract() -> None:
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     script = ScriptDirectory.from_config(config)
     heads = script.get_heads()
-    assert heads == [REVISION]
+    assert heads == [CURRENT_HEAD]
+    assert REVISION in {
+        item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+    }
     revision = script.get_revision(REVISION)
     assert revision is not None
     assert revision.down_revision == DOWN_REVISION
