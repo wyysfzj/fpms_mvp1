@@ -1278,8 +1278,8 @@
     {
       "catalog_id": "FPMS-V8-OFFICIAL-FEE-CATEGORY-CORRECTION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OFFICIAL-FEE-CATEGORY-CORRECTION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2752,6 +2752,24 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-FACT-WRITERS-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FEE-FACT-WRITERS-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OFFICIAL-FEE-CATEGORY-CORRECTION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "bca7de8f05505ee4eb3103ee95161a627436efa1"
+      ],
+      "paths": [
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_official_fee_category_correction.py"
+      ],
+      "tree_sha256": "f20be8ac5439e22fab810756975a1e76ac506cdaf957c5112e72d7e015713aba",
+      "tests": [
+        "pytest -q tests/test_v8_official_fee_category_correction.py from backend cwd (controller 1 passed; independent reviewer 1 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-FEE-CATEGORY-CORRECTION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OFFICIAL-FEE-CATEGORY-CORRECTION-CURRENT-ADOPTION.md"
     }
   ]
 }
