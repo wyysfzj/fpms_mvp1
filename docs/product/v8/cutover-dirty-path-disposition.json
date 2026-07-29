@@ -13,9 +13,9 @@
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
     "V8-ADOPT-ANNUITY-RATE-SOURCES": 37,
     "V8-ADOPT-LIFECYCLE-CENTER": 25,
-    "V8-ADOPT-DOCUMENT-EVIDENCE": 49,
+    "V8-ADOPT-DOCUMENT-EVIDENCE": 48,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
-    "V8-OA-COPYABLE-ATTACHMENT-POLICY": 2,
+    "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 3,
     "V8-ADOPT-FEE-OBLIGATION": 25,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
@@ -137,7 +137,7 @@
     {
       "path": "backend/app/modules/documents/evidence_policy.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-OA-COPYABLE-ATTACHMENT-POLICY",
+      "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
       "rationale": "document/evidence lineage and workflow"
     },
     {
@@ -869,7 +869,7 @@
     {
       "path": "backend/tests/test_v8_oa_copyable_attachment_policy.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-OA-COPYABLE-ATTACHMENT-POLICY",
+      "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
       "rationale": "document/evidence lineage behavior"
     },
     {
@@ -887,7 +887,7 @@
     {
       "path": "backend/tests/test_v8_oa_noncopyable_appendix_policy.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
       "rationale": "document/evidence lineage behavior"
     },
     {

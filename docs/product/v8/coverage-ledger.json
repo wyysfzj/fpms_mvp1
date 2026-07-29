@@ -574,16 +574,16 @@
     {
       "catalog_id": "FPMS-V8-OA-COPYABLE-ATTACHMENT-POLICY-20260712-01",
       "phase": "foundation",
-      "disposition": "CURRENT_VERIFIED",
-      "story_id": "V8-OA-COPYABLE-ATTACHMENT-POLICY",
-      "successor_story_id": null,
+      "disposition": "SUPERSEDED_BY_STORY",
+      "story_id": null,
+      "successor_story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OA-NONCOPYABLE-APPENDIX-POLICY-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2655,24 +2655,6 @@
       "verification_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-CURRENT-VERIFICATION.md"
     },
     {
-      "story_id": "V8-OA-COPYABLE-ATTACHMENT-POLICY",
-      "status": "CURRENT_VERIFIED",
-      "commits": [
-        "8341a7a4146494af6038f72bc26d6e2efd028038"
-      ],
-      "paths": [
-        "backend/app/modules/documents/evidence_policy.py",
-        "backend/tests/test_v8_oa_copyable_attachment_policy.py"
-      ],
-      "tree_sha256": "178a29a5c8ce22c29ee624bdd3840837470d0077eda339f49cf2e63702b9e3a9",
-      "tests": [
-        "pytest -q tests/test_v8_oa_copyable_attachment_policy.py tests/test_v8_oa_structured_attachment_promotion.py tests/test_v8_document_evidence_derivation.py tests/test_v8_filing_xml_derivation_gate.py from backend cwd (116 passed)"
-      ],
-      "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-OA-COPYABLE-ATTACHMENT-POLICY.md",
-      "verification_ref": "docs/product/v8/reviews/V8-OA-COPYABLE-ATTACHMENT-POLICY.md"
-    },
-    {
       "story_id": "V8-OVERLAY-CONTRACTS-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
@@ -2709,6 +2691,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "d66ab96cee2878215d3a9ac81d7390b75ab6e5b1",
+        "d7150cafd4d0dc4ccd19d1abeab78ec0798b9f01"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_policy.py",
+        "backend/tests/test_v8_oa_copyable_attachment_policy.py",
+        "backend/tests/test_v8_oa_noncopyable_appendix_policy.py"
+      ],
+      "tree_sha256": "d7799eac8b4f38cceeb3cde9d11f14edcaa5b8676a99c0938412b3037f86515b",
+      "tests": [
+        "pytest -q tests/test_v8_oa_noncopyable_appendix_policy.py tests/test_v8_oa_copyable_attachment_policy.py tests/test_v8_document_evidence_derivation.py tests/test_v8_oa_structured_attachment_promotion.py from backend cwd (245 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OA-NONCOPYABLE-APPENDIX-POLICY.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OA-NONCOPYABLE-APPENDIX-POLICY.md"
     }
   ]
 }
