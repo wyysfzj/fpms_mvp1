@@ -12,7 +12,15 @@ from app.modules.documents.evidence_contracts import (
     EvidenceVersionResult,
     EvidenceVersionState,
 )
-from app.modules.documents.models import DocumentEvidenceDerivation, DocumentEvidenceVersion
+from app.modules.documents.models import (
+    DocAttachment,
+    DocumentEvidenceDerivation,
+    DocumentEvidenceVersion,
+)
+from app.modules.official_workflows.models import (
+    OfficialWorkPackage,
+    OfficialWorkPackageManifest,
+)
 
 __all__ = (
     "CopyableOaAttachmentEvidence",
@@ -20,12 +28,18 @@ __all__ = (
     "CopyableOaAttachmentPolicyError",
     "FilingXmlDerivationErrorCode",
     "FilingXmlDerivationPolicyError",
+    "NoncopyableOaAppendixErrorCode",
+    "NoncopyableOaAppendixPolicyError",
     "require_copyable_oa_attachment_combination",
     "require_filing_xml_reviewed_word_source",
+    "require_noncopyable_oa_appendix_derivation",
 )
 
 
 _CONTENT_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+_OA_APPENDIX_SOURCE_SNAPSHOT = (
+    '{"component":"OA_STATEMENT_APPENDIX","schema":"FPMS_OA_NONCOPYABLE_APPENDIX_V1"}'
+)
 _COPYABLE_OA_ATTACHMENT_ROLES = frozenset(
     {
         "OA_STATEMENT_WORD",
@@ -79,6 +93,25 @@ class CopyableOaAttachmentPolicyError(ValueError):
         return self._code
 
 
+class NoncopyableOaAppendixErrorCode(str, Enum):
+    INVALID_CONTEXT = "OA_NONCOPYABLE_APPENDIX_INVALID_CONTEXT"
+    FULL_REPLY_PDF_REQUIRED = "OA_NONCOPYABLE_FULL_REPLY_PDF_REQUIRED"
+    EXTRACTED_APPENDIX_REQUIRED = "OA_NONCOPYABLE_EXTRACTED_APPENDIX_REQUIRED"
+    CASE_MISMATCH = "OA_NONCOPYABLE_APPENDIX_CASE_MISMATCH"
+    DERIVATION_MISMATCH = "OA_NONCOPYABLE_APPENDIX_DERIVATION_MISMATCH"
+    OTHER_PROOF_NOT_APPENDIX = "OA_NONCOPYABLE_OTHER_PROOF_NOT_APPENDIX"
+
+
+class NoncopyableOaAppendixPolicyError(ValueError):
+    def __init__(self, code: NoncopyableOaAppendixErrorCode) -> None:
+        self._code = code
+        super().__init__(code.value)
+
+    @property
+    def code(self) -> NoncopyableOaAppendixErrorCode:
+        return self._code
+
+
 class FilingXmlDerivationErrorCode(str, Enum):
     INVALID_CONTEXT = "FILING_XML_DERIVATION_INVALID_CONTEXT"
     SOURCE_NOT_FILING_WORD = "FILING_XML_SOURCE_NOT_FILING_WORD"
@@ -111,6 +144,10 @@ def _is_exact_text(value: object) -> bool:
 
 def _raise_copyable(code: CopyableOaAttachmentErrorCode) -> None:
     raise CopyableOaAttachmentPolicyError(code)
+
+
+def _raise_noncopyable(code: NoncopyableOaAppendixErrorCode) -> None:
+    raise NoncopyableOaAppendixPolicyError(code)
 
 
 def _has_valid_copyable_evidence_shape(evidence: object) -> bool:
@@ -245,6 +282,144 @@ def require_copyable_oa_attachment_combination(
         _raise_copyable(CopyableOaAttachmentErrorCode.MULTIPLE_MODIFIED_CLAIMS)
     if roles.count("OA_AMENDMENT_COMPARISON") > 1:
         _raise_copyable(CopyableOaAttachmentErrorCode.MULTIPLE_COMPARISON_PAGES)
+
+
+def require_noncopyable_oa_appendix_derivation(
+    *,
+    case_id: str,
+    package: OfficialWorkPackage,
+    full_reply_pdf: DocumentEvidenceVersion,
+    full_reply_attachment: DocAttachment,
+    full_reply_manifest: OfficialWorkPackageManifest,
+    extracted_appendix: DocumentEvidenceVersion,
+    appendix_attachment: DocAttachment,
+    appendix_manifest: OfficialWorkPackageManifest,
+    derivation: DocumentEvidenceDerivation,
+    other_proof_evidence_version_id: str,
+) -> None:
+    if (
+        not _is_exact_text(case_id)
+        or type(package) is not OfficialWorkPackage
+        or type(full_reply_pdf) is not DocumentEvidenceVersion
+        or type(full_reply_attachment) is not DocAttachment
+        or type(full_reply_manifest) is not OfficialWorkPackageManifest
+        or type(extracted_appendix) is not DocumentEvidenceVersion
+        or type(appendix_attachment) is not DocAttachment
+        or type(appendix_manifest) is not OfficialWorkPackageManifest
+        or type(derivation) is not DocumentEvidenceDerivation
+        or not _is_exact_text(package.id)
+        or not _is_exact_text(package.case_id)
+        or not _is_exact_text(package.package_kind)
+        or not _is_exact_text(full_reply_pdf.id)
+        or not _is_exact_text(full_reply_pdf.case_id)
+        or not _is_exact_text(full_reply_pdf.document_id)
+        or not _is_exact_text(full_reply_pdf.attachment_id)
+        or not _is_exact_text(full_reply_pdf.role)
+        or not _is_exact_text(full_reply_pdf.content_hash)
+        or _CONTENT_HASH_PATTERN.fullmatch(full_reply_pdf.content_hash) is None
+        or not _is_exact_text(full_reply_attachment.id)
+        or not _is_exact_text(full_reply_attachment.document_id)
+        or not _is_exact_text(full_reply_attachment.mime_type)
+        or not _is_exact_text(full_reply_attachment.official_file_role)
+        or not _is_exact_text(full_reply_attachment.content_hash)
+        or _CONTENT_HASH_PATTERN.fullmatch(full_reply_attachment.content_hash) is None
+        or not _is_exact_text(full_reply_manifest.id)
+        or not _is_exact_text(full_reply_manifest.package_id)
+        or not _is_exact_text(full_reply_manifest.attachment_id)
+        or not _is_exact_text(full_reply_manifest.evidence_version_id)
+        or not _is_exact_text(full_reply_manifest.official_file_role)
+        or not _is_exact_text(full_reply_manifest.content_hash)
+        or _CONTENT_HASH_PATTERN.fullmatch(full_reply_manifest.content_hash) is None
+        or type(full_reply_manifest.present) is not bool
+        or not _is_exact_text(extracted_appendix.id)
+        or not _is_exact_text(extracted_appendix.case_id)
+        or not _is_exact_text(extracted_appendix.document_id)
+        or not _is_exact_text(extracted_appendix.attachment_id)
+        or not _is_exact_text(extracted_appendix.role)
+        or not _is_exact_text(extracted_appendix.content_hash)
+        or _CONTENT_HASH_PATTERN.fullmatch(extracted_appendix.content_hash) is None
+        or not _is_exact_text(appendix_attachment.id)
+        or not _is_exact_text(appendix_attachment.document_id)
+        or not _is_exact_text(appendix_attachment.official_file_role)
+        or not _is_exact_text(appendix_attachment.source_role_alias)
+        or not _is_exact_text(appendix_attachment.content_hash)
+        or _CONTENT_HASH_PATTERN.fullmatch(appendix_attachment.content_hash) is None
+        or not _is_exact_text(appendix_manifest.id)
+        or not _is_exact_text(appendix_manifest.package_id)
+        or not _is_exact_text(appendix_manifest.attachment_id)
+        or not _is_exact_text(appendix_manifest.evidence_version_id)
+        or not _is_exact_text(appendix_manifest.official_file_role)
+        or not _is_exact_text(appendix_manifest.source_role_alias)
+        or not _is_exact_text(appendix_manifest.content_hash)
+        or _CONTENT_HASH_PATTERN.fullmatch(appendix_manifest.content_hash) is None
+        or type(appendix_manifest.present) is not bool
+        or not _is_exact_text(derivation.id)
+        or not _is_exact_text(derivation.case_id)
+        or not _is_exact_text(derivation.parent_evidence_version_id)
+        or not _is_exact_text(derivation.child_evidence_version_id)
+        or not _is_exact_text(derivation.derivation_type)
+        or not _is_exact_text(derivation.actor_id)
+        or type(derivation.derived_at) is not datetime
+        or derivation.derived_at.tzinfo is not None
+        or not _is_exact_text(derivation.source_snapshot)
+        or not _is_exact_text(other_proof_evidence_version_id)
+    ):
+        _raise_noncopyable(NoncopyableOaAppendixErrorCode.INVALID_CONTEXT)
+    if (
+        package.case_id != case_id
+        or full_reply_pdf.case_id != case_id
+        or extracted_appendix.case_id != case_id
+        or derivation.case_id != case_id
+    ):
+        _raise_noncopyable(NoncopyableOaAppendixErrorCode.CASE_MISMATCH)
+    if (
+        full_reply_pdf.role != EvidenceRole.GENERATED_ATTACHMENT.value
+        or full_reply_attachment.mime_type != "application/pdf"
+        or full_reply_attachment.official_file_role != "OA_STATEMENT_PDF"
+        or full_reply_manifest.official_file_role != "OA_STATEMENT_PDF"
+    ):
+        _raise_noncopyable(NoncopyableOaAppendixErrorCode.FULL_REPLY_PDF_REQUIRED)
+    if (
+        extracted_appendix.role != EvidenceRole.OA_STRUCTURED_ATTACHMENT.value
+        or appendix_attachment.official_file_role != "OA_OTHER_PROOF"
+        or appendix_manifest.official_file_role != "OA_OTHER_PROOF"
+        or appendix_attachment.source_role_alias != "OA_STATEMENT_APPENDIX"
+        or appendix_manifest.source_role_alias != "OA_STATEMENT_APPENDIX"
+    ):
+        _raise_noncopyable(NoncopyableOaAppendixErrorCode.EXTRACTED_APPENDIX_REQUIRED)
+    if (
+        package.package_kind != "OA_REPLY"
+        or full_reply_manifest.package_id != package.id
+        or appendix_manifest.package_id != package.id
+        or full_reply_attachment.id != full_reply_pdf.attachment_id
+        or full_reply_attachment.document_id != full_reply_pdf.document_id
+        or full_reply_manifest.attachment_id != full_reply_attachment.id
+        or full_reply_manifest.evidence_version_id != full_reply_pdf.id
+        or full_reply_manifest.present is not True
+        or appendix_attachment.id != extracted_appendix.attachment_id
+        or appendix_attachment.document_id != extracted_appendix.document_id
+        or appendix_manifest.attachment_id != appendix_attachment.id
+        or appendix_manifest.evidence_version_id != extracted_appendix.id
+        or appendix_manifest.present is not True
+        or full_reply_attachment.content_hash != full_reply_pdf.content_hash
+        or full_reply_manifest.content_hash != full_reply_pdf.content_hash
+        or appendix_attachment.content_hash != extracted_appendix.content_hash
+        or appendix_manifest.content_hash != extracted_appendix.content_hash
+        or full_reply_pdf.id == extracted_appendix.id
+        or full_reply_attachment.id == appendix_attachment.id
+        or full_reply_pdf.document_id == extracted_appendix.document_id
+        or derivation.parent_evidence_version_id != full_reply_pdf.id
+        or derivation.child_evidence_version_id != extracted_appendix.id
+        or derivation.derivation_type
+        != EvidenceDerivationType.COMPONENT_EXTRACTION.value
+        or derivation.source_snapshot != _OA_APPENDIX_SOURCE_SNAPSHOT
+    ):
+        _raise_noncopyable(NoncopyableOaAppendixErrorCode.DERIVATION_MISMATCH)
+    if (
+        other_proof_evidence_version_id != extracted_appendix.id
+        or other_proof_evidence_version_id == full_reply_pdf.id
+    ):
+        _raise_noncopyable(NoncopyableOaAppendixErrorCode.OTHER_PROOF_NOT_APPENDIX)
 
 
 def require_filing_xml_reviewed_word_source(
