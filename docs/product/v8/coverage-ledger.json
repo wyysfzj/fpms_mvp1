@@ -1286,8 +1286,8 @@
     {
       "catalog_id": "FPMS-V8-PAYLIST-EXPORT-ARTIFACT-CARRIER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2711,6 +2711,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-NONCOPYABLE-APPENDIX-POLICY.md",
       "verification_ref": "docs/product/v8/reviews/V8-OA-NONCOPYABLE-APPENDIX-POLICY.md"
+    },
+    {
+      "story_id": "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "fdb4bb56459050d61987fd68f6a953300fcaea94"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_w5_pay_list_export_artifact.py",
+        "backend/app/modules/annuity/models.py",
+        "backend/tests/test_v8_pay_list_export_artifact_schema.py"
+      ],
+      "tree_sha256": "f2732df434169728af41c237f76f5697c00122ba1753973b69e84b918eb3b537",
+      "tests": [
+        "pytest -q tests/test_v8_pay_list_export_artifact_schema.py from backend cwd (4 passed)",
+        "alembic heads plus isolated clean SQLite upgrade/current at v8_d4_evidence_kind_capacity_01"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION.md"
     }
   ]
 }

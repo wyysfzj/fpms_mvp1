@@ -11,7 +11,8 @@
     "V8-ADOPT-DOCUMENT-REVIEW-UI": 5,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
-    "V8-ADOPT-ANNUITY-RATE-SOURCES": 37,
+    "V8-ADOPT-ANNUITY-RATE-SOURCES": 36,
+    "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
     "V8-ADOPT-LIFECYCLE-CENTER": 25,
     "V8-ADOPT-DOCUMENT-EVIDENCE": 48,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
@@ -71,7 +72,7 @@
     {
       "path": "backend/app/modules/annuity/models.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "story_id": "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION",
       "rationale": "annuity domain behavior"
     },
     {
