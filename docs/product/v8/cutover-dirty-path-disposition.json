@@ -18,7 +18,8 @@
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 3,
-    "V8-ADOPT-FEE-OBLIGATION": 25,
+    "V8-ADOPT-FEE-OBLIGATION": 24,
+    "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION": 1,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
     "V8-ADOPT-DECISION-GATES": 2,
     "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
@@ -264,8 +265,8 @@
     {
       "path": "backend/app/modules/fees/obligation_service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee and obligation behavior"
+      "story_id": "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION",
+      "rationale": "independently verified fee-obligation client-instruction writer"
     },
     {
       "path": "backend/app/modules/fees/official_rate_book.py",

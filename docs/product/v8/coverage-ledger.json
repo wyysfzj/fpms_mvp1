@@ -754,8 +754,8 @@
     {
       "catalog_id": "FPMS-V8-FEE-REDUCTION-APPROVAL-RECORD-SERVICE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -862,8 +862,8 @@
     {
       "catalog_id": "FPMS-V8-FO-CLIENT-INSTRUCTION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2731,6 +2731,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "1a886c4e40b0ee6e83882c42e6eb4da561feccc7"
+      ],
+      "paths": [
+        "backend/app/modules/fees/fee_reduction_approval_service.py",
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/tests/test_v8_fee_obligation_instruction.py",
+        "backend/tests/test_v8_fee_reduction_approval_record.py"
+      ],
+      "tree_sha256": "5f1fad6faf138f5e5a7d50768545d3504940a296120fbfaeae2617b9fd038996",
+      "tests": [
+        "pytest -q tests/test_v8_fee_reduction_approval_record.py plus its three inherited regressions from backend cwd (186 passed)",
+        "pytest -q tests/test_v8_fee_obligation_instruction.py plus its three inherited regressions from backend cwd (135 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-FACT-WRITERS-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-FACT-WRITERS-CURRENT-ADOPTION.md"
     }
   ]
 }
