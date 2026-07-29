@@ -284,6 +284,24 @@ def require_copyable_oa_attachment_combination(
         _raise_copyable(CopyableOaAttachmentErrorCode.MULTIPLE_COMPARISON_PAGES)
 
 
+def _has_coherent_noncopyable_review_tuple(
+    evidence: DocumentEvidenceVersion,
+) -> bool:
+    try:
+        review_state = EvidenceReviewState(evidence.review_state)
+    except ValueError:
+        return False
+    if review_state is EvidenceReviewState.PENDING:
+        return evidence.reviewer_id is None and evidence.reviewed_at is None
+    return (
+        _is_exact_text(evidence.reviewer_id)
+        and len(evidence.reviewer_id) <= 36
+        and evidence.reviewer_id != evidence.creator_id
+        and type(evidence.reviewed_at) is datetime
+        and evidence.reviewed_at.tzinfo is None
+    )
+
+
 def require_noncopyable_oa_appendix_derivation(
     *,
     case_id: str,
@@ -314,9 +332,30 @@ def require_noncopyable_oa_appendix_derivation(
         or not _is_exact_text(full_reply_pdf.case_id)
         or not _is_exact_text(full_reply_pdf.document_id)
         or not _is_exact_text(full_reply_pdf.attachment_id)
+        or not _is_exact_text(full_reply_pdf.lineage_key)
         or not _is_exact_text(full_reply_pdf.role)
+        or type(full_reply_pdf.version_number) is not int
+        or not _is_exact_text(full_reply_pdf.state)
+        or not _is_exact_text(full_reply_pdf.creator_id)
+        or not _is_exact_text(full_reply_pdf.review_state)
+        or (
+            full_reply_pdf.reviewer_id is not None
+            and not _is_exact_text(full_reply_pdf.reviewer_id)
+        )
+        or (
+            full_reply_pdf.reviewed_at is not None
+            and type(full_reply_pdf.reviewed_at) is not datetime
+        )
+        or (
+            full_reply_pdf.final_submitted_at is not None
+            and type(full_reply_pdf.final_submitted_at) is not datetime
+        )
         or not _is_exact_text(full_reply_pdf.content_hash)
         or _CONTENT_HASH_PATTERN.fullmatch(full_reply_pdf.content_hash) is None
+        or (
+            full_reply_pdf.current_identity_key is not None
+            and not _is_exact_text(full_reply_pdf.current_identity_key)
+        )
         or not _is_exact_text(full_reply_attachment.id)
         or not _is_exact_text(full_reply_attachment.document_id)
         or not _is_exact_text(full_reply_attachment.mime_type)
@@ -335,9 +374,30 @@ def require_noncopyable_oa_appendix_derivation(
         or not _is_exact_text(extracted_appendix.case_id)
         or not _is_exact_text(extracted_appendix.document_id)
         or not _is_exact_text(extracted_appendix.attachment_id)
+        or not _is_exact_text(extracted_appendix.lineage_key)
         or not _is_exact_text(extracted_appendix.role)
+        or type(extracted_appendix.version_number) is not int
+        or not _is_exact_text(extracted_appendix.state)
+        or not _is_exact_text(extracted_appendix.creator_id)
+        or not _is_exact_text(extracted_appendix.review_state)
+        or (
+            extracted_appendix.reviewer_id is not None
+            and not _is_exact_text(extracted_appendix.reviewer_id)
+        )
+        or (
+            extracted_appendix.reviewed_at is not None
+            and type(extracted_appendix.reviewed_at) is not datetime
+        )
+        or (
+            extracted_appendix.final_submitted_at is not None
+            and type(extracted_appendix.final_submitted_at) is not datetime
+        )
         or not _is_exact_text(extracted_appendix.content_hash)
         or _CONTENT_HASH_PATTERN.fullmatch(extracted_appendix.content_hash) is None
+        or (
+            extracted_appendix.current_identity_key is not None
+            and not _is_exact_text(extracted_appendix.current_identity_key)
+        )
         or not _is_exact_text(appendix_attachment.id)
         or not _is_exact_text(appendix_attachment.document_id)
         or not _is_exact_text(appendix_attachment.official_file_role)
@@ -374,6 +434,12 @@ def require_noncopyable_oa_appendix_derivation(
         _raise_noncopyable(NoncopyableOaAppendixErrorCode.CASE_MISMATCH)
     if (
         full_reply_pdf.role != EvidenceRole.GENERATED_ATTACHMENT.value
+        or full_reply_pdf.version_number < 1
+        or full_reply_pdf.state != EvidenceVersionState.DRAFT.value
+        or full_reply_pdf.current_identity_key
+        != f"{case_id}|{full_reply_pdf.lineage_key}"
+        or not _has_coherent_noncopyable_review_tuple(full_reply_pdf)
+        or full_reply_pdf.final_submitted_at is not None
         or full_reply_attachment.mime_type != "application/pdf"
         or full_reply_attachment.official_file_role != "OA_STATEMENT_PDF"
         or full_reply_manifest.official_file_role != "OA_STATEMENT_PDF"
@@ -381,6 +447,15 @@ def require_noncopyable_oa_appendix_derivation(
         _raise_noncopyable(NoncopyableOaAppendixErrorCode.FULL_REPLY_PDF_REQUIRED)
     if (
         extracted_appendix.role != EvidenceRole.OA_STRUCTURED_ATTACHMENT.value
+        or extracted_appendix.version_number < 1
+        or extracted_appendix.state
+        not in (
+            EvidenceVersionState.DRAFT.value,
+            EvidenceVersionState.FINAL.value,
+        )
+        or extracted_appendix.current_identity_key
+        != f"{case_id}|{extracted_appendix.lineage_key}"
+        or not _has_coherent_noncopyable_review_tuple(extracted_appendix)
         or appendix_attachment.official_file_role != "OA_OTHER_PROOF"
         or appendix_manifest.official_file_role != "OA_OTHER_PROOF"
         or appendix_attachment.source_role_alias != "OA_STATEMENT_APPENDIX"

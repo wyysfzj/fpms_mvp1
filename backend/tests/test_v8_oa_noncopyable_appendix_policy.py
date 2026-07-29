@@ -26,6 +26,9 @@ from app.modules.official_workflows.models import (
 
 CASE_ID = "00000000-0000-0000-0000-000000000001"
 PACKAGE_ID = "00000000-0000-0000-0000-000000000010"
+CREATOR_ID = "00000000-0000-0000-0000-000000000002"
+REVIEWER_ID = "00000000-0000-0000-0000-000000000003"
+REVIEWED_AT = datetime(2026, 7, 18, 13, 0)
 PARENT_HASH = f"sha256:{'a' * 64}"
 CHILD_HASH = f"sha256:{'b' * 64}"
 CANONICAL_SNAPSHOT = (
@@ -44,23 +47,29 @@ def _version(
     attachment_id: str,
     role: EvidenceRole,
     content_hash: str,
+    state: EvidenceVersionState,
+    review_state: EvidenceReviewState = EvidenceReviewState.PENDING,
+    creator_id: str = CREATOR_ID,
+    reviewer_id: str | None = None,
+    reviewed_at: datetime | None = None,
 ) -> DocumentEvidenceVersion:
+    lineage_key = f"oa-noncopyable:{evidence_version_id}"
     return DocumentEvidenceVersion(
         id=evidence_version_id,
         case_id=CASE_ID,
         document_id=document_id,
         attachment_id=attachment_id,
-        lineage_key=f"oa-noncopyable:{evidence_version_id}",
+        lineage_key=lineage_key,
         role=role.value,
         version_number=1,
-        state=EvidenceVersionState.FINAL.value,
-        creator_id="00000000-0000-0000-0000-000000000002",
-        review_state=EvidenceReviewState.APPROVED.value,
-        reviewer_id="00000000-0000-0000-0000-000000000003",
-        reviewed_at=datetime(2026, 7, 18, 13, 0),
+        state=state.value,
+        creator_id=creator_id,
+        review_state=review_state.value,
+        reviewer_id=reviewer_id,
+        reviewed_at=reviewed_at,
         final_submitted_at=None,
         content_hash=content_hash,
-        current_identity_key=None,
+        current_identity_key=f"{CASE_ID}|{lineage_key}",
     )
 
 
@@ -114,6 +123,7 @@ def _valid_call() -> dict[str, Any]:
         attachment_id="full-reply-attachment",
         role=EvidenceRole.GENERATED_ATTACHMENT,
         content_hash=PARENT_HASH,
+        state=EvidenceVersionState.DRAFT,
     )
     full_reply_attachment = _attachment(
         "full-reply-attachment",
@@ -137,6 +147,7 @@ def _valid_call() -> dict[str, Any]:
         attachment_id="appendix-attachment",
         role=EvidenceRole.OA_STRUCTURED_ATTACHMENT,
         content_hash=CHILD_HASH,
+        state=EvidenceVersionState.DRAFT,
     )
     appendix_attachment = _attachment(
         "appendix-attachment",
@@ -276,6 +287,45 @@ def test_exact_full_reply_to_appendix_derivation_is_accepted_without_mutation() 
 
 
 @pytest.mark.parametrize(
+    "state",
+    (
+        EvidenceVersionState.DRAFT,
+        EvidenceVersionState.FINAL,
+    ),
+)
+def test_extracted_appendix_accepts_each_registered_structured_state(
+    state: EvidenceVersionState,
+) -> None:
+    values = _valid_call()
+    values["extracted_appendix"].state = state.value
+
+    assert _policy().require_noncopyable_oa_appendix_derivation(**values) is None
+
+
+@pytest.mark.parametrize(
+    ("review_state", "reviewer_id", "reviewed_at"),
+    (
+        (EvidenceReviewState.PENDING, None, None),
+        (EvidenceReviewState.APPROVED, REVIEWER_ID, REVIEWED_AT),
+        (EvidenceReviewState.REJECTED, REVIEWER_ID, REVIEWED_AT),
+    ),
+)
+def test_known_internally_coherent_review_tuples_are_accepted(
+    review_state: EvidenceReviewState,
+    reviewer_id: str | None,
+    reviewed_at: datetime | None,
+) -> None:
+    values = _valid_call()
+    for carrier_name in ("full_reply_pdf", "extracted_appendix"):
+        carrier = values[carrier_name]
+        carrier.review_state = review_state.value
+        carrier.reviewer_id = reviewer_id
+        carrier.reviewed_at = reviewed_at
+
+    assert _policy().require_noncopyable_oa_appendix_derivation(**values) is None
+
+
+@pytest.mark.parametrize(
     ("parameter", "invalid_value"),
     (
         ("case_id", 1),
@@ -298,8 +348,17 @@ def test_exact_full_reply_to_appendix_derivation_is_accepted_without_mutation() 
         ("full_reply_pdf.case_id", ""),
         ("full_reply_pdf.document_id", ""),
         ("full_reply_pdf.attachment_id", ""),
+        ("full_reply_pdf.lineage_key", ""),
         ("full_reply_pdf.role", ""),
+        ("full_reply_pdf.version_number", True),
+        ("full_reply_pdf.state", 1),
+        ("full_reply_pdf.creator_id", ""),
+        ("full_reply_pdf.review_state", 1),
+        ("full_reply_pdf.reviewer_id", 1),
+        ("full_reply_pdf.reviewed_at", "2026-07-18T13:00:00"),
+        ("full_reply_pdf.final_submitted_at", "2026-07-18T13:00:00"),
         ("full_reply_pdf.content_hash", "sha256:not-a-hash"),
+        ("full_reply_pdf.current_identity_key", 1),
         ("full_reply_attachment.id", ""),
         ("full_reply_attachment.document_id", ""),
         ("full_reply_attachment.mime_type", ""),
@@ -316,8 +375,17 @@ def test_exact_full_reply_to_appendix_derivation_is_accepted_without_mutation() 
         ("extracted_appendix.case_id", ""),
         ("extracted_appendix.document_id", ""),
         ("extracted_appendix.attachment_id", ""),
+        ("extracted_appendix.lineage_key", ""),
         ("extracted_appendix.role", ""),
+        ("extracted_appendix.version_number", True),
+        ("extracted_appendix.state", 1),
+        ("extracted_appendix.creator_id", ""),
+        ("extracted_appendix.review_state", 1),
+        ("extracted_appendix.reviewer_id", 1),
+        ("extracted_appendix.reviewed_at", "2026-07-18T13:00:00"),
+        ("extracted_appendix.final_submitted_at", "2026-07-18T13:00:00"),
         ("extracted_appendix.content_hash", "sha256:not-a-hash"),
+        ("extracted_appendix.current_identity_key", 1),
         ("appendix_attachment.id", ""),
         ("appendix_attachment.document_id", ""),
         ("appendix_attachment.official_file_role", ""),
@@ -370,6 +438,11 @@ def test_every_same_case_carrier_is_required(parameter: str) -> None:
     ("parameter", "invalid_value"),
     (
         ("full_reply_pdf.role", EvidenceRole.OA_STRUCTURED_ATTACHMENT.value),
+        ("full_reply_pdf.version_number", 0),
+        ("full_reply_pdf.current_identity_key", None),
+        ("full_reply_pdf.current_identity_key", f"{CASE_ID}|other-lineage"),
+        ("full_reply_pdf.state", EvidenceVersionState.FINAL.value),
+        ("full_reply_pdf.final_submitted_at", datetime(2026, 7, 18, 13, 45)),
         ("full_reply_attachment.mime_type", "application/octet-stream"),
         ("full_reply_attachment.official_file_role", "OA_OTHER_PROOF"),
         ("full_reply_manifest.official_file_role", "OA_OTHER_PROOF"),
@@ -389,6 +462,13 @@ def test_parent_must_have_exact_full_reply_pdf_identity(
     ("parameter", "invalid_value"),
     (
         ("extracted_appendix.role", EvidenceRole.GENERATED_ATTACHMENT.value),
+        ("extracted_appendix.version_number", 0),
+        ("extracted_appendix.current_identity_key", None),
+        (
+            "extracted_appendix.current_identity_key",
+            f"{CASE_ID}|other-lineage",
+        ),
+        ("extracted_appendix.state", "SUBMITTED"),
         ("appendix_attachment.official_file_role", "OA_ADDITIONAL_FILE"),
         ("appendix_manifest.official_file_role", "OA_ADDITIONAL_FILE"),
         ("appendix_attachment.source_role_alias", "OA_STATEMENT_WORD"),
@@ -403,6 +483,45 @@ def test_child_must_have_exact_appendix_other_proof_identity(
     _set(values, parameter, invalid_value)
 
     _assert_error(values, "OA_NONCOPYABLE_EXTRACTED_APPENDIX_REQUIRED")
+
+
+@pytest.mark.parametrize(
+    ("carrier_name", "expected_code"),
+    (
+        ("full_reply_pdf", "OA_NONCOPYABLE_FULL_REPLY_PDF_REQUIRED"),
+        ("extracted_appendix", "OA_NONCOPYABLE_EXTRACTED_APPENDIX_REQUIRED"),
+    ),
+)
+@pytest.mark.parametrize(
+    ("review_state", "reviewer_id", "reviewed_at"),
+    (
+        ("UNKNOWN", None, None),
+        (EvidenceReviewState.PENDING.value, REVIEWER_ID, None),
+        (EvidenceReviewState.PENDING.value, None, REVIEWED_AT),
+        (EvidenceReviewState.APPROVED.value, None, REVIEWED_AT),
+        (EvidenceReviewState.APPROVED.value, REVIEWER_ID, None),
+        (EvidenceReviewState.REJECTED.value, CREATOR_ID, REVIEWED_AT),
+        (
+            EvidenceReviewState.APPROVED.value,
+            REVIEWER_ID,
+            datetime(2026, 7, 18, 13, 0, tzinfo=timezone.utc),
+        ),
+    ),
+)
+def test_unknown_malformed_or_self_review_tuples_fail_closed(
+    carrier_name: str,
+    expected_code: str,
+    review_state: str,
+    reviewer_id: str | None,
+    reviewed_at: datetime | None,
+) -> None:
+    values = _valid_call()
+    carrier = values[carrier_name]
+    carrier.review_state = review_state
+    carrier.reviewer_id = reviewer_id
+    carrier.reviewed_at = reviewed_at
+
+    _assert_error(values, expected_code)
 
 
 @pytest.mark.parametrize(
