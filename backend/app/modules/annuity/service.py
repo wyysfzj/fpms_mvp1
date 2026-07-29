@@ -33,7 +33,10 @@ from app.modules.fees.models import (
     FeeObligationLine,
     FeeRate,
 )
-from app.modules.fees.obligation_contracts import RecordFeePaymentEvidenceCommand
+from app.modules.fees.obligation_contracts import (
+    FeeOfficialEvidenceStatus,
+    RecordFeePaymentEvidenceCommand,
+)
 from app.modules.fees.obligation_service import record_payment_evidence
 from app.modules.fees.service import (
     fee_rate_effective_on_conditions,
@@ -1852,6 +1855,53 @@ def _record_gov_payment_activity(
     )
 
 
+def _record_gov_payment_official_evidence_activity(
+    db: Session,
+    *,
+    payment: GovPayment,
+    obligation: FeeObligation,
+    obligation_line_ids: tuple[str, ...],
+    actor_id: str,
+) -> None:
+    obligation.official_evidence_status = FeeOfficialEvidenceStatus.VERIFIED.value
+    obligation.updated_by = actor_id
+    case = db.get(Case, payment.case_id)
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+    projection = _gov_payment_projection(case)
+    verified_at = datetime.combine(payment.paid_date or date.today(), time.min)
+    append_case_activity(
+        LifecycleEventCommand(
+            case_id=payment.case_id,
+            event_type="OFFICIAL_PAYMENT_EVIDENCE_VERIFIED",
+            lane=ActivityLane.FEE,
+            effective_at=verified_at,
+            occurred_at=verified_at,
+            evidence_refs=(),
+            actor_id=actor_id,
+            reviewer_id=None,
+            idempotency_key=f"gov-payment:{payment.id}:official-evidence-verified",
+            source_activity_id=obligation.source_activity_id,
+            supersedes_event_id=None,
+            payload={
+                "gov_payment_id": payment.id,
+                "invoice_no": payment.invoice_no,
+                "obligation_id": obligation.id,
+                "obligation_line_ids": list(obligation_line_ids),
+                "official_receipt_no": payment.official_receipt_no,
+                "schema": "FPMS_GOV_PAYMENT_OFFICIAL_EVIDENCE_VERIFIED_V1",
+                "voucher_no": payment.voucher_no,
+            },
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+        ),
+        db,
+        previous_projection=projection,
+        current_projection=projection,
+        legacy_case_status=case.status,
+        conflict_codes=(),
+    )
+
+
 def register_gov_payment(
     db: Session,
     *,
@@ -2052,6 +2102,20 @@ def register_gov_payment(
             obligation_line_ids=obligation_line_ids,
             actor_id=resolved_actor_id,
         )
+        if any(
+            (
+                _normalize_optional_text(target.official_receipt_no),
+                _normalize_optional_text(target.voucher_no),
+                _normalize_optional_text(target.invoice_no),
+            )
+        ):
+            _record_gov_payment_official_evidence_activity(
+                db,
+                payment=target,
+                obligation=obligation,
+                obligation_line_ids=obligation_line_ids,
+                actor_id=resolved_actor_id,
+            )
     payments = (
         db.execute(
             select(GovPayment)
