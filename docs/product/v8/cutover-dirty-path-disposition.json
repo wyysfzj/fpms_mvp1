@@ -14,10 +14,11 @@
     "V8-ADOPT-ANNUITY-RATE-SOURCES": 36,
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
     "V8-ADOPT-LIFECYCLE-CENTER": 25,
-    "V8-ADOPT-DOCUMENT-EVIDENCE": 48,
+    "V8-ADOPT-DOCUMENT-EVIDENCE": 47,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
-    "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 3,
+    "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 2,
+    "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 2,
     "V8-ADOPT-FEE-OBLIGATION": 24,
     "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION": 1,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
@@ -79,8 +80,8 @@
     {
       "path": "backend/app/modules/annuity/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION",
-      "rationale": "annuity domain behavior"
+      "story_id": "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY",
+      "rationale": "official-payment evidence status and activity adapter"
     },
     {
       "path": "backend/app/modules/cases/lifecycle_activity_service.py",
@@ -919,8 +920,8 @@
     {
       "path": "backend/tests/test_v8_official_payment_evidence_activity_adapter.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY",
+      "rationale": "official-payment evidence status and activity adapter"
     },
     {
       "path": "backend/tests/test_v8_open_license_annuity_obligation_adapter.py",
