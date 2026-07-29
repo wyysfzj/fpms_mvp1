@@ -2,29 +2,34 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import date, datetime, time
+from dataclasses import dataclass
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
+from hashlib import sha256
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.export_excel import build_pay_list_export_xlsx
-from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
+from app.modules.annuity.models import AnnuityTask, GovPayment, PayList, PayListExportArtifact
 from app.modules.billing.models import CaseReceipt
 from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
     BusinessStage,
     ConfirmationStatus,
+    EvidenceReference,
     LegalStatus,
     LifecycleEventCommand,
     LifecycleProjection,
     OfficialProcedureStage,
 )
-from app.modules.cases.models import Case
+from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
 from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
@@ -1408,6 +1413,466 @@ def create_historical_pay_list(
         "created_by": pay_list.created_by,
         "updated_by": pay_list.updated_by,
     }
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExportInternalPayListCommand:
+    pay_list_id: int
+    actor_id: str
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class ExportInternalPayListResult:
+    artifact_id: str
+    pay_list_id: int
+    filename: str
+    content_type: str
+    content: bytes
+    content_sha256: str
+    managed_storage_path: str
+    activity_ids: tuple[str, ...]
+    generated_at: datetime
+    idempotency_key: str
+    reused: bool
+
+
+_PAY_LIST_EXPORT_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _fail_internal_export_conflict() -> None:
+    raise_business_error(
+        "PAY_LIST_EXPORT_IDEMPOTENCY_CONFLICT",
+        "Pay-list export idempotency carrier conflicts with this request",
+        status_code=409,
+    )
+
+
+def _validate_internal_export_command(command: ExportInternalPayListCommand) -> None:
+    if type(command.pay_list_id) is not int or command.pay_list_id <= 0:
+        raise_business_error(
+            "PAY_LIST_EXPORT_INPUT_INVALID",
+            "pay_list_id must be a positive integer",
+            status_code=400,
+        )
+    if (
+        type(command.actor_id) is not str
+        or not command.actor_id
+        or command.actor_id.strip() != command.actor_id
+        or len(command.actor_id) > 36
+    ):
+        raise_business_error(
+            "PAY_LIST_EXPORT_INPUT_INVALID",
+            "actor_id must be canonical",
+            status_code=400,
+        )
+    if (
+        type(command.idempotency_key) is not str
+        or not command.idempotency_key.strip()
+        or len(command.idempotency_key) > 128
+    ):
+        raise_business_error(
+            "PAY_LIST_EXPORT_INPUT_INVALID",
+            "idempotency_key must be nonblank and at most 128 characters",
+            status_code=400,
+        )
+
+
+def _internal_export_relative_path(pay_list_id: int, artifact_id: str) -> Path:
+    return Path("pay-list-exports") / str(pay_list_id) / f"{artifact_id}.xlsx"
+
+
+def _resolve_internal_export_path(
+    *,
+    pay_list_id: int,
+    artifact_id: str,
+    managed_storage_path: str,
+    storage_dir: str | Path,
+) -> Path:
+    relative_path = _internal_export_relative_path(pay_list_id, artifact_id)
+    if managed_storage_path != relative_path.as_posix():
+        _fail_internal_export_conflict()
+
+    storage_root = Path(storage_dir)
+    if storage_root.is_symlink():
+        _fail_internal_export_conflict()
+    resolved_root = storage_root.resolve(strict=False)
+    candidate = resolved_root / relative_path
+    if not candidate.resolve(strict=False).is_relative_to(resolved_root):
+        _fail_internal_export_conflict()
+
+    current = resolved_root
+    for part in relative_path.parts:
+        current /= part
+        if current.is_symlink():
+            _fail_internal_export_conflict()
+    return candidate
+
+
+def compensate_internal_pay_list_export(
+    managed_storage_path: str,
+    *,
+    storage_dir: str | Path | None = None,
+) -> None:
+    parts = Path(managed_storage_path).parts
+    if (
+        len(parts) != 3
+        or parts[0] != "pay-list-exports"
+        or not parts[1].isdigit()
+        or not parts[2].endswith(".xlsx")
+    ):
+        raise_business_error(
+            "PAY_LIST_EXPORT_STORAGE_COMPENSATION_FAILED",
+            "Managed pay-list export path is invalid",
+            status_code=500,
+        )
+    artifact_id = parts[2][:-5]
+    try:
+        target = _resolve_internal_export_path(
+            pay_list_id=int(parts[1]),
+            artifact_id=artifact_id,
+            managed_storage_path=managed_storage_path,
+            storage_dir=storage_dir if storage_dir is not None else get_settings().storage_dir,
+        )
+        target.unlink(missing_ok=True)
+    except (BusinessError, OSError) as exc:
+        raise BusinessError(
+            "PAY_LIST_EXPORT_STORAGE_COMPENSATION_FAILED",
+            "Could not remove managed pay-list export",
+            status_code=500,
+        ) from exc
+
+
+def _write_internal_export(
+    *,
+    pay_list_id: int,
+    artifact_id: str,
+    content: bytes,
+) -> tuple[str, bytes]:
+    managed_storage_path = _internal_export_relative_path(pay_list_id, artifact_id).as_posix()
+    temporary: Path | None = None
+    target: Path | None = None
+    try:
+        target = _resolve_internal_export_path(
+            pay_list_id=pay_list_id,
+            artifact_id=artifact_id,
+            managed_storage_path=managed_storage_path,
+            storage_dir=get_settings().storage_dir,
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
+        temporary.write_bytes(content)
+        temporary.replace(target)
+        stored_content = target.read_bytes()
+    except BusinessError:
+        raise
+    except OSError as exc:
+        try:
+            if temporary is not None and (temporary.exists() or temporary.is_symlink()):
+                temporary.unlink()
+            if target is not None and (target.exists() or target.is_symlink()):
+                target.unlink()
+        except OSError as cleanup_exc:
+            raise BusinessError(
+                "PAY_LIST_EXPORT_STORAGE_COMPENSATION_FAILED",
+                "Could not compensate failed pay-list export storage write",
+                status_code=500,
+            ) from cleanup_exc
+        raise BusinessError(
+            "PAY_LIST_EXPORT_STORAGE_WRITE_FAILED",
+            "Could not store pay-list export",
+            status_code=500,
+        ) from exc
+    return managed_storage_path, stored_content
+
+
+def _pay_list_filename(pay_list: PayList) -> str:
+    return f"{pay_list.pay_list_no or f'PL-{pay_list.id:06d}'}-export.xlsx"
+
+
+def _activity_projection(
+    transaction: Session,
+    case_id: str,
+) -> tuple[LifecycleProjection, str]:
+    get_case = getattr(transaction, "get", None)
+    case = get_case(Case, case_id) if callable(get_case) else None
+    if case is None:
+        return (
+            LifecycleProjection(
+                business_stage=None,
+                official_procedure_stage=None,
+                legal_status=None,
+                lifecycle_verification_status=None,
+            ),
+            "",
+        )
+    return _gov_payment_projection(case), case.status
+
+
+def _replayed_internal_export_activity_ids(
+    transaction: Session,
+    *,
+    artifact: PayListExportArtifact,
+) -> tuple[str, ...]:
+    activity_prefix = f"pay-list-internal-export:{artifact.id}:"
+    activities = (
+        transaction.execute(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.lane == ActivityLane.FEE.value,
+                CaseActivityEvent.activity_type == "PAY_LIST_INTERNAL_EXPORTED",
+                CaseActivityEvent.idempotency_key.startswith(activity_prefix),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    evidence_rows = (
+        transaction.execute(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.evidence_kind == "PAY_LIST_EXPORT_ARTIFACT",
+                CaseActivityEventEvidence.object_type == "PayListExportArtifact",
+                CaseActivityEventEvidence.object_id == artifact.id,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    activity_ids = [activity.id for activity in activities]
+    case_ids = [activity.case_id for activity in activities]
+    evidence_activity_ids = [evidence.activity_id for evidence in evidence_rows]
+    if (
+        not activities
+        or len(activity_ids) != len(set(activity_ids))
+        or len(case_ids) != len(set(case_ids))
+        or len(evidence_activity_ids) != len(set(evidence_activity_ids))
+        or set(activity_ids) != set(evidence_activity_ids)
+    ):
+        _fail_internal_export_conflict()
+
+    expected_payload = json.dumps(
+        {
+            "artifact_id": artifact.id,
+            "content_sha256": artifact.content_sha256,
+            "managed_storage_path": artifact.managed_storage_path,
+            "pay_list_id": artifact.pay_list_id,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    evidence_by_activity = {evidence.activity_id: evidence for evidence in evidence_rows}
+    for activity in activities:
+        evidence = evidence_by_activity[activity.id]
+        if (
+            activity.lane != ActivityLane.FEE.value
+            or activity.activity_type != "PAY_LIST_INTERNAL_EXPORTED"
+            or activity.idempotency_key != f"{activity_prefix}{activity.case_id}"
+            or activity.actor_id != artifact.generated_by
+            or activity.occurred_at != artifact.generated_at
+            or activity.effective_at != artifact.generated_at
+            or activity.source_activity_id is not None
+            or activity.reviewer_id is not None
+            or activity.supersedes_event_id is not None
+            or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+            or activity.old_business_stage != activity.new_business_stage
+            or activity.old_official_procedure_stage != activity.new_official_procedure_stage
+            or activity.old_legal_status != activity.new_legal_status
+            or activity.payload_json != expected_payload
+            or evidence.case_id != activity.case_id
+            or evidence.evidence_kind != "PAY_LIST_EXPORT_ARTIFACT"
+            or evidence.object_type != "PayListExportArtifact"
+            or evidence.object_id != artifact.id
+            or evidence.content_hash != artifact.content_sha256
+            or evidence.captured_at != artifact.generated_at
+        ):
+            _fail_internal_export_conflict()
+    return tuple(
+        activity.id for activity in sorted(activities, key=lambda item: item.case_id.encode())
+    )
+
+
+def _replay_internal_export(
+    command: ExportInternalPayListCommand,
+    transaction: Session,
+    *,
+    pay_list: PayList,
+    artifact: PayListExportArtifact,
+) -> ExportInternalPayListResult:
+    if (
+        artifact.pay_list_id != command.pay_list_id
+        or artifact.idempotency_key != command.idempotency_key
+        or artifact.kind != "INTERNAL_XLSX"
+        or artifact.status != "GENERATED"
+        or artifact.generated_by != command.actor_id
+        or artifact.template_version is not None
+        or artifact.official_acceptance_evidence_ref is not None
+        or artifact.official_acceptance_evidence_hash is not None
+        or artifact.official_accepted_at is not None
+    ):
+        _fail_internal_export_conflict()
+    try:
+        path = _resolve_internal_export_path(
+            pay_list_id=command.pay_list_id,
+            artifact_id=artifact.id,
+            managed_storage_path=artifact.managed_storage_path,
+            storage_dir=get_settings().storage_dir,
+        )
+        content = path.read_bytes()
+    except (BusinessError, OSError):
+        _fail_internal_export_conflict()
+    if sha256(content).hexdigest() != artifact.content_sha256:
+        _fail_internal_export_conflict()
+    return ExportInternalPayListResult(
+        artifact_id=artifact.id,
+        pay_list_id=command.pay_list_id,
+        filename=_pay_list_filename(pay_list),
+        content_type=_PAY_LIST_EXPORT_CONTENT_TYPE,
+        content=content,
+        content_sha256=artifact.content_sha256,
+        managed_storage_path=artifact.managed_storage_path,
+        activity_ids=_replayed_internal_export_activity_ids(
+            transaction,
+            artifact=artifact,
+        ),
+        generated_at=artifact.generated_at,
+        idempotency_key=artifact.idempotency_key,
+        reused=True,
+    )
+
+
+def export_internal_pay_list(
+    command: ExportInternalPayListCommand,
+    transaction: Session,
+) -> ExportInternalPayListResult:
+    _validate_internal_export_command(command)
+    artifact = transaction.execute(
+        select(PayListExportArtifact).where(
+            PayListExportArtifact.pay_list_id == command.pay_list_id,
+            PayListExportArtifact.idempotency_key == command.idempotency_key,
+        )
+    ).scalar_one_or_none()
+    pay_list = transaction.execute(
+        select(PayList).where(PayList.id == command.pay_list_id)
+    ).scalar_one_or_none()
+    if pay_list is None:
+        raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
+    if artifact is not None:
+        return _replay_internal_export(
+            command,
+            transaction,
+            pay_list=pay_list,
+            artifact=artifact,
+        )
+    client = transaction.execute(
+        select(Client).where(Client.id == pay_list.client_id)
+    ).scalar_one_or_none()
+    payments = (
+        transaction.execute(
+            select(GovPayment)
+            .where(GovPayment.pay_list_id == command.pay_list_id)
+            .order_by(GovPayment.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    case_ids = sorted({payment.case_id for payment in payments}, key=str.encode)
+    if not payments or not case_ids:
+        raise_business_error(
+            "PAY_LIST_EXPORT_NO_CASES",
+            "Pay list has no payment cases",
+            status_code=409,
+        )
+    generated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    artifact_id = str(uuid4())
+    content = build_pay_list_export_xlsx(
+        pay_list=pay_list,
+        client_name=client.name_cn if client is not None else None,
+        payments=payments,
+    )
+    managed_storage_path, stored_content = _write_internal_export(
+        pay_list_id=command.pay_list_id,
+        artifact_id=artifact_id,
+        content=content,
+    )
+    content_hash = sha256(stored_content).hexdigest()
+    carrier = PayListExportArtifact(
+        id=artifact_id,
+        pay_list_id=command.pay_list_id,
+        kind="INTERNAL_XLSX",
+        status="GENERATED",
+        content_sha256=content_hash,
+        managed_storage_path=managed_storage_path,
+        template_version=None,
+        generated_by=command.actor_id,
+        generated_at=generated_at,
+        idempotency_key=command.idempotency_key,
+        official_acceptance_evidence_ref=None,
+        official_acceptance_evidence_hash=None,
+        official_accepted_at=None,
+    )
+    activity_ids: list[str] = []
+    try:
+        transaction.add(carrier)
+        transaction.flush()
+        for case_id in case_ids:
+            projection, legacy_status = _activity_projection(transaction, case_id)
+            activity = append_case_activity(
+                LifecycleEventCommand(
+                    case_id=case_id,
+                    event_type="PAY_LIST_INTERNAL_EXPORTED",
+                    lane=ActivityLane.FEE,
+                    effective_at=generated_at,
+                    occurred_at=generated_at,
+                    evidence_refs=(
+                        EvidenceReference(
+                            case_id=case_id,
+                            evidence_kind="PAY_LIST_EXPORT_ARTIFACT",
+                            object_type="PayListExportArtifact",
+                            object_id=artifact_id,
+                            content_hash=content_hash,
+                            captured_at=generated_at,
+                        ),
+                    ),
+                    actor_id=command.actor_id,
+                    reviewer_id=None,
+                    idempotency_key=f"pay-list-internal-export:{artifact_id}:{case_id}",
+                    source_activity_id=None,
+                    supersedes_event_id=None,
+                    payload={
+                        "artifact_id": artifact_id,
+                        "pay_list_id": command.pay_list_id,
+                        "content_sha256": content_hash,
+                        "managed_storage_path": managed_storage_path,
+                    },
+                    confirmation_status=ConfirmationStatus.CONFIRMED,
+                ),
+                transaction,
+                previous_projection=projection,
+                current_projection=projection,
+                legacy_case_status=legacy_status,
+                conflict_codes=(),
+            )
+            activity_ids.append(activity.activity_id)
+    except Exception as exc:
+        try:
+            compensate_internal_pay_list_export(managed_storage_path)
+        except BusinessError as cleanup_exc:
+            raise cleanup_exc from exc
+        raise
+    return ExportInternalPayListResult(
+        artifact_id=artifact_id,
+        pay_list_id=command.pay_list_id,
+        filename=_pay_list_filename(pay_list),
+        content_type=_PAY_LIST_EXPORT_CONTENT_TYPE,
+        content=stored_content,
+        content_sha256=content_hash,
+        managed_storage_path=managed_storage_path,
+        activity_ids=tuple(activity_ids),
+        generated_at=generated_at,
+        idempotency_key=command.idempotency_key,
+        reused=False,
+    )
 
 
 def export_pay_list(
