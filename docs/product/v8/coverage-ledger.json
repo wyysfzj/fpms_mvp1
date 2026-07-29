@@ -2094,8 +2094,8 @@
     {
       "catalog_id": "FPMS-V8-OVERLAY-CONTRACTS-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-CONTRACTS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2671,6 +2671,24 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-COPYABLE-ATTACHMENT-POLICY.md",
       "verification_ref": "docs/product/v8/reviews/V8-OA-COPYABLE-ATTACHMENT-POLICY.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-CONTRACTS-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "86cfce66e176f36d8e1e0a3e1e056720ae8b4a30"
+      ],
+      "paths": [
+        "backend/app/modules/cases/lifecycle_overlay_schemas.py",
+        "backend/tests/test_v8_lifecycle_overlay_contracts.py"
+      ],
+      "tree_sha256": "8369c8a64dd9bcb69a87a214bc0e4c8db3f8e729d3f7e510fabbd3ba1e35a789",
+      "tests": [
+        "pytest -q tests/test_v8_lifecycle_overlay_contracts.py from backend cwd (2 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-CONTRACTS-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-CONTRACTS-CURRENT-ADOPTION.md"
     }
   ]
 }
