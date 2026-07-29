@@ -1270,8 +1270,8 @@
     {
       "catalog_id": "FPMS-V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2634,6 +2634,25 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION.md"
+    },
+    {
+      "story_id": "V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "409918c74405213e0ca294baa45e214d0a0f1ed9"
+      ],
+      "paths": [
+        "backend/app/modules/fees/official_rate_book.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_official_rate_book_activation.py"
+      ],
+      "tree_sha256": "e94cd606e571354d1b7652b0ea43ddbaa64b3f263e4b6c2a79961808377c1c29",
+      "tests": [
+        "pytest -q tests/test_v8_official_rate_book_activation.py tests/test_v8_official_rate_book_schema.py tests/test_official_fee_rate_catalog_seed.py from backend cwd (43 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-CURRENT-VERIFICATION.md"
     }
   ]
 }
