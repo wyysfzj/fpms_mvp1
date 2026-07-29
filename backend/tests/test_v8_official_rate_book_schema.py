@@ -32,6 +32,7 @@ from app.modules.fees import models as fee_models
 
 REVISION = "v8_w4_official_rate_book_01"
 DOWN_REVISION = "v8_post_w1_customer_decision_gate_01"
+CURRENT_HEAD = "v8_d4_evidence_kind_capacity_01"
 TABLE = "t_fee_rate_book"
 RATE_TABLE = "t_fee_rate"
 
@@ -452,13 +453,16 @@ def test_fee_rate_model_has_only_the_frozen_compatibility_link() -> None:
     } == RATE_LINK_INDEX_SPEC
 
 
-def test_migration_identity_is_frozen_unique_head_and_forward_only(monkeypatch, tmp_path) -> None:
+def test_migration_identity_is_frozen_reachable_and_forward_only(monkeypatch, tmp_path) -> None:
     config = _alembic_config(tmp_path / "identity.db", monkeypatch)
     script = ScriptDirectory.from_config(config)
     migration = script.get_revision(REVISION)
 
     assert migration is not None, "official-rate-book migration is absent"
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == [CURRENT_HEAD]
+    assert REVISION in {
+        item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+    }
     assert migration.down_revision == DOWN_REVISION
     assert migration.module.revision == REVISION
     assert migration.module.down_revision == DOWN_REVISION
