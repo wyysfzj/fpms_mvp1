@@ -11,11 +11,12 @@
     "V8-ADOPT-DOCUMENT-REVIEW-UI": 5,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
-    "V8-ADOPT-ANNUITY-RATE-SOURCES": 38,
-    "V8-ADOPT-LIFECYCLE-CENTER": 26,
-    "V8-ADOPT-DOCUMENT-EVIDENCE": 50,
+    "V8-ADOPT-ANNUITY-RATE-SOURCES": 37,
+    "V8-ADOPT-LIFECYCLE-CENTER": 25,
+    "V8-ADOPT-DOCUMENT-EVIDENCE": 49,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-OA-COPYABLE-ATTACHMENT-POLICY": 2,
+    "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 3,
     "V8-ADOPT-FEE-OBLIGATION": 25,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
     "V8-ADOPT-DECISION-GATES": 2,
@@ -76,7 +77,7 @@
     {
       "path": "backend/app/modules/annuity/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "story_id": "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION",
       "rationale": "annuity domain behavior"
     },
     {
@@ -214,7 +215,7 @@
     {
       "path": "backend/app/modules/documents/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
+      "story_id": "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION",
       "rationale": "document/evidence lineage and workflow"
     },
     {
@@ -484,7 +485,7 @@
     {
       "path": "backend/tests/test_v8_certificate_archived_activity.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
+      "story_id": "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION",
       "rationale": "case lifecycle behavior"
     },
     {
