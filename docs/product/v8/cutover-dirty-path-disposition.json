@@ -18,14 +18,15 @@
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 2,
-    "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 2,
+    "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 1,
     "V8-ADOPT-FEE-OBLIGATION": 24,
     "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION": 1,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
     "V8-ADOPT-DECISION-GATES": 2,
     "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
-    "V8-ADOPT-PAYLIST-PAYMENT": 9,
+    "V8-ADOPT-PAYLIST-PAYMENT": 8,
+    "V8-PAYLIST-INTERNAL-EXPORT-SERVICE": 2,
     "C3-LEAN-GOVERNANCE-ADOPTION": 2
   },
   "entries": [
@@ -80,8 +81,8 @@
     {
       "path": "backend/app/modules/annuity/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY",
-      "rationale": "official-payment evidence status and activity adapter"
+      "story_id": "V8-PAYLIST-INTERNAL-EXPORT-SERVICE",
+      "rationale": "internal PayList export service and preserved successor adapters"
     },
     {
       "path": "backend/app/modules/cases/lifecycle_activity_service.py",
@@ -704,8 +705,8 @@
     {
       "path": "backend/tests/test_v8_internal_pay_list_export.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
-      "rationale": "payment and PayList boundary behavior"
+      "story_id": "V8-PAYLIST-INTERNAL-EXPORT-SERVICE",
+      "rationale": "internal PayList export service decisive regression"
     },
     {
       "path": "backend/tests/test_v8_internal_pay_list_export_api.py",

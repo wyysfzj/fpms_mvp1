@@ -1294,8 +1294,8 @@
     {
       "catalog_id": "FPMS-V8-PAYLIST-INTERNAL-EXPORT-SERVICE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PAYLIST-INTERNAL-EXPORT-SERVICE",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2677,7 +2677,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "4d85a56e9990107245c0f448e9d7ecb11c3fb5a3",
-        "114d26b8a4967a517e1ae6c4da73692d921ad020"
+        "114d26b8a4967a517e1ae6c4da73692d921ad020",
+        "f89e67e60db95ce34046acc84aaafd53703f3fea"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
@@ -2685,14 +2686,15 @@
         "backend/tests/test_v8_certificate_archived_activity.py",
         "backend/tests/test_v8_gov_payment_activity_adapter.py"
       ],
-      "tree_sha256": "363a71edeff7a9f5a6ea1351dfcbebb3dfd54124bdb48436fb2cbcc69cf97902",
+      "tree_sha256": "095a1ac160fdf66cfa168543fdcf3fb17357a46fc0d083f1639115f547d9ee5b",
       "tests": [
         "pytest -q tests/test_v8_certificate_archived_activity.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
-        "successor re-attestation with row125 focused test from backend cwd (3 passed)"
+        "successor re-attestation with row125 focused test from backend cwd (3 passed)",
+        "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY.md",
-      "verification_ref": "docs/product/v8/reviews/V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY.md"
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md"
     },
     {
       "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
@@ -2777,20 +2779,41 @@
       "story_id": "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "114d26b8a4967a517e1ae6c4da73692d921ad020"
+        "114d26b8a4967a517e1ae6c4da73692d921ad020",
+        "f89e67e60db95ce34046acc84aaafd53703f3fea"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/tests/test_v8_official_payment_evidence_activity_adapter.py"
       ],
-      "tree_sha256": "033c0f740a9a06b6cf1ecd346928075f406ca82ddb015e73b422b104c515ec90",
+      "tree_sha256": "61e7c269b38c4ca65c012213363f7b0e800cfced2cbce5fbb94aa6d8dd8ca019",
       "tests": [
         "pytest -q tests/test_v8_official_payment_evidence_activity_adapter.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
-        "independent successor re-attestation with certificate, GovPayment and row125 tests from backend cwd (3 passed)"
+        "independent successor re-attestation with certificate, GovPayment and row125 tests from backend cwd (3 passed)",
+        "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY.md",
-      "verification_ref": "docs/product/v8/reviews/V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY.md"
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md"
+    },
+    {
+      "story_id": "V8-PAYLIST-INTERNAL-EXPORT-SERVICE",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "f89e67e60db95ce34046acc84aaafd53703f3fea"
+      ],
+      "paths": [
+        "backend/app/modules/annuity/service.py",
+        "backend/tests/test_v8_internal_pay_list_export.py"
+      ],
+      "tree_sha256": "f95f562d3eec67b0eacf1a8f4a7cbbc585c0848dd05885b3e609651c2de87b4f",
+      "tests": [
+        "pytest -q tests/test_v8_internal_pay_list_export.py from backend cwd (13 passed)",
+        "independent row159, row160, row124 and row125 tranche from backend cwd (19 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md"
     }
   ]
 }
