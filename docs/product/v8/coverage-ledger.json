@@ -2616,6 +2616,24 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-ANNUITY-LATE-FEE-RULE-CURRENT-VERIFICATION.md",
       "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-LATE-FEE-RULE-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "87a7205452c813d7be02b4d2b4c70bab37db3c16"
+      ],
+      "paths": [
+        "backend/app/modules/documents/oa_attachment_promotion_service.py",
+        "backend/tests/test_v8_oa_structured_attachment_promotion.py"
+      ],
+      "tree_sha256": "cf808996503830068f2e9378673fade8872c1add7b507d8b089afb7a6c92a684",
+      "tests": [
+        "pytest -q tests/test_v8_oa_structured_attachment_promotion.py tests/test_v8_delta4_evidence_role_extension.py tests/test_v8_delta4_registration_matrix.py tests/test_v8_document_evidence_register_version.py tests/test_v8_document_evidence_derivation.py tests/test_v8_external_submission_role_allowlist.py from backend cwd (101 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION.md"
     }
   ]
 }
