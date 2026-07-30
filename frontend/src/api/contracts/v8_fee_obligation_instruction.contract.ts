@@ -6,42 +6,6 @@ import type {
     FeeObligationInstructionResult,
 } from '../fees.types'
 
-declare module 'axios' {
-    interface FeeObligationInstructionContractResponse<T = unknown> {
-        data: T
-    }
-
-    interface FeeObligationInstructionContractRequestConfig {
-        headers?: Record<string, string>
-    }
-
-    interface FeeObligationInstructionContractInterceptor<V> {
-        use(
-            onFulfilled?: (value: V) => V | Promise<V>,
-            onRejected?: (error: unknown) => unknown,
-        ): number
-    }
-
-    interface FeeObligationInstructionContractHttp {
-        interceptors: {
-            request: FeeObligationInstructionContractInterceptor<FeeObligationInstructionContractRequestConfig>
-            response: FeeObligationInstructionContractInterceptor<FeeObligationInstructionContractResponse>
-        }
-        get<T>(url: string, config?: unknown): Promise<FeeObligationInstructionContractResponse<T>>
-        post<T>(
-            url: string,
-            data?: unknown,
-            config?: unknown,
-        ): Promise<FeeObligationInstructionContractResponse<T>>
-        put<T>(url: string, data?: unknown): Promise<FeeObligationInstructionContractResponse<T>>
-        delete<T>(url: string): Promise<FeeObligationInstructionContractResponse<T>>
-    }
-
-    interface AxiosStatic {
-        create(config?: unknown): FeeObligationInstructionContractHttp
-    }
-}
-
 type Exact<Actual, Expected> = [Actual] extends [Expected]
     ? [Expected] extends [Actual]
         ? true

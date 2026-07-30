@@ -534,7 +534,16 @@ def test_collection_action_and_legacy_body_id_routes_do_not_exist(
         json={**_request_data(), "obligation_id": "obligation-1"},
     )
 
-    assert collection.status_code == 404
+    collection_post_routes = [
+        route
+        for route in fees_api.router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/fees/obligations/instruction"
+        and "POST" in route.methods
+    ]
+    assert collection_post_routes == []
+    assert collection.status_code == 405
+    assert collection.headers["allow"] == "GET"
     assert legacy.status_code == 404
     assert captured == []
     assert session.commit_calls == 0
