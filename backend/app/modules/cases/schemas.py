@@ -8,6 +8,12 @@ from pydantic import AliasChoices, BaseModel, Field, field_validator
 from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
 
 
+def _require_canonical_fee_reduction(value: object) -> str:
+    if type(value) is not str or value not in {"0", "0.7", "0.85"}:
+        raise ValueError("fee_reduction must be an explicit canonical selection")
+    return value
+
+
 class CaseApplicantIn(BaseModel):
     seq: int = Field(..., ge=1)
     is_first: bool = False
@@ -117,7 +123,7 @@ class CaseCreate(BaseModel):
     draftor_id: str | None = Field(None, max_length=36)
     # A3 — Control flags
     is_fee_monitor: bool | None = None
-    fee_reduction: str | None = Field(None, max_length=32)
+    fee_reduction: str = Field(..., max_length=4)
     applicant_kind: str | None = Field(None, max_length=32)
     discount_rate: Decimal | None = Field(None, ge=Decimal("0"), le=Decimal("1"))
     no_power: bool | None = None
@@ -129,6 +135,11 @@ class CaseCreate(BaseModel):
     inventors: list[CaseInventorIn] = []
     priorities: list[PriorityIn] = []
     bio_deposits: list[BioDepositIn] = []
+
+    @field_validator("fee_reduction", mode="before")
+    @classmethod
+    def _require_canonical_fee_reduction(cls, value: object) -> str:
+        return _require_canonical_fee_reduction(value)
 
 
 class CaseCreateIn(CaseCreate):
@@ -219,6 +230,11 @@ class CaseUpdateFull(BaseModel):
         if isinstance(value, str) and not value.strip():
             return None
         return value
+
+    @field_validator("fee_reduction", mode="before")
+    @classmethod
+    def _require_canonical_fee_reduction(cls, value: object) -> str:
+        return _require_canonical_fee_reduction(value)
 
 
 class CaseUpdateLimited(BaseModel):

@@ -48,11 +48,19 @@ test("CaseCreate explains automatic lifecycle initialization and omits status", 
   await page.getByPlaceholder("请输入案号（例如：P2024-001）").fill("V8-STATUS-GATE-001");
   await page.getByRole("combobox", { name: "*客户", exact: true }).click();
   await page.getByRole("option", { name: "生命周期测试客户" }).click();
+  await page.getByText("控制标记", { exact: true }).click();
+  await page
+    .locator(".el-form-item")
+    .filter({ hasText: "费用减缓比例" })
+    .locator(".el-select__wrapper")
+    .click();
+  await page.getByRole("option", { name: "不减免（0）" }).click();
   await page.getByRole("button", { name: "创建案件" }).click();
 
   await expect.poll(() => createRequest?.postDataJSON()).toMatchObject({
     case_no: "V8-STATUS-GATE-001",
     client_id: "client-v8-status-gate",
+    fee_reduction: "0",
   });
   expect(createRequest?.postDataJSON()).not.toHaveProperty("status");
 });

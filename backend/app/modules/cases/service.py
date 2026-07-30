@@ -58,8 +58,18 @@ from app.modules.cases.schemas import (
     CaseUpdateLimited,
 )
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
-from app.modules.documents.models import DocTemplate, Document
-from app.modules.fees.models import FeeDraft
+from app.modules.documents.evidence_contracts import EvidenceReviewState, EvidenceVersionState
+from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
+from app.modules.fees.fee_reduction import (
+    FeeReductionApprovalContext,
+    FeeReductionApprovalScopeType,
+    FeeReductionEvaluationContext,
+    FeeReductionInput,
+    FeeReductionInputProvenance,
+    FeeReductionValidationError,
+    validate_fee_reduction,
+)
+from app.modules.fees.models import FeeDraft, FeeReductionApproval
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress
 from app.modules.tasks.enums import TaskAction, TaskDeadlineBase, TaskRemindBase
@@ -316,6 +326,249 @@ def _normalize_create_case_applicants(db: Session, data: CaseCreate) -> list[Cas
     if applicants or "applicants" in data.model_fields_set:
         return applicants
     return [_default_legacy_case_applicant(db, data.client_id)]
+
+
+def _canonical_json(value: object) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _approval_applicant_set_key(
+    approval: FeeReductionApproval,
+    submitted_ids: tuple[str, ...],
+) -> str | None:
+    try:
+        snapshot = json.loads(approval.eligibility_snapshot)
+        canonical_snapshot = _canonical_json(snapshot)
+    except (TypeError, ValueError, UnicodeEncodeError, json.JSONDecodeError):
+        return None
+    if (
+        canonical_snapshot != approval.eligibility_snapshot
+        or _sha256(canonical_snapshot) != approval.eligibility_snapshot_hash
+        or type(snapshot) is not dict
+        or set(snapshot) != {"applicants", "attributes_version", "schema"}
+        or snapshot["schema"] != "FPMS_FEE_REDUCTION_ELIGIBILITY_V1"
+        or type(snapshot["attributes_version"]) is not str
+        or not snapshot["attributes_version"]
+        or type(snapshot["applicants"]) is not list
+        or not snapshot["applicants"]
+    ):
+        return None
+    applicant_ids: list[str] = []
+    for applicant in snapshot["applicants"]:
+        if (
+            type(applicant) is not dict
+            or set(applicant) != {"applicant_id", "attributes"}
+            or type(applicant["applicant_id"]) is not str
+            or not applicant["applicant_id"]
+            or applicant["applicant_id"] != applicant["applicant_id"].strip()
+            or type(applicant["attributes"]) is not dict
+        ):
+            return None
+        applicant_ids.append(applicant["applicant_id"])
+    if tuple(applicant_ids) != submitted_ids:
+        return None
+    expected_key = _sha256(
+        _canonical_json(
+            {
+                "applicant_ids": list(submitted_ids),
+                "eligibility_snapshot_hash": approval.eligibility_snapshot_hash,
+                "schema": "FPMS_FEE_REDUCTION_APPLICANT_SET_V1",
+            }
+        )
+    )
+    return expected_key if approval.applicant_set_key == expected_key else None
+
+
+def _approval_fee_codes(approval: FeeReductionApproval) -> frozenset[str]:
+    try:
+        snapshot = json.loads(approval.fee_scope_snapshot)
+        canonical_snapshot = _canonical_json(snapshot)
+    except (TypeError, ValueError, UnicodeEncodeError, json.JSONDecodeError):
+        return frozenset()
+    if (
+        canonical_snapshot != approval.fee_scope_snapshot
+        or _sha256(canonical_snapshot) != approval.fee_scope_hash
+        or type(snapshot) is not dict
+        or set(snapshot) != {"fee_codes", "schema"}
+        or snapshot["schema"] != "FPMS_FEE_REDUCTION_FEE_SCOPE_V1"
+        or type(snapshot["fee_codes"]) is not list
+        or not snapshot["fee_codes"]
+        or any(
+            type(fee_code) is not str or not fee_code or fee_code != fee_code.strip()
+            for fee_code in snapshot["fee_codes"]
+        )
+        or snapshot["fee_codes"] != sorted(set(snapshot["fee_codes"]))
+    ):
+        return frozenset()
+    return frozenset(snapshot["fee_codes"])
+
+
+def _approval_source_is_current(source: DocumentEvidenceVersion | None) -> bool:
+    return bool(
+        source is not None
+        and type(source.case_id) is str
+        and bool(source.case_id)
+        and source.case_id == source.case_id.strip()
+        and type(source.lineage_key) is str
+        and bool(source.lineage_key)
+        and source.lineage_key == source.lineage_key.strip()
+        and "\x00" not in source.lineage_key
+        and len(source.lineage_key) <= 128
+        and source.state == EvidenceVersionState.FINAL.value
+        and source.review_state == EvidenceReviewState.APPROVED.value
+        and type(source.reviewer_id) is str
+        and bool(source.reviewer_id)
+        and source.reviewer_id == source.reviewer_id.strip()
+        and "\x00" not in source.reviewer_id
+        and len(source.reviewer_id) <= 36
+        and type(source.reviewed_at) is datetime
+        and source.reviewed_at.tzinfo is None
+        and source.reviewer_id != source.creator_id
+        and source.current_identity_key == f"{source.case_id}|{source.lineage_key}"
+    )
+
+
+def _raise_create_fee_reduction_error(exc: FeeReductionValidationError) -> None:
+    raise_business_error(
+        exc.code.value,
+        exc.code.value,
+        details=exc.details,
+        status_code=409,
+    )
+
+
+def _canonical_create_fee_reduction(
+    db: Session,
+    *,
+    reduction_value: str,
+    applicants: list[CaseApplicantIn],
+    case_id: str,
+) -> str:
+    reduction_input = FeeReductionInput(
+        reduction_ratio=Decimal(reduction_value),
+        provenance=FeeReductionInputProvenance.EXPLICIT_ENTRY,
+    )
+    evaluation_date = date.today()
+    base_context = FeeReductionEvaluationContext(
+        case_id=case_id,
+        applicant_set_key=None,
+        fee_code="CASE_CREATE",
+        fee_year_key=0,
+        as_of_date=evaluation_date,
+    )
+    if reduction_value == "0":
+        result = validate_fee_reduction(
+            reduction_input=reduction_input,
+            context=base_context,
+            approval=None,
+        )
+        return "0" if result.reduction_ratio == Decimal("0") else reduction_value
+
+    submitted_ids = tuple(
+        sorted(
+            applicant.applicant_id
+            for applicant in applicants
+            if type(applicant.applicant_id) is str and applicant.applicant_id
+        )
+    )
+    has_exact_composition = len(submitted_ids) == len(applicants) and len(
+        set(submitted_ids)
+    ) == len(submitted_ids)
+    approvals = (
+        db.query(FeeReductionApproval)
+        .filter(
+            FeeReductionApproval.scope_type == FeeReductionApprovalScopeType.APPLICANT_SET.value,
+            FeeReductionApproval.reduction_ratio == Decimal(reduction_value),
+            FeeReductionApproval.confirmation_status == "CONFIRMED",
+        )
+        .order_by(FeeReductionApproval.id)
+        .all()
+        if has_exact_composition
+        else []
+    )
+    matching = [
+        (approval, applicant_set_key)
+        for approval in approvals
+        if (
+            applicant_set_key := _approval_applicant_set_key(approval, submitted_ids)
+        )
+        is not None
+    ]
+    last_error: FeeReductionValidationError | None = None
+    valid_results = []
+    for approval, applicant_set_key in matching:
+        fee_codes = _approval_fee_codes(approval)
+        source = db.get(DocumentEvidenceVersion, approval.source_evidence_version_id)
+        approval_context = FeeReductionApprovalContext(
+            approval_id=approval.id,
+            scope_type=FeeReductionApprovalScopeType.APPLICANT_SET,
+            case_id=None,
+            applicant_set_key=applicant_set_key,
+            reduction_ratio=approval.reduction_ratio,
+            fee_codes=fee_codes,
+            fee_year_from=approval.fee_year_from,
+            fee_year_to=approval.fee_year_to,
+            effective_from=approval.effective_from,
+            effective_to=approval.effective_to,
+            source_evidence_version_id=approval.source_evidence_version_id,
+            confirmation_status=approval.confirmation_status,
+            is_current=_approval_source_is_current(source),
+        )
+        context = FeeReductionEvaluationContext(
+            case_id=case_id,
+            applicant_set_key=applicant_set_key,
+            fee_code="CASE_CREATE",
+            fee_year_key=0,
+            as_of_date=evaluation_date,
+        )
+        try:
+            result = validate_fee_reduction(
+                reduction_input=reduction_input,
+                context=context,
+                approval=approval_context,
+            )
+        except FeeReductionValidationError as exc:
+            last_error = exc
+            continue
+        valid_results.append(result)
+
+    if len(valid_results) > 1:
+        raise_business_error(
+            "FEE_REDUCTION_AMBIGUOUS_PROVENANCE",
+            "FEE_REDUCTION_AMBIGUOUS_PROVENANCE",
+            details={
+                "scope_type": "APPLICANT_SET",
+                "fee_code": "CASE_CREATE",
+            },
+            status_code=409,
+        )
+    if valid_results:
+        return {
+            Decimal("0.7000"): "0.7",
+            Decimal("0.8500"): "0.85",
+        }[valid_results[0].reduction_ratio]
+
+    if last_error is not None:
+        _raise_create_fee_reduction_error(last_error)
+    try:
+        validate_fee_reduction(
+            reduction_input=reduction_input,
+            context=base_context,
+            approval=None,
+        )
+    except FeeReductionValidationError as exc:
+        _raise_create_fee_reduction_error(exc)
+    raise AssertionError("non-zero reduction unexpectedly validated without approval")
 
 
 def validate_foreign_agent(
@@ -1741,9 +1994,16 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         invalid_requester=data.invalid_requester,
         invalid_role=data.invalid_role,
     )
+    case_id = str(uuid4())
+    fee_reduction = _canonical_create_fee_reduction(
+        db,
+        reduction_value=data.fee_reduction,
+        applicants=applicants,
+        case_id=case_id,
+    )
 
     case = Case(
-        id=str(uuid4()),
+        id=case_id,
         case_no=data.case_no,
         case_type=data.case_type,
         patent_category=data.patent_category,
@@ -1799,7 +2059,7 @@ def create_case(db: Session, data: CaseCreate, user_id: str) -> Case:
         draftor_id=data.draftor_id,
         # A3 — Control flags
         is_fee_monitor=data.is_fee_monitor,
-        fee_reduction=data.fee_reduction,
+        fee_reduction=fee_reduction,
         applicant_kind=data.applicant_kind,
         discount_rate=data.discount_rate,
         no_power=data.no_power,
@@ -2143,6 +2403,28 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
                 ),
                 first_applicant_id=first_applicant.applicant_id if first_applicant else None,
             )
+
+        current_applicants = (
+            db.query(T_CaseApplicant)
+            .filter(T_CaseApplicant.case_id == case_id)
+            .order_by(T_CaseApplicant.seq)
+            .all()
+        )
+        current_composition = tuple(applicant.applicant_id for applicant in current_applicants)
+        submitted_applicants = sorted(data.applicants, key=lambda applicant: applicant.seq)
+        submitted_composition = tuple(
+            applicant.applicant_id for applicant in submitted_applicants
+        )
+        if (
+            submitted_composition != current_composition
+            and "fee_reduction" not in provided_fields
+        ):
+            raise_business_error(
+                "FEE_REDUCTION_EXPLICIT_SELECTION_REQUIRED",
+                "FEE_REDUCTION_EXPLICIT_SELECTION_REQUIRED",
+                details={"case_id": case.id, "field": "fee_reduction"},
+                status_code=409,
+            )
     elif "applicant_kind" in provided_fields:
         first_applicant = (
             db.query(T_CaseApplicant.applicant_id)
@@ -2154,6 +2436,24 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
             db,
             applicant_kind=data.applicant_kind,
             first_applicant_id=first_applicant.applicant_id if first_applicant else None,
+        )
+
+    canonical_fee_reduction: str | None = None
+    if "fee_reduction" in provided_fields:
+        if data.applicants is not None:
+            target_applicants = submitted_applicants
+        else:
+            target_applicants = (
+                db.query(T_CaseApplicant)
+                .filter(T_CaseApplicant.case_id == case_id)
+                .order_by(T_CaseApplicant.seq)
+                .all()
+            )
+        canonical_fee_reduction = _canonical_create_fee_reduction(
+            db,
+            reduction_value=data.fee_reduction,
+            applicants=target_applicants,
+            case_id=case.id,
         )
 
     if data.inventors is not None:
@@ -2299,7 +2599,7 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
     if "is_fee_monitor" in provided_fields:
         case.is_fee_monitor = data.is_fee_monitor
     if "fee_reduction" in provided_fields:
-        case.fee_reduction = data.fee_reduction
+        case.fee_reduction = canonical_fee_reduction
     if "applicant_kind" in provided_fields:
         case.applicant_kind = data.applicant_kind
     if "discount_rate" in provided_fields:
