@@ -258,7 +258,10 @@ def _valid_filing_external_submission_evidence_refs(
         {(reference.evidence_kind, reference.object_type) for reference in evidence_refs}
         == expected_reference_types
         and all(reference.case_id == case_id for reference in evidence_refs)
-        and all(type(reference.object_id) is str for reference in evidence_refs)
+        and all(
+            type(reference.object_id) is str and bool(reference.object_id.strip())
+            for reference in evidence_refs
+        )
         and evidence_refs[0].object_id != evidence_refs[1].object_id
         and all(
             type(reference.content_hash) is str
