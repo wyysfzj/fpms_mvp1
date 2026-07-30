@@ -260,6 +260,47 @@ export interface OfficialFeeEstimateResult {
     total_payable_amount: string
 }
 
+export type FeeReductionApprovalScopeType = 'CASE' | 'APPLICANT_SET'
+
+export interface FeeReductionApprovalCreatePayload {
+    case_id: string
+    scope_type: FeeReductionApprovalScopeType
+    applicant_ids: string[]
+    eligibility_attributes_version: string
+    eligibility_attributes_json: string
+    reduction_ratio: '0.7' | '0.85'
+    fee_codes: string[]
+    fee_year_from: number | null
+    fee_year_to: number | null
+    effective_from: string
+    effective_to: string | null
+    source_evidence_version_id: string
+    expected_source_content_hash: string
+    confirmed_at: string
+}
+
+export interface FeeReductionApprovalCreateResult {
+    approval_id: string
+}
+
+export interface FeeReductionApprovalListItem {
+    approval_id: string
+    scope_type: FeeReductionApprovalScopeType
+    case_id: string | null
+    applicant_set_key: string | null
+    reduction_ratio: string
+    fee_codes: string[]
+    fee_year_from: number | null
+    fee_year_to: number | null
+    effective_from: string
+    effective_to: string | null
+    source_evidence_version_id: string
+    confirmation_status: string
+    confirmed_at: string
+    confirmed_by: string
+    is_current: boolean
+}
+
 export interface FeeObligationInstructionPayload {
     instruction: 'PAY' | 'HOLD' | 'ABANDON'
     idempotency_key: string

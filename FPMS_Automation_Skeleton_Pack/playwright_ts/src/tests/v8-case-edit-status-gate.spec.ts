@@ -71,6 +71,7 @@ function backendCase(): Record<string, unknown> {
     client_name: "生命周期测试客户",
     title_cn: "兼容状态只读测试案件",
     status: "NOT_FILED",
+    fee_reduction: "0",
     applicants: [],
     inventors: [],
     priorities: [],

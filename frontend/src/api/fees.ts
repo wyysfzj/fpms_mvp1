@@ -17,6 +17,9 @@ import type {
     FeeRateCreatePayload,
     FeeRateListParams,
     FeeRateUpdatePayload,
+    FeeReductionApprovalCreatePayload,
+    FeeReductionApprovalCreateResult,
+    FeeReductionApprovalListItem,
     FeeObligationInstructionPayload,
     FeeObligationInstructionResult,
     OfficialFeeEstimateContext,
@@ -435,6 +438,22 @@ export async function previewOfficialFeeCandidates(
     context: OfficialFeeEstimateContext,
 ): Promise<OfficialFeeEstimateResult> {
     const response = await http.post<OfficialFeeEstimateResult>('/fees/official-fee-preview', context)
+    return response.data
+}
+
+export async function getFeeReductionApprovals(caseId: string): Promise<FeeReductionApprovalListItem[]> {
+    const response = await http.get<FeeReductionApprovalListItem[]>(`/fees/cases/${caseId}/reduction-approvals`)
+    return response.data
+}
+
+export async function createFeeReductionApproval(
+    caseId: string,
+    payload: FeeReductionApprovalCreatePayload,
+): Promise<FeeReductionApprovalCreateResult> {
+    const response = await http.post<FeeReductionApprovalCreateResult>(
+        `/fees/cases/${caseId}/reduction-approvals`,
+        payload,
+    )
     return response.data
 }
 
