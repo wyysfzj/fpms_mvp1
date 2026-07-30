@@ -151,6 +151,33 @@ def test_filing_external_submission_fails_closed_for_malformed_or_different_comm
 
 
 @pytest.mark.parametrize(
+    ("reference_index", "object_id"),
+    (
+        (0, ""),
+        (0, "   "),
+        (1, ""),
+        (1, "   "),
+    ),
+)
+def test_filing_external_submission_rejects_blank_evidence_identity(
+    reference_index: int,
+    object_id: str,
+) -> None:
+    evidence_refs = list(_evidence_refs())
+    evidence_refs[reference_index] = replace(
+        evidence_refs[reference_index],
+        object_id=object_id,
+    )
+    command = replace(_command(), evidence_refs=tuple(evidence_refs))
+    rule = _rule()
+    assert rule is not None
+
+    decision = rule(command, FILING_PREPARATION_PROJECTION, InteractionForbidden())
+
+    assert decision is None
+
+
+@pytest.mark.parametrize(
     "previous_projection",
     (
         cast(LifecycleProjection, object()),
