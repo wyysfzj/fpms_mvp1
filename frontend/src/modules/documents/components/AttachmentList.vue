@@ -108,6 +108,7 @@
           v-for="att in attachments"
           :key="att.id"
           class="attachment-item"
+          :data-testid="att.evidence_version_id ? `attachment-${att.evidence_version_id}` : undefined"
         >
           <div class="attachment-info">
             <span class="attachment-name">{{ att.filename }}</span>
@@ -126,15 +127,48 @@
               <span>内容哈希：{{ formatHash(att.content_hash) }}</span>
               <span>状态：{{ getPackageUsageHintText(att.package_usage_hint) }}</span>
             </div>
+            <div v-if="att.evidence_version_id" class="attachment-review-meta">
+              <span>创建人：{{ att.creator_id || '待确认' }}</span>
+              <span>复核人：{{ att.reviewer_id || '未复核' }}</span>
+              <el-tag :type="getReviewTagType(att.review_state)" size="small">
+                复核状态：{{ getReviewStateText(att.review_state) }}
+              </el-tag>
+            </div>
+            <span v-if="isSelfReview(att)" class="self-review-warning">
+              创建人不能复核自己的证据版本
+            </span>
           </div>
-          <el-button
-            size="small"
-            text
-            :loading="downloadingId === att.id"
-            @click="handleDownload(att)"
-          >
-            ⬇️ 下载
-          </el-button>
+          <div class="attachment-actions">
+            <div v-if="showReviewActions(att)" class="attachment-review-actions">
+              <el-button
+                size="small"
+                type="success"
+                :loading="reviewingKey === `${att.evidence_version_id}:APPROVE`"
+                :disabled="reviewActionDisabled(att)"
+                @click="handleReview(att, 'APPROVE')"
+              >
+                通过
+              </el-button>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                :loading="reviewingKey === `${att.evidence_version_id}:REJECT`"
+                :disabled="reviewActionDisabled(att)"
+                @click="handleReview(att, 'REJECT')"
+              >
+                驳回
+              </el-button>
+            </div>
+            <el-button
+              size="small"
+              text
+              :loading="downloadingId === att.id"
+              @click="handleDownload(att)"
+            >
+              ⬇️ 下载
+            </el-button>
+          </div>
         </div>
       </div>
     </template>
@@ -145,10 +179,17 @@
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
-import { getAttachments, uploadAttachment, downloadAttachment } from '../../../api/documents'
+import {
+  downloadAttachment,
+  getDocument,
+  reviewDocumentEvidence,
+  uploadAttachment,
+} from '../../../api/documents'
+import { http } from '../../../api/http'
 import type { Attachment } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
+import { useAuthStore } from '../../../stores/auth'
 
 const props = defineProps<{
   documentId: string | number
@@ -158,11 +199,15 @@ const emit = defineEmits<{
   uploaded: []
 }>()
 
+const authStore = useAuthStore()
 const attachments = ref<Attachment[]>([])
 const loading = ref(false)
 const uploading = ref(false)
 const error = ref<ApiError | null>(null)
 const downloadingId = ref<string | null>(null)
+const reviewingKey = ref<string | null>(null)
+const caseId = ref<string | null>(null)
+const currentUserId = ref<string | null>(null)
 const uploadDialogVisible = ref(false)
 const selectedUploadFile = ref<File | null>(null)
 const selectedUploadFileName = ref('')
@@ -281,11 +326,109 @@ async function fetchAttachments() {
   error.value = null
 
   try {
-    attachments.value = await getAttachments(props.documentId)
+    const document = await getDocument(props.documentId)
+    attachments.value = document.attachments || []
+    caseId.value = document.case_id || null
   } catch (err) {
     error.value = err as ApiError
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchCurrentUserId() {
+  try {
+    const response = await http.get<{ user?: { id?: string } }>('/auth/me')
+    currentUserId.value = response.data.user?.id?.trim() || null
+  } catch {
+    currentUserId.value = null
+  }
+}
+
+function showReviewActions(att: Attachment): boolean {
+  return Boolean(
+    authStore.hasPermission('Doc.Edit')
+    && att.evidence_version_id
+    && att.review_state === 'PENDING'
+  )
+}
+
+function isSelfReview(att: Attachment): boolean {
+  return Boolean(att.creator_id && currentUserId.value && att.creator_id === currentUserId.value)
+}
+
+function reviewActionDisabled(att: Attachment): boolean {
+  return Boolean(
+    reviewingKey.value
+    || !caseId.value
+    || !currentUserId.value
+    || isSelfReview(att)
+  )
+}
+
+async function handleReview(att: Attachment, decision: 'APPROVE' | 'REJECT') {
+  if (!att.evidence_version_id || !caseId.value || !currentUserId.value) {
+    ElMessage.error('暂时无法确认复核所需信息，请刷新后重试。')
+    return
+  }
+  if (isSelfReview(att)) {
+    ElMessage.warning('创建人不能复核自己的证据版本。')
+    return
+  }
+
+  reviewingKey.value = `${att.evidence_version_id}:${decision}`
+  error.value = null
+
+  try {
+    const projection = await reviewDocumentEvidence(
+      String(props.documentId),
+      att.evidence_version_id,
+      {
+        case_id: caseId.value,
+        decision,
+        reviewed_at: new Date().toISOString().slice(0, 19),
+        idempotency_key: `review-ui:${att.evidence_version_id}:${decision}`,
+      }
+    )
+    att.creator_id = projection.creator_id
+    att.reviewer_id = projection.reviewer_id
+    att.review_state = projection.review_state
+    att.is_current = projection.is_current
+    att.is_final = projection.is_final
+    ElMessage.success(decision === 'APPROVE' ? '附件复核已通过' : '附件复核已驳回')
+  } catch (err) {
+    error.value = getReviewError(err)
+  } finally {
+    reviewingKey.value = null
+  }
+}
+
+function getReviewError(err: unknown): ApiError {
+  const apiError = (err || {}) as Partial<ApiError>
+  const status = typeof apiError.status === 'number' ? apiError.status : 0
+  const code = typeof apiError.code === 'string' ? apiError.code : 'REVIEW_FAILED'
+  let message = '附件复核失败，请稍后重试。'
+
+  if (code === 'EVIDENCE_REVIEW_SELF_REVIEW') {
+    message = '创建人不能复核自己的证据版本。'
+  } else if (status === 400 || status === 422) {
+    message = '复核请求无效，请核对后重试。'
+  } else if (status === 401) {
+    message = '登录已失效，请重新登录。'
+  } else if (status === 403) {
+    message = '您没有复核附件的权限。'
+  } else if (status === 404) {
+    message = '未找到待复核的证据版本。'
+  } else if (status === 409) {
+    message = '附件复核状态已变化，请刷新后重试。'
+  }
+
+  return {
+    status,
+    code,
+    message,
+    details: apiError.details,
+    requestId: apiError.requestId,
   }
 }
 
@@ -422,8 +565,24 @@ function formatHash(value?: string | null): string {
   return value.length > 12 ? `${value.slice(0, 12)}...` : value
 }
 
-onMounted(() => {
-  fetchAttachments()
+function getReviewStateText(state?: Attachment['review_state']): string {
+  if (state === 'APPROVED') return '已通过'
+  if (state === 'REJECTED') return '已驳回'
+  if (state === 'PENDING') return '待复核'
+  return '未关联'
+}
+
+function getReviewTagType(
+  state?: Attachment['review_state']
+): 'success' | 'warning' | 'danger' | 'info' {
+  if (state === 'APPROVED') return 'success'
+  if (state === 'REJECTED') return 'danger'
+  if (state === 'PENDING') return 'warning'
+  return 'info'
+}
+
+onMounted(async () => {
+  await Promise.all([fetchAttachments(), fetchCurrentUserId()])
 })
 </script>
 
@@ -530,6 +689,31 @@ onMounted(() => {
   font-size: 12px;
 }
 
+.attachment-review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  color: var(--text-sub);
+  font-size: 12px;
+}
+
+.attachment-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.attachment-review-actions {
+  display: flex;
+}
+
+.self-review-warning {
+  color: var(--el-color-danger);
+  font-size: 12px;
+}
+
 .attachment-error {
   margin-bottom: 12px;
 }
@@ -542,6 +726,10 @@ onMounted(() => {
 
   .attachment-official-meta {
     grid-template-columns: 1fr;
+  }
+
+  .attachment-actions {
+    align-items: flex-start;
   }
 }
 </style>
