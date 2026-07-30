@@ -314,6 +314,47 @@ export interface FeeObligationInstructionResult {
     reused: boolean
 }
 
+export interface FeeObligationDetail {
+    id: string
+    case_id: string
+    source: {
+        source_activity_id: string
+        source_document_id: string | null
+        status: 'VERIFIED' | 'REVIEW_REQUIRED' | 'LEGACY_UNVERIFIED'
+    }
+    fee_domain: 'GOV' | 'SERVICE'
+    obligation_type: string
+    due_date: string | null
+    currency: string
+    statuses: {
+        estimate_status: 'ESTIMATE' | null
+        obligation_status: 'RECOGNIZED' | 'SUPERSEDED'
+        client_instruction_status: 'PENDING' | 'PAY' | 'HOLD' | 'ABANDON'
+        draft_status: 'NOT_CREATED' | 'CREATED'
+        pay_list_status: 'NOT_CREATED' | 'CREATED'
+        payment_status: 'UNPAID' | 'PAID'
+        official_evidence_status: 'PENDING' | 'VERIFIED' | 'NOT_APPLICABLE'
+    }
+    lines: {
+        id: string
+        obligation_id: string
+        case_id: string
+        source_activity_id: string
+        fee_code: string
+        fee_name: string
+        fee_year_key: number
+        official_full_amount: string | null
+        reduction_ratio: string
+        payable_amount: string
+        source_amount: string | null
+        source_date: string | null
+        difference_review_state: 'MATCHED' | 'SOURCE_PENDING' | 'REVIEW_REQUIRED'
+        current_identity_key: string | null
+    }[]
+    supersedes_obligation_id: string | null
+    supersede_reason: string | null
+}
+
 export interface FeeDraftUpdatePayload {
     case_id?: string
     client_id?: string | null

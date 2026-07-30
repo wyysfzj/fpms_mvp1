@@ -33,12 +33,14 @@ from app.modules.fees.obligation_contracts import (
     RecordFeeObligationInstructionCommand,
 )
 from app.modules.fees.obligation_schemas import (
+    FeeObligationDetailOut,
     FeeObligationInstructionIn,
     FeeObligationInstructionOut,
 )
 from app.modules.fees.obligation_service import (
     FeeEstimatePreviewError,
     FeeEstimatePreviewErrorCode,
+    get_fee_obligation,
     preview_estimate,
     record_client_instruction,
 )
@@ -551,6 +553,20 @@ def record_fee_obligation_instruction(
         idempotency_key=result.idempotency_key,
         reused=result.reused,
     )
+
+
+@router.get(
+    "/fees/obligations/{obligation_id}",
+    status_code=status.HTTP_200_OK,
+    response_model=FeeObligationDetailOut,
+    summary="Get a fee obligation detail",
+)
+def get_fee_obligation_detail(
+    obligation_id: Annotated[str, Path(min_length=1, max_length=36)],
+    _perm: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> FeeObligationDetailOut:
+    return FeeObligationDetailOut.model_validate(get_fee_obligation(obligation_id, db))
 
 
 @router.post("/fees/drafts/{draft_id}/lock", response_model=OkOut, summary="Lock a fee draft")
