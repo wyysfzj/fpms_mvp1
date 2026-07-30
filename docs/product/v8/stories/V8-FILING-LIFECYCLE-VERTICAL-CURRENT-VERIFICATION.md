@@ -90,5 +90,6 @@ path/mode/blob fingerprint before this `PROTECTED` story is mapped.
 
 No second or later lifecycle event, API, UI, adapter/resolver, persistence, activity,
 document creation, fee, deadline, permission, schema/migration, registry reorder,
-historical evidence mutation, coverage-ledger edit or Foundation claim. Rollback removes
-only this story-card commit; the current product and test bytes remain unchanged.
+historical evidence mutation, coverage-ledger edit or Foundation claim. Rollback reverts
+the story-card, external-submission regression and nonblank identity guard as one exact
+candidate range, restoring the prior rule/test bytes without changing schema or data.
