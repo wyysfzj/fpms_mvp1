@@ -7,27 +7,28 @@
   "rule": "Every visible dirty path from the quarantined workspace appears exactly once. Archive-only paths are preserved but never enter active ancestry; adoption paths may enter only through their named reviewed story.",
   "story_counts": {
     "ARCHIVE_ONLY_HISTORY": 283,
-    "V8-ADOPT-FEE-REDUCTION-UI": 6,
+    "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION": 8,
     "V8-ADOPT-DOCUMENT-REVIEW-UI": 5,
+    "V8-ADOPT-FEE-REDUCTION-UI": 2,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
     "V8-ADOPT-ANNUITY-RATE-SOURCES": 36,
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
-    "V8-ADOPT-LIFECYCLE-CENTER": 25,
+    "V8-PAYLIST-INTERNAL-EXPORT-SERVICE": 2,
+    "V8-ADOPT-LIFECYCLE-CENTER": 23,
     "V8-ADOPT-DOCUMENT-EVIDENCE": 47,
-    "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
+    "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 2,
-    "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 1,
-    "V8-ADOPT-FEE-OBLIGATION": 20,
-    "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION": 1,
     "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION": 4,
+    "V8-ADOPT-FEE-OBLIGATION": 18,
+    "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION": 1,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
-    "V8-ADOPT-DECISION-GATES": 2,
     "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
+    "V8-ADOPT-DECISION-GATES": 2,
     "V8-ADOPT-PAYLIST-PAYMENT": 8,
-    "V8-PAYLIST-INTERNAL-EXPORT-SERVICE": 2,
+    "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 1,
     "C3-LEAN-GOVERNANCE-ADOPTION": 2
   },
   "entries": [
@@ -40,8 +41,8 @@
     {
       "path": "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-fee-reduction.spec.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-REDUCTION-UI",
-      "rationale": "fee-reduction UI end-to-end verification"
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
     },
     {
       "path": "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-document-evidence-review-ui.spec.ts",
@@ -112,14 +113,14 @@
     {
       "path": "backend/app/modules/cases/schemas.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
-      "rationale": "central case lifecycle carrier and service"
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
     },
     {
       "path": "backend/app/modules/cases/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
-      "rationale": "central case lifecycle carrier and service"
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
     },
     {
       "path": "backend/app/modules/documents/api.py",
@@ -478,14 +479,14 @@
     {
       "path": "backend/tests/test_v8_case_create_fee_reduction.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
     },
     {
       "path": "backend/tests/test_v8_case_update_fee_reduction.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
     },
     {
       "path": "backend/tests/test_v8_certificate_archived_activity.py",
@@ -1288,14 +1289,14 @@
     {
       "path": "frontend/src/api/cases.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-REDUCTION-UI",
-      "rationale": "case fee-reduction UI/API contract"
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
     },
     {
       "path": "frontend/src/api/cases.types.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-REDUCTION-UI",
-      "rationale": "case fee-reduction UI/API contract"
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
     },
     {
       "path": "frontend/src/api/contracts/v8_document_evidence_review.contract.ts",
@@ -1372,8 +1373,8 @@
     {
       "path": "frontend/src/modules/cases/pages/CaseCreate.vue",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-REDUCTION-UI",
-      "rationale": "case fee-reduction UI/API contract"
+      "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed case fee-reduction API/UI vertical"
     },
     {
       "path": "frontend/src/modules/cases/pages/CaseEdit.vue",
