@@ -33,6 +33,13 @@ class DocAttachmentOut(BaseModel):
     package_usage_hint: str | None = None
     is_archive_evidence: bool = False
     is_receipt_evidence: bool = False
+    evidence_version_id: str | None = None
+    role: str | None = None
+    creator_id: str | None = None
+    reviewer_id: str | None = None
+    review_state: str | None = None
+    is_current: bool = False
+    is_final: bool = False
 
 
 class AttachmentManifestItemOut(BaseModel):

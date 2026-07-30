@@ -3,6 +3,7 @@ import { http } from './http'
 import type { Pagination } from './types'
 import type {
     Attachment,
+    AttachmentEvidenceProjection,
     DocTemplate,
     DocTemplateCreatePayload,
     DocTemplateListParams,
@@ -15,6 +16,7 @@ import type {
     DocumentMailingBatchIn,
     DocumentMailingBatchOut,
     DocumentCreatePayload,
+    DocumentEvidenceReviewPayload,
     DocumentImpactPreviewPayload,
     DocumentImpactPreviewResult,
     DocumentListParams,
@@ -44,6 +46,13 @@ interface BackendAttachment {
     package_usage_hint?: string | null
     is_archive_evidence?: boolean
     is_receipt_evidence?: boolean
+    evidence_version_id: string | null
+    role: string | null
+    creator_id: string | null
+    reviewer_id: string | null
+    review_state: 'PENDING' | 'APPROVED' | 'REJECTED' | null
+    is_current: boolean
+    is_final: boolean
 }
 
 interface BackendDocument {
@@ -89,6 +98,13 @@ function mapAttachment(input: BackendAttachment): Attachment {
         package_usage_hint: input.package_usage_hint ?? null,
         is_archive_evidence: input.is_archive_evidence ?? false,
         is_receipt_evidence: input.is_receipt_evidence ?? false,
+        evidence_version_id: input.evidence_version_id,
+        role: input.role,
+        creator_id: input.creator_id,
+        reviewer_id: input.reviewer_id,
+        review_state: input.review_state,
+        is_current: input.is_current,
+        is_final: input.is_final,
     }
 }
 
@@ -400,6 +416,37 @@ export async function getDocumentEnvelopePreview(documentId: string): Promise<Do
 export async function getDocument(id: string | number): Promise<Document> {
     const response = await http.get<BackendDocument>(`/documents/${id}`)
     return mapDocument(response.data)
+}
+
+export async function reviewDocumentEvidence(
+    documentId: string,
+    evidenceVersionId: string,
+    payload: DocumentEvidenceReviewPayload
+): Promise<AttachmentEvidenceProjection> {
+    await http.post(`/documents/evidence-versions/${evidenceVersionId}/review`, payload)
+    const document = await getDocument(documentId)
+    const attachment = document.attachments?.find(
+        (item) => item.evidence_version_id === evidenceVersionId
+    )
+    if (
+        !attachment?.evidence_version_id ||
+        !attachment.role ||
+        !attachment.creator_id ||
+        !attachment.review_state ||
+        typeof attachment.is_current !== 'boolean' ||
+        typeof attachment.is_final !== 'boolean'
+    ) {
+        throw new Error('未找到已复核的证据版本')
+    }
+    return {
+        evidence_version_id: attachment.evidence_version_id,
+        role: attachment.role,
+        creator_id: attachment.creator_id,
+        reviewer_id: attachment.reviewer_id ?? null,
+        review_state: attachment.review_state,
+        is_current: attachment.is_current,
+        is_final: attachment.is_final,
+    }
 }
 
 /**

@@ -32,6 +32,7 @@ from app.modules.cases.service import (
 )
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.evidence_contracts import (
+    EvidenceReviewState,
     EvidenceRole,
     EvidenceVersionResult,
     EvidenceVersionState,
@@ -1280,7 +1281,10 @@ def preview_document_impact(
 
 
 def create_document_wizard_batch(
-    db: Session, data: DocumentWizardBatchCreateIn
+    db: Session,
+    data: DocumentWizardBatchCreateIn,
+    *,
+    actor_id: str | None = None,
 ) -> list[tuple[int, Document]]:
     template = db.execute(
         select(DocTemplate).where(DocTemplate.id == data.defaults.doc_template_id)
@@ -1292,6 +1296,8 @@ def create_document_wizard_batch(
     _validate_document_wizard_rows(db, rows)
 
     created_rows: list[tuple[int, Document]] = []
+    managed_generated_files: list[Path] = []
+    committed = False
     task_rows_by_row_index: dict[int, list[DocumentWizardTaskFinalRowIn]] = {}
     fee_rows_by_row_index: dict[int, DocumentWizardFeeFinalRowIn] = {}
     attachment_rows_by_row_index: dict[int, list[DocumentWizardAttachmentFinalRowIn]] = {}
@@ -1341,22 +1347,29 @@ def create_document_wizard_batch(
                 maybe_create_fee_draft(db, document, template)
             explicit_attachment_rows = attachment_rows_by_row_index.get(idx, [])
             if explicit_attachment_rows:
-                _create_document_wizard_attachments_from_rows(
-                    db,
-                    document=document,
-                    doc_template=template,
-                    row_attachment_rows=explicit_attachment_rows,
+                managed_generated_files.extend(
+                    _create_document_wizard_attachments_from_rows(
+                        db,
+                        document=document,
+                        doc_template=template,
+                        row_attachment_rows=explicit_attachment_rows,
+                        actor_id=actor_id,
+                    )
                 )
             if not explicit_task_rows:
                 TaskGenerationService().generate_from_document(db, document)
             created_rows.append((idx, document))
 
         db.commit()
+        committed = True
         for _, document in created_rows:
             db.refresh(document)
         return created_rows
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        if not committed:
+            for managed_file_path in managed_generated_files:
+                _remove_managed_attachment_file(managed_file_path, original_error=exc)
         raise
 
 
@@ -2262,6 +2275,97 @@ def get_document(db: Session, document_id: str) -> Document:
     return document
 
 
+@dataclass(frozen=True, slots=True)
+class AttachmentEvidenceReadProjection:
+    evidence_version_id: str
+    role: EvidenceRole
+    creator_id: str
+    reviewer_id: str | None
+    review_state: EvidenceReviewState
+    is_current: bool
+    is_final: bool
+
+
+def _attachment_current_evidence_invalid() -> None:
+    raise_business_error(
+        "DOCUMENT_ATTACHMENT_CURRENT_EVIDENCE_INVALID",
+        "当前附件证据版本数据无效",
+        status_code=409,
+    )
+
+
+def _is_valid_evidence_identifier(value: object) -> bool:
+    return type(value) is str and bool(value.strip()) and len(value) <= 36
+
+
+def get_current_attachment_evidence_versions(
+    db: Session,
+    *,
+    document: Document,
+) -> dict[str, AttachmentEvidenceReadProjection]:
+    attachment_ids = tuple(attachment.id for attachment in document.attachments)
+    if not attachment_ids:
+        return {}
+    attachment_id_set = set(attachment_ids)
+
+    versions = (
+        db.execute(
+            select(DocumentEvidenceVersion).where(
+                DocumentEvidenceVersion.attachment_id.in_(attachment_ids),
+                DocumentEvidenceVersion.current_identity_key.is_not(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_attachment: dict[str, AttachmentEvidenceReadProjection] = {}
+    for version in versions:
+        if (
+            not _is_valid_evidence_identifier(version.id)
+            or version.document_id != document.id
+            or version.case_id != document.case_id
+            or version.attachment_id not in attachment_id_set
+            or type(version.lineage_key) is not str
+            or not version.lineage_key.strip()
+            or len(version.lineage_key) > 128
+            or version.current_identity_key != f"{document.case_id}|{version.lineage_key}"
+            or version.attachment_id in by_attachment
+            or not _is_valid_evidence_identifier(version.creator_id)
+        ):
+            _attachment_current_evidence_invalid()
+        try:
+            role = EvidenceRole(version.role)
+            state = EvidenceVersionState(version.state)
+            review_state = EvidenceReviewState(version.review_state)
+        except (TypeError, ValueError):
+            _attachment_current_evidence_invalid()
+        if (
+            role in {EvidenceRole.RAW_ATTACHMENT, EvidenceRole.GENERATED_ATTACHMENT}
+            and state is not EvidenceVersionState.DRAFT
+        ):
+            _attachment_current_evidence_invalid()
+        if review_state is EvidenceReviewState.PENDING:
+            if version.reviewer_id is not None or version.reviewed_at is not None:
+                _attachment_current_evidence_invalid()
+        elif (
+            not _is_valid_evidence_identifier(version.reviewer_id)
+            or type(version.reviewed_at) is not datetime
+            or version.reviewed_at.tzinfo is not None
+            or version.reviewer_id == version.creator_id
+        ):
+            _attachment_current_evidence_invalid()
+        by_attachment[version.attachment_id] = AttachmentEvidenceReadProjection(
+            evidence_version_id=version.id,
+            role=role,
+            creator_id=version.creator_id,
+            reviewer_id=version.reviewer_id,
+            review_state=review_state,
+            is_current=True,
+            is_final=state is EvidenceVersionState.FINAL,
+        )
+    return by_attachment
+
+
 def _pop_reply_task_controls(updates: dict[str, object]) -> tuple[str | None, dict[str, date]]:
     action = updates.pop("reply_task_action", None)
     task_updates: dict[str, date] = {}
@@ -2709,10 +2813,48 @@ def persist_generated_attachment(
     package_usage_hint: str | None = None,
     is_archive_evidence: bool | None = None,
     is_receipt_evidence: bool | None = None,
+    actor_id: str | None = None,
+    template_id: str | None = None,
+    template_code: str | None = None,
 ) -> DocAttachment:
     document = db.execute(select(Document).where(Document.id == document_id)).scalar_one_or_none()
     if not document:
         raise_business_error("DOCUMENT_NOT_FOUND", "Document not found", status_code=404)
+
+    provenance_values = (actor_id, template_id, template_code)
+    register_generated_evidence = any(value is not None for value in provenance_values)
+    if register_generated_evidence and any(
+        not isinstance(value, str) or not value.strip() for value in provenance_values
+    ):
+        raise_business_error(
+            "GENERATED_ATTACHMENT_PROVENANCE_REQUIRED",
+            "Generated attachment provenance is required",
+            status_code=400,
+        )
+
+    normalized_actor_id = actor_id.strip() if register_generated_evidence else None
+    normalized_template_id = template_id.strip() if register_generated_evidence else None
+    normalized_template_code = template_code.strip() if register_generated_evidence else None
+    if register_generated_evidence:
+        doc_template = db.execute(
+            select(DocTemplate).where(DocTemplate.id == document.doc_template_id)
+        ).scalar_one_or_none()
+        if doc_template is None or _normalize_text(doc_template.code) != normalized_template_code:
+            raise_business_error(
+                "GENERATED_ATTACHMENT_TEMPLATE_MISMATCH",
+                "Generated attachment template identity does not match the document",
+                status_code=409,
+            )
+        resolved_template, _template_path = resolve_document_template_render_source(
+            db,
+            doc_template=doc_template,
+        )
+        if resolved_template.id != normalized_template_id:
+            raise_business_error(
+                "GENERATED_ATTACHMENT_TEMPLATE_MISMATCH",
+                "Generated attachment template source identity does not match",
+                status_code=409,
+            )
 
     normalized_name = Path(_normalize_text(file_name) or "").name
     if not normalized_name:
@@ -2724,42 +2866,78 @@ def persist_generated_attachment(
 
     stored_name = f"{uuid4().hex}_{normalized_name}"
     relative_path = f"attachments/{document_id}/{stored_name}"
-    dest_path = safe_join(storage_dir, relative_path)
-    ensure_dir(str(Path(dest_path).parent))
+    managed_file_path = Path(safe_join(storage_dir, relative_path))
+    try:
+        ensure_dir(str(managed_file_path.parent))
+        with open(managed_file_path, "wb") as output_file:
+            output_file.write(content_bytes)
+    except Exception as exc:
+        _remove_managed_attachment_file(managed_file_path, original_error=exc)
+        raise_business_error(
+            "ATTACHMENT_STORAGE_WRITE_FAILED",
+            "Attachment storage write failed",
+            status_code=500,
+        )
 
-    with open(dest_path, "wb") as output_file:
-        output_file.write(content_bytes)
-
-    manifest_metadata = _resolve_attachment_manifest_metadata(
-        official_file_role=official_file_role,
-        source_role_alias=source_role_alias,
-        external_upload_position=external_upload_position,
-        package_usage_hint=package_usage_hint,
-        is_archive_evidence=is_archive_evidence,
-        is_receipt_evidence=is_receipt_evidence,
-    )
-    attachment = DocAttachment(
-        id=str(uuid4()),
-        document_id=document_id,
-        file_name=normalized_name,
-        file_path=relative_path,
-        mime_type=mime_type or "application/octet-stream",
-        file_size=len(content_bytes),
-        official_file_role=manifest_metadata["official_file_role"],
-        source_role_alias=manifest_metadata["source_role_alias"],
-        external_upload_position=manifest_metadata["external_upload_position"],
-        content_hash=f"sha256:{sha256(content_bytes).hexdigest()}",
-        package_usage_hint=manifest_metadata["package_usage_hint"],
-        is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
-        is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
-    )
-    db.add(attachment)
-    if commit:
-        db.commit()
-        db.refresh(attachment)
-    else:
+    try:
+        manifest_metadata = _resolve_attachment_manifest_metadata(
+            official_file_role=official_file_role,
+            source_role_alias=source_role_alias,
+            external_upload_position=external_upload_position,
+            package_usage_hint=package_usage_hint,
+            is_archive_evidence=is_archive_evidence,
+            is_receipt_evidence=is_receipt_evidence,
+        )
+        attachment = DocAttachment(
+            id=str(uuid4()),
+            document_id=document_id,
+            file_name=normalized_name,
+            file_path=relative_path,
+            mime_type=mime_type or "application/octet-stream",
+            file_size=len(content_bytes),
+            official_file_role=manifest_metadata["official_file_role"],
+            source_role_alias=manifest_metadata["source_role_alias"],
+            external_upload_position=manifest_metadata["external_upload_position"],
+            content_hash=f"sha256:{sha256(content_bytes).hexdigest()}",
+            package_usage_hint=manifest_metadata["package_usage_hint"],
+            is_archive_evidence=bool(manifest_metadata["is_archive_evidence"]),
+            is_receipt_evidence=bool(manifest_metadata["is_receipt_evidence"]),
+        )
+        db.add(attachment)
         db.flush()
-    return attachment
+        if register_generated_evidence:
+            template_code_hash = sha256(normalized_template_code.encode()).hexdigest()[:16]
+            register_evidence_version(
+                RegisterEvidenceVersionCommand(
+                    case_id=document.case_id,
+                    document_id=document_id,
+                    attachment_id=attachment.id,
+                    lineage_key=(
+                        f"generated:{normalized_template_id}:{template_code_hash}:{attachment.id}"
+                    ),
+                    role=EvidenceRole.GENERATED_ATTACHMENT,
+                    state=EvidenceVersionState.DRAFT,
+                    creator_id=normalized_actor_id,
+                    content_hash=attachment.content_hash,
+                ),
+                db,
+            )
+            db.flush()
+        if commit:
+            db.commit()
+            db.refresh(attachment)
+        return attachment
+    except Exception as exc:
+        if commit:
+            db.rollback()
+        _remove_managed_attachment_file(managed_file_path, original_error=exc)
+        if isinstance(exc, BusinessError):
+            raise
+        raise_business_error(
+            "ATTACHMENT_PERSIST_FAILED",
+            "Attachment persistence failed",
+            status_code=500,
+        )
 
 
 def build_document_template_render_context(
@@ -2828,12 +3006,14 @@ def _create_document_wizard_attachments_from_rows(
     document: Document,
     doc_template: DocTemplate,
     row_attachment_rows: list[DocumentWizardAttachmentFinalRowIn],
-) -> None:
+    actor_id: str | None = None,
+) -> list[Path]:
     resolved_template, template_path = resolve_document_template_render_source(
         db, doc_template=doc_template
     )
     renderer = TemplateRenderer()
     base_context = build_document_template_render_context(db, document=document)
+    managed_generated_files: list[Path] = []
 
     for attachment_row in row_attachment_rows:
         if _normalize_text(attachment_row.case_id) != document.case_id:
@@ -2938,15 +3118,26 @@ def _create_document_wizard_attachments_from_rows(
                 status_code=409,
             )
 
-        persist_generated_attachment(
+        storage_dir = _backend_storage_dir()
+        provenance: dict[str, str] = {}
+        if actor_id is not None:
+            provenance = {
+                "actor_id": actor_id,
+                "template_id": resolved_template.id,
+                "template_code": attachment_row.template_code,
+            }
+        attachment = persist_generated_attachment(
             db,
             document_id=document.id,
             file_name=attachment_row.output_file_name,
             content_bytes=rendered_bytes,
-            storage_dir=str(_backend_storage_dir()),
+            storage_dir=str(storage_dir),
             mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             commit=False,
+            **provenance,
         )
+        managed_generated_files.append(Path(safe_join(str(storage_dir), attachment.file_path)))
+    return managed_generated_files
 
 
 def get_attachment_download(

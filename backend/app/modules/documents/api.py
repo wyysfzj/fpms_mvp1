@@ -25,6 +25,12 @@ from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
+from app.modules.documents.evidence_review_schemas import EvidenceVersionReviewIn
+from app.modules.documents.evidence_service import (
+    ReviewEvidenceVersionCommand,
+    ReviewEvidenceVersionResult,
+    review_evidence_version,
+)
 from app.modules.documents.export_excel import (
     DOCUMENT_LIST_EXPORT_MIME_TYPE,
     build_document_list_export_xlsx,
@@ -66,6 +72,7 @@ from app.modules.documents.service import (
     create_document_dispatch,
     create_document_wizard_batch,
     get_attachment_download,
+    get_current_attachment_evidence_versions,
     get_doc_template,
     get_document_dispatch,
     get_document_envelope_preview,
@@ -94,6 +101,37 @@ from app.modules.masterdata.clients.models import Client
 from app.modules.tasks.task_generation_service import TaskGenerationService
 
 router = APIRouter()
+
+
+@router.post(
+    "/documents/evidence-versions/{evidence_version_id}/review",
+    status_code=status.HTTP_200_OK,
+    response_model=ReviewEvidenceVersionResult,
+)
+def review_document_evidence_version(
+    evidence_version_id: str,
+    payload: EvidenceVersionReviewIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ReviewEvidenceVersionResult:
+    try:
+        result = review_evidence_version(
+            ReviewEvidenceVersionCommand(
+                case_id=payload.case_id,
+                evidence_version_id=evidence_version_id,
+                reviewer_id=current_user.id,
+                decision=payload.decision,
+                reviewed_at=payload.reviewed_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
 
 
 def _build_document_out(
@@ -588,9 +626,10 @@ def preview_document_wizard_attachment_candidates_endpoint(
 def create_document_wizard_batch_endpoint(
     payload: DocumentWizardBatchCreateIn,
     _perm: None = Depends(require_perm("Doc.Create")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> DocumentWizardBatchCreateOut:
-    created_rows = create_document_wizard_batch(db, payload)
+    created_rows = create_document_wizard_batch(db, payload, actor_id=current_user.id)
     case_ids = {document.case_id for _, document in created_rows}
     case_no_map: dict[str, str] = {}
     if case_ids:
@@ -757,10 +796,14 @@ def get_document(
     """
     document = get_document_service(db, document_id)
     case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
-    return _build_document_out(
-        document,
-        case_no=case.case_no if case else None,
-        attachments=[
+    evidence_versions = get_current_attachment_evidence_versions(
+        db,
+        document=document,
+    )
+    attachments = []
+    for attachment in document.attachments:
+        evidence_version = evidence_versions.get(attachment.id)
+        attachments.append(
             {
                 "id": attachment.id,
                 "document_id": attachment.document_id,
@@ -775,9 +818,35 @@ def get_document(
                 "package_usage_hint": attachment.package_usage_hint,
                 "is_archive_evidence": bool(attachment.is_archive_evidence),
                 "is_receipt_evidence": bool(attachment.is_receipt_evidence),
+                "evidence_version_id": (
+                    evidence_version.evidence_version_id
+                    if evidence_version is not None
+                    else None
+                ),
+                "role": (
+                    evidence_version.role.value if evidence_version is not None else None
+                ),
+                "creator_id": (
+                    evidence_version.creator_id if evidence_version is not None else None
+                ),
+                "reviewer_id": (
+                    evidence_version.reviewer_id if evidence_version is not None else None
+                ),
+                "review_state": (
+                    evidence_version.review_state.value
+                    if evidence_version is not None
+                    else None
+                ),
+                "is_current": bool(
+                    evidence_version is not None and evidence_version.is_current
+                ),
+                "is_final": bool(evidence_version is not None and evidence_version.is_final),
             }
-            for attachment in document.attachments
-        ],
+        )
+    return _build_document_out(
+        document,
+        case_no=case.case_no if case else None,
+        attachments=attachments,
     )
 
 
@@ -824,6 +893,15 @@ def update_document(
     "/documents/{document_id}/attachments",
     status_code=status.HTTP_201_CREATED,
     response_model=DocAttachmentOut,
+    response_model_exclude={
+        "evidence_version_id",
+        "role",
+        "creator_id",
+        "reviewer_id",
+        "review_state",
+        "is_current",
+        "is_final",
+    },
     summary="Upload a document attachment",
 )
 def add_attachment(

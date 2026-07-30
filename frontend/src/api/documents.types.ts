@@ -205,6 +205,30 @@ export interface Attachment {
     package_usage_hint?: string | null
     is_archive_evidence?: boolean
     is_receipt_evidence?: boolean
+    evidence_version_id?: string | null
+    role?: string | null
+    creator_id?: string | null
+    reviewer_id?: string | null
+    review_state?: 'PENDING' | 'APPROVED' | 'REJECTED' | null
+    is_current?: boolean
+    is_final?: boolean
+}
+
+export interface AttachmentEvidenceProjection {
+    evidence_version_id: string
+    role: string
+    creator_id: string
+    reviewer_id: string | null
+    review_state: 'PENDING' | 'APPROVED' | 'REJECTED'
+    is_current: boolean
+    is_final: boolean
+}
+
+export interface DocumentEvidenceReviewPayload {
+    case_id: string
+    decision: 'APPROVE' | 'REJECT'
+    reviewed_at: string
+    idempotency_key: string
 }
 
 export interface AttachmentUploadMetadata {
