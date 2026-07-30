@@ -1302,16 +1302,16 @@
     {
       "catalog_id": "FPMS-V8-PAYLIST-PAYMENT-EXPORT-DECOUPLE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-PAYLIST-EXPORT-ARTIFACT-READ-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2784,40 +2784,45 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "114d26b8a4967a517e1ae6c4da73692d921ad020",
-        "f89e67e60db95ce34046acc84aaafd53703f3fea"
+        "f89e67e60db95ce34046acc84aaafd53703f3fea",
+        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/tests/test_v8_official_payment_evidence_activity_adapter.py"
       ],
-      "tree_sha256": "61e7c269b38c4ca65c012213363f7b0e800cfced2cbce5fbb94aa6d8dd8ca019",
+      "tree_sha256": "b8c42f9742c342941966c1df2e22c964db9822ef2f5cbd5aa7d47dcfe6fae9e8",
       "tests": [
         "pytest -q tests/test_v8_official_payment_evidence_activity_adapter.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "independent successor re-attestation with certificate, GovPayment and row125 tests from backend cwd (3 passed)",
-        "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)"
+        "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)",
+        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md"
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-PAYLIST-INTERNAL-EXPORT-SERVICE",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "f89e67e60db95ce34046acc84aaafd53703f3fea"
+        "f89e67e60db95ce34046acc84aaafd53703f3fea",
+        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
+        "backend/app/modules/annuity/export_excel.py",
         "backend/tests/test_v8_internal_pay_list_export.py"
       ],
-      "tree_sha256": "f95f562d3eec67b0eacf1a8f4a7cbbc585c0848dd05885b3e609651c2de87b4f",
+      "tree_sha256": "306223572b27d81838ccf5b9e2828f904f0daa9d5f5e005d04942d4c10df7195",
       "tests": [
         "pytest -q tests/test_v8_internal_pay_list_export.py from backend cwd (13 passed)",
-        "independent row159, row160, row124 and row125 tranche from backend cwd (19 passed)"
+        "independent row159, row160, row124 and row125 tranche from backend cwd (19 passed)",
+        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md"
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
@@ -2883,6 +2888,25 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755"
+      ],
+      "paths": [
+        "backend/app/modules/annuity/service.py",
+        "backend/tests/test_v8_pay_list_export_artifact_read.py",
+        "backend/tests/test_v8_pay_list_payment_export_decouple.py"
+      ],
+      "tree_sha256": "8cc495cc87c5ad48cea305142d7eaa28e9bdc1cf11d2f497cc70fa012cd18c51",
+      "tests": [
+        "pytest -q rows161/162 plus row159/160 and row124/125 successor files from backend cwd (25 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md"
     }
   ]
 }

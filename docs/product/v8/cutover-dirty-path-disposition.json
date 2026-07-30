@@ -14,7 +14,7 @@
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
     "V8-ADOPT-ANNUITY-RATE-SOURCES": 36,
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
-    "V8-PAYLIST-INTERNAL-EXPORT-SERVICE": 2,
+    "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 3,
     "V8-ADOPT-LIFECYCLE-CENTER": 23,
     "V8-ADOPT-DOCUMENT-EVIDENCE": 47,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
@@ -27,7 +27,8 @@
     "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
     "V8-ADOPT-DECISION-GATES": 2,
-    "V8-ADOPT-PAYLIST-PAYMENT": 8,
+    "V8-PAYLIST-INTERNAL-EXPORT-SERVICE": 1,
+    "V8-ADOPT-PAYLIST-PAYMENT": 6,
     "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 1,
     "C3-LEAN-GOVERNANCE-ADOPTION": 2
   },
@@ -83,8 +84,8 @@
     {
       "path": "backend/app/modules/annuity/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-PAYLIST-INTERNAL-EXPORT-SERVICE",
-      "rationale": "internal PayList export service and preserved successor adapters"
+      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList export/payment boundary story"
     },
     {
       "path": "backend/app/modules/cases/lifecycle_activity_service.py",
@@ -959,14 +960,14 @@
     {
       "path": "backend/tests/test_v8_pay_list_export_artifact_read.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
-      "rationale": "payment and PayList boundary behavior"
+      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList export/payment boundary story"
     },
     {
       "path": "backend/tests/test_v8_pay_list_payment_export_decouple.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
-      "rationale": "payment and PayList boundary behavior"
+      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList export/payment boundary story"
     },
     {
       "path": "backend/tests/test_v8_pct_fee_policy.py",
