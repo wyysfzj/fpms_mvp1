@@ -1943,18 +1943,10 @@ def mark_pay_list_paid(
     paid_date: date,
     actor_id: str | None = None,
 ) -> dict[str, Any]:
-    """Record header paid date and advance an exported pay list to PAID."""
+    """Record header paid date after every payment row has payment evidence."""
     pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one_or_none()
     if pay_list is None:
         raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
-
-    if (pay_list.status or "").strip().upper() != "EXPORTED":
-        raise_business_error(
-            "PAY_LIST_STATE_CONFLICT",
-            "Pay list can only be marked paid from EXPORTED status",
-            details={"status": pay_list.status},
-            status_code=409,
-        )
 
     payments = (
         db.execute(
@@ -2102,31 +2094,44 @@ def list_pay_lists(
 
 def get_pay_list_detail(db: Session, *, pay_list_id: int) -> dict[str, Any]:
     """Return one pay-list header with its associated gov payment rows."""
-    pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one_or_none()
-    if pay_list is None:
-        raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
+    with db.no_autoflush:
+        pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one_or_none()
+        if pay_list is None:
+            raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
 
-    gov_payments = (
-        db.execute(
-            select(GovPayment)
-            .where(GovPayment.pay_list_id == pay_list.id)
-            .order_by(GovPayment.id.asc())
+        export_artifacts = (
+            db.execute(
+                select(PayListExportArtifact)
+                .where(PayListExportArtifact.pay_list_id == pay_list.id)
+                .order_by(
+                    PayListExportArtifact.generated_at.asc(),
+                    PayListExportArtifact.id.asc(),
+                )
+            )
+            .scalars()
+            .all()
         )
-        .scalars()
-        .all()
-    )
+        gov_payments = (
+            db.execute(
+                select(GovPayment)
+                .where(GovPayment.pay_list_id == pay_list.id)
+                .order_by(GovPayment.id.asc())
+            )
+            .scalars()
+            .all()
+        )
 
-    case_ids = {gov_payment.case_id for gov_payment in gov_payments if gov_payment.case_id}
-    case_no_by_id: dict[str, str | None] = {}
-    if case_ids:
-        case_no_by_id = {
-            row[0]: row[1]
-            for row in db.execute(
-                select(Case.id, Case.case_no).where(Case.id.in_(case_ids))
-            ).all()
-        }
+        case_ids = {gov_payment.case_id for gov_payment in gov_payments if gov_payment.case_id}
+        case_no_by_id: dict[str, str | None] = {}
+        if case_ids:
+            case_no_by_id = {
+                row[0]: row[1]
+                for row in db.execute(
+                    select(Case.id, Case.case_no).where(Case.id.in_(case_ids))
+                ).all()
+            }
 
-    return {
+    result = {
         "pay_list": {
             "id": pay_list.id,
             "pay_list_no": pay_list.pay_list_no,
@@ -2176,6 +2181,38 @@ def get_pay_list_detail(db: Session, *, pay_list_id: int) -> dict[str, Any]:
             for gov_payment in gov_payments
         ],
     }
+
+    if export_artifacts:
+        result["export_artifacts"] = [
+            {
+                "id": artifact.id,
+                "pay_list_id": artifact.pay_list_id,
+                "kind": artifact.kind,
+                "status": artifact.status,
+                "content_sha256": artifact.content_sha256,
+                "managed_storage_path": artifact.managed_storage_path,
+                "template_version": artifact.template_version,
+                "generated_by": artifact.generated_by,
+                "generated_at": artifact.generated_at,
+                "idempotency_key": artifact.idempotency_key,
+                "official_acceptance_evidence_ref": artifact.official_acceptance_evidence_ref,
+                "official_acceptance_evidence_hash": artifact.official_acceptance_evidence_hash,
+                "official_accepted_at": artifact.official_accepted_at,
+                "updated_at": artifact.updated_at,
+            }
+            for artifact in export_artifacts
+        ]
+
+    official_workbook = {
+        "official_upload_template_status": pay_list.official_upload_template_status,
+        "official_upload_template_name": pay_list.official_upload_template_name,
+        "official_upload_batch_limit": pay_list.official_upload_batch_limit,
+        "official_pay_list_boundary_note": pay_list.official_pay_list_boundary_note,
+    }
+    if any(value is not None for value in official_workbook.values()):
+        result["official_workbook"] = official_workbook
+
+    return result
 
 
 def _recompute_pay_list_status(pay_list: PayList, payments: list[GovPayment]) -> None:
