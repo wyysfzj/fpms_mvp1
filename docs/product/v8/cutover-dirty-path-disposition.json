@@ -15,7 +15,7 @@
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
     "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 3,
     "V8-ADOPT-LIFECYCLE-CENTER": 22,
-    "V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION": 1,
+    "V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION": 1,
     "V8-ADOPT-DOCUMENT-EVIDENCE": 47,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
@@ -98,8 +98,8 @@
     {
       "path": "backend/app/modules/cases/lifecycle_rules.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION",
-      "rationale": "current-reviewed filing lifecycle sequence and fail-closed evidence identity"
+      "story_id": "V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed prosecution notice lifecycle, deadline and evidence rules"
     },
     {
       "path": "backend/app/modules/cases/lifecycle_service.py",
