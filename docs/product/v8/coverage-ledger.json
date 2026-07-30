@@ -390,48 +390,48 @@
     {
       "catalog_id": "FPMS-V8-DE-ATTACHMENT-EVIDENCE-ATOMIC-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-GENERATED-ATTACHMENT-EVIDENCE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-REVIEW-API-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-ATTACHMENT-EVIDENCE-READ-PROJECTION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-REVIEW-FE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-DE-REVIEW-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2687,7 +2687,8 @@
         "4d85a56e9990107245c0f448e9d7ecb11c3fb5a3",
         "114d26b8a4967a517e1ae6c4da73692d921ad020",
         "f89e67e60db95ce34046acc84aaafd53703f3fea",
-        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755"
+        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
+        "895bfc22c6642baacfce2ae6a83916af0dbc3ade"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
@@ -2695,16 +2696,17 @@
         "backend/tests/test_v8_certificate_archived_activity.py",
         "backend/tests/test_v8_gov_payment_activity_adapter.py"
       ],
-      "tree_sha256": "e3788d75ffe844ee66292083e62dff2ec9642458c2dda739206acba387f0d72d",
+      "tree_sha256": "3e61a9d8fdcf924eef6660e784bae900c2910f81e536bf587414824718b08491",
       "tests": [
         "pytest -q tests/test_v8_certificate_archived_activity.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "successor re-attestation with row125 focused test from backend cwd (3 passed)",
         "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)",
-        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)"
+        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)",
+        "independent document-evidence successor review: shared service additions left the two activity adapters unchanged; exact document tranche 92 passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
@@ -3046,6 +3048,38 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "895bfc22c6642baacfce2ae6a83916af0dbc3ade"
+      ],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-document-evidence-review-ui.spec.ts",
+        "backend/app/modules/documents/api.py",
+        "backend/app/modules/documents/evidence_review_schemas.py",
+        "backend/app/modules/documents/schemas.py",
+        "backend/app/modules/documents/service.py",
+        "backend/tests/test_v8_attachment_evidence_atomic_adapter.py",
+        "backend/tests/test_v8_attachment_evidence_read_projection.py",
+        "backend/tests/test_v8_document_evidence_review_api.py",
+        "backend/tests/test_v8_generated_attachment_evidence_adapter.py",
+        "frontend/src/api/contracts/v8_document_evidence_review.contract.ts",
+        "frontend/src/api/documents.ts",
+        "frontend/src/api/documents.types.ts",
+        "frontend/src/modules/documents/components/AttachmentList.vue"
+      ],
+      "tree_sha256": "83dcb5fba47307c3aa90cffc653c4da46790be7d9a25673467756f6e3b799616",
+      "tests": [
+        "pytest -q exact four-file document attachment/evidence/review backend tranche from backend cwd (92 passed)",
+        "isolated TypeScript contract and exact-file ESLint passed",
+        "playwright test v8-document-evidence-review-ui.spec.ts --project=chromium --workers=1 (3 passed)",
+        "scoped Ruff and exact two-tree diff-check passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md"
     }
   ]
 }
