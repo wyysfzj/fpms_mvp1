@@ -3,15 +3,16 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from datetime import date, datetime
 from decimal import Decimal
 from typing import get_type_hints
-from unittest.mock import patch
 
 import pytest
 from sqlalchemy import event, select
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql import Select
 
 from app.core.errors import BusinessError
 from app.modules.annuity.models import GovPayment, PayList
@@ -23,7 +24,11 @@ from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
     FeeObligationDraftItemLink,
+)
+from app.modules.fees.models import (
     FeeObligation as FeeObligationModel,
+)
+from app.modules.fees.models import (
     FeeObligationLine as FeeObligationLineModel,
 )
 from app.modules.fees.obligation_contracts import (
@@ -34,8 +39,8 @@ from app.modules.fees.obligation_contracts import (
     FeeObligationDraftStatus,
     FeeObligationStatus,
     FeeOfficialEvidenceStatus,
-    FeePaymentStatus,
     FeePayListStatus,
+    FeePaymentStatus,
     FeeSourceStatus,
 )
 from app.modules.masterdata.clients.models import Client
@@ -47,6 +52,9 @@ SOURCE_ID = "source-obligation-detail"
 RECOGNITION_ID = "recognition-obligation-detail"
 DOCUMENT_ID = "document-obligation-detail"
 OBLIGATION_ID = "obligation-detail"
+CURRENT_SOURCE_ID = "source-obligation-detail-current"
+CURRENT_RECOGNITION_ID = "recognition-obligation-detail-current"
+CURRENT_OBLIGATION_ID = "obligation-detail-current"
 EFFECTIVE_AT = datetime(2026, 7, 14, 12, 0)
 
 
@@ -167,9 +175,10 @@ def _seed_valid(
     obligation_id: str = OBLIGATION_ID,
     obligation_status: FeeObligationStatus = FeeObligationStatus.RECOGNIZED,
 ) -> tuple[FeeObligationModel, tuple[FeeObligationLineModel, ...]]:
+    transaction.add(Client(id=CLIENT_ID, client_code="DETAIL", name_cn="详情客户"))
+    transaction.flush()
     transaction.add_all(
         (
-            Client(id=CLIENT_ID, client_code="DETAIL", name_cn="详情客户"),
             Case(id=CASE_ID, case_no="DETAIL-1", client_id=CLIENT_ID, status="OPEN"),
             Case(id=OTHER_CASE_ID, case_no="DETAIL-2", client_id=CLIENT_ID, status="OPEN"),
         )
@@ -318,6 +327,94 @@ def _seed_pay_list_relation(
     transaction.expunge_all()
 
 
+def _seed_current_child(transaction: Session) -> None:
+    transaction.add(
+        CaseActivityEvent(
+            id=CURRENT_SOURCE_ID,
+            case_id=CASE_ID,
+            sequence=3,
+            lane=ActivityLane.DOCUMENT.value,
+            activity_type="OFFICIAL_FEE_SOURCE_CONFIRMED",
+            occurred_at=EFFECTIVE_AT,
+            effective_at=EFFECTIVE_AT,
+            confirmation_status=ConfirmationStatus.CONFIRMED.value,
+            actor_id="actor-obligation-detail",
+            reviewer_id="reviewer-obligation-detail",
+            idempotency_key="source:obligation-detail:current",
+            payload_json='{"source":"current"}',
+        )
+    )
+    transaction.flush()
+    lines = (
+        _line(
+            line_id="line-detail-current-z",
+            fee_code="GOV-Z",
+            fee_name="后置费",
+            fee_year_key=2,
+            obligation_id=CURRENT_OBLIGATION_ID,
+            source_id=CURRENT_SOURCE_ID,
+        ),
+        _line(
+            line_id="line-detail-current-a",
+            fee_code="GOV-A",
+            fee_name="前置费",
+            fee_year_key=1,
+            obligation_id=CURRENT_OBLIGATION_ID,
+            source_id=CURRENT_SOURCE_ID,
+        ),
+    )
+    transaction.add_all(
+        (
+            FeeObligationModel(
+                id=CURRENT_OBLIGATION_ID,
+                case_id=CASE_ID,
+                source_activity_id=CURRENT_SOURCE_ID,
+                source_document_id=DOCUMENT_ID,
+                fee_domain=FeeDomain.GOV.value,
+                obligation_type="PATENT_APPLICATION",
+                obligation_status=FeeObligationStatus.RECOGNIZED.value,
+                due_date=date(2026, 8, 14),
+                currency="CNY",
+                source_status=FeeSourceStatus.VERIFIED.value,
+                client_instruction_status=FeeClientInstructionStatus.PAY.value,
+                draft_status=FeeObligationDraftStatus.CREATED.value,
+                payment_status=FeePaymentStatus.PAID.value,
+                official_evidence_status=FeeOfficialEvidenceStatus.VERIFIED.value,
+                supersedes_obligation_id=OBLIGATION_ID,
+                supersede_reason="更正官费事实",
+            ),
+            *lines,
+        )
+    )
+    transaction.flush()
+    transaction.add(
+        CaseActivityEvent(
+            id=CURRENT_RECOGNITION_ID,
+            case_id=CASE_ID,
+            sequence=4,
+            lane=ActivityLane.FEE.value,
+            activity_type="FEE_OBLIGATION_RECOGNIZED",
+            source_activity_id=CURRENT_SOURCE_ID,
+            occurred_at=EFFECTIVE_AT,
+            effective_at=EFFECTIVE_AT,
+            confirmation_status=ConfirmationStatus.CONFIRMED.value,
+            actor_id="actor-obligation-detail",
+            reviewer_id="reviewer-obligation-detail",
+            idempotency_key="recognize:obligation-detail:current",
+            supersedes_event_id=RECOGNITION_ID,
+            payload_json=_canonical_payload(
+                obligation_id=CURRENT_OBLIGATION_ID,
+                source_id=CURRENT_SOURCE_ID,
+                lines=lines,
+                supersedes_obligation_id=OBLIGATION_ID,
+                supersede_reason="更正官费事实",
+            ),
+        )
+    )
+    transaction.commit()
+    transaction.expunge_all()
+
+
 def _read(transaction: Session, obligation_id: object = OBLIGATION_ID) -> FeeObligation:
     return obligation_service.get_fee_obligation(obligation_id, transaction)  # type: ignore[arg-type]
 
@@ -361,6 +458,95 @@ class _SelectSpy:
     ) -> None:
         if statement.lstrip().upper().startswith("SELECT"):
             self.statements.append(statement)
+
+
+class _NoAutoflushProbe(AbstractContextManager[None]):
+    def __init__(self, owner: _ReadSessionProbe) -> None:
+        self.owner = owner
+        self.wrapped = owner.transaction.no_autoflush
+
+    def __enter__(self) -> None:
+        self.owner.no_autoflush_enters += 1
+        self.wrapped.__enter__()
+
+    def __exit__(self, *args: object) -> None:
+        self.wrapped.__exit__(*args)
+        self.owner.no_autoflush_exits += 1
+
+
+class _MappingResultProbe:
+    def __init__(self, owner: _ReadSessionProbe, result: object) -> None:
+        self.owner = owner
+        self.result = result
+
+    def mappings(self) -> object:
+        self.owner.mapping_calls += 1
+        return self.result.mappings()  # type: ignore[attr-defined,no-any-return]
+
+
+class _ReadSessionProbe:
+    def __init__(self, transaction: Session) -> None:
+        self.transaction = transaction
+        self.statements: list[Select[tuple[object, ...]]] = []
+        self.mapping_calls = 0
+        self.no_autoflush_enters = 0
+        self.no_autoflush_exits = 0
+
+    @property
+    def no_autoflush(self) -> _NoAutoflushProbe:
+        return _NoAutoflushProbe(self)
+
+    def execute(self, statement: Select[tuple[object, ...]]) -> _MappingResultProbe:
+        self.statements.append(statement)
+        return _MappingResultProbe(self, self.transaction.execute(statement))
+
+    def add(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("detail read called add")
+
+    def add_all(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("detail read called add_all")
+
+    def flush(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("detail read called flush")
+
+    def commit(self) -> None:
+        raise AssertionError("detail read called commit")
+
+    def rollback(self) -> None:
+        raise AssertionError("detail read called rollback")
+
+    def begin(self) -> None:
+        raise AssertionError("detail read called begin")
+
+    def begin_nested(self) -> None:
+        raise AssertionError("detail read called begin_nested")
+
+    def delete(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("detail read called delete")
+
+    def refresh(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("detail read called refresh")
+
+    def expire(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("detail read called expire")
+
+    def expire_all(self) -> None:
+        raise AssertionError("detail read called expire_all")
+
+
+class _ForbiddenClock:
+    @classmethod
+    def now(cls, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("detail read called clock")
+
+
+def _session_state(transaction: Session) -> dict[str, object]:
+    return {
+        "new": {id(item) for item in transaction.new},
+        "dirty": {id(item) for item in transaction.dirty},
+        "deleted": {id(item) for item in transaction.deleted},
+        "identity_map": {key: id(value) for key, value in transaction.identity_map.items()},
+    }
 
 
 def test_get_fee_obligation_exposes_exact_synchronous_public_contract() -> None:
@@ -577,9 +763,7 @@ def test_missing_recognition_is_stored_state_409_not_request_404(
     with session_factory() as transaction:
         _seed_valid(transaction)
         transaction.execute(
-            CaseActivityEvent.__table__.delete().where(
-                CaseActivityEvent.id == RECOGNITION_ID
-            )
+            CaseActivityEvent.__table__.delete().where(CaseActivityEvent.id == RECOGNITION_ID)
         )
         transaction.commit()
 
@@ -652,6 +836,278 @@ def test_duplicate_recognition_fails_closed(session_factory: sessionmaker) -> No
             code="FEE_OBLIGATION_STORED_STATE_INVALID",
             status_code=409,
         )
+
+
+def test_recognition_cannot_be_its_own_source(session_factory: sessionmaker) -> None:
+    with session_factory() as transaction:
+        _seed_valid(transaction)
+        lines = tuple(
+            transaction.scalars(
+                select(FeeObligationLineModel)
+                .where(FeeObligationLineModel.obligation_id == OBLIGATION_ID)
+                .order_by(FeeObligationLineModel.fee_code, FeeObligationLineModel.fee_year_key)
+            )
+        )
+        transaction.execute(
+            FeeObligationModel.__table__.update()
+            .where(FeeObligationModel.id == OBLIGATION_ID)
+            .values(source_activity_id=RECOGNITION_ID)
+        )
+        for line in lines:
+            transaction.execute(
+                FeeObligationLineModel.__table__.update()
+                .where(FeeObligationLineModel.id == line.id)
+                .values(
+                    source_activity_id=RECOGNITION_ID,
+                    current_identity_key=_identity(
+                        CASE_ID,
+                        RECOGNITION_ID,
+                        line.fee_code,
+                        line.fee_year_key,
+                    ),
+                )
+            )
+        transaction.execute(
+            CaseActivityEvent.__table__.update()
+            .where(CaseActivityEvent.id == RECOGNITION_ID)
+            .values(
+                source_activity_id=RECOGNITION_ID,
+                payload_json=_canonical_payload(
+                    source_id=RECOGNITION_ID,
+                    lines=lines,
+                ),
+            )
+        )
+        transaction.commit()
+
+        _expect_error(
+            lambda: _read(transaction),
+            code="FEE_OBLIGATION_STORED_STATE_INVALID",
+            status_code=409,
+        )
+
+
+def test_source_activity_must_precede_recognition(session_factory: sessionmaker) -> None:
+    with session_factory() as transaction:
+        _seed_valid(transaction)
+        transaction.execute(
+            CaseActivityEvent.__table__.update()
+            .where(CaseActivityEvent.id == SOURCE_ID)
+            .values(sequence=3)
+        )
+        transaction.commit()
+
+        _expect_error(
+            lambda: _read(transaction),
+            code="FEE_OBLIGATION_STORED_STATE_INVALID",
+            status_code=409,
+        )
+
+
+def test_valid_historical_obligation_returns_its_own_detail_with_current_child_linkage(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        _seed_valid(transaction, obligation_status=FeeObligationStatus.SUPERSEDED)
+        _seed_current_child(transaction)
+
+        with _SelectSpy(transaction) as spy:
+            result = _read(transaction)
+
+    assert result.id == OBLIGATION_ID
+    assert result.source.source_activity_id == SOURCE_ID
+    assert result.statuses.obligation_status is FeeObligationStatus.SUPERSEDED
+    assert tuple(line.id for line in result.lines) == ("line-detail-a", "line-detail-z")
+    assert result.supersedes_obligation_id is None
+    assert len(spy.statements) == 4
+
+
+def test_valid_current_child_binds_to_persisted_prior_obligation(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        _seed_valid(transaction, obligation_status=FeeObligationStatus.SUPERSEDED)
+        _seed_current_child(transaction)
+
+        with _SelectSpy(transaction) as spy:
+            result = _read(transaction, CURRENT_OBLIGATION_ID)
+
+    assert result.id == CURRENT_OBLIGATION_ID
+    assert result.source.source_activity_id == CURRENT_SOURCE_ID
+    assert result.statuses.obligation_status is FeeObligationStatus.RECOGNIZED
+    assert result.supersedes_obligation_id == OBLIGATION_ID
+    assert tuple(line.id for line in result.lines) == (
+        "line-detail-current-a",
+        "line-detail-current-z",
+    )
+    assert len(spy.statements) == 4
+
+
+@pytest.mark.parametrize("corruption", ("missing_prior", "cross_case_prior"))
+def test_current_child_rejects_missing_or_cross_case_persisted_prior(
+    session_factory: sessionmaker,
+    corruption: str,
+) -> None:
+    with session_factory() as transaction:
+        _seed_valid(transaction, obligation_status=FeeObligationStatus.SUPERSEDED)
+        _seed_current_child(transaction)
+        transaction.connection().exec_driver_sql("PRAGMA foreign_keys=OFF")
+        if corruption == "missing_prior":
+            missing_prior_id = "missing-prior-obligation"
+            current_lines = tuple(
+                transaction.scalars(
+                    select(FeeObligationLineModel)
+                    .where(FeeObligationLineModel.obligation_id == CURRENT_OBLIGATION_ID)
+                    .order_by(
+                        FeeObligationLineModel.fee_code,
+                        FeeObligationLineModel.fee_year_key,
+                    )
+                )
+            )
+            prior_payload_json = transaction.scalar(
+                select(CaseActivityEvent.payload_json).where(CaseActivityEvent.id == RECOGNITION_ID)
+            )
+            assert prior_payload_json is not None
+            prior_payload = json.loads(prior_payload_json)
+            prior_payload["obligation_id"] = missing_prior_id
+            transaction.execute(
+                FeeObligationModel.__table__.update()
+                .where(FeeObligationModel.id == CURRENT_OBLIGATION_ID)
+                .values(supersedes_obligation_id=missing_prior_id)
+            )
+            transaction.execute(
+                CaseActivityEvent.__table__.update()
+                .where(CaseActivityEvent.id == RECOGNITION_ID)
+                .values(
+                    payload_json=json.dumps(
+                        prior_payload,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    )
+                )
+            )
+            transaction.execute(
+                CaseActivityEvent.__table__.update()
+                .where(CaseActivityEvent.id == CURRENT_RECOGNITION_ID)
+                .values(
+                    payload_json=_canonical_payload(
+                        obligation_id=CURRENT_OBLIGATION_ID,
+                        source_id=CURRENT_SOURCE_ID,
+                        lines=current_lines,
+                        supersedes_obligation_id=missing_prior_id,
+                        supersede_reason="更正官费事实",
+                    )
+                )
+            )
+        else:
+            transaction.execute(
+                FeeObligationModel.__table__.update()
+                .where(FeeObligationModel.id == OBLIGATION_ID)
+                .values(case_id=OTHER_CASE_ID)
+            )
+        transaction.commit()
+        transaction.connection().exec_driver_sql("PRAGMA foreign_keys=ON")
+
+        _expect_error(
+            lambda: _read(transaction, CURRENT_OBLIGATION_ID),
+            code="FEE_OBLIGATION_STORED_STATE_INVALID",
+            status_code=409,
+        )
+
+
+@pytest.mark.parametrize(
+    ("table", "row_id", "values"),
+    (
+        (
+            FeeObligationModel.__table__,
+            CURRENT_OBLIGATION_ID,
+            {"obligation_status": FeeObligationStatus.SUPERSEDED.value},
+        ),
+        (
+            CaseActivityEvent.__table__,
+            CURRENT_RECOGNITION_ID,
+            {"supersedes_event_id": None},
+        ),
+    ),
+)
+def test_historical_obligation_rejects_broken_current_child_linkage(
+    session_factory: sessionmaker,
+    table: object,
+    row_id: str,
+    values: Mapping[str, object],
+) -> None:
+    with session_factory() as transaction:
+        _seed_valid(transaction, obligation_status=FeeObligationStatus.SUPERSEDED)
+        _seed_current_child(transaction)
+        transaction.execute(table.update().where(table.c.id == row_id).values(**values))  # type: ignore[attr-defined]
+        transaction.commit()
+
+        _expect_error(
+            lambda: _read(transaction),
+            code="FEE_OBLIGATION_STORED_STATE_INVALID",
+            status_code=409,
+        )
+
+
+@pytest.mark.parametrize(
+    ("obligation_id", "expected_selects"),
+    ((OBLIGATION_ID, 4), ("missing-obligation", 1)),
+)
+def test_read_only_query_boundary_preserves_dirty_session_and_identity_map(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+    obligation_id: str,
+    expected_selects: int,
+) -> None:
+    with session_factory() as transaction:
+        _seed_valid(transaction)
+        case = transaction.get(Case, CASE_ID)
+        document = transaction.get(Document, DOCUMENT_ID)
+        assert case is not None
+        assert document is not None
+        pending = Client(id="client-detail-pending", client_code="PENDING", name_cn="待处理客户")
+        transaction.add(pending)
+        case.status = "DIRTY-PENDING"
+        transaction.delete(document)
+        before = _session_state(transaction)
+        assert before["new"] and before["dirty"] and before["deleted"]
+
+        probe = _ReadSessionProbe(transaction)
+        monkeypatch.setattr(obligation_service, "datetime", _ForbiddenClock)
+        if expected_selects == 1:
+            _expect_error(
+                lambda: obligation_service.get_fee_obligation(
+                    obligation_id,
+                    probe,  # type: ignore[arg-type]
+                ),
+                code="FEE_OBLIGATION_NOT_FOUND",
+                status_code=404,
+            )
+        else:
+            result = obligation_service.get_fee_obligation(
+                obligation_id,
+                probe,  # type: ignore[arg-type]
+            )
+            assert result.id == OBLIGATION_ID
+
+        assert _session_state(transaction) == before
+        assert probe.no_autoflush_enters == 1
+        assert probe.no_autoflush_exits == 1
+        assert probe.mapping_calls == expected_selects
+        assert len(probe.statements) == expected_selects
+        sql = tuple(" ".join(str(statement).split()) for statement in probe.statements)
+        assert "FROM t_fee_obligation LEFT OUTER JOIN t_document" in sql[0]
+        assert "FOR UPDATE" not in sql[0]
+        if expected_selects == 4:
+            assert "FROM t_fee_obligation_line" in sql[1]
+            assert (
+                "ORDER BY t_fee_obligation_line.fee_code, "
+                "t_fee_obligation_line.fee_year_key, t_fee_obligation_line.id"
+            ) in sql[1]
+            assert "FROM t_case_activity_event" in sql[2]
+            assert "FROM t_fee_obligation_draft_item_link" in sql[3]
 
 
 def test_complete_pay_list_chain_sets_created_without_status_inference(
