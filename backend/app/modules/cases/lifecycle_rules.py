@@ -2089,6 +2089,648 @@ def _valid_application_rejection_evidence_refs(
     )
 
 
+def _application_withdrawal_confirmed(
+    command: LifecycleEventCommand,
+    previous_projection: LifecycleProjection,
+    transaction: Session,
+) -> LifecycleRuleDecision | None:
+    del transaction
+    if (
+        not _valid_application_withdrawal_command(command)
+        or not _valid_ungranted_application_projection(previous_projection)
+    ):
+        return None
+    return LifecycleRuleDecision(
+        current_projection=LifecycleProjection(
+            business_stage=BusinessStage.CLOSED,
+            official_procedure_stage=OfficialProcedureStage.PROCEDURE_CLOSED,
+            legal_status=LegalStatus.APPLICATION_WITHDRAWN,
+            lifecycle_verification_status=ConfirmationStatus.CONFIRMED,
+        ),
+        oa_sequence=None,
+    )
+
+
+def _valid_application_withdrawal_command(command: object) -> bool:
+    if type(command) is not LifecycleEventCommand:
+        return False
+    required_strings = (
+        (command.case_id, 36),
+        (command.event_type, 64),
+        (command.actor_id, 36),
+        (command.idempotency_key, 128),
+    )
+    if any(
+        type(value) is not str
+        or not value
+        or value.strip() != value
+        or len(value) > limit
+        for value, limit in required_strings
+    ):
+        return False
+    return (
+        command.event_type == "APPLICATION_WITHDRAWAL_CONFIRMED"
+        and type(command.lane) is ActivityLane
+        and command.lane is ActivityLane.LIFECYCLE
+        and type(command.confirmation_status) is ConfirmationStatus
+        and command.confirmation_status is ConfirmationStatus.CONFIRMED
+        and type(command.evidence_refs) is tuple
+        and _valid_application_withdrawal_evidence_refs(
+            command.case_id,
+            command.evidence_refs,
+        )
+        and type(command.payload) is dict
+        and not command.payload
+        and _naive_datetime(command.effective_at)
+        and (command.occurred_at is None or _naive_datetime(command.occurred_at))
+        and command.source_activity_id is None
+        and command.supersedes_event_id is None
+    )
+
+
+def _valid_application_withdrawal_evidence_refs(
+    case_id: str,
+    evidence_refs: tuple[EvidenceReference, ...],
+) -> bool:
+    if len(evidence_refs) != 2:
+        return False
+    expected_kinds = (
+        "APPLICATION_WITHDRAWAL_REQUEST",
+        "APPLICATION_WITHDRAWAL_OFFICIAL_CONFIRMATION",
+    )
+    return all(
+        type(reference) is EvidenceReference
+        and reference.case_id == case_id
+        and type(reference.evidence_kind) is str
+        and reference.evidence_kind == expected_kind
+        and type(reference.object_type) is str
+        and reference.object_type == "DocumentEvidenceVersion"
+        and _canonical_identifier(reference.object_id)
+        and type(reference.content_hash) is str
+        and fullmatch(r"sha256:[0-9a-f]{64}", reference.content_hash) is not None
+        and _naive_datetime(reference.captured_at)
+        for reference, expected_kind in zip(
+            evidence_refs,
+            expected_kinds,
+            strict=True,
+        )
+    ) and evidence_refs[0].object_id != evidence_refs[1].object_id
+
+
+def _valid_ungranted_application_projection(previous_projection: object) -> bool:
+    if (
+        type(previous_projection) is not LifecycleProjection
+        or previous_projection.legal_status is not LegalStatus.APPLICATION_PENDING
+        or previous_projection.lifecycle_verification_status
+        is not ConfirmationStatus.CONFIRMED
+    ):
+        return False
+    return (
+        previous_projection.business_stage,
+        previous_projection.official_procedure_stage,
+    ) in {
+        (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE,
+        ),
+        (BusinessStage.PROSECUTION_MANAGEMENT, OfficialProcedureStage.ACCEPTED),
+        (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.PRELIMINARY_EXAMINATION,
+        ),
+        (
+            BusinessStage.OA_REPLY_IN_PROGRESS,
+            OfficialProcedureStage.RECTIFICATION_RESPONSE,
+        ),
+        (BusinessStage.PROSECUTION_MANAGEMENT, OfficialProcedureStage.PUBLISHED),
+        (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.SUBSTANTIVE_EXAMINATION,
+        ),
+        (
+            BusinessStage.OA_REPLY_IN_PROGRESS,
+            OfficialProcedureStage.OFFICE_ACTION_RESPONSE,
+        ),
+        (BusinessStage.PROSECUTION_MANAGEMENT, OfficialProcedureStage.REEXAMINATION),
+        (
+            BusinessStage.GRANT_REGISTRATION_IN_PROGRESS,
+            OfficialProcedureStage.GRANT_REGISTRATION,
+        ),
+    }
+
+
+def _application_abandonment_confirmed(
+    command: LifecycleEventCommand,
+    previous_projection: LifecycleProjection,
+    transaction: Session,
+) -> LifecycleRuleDecision | None:
+    del transaction
+    if (
+        not _valid_application_abandonment_command(command)
+        or not _valid_ungranted_application_projection(previous_projection)
+    ):
+        return None
+    return LifecycleRuleDecision(
+        current_projection=LifecycleProjection(
+            business_stage=BusinessStage.CLOSED,
+            official_procedure_stage=OfficialProcedureStage.PROCEDURE_CLOSED,
+            legal_status=LegalStatus.APPLICATION_ABANDONED,
+            lifecycle_verification_status=ConfirmationStatus.CONFIRMED,
+        ),
+        oa_sequence=None,
+    )
+
+
+def _valid_application_abandonment_command(command: object) -> bool:
+    if type(command) is not LifecycleEventCommand:
+        return False
+    required_strings = (
+        (command.case_id, 36),
+        (command.event_type, 64),
+        (command.actor_id, 36),
+        (command.idempotency_key, 128),
+    )
+    if any(
+        type(value) is not str
+        or not value
+        or value.strip() != value
+        or len(value) > limit
+        for value, limit in required_strings
+    ):
+        return False
+    return (
+        command.event_type == "APPLICATION_ABANDONMENT_CONFIRMED"
+        and type(command.lane) is ActivityLane
+        and command.lane is ActivityLane.LIFECYCLE
+        and type(command.confirmation_status) is ConfirmationStatus
+        and command.confirmation_status is ConfirmationStatus.CONFIRMED
+        and type(command.evidence_refs) is tuple
+        and _valid_application_abandonment_evidence_refs(
+            command.case_id,
+            command.evidence_refs,
+        )
+        and type(command.payload) is dict
+        and not command.payload
+        and _naive_datetime(command.effective_at)
+        and (command.occurred_at is None or _naive_datetime(command.occurred_at))
+        and command.source_activity_id is None
+        and command.supersedes_event_id is None
+    )
+
+
+def _valid_application_abandonment_evidence_refs(
+    case_id: str,
+    evidence_refs: tuple[EvidenceReference, ...],
+) -> bool:
+    if len(evidence_refs) != 1:
+        return False
+    reference = evidence_refs[0]
+    return (
+        type(reference) is EvidenceReference
+        and reference.case_id == case_id
+        and type(reference.evidence_kind) is str
+        and reference.evidence_kind
+        in {"DEEMED_ABANDONMENT_NOTICE", "RIGHT_ABANDONMENT_CONFIRMATION"}
+        and type(reference.object_type) is str
+        and reference.object_type == "DocumentEvidenceVersion"
+        and _canonical_identifier(reference.object_id)
+        and type(reference.content_hash) is str
+        and fullmatch(r"sha256:[0-9a-f]{64}", reference.content_hash) is not None
+        and _naive_datetime(reference.captured_at)
+    )
+
+
+def _patent_termination_confirmed(
+    command: LifecycleEventCommand,
+    previous_projection: LifecycleProjection,
+    transaction: Session,
+) -> LifecycleRuleDecision | None:
+    del transaction
+    if (
+        not _valid_patent_termination_command(command)
+        or not _valid_in_force_patent_projection(previous_projection)
+    ):
+        return None
+    return LifecycleRuleDecision(
+        current_projection=LifecycleProjection(
+            business_stage=BusinessStage.CLOSED,
+            official_procedure_stage=OfficialProcedureStage.PROCEDURE_CLOSED,
+            legal_status=LegalStatus.PATENT_TERMINATED,
+            lifecycle_verification_status=ConfirmationStatus.CONFIRMED,
+        ),
+        oa_sequence=None,
+    )
+
+
+def _valid_patent_termination_command(command: object) -> bool:
+    return _valid_confirmed_lifecycle_command(
+        command,
+        event_type="PATENT_TERMINATION_CONFIRMED",
+        evidence_kinds={"PATENT_TERMINATION_NOTICE", "PATENT_REGISTER_STATUS_EVIDENCE"},
+    )
+
+
+def _valid_confirmed_lifecycle_command(
+    command: object,
+    *,
+    event_type: str,
+    evidence_kinds: set[str],
+) -> bool:
+    if type(command) is not LifecycleEventCommand:
+        return False
+    required_strings = (
+        (command.case_id, 36),
+        (command.event_type, 64),
+        (command.actor_id, 36),
+        (command.idempotency_key, 128),
+    )
+    if any(
+        type(value) is not str
+        or not value
+        or value.strip() != value
+        or len(value) > limit
+        for value, limit in required_strings
+    ):
+        return False
+    return (
+        command.event_type == event_type
+        and type(command.lane) is ActivityLane
+        and command.lane is ActivityLane.LIFECYCLE
+        and type(command.confirmation_status) is ConfirmationStatus
+        and command.confirmation_status is ConfirmationStatus.CONFIRMED
+        and type(command.evidence_refs) is tuple
+        and _valid_single_document_evidence_ref(
+            command.case_id,
+            command.evidence_refs,
+            evidence_kinds,
+        )
+        and type(command.payload) is dict
+        and not command.payload
+        and _naive_datetime(command.effective_at)
+        and (command.occurred_at is None or _naive_datetime(command.occurred_at))
+        and command.source_activity_id is None
+        and command.supersedes_event_id is None
+    )
+
+
+def _valid_single_document_evidence_ref(
+    case_id: str,
+    evidence_refs: tuple[EvidenceReference, ...],
+    evidence_kinds: set[str],
+) -> bool:
+    if len(evidence_refs) != 1:
+        return False
+    reference = evidence_refs[0]
+    return (
+        type(reference) is EvidenceReference
+        and reference.case_id == case_id
+        and type(reference.evidence_kind) is str
+        and reference.evidence_kind in evidence_kinds
+        and type(reference.object_type) is str
+        and reference.object_type == "DocumentEvidenceVersion"
+        and _canonical_identifier(reference.object_id)
+        and type(reference.content_hash) is str
+        and fullmatch(r"sha256:[0-9a-f]{64}", reference.content_hash) is not None
+        and _naive_datetime(reference.captured_at)
+    )
+
+
+def _valid_in_force_patent_projection(previous_projection: object) -> bool:
+    return (
+        type(previous_projection) is LifecycleProjection
+        and previous_projection.business_stage is BusinessStage.POST_GRANT_MAINTENANCE
+        and previous_projection.official_procedure_stage
+        is OfficialProcedureStage.GRANT_ANNOUNCED
+        and previous_projection.legal_status is LegalStatus.PATENT_IN_FORCE
+        and previous_projection.lifecycle_verification_status
+        is ConfirmationStatus.CONFIRMED
+    )
+
+
+def _patent_expiry_confirmed(
+    command: LifecycleEventCommand,
+    previous_projection: LifecycleProjection,
+    transaction: Session,
+) -> LifecycleRuleDecision | None:
+    del transaction
+    if (
+        not _valid_confirmed_lifecycle_command(
+            command,
+            event_type="PATENT_EXPIRY_CONFIRMED",
+            evidence_kinds={
+                "PATENT_EXPIRY_CONFIRMATION",
+                "PATENT_REGISTER_STATUS_EVIDENCE",
+            },
+        )
+        or not _valid_in_force_patent_projection(previous_projection)
+    ):
+        return None
+    return LifecycleRuleDecision(
+        current_projection=LifecycleProjection(
+            business_stage=BusinessStage.CLOSED,
+            official_procedure_stage=OfficialProcedureStage.PROCEDURE_CLOSED,
+            legal_status=LegalStatus.PATENT_EXPIRED,
+            lifecycle_verification_status=ConfirmationStatus.CONFIRMED,
+        ),
+        oa_sequence=None,
+    )
+
+
+def _patent_invalidation_confirmed(
+    command: LifecycleEventCommand,
+    previous_projection: LifecycleProjection,
+    transaction: Session,
+) -> LifecycleRuleDecision | None:
+    del transaction
+    if (
+        not _valid_patent_invalidation_command(command)
+        or not _valid_in_force_patent_projection(previous_projection)
+    ):
+        return None
+    return LifecycleRuleDecision(
+        current_projection=LifecycleProjection(
+            business_stage=BusinessStage.CLOSED,
+            official_procedure_stage=OfficialProcedureStage.PROCEDURE_CLOSED,
+            legal_status=LegalStatus.PATENT_INVALIDATED,
+            lifecycle_verification_status=ConfirmationStatus.CONFIRMED,
+        ),
+        oa_sequence=None,
+    )
+
+
+def _valid_patent_invalidation_command(command: object) -> bool:
+    if type(command) is not LifecycleEventCommand:
+        return False
+    required_strings = (
+        (command.case_id, 36),
+        (command.event_type, 64),
+        (command.actor_id, 36),
+        (command.idempotency_key, 128),
+    )
+    if any(
+        type(value) is not str
+        or not value
+        or value.strip() != value
+        or len(value) > limit
+        for value, limit in required_strings
+    ):
+        return False
+    return (
+        command.event_type == "PATENT_INVALIDATION_CONFIRMED"
+        and type(command.lane) is ActivityLane
+        and command.lane is ActivityLane.LIFECYCLE
+        and type(command.confirmation_status) is ConfirmationStatus
+        and command.confirmation_status is ConfirmationStatus.CONFIRMED
+        and type(command.evidence_refs) is tuple
+        and _valid_patent_invalidation_evidence_refs(
+            command.case_id,
+            command.evidence_refs,
+        )
+        and type(command.payload) is dict
+        and not command.payload
+        and _naive_datetime(command.effective_at)
+        and (command.occurred_at is None or _naive_datetime(command.occurred_at))
+        and command.source_activity_id is None
+        and command.supersedes_event_id is None
+    )
+
+
+def _valid_patent_invalidation_evidence_refs(
+    case_id: str,
+    evidence_refs: tuple[EvidenceReference, ...],
+) -> bool:
+    if len(evidence_refs) != 2:
+        return False
+    expected_kinds = (
+        "EFFECTIVE_PATENT_INVALIDATION_DECISION",
+        "PATENT_REGISTER_STATUS_EVIDENCE",
+    )
+    return all(
+        type(reference) is EvidenceReference
+        and reference.case_id == case_id
+        and type(reference.evidence_kind) is str
+        and reference.evidence_kind == expected_kind
+        and type(reference.object_type) is str
+        and reference.object_type == "DocumentEvidenceVersion"
+        and _canonical_identifier(reference.object_id)
+        and type(reference.content_hash) is str
+        and fullmatch(r"sha256:[0-9a-f]{64}", reference.content_hash) is not None
+        and _naive_datetime(reference.captured_at)
+        for reference, expected_kind in zip(
+            evidence_refs,
+            expected_kinds,
+            strict=True,
+        )
+    ) and evidence_refs[0].object_id != evidence_refs[1].object_id
+
+
+def _application_right_restoration_confirmed(
+    command: LifecycleEventCommand,
+    previous_projection: LifecycleProjection,
+    transaction: Session,
+) -> LifecycleRuleDecision | None:
+    del transaction
+    restored_stage = _valid_application_restoration_command(command)
+    if (
+        restored_stage is None
+        or type(previous_projection) is not LifecycleProjection
+        or previous_projection.business_stage is not BusinessStage.CLOSED
+        or previous_projection.official_procedure_stage
+        is not OfficialProcedureStage.PROCEDURE_CLOSED
+        or previous_projection.legal_status is not LegalStatus.APPLICATION_ABANDONED
+        or previous_projection.lifecycle_verification_status
+        is not ConfirmationStatus.CONFIRMED
+    ):
+        return None
+    business_stage, official_stage = restored_stage
+    return LifecycleRuleDecision(
+        current_projection=LifecycleProjection(
+            business_stage=business_stage,
+            official_procedure_stage=official_stage,
+            legal_status=LegalStatus.APPLICATION_PENDING,
+            lifecycle_verification_status=ConfirmationStatus.CONFIRMED,
+        ),
+        oa_sequence=None,
+    )
+
+
+def _valid_application_restoration_command(
+    command: object,
+) -> tuple[BusinessStage, OfficialProcedureStage] | None:
+    if type(command) is not LifecycleEventCommand:
+        return None
+    required_strings = (
+        (command.case_id, 36),
+        (command.event_type, 64),
+        (command.actor_id, 36),
+        (command.idempotency_key, 128),
+    )
+    if any(
+        type(value) is not str
+        or not value
+        or value.strip() != value
+        or len(value) > limit
+        for value, limit in required_strings
+    ):
+        return None
+    if (
+        command.event_type != "APPLICATION_RIGHT_RESTORATION_CONFIRMED"
+        or type(command.lane) is not ActivityLane
+        or command.lane is not ActivityLane.LIFECYCLE
+        or type(command.confirmation_status) is not ConfirmationStatus
+        or command.confirmation_status is not ConfirmationStatus.CONFIRMED
+        or type(command.evidence_refs) is not tuple
+        or not _valid_single_document_evidence_ref(
+            command.case_id,
+            command.evidence_refs,
+            {"APPLICATION_RIGHT_RESTORATION_DECISION"},
+        )
+        or type(command.payload) is not dict
+        or set(command.payload) != {"restored_official_procedure_stage"}
+        or not _naive_datetime(command.effective_at)
+        or (command.occurred_at is not None and not _naive_datetime(command.occurred_at))
+        or command.source_activity_id is not None
+        or command.supersedes_event_id is not None
+    ):
+        return None
+    restored_value = command.payload["restored_official_procedure_stage"]
+    if type(restored_value) is not str:
+        return None
+    restored_stages = {
+        OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE.value: (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE,
+        ),
+        OfficialProcedureStage.ACCEPTED.value: (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.ACCEPTED,
+        ),
+        OfficialProcedureStage.PRELIMINARY_EXAMINATION.value: (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.PRELIMINARY_EXAMINATION,
+        ),
+        OfficialProcedureStage.RECTIFICATION_RESPONSE.value: (
+            BusinessStage.OA_REPLY_IN_PROGRESS,
+            OfficialProcedureStage.RECTIFICATION_RESPONSE,
+        ),
+        OfficialProcedureStage.PUBLISHED.value: (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.PUBLISHED,
+        ),
+        OfficialProcedureStage.SUBSTANTIVE_EXAMINATION.value: (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.SUBSTANTIVE_EXAMINATION,
+        ),
+        OfficialProcedureStage.OFFICE_ACTION_RESPONSE.value: (
+            BusinessStage.OA_REPLY_IN_PROGRESS,
+            OfficialProcedureStage.OFFICE_ACTION_RESPONSE,
+        ),
+        OfficialProcedureStage.REEXAMINATION.value: (
+            BusinessStage.PROSECUTION_MANAGEMENT,
+            OfficialProcedureStage.REEXAMINATION,
+        ),
+        OfficialProcedureStage.GRANT_REGISTRATION.value: (
+            BusinessStage.GRANT_REGISTRATION_IN_PROGRESS,
+            OfficialProcedureStage.GRANT_REGISTRATION,
+        ),
+    }
+    return restored_stages.get(restored_value)
+
+
+def _patent_right_restoration_confirmed(
+    command: LifecycleEventCommand,
+    previous_projection: LifecycleProjection,
+    transaction: Session,
+) -> LifecycleRuleDecision | None:
+    del transaction
+    if (
+        not _valid_patent_restoration_command(command)
+        or type(previous_projection) is not LifecycleProjection
+        or previous_projection.business_stage is not BusinessStage.CLOSED
+        or previous_projection.official_procedure_stage
+        is not OfficialProcedureStage.PROCEDURE_CLOSED
+        or previous_projection.legal_status is not LegalStatus.PATENT_TERMINATED
+        or previous_projection.lifecycle_verification_status
+        is not ConfirmationStatus.CONFIRMED
+    ):
+        return None
+    return LifecycleRuleDecision(
+        current_projection=LifecycleProjection(
+            business_stage=BusinessStage.POST_GRANT_MAINTENANCE,
+            official_procedure_stage=OfficialProcedureStage.GRANT_ANNOUNCED,
+            legal_status=LegalStatus.PATENT_IN_FORCE,
+            lifecycle_verification_status=ConfirmationStatus.CONFIRMED,
+        ),
+        oa_sequence=None,
+    )
+
+
+def _valid_patent_restoration_command(command: object) -> bool:
+    if type(command) is not LifecycleEventCommand:
+        return False
+    required_strings = (
+        (command.case_id, 36),
+        (command.event_type, 64),
+        (command.actor_id, 36),
+        (command.idempotency_key, 128),
+    )
+    if any(
+        type(value) is not str
+        or not value
+        or value.strip() != value
+        or len(value) > limit
+        for value, limit in required_strings
+    ):
+        return False
+    return (
+        command.event_type == "PATENT_RIGHT_RESTORATION_CONFIRMED"
+        and type(command.lane) is ActivityLane
+        and command.lane is ActivityLane.LIFECYCLE
+        and type(command.confirmation_status) is ConfirmationStatus
+        and command.confirmation_status is ConfirmationStatus.CONFIRMED
+        and type(command.evidence_refs) is tuple
+        and _valid_patent_restoration_evidence_refs(
+            command.case_id,
+            command.evidence_refs,
+        )
+        and type(command.payload) is dict
+        and not command.payload
+        and _naive_datetime(command.effective_at)
+        and (command.occurred_at is None or _naive_datetime(command.occurred_at))
+        and command.source_activity_id is None
+        and command.supersedes_event_id is None
+    )
+
+
+def _valid_patent_restoration_evidence_refs(
+    case_id: str,
+    evidence_refs: tuple[EvidenceReference, ...],
+) -> bool:
+    if len(evidence_refs) != 2:
+        return False
+    expected_kinds = (
+        "PATENT_RIGHT_RESTORATION_DECISION",
+        "PATENT_REGISTER_STATUS_EVIDENCE",
+    )
+    return all(
+        type(reference) is EvidenceReference
+        and reference.case_id == case_id
+        and type(reference.evidence_kind) is str
+        and reference.evidence_kind == expected_kind
+        and type(reference.object_type) is str
+        and reference.object_type == "DocumentEvidenceVersion"
+        and _canonical_identifier(reference.object_id)
+        and type(reference.content_hash) is str
+        and fullmatch(r"sha256:[0-9a-f]{64}", reference.content_hash) is not None
+        and _naive_datetime(reference.captured_at)
+        for reference, expected_kind in zip(
+            evidence_refs,
+            expected_kinds,
+            strict=True,
+        )
+    ) and evidence_refs[0].object_id != evidence_refs[1].object_id
+
+
 def _unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
@@ -2153,4 +2795,13 @@ _RULES: dict[str, _LifecycleRule] = {
     "GRANT_ANNOUNCEMENT_CONFIRMED": _grant_announcement_confirmed,
     "PATENT_REGISTER_STATUS_CONFIRMED": _patent_register_status_confirmed,
     "APPLICATION_REJECTION_CONFIRMED": _application_rejection_confirmed,
+    "APPLICATION_WITHDRAWAL_CONFIRMED": _application_withdrawal_confirmed,
+    "APPLICATION_ABANDONMENT_CONFIRMED": _application_abandonment_confirmed,
+    "PATENT_TERMINATION_CONFIRMED": _patent_termination_confirmed,
+    "PATENT_EXPIRY_CONFIRMED": _patent_expiry_confirmed,
+    "PATENT_INVALIDATION_CONFIRMED": _patent_invalidation_confirmed,
+    "APPLICATION_RIGHT_RESTORATION_CONFIRMED": (
+        _application_right_restoration_confirmed
+    ),
+    "PATENT_RIGHT_RESTORATION_CONFIRMED": _patent_right_restoration_confirmed,
 }
