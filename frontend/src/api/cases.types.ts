@@ -187,6 +187,8 @@ export interface CaseListResponse {
     summary: CaseListSummary
 }
 
+export type CaseFeeReduction = '0' | '0.7' | '0.85'
+
 export interface CaseCreatePayload {
     case_no: string
     case_type?: string
@@ -244,7 +246,7 @@ export interface CaseCreatePayload {
     second_agent_id?: string
     draftor_id?: string
     is_fee_monitor?: boolean
-    fee_reduction?: string
+    fee_reduction?: CaseFeeReduction
     applicant_kind?: string
     applicants?: CaseApplicant[]
     inventors?: CaseInventor[]

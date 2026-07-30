@@ -678,7 +678,7 @@ export async function createCase(data: CaseCreatePayload): Promise<Case> {
         second_agent_id: trimToUndefined(data.second_agent_id),
         draftor_id: trimToUndefined(data.draftor_id),
         is_fee_monitor: data.is_fee_monitor ?? undefined,
-        fee_reduction: trimToUndefined(data.fee_reduction),
+        fee_reduction: data.fee_reduction,
         applicant_kind: trimToUndefined(data.applicant_kind),
     }
     const response = await http.post<BackendCase>('/cases', payload)

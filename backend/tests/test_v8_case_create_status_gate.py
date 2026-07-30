@@ -16,6 +16,7 @@ def _case_payload(*, case_no: str, **overrides: object) -> dict[str, object]:
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
         "title_cn": "生命周期新建案件",
+        "fee_reduction": "0",
     }
     payload.update(overrides)
     return payload
