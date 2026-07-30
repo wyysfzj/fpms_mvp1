@@ -693,8 +693,28 @@
                 </el-form-item>
               </el-col>
               <el-col :span="8">
-                <el-form-item label="客户减免比例">
-                  <el-input v-model="form.fee_reduction" placeholder="例如：0.85" />
+                <el-form-item label="客户减免比例" :error="fieldErrors.get('fee_reduction')?.join('，')">
+                  <el-select
+                    v-model="form.fee_reduction"
+                    data-testid="case-fee-reduction"
+                    class="full-width"
+                    placeholder="请选择费用减免比例"
+                    :disabled="Boolean(reductionApprovalLoadError)"
+                    @change="handleFeeReductionSelection"
+                  >
+                    <el-option label="不减缴" value="0" />
+                    <el-option label="70%" value="0.7" :disabled="selectedCanonicalReductionRatio !== '0.7'" />
+                    <el-option label="85%" value="0.85" :disabled="selectedCanonicalReductionRatio !== '0.85'" />
+                  </el-select>
+                  <el-alert
+                    v-if="feeReductionSelectionWarning"
+                    :title="feeReductionSelectionWarning"
+                    type="warning"
+                    show-icon
+                    :closable="false"
+                    class="fee-reduction-selection-warning"
+                  />
+                  <div class="field-hint">0.7/0.85 仅在选择同一比例的审批依据后可选。</div>
                 </el-form-item>
               </el-col>
               <el-col :span="8">
@@ -705,6 +725,48 @@
                     <el-option label="高校" value="UNIV" />
                     <el-option label="政府" value="GOV" />
                   </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="24">
+                <div class="section-toolbar">
+                  <div class="field-hint">仅展示并选择后端返回的审批记录；是否适用于具体费用由后端校验。</div>
+                  <el-button type="primary" plain @click="openReductionApprovalDialog">记录减缴审批证据</el-button>
+                </div>
+                <el-alert
+                  v-if="reductionApprovalLoadError"
+                  :title="reductionApprovalLoadError"
+                  type="error"
+                  show-icon
+                  :closable="false"
+                  class="reduction-approval-error"
+                />
+                <el-form-item label="减缴审批依据">
+                  <el-select
+                    v-model="selectedReductionApprovalId"
+                    aria-label="减缴审批依据"
+                    clearable
+                    class="full-width"
+                    placeholder="请选择后端返回的减缴审批依据"
+                  >
+                    <el-option
+                      v-for="approval in reductionApprovals"
+                      :key="approval.approval_id"
+                      :label="reductionApprovalOptionLabel(approval)"
+                      :value="approval.approval_id"
+                    />
+                  </el-select>
+                  <template v-if="selectedReductionApproval">
+                    <div class="field-hint">来源证据：{{ selectedReductionApproval.source_evidence_version_id }}</div>
+                    <div class="field-hint">适用范围：{{ reductionApprovalScopeText(selectedReductionApproval.scope_type) }}</div>
+                    <div class="field-hint">费用代码：{{ reductionApprovalFeeCodesText(selectedReductionApproval) }}</div>
+                    <div class="field-hint">费用年度：{{ reductionApprovalYearsText(selectedReductionApproval) }}</div>
+                    <div class="field-hint">生效区间：{{ reductionApprovalEffectiveText(selectedReductionApproval) }}</div>
+                    <div class="field-hint">申请人集合：{{ selectedReductionApproval.applicant_set_key || '不适用' }}</div>
+                    <div class="field-hint">后端当前标记：{{ selectedReductionApproval.is_current ? '是' : '否' }}</div>
+                  </template>
+                  <div class="field-hint">选择审批依据仅解锁同一比例选项，不自动写入案件减缴字段。</div>
                 </el-form-item>
               </el-col>
             </el-row>
@@ -779,6 +841,97 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="showReductionApprovalDialog"
+      title="记录减缴审批证据"
+      width="760px"
+      destroy-on-close
+      @closed="resetReductionApprovalDialog"
+    >
+      <el-form :model="reductionApprovalDraft" label-position="top">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="审批范围">
+              <el-select v-model="reductionApprovalDraft.scope_type" class="full-width" placeholder="请选择审批范围">
+                <el-option label="案件" value="CASE" />
+                <el-option label="申请人集合" value="APPLICANT_SET" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="减缴比例">
+              <el-select v-model="reductionApprovalDraft.reduction_ratio" class="full-width" placeholder="请选择减缴比例">
+                <el-option label="70%" value="0.7" />
+                <el-option label="85%" value="0.85" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="申请人标识">
+          <el-input v-model="reductionApprovalDraft.applicant_ids" placeholder="请输入申请人标识，多个用逗号分隔" />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="资格属性版本">
+              <el-input v-model="reductionApprovalDraft.eligibility_attributes_version" placeholder="请输入资格属性版本" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="费用代码">
+              <el-input v-model="reductionApprovalDraft.fee_codes" placeholder="请输入费用代码，多个用逗号分隔" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="资格属性 JSON">
+          <el-input
+            v-model="reductionApprovalDraft.eligibility_attributes_json"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入资格属性 JSON"
+          />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="费用年度起始">
+              <el-input-number v-model="reductionApprovalDraft.fee_year_from" :min="1" class="full-width" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="费用年度截止">
+              <el-input-number v-model="reductionApprovalDraft.fee_year_to" :min="1" class="full-width" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="生效起始日">
+              <el-input v-model="reductionApprovalDraft.effective_from" placeholder="请选择生效起始日" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="生效截止日">
+              <el-input v-model="reductionApprovalDraft.effective_to" placeholder="请选择生效截止日（可选）" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="来源证据版本标识">
+          <el-input v-model="reductionApprovalDraft.source_evidence_version_id" placeholder="请输入来源证据版本标识" />
+        </el-form-item>
+        <el-form-item label="来源内容哈希">
+          <el-input v-model="reductionApprovalDraft.expected_source_content_hash" placeholder="请输入来源内容哈希" />
+        </el-form-item>
+        <el-form-item label="确认时间（无时区）">
+          <el-input v-model="reductionApprovalDraft.confirmed_at" placeholder="请选择确认时间" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showReductionApprovalDialog = false">取消</el-button>
+        <el-button type="primary" :loading="recordingReductionApproval" @click="handleReductionApprovalRecord">
+          确认记录
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -789,6 +942,7 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getCase, getCaseByCaseNo, updateCase } from '../../../api/cases'
 import { createClient, getClients } from '../../../api/clients'
+import { createFeeReductionApproval, getFeeReductionApprovals } from '../../../api/fees'
 import type {
   Case,
   CaseAgentSplit,
@@ -798,6 +952,11 @@ import type {
   CaseUpdatePayload,
 } from '../../../api/cases.types'
 import type { Client, ClientCreatePayload } from '../../../api/clients.types'
+import type {
+  FeeReductionApprovalCreatePayload,
+  FeeReductionApprovalListItem,
+  FeeReductionApprovalScopeType,
+} from '../../../api/fees.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import CaseAgentSplitEditor from '../components/CaseAgentSplitEditor.vue'
@@ -808,6 +967,22 @@ interface ValidationItem {
   key: string
   message: string
   section?: string
+}
+
+interface ReductionApprovalDraft {
+  scope_type: FeeReductionApprovalScopeType | ''
+  applicant_ids: string
+  eligibility_attributes_version: string
+  eligibility_attributes_json: string
+  reduction_ratio: '0.7' | '0.85' | ''
+  fee_codes: string
+  fee_year_from: number | undefined
+  fee_year_to: number | undefined
+  effective_from: string
+  effective_to: string
+  source_evidence_version_id: string
+  expected_source_content_hash: string
+  confirmed_at: string
 }
 
 const CASE_TYPE_TEXT: Record<string, string> = {
@@ -873,6 +1048,28 @@ const creatingClient = ref(false)
 const showQuickClientDialog = ref(false)
 const quickApplicantIndex = ref<number | null>(null)
 const quickClientMode = ref<'applicant' | 'foreign_agent'>('applicant')
+const reductionApprovals = ref<FeeReductionApprovalListItem[]>([])
+const selectedReductionApprovalId = ref('')
+const reductionApprovalLoadError = ref('')
+const storedFeeReductionLegacyValue = ref('')
+const feeReductionSelectionRequired = ref(false)
+const showReductionApprovalDialog = ref(false)
+const recordingReductionApproval = ref(false)
+const reductionApprovalDraft = reactive<ReductionApprovalDraft>({
+  scope_type: '',
+  applicant_ids: '',
+  eligibility_attributes_version: '',
+  eligibility_attributes_json: '',
+  reduction_ratio: '',
+  fee_codes: '',
+  fee_year_from: undefined,
+  fee_year_to: undefined,
+  effective_from: '',
+  effective_to: '',
+  source_evidence_version_id: '',
+  expected_source_content_hash: '',
+  confirmed_at: '',
+})
 
 const form = reactive<CaseUpdatePayload>({
   title: '',
@@ -964,6 +1161,19 @@ const isForeignFlow = computed(() => (caseData.value?.flow_dir || 'CN_DOMESTIC')
 const isPctIntlCase = computed(() => caseData.value?.case_type === 'PCT_INTL')
 const isPctNatlCase = computed(() => caseData.value?.case_type === 'PCT_NATL')
 const isInvalidationCase = computed(() => caseData.value?.case_type === 'INVALIDATION')
+const selectedReductionApproval = computed(() =>
+  reductionApprovals.value.find((approval) => approval.approval_id === selectedReductionApprovalId.value) || null
+)
+const selectedCanonicalReductionRatio = computed(() =>
+  canonicalReductionRatio(selectedReductionApproval.value?.reduction_ratio || '')
+)
+const feeReductionSelectionWarning = computed(() => {
+  if (!feeReductionSelectionRequired.value) return ''
+  if (storedFeeReductionLegacyValue.value) {
+    return `历史减免值“${storedFeeReductionLegacyValue.value}”无法识别，请明确选择不减缴、70% 或 85% 后再保存。`
+  }
+  return '当前案件未设置费用减免比例，请明确选择后再保存。'
+})
 const agentSplitErrorItems = computed(() => {
   const items: ValidationItem[] = []
   const seen = new Set<string>()
@@ -1123,6 +1333,151 @@ async function fetchClients() {
   }
 }
 
+function reductionApprovalScopeText(scopeType: FeeReductionApprovalScopeType) {
+  if (scopeType === 'CASE') return '案件'
+  return '申请人集合'
+}
+
+function canonicalReductionRatio(value: string): '0.7' | '0.85' | null {
+  const [whole, fraction = ''] = value.split('.')
+  if (whole !== '0') return null
+  const normalizedFraction = fraction.replace(/0+$/, '')
+  if (normalizedFraction === '7') return '0.7'
+  if (normalizedFraction === '85') return '0.85'
+  return null
+}
+
+function storedCanonicalReductionRatio(value: unknown): '0' | '0.7' | '0.85' | '' {
+  if (value === '0' || value === '0.7' || value === '0.85') {
+    storedFeeReductionLegacyValue.value = ''
+    feeReductionSelectionRequired.value = false
+    return value
+  }
+  storedFeeReductionLegacyValue.value = typeof value === 'string' ? value : ''
+  feeReductionSelectionRequired.value = true
+  return ''
+}
+
+function handleFeeReductionSelection() {
+  storedFeeReductionLegacyValue.value = ''
+  feeReductionSelectionRequired.value = false
+}
+
+function reductionApprovalOptionLabel(approval: FeeReductionApprovalListItem) {
+  const ratio = canonicalReductionRatio(approval.reduction_ratio)
+  const ratioText = ratio === '0.7' ? '70%' : ratio === '0.85' ? '85%' : approval.reduction_ratio
+  return `${ratioText} · ${reductionApprovalScopeText(approval.scope_type)} · ${approval.source_evidence_version_id}`
+}
+
+function reductionApprovalFeeCodesText(approval: FeeReductionApprovalListItem) {
+  return approval.fee_codes.join('、')
+}
+
+function reductionApprovalYearsText(approval: FeeReductionApprovalListItem) {
+  if (approval.fee_year_from === null && approval.fee_year_to === null) return '不限'
+  return `${approval.fee_year_from ?? '未指定'} 至 ${approval.fee_year_to ?? '未指定'}`
+}
+
+function reductionApprovalEffectiveText(approval: FeeReductionApprovalListItem) {
+  return `${approval.effective_from} 至 ${approval.effective_to || '无截止日'}`
+}
+
+function splitCommaSeparated(value: string) {
+  return value.split(',').map((item) => item.trim()).filter(Boolean)
+}
+
+function resetReductionApprovalDialog() {
+  Object.assign(reductionApprovalDraft, {
+    scope_type: '',
+    applicant_ids: '',
+    eligibility_attributes_version: '',
+    eligibility_attributes_json: '',
+    reduction_ratio: '',
+    fee_codes: '',
+    fee_year_from: undefined,
+    fee_year_to: undefined,
+    effective_from: '',
+    effective_to: '',
+    source_evidence_version_id: '',
+    expected_source_content_hash: '',
+    confirmed_at: '',
+  })
+}
+
+function openReductionApprovalDialog() {
+  resetReductionApprovalDialog()
+  showReductionApprovalDialog.value = true
+}
+
+async function fetchReductionApprovals(caseId: string, selectedApprovalId = '') {
+  reductionApprovals.value = await getFeeReductionApprovals(caseId)
+  selectedReductionApprovalId.value = reductionApprovals.value.some(
+    (approval) => approval.approval_id === selectedApprovalId
+  ) ? selectedApprovalId : ''
+}
+
+async function loadReductionApprovals(caseId: string, selectedApprovalId = '') {
+  reductionApprovalLoadError.value = ''
+  try {
+    await fetchReductionApprovals(caseId, selectedApprovalId)
+  } catch {
+    reductionApprovals.value = []
+    selectedReductionApprovalId.value = ''
+    reductionApprovalLoadError.value = '减缴审批依据加载失败，减缴比例已锁定，请稍后重试。'
+  }
+}
+
+async function handleReductionApprovalRecord() {
+  const caseId = String(caseData.value?.id || route.params.id || '').trim()
+  const scopeType = reductionApprovalDraft.scope_type
+  const reductionRatio = reductionApprovalDraft.reduction_ratio
+  const feeCodes = splitCommaSeparated(reductionApprovalDraft.fee_codes)
+  if (
+    !caseId
+    || !scopeType
+    || !reductionRatio
+    || !reductionApprovalDraft.eligibility_attributes_version.trim()
+    || !reductionApprovalDraft.eligibility_attributes_json.trim()
+    || !feeCodes.length
+    || !reductionApprovalDraft.effective_from.trim()
+    || !reductionApprovalDraft.source_evidence_version_id.trim()
+    || !reductionApprovalDraft.expected_source_content_hash.trim()
+    || !reductionApprovalDraft.confirmed_at.trim()
+  ) {
+    ElMessage.warning('请完整填写减缴审批证据必填项')
+    return
+  }
+
+  const payload: FeeReductionApprovalCreatePayload = {
+    case_id: caseId,
+    scope_type: scopeType,
+    applicant_ids: splitCommaSeparated(reductionApprovalDraft.applicant_ids),
+    eligibility_attributes_version: reductionApprovalDraft.eligibility_attributes_version.trim(),
+    eligibility_attributes_json: reductionApprovalDraft.eligibility_attributes_json.trim(),
+    reduction_ratio: reductionRatio,
+    fee_codes: feeCodes,
+    fee_year_from: reductionApprovalDraft.fee_year_from ?? null,
+    fee_year_to: reductionApprovalDraft.fee_year_to ?? null,
+    effective_from: reductionApprovalDraft.effective_from.trim(),
+    effective_to: reductionApprovalDraft.effective_to.trim() || null,
+    source_evidence_version_id: reductionApprovalDraft.source_evidence_version_id.trim(),
+    expected_source_content_hash: reductionApprovalDraft.expected_source_content_hash.trim(),
+    confirmed_at: reductionApprovalDraft.confirmed_at.trim(),
+  }
+
+  recordingReductionApproval.value = true
+  try {
+    const result = await createFeeReductionApproval(caseId, payload)
+    await loadReductionApprovals(caseId, result.approval_id)
+    showReductionApprovalDialog.value = false
+    ElMessage.success('减缴审批证据已记录')
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    recordingReductionApproval.value = false
+  }
+}
+
 async function fetchCase() {
   const caseNo = String(route.params.caseNo || '').trim()
   const id = String(route.params.id || '').trim()
@@ -1224,7 +1579,7 @@ async function fetchCase() {
     form.second_agent_id = caseData.value.second_agent_id || ''
     form.draftor_id = caseData.value.draftor_id || ''
     form.is_fee_monitor = caseData.value.is_fee_monitor ?? undefined
-    form.fee_reduction = caseData.value.fee_reduction || ''
+    form.fee_reduction = storedCanonicalReductionRatio(caseData.value.fee_reduction)
     form.applicant_kind = caseData.value.applicant_kind || ''
     if ((caseData.value.agent_splits || []).length > 0) {
       expandedSections.value = Array.from(new Set([...expandedSections.value, 'agent_split']))
@@ -1232,6 +1587,7 @@ async function fetchCase() {
     if ((caseData.value.inventors || []).length > 0) {
       expandedSections.value = Array.from(new Set([...expandedSections.value, 'inventor']))
     }
+    await loadReductionApprovals(caseData.value.id)
   } catch (err) {
     error.value = err as ApiError
   } finally {
@@ -1342,6 +1698,17 @@ function runCustomValidation(): ValidationItem[] {
     if (seen.has(token)) return
     seen.add(token)
     items.push({ key, message, section })
+  }
+
+  if (feeReductionSelectionRequired.value || !['0', '0.7', '0.85'].includes(String(form.fee_reduction || ''))) {
+    add('fee_reduction', feeReductionSelectionWarning.value || '请选择费用减免比例。', 'flags')
+  }
+
+  if (
+    (form.fee_reduction === '0.7' || form.fee_reduction === '0.85')
+    && selectedCanonicalReductionRatio.value !== form.fee_reduction
+  ) {
+    add('fee_reduction', '选择 0.7/0.85 前必须选择同一比例的减缴审批依据。', 'flags')
   }
 
   const status = compatibilityStatus.value

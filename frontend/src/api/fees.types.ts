@@ -209,6 +209,7 @@ export interface FeeDraftCreatePayload {
     client_id?: string | null
     currency: string
     draft_type?: string
+    obligation_id?: string | null
 }
 
 export interface ApplyFeeDraftGeneratePayload {
@@ -260,6 +261,47 @@ export interface OfficialFeeEstimateResult {
     total_payable_amount: string
 }
 
+export type FeeReductionApprovalScopeType = 'CASE' | 'APPLICANT_SET'
+
+export interface FeeReductionApprovalCreatePayload {
+    case_id: string
+    scope_type: FeeReductionApprovalScopeType
+    applicant_ids: string[]
+    eligibility_attributes_version: string
+    eligibility_attributes_json: string
+    reduction_ratio: '0.7' | '0.85'
+    fee_codes: string[]
+    fee_year_from: number | null
+    fee_year_to: number | null
+    effective_from: string
+    effective_to: string | null
+    source_evidence_version_id: string
+    expected_source_content_hash: string
+    confirmed_at: string
+}
+
+export interface FeeReductionApprovalCreateResult {
+    approval_id: string
+}
+
+export interface FeeReductionApprovalListItem {
+    approval_id: string
+    scope_type: FeeReductionApprovalScopeType
+    case_id: string | null
+    applicant_set_key: string | null
+    reduction_ratio: string
+    fee_codes: string[]
+    fee_year_from: number | null
+    fee_year_to: number | null
+    effective_from: string
+    effective_to: string | null
+    source_evidence_version_id: string
+    confirmation_status: string
+    confirmed_at: string
+    confirmed_by: string
+    is_current: boolean
+}
+
 export interface FeeObligationInstructionPayload {
     instruction: 'PAY' | 'HOLD' | 'ABANDON'
     idempotency_key: string
@@ -271,6 +313,47 @@ export interface FeeObligationInstructionResult {
     activity_id: string
     idempotency_key: string
     reused: boolean
+}
+
+export interface FeeObligationDetail {
+    id: string
+    case_id: string
+    source: {
+        source_activity_id: string
+        source_document_id: string | null
+        status: 'VERIFIED' | 'REVIEW_REQUIRED' | 'LEGACY_UNVERIFIED'
+    }
+    fee_domain: 'GOV' | 'SERVICE'
+    obligation_type: string
+    due_date: string | null
+    currency: string
+    statuses: {
+        estimate_status: 'ESTIMATE' | null
+        obligation_status: 'RECOGNIZED' | 'SUPERSEDED'
+        client_instruction_status: 'PENDING' | 'PAY' | 'HOLD' | 'ABANDON'
+        draft_status: 'NOT_CREATED' | 'CREATED'
+        pay_list_status: 'NOT_CREATED' | 'CREATED'
+        payment_status: 'UNPAID' | 'PAID'
+        official_evidence_status: 'PENDING' | 'VERIFIED' | 'NOT_APPLICABLE'
+    }
+    lines: {
+        id: string
+        obligation_id: string
+        case_id: string
+        source_activity_id: string
+        fee_code: string
+        fee_name: string
+        fee_year_key: number
+        official_full_amount: string | null
+        reduction_ratio: string
+        payable_amount: string
+        source_amount: string | null
+        source_date: string | null
+        difference_review_state: 'MATCHED' | 'SOURCE_PENDING' | 'REVIEW_REQUIRED'
+        current_identity_key: string | null
+    }[]
+    supersedes_obligation_id: string | null
+    supersede_reason: string | null
 }
 
 export interface FeeDraftUpdatePayload {
