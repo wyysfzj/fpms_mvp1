@@ -150,24 +150,24 @@
     {
       "catalog_id": "FPMS-V8-LC-FILING-PREPARATION-STARTED-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-FILING-EXTERNAL-SUBMISSION-RECORDED-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-FILING-RECEIPT-ARCHIVED-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2396,7 +2396,8 @@
         "d25503e6be7e317c0838ce1c1cdfb2885d84f84e",
         "dfd3ead6047a788251123b27fa91164e64e37ab2",
         "05e88ef32f4393a0161ca6e176dd0b47fc7dc3c6",
-        "2e12c4644c4228a7bee3487243544f1d486c8746"
+        "2e12c4644c4228a7bee3487243544f1d486c8746",
+        "6834710cae300aa2b748268a909f11a8239b9977"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-status-gate.spec.ts",
@@ -2412,16 +2413,17 @@
         "frontend/src/modules/cases/pages/CaseCreate.vue",
         "frontend/src/modules/cases/pages/CaseEdit.vue"
       ],
-      "tree_sha256": "f7c0eb5f682ac3daadc0959c53272791a900c501d9706a678344be7c96c89eac",
+      "tree_sha256": "7fee053e7f48be6ec7768de44af83815cda64378d1b82d8d283e47d01fea077f",
       "tests": [
         "pytest -q tests/test_v8_lifecycle_case_opened.py tests/test_v8_case_create_status_gate.py tests/test_v8_case_update_status_gate.py from backend cwd (45 passed)",
         "playwright test v8-case-create-status-gate.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (2 passed)",
         "independent compositional successor tranche with rows 98–100: backend 98 passed plus 19 subtests; Playwright 5 passed",
-        "independent CaseEdit fee-reduction successor tranche: exact three Chromium specs 5 passed"
+        "independent CaseEdit fee-reduction successor tranche: exact three Chromium specs 5 passed",
+        "independent filing-identity successor re-attestation: exact backend canary tranche 45 passed; six UI/test blobs unchanged"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-CASE-STATUS-UI-FILING-SUCCESSOR-REATTESTATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CASE-STATUS-UI-FILING-SUCCESSOR-REATTESTATION.md"
     },
     {
       "story_id": "V8-FEE-FOUNDATION-CONTRACTS-CURRENT-VERIFICATION",
@@ -2962,6 +2964,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "6834710cae300aa2b748268a909f11a8239b9977"
+      ],
+      "paths": [
+        "backend/app/modules/cases/lifecycle_rules.py",
+        "backend/tests/test_v8_lifecycle_filing_external_submission.py",
+        "backend/tests/test_v8_lifecycle_filing_preparation_started.py",
+        "backend/tests/test_v8_lifecycle_filing_receipt_archived.py"
+      ],
+      "tree_sha256": "2366cee203485357e11fbe505b9483d3722ed3a15740f6f75a108356c0a6b049",
+      "tests": [
+        "pytest -q exact seven-file filing lifecycle tranche from backend cwd (204 passed)",
+        "scoped Ruff check and Ruff format-check passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION.md"
     }
   ]
 }
