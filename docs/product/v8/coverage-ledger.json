@@ -778,14 +778,10 @@
     {
       "catalog_id": "FPMS-V8-FEE-REDUCTION-APPROVAL-CASEEDIT-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "WIP",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "kind": "HISTORICAL_NONTERMINAL",
-        "historical_state": "IMPLEMENTING",
-        "source": "artifacts/FPMS-V8-FEE-REDUCTION-APPROVAL-CASEEDIT-UI-20260712-01/state.json"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-CASE-CREATE-FEE-REDUCTION-API-20260712-01",
@@ -814,8 +810,8 @@
     {
       "catalog_id": "FPMS-V8-CASE-EDIT-FEE-REDUCTION-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2399,7 +2395,8 @@
       "commits": [
         "d25503e6be7e317c0838ce1c1cdfb2885d84f84e",
         "dfd3ead6047a788251123b27fa91164e64e37ab2",
-        "05e88ef32f4393a0161ca6e176dd0b47fc7dc3c6"
+        "05e88ef32f4393a0161ca6e176dd0b47fc7dc3c6",
+        "2e12c4644c4228a7bee3487243544f1d486c8746"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-status-gate.spec.ts",
@@ -2415,15 +2412,16 @@
         "frontend/src/modules/cases/pages/CaseCreate.vue",
         "frontend/src/modules/cases/pages/CaseEdit.vue"
       ],
-      "tree_sha256": "6ed8e9c3b8325cdf0234986767a9080dcc1b480a451abf24f8254daf37de2dbf",
+      "tree_sha256": "f7c0eb5f682ac3daadc0959c53272791a900c501d9706a678344be7c96c89eac",
       "tests": [
         "pytest -q tests/test_v8_lifecycle_case_opened.py tests/test_v8_case_create_status_gate.py tests/test_v8_case_update_status_gate.py from backend cwd (45 passed)",
         "playwright test v8-case-create-status-gate.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (2 passed)",
-        "independent compositional successor tranche with rows 98–100: backend 98 passed plus 19 subtests; Playwright 5 passed"
+        "independent compositional successor tranche with rows 98–100: backend 98 passed plus 19 subtests; Playwright 5 passed",
+        "independent CaseEdit fee-reduction successor tranche: exact three Chromium specs 5 passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-FEE-FOUNDATION-CONTRACTS-CURRENT-VERIFICATION",
@@ -2553,7 +2551,7 @@
         "backend/tests/test_v8_w1_f1_fee_obligation.py",
         "backend/tests/test_v8_w1_f2_fee_obligation_line.py"
       ],
-      "tree_sha256": "56728d5e3aff63642cd5e4b7f1b98846f0b6771510b15cea3d93796db56648be",
+      "tree_sha256": "dfa3434cd647cc4d32a1b880c669e3e9597c46a042a7bed2ed5f06f866835da3",
       "tests": [
         "pytest -q tests/test_v8_fee_obligation_recognize.py tests/test_v8_fee_estimate_read_only.py tests/test_v8_fee_obligation_payment_evidence.py tests/test_v8_fee_obligation_contracts.py tests/test_v8_w1_f1_fee_obligation.py tests/test_v8_w1_f2_fee_obligation_line.py tests/test_v8_lifecycle_activity_append.py from backend cwd (170 passed)",
         "independent compositional successor tranche with rows 110/113 from backend cwd (290 passed)"
@@ -2682,7 +2680,8 @@
       "commits": [
         "4d85a56e9990107245c0f448e9d7ecb11c3fb5a3",
         "114d26b8a4967a517e1ae6c4da73692d921ad020",
-        "f89e67e60db95ce34046acc84aaafd53703f3fea"
+        "f89e67e60db95ce34046acc84aaafd53703f3fea",
+        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
@@ -2690,15 +2689,16 @@
         "backend/tests/test_v8_certificate_archived_activity.py",
         "backend/tests/test_v8_gov_payment_activity_adapter.py"
       ],
-      "tree_sha256": "095a1ac160fdf66cfa168543fdcf3fb17357a46fc0d083f1639115f547d9ee5b",
+      "tree_sha256": "e3788d75ffe844ee66292083e62dff2ec9642458c2dda739206acba387f0d72d",
       "tests": [
         "pytest -q tests/test_v8_certificate_archived_activity.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "successor re-attestation with row125 focused test from backend cwd (3 passed)",
-        "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)"
+        "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)",
+        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-EXPORT-SERVICE.md"
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
@@ -2744,7 +2744,8 @@
       "story_id": "V8-FEE-FACT-WRITERS-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "1a886c4e40b0ee6e83882c42e6eb4da561feccc7"
+        "1a886c4e40b0ee6e83882c42e6eb4da561feccc7",
+        "1975bb1027f201a9bc35201dcc0cafbdfc278729"
       ],
       "paths": [
         "backend/app/modules/fees/fee_reduction_approval_service.py",
@@ -2752,14 +2753,15 @@
         "backend/tests/test_v8_fee_obligation_instruction.py",
         "backend/tests/test_v8_fee_reduction_approval_record.py"
       ],
-      "tree_sha256": "5f1fad6faf138f5e5a7d50768545d3504940a296120fbfaeae2617b9fd038996",
+      "tree_sha256": "6f043e166640684d34488448c9d2c7631e0fd72563008ae7071d2b3bd8c092f0",
       "tests": [
         "pytest -q tests/test_v8_fee_reduction_approval_record.py plus its three inherited regressions from backend cwd (186 passed)",
-        "pytest -q tests/test_v8_fee_obligation_instruction.py plus its three inherited regressions from backend cwd (135 passed)"
+        "pytest -q tests/test_v8_fee_obligation_instruction.py plus its three inherited regressions from backend cwd (135 passed)",
+        "independent compositional successor tranche with rows 110/113 from backend cwd (290 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-FEE-FACT-WRITERS-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-FEE-FACT-WRITERS-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-OFFICIAL-FEE-CATEGORY-CORRECTION-CURRENT-ADOPTION",
@@ -2791,7 +2793,7 @@
         "backend/app/modules/annuity/service.py",
         "backend/tests/test_v8_official_payment_evidence_activity_adapter.py"
       ],
-      "tree_sha256": "b8c42f9742c342941966c1df2e22c964db9822ef2f5cbd5aa7d47dcfe6fae9e8",
+      "tree_sha256": "4befe0c4c9a633dd78313e462c2b7e26787ae0535652498de4178d2bd36c1ea0",
       "tests": [
         "pytest -q tests/test_v8_official_payment_evidence_activity_adapter.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "independent successor re-attestation with certificate, GovPayment and row125 tests from backend cwd (3 passed)",
@@ -2814,7 +2816,7 @@
         "backend/app/modules/annuity/export_excel.py",
         "backend/tests/test_v8_internal_pay_list_export.py"
       ],
-      "tree_sha256": "306223572b27d81838ccf5b9e2828f904f0daa9d5f5e005d04942d4c10df7195",
+      "tree_sha256": "74033c523ef9fafab723221e1782c24664b2a8a777d306c3d14f1233d57c2182",
       "tests": [
         "pytest -q tests/test_v8_internal_pay_list_export.py from backend cwd (13 passed)",
         "independent row159, row160, row124 and row125 tranche from backend cwd (19 passed)",
@@ -2861,7 +2863,7 @@
         "frontend/src/api/cases.types.ts",
         "frontend/src/modules/cases/pages/CaseCreate.vue"
       ],
-      "tree_sha256": "b307d54ab3df20b80995bb12f87d83b1cc0b5ceeefb659f9730bfb1a98fa211f",
+      "tree_sha256": "63231a6b9dd4a22c1a7e860ff04fe4e28fdcf65bc9d7e1df2666788a9bdd0153",
       "tests": [
         "pytest -q tests/test_v8_case_create_fee_reduction.py tests/test_v8_case_update_fee_reduction.py tests/test_v8_case_create_status_gate.py tests/test_v8_case_update_status_gate.py tests/test_v8_lifecycle_case_opened.py from backend cwd (98 passed, 19 subtests passed)",
         "playwright test v8-case-create-fee-reduction.spec.ts v8-case-create-status-gate.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (5 passed)"
@@ -2881,7 +2883,7 @@
         "backend/tests/test_v8_fee_obligation_detail_read.py",
         "backend/tests/test_v8_fee_obligation_prepare_draft.py"
       ],
-      "tree_sha256": "3725084b2996d6257fb8f5e3767c3293ed9ba7c5295b6c4d7cb264391fcf3aa3",
+      "tree_sha256": "67daa76fb1973f991bdf3ec60cb35fc2ccc845fab0bb4b20eae9bf985c8bd8e3",
       "tests": [
         "pytest -q detail-read, prepare-draft and nine inherited fee-obligation/lifecycle files from backend cwd (290 passed)"
       ],
@@ -2900,13 +2902,36 @@
         "backend/tests/test_v8_pay_list_export_artifact_read.py",
         "backend/tests/test_v8_pay_list_payment_export_decouple.py"
       ],
-      "tree_sha256": "8cc495cc87c5ad48cea305142d7eaa28e9bdc1cf11d2f497cc70fa012cd18c51",
+      "tree_sha256": "05c6b1e1c8d9a6a05f40d7b461a2cfb3e1554010255ae953df7f3c8b3da3f104",
       "tests": [
         "pytest -q rows161/162 plus row159/160 and row124/125 successor files from backend cwd (25 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "2e12c4644c4228a7bee3487243544f1d486c8746"
+      ],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-edit-fee-reduction.spec.ts",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-edit-status-gate.spec.ts",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-fee-reduction-approval-case-edit.spec.ts",
+        "frontend/src/api/fees.ts",
+        "frontend/src/api/fees.types.ts",
+        "frontend/src/modules/cases/pages/CaseEdit.vue"
+      ],
+      "tree_sha256": "677215ccfcb8a9d00d8ba0d547ab057f90483b5844c6481598a98669ea7bef52",
+      "tests": [
+        "playwright test v8-fee-reduction-approval-case-edit.spec.ts v8-case-edit-fee-reduction.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (5 passed)",
+        "exact-file ESLint passed; full typecheck matched the integration base with zero new or owned-path errors"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION.md"
     }
   ]
 }

@@ -26,8 +26,10 @@ Fresh independent verification:
 - backend five-file tranche: 98 passed, 19 subtests passed;
 - Chromium Playwright exact three-spec tranche: 5 passed;
 - scoped Ruff, exact-file ESLint, exact-story `vue-tsc --noEmit` and diff-check: passed;
-- exact product/test tree SHA-256:
+- reviewer content-manifest SHA-256:
   `b307d54ab3df20b80995bb12f87d83b1cc0b5ceeefb659f9730bfb1a98fa211f`;
+- Lean exact Git path/mode/blob fingerprint:
+  `63231a6b9dd4a22c1a7e860ff04fe4e28fdcf65bc9d7e1df2666788a9bdd0153`;
 - patch SHA-256:
   `bd6056abfaa48f54792328407db0a959893e2d23d8f93abbdf333033695b8f34`;
 - story SHA-256:

@@ -9,7 +9,6 @@
     "ARCHIVE_ONLY_HISTORY": 283,
     "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION": 8,
     "V8-ADOPT-DOCUMENT-REVIEW-UI": 5,
-    "V8-ADOPT-FEE-REDUCTION-UI": 2,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
     "V8-ADOPT-ANNUITY-RATE-SOURCES": 36,
@@ -21,8 +20,9 @@
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 2,
     "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION": 4,
-    "V8-ADOPT-FEE-OBLIGATION": 16,
+    "V8-ADOPT-FEE-OBLIGATION": 14,
     "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION": 3,
+    "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION": 4,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
     "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
@@ -54,8 +54,8 @@
     {
       "path": "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-fee-reduction-approval-case-edit.spec.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-REDUCTION-UI",
-      "rationale": "fee-reduction UI end-to-end verification"
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
+      "rationale": "current-reviewed CaseEdit fee-reduction approval and legacy-value story"
     },
     {
       "path": "backend/alembic/versions/v8_delta27_future_annuity_reduction_lineage.py",
@@ -1350,14 +1350,14 @@
     {
       "path": "frontend/src/api/fees.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "fee obligation frontend API contract"
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
+      "rationale": "current-reviewed CaseEdit fee-reduction approval and legacy-value story"
     },
     {
       "path": "frontend/src/api/fees.types.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "fee obligation frontend API contract"
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
+      "rationale": "current-reviewed CaseEdit fee-reduction approval and legacy-value story"
     },
     {
       "path": "frontend/src/api/govPayments.ts",
@@ -1380,8 +1380,8 @@
     {
       "path": "frontend/src/modules/cases/pages/CaseEdit.vue",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-REDUCTION-UI",
-      "rationale": "case fee-reduction UI/API contract"
+      "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
+      "rationale": "current-reviewed CaseEdit fee-reduction approval and legacy-value story"
     },
     {
       "path": "frontend/src/modules/documents/components/AttachmentList.vue",
