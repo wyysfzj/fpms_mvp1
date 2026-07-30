@@ -15,7 +15,8 @@
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
     "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 3,
     "V8-ADOPT-LIFECYCLE-CENTER": 21,
-    "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 2,
+    "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 1,
+    "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES": 1,
     "V8-ADOPT-DOCUMENT-EVIDENCE": 41,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
@@ -98,8 +99,8 @@
     {
       "path": "backend/app/modules/cases/lifecycle_rules.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
-      "rationale": "current-reviewed lifecycle rules through post-OA, grant, register conflict and application rejection outcomes"
+      "story_id": "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES",
+      "rationale": "current-reviewed lifecycle rules through application/patent terminal and restoration outcomes"
     },
     {
       "path": "backend/app/modules/cases/lifecycle_service.py",
