@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -31,12 +32,21 @@ from app.modules.cases.models import Case, CaseActivityEvent
 __all__ = ("LifecycleRuleDecision", "apply_lifecycle_event")
 
 _RULES_MODULE = "app.modules.cases.lifecycle_rules"
+_PATENT_REGISTER_STATUS_EVENT = "PATENT_REGISTER_STATUS_CONFIRMED"
+_PATENT_REGISTER_STATUS_SCHEMA = "FPMS_PATENT_REGISTER_STATUS_CONFIRMED_V1"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class LifecycleRuleDecision:
     current_projection: LifecycleProjection
     oa_sequence: int | None = None
+    conflict_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PatentRegisterStatusRuleContext:
+    predecessor_event_type: str | None
+    predecessor_status_snapshot_hash: str | None
 
 
 def apply_lifecycle_event(
@@ -102,7 +112,7 @@ def apply_lifecycle_event(
             previous_projection=previous_projection,
             current_projection=decision.current_projection,
             legacy_case_status=legacy_projection.legacy_case_status,
-            conflict_codes=(),
+            conflict_codes=decision.conflict_codes,
         )
 
 
@@ -134,13 +144,30 @@ def _replay(
         event_type=cast(str, existing["activity_type"]),
         oa_sequence=cast(int | None, stored_oa_sequence),
     )
+    conflict_codes: tuple[str, ...] = ()
+    if (
+        command.event_type == _PATENT_REGISTER_STATUS_EVENT
+        and existing["activity_type"] == _PATENT_REGISTER_STATUS_EVENT
+    ):
+        append_case_activity(
+            command,
+            transaction,
+            previous_projection=previous_projection,
+            current_projection=current_projection,
+            legacy_case_status=legacy_projection.legacy_case_status,
+            conflict_codes=(),
+        )
+        decision = _resolve_decision(command, previous_projection, transaction)
+        if decision.current_projection != current_projection:
+            _invalid_decision()
+        conflict_codes = decision.conflict_codes
     return append_case_activity(
         command,
         transaction,
         previous_projection=previous_projection,
         current_projection=current_projection,
         legacy_case_status=legacy_projection.legacy_case_status,
-        conflict_codes=(),
+        conflict_codes=conflict_codes,
     )
 
 
@@ -172,7 +199,11 @@ def _resolve_decision(
             status_code=409,
         )
 
-    decision = rule(command, previous_projection, transaction)
+    rule_context: object = transaction
+    if command.event_type == _PATENT_REGISTER_STATUS_EVENT:
+        rule_context = _patent_register_status_context(command, transaction)
+
+    decision = rule(command, previous_projection, rule_context)
     if type(decision) is not LifecycleRuleDecision:
         _invalid_decision()
     if type(decision.current_projection) is not LifecycleProjection:
@@ -181,7 +212,113 @@ def _resolve_decision(
         type(decision.oa_sequence) is not int or decision.oa_sequence < 1
     ):
         _invalid_decision()
+    if type(decision.conflict_codes) is not tuple:
+        _invalid_decision()
+    if any(type(code) is not str or not code for code in decision.conflict_codes):
+        _invalid_decision()
+    if tuple(sorted(decision.conflict_codes)) != decision.conflict_codes or len(
+        set(decision.conflict_codes)
+    ) != len(decision.conflict_codes):
+        _invalid_decision()
     return decision
+
+
+def _patent_register_status_context(
+    command: LifecycleEventCommand,
+    transaction: Session,
+) -> PatentRegisterStatusRuleContext:
+    predecessor_id = command.supersedes_event_id
+    if predecessor_id is None:
+        return PatentRegisterStatusRuleContext(
+            predecessor_event_type=None,
+            predecessor_status_snapshot_hash=None,
+        )
+
+    predecessor = (
+        transaction.execute(
+            select(
+                CaseActivityEvent.case_id,
+                CaseActivityEvent.activity_type,
+                CaseActivityEvent.payload_json,
+            ).where(CaseActivityEvent.id == predecessor_id)
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if predecessor is None:
+        _fail(
+            "LIFECYCLE_SUPERSEDED_ACTIVITY_NOT_FOUND",
+            "被替代的生命周期活动不存在",
+            status_code=409,
+        )
+    if predecessor["case_id"] != command.case_id:
+        _fail(
+            "LIFECYCLE_SUPERSEDED_ACTIVITY_CASE_MISMATCH",
+            "被替代的生命周期活动不属于当前案件",
+            status_code=409,
+        )
+
+    predecessor_event_type = predecessor["activity_type"]
+    if type(predecessor_event_type) is not str:
+        _invalid_decision()
+    if predecessor_event_type != _PATENT_REGISTER_STATUS_EVENT:
+        return PatentRegisterStatusRuleContext(
+            predecessor_event_type=predecessor_event_type,
+            predecessor_status_snapshot_hash=None,
+        )
+
+    return PatentRegisterStatusRuleContext(
+        predecessor_event_type=predecessor_event_type,
+        predecessor_status_snapshot_hash=_verified_register_status_snapshot_hash(
+            predecessor["payload_json"]
+        ),
+    )
+
+
+def _verified_register_status_snapshot_hash(value: object) -> str:
+    payload = _canonical_stored_object(value)
+    if payload.get("schema") != _PATENT_REGISTER_STATUS_SCHEMA:
+        _stored_register_payload_invalid()
+
+    snapshot = payload.get("status_snapshot")
+    snapshot_hash = payload.get("status_snapshot_hash")
+    if type(snapshot) is not str or type(snapshot_hash) is not str:
+        _stored_register_payload_invalid()
+    if len(snapshot_hash) != 64 or any(
+        character not in "0123456789abcdef" for character in snapshot_hash
+    ):
+        _stored_register_payload_invalid()
+    _canonical_stored_object(snapshot)
+    if hashlib.sha256(snapshot.encode()).hexdigest() != snapshot_hash:
+        _stored_register_payload_invalid()
+    return snapshot_hash
+
+
+def _canonical_stored_object(value: object) -> dict[str, object]:
+    if type(value) is not str:
+        _stored_register_payload_invalid()
+    try:
+        payload = json.loads(value)
+        canonical = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (RecursionError, TypeError, ValueError, json.JSONDecodeError):
+        _stored_register_payload_invalid()
+    if type(payload) is not dict or canonical != value:
+        _stored_register_payload_invalid()
+    return payload
+
+
+def _stored_register_payload_invalid() -> None:
+    _fail(
+        "LIFECYCLE_PAYLOAD_INVALID",
+        "已存专利登记簿状态载荷无效",
+        status_code=409,
+    )
 
 
 def _project_legacy(
