@@ -20,7 +20,6 @@ import type {
     FeeReductionApprovalCreatePayload,
     FeeReductionApprovalCreateResult,
     FeeReductionApprovalListItem,
-    FeeObligationDetail,
     FeeObligationInstructionPayload,
     FeeObligationInstructionResult,
     OfficialFeeEstimateContext,
@@ -466,11 +465,6 @@ export async function recordFeeObligationInstruction(
         `/fees/obligations/${obligationId}/instruction`,
         payload,
     )
-    return response.data
-}
-
-export async function getFeeObligation(id: string): Promise<FeeObligationDetail> {
-    const response = await http.get<FeeObligationDetail>(`/fees/obligations/${id}`)
     return response.data
 }
 
