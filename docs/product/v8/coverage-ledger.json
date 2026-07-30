@@ -866,16 +866,16 @@
     {
       "catalog_id": "FPMS-V8-FO-INSTRUCTION-HTTP-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FO-INSTRUCTION-FE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -890,16 +890,16 @@
     {
       "catalog_id": "FPMS-V8-FO-OBLIGATION-DETAIL-HTTP-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FO-OBLIGATION-DETAIL-FE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2830,7 +2830,8 @@
       "story_id": "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "bd8590eed6ef2b0636ef54035501a61c75f7fbd9"
+        "bd8590eed6ef2b0636ef54035501a61c75f7fbd9",
+        "446d295fd860bda3bfee2466da0a222f7aa8ff6b"
       ],
       "paths": [
         "backend/app/modules/fees/api.py",
@@ -2838,14 +2839,15 @@
         "backend/tests/test_v8_fee_reduction_approval_create_api.py",
         "backend/tests/test_v8_fee_reduction_approval_list_api.py"
       ],
-      "tree_sha256": "1cf9bacbad739e4bcdd1f92abdc9b6b17eb5ebf21cdac81be50032fb5a4e6256",
+      "tree_sha256": "f62c7cd3dff5a1972c2b80b7a29ca7e894ea13f66737243ec395e0577c5b0dc3",
       "tests": [
         "pytest -q tests/test_v8_fee_reduction_approval_create_api.py tests/test_v8_fee_reduction_approval_list_api.py from backend cwd (39 passed)",
-        "independent real SQLite malformed evidence identity probe returned deterministic 409"
+        "independent real SQLite malformed evidence identity probe returned deterministic 409",
+        "independent fee-obligation HTTP/FE successor tranche included both approval API files (168 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
@@ -2914,7 +2916,8 @@
       "story_id": "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "2e12c4644c4228a7bee3487243544f1d486c8746"
+        "2e12c4644c4228a7bee3487243544f1d486c8746",
+        "446d295fd860bda3bfee2466da0a222f7aa8ff6b"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-edit-fee-reduction.spec.ts",
@@ -2924,14 +2927,41 @@
         "frontend/src/api/fees.types.ts",
         "frontend/src/modules/cases/pages/CaseEdit.vue"
       ],
-      "tree_sha256": "677215ccfcb8a9d00d8ba0d547ab057f90483b5844c6481598a98669ea7bef52",
+      "tree_sha256": "018ad6e98f485d27eb552da80f4354bb67a163194062571773cad062c6fc7a5b",
       "tests": [
         "playwright test v8-fee-reduction-approval-case-edit.spec.ts v8-case-edit-fee-reduction.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (5 passed)",
-        "exact-file ESLint passed; full typecheck matched the integration base with zero new or owned-path errors"
+        "exact-file ESLint passed; full typecheck matched the integration base with zero new or owned-path errors",
+        "independent fee-obligation HTTP/FE successor re-attestation: exact three Chromium specs 5 passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "446d295fd860bda3bfee2466da0a222f7aa8ff6b"
+      ],
+      "paths": [
+        "backend/app/modules/fees/api.py",
+        "backend/app/modules/fees/obligation_schemas.py",
+        "backend/tests/test_v8_fee_obligation_detail_api.py",
+        "backend/tests/test_v8_fee_obligation_instruction_api.py",
+        "frontend/src/api/contracts/v8_fee_obligation_detail.contract.ts",
+        "frontend/src/api/contracts/v8_fee_obligation_instruction.contract.ts",
+        "frontend/src/api/fees.ts",
+        "frontend/src/api/fees.types.ts"
+      ],
+      "tree_sha256": "cd9a24ee83d1a53ef8d01e182ebf9b6cd98ce1d0da19a928fb4568fb10b4df9b",
+      "tests": [
+        "pytest -q instruction/detail HTTP, instruction/detail service and fee-reduction approval create/list files from backend cwd (168 passed)",
+        "strict isolated TypeScript probes and exact-file ESLint passed",
+        "playwright test exact three CaseEdit fee-reduction/status specs --project=chromium --workers=1 (5 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md"
     }
   ]
 }
