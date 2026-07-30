@@ -230,48 +230,48 @@
     {
       "catalog_id": "FPMS-V8-LC-OA-RECEIPT-ARCHIVED-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-REEXAMINATION-STARTED-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-GRANT-REGISTRATION-NOTICE-RECORDED-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-GRANT-ANNOUNCEMENT-CONFIRMED-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-PATENT-REGISTER-STATUS-CONFIRMED-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LC-APPLICATION-REJECTION-CONFIRMED-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2398,7 +2398,8 @@
         "05e88ef32f4393a0161ca6e176dd0b47fc7dc3c6",
         "2e12c4644c4228a7bee3487243544f1d486c8746",
         "6834710cae300aa2b748268a909f11a8239b9977",
-        "9c94ce38d231a8052995061b6130591715099a39"
+        "9c94ce38d231a8052995061b6130591715099a39",
+        "cea2ca2e34dafee278fc2087f1ab5bfe36f8aa34"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-status-gate.spec.ts",
@@ -2414,18 +2415,19 @@
         "frontend/src/modules/cases/pages/CaseCreate.vue",
         "frontend/src/modules/cases/pages/CaseEdit.vue"
       ],
-      "tree_sha256": "83f726a6c83b20e4f3b52aa1ef2827e065dccb871550aff6e2d847c59464d19a",
+      "tree_sha256": "98b8e6d4f19d79451b20c04e837505fad6e3b1015a32033deb4c5cfad7b1382e",
       "tests": [
         "pytest -q tests/test_v8_lifecycle_case_opened.py tests/test_v8_case_create_status_gate.py tests/test_v8_case_update_status_gate.py from backend cwd (45 passed)",
         "playwright test v8-case-create-status-gate.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (2 passed)",
         "independent compositional successor tranche with rows 98–100: backend 98 passed plus 19 subtests; Playwright 5 passed",
         "independent CaseEdit fee-reduction successor tranche: exact three Chromium specs 5 passed",
         "independent filing-identity successor re-attestation: exact backend canary tranche 45 passed; six UI/test blobs unchanged",
-        "independent prosecution successor tranche included exact CASE_OPENED regression in 577 passed; all status-gate paths unchanged"
+        "independent prosecution successor tranche included exact CASE_OPENED regression in 577 passed; all status-gate paths unchanged",
+        "independent post-OA successor review: lifecycle_rules only gained rows29-34 after all prior rule bodies; exact 461-test tranche passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-FEE-FOUNDATION-CONTRACTS-CURRENT-VERIFICATION",
@@ -2972,7 +2974,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "6834710cae300aa2b748268a909f11a8239b9977",
-        "9c94ce38d231a8052995061b6130591715099a39"
+        "9c94ce38d231a8052995061b6130591715099a39",
+        "cea2ca2e34dafee278fc2087f1ab5bfe36f8aa34"
       ],
       "paths": [
         "backend/app/modules/cases/lifecycle_rules.py",
@@ -2980,21 +2983,23 @@
         "backend/tests/test_v8_lifecycle_filing_preparation_started.py",
         "backend/tests/test_v8_lifecycle_filing_receipt_archived.py"
       ],
-      "tree_sha256": "d00362fd3e6076e3bc71ef355f501ac15d6cf7b067a14db6315978a2863ea050",
+      "tree_sha256": "0b6cbc23797f464cdd8521f1c210c323617ed78f0e41cda8cbc1228a8bded592",
       "tests": [
         "pytest -q exact seven-file filing lifecycle tranche from backend cwd (204 passed)",
         "scoped Ruff check and Ruff format-check passed",
-        "independent prosecution successor tranche included all filing predecessors and apply-event regression (577 passed)"
+        "independent prosecution successor tranche included all filing predecessors and apply-event regression (577 passed)",
+        "independent post-OA successor review: lifecycle_rules only gained rows29-34 after all filing/prosecution rules; exact 461-test tranche passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "9c94ce38d231a8052995061b6130591715099a39"
+        "9c94ce38d231a8052995061b6130591715099a39",
+        "cea2ca2e34dafee278fc2087f1ab5bfe36f8aa34"
       ],
       "paths": [
         "backend/app/modules/cases/lifecycle_rules.py",
@@ -3006,14 +3011,41 @@
         "backend/tests/test_v8_lifecycle_rectification_notice.py",
         "backend/tests/test_v8_lifecycle_substantive_started.py"
       ],
-      "tree_sha256": "a0a7af30990c77d12bf1cfb18f0fd232e3ce23dde9ca71f96e2e93dd8f8176d8",
+      "tree_sha256": "a74335883d184cc547f0cfde1b43d5d46bc3dd61bfdc3da4362c4ec1dad586cd",
       "tests": [
         "pytest -q exact 12-file prosecution, filing and apply-event lifecycle tranche from backend cwd (577 passed)",
+        "scoped Ruff check and exact two-tree diff-check passed",
+        "independent post-OA successor review: lifecycle_rules only gained rows29-34 after the prosecution registry entries; exact 461-test tranche passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "cea2ca2e34dafee278fc2087f1ab5bfe36f8aa34"
+      ],
+      "paths": [
+        "backend/app/modules/cases/lifecycle_rules.py",
+        "backend/app/modules/cases/lifecycle_service.py",
+        "backend/tests/test_v8_lifecycle_application_rejection.py",
+        "backend/tests/test_v8_lifecycle_grant_announcement.py",
+        "backend/tests/test_v8_lifecycle_grant_registration_notice.py",
+        "backend/tests/test_v8_lifecycle_oa_receipt.py",
+        "backend/tests/test_v8_lifecycle_reexamination_started.py",
+        "backend/tests/test_v8_lifecycle_register_status.py",
+        "backend/tests/test_v8_lifecycle_register_status_conflict_service.py"
+      ],
+      "tree_sha256": "5c8bfcfbbd6cc6f7257745617ab7a61834749a91b2bcecfe1e327eab1cce1ea5",
+      "tests": [
+        "pytest -q exact nine-file post-OA, grant, register conflict and predecessor tranche from backend cwd (461 passed)",
         "scoped Ruff check and exact two-tree diff-check passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION.md"
     }
   ]
 }

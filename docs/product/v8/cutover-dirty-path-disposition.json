@@ -14,8 +14,8 @@
     "V8-ADOPT-ANNUITY-RATE-SOURCES": 36,
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
     "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 3,
-    "V8-ADOPT-LIFECYCLE-CENTER": 22,
-    "V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION": 1,
+    "V8-ADOPT-LIFECYCLE-CENTER": 21,
+    "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 2,
     "V8-ADOPT-DOCUMENT-EVIDENCE": 47,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
@@ -98,14 +98,14 @@
     {
       "path": "backend/app/modules/cases/lifecycle_rules.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-PROSECUTION-LIFECYCLE-NOTICE-VERTICAL-CURRENT-ADOPTION",
-      "rationale": "current-reviewed prosecution notice lifecycle, deadline and evidence rules"
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle rules through post-OA, grant, register conflict and application rejection outcomes"
     },
     {
       "path": "backend/app/modules/cases/lifecycle_service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-LIFECYCLE-CENTER",
-      "rationale": "central case lifecycle carrier and service"
+      "story_id": "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle service with exact patent-register predecessor context and replay"
     },
     {
       "path": "backend/app/modules/cases/models.py",
