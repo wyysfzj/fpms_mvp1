@@ -886,8 +886,8 @@
     {
       "catalog_id": "FPMS-V8-FO-OBLIGATION-DETAIL-READ-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -910,8 +910,8 @@
     {
       "catalog_id": "FPMS-V8-FO-PREPARE-DRAFT-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2540,7 +2540,8 @@
       "story_id": "V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "f89d222861d6ebda88ead322cfd7254e8fb26e64"
+        "f89d222861d6ebda88ead322cfd7254e8fb26e64",
+        "1975bb1027f201a9bc35201dcc0cafbdfc278729"
       ],
       "paths": [
         "backend/app/modules/fees/obligation_service.py",
@@ -2552,13 +2553,14 @@
         "backend/tests/test_v8_w1_f1_fee_obligation.py",
         "backend/tests/test_v8_w1_f2_fee_obligation_line.py"
       ],
-      "tree_sha256": "0790602b59eec0f56a547716648bc3b9a514925785bad21ee4cb4a99601c615e",
+      "tree_sha256": "56728d5e3aff63642cd5e4b7f1b98846f0b6771510b15cea3d93796db56648be",
       "tests": [
-        "pytest -q tests/test_v8_fee_obligation_recognize.py tests/test_v8_fee_estimate_read_only.py tests/test_v8_fee_obligation_payment_evidence.py tests/test_v8_fee_obligation_contracts.py tests/test_v8_w1_f1_fee_obligation.py tests/test_v8_w1_f2_fee_obligation_line.py tests/test_v8_lifecycle_activity_append.py from backend cwd (170 passed)"
+        "pytest -q tests/test_v8_fee_obligation_recognize.py tests/test_v8_fee_estimate_read_only.py tests/test_v8_fee_obligation_payment_evidence.py tests/test_v8_fee_obligation_contracts.py tests/test_v8_w1_f1_fee_obligation.py tests/test_v8_w1_f2_fee_obligation_line.py tests/test_v8_lifecycle_activity_append.py from backend cwd (170 passed)",
+        "independent compositional successor tranche with rows 110/113 from backend cwd (290 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION.md"
+      "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-OFFICIAL-RATE-BOOK-CARRIER-CURRENT-VERIFICATION",
@@ -2862,6 +2864,25 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "1975bb1027f201a9bc35201dcc0cafbdfc278729"
+      ],
+      "paths": [
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/tests/test_v8_fee_obligation_detail_read.py",
+        "backend/tests/test_v8_fee_obligation_prepare_draft.py"
+      ],
+      "tree_sha256": "3725084b2996d6257fb8f5e3767c3293ed9ba7c5295b6c4d7cb264391fcf3aa3",
+      "tests": [
+        "pytest -q detail-read, prepare-draft and nine inherited fee-obligation/lifecycle files from backend cwd (290 passed)"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md"
     }
   ]
 }
