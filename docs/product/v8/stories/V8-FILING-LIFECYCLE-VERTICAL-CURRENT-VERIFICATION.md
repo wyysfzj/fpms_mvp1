@@ -5,8 +5,9 @@
   exact fail-closed sequence from filing preparation through externally recorded
   submission to archived filing receipt, including the first establishment of
   `APPLICATION_PENDING`.
-- Change mode: current verification only. The product and decisive-test bytes already
-  implement the frozen contracts, so this story does not modify them.
+- Change mode: current adoption plus one minimum fail-closed correction. Independent
+  review found that external-submission evidence accepted a blank object identity; the
+  exact current-tree RED and minimum rule/test change close only that defect.
 - Authority: the lifecycle and evidence-lineage invariants in
   `docs/product/v8/domain-contract.md`, frozen catalog rows 19–21, and their exact task
   contracts.
@@ -61,8 +62,10 @@ preparation starts or an external submission is manually recorded. It changes to
 - `backend/tests/test_v8_lifecycle_filing_external_submission.py`
 - `backend/tests/test_v8_lifecycle_filing_receipt_archived.py`
 
-The three decisive test blobs are byte-identical to their archive counterparts.
-Historical RED and accepted evidence remain comparison inputs and were not rerun.
+The preparation and receipt decisive-test blobs are byte-identical to their archive
+counterparts. The external-submission test retains its archive cases and adds only the
+blank/whitespace identity regression. Historical task RED and accepted evidence remain
+comparison inputs and were not rerun.
 
 ## Current-tree verification
 
@@ -70,7 +73,13 @@ The controller granted the serialized SQLite/shared verification lane and ran:
 
 `/Users/cfcc/Workshop/myprojects/fpms_mvp1_blueprint_atomic/backend/.venv/bin/pytest -q tests/test_v8_lifecycle_case_opened.py tests/test_v8_lifecycle_filing_preparation_started.py tests/test_v8_lifecycle_filing_external_submission.py tests/test_v8_lifecycle_filing_receipt_archived.py tests/test_v8_lifecycle_apply_event.py tests/test_v8_lifecycle_activity_append.py tests/test_v8_lifecycle_evidence_kind_capacity.py`
 
-Result: `200 passed`, with only the inherited third-party `passlib` deprecation warning.
+The correction RED ran only
+`test_filing_external_submission_rejects_blank_evidence_identity`: all four cases failed
+because the invalid command returned a transition. After the minimum nonblank identity
+guard, the same four cases passed.
+
+The complete current-tree result is `204 passed`, with only the inherited third-party
+`passlib` deprecation warning.
 
 Scoped Ruff check and Ruff format-check pass on the shared lifecycle rule file and the
 three decisive tests. An independent High reviewer must review the exact story commit,
@@ -81,5 +90,6 @@ path/mode/blob fingerprint before this `PROTECTED` story is mapped.
 
 No second or later lifecycle event, API, UI, adapter/resolver, persistence, activity,
 document creation, fee, deadline, permission, schema/migration, registry reorder,
-historical evidence mutation, coverage-ledger edit or Foundation claim. Rollback removes
-only this story-card commit; the current product and test bytes remain unchanged.
+historical evidence mutation, coverage-ledger edit or Foundation claim. Rollback reverts
+the story-card, external-submission regression and nonblank identity guard as one exact
+candidate range, restoring the prior rule/test bytes without changing schema or data.
