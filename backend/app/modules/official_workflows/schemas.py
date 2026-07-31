@@ -53,6 +53,7 @@ class OfficialWorkPackageManifestOut(BaseModel):
     id: str
     package_id: str
     attachment_id: str | None = None
+    evidence_version_id: str | None = None
     official_file_role: str | None = None
     source_role_alias: str | None = None
     external_upload_position: str | None = None

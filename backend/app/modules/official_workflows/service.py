@@ -24,6 +24,7 @@ from app.modules.documents.models import (
     DocAttachment,
     DocTemplate,
     Document,
+    DocumentEvidenceVersion,
     LetterHandoff,
     LetterHandoffAttachment,
 )
@@ -190,6 +191,7 @@ def _manifest_out(manifest: OfficialWorkPackageManifest) -> OfficialWorkPackageM
         id=manifest.id,
         package_id=manifest.package_id,
         attachment_id=manifest.attachment_id,
+        evidence_version_id=manifest.evidence_version_id,
         official_file_role=manifest.official_file_role,
         source_role_alias=manifest.source_role_alias,
         external_upload_position=manifest.external_upload_position,
@@ -448,7 +450,25 @@ def _upsert_manifest_role(
         package_id=package_id,
         official_file_role=role,
     )
+    evidence_version_ids = (
+        db.execute(
+            select(DocumentEvidenceVersion.id)
+            .where(DocumentEvidenceVersion.attachment_id == attachment.id)
+            .limit(2)
+        )
+        .scalars()
+        .all()
+        if attachment
+        else []
+    )
+    if len(evidence_version_ids) > 1:
+        raise_business_error(
+            "WORK_PACKAGE_MANIFEST_EVIDENCE_CONFLICT",
+            "Attachment evidence-version identity is ambiguous",
+            status_code=409,
+        )
     manifest.attachment_id = attachment.id if attachment else None
+    manifest.evidence_version_id = evidence_version_ids[0] if evidence_version_ids else None
     manifest.source_role_alias = (
         getattr(attachment, "source_role_alias", None) if attachment else None
     )
