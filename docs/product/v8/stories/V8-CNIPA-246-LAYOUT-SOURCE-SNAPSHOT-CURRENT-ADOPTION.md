@@ -1,7 +1,9 @@
 # Story V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION
 
 - Risk: `PROTECTED`
-- Base: `02c38d59ebfa29185ed1dfbea4fcd4c7164fe9e9`.
+- Initial implementation base: `02c38d59ebfa29185ed1dfbea4fcd4c7164fe9e9`.
+- Current integration parent for final review:
+  `0516701da7834ea0ca12e8c3119173da314d1096`.
 - Outcome: current-adopt the exact hash-locked CNIPA Announcement 246 normalized source
   snapshot and provenance carrier required by frozen D4-09, without creating, approving,
   activating or exposing any rate-book candidate.
