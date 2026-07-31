@@ -23,7 +23,8 @@ no service or API behavior.
 ## Verification and non-goals
 
 The focused SQLite migration/persistence probe passed `3/3`; exact three-path Ruff passed.
-Independent High review approved P0/P1/P2 `0/0/0`. The three current paths are
-byte-identical to the original product commit. No backfill, service, API, fee rule,
-instruction adapter, rate candidate or future-annuity behavior enters this adoption.
-
+Independent High review approved P0/P1/P2 `0/0/0`. Delta-27 later added a disjoint
+four-column model to the shared model file without changing this carrier or migration;
+the combined successor compatibility tranche passed `7/7` and independent High review
+again approved P0/P1/P2 `0/0/0`. No backfill, service, API, fee rule, instruction adapter,
+rate candidate or future-annuity behavior enters this adoption.

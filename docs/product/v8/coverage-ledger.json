@@ -2759,17 +2759,21 @@
       "story_id": "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "fdb4bb56459050d61987fd68f6a953300fcaea94"
+        "fdb4bb56459050d61987fd68f6a953300fcaea94",
+        "03585cb723dece246d987eba92efcf3f0c24e7a5",
+        "9fe91752a7e0027f7792c032d2a966c53481e5fc"
       ],
       "paths": [
         "backend/alembic/versions/v8_w5_pay_list_export_artifact.py",
         "backend/app/modules/annuity/models.py",
         "backend/tests/test_v8_pay_list_export_artifact_schema.py"
       ],
-      "tree_sha256": "f2732df434169728af41c237f76f5697c00122ba1753973b69e84b918eb3b537",
+      "tree_sha256": "cf8ef258d0b995295882addbe6fc8de800702e4bc75c475b2841be66ac50a4ed",
       "tests": [
         "pytest -q tests/test_v8_pay_list_export_artifact_schema.py from backend cwd (4 passed)",
-        "alembic heads plus isolated clean SQLite upgrade/current at v8_d4_evidence_kind_capacity_01"
+        "alembic heads plus isolated clean SQLite upgrade/current at v8_d27_annuity_reduction_01",
+        "Delta-27 successor compatibility tranche with Delta-4 lineage (7 passed)",
+        "independent High successor review approved P0/P1/P2 0/0/0"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION.md",
@@ -3940,18 +3944,21 @@
       "story_id": "V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "83d014fb825c76e90c53821c7db9ed7f3cd49436"
+        "83d014fb825c76e90c53821c7db9ed7f3cd49436",
+        "03585cb723dece246d987eba92efcf3f0c24e7a5"
       ],
       "paths": [
         "backend/alembic/versions/v8_delta4_annuity_obligation_lineage.py",
         "backend/app/modules/annuity/models.py",
         "backend/tests/test_v8_annuity_task_obligation_lineage_carrier.py"
       ],
-      "tree_sha256": "0a7c4b39b8cd18b451924f87fc8a13f80e5b722055455591485843a8970c43a2",
+      "tree_sha256": "446f54c0901f9dc7fa1183eb1a1b243ec1c5cbd5c1a5672239a4167dc1ab2e1a",
       "tests": [
         "focused SQLite migration and persistence probe (3 passed)",
         "exact three-path Ruff passed",
-        "independent High review approved P0/P1/P2 0/0/0"
+        "independent High review approved P0/P1/P2 0/0/0",
+        "Delta-27 successor compatibility tranche with PayList carrier (7 passed)",
+        "independent High successor review approved P0/P1/P2 0/0/0"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-CURRENT-ADOPTION.md",
@@ -3979,6 +3986,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CNIPA-ANNUITY-RATE-CANDIDATE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CNIPA-ANNUITY-RATE-CANDIDATE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FUTURE-ANNUITY-REDUCTION-LINEAGE-CARRIER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "03585cb723dece246d987eba92efcf3f0c24e7a5"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_delta27_future_annuity_reduction_lineage.py",
+        "backend/app/modules/annuity/models.py",
+        "backend/tests/test_v8_future_annuity_reduction_lineage_carrier.py"
+      ],
+      "tree_sha256": "0bcaadc36231e4fcdf94dde1934349dcb862a9fb04971c2e5e03ea160de07722",
+      "tests": [
+        "focused serialized SQLite schema and immutability test (5 passed)",
+        "clean temporary upgrade to the single v8_d27_annuity_reduction_01 head passed",
+        "scoped Ruff and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-REDUCTION-LINEAGE-CARRIER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-REDUCTION-LINEAGE-CARRIER-CURRENT-ADOPTION.md"
     }
   ]
 }

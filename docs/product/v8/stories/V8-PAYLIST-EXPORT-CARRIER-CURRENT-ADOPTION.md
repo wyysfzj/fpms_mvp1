@@ -47,10 +47,11 @@ current tree has one legitimate linear successor chain:
 `v8_w5_pay_list_export_artifact_01` →
 `v8_d4_annuity_lineage_01` →
 `v8_d4_legacy_fee_provenance_01` →
-`v8_d4_evidence_kind_capacity_01`.
+`v8_d4_evidence_kind_capacity_01` →
+`v8_d27_annuity_reduction_01`.
 
 The minimum test-only correction names
-`v8_d4_evidence_kind_capacity_01` as the exact unique current head and proves W5 remains
+`v8_d27_annuity_reduction_01` as the exact unique current head and proves W5 remains
 reachable from it. It does not change or reinterpret the W5 revision, down-revision,
 table, columns, constraints, indexes, defaults, foreign-key actions, UUID behavior or
 forward-only boundary.
@@ -74,9 +75,13 @@ Under the controller-granted exclusive `GLOBAL_ALEMBIC_HEAD` and SQLite lane:
   itself as head but observed the legitimate current head;
 - focused GREEN after the test-only correction: `4 passed, 1 warning`;
 - `alembic heads`: exact output
-  `v8_d4_evidence_kind_capacity_01 (head)`; and
+  `v8_d27_annuity_reduction_01 (head)`; and
 - an isolated clean SQLite `upgrade head` succeeded, followed by `alembic current` with
-  exact output `v8_d4_evidence_kind_capacity_01 (head)`.
+  exact output `v8_d27_annuity_reduction_01 (head)`.
+
+The Delta-27 successor compatibility commit `9fe91752a7e0027f7792c032d2a966c53481e5fc`
+changes only that exact current-head constant. Independent High review approved
+P0/P1/P2 `0/0/0`; the PayList and Delta-4 lineage compatibility tranche passed `7/7`.
 
 The warning is the existing third-party passlib `crypt` deprecation. The exclusive lane
 was released after these commands.
