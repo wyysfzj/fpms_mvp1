@@ -11,7 +11,9 @@
   `docs/product/v8/domain-contract.md`; the no-default and no-activation boundaries in
   `docs/product/v8/source-decision-registry.md`; frozen catalog row `132` and its exact
   task contract.
-- Base: `0516701da7834ea0ca12e8c3119173da314d1096`.
+- Initial implementation base: `0516701da7834ea0ca12e8c3119173da314d1096`.
+- Current integration parent for final review:
+  `21b12ae9dc740f19686584978acbd2e22555dd06`.
 
 ## Catalog ID
 
