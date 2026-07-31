@@ -50,7 +50,7 @@ validator has exactly `(case_id, effective_on, evidence)`.
 - `backend/tests/test_v8_pct_fee_policy.py`
   - SHA-256: `2a6301446400b6d80f57ed4abd37b568919b963a0f6109bd12fcd0c6c1a70728`
 - `docs/product/v8/cutover-dirty-path-disposition.json`
-  - SHA-256: `8fd6a873351744111791145bf997a0b73b6adebba2d7f6a9313537f8e7bae1cf`
+  - SHA-256: `260d770ff703b3675d32f06e1ae56888dfa037d0be92b999ef312110f87a5d6e`
 - `docs/product/v8/stories/V8-PCT-FEE-POLICY-CURRENT-ADOPTION.md`
 
 The disposition ledger changes only the two PCT path owners:
