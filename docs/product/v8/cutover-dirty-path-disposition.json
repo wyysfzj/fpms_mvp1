@@ -25,7 +25,8 @@
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 1,
     "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION": 3,
-    "V8-ADOPT-FEE-OBLIGATION": 8,
+    "V8-ADOPT-FEE-OBLIGATION": 6,
+    "V8-PCT-FEE-POLICY-CURRENT-ADOPTION": 2,
     "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION": 3,
     "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION": 2,
     "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION": 4,
@@ -289,8 +290,8 @@
     {
       "path": "backend/app/modules/fees/pct_policy.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee and obligation behavior"
+      "story_id": "V8-PCT-FEE-POLICY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed pure PCT national-stage fee policy"
     },
     {
       "path": "backend/app/modules/fees/schemas.py",
@@ -979,8 +980,8 @@
     {
       "path": "backend/tests/test_v8_pct_fee_policy.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-PCT-FEE-POLICY-CURRENT-ADOPTION",
+      "rationale": "current-reviewed pure PCT national-stage fee policy"
     },
     {
       "path": "backend/tests/test_v8_preliminary_passed_evidence_api.py",
