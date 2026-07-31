@@ -2053,14 +2053,10 @@
     {
       "catalog_id": "FPMS-V8-LEGACY-FEE-REDUCTION-IMPORT-20260712-01",
       "phase": "foundation",
-      "disposition": "WIP",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LEGACY-FEE-REDUCTION-IMPORT-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "kind": "HISTORICAL_NONTERMINAL",
-        "historical_state": "IMPLEMENTING",
-        "source": "artifacts/FPMS-V8-LEGACY-FEE-REDUCTION-IMPORT-20260712-01/state.json"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FEE-TRUTH-LINK-20260712-01",
@@ -3546,6 +3542,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-CURRENT-VERIFICATION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-CURRENT-VERIFICATION.md"
+    },
+    {
+      "story_id": "V8-LEGACY-FEE-REDUCTION-IMPORT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "897eee8"
+      ],
+      "paths": [
+        "backend/scripts/backfill_v8_fee_reduction.py",
+        "backend/tests/test_v8_legacy_fee_reduction_import.py"
+      ],
+      "tree_sha256": "804e5bea5f352005c583378d79044075b0d78840cdbd937ea11b298e56a218f3",
+      "tests": [
+        "pytest -q tests/test_v8_legacy_fee_reduction_import.py from backend cwd (14 passed)",
+        "scoped Ruff format/check and exact two-path diff check passed",
+        "independent exact-candidate review approved P0/P1/P2 0/0/0 without repeating SQLite verification"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-REDUCTION-IMPORT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-REDUCTION-IMPORT-CURRENT-ADOPTION.md"
     }
   ]
 }
