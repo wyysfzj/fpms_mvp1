@@ -20,6 +20,7 @@ from sqlalchemy import (
     event,
     text,
 )
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.db.base import Base
@@ -523,6 +524,19 @@ class FeeReductionApproval(Base):
     )
 
 
+class _LegacyFeeReductionValue(String):
+    pass
+
+
+@compiles(_LegacyFeeReductionValue, "sqlite")
+def _compile_legacy_fee_reduction_value_sqlite(
+    _type: _LegacyFeeReductionValue,
+    _compiler,
+    **_kw,
+) -> str:
+    return "BLOB"
+
+
 class LegacyFeeReductionProvenance(Base):
     __tablename__ = "t_legacy_fee_reduction_provenance"
 
@@ -532,7 +546,9 @@ class LegacyFeeReductionProvenance(Base):
         default=lambda: str(uuid4()),
     )
     case_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    legacy_value: Mapped[str] = mapped_column(String(), nullable=False)
+    legacy_value: Mapped[str] = mapped_column(
+        _LegacyFeeReductionValue(), nullable=False
+    )
     source_reference: Mapped[str] = mapped_column(String(), nullable=False)
     source_version: Mapped[str] = mapped_column(String(), nullable=False)
     source_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -566,7 +582,7 @@ class LegacyFeeReductionProvenance(Base):
             name="uq_t_legacy_fee_reduction_provenance_case_manifest",
         ),
         CheckConstraint(
-            "legacy_value IN ('0', '0.7', '0.85')",
+            "typeof(legacy_value) = 'text' AND legacy_value IN ('0', '0.7', '0.85')",
             name="ck_t_legacy_fee_reduction_provenance_legacy_value",
         ),
         CheckConstraint(

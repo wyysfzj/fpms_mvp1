@@ -6,8 +6,8 @@
   fee-reduction provenance carrier satisfies its frozen schema, migration and append-only
   audit contract.
 - Task ID: `FPMS-V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-20260715-01`.
-- Change mode: current verification only; no migration, model, schema, test or product byte
-  changes.
+- Change mode: current verification followed by the minimum independently found database
+  no-coercion correction; no importer or adjacent schema change.
 - Authority: the frozen D4-12 task, Delta-4 contract, fee-reduction/source fail-closed
   rules, and current migration graph.
 
@@ -27,13 +27,22 @@ current acceptance.
 
 ## Verification
 
-The exact focused SQLite-writing schema test passed `4/4`. It proves the frozen table
-shape, application UUID identity, exact legacy-value grammar, approval nullability
-invariant, unique case/manifest identity, restricted foreign keys, explicit naive
-confirmation audit and immutable carrier behavior.
+The first independent review found one P1: SQLite TEXT affinity converted raw numeric
+inputs to text before the existing value check, so the test proved ORM rejection but not
+the frozen database-boundary no-coercion rule. The correction RED failed exactly on
+`VARCHAR` storage and an accepted raw numeric insert.
+
+The minimum correction keeps the ORM surface a Python/SQLAlchemy string while compiling
+only `legacy_value` with SQLite BLOB/no-coercion affinity, and requires both
+`typeof(legacy_value) = 'text'` and the exact `0/0.7/0.85` grammar in ORM and migration
+DDL. The focused SQLite-writing schema test then passed `4/4`, including raw numeric
+rejection and persisted string identity. It also proves the frozen table shape,
+application UUID identity, approval nullability invariant, unique case/manifest identity,
+restricted foreign keys, explicit naive confirmation audit and immutable carrier
+behavior.
 
 Scoped Ruff, task-contract check and exact-path diff check pass. An independent High
-reviewer must inspect this exact story-card commit, the current product fingerprints and
+reviewer must inspect the exact corrected commit/range, current product fingerprints and
 migration graph, then independently rerun the focused test under the serialized SQLite
 lane.
 

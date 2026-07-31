@@ -21,6 +21,7 @@ from sqlalchemy import (
     event,
     inspect,
 )
+from sqlalchemy.dialects.sqlite import dialect as sqlite_dialect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -74,7 +75,9 @@ UNIQUE_CONSTRAINTS = {
         "manifest_hash",
     ),
 }
-LEGACY_VALUE_CHECK = "legacy_value IN ('0', '0.7', '0.85')"
+LEGACY_VALUE_CHECK = (
+    "typeof(legacy_value) = 'text' AND legacy_value IN ('0', '0.7', '0.85')"
+)
 APPROVAL_CHECK = (
     "(legacy_value = '0' AND approval_id IS NULL) OR "
     "(legacy_value IN ('0.7', '0.85') AND approval_id IS NOT NULL)"
@@ -183,6 +186,7 @@ def test_model_matches_exact_append_only_frozen_contract() -> None:
         assert table.c[name].type.length == length
     for name in ("legacy_value", "source_reference", "source_version"):
         assert isinstance(table.c[name].type, String)
+    assert table.c.legacy_value.type.compile(dialect=sqlite_dialect()) == "BLOB"
     assert isinstance(table.c.confirmed_at.type, DateTime)
     assert table.c.confirmed_at.type.timezone is False
 
@@ -229,6 +233,7 @@ def test_parent_to_child_migration_has_exact_sqlite_schema(
     for name, length in STRING_LENGTHS.items():
         assert isinstance(by_name[name]["type"], String)
         assert by_name[name]["type"].length == length
+    assert by_name["legacy_value"]["type"].compile(dialect=engine.dialect) == "BLOB"
     assert isinstance(by_name["confirmed_at"]["type"], DateTime)
     assert {
         item["name"]: (
@@ -294,6 +299,22 @@ def test_database_enforces_grammar_approval_identity_and_restricted_references()
                         id=f"carrier-invalid-value-{index}",
                         manifest_hash=f"{index:064x}",
                         legacy_value=legacy_value,
+                    )
+                )
+            )
+
+    for index, (legacy_value, approval_id) in enumerate(
+        ((0, None), (0.7, "approval-1"), (0.85, "approval-1")),
+        10,
+    ):
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(
+                table.insert().values(
+                    **_values(
+                        id=f"carrier-raw-numeric-{index}",
+                        manifest_hash=f"{index:064x}",
+                        legacy_value=legacy_value,
+                        approval_id=approval_id,
                     )
                 )
             )
@@ -393,6 +414,8 @@ def test_orm_generates_uuid_and_rejects_coercion_timezone_update_and_delete() ->
     with Session(engine) as session:
         persisted = session.get(model, persisted_id)
         assert persisted is not None
+        assert type(persisted.legacy_value) is str
+        assert persisted.legacy_value == "0.7"
         persisted.source_reference = "changed-source"
         with pytest.raises(ValueError, match="immutable"):
             session.flush()

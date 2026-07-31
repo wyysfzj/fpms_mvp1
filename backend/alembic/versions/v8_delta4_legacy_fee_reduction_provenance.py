@@ -6,6 +6,7 @@ Revises: v8_d4_annuity_lineage_01
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.ext.compiler import compiles
 
 
 revision = "v8_d4_legacy_fee_provenance_01"
@@ -14,12 +15,25 @@ branch_labels = None
 depends_on = None
 
 
+class _LegacyFeeReductionValue(sa.String):
+    pass
+
+
+@compiles(_LegacyFeeReductionValue, "sqlite")
+def _compile_legacy_fee_reduction_value_sqlite(
+    _type: _LegacyFeeReductionValue,
+    _compiler,
+    **_kw,
+) -> str:
+    return "BLOB"
+
+
 def upgrade() -> None:
     op.create_table(
         "t_legacy_fee_reduction_provenance",
         sa.Column("id", sa.String(36), nullable=False),
         sa.Column("case_id", sa.String(36), nullable=False),
-        sa.Column("legacy_value", sa.String(), nullable=False),
+        sa.Column("legacy_value", _LegacyFeeReductionValue(), nullable=False),
         sa.Column("source_reference", sa.String(), nullable=False),
         sa.Column("source_version", sa.String(), nullable=False),
         sa.Column("source_snapshot_hash", sa.String(64), nullable=False),
@@ -52,7 +66,7 @@ def upgrade() -> None:
             name="uq_t_legacy_fee_reduction_provenance_case_manifest",
         ),
         sa.CheckConstraint(
-            "legacy_value IN ('0', '0.7', '0.85')",
+            "typeof(legacy_value) = 'text' AND legacy_value IN ('0', '0.7', '0.85')",
             name="ck_t_legacy_fee_reduction_provenance_legacy_value",
         ),
         sa.CheckConstraint(
