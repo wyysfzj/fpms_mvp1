@@ -400,6 +400,7 @@ def materialize_cnipa_annuity_rate_candidate(
             select(OfficialRateBook).where(
                 OfficialRateBook.source_authority == "CNIPA",
                 OfficialRateBook.book_code == _BOOK_CODE,
+                OfficialRateBook.version_code == _VERSION,
             )
         ).all()
         if books:

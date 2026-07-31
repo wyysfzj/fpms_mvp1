@@ -446,6 +446,66 @@ def test_exact_replay_reuses_complete_graph_without_flush_or_timestamp_churn(
         assert not transaction.dirty
 
 
+def test_different_series_version_coexists_untouched_while_target_creates_and_reuses(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        historical = OfficialRateBook(
+            book_code=BOOK_CODE,
+            version_code="2025-01-01",
+            source_authority="CNIPA",
+            source_reference=PDF_URL,
+            source_version="2025-01-01",
+            source_published_on=date(2025, 1, 1),
+            source_snapshot=EXPECTED_SNAPSHOT,
+            source_snapshot_hash=SNAPSHOT_HASH,
+            approval_status="PENDING",
+            approved_by=None,
+            approved_at=None,
+            effective_from=date(2025, 1, 1),
+            effective_to=date(2026, 3, 29),
+            activation_status="INACTIVE",
+            activated_by=None,
+            activated_at=None,
+            current_identity_key=None,
+        )
+        transaction.add(historical)
+        transaction.commit()
+        historical_id = historical.id
+        historical_identity = (
+            historical.version_code,
+            historical.source_version,
+            historical.effective_from,
+            historical.effective_to,
+            historical.created_at,
+            historical.updated_at,
+        )
+
+    with session_factory() as transaction:
+        created = materialize_cnipa_annuity_rate_candidate(transaction)
+        assert created.disposition is CnipaAnnuityMaterializationDisposition.CREATED
+        transaction.commit()
+
+    with session_factory() as transaction:
+        historical = transaction.get(OfficialRateBook, historical_id)
+        assert historical is not None
+        assert (
+            historical.version_code,
+            historical.source_version,
+            historical.effective_from,
+            historical.effective_to,
+            historical.created_at,
+            historical.updated_at,
+        ) == historical_identity
+
+        reused = materialize_cnipa_annuity_rate_candidate(transaction)
+        target, rates = _graph(transaction)
+        assert reused.disposition is CnipaAnnuityMaterializationDisposition.REUSED
+        assert reused.rate_book_id == created.rate_book_id == target.id
+        assert reused.rate_ids == created.rate_ids == tuple(rate.id for rate in rates)
+        assert _counts(transaction) == (2, 3)
+
+
 @pytest.mark.parametrize(
     ("target", "field", "changed"),
     [
