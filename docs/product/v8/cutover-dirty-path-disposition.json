@@ -28,7 +28,8 @@
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 1,
     "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION": 3,
-    "V8-ADOPT-FEE-OBLIGATION": 6,
+    "V8-ADOPT-FEE-OBLIGATION": 4,
+    "V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION": 2,
     "V8-PCT-FEE-POLICY-CURRENT-ADOPTION": 2,
     "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION": 3,
     "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION": 2,
@@ -306,8 +307,8 @@
     {
       "path": "backend/app/modules/fees/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee and obligation behavior"
+      "story_id": "V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed obligation-linked generic fee draft behavior"
     },
     {
       "path": "backend/app/modules/grant_fees/service.py",
@@ -660,8 +661,8 @@
     {
       "path": "backend/tests/test_v8_generic_fee_draft_activity_adapter.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed obligation-linked generic fee draft behavior"
     },
     {
       "path": "backend/tests/test_v8_generic_fee_draft_obligation_api.py",

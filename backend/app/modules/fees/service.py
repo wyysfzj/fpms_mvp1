@@ -16,6 +16,11 @@ from app.modules.billing.models import Bill, BillItem
 from app.modules.cases.models import Case, T_CaseAgentSplit
 from app.modules.fees.enums import FeeDraftStatus, FeeType
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
+from app.modules.fees.obligation_contracts import (
+    PrepareFeeObligationDraftCommand,
+    PrepareFeeObligationDraftResult,
+)
+from app.modules.fees.obligation_service import prepare_draft
 from app.modules.fees.schemas import (
     ApplyFeeDraftGenerateIn,
     FeeDraftCreateIn,
@@ -582,7 +587,21 @@ def get_fee_draft(db: Session, *, draft_id: str) -> FeeDraft:
     return draft
 
 
-def create_fee_draft(db: Session, *, data: FeeDraftCreateIn, actor_id: str | None) -> FeeDraft:
+def create_fee_draft(
+    db: Session,
+    *,
+    data: FeeDraftCreateIn,
+    actor_id: str | None,
+    obligation_id: str | None = None,
+) -> FeeDraft:
+    if obligation_id is not None:
+        return _create_obligation_fee_draft(
+            db,
+            data=data,
+            actor_id=actor_id,
+            obligation_id=obligation_id,
+        )
+
     case = db.execute(select(Case).where(Case.id == data.case_id)).scalar_one_or_none()
     if not case:
         raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
@@ -607,6 +626,68 @@ def create_fee_draft(db: Session, *, data: FeeDraftCreateIn, actor_id: str | Non
     db.add(draft)
     db.commit()
     db.refresh(draft)
+    return draft
+
+
+def _create_obligation_fee_draft(
+    db: Session,
+    *,
+    data: FeeDraftCreateIn,
+    actor_id: str | None,
+    obligation_id: str,
+) -> FeeDraft:
+    if (
+        type(actor_id) is not str
+        or not actor_id
+        or actor_id.strip() != actor_id
+        or len(actor_id) > 36
+    ):
+        raise_business_error(
+            "FEE_DRAFT_OBLIGATION_ACTOR_REQUIRED",
+            "关联费用义务时必须提供操作人",
+            status_code=409,
+        )
+    idempotency_key = f"generic-fee-draft:{obligation_id}"
+    connection = db.connection()
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.driver_connection.in_transaction
+    ):
+        connection.exec_driver_sql("BEGIN")
+    with db.begin_nested():
+        result = prepare_draft(
+            PrepareFeeObligationDraftCommand(
+                obligation_id=obligation_id,
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+            ),
+            db,
+        )
+        if type(result) is not PrepareFeeObligationDraftResult:
+            raise_business_error(
+                "FEE_DRAFT_OBLIGATION_LINK_MISMATCH",
+                "费用草稿与费用义务关联不一致",
+                status_code=409,
+            )
+        draft = db.execute(
+            select(FeeDraft).where(FeeDraft.id == result.draft_id)
+        ).scalar_one_or_none()
+        if (
+            result.obligation_id != obligation_id
+            or result.idempotency_key != idempotency_key
+            or not result.links
+            or not result.activity_id
+            or draft is None
+            or draft.case_id != data.case_id
+            or draft.client_id != data.client_id
+            or draft.draft_type != (data.draft_type or "GENERIC")
+            or draft.currency != data.currency
+        ):
+            raise_business_error(
+                "FEE_DRAFT_OBLIGATION_LINK_MISMATCH",
+                "费用草稿与费用义务关联不一致",
+                status_code=409,
+            )
     return draft
 
 
