@@ -510,8 +510,8 @@
     {
       "catalog_id": "FPMS-V8-FILING-XML-DERIVATION-GATE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2729,16 +2729,18 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "d66ab96cee2878215d3a9ac81d7390b75ab6e5b1",
-        "d7150cafd4d0dc4ccd19d1abeab78ec0798b9f01"
+        "d7150cafd4d0dc4ccd19d1abeab78ec0798b9f01",
+        "c11ac99"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_policy.py",
         "backend/tests/test_v8_oa_copyable_attachment_policy.py",
         "backend/tests/test_v8_oa_noncopyable_appendix_policy.py"
       ],
-      "tree_sha256": "d7799eac8b4f38cceeb3cde9d11f14edcaa5b8676a99c0938412b3037f86515b",
+      "tree_sha256": "ec9bd1237ecb283ef18b5f4658a546bf6ee68c07c290a49c114e447f11cc077e",
       "tests": [
-        "pytest -q tests/test_v8_oa_noncopyable_appendix_policy.py tests/test_v8_oa_copyable_attachment_policy.py tests/test_v8_document_evidence_derivation.py tests/test_v8_oa_structured_attachment_promotion.py from backend cwd (245 passed)"
+        "pytest -q tests/test_v8_oa_noncopyable_appendix_policy.py tests/test_v8_oa_copyable_attachment_policy.py tests/test_v8_document_evidence_derivation.py tests/test_v8_oa_structured_attachment_promotion.py from backend cwd (245 passed)",
+        "filing-XML successor re-attestation with the noncopyable appendix regression from backend cwd (347 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-NONCOPYABLE-APPENDIX-POLICY.md",
@@ -3360,6 +3362,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "ef938aa",
+        "c11ac99"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_policy.py",
+        "backend/tests/test_v8_filing_xml_derivation_gate.py"
+      ],
+      "tree_sha256": "99726ebb0c6cf31a3c6353262b71f05a461fb560f70c8b732123bebfa5b28865",
+      "tests": [
+        "pytest -q tests/test_v8_filing_xml_derivation_gate.py from backend cwd (196 passed)",
+        "pytest -q tests/test_v8_filing_xml_derivation_gate.py tests/test_v8_oa_noncopyable_appendix_policy.py from backend cwd (347 passed)",
+        "scoped Ruff, exact four-path diff-check and 474-path disposition validation passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION.md"
     }
   ]
 }
