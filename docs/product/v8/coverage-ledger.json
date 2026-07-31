@@ -2045,8 +2045,8 @@
     {
       "catalog_id": "FPMS-V8-LEGACY-DOCUMENT-EVIDENCE-IMPORT-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LEGACY-DOCUMENT-EVIDENCE-IMPORT-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3587,6 +3587,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-LEGACY-DOCUMENT-EVIDENCE-IMPORT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "207b10b"
+      ],
+      "paths": [
+        "backend/scripts/backfill_v8_document_evidence.py",
+        "backend/tests/test_v8_legacy_document_evidence_import.py"
+      ],
+      "tree_sha256": "6fbf9d827e077a77653e89e351e6cd89b07f70e2eaa37af6ab99c851677f47e3",
+      "tests": [
+        "pytest -q tests/test_v8_legacy_document_evidence_import.py from backend cwd (5 passed)",
+        "scoped Ruff format/check and exact two-path diff check passed",
+        "independent exact-candidate review approved P0/P1/P2 0/0/0 without repeating SQLite verification"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LEGACY-DOCUMENT-EVIDENCE-IMPORT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LEGACY-DOCUMENT-EVIDENCE-IMPORT-CURRENT-ADOPTION.md"
     }
   ]
 }
