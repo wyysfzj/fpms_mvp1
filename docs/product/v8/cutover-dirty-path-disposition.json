@@ -16,7 +16,7 @@
     "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION": 3,
     "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION": 2,
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
-    "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 3,
+    "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 2,
     "V8-ADOPT-LIFECYCLE-CENTER": 21,
     "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 1,
     "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES": 1,
@@ -41,7 +41,8 @@
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
     "V8-ADOPT-DECISION-GATES": 2,
     "V8-PAYLIST-INTERNAL-EXPORT-SERVICE": 1,
-    "V8-ADOPT-PAYLIST-PAYMENT": 6,
+    "V8-ADOPT-PAYLIST-PAYMENT": 5,
+    "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION": 2,
     "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 1,
     "C3-LEAN-GOVERNANCE-ADOPTION": 2
   },
@@ -97,8 +98,8 @@
     {
       "path": "backend/app/modules/annuity/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
-      "rationale": "current-reviewed PayList export/payment boundary story"
+      "story_id": "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList creation fee-activity adapter"
     },
     {
       "path": "backend/app/modules/cases/lifecycle_activity_service.py",
@@ -961,8 +962,8 @@
     {
       "path": "backend/tests/test_v8_pay_list_create_activity_adapter.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
-      "rationale": "payment and PayList boundary behavior"
+      "story_id": "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed PayList creation fee-activity adapter"
     },
     {
       "path": "backend/tests/test_v8_pay_list_create_transaction_api.py",

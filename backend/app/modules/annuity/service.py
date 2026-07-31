@@ -1274,6 +1274,34 @@ def create_pay_list_from_fee_items(
             "failed": failed,
         }
 
+    linked_activity_rows: list[tuple[FeeItem, FeeDraft, FeeObligation, tuple[str, ...]]] = []
+    for item, draft in scoped_items:
+        obligation_context = _gov_payment_obligation_context(db, fee_item_id=item.id)
+        if obligation_context is None:
+            raise_business_error(
+                "PAY_LIST_OBLIGATION_LINK_REQUIRED",
+                "Fee item must be linked to a fee obligation",
+                status_code=409,
+            )
+        obligation, obligation_line_ids = obligation_context
+        linked_activity_rows.append((item, draft, obligation, obligation_line_ids))
+
+    activity_rows_by_case: dict[
+        str, list[tuple[FeeItem, FeeDraft, FeeObligation, tuple[str, ...]]]
+    ] = defaultdict(list)
+    for row in linked_activity_rows:
+        activity_rows_by_case[row[2].case_id].append(row)
+    source_activity_by_case: dict[str, str] = {}
+    for case_id, activity_rows in activity_rows_by_case.items():
+        source_activity_ids = {row[2].source_activity_id for row in activity_rows}
+        if None in source_activity_ids or len(source_activity_ids) != 1:
+            raise_business_error(
+                "PAY_LIST_SOURCE_ACTIVITY_CONFLICT",
+                "Fee obligations in one case must share one source activity",
+                status_code=409,
+            )
+        source_activity_by_case[case_id] = next(iter(source_activity_ids))
+
     total_amount = sum((Decimal(item.amount or 0) for item, _ in scoped_items), Decimal("0"))
     pay_list = PayList(
         client_id=baseline_client,
@@ -1321,7 +1349,69 @@ def create_pay_list_from_fee_items(
             }
         )
 
-    db.commit()
+    occurred_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    for case_id, activity_rows in activity_rows_by_case.items():
+        case = db.get(Case, case_id)
+        if case is None:
+            raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+        resolved_actor_id = next(
+            (
+                value
+                for item, draft, obligation, _line_ids in activity_rows
+                for value in (
+                    actor_id,
+                    item.updated_by,
+                    item.created_by,
+                    draft.updated_by,
+                    draft.created_by,
+                    obligation.updated_by,
+                    obligation.created_by,
+                )
+                if value
+            ),
+            None,
+        )
+        if resolved_actor_id is None:
+            raise_business_error(
+                "PAY_LIST_ACTOR_REQUIRED",
+                "actor_id is required for obligation-linked pay list creation",
+                status_code=409,
+            )
+        obligation_ids = sorted({row[2].id for row in activity_rows})
+        obligation_line_ids = sorted({line_id for row in activity_rows for line_id in row[3]})
+        projection = _gov_payment_projection(case)
+        append_case_activity(
+            LifecycleEventCommand(
+                case_id=case_id,
+                event_type="PAY_LIST_CREATED",
+                lane=ActivityLane.FEE,
+                effective_at=occurred_at,
+                occurred_at=occurred_at,
+                evidence_refs=(),
+                actor_id=resolved_actor_id,
+                reviewer_id=None,
+                idempotency_key=f"pay-list:{pay_list.id}:created",
+                source_activity_id=source_activity_by_case[case_id],
+                supersedes_event_id=None,
+                payload={
+                    "actor_id": resolved_actor_id,
+                    "center_changes": {},
+                    "fee_item_ids": sorted(row[0].id for row in activity_rows),
+                    "obligation_ids": obligation_ids,
+                    "obligation_line_ids": obligation_line_ids,
+                    "pay_list_id": pay_list.id,
+                    "schema": "FPMS_PAY_LIST_CREATED_V1",
+                },
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+            ),
+            db,
+            previous_projection=projection,
+            current_projection=projection,
+            legacy_case_status=case.status,
+            conflict_codes=(),
+        )
+
+    db.flush()
     db.refresh(pay_list)
 
     return {
