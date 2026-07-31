@@ -1058,8 +1058,8 @@
     {
       "catalog_id": "FPMS-V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3196,6 +3196,25 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "1a289152ea03956ab84e305787e78c27df29e6d1"
+      ],
+      "paths": [
+        "backend/app/modules/fees/annuity_reduction.py",
+        "backend/tests/test_v8_annuity_first_ten_year_reduction_scope.py"
+      ],
+      "tree_sha256": "5fddadd7ba66676c77dbf7ab101fde7fbdfe760e7e902c68f412d557c83ae5c4",
+      "tests": [
+        "pytest -q exact focused annuity-reduction wrapper plus base-validator regression from backend cwd (125 passed)",
+        "scoped Ruff, exact story-only diff-check and archive/current product-test zero-diff passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION.md"
     }
   ]
 }
