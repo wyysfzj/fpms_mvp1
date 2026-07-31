@@ -115,6 +115,16 @@ OFFICIAL_NOTICE_GRANT_ACTIVATIONS = {
         False,
     ),
 }
+OFFICIAL_NOTICE_APPLICATION_FEE_ACTIVATIONS = {
+    **OFFICIAL_NOTICE_GRANT_ACTIVATIONS,
+    "缴纳申请费通知书": (
+        "APPLICATION_FEE_NOTICE",
+        "APPLICATION_FEE_NOTICE",
+        None,
+        None,
+        False,
+    ),
+}
 
 
 def _split_official_codes(code_text: str) -> list[str]:
@@ -148,7 +158,7 @@ def _official_notice_input_fields(
                 "execution_behavior": behavior,
             }
         )
-        if behavior in {"OA_REPLY", "GRANT_NOTICE"}:
+        if behavior in {"OA_REPLY", "GRANT_NOTICE", "APPLICATION_FEE_NOTICE"}:
             metadata["deadline_source_policy"] = "EXPLICIT_OFFICIAL_DUE_REQUIRED"
         if behavior == "OA_REPLY":
             metadata.update(
@@ -192,6 +202,8 @@ def _seed_official_notice_catalog(
             )
             if behavior == "GRANT_NOTICE":
                 values["fee_draft_type"] = "GRANT_FEE"
+            if behavior == "APPLICATION_FEE_NOTICE":
+                values["fee_draft_type"] = "APPLICATION_FEE"
         existing = db.query(DocTemplate).filter(DocTemplate.code == values["code"]).first()
         if existing is None:
             db.add(DocTemplate(id=str(uuid4()), **values))
@@ -217,6 +229,10 @@ def seed_oa_acceptance_official_notice_catalog(db: Session) -> int:
 
 def seed_grant_official_notice_catalog(db: Session) -> int:
     return _seed_official_notice_catalog(db, OFFICIAL_NOTICE_GRANT_ACTIVATIONS)
+
+
+def seed_application_fee_official_notice_catalog(db: Session) -> int:
+    return _seed_official_notice_catalog(db, OFFICIAL_NOTICE_APPLICATION_FEE_ACTIVATIONS)
 
 
 OFFICIAL_LETTER_OUT_CATALOG_SOURCE = "相关流程操作-20260526.docx [P0102] TABLE 002"
