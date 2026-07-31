@@ -3956,6 +3956,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CNIPA-ANNUITY-RATE-CANDIDATE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "fe5edf1",
+        "c5a7cf4"
+      ],
+      "paths": [
+        "backend/app/modules/fees/cnipa_annuity_rate_candidate.py",
+        "backend/app/modules/fees/data/cnipa_payment_guide_20260330_annuity_rates.json",
+        "backend/tests/test_v8_cnipa_annuity_rate_candidate.py"
+      ],
+      "tree_sha256": "f0afed6cf5f722104f97df9a07bfe5c0c241e826eb816ccb9c3cb05fa59bba26",
+      "tests": [
+        "focused candidate/parser/materializer suite (52 passed)",
+        "official rate-book carrier and activation regressions (50 passed)",
+        "scoped Ruff and exact diff checks passed",
+        "independent High re-review approved P0/P1/P2 0/0/0 after the version-identity correction"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CNIPA-ANNUITY-RATE-CANDIDATE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CNIPA-ANNUITY-RATE-CANDIDATE-CURRENT-ADOPTION.md"
     }
   ]
 }
