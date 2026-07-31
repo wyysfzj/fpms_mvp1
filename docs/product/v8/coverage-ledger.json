@@ -470,8 +470,8 @@
     {
       "catalog_id": "FPMS-V8-FILING-PREPARATION-STARTED-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3467,20 +3467,22 @@
       "commits": [
         "ed6a4c5",
         "54b32d5",
-        "749eb1d"
+        "749eb1d",
+        "3e5e1d5"
       ],
       "paths": [
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_addgap_oa_receipt_archive_event.py",
         "backend/tests/test_v8_oa_receipt_lifecycle_adapter.py"
       ],
-      "tree_sha256": "2246489bd3560f854d3c53799bd62f004075f1774c6c64a8b2d798b359102a95",
+      "tree_sha256": "c50394d26126cc8dbf09b9b23ea6921ebd728fa2a54754886647f20431d7891a",
       "tests": [
         "pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py tests/test_addgap_oa_receipt_archive_event.py from backend cwd (12 passed)",
         "independent pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py from backend cwd (2 passed)",
         "scoped Ruff, exact five-path diff-check and 474-path disposition validation passed",
         "independent row71 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact",
-        "independent row62 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact"
+        "independent row62 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact",
+        "independent row59 successor review confirmed OA receipt lifecycle and replay remain intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
@@ -3512,19 +3514,21 @@
       "commits": [
         "54b32d5",
         "f179e8e",
-        "749eb1d"
+        "749eb1d",
+        "3e5e1d5"
       ],
       "paths": [
         "backend/app/modules/documents/service.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_oa_reply_date_receipt_projection.py"
       ],
-      "tree_sha256": "9de8ab5251df8296c5bf8fba7f6ceacca09bab40e63541c07b0b3c1b1b02cb58",
+      "tree_sha256": "704c22b45c5cbbbe2ebf34600b08dc8a269b73be70150371a7e21fa329b10ea0",
       "tests": [
         "pytest -q tests/test_v8_oa_reply_date_receipt_projection.py from backend cwd (2 passed)",
         "independent focused rerun from backend cwd (2 passed)",
         "scoped Ruff, exact five-path diff-check, disposition integrity and predecessor successor-attestation passed",
-        "independent row62 successor review confirmed receipt-derived reply-date and replay behavior remain intact"
+        "independent row62 successor review confirmed receipt-derived reply-date and replay behavior remain intact",
+        "independent row59 successor review confirmed receipt-derived reply-date behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION.md",
@@ -3577,18 +3581,20 @@
       "story_id": "V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "749eb1d"
+        "749eb1d",
+        "3e5e1d5"
       ],
       "paths": [
         "backend/app/modules/official_workflows/schemas.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_work_package_manifest_evidence_version.py"
       ],
-      "tree_sha256": "af35586a8f9706953df0e003f90ff425b5ab7e29603f8074677c9e3bd65541cc",
+      "tree_sha256": "09de5d67b18b993ea8b995ddbb41cf9171114fc11af260c41a9a4f60d523d97c",
       "tests": [
         "pytest -q tests/test_v8_work_package_manifest_evidence_version.py from backend cwd (1 passed)",
         "scoped Ruff and exact three-path diff check passed",
-        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row70/row71"
+        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row70/row71",
+        "independent row59 successor review confirmed manifest evidence identity behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION.md",
@@ -3654,6 +3660,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-TRUTH-LINK-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-TRUTH-LINK-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "3e5e1d5"
+      ],
+      "paths": [
+        "backend/app/modules/official_workflows/api.py",
+        "backend/app/modules/official_workflows/service.py",
+        "backend/tests/test_v8_filing_preparation_started_adapter.py"
+      ],
+      "tree_sha256": "40465e09a4a21a84deedd67c1c53044ec4f655fbcd71cbf6959e1b2742667a2d",
+      "tests": [
+        "pytest -q tests/test_v8_filing_preparation_started_adapter.py from backend cwd (11 passed)",
+        "scoped Ruff and exact three-path diff check passed",
+        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row62/row70/row71"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
