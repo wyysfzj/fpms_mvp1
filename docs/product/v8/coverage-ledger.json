@@ -558,8 +558,8 @@
     {
       "catalog_id": "FPMS-V8-OA-RECEIPT-LIFECYCLE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -1322,8 +1322,8 @@
     {
       "catalog_id": "FPMS-V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3451,6 +3451,47 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "ed6a4c5"
+      ],
+      "paths": [
+        "backend/app/modules/official_workflows/service.py",
+        "backend/tests/test_addgap_oa_receipt_archive_event.py",
+        "backend/tests/test_v8_oa_receipt_lifecycle_adapter.py"
+      ],
+      "tree_sha256": "bac409435c8dff690d4eb649f19581e94d52f70ac877ada32ea3b7d3749d7b8c",
+      "tests": [
+        "pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py tests/test_addgap_oa_receipt_archive_event.py from backend cwd (12 passed)",
+        "independent pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py from backend cwd (2 passed)",
+        "scoped Ruff, exact five-path diff-check and 474-path disposition validation passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "7ac790f"
+      ],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-pay-list-boundary-ui.spec.ts",
+        "frontend/src/modules/annuity/pages/PayListDetail.vue"
+      ],
+      "tree_sha256": "bcc993437426a52281cc96bf7764dd4aecd7de2954692485d59686d4bf8d6075",
+      "tests": [
+        "direct source-level Playwright contract probe from automation cwd (2 passed)",
+        "exact-page ESLint from frontend cwd (exit 0)",
+        "exact three-path diff-check and inherited vue-tsc baseline subtraction passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-CURRENT-ADOPTION.md"
     }
   ]
 }
