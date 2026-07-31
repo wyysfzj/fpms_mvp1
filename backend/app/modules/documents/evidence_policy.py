@@ -121,7 +121,9 @@ class FilingXmlDerivationErrorCode(str, Enum):
     TARGET_NOT_XML = "FILING_XML_TARGET_NOT_XML"
     CASE_MISMATCH = "FILING_XML_DERIVATION_CASE_MISMATCH"
     LINEAGE_MISMATCH = "FILING_XML_DERIVATION_LINEAGE_MISMATCH"
-    DERIVATION_MISMATCH = "FILING_XML_DERIVATION_EDGE_MISMATCH"
+    PATH_SHAPE_MISMATCH = "FILING_XML_DERIVATION_PATH_SHAPE_MISMATCH"
+    EDGE_MISMATCH = "FILING_XML_DERIVATION_EDGE_MISMATCH"
+    TYPE_MISMATCH = "FILING_XML_DERIVATION_TYPE_MISMATCH"
 
 
 class FilingXmlDerivationPolicyError(ValueError):
@@ -502,13 +504,23 @@ def require_filing_xml_reviewed_word_source(
     case_id: str,
     source_word: DocumentEvidenceVersion,
     xml_evidence: DocumentEvidenceVersion,
-    derivation: DocumentEvidenceDerivation,
+    parent_xml_evidence: DocumentEvidenceVersion | None,
+    source_derivation: DocumentEvidenceDerivation,
+    submission_derivation: DocumentEvidenceDerivation | None,
 ) -> None:
     if (
         not _is_exact_text(case_id)
         or type(source_word) is not DocumentEvidenceVersion
         or type(xml_evidence) is not DocumentEvidenceVersion
-        or type(derivation) is not DocumentEvidenceDerivation
+        or (
+            parent_xml_evidence is not None
+            and type(parent_xml_evidence) is not DocumentEvidenceVersion
+        )
+        or type(source_derivation) is not DocumentEvidenceDerivation
+        or (
+            submission_derivation is not None
+            and type(submission_derivation) is not DocumentEvidenceDerivation
+        )
         or not _is_exact_text(source_word.id)
         or not _is_exact_text(source_word.case_id)
         or not _is_exact_text(source_word.lineage_key)
@@ -516,24 +528,35 @@ def require_filing_xml_reviewed_word_source(
         or not _is_exact_text(xml_evidence.id)
         or not _is_exact_text(xml_evidence.case_id)
         or not _is_exact_text(xml_evidence.lineage_key)
-        or not _is_exact_text(derivation.case_id)
-        or not _is_exact_text(derivation.parent_evidence_version_id)
-        or not _is_exact_text(derivation.child_evidence_version_id)
-        or not _is_exact_text(derivation.derivation_type)
+        or (
+            parent_xml_evidence is not None
+            and (
+                not _is_exact_text(parent_xml_evidence.id)
+                or not _is_exact_text(parent_xml_evidence.case_id)
+                or not _is_exact_text(parent_xml_evidence.lineage_key)
+            )
+        )
+        or not _is_exact_text(source_derivation.id)
+        or not _is_exact_text(source_derivation.case_id)
+        or not _is_exact_text(source_derivation.parent_evidence_version_id)
+        or not _is_exact_text(source_derivation.child_evidence_version_id)
+        or not _is_exact_text(source_derivation.derivation_type)
+        or (
+            submission_derivation is not None
+            and (
+                not _is_exact_text(submission_derivation.id)
+                or not _is_exact_text(submission_derivation.case_id)
+                or not _is_exact_text(submission_derivation.parent_evidence_version_id)
+                or not _is_exact_text(submission_derivation.child_evidence_version_id)
+                or not _is_exact_text(submission_derivation.derivation_type)
+            )
+        )
     ):
         _raise(FilingXmlDerivationErrorCode.INVALID_CONTEXT)
-    try:
-        EvidenceDerivationType(derivation.derivation_type)
-    except ValueError:
-        _raise(FilingXmlDerivationErrorCode.INVALID_CONTEXT)
 
-    if source_word.case_id != case_id or xml_evidence.case_id != case_id:
-        _raise(FilingXmlDerivationErrorCode.CASE_MISMATCH)
     if source_word.role != EvidenceRole.FILING_FULL_WORD.value:
         _raise(FilingXmlDerivationErrorCode.SOURCE_NOT_FILING_WORD)
-
-    current_identity = f"{case_id}|{source_word.lineage_key}"
-    if source_word.current_identity_key != current_identity:
+    if source_word.current_identity_key != f"{case_id}|{source_word.lineage_key}":
         _raise(FilingXmlDerivationErrorCode.SOURCE_NOT_CURRENT)
     if source_word.review_state != EvidenceReviewState.APPROVED.value:
         _raise(FilingXmlDerivationErrorCode.SOURCE_NOT_APPROVED)
@@ -550,11 +573,47 @@ def require_filing_xml_reviewed_word_source(
         EvidenceRole.SUBMITTED_XML.value,
     ):
         _raise(FilingXmlDerivationErrorCode.TARGET_NOT_XML)
-    if xml_evidence.lineage_key != source_word.lineage_key:
-        _raise(FilingXmlDerivationErrorCode.LINEAGE_MISMATCH)
-    if (
-        derivation.case_id != case_id
-        or derivation.parent_evidence_version_id != source_word.id
-        or derivation.child_evidence_version_id != xml_evidence.id
+
+    versions = (source_word, xml_evidence) + (
+        (parent_xml_evidence,) if parent_xml_evidence is not None else ()
+    )
+    derivations = (source_derivation,) + (
+        (submission_derivation,) if submission_derivation is not None else ()
+    )
+    if any(version.case_id != case_id for version in versions) or any(
+        derivation.case_id != case_id for derivation in derivations
     ):
-        _raise(FilingXmlDerivationErrorCode.DERIVATION_MISMATCH)
+        _raise(FilingXmlDerivationErrorCode.CASE_MISMATCH)
+    if any(version.lineage_key != source_word.lineage_key for version in versions[1:]):
+        _raise(FilingXmlDerivationErrorCode.LINEAGE_MISMATCH)
+
+    if xml_evidence.role == EvidenceRole.EXTERNAL_XML_PACKAGE.value:
+        if parent_xml_evidence is not None or submission_derivation is not None:
+            _raise(FilingXmlDerivationErrorCode.PATH_SHAPE_MISMATCH)
+        if (
+            source_derivation.parent_evidence_version_id != source_word.id
+            or source_derivation.child_evidence_version_id != xml_evidence.id
+        ):
+            _raise(FilingXmlDerivationErrorCode.EDGE_MISMATCH)
+        if source_derivation.derivation_type != EvidenceDerivationType.FORMAT_CONVERSION.value:
+            _raise(FilingXmlDerivationErrorCode.TYPE_MISMATCH)
+        return
+
+    if (
+        parent_xml_evidence is None
+        or submission_derivation is None
+        or parent_xml_evidence.role != EvidenceRole.EXTERNAL_XML_PACKAGE.value
+    ):
+        _raise(FilingXmlDerivationErrorCode.PATH_SHAPE_MISMATCH)
+    if (
+        source_derivation.parent_evidence_version_id != source_word.id
+        or source_derivation.child_evidence_version_id != parent_xml_evidence.id
+        or submission_derivation.parent_evidence_version_id != parent_xml_evidence.id
+        or submission_derivation.child_evidence_version_id != xml_evidence.id
+    ):
+        _raise(FilingXmlDerivationErrorCode.EDGE_MISMATCH)
+    if (
+        source_derivation.derivation_type != EvidenceDerivationType.FORMAT_CONVERSION.value
+        or submission_derivation.derivation_type != EvidenceDerivationType.EXTERNAL_SUBMISSION.value
+    ):
+        _raise(FilingXmlDerivationErrorCode.TYPE_MISMATCH)

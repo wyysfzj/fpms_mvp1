@@ -155,8 +155,8 @@
     {
       "path": "backend/app/modules/documents/evidence_policy.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-OA-NONCOPYABLE-APPENDIX-POLICY",
-      "rationale": "document/evidence lineage and workflow"
+      "story_id": "V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION",
+      "rationale": "current-reviewed filing XML derivation lineage gate"
     },
     {
       "path": "backend/app/modules/documents/evidence_review_schemas.py",
@@ -617,8 +617,8 @@
     {
       "path": "backend/tests/test_v8_filing_xml_derivation_gate.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-OFFICIAL-WORKFLOW",
-      "rationale": "official workflow behavior"
+      "story_id": "V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION",
+      "rationale": "current-reviewed filing XML derivation lineage gate"
     },
     {
       "path": "backend/tests/test_v8_format_letter_archive.py",
