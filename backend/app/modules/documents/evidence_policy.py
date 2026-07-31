@@ -30,6 +30,7 @@ __all__ = (
     "FilingXmlDerivationPolicyError",
     "NoncopyableOaAppendixErrorCode",
     "NoncopyableOaAppendixPolicyError",
+    "is_filing_full_word_ready",
     "require_copyable_oa_attachment_combination",
     "require_filing_xml_reviewed_word_source",
     "require_noncopyable_oa_appendix_derivation",
@@ -142,6 +143,32 @@ def _raise(code: FilingXmlDerivationErrorCode) -> None:
 
 def _is_exact_text(value: object) -> bool:
     return type(value) is str and bool(value) and value == value.strip()
+
+
+def is_filing_full_word_ready(
+    *,
+    case_id: str,
+    evidence_version: DocumentEvidenceVersion,
+) -> bool:
+    if (
+        not _is_exact_text(case_id)
+        or type(evidence_version) is not DocumentEvidenceVersion
+        or not _is_exact_text(evidence_version.id)
+        or not _is_exact_text(evidence_version.case_id)
+        or not _is_exact_text(evidence_version.lineage_key)
+        or not _is_exact_text(evidence_version.creator_id)
+    ):
+        return False
+    return (
+        evidence_version.case_id == case_id
+        and evidence_version.role == EvidenceRole.FILING_FULL_WORD.value
+        and evidence_version.current_identity_key == f"{case_id}|{evidence_version.lineage_key}"
+        and evidence_version.review_state == EvidenceReviewState.APPROVED.value
+        and _is_exact_text(evidence_version.reviewer_id)
+        and evidence_version.reviewer_id != evidence_version.creator_id
+        and type(evidence_version.reviewed_at) is datetime
+        and evidence_version.reviewed_at.tzinfo is None
+    )
 
 
 def _raise_copyable(code: CopyableOaAttachmentErrorCode) -> None:

@@ -26,6 +26,7 @@ from app.modules.cases.models import (
     T_CaseApplicant,
     T_CaseInventor,
 )
+from app.modules.documents.evidence_policy import is_filing_full_word_ready
 from app.modules.documents.models import (
     DocAttachment,
     DocTemplate,
@@ -1317,6 +1318,50 @@ def _refresh_filing_preparation_package(
             note=note,
         )
 
+    full_word_item = items_by_role.get("FILING_FULL_WORD")
+    existing_full_word_manifest = (
+        db.execute(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package.id,
+                OfficialWorkPackageManifest.official_file_role == "FILING_FULL_WORD",
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if full_word_item is not None or existing_full_word_manifest is not None:
+        full_word_attachment = (
+            attachments_by_id.get(full_word_item.attachment_id) if full_word_item else None
+        )
+        evidence_versions = (
+            db.execute(
+                select(DocumentEvidenceVersion)
+                .where(DocumentEvidenceVersion.attachment_id == full_word_attachment.id)
+                .limit(2)
+            )
+            .scalars()
+            .all()
+            if full_word_attachment
+            else []
+        )
+        ready_attachment = (
+            full_word_attachment
+            if len(evidence_versions) == 1
+            and is_filing_full_word_ready(
+                case_id=package.case_id,
+                evidence_version=evidence_versions[0],
+            )
+            else None
+        )
+        _upsert_manifest_role(
+            db,
+            package_id=package.id,
+            role="FILING_FULL_WORD",
+            required=True,
+            sort_order=25,
+            attachment=ready_attachment,
+        )
+
     _upsert_checklist(
         db,
         package_id=package.id,
@@ -2322,7 +2367,7 @@ def evaluate_official_work_package(
     *,
     package_id: str,
 ) -> OfficialWorkPackageStatusEvaluationOut:
-    _get_package(db, package_id)
+    package = _get_package(db, package_id)
     checklists = (
         db.execute(
             select(OfficialWorkPackageChecklist).where(
@@ -2376,6 +2421,21 @@ def evaluate_official_work_package(
                     message="Required package manifest file is missing",
                 )
             )
+
+    manifest_roles = {manifest.official_file_role for manifest in manifests}
+    if (
+        _normalize_code(package.package_kind) == "FILING_PREP"
+        and "FILING_FULL_WORD" not in manifest_roles
+    ):
+        blockers.append(
+            OfficialWorkPackageBlockerOut(
+                blocker_type="MANIFEST_MISSING",
+                item_code="FILING_FULL_WORD",
+                item_label="FILING_FULL_WORD",
+                status="NEEDS_MAINTENANCE",
+                message="Required package manifest file is missing",
+            )
+        )
 
     receipt_hard_gate_satisfied = _has_archived_receipt(list(receipts))
     if not receipt_hard_gate_satisfied:
