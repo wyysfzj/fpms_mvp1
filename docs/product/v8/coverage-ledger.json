@@ -842,16 +842,16 @@
     {
       "catalog_id": "FPMS-V8-FO-PREVIEW-HTTP-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FO-PREVIEW-FE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3114,6 +3114,30 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES.md",
       "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES.md"
+    },
+    {
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "20ac8b44495442861aae3acffbcbe9082769a3c3"
+      ],
+      "paths": [
+        "backend/app/modules/fees/api.py",
+        "backend/app/modules/fees/schemas.py",
+        "backend/tests/test_v8_fee_estimate_preview_api.py",
+        "frontend/src/api/contracts/v8_fee_estimate_preview.contract.ts",
+        "frontend/src/api/fees.ts",
+        "frontend/src/api/fees.types.ts"
+      ],
+      "tree_sha256": "dc295f65a708cede08802d01c4ef0bb263cca057611726b4da5fbeccfe6231f6",
+      "tests": [
+        "pytest -q tests/test_v8_fee_estimate_preview_api.py from backend cwd (40 passed)",
+        "pytest -q exact two-file row103/104 predecessor tranche from backend cwd (101 passed)",
+        "isolated TypeScript contract, exact-file ESLint, scoped Ruff and exact diff-check passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md"
     }
   ]
 }

@@ -22,10 +22,11 @@
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 1,
     "V8-FEE-REDUCTION-APPROVAL-API-CURRENT-ADOPTION": 3,
-    "V8-ADOPT-FEE-OBLIGATION": 10,
+    "V8-ADOPT-FEE-OBLIGATION": 8,
     "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION": 3,
     "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION": 2,
-    "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION": 7,
+    "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION": 4,
+    "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION": 5,
     "V8-ADOPT-OFFICIAL-WORKFLOW": 7,
     "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
@@ -231,8 +232,8 @@
     {
       "path": "backend/app/modules/fees/api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
-      "rationale": "current-reviewed fee-obligation instruction/detail HTTP and frontend vertical"
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
     },
     {
       "path": "backend/app/modules/fees/cnipa_annuity_rate_candidate.py",
@@ -291,8 +292,8 @@
     {
       "path": "backend/app/modules/fees/schemas.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "official-fee and obligation behavior"
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
     },
     {
       "path": "backend/app/modules/fees/service.py",
@@ -1317,8 +1318,8 @@
     {
       "path": "frontend/src/api/contracts/v8_fee_estimate_preview.contract.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-FEE-OBLIGATION",
-      "rationale": "fee obligation frontend API contract"
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
     },
     {
       "path": "frontend/src/api/contracts/v8_fee_obligation_detail.contract.ts",
@@ -1353,14 +1354,14 @@
     {
       "path": "frontend/src/api/fees.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
-      "rationale": "current-reviewed fee-obligation instruction/detail HTTP and frontend vertical"
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
     },
     {
       "path": "frontend/src/api/fees.types.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
-      "rationale": "current-reviewed fee-obligation instruction/detail HTTP and frontend vertical"
+      "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
+      "rationale": "current-reviewed fee estimate preview HTTP and frontend vertical"
     },
     {
       "path": "frontend/src/api/govPayments.ts",
