@@ -14,9 +14,11 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -286,3 +288,65 @@ class AnnuityTask(Base):
             name="ck_t_annuity_task_source_evidence_hash",
         ),
     )
+
+
+class FutureAnnuityReductionLineage(Base):
+    __tablename__ = "t_future_annuity_reduction_lineage"
+
+    annuity_task_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    fee_obligation_line_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reduction_input_provenance: Mapped[str] = mapped_column(String(32), nullable=False)
+    reduction_approval_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "annuity_task_id",
+            name="pk_t_future_annuity_reduction_lineage",
+        ),
+        ForeignKeyConstraint(
+            ["annuity_task_id"],
+            ["t_annuity_task.id"],
+            name="fk_t_future_annuity_reduction_lineage_annuity_task_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["fee_obligation_line_id"],
+            ["t_fee_obligation_line.id"],
+            name="fk_t_future_annuity_reduction_lineage_fee_obligation_line_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reduction_approval_id"],
+            ["t_fee_reduction_approval.id"],
+            name="fk_t_future_annuity_reduction_lineage_reduction_approval_id",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "fee_obligation_line_id",
+            name="uq_t_future_annuity_reduction_lineage_fee_obligation_line_id",
+        ),
+        CheckConstraint(
+            "reduction_input_provenance IN "
+            "('EXPLICIT_ENTRY', 'CONFIRMED_MIGRATION')",
+            name="ck_t_future_annuity_reduction_lineage_provenance",
+        ),
+        CheckConstraint(
+            "reduction_input_provenance != 'CONFIRMED_MIGRATION' "
+            "OR reduction_approval_id IS NOT NULL",
+            name="ck_t_future_annuity_reduction_lineage_approval_shape",
+        ),
+    )
+
+
+@event.listens_for(FutureAnnuityReductionLineage, "before_update")
+def reject_future_annuity_reduction_lineage_update(
+    _mapper, _connection, _target: FutureAnnuityReductionLineage
+) -> None:
+    raise ValueError("future annuity reduction lineage is immutable")
+
+
+@event.listens_for(FutureAnnuityReductionLineage, "before_delete")
+def reject_future_annuity_reduction_lineage_delete(
+    _mapper, _connection, _target: FutureAnnuityReductionLineage
+) -> None:
+    raise ValueError("future annuity reduction lineage is immutable")
