@@ -28,6 +28,11 @@ from app.modules.documents.application_fee_notice_contracts import (
 from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
 from app.modules.documents.schemas import DocumentWizardFeeFinalRowIn
 from app.modules.documents.semantics import resolve_document_semantics
+from app.modules.fees.fee_reduction_approval_service import (
+    RecordFeeReductionApprovalCommand,
+    RecordFeeReductionApprovalResult,
+    record_fee_reduction_approval,
+)
 from app.modules.fees.models import FeeDraft, FeeItem
 from app.modules.fees.obligation_contracts import (
     FeeDifferenceReviewState,
@@ -952,6 +957,21 @@ def recognize_application_fee_notice_obligation(
         ),
         transaction,
     )
+
+
+def maybe_record_fee_reduction_approval_notice(
+    *,
+    transaction: Session,
+    template: DocTemplate | None,
+    command: RecordFeeReductionApprovalCommand,
+) -> RecordFeeReductionApprovalResult | None:
+    semantics = resolve_document_semantics(template)
+    if (
+        semantics.catalog_status != "EXECUTABLE"
+        or semantics.execution_behavior != "FEE_REDUCTION_APPROVAL_NOTICE"
+    ):
+        return None
+    return record_fee_reduction_approval(command, transaction)
 
 
 def _ic_layout_invalid(field: str) -> None:

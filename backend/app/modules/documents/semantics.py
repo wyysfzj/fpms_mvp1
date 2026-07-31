@@ -10,6 +10,7 @@ CatalogStatus = Literal["EXECUTABLE", "REFERENCE_ONLY"]
 ExecutionBehavior = Literal[
     "ACCEPTANCE_NOTICE",
     "APPLICATION_FEE_NOTICE",
+    "FEE_REDUCTION_APPROVAL_NOTICE",
     "OA_REPLY",
     "GRANT_NOTICE",
 ]
@@ -81,6 +82,13 @@ _APPLICATION_FEE_NOTICE = _ExecutionContract(
     requires_reply=False,
     deadline_source_policy="EXPLICIT_OFFICIAL_DUE_REQUIRED",
     fee_trigger="APPLICATION_FEE",
+)
+_FEE_REDUCTION_APPROVAL_NOTICE = _ExecutionContract(
+    behavior="FEE_REDUCTION_APPROVAL_NOTICE",
+    canonical_code="FEE_REDUCTION_APPROVAL_NOTICE",
+    status_effect=None,
+    task_template_code=None,
+    requires_reply=False,
 )
 _OA_BY_STATUS = {
     status: _ExecutionContract(
@@ -464,6 +472,8 @@ def _resolve_declared_metadata(
         contract = _GRANT
     elif behavior == "APPLICATION_FEE_NOTICE":
         contract = _APPLICATION_FEE_NOTICE
+    elif behavior == "FEE_REDUCTION_APPROVAL_NOTICE":
+        contract = _FEE_REDUCTION_APPROVAL_NOTICE
     elif behavior == "ACCEPTANCE_NOTICE":
         contract = _ACCEPTANCE
     else:
