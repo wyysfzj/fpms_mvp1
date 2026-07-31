@@ -3935,6 +3935,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-NOTICE-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-NOTICE-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "83d014fb825c76e90c53821c7db9ed7f3cd49436"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_delta4_annuity_obligation_lineage.py",
+        "backend/app/modules/annuity/models.py",
+        "backend/tests/test_v8_annuity_task_obligation_lineage_carrier.py"
+      ],
+      "tree_sha256": "0a7c4b39b8cd18b451924f87fc8a13f80e5b722055455591485843a8970c43a2",
+      "tests": [
+        "focused SQLite migration and persistence probe (3 passed)",
+        "exact three-path Ruff passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-CURRENT-ADOPTION.md"
     }
   ]
 }
