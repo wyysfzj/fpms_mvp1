@@ -11,7 +11,7 @@
     "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION": 11,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
-    "V8-ADOPT-ANNUITY-RATE-SOURCES": 20,
+    "V8-ADOPT-ANNUITY-RATE-SOURCES": 11,
     "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION": 11,
     "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION": 3,
     "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION": 2,
@@ -20,7 +20,8 @@
     "V8-ADOPT-LIFECYCLE-CENTER": 21,
     "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 1,
     "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES": 1,
-    "V8-ADOPT-DOCUMENT-EVIDENCE": 30,
+    "V8-ADOPT-DOCUMENT-EVIDENCE": 28,
+    "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION": 11,
     "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION": 8,
     "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION": 4,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
@@ -166,8 +167,8 @@
     {
       "path": "backend/app/modules/documents/evidence_service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage and workflow"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special-fee evidence review snapshot"
     },
     {
       "path": "backend/app/modules/documents/evidence_workflow_service.py",
@@ -184,8 +185,8 @@
     {
       "path": "backend/app/modules/documents/fee_linking_service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage and workflow"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special-fee evidence-to-obligation adapters"
     },
     {
       "path": "backend/app/modules/documents/letter_context.py",
@@ -520,8 +521,8 @@
     {
       "path": "backend/tests/test_v8_compensation_period_annuity_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed compensation-period annuity obligation"
     },
     {
       "path": "backend/tests/test_v8_compensation_period_annuity_rule.py",
@@ -676,44 +677,44 @@
     {
       "path": "backend/tests/test_v8_ic_layout_bibliographic_change_submission_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout bibliographic-change obligation"
     },
     {
       "path": "backend/tests/test_v8_ic_layout_extension_request_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout extension obligation"
     },
     {
       "path": "backend/tests/test_v8_ic_layout_nonvoluntary_license_request_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout nonvoluntary-licence obligation"
     },
     {
       "path": "backend/tests/test_v8_ic_layout_reexamination_request_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout reexamination obligation"
     },
     {
       "path": "backend/tests/test_v8_ic_layout_registration_filed_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout registration obligation"
     },
     {
       "path": "backend/tests/test_v8_ic_layout_remuneration_adjudication_request_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout remuneration-adjudication obligation"
     },
     {
       "path": "backend/tests/test_v8_ic_layout_right_restoration_request_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed IC-layout restoration obligation"
     },
     {
       "path": "backend/tests/test_v8_internal_pay_list_export.py",
@@ -952,8 +953,8 @@
     {
       "path": "backend/tests/test_v8_patent_term_compensation_request_obligation.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "rationale": "current-reviewed patent-term-compensation request obligation"
     },
     {
       "path": "backend/tests/test_v8_pay_list_create_activity_adapter.py",

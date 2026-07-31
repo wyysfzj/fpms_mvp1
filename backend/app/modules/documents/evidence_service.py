@@ -938,11 +938,41 @@ def _validate_review_version_carrier(version: DocumentEvidenceVersion) -> None:
         _review_state_conflict()
 
 
+def _review_source_snapshot(
+    command: ReviewEvidenceVersionCommand,
+    version: DocumentEvidenceVersion,
+    transaction: Session,
+) -> tuple[dict[str, object], str] | None:
+    if command.decision is not EvidenceReviewDecision.APPROVE:
+        return None
+    from app.modules.documents.fee_linking_service import (
+        _compensation_period_review_snapshot,
+    )
+
+    document = transaction.get(Document, version.document_id)
+    if version.lineage_key == "term-compensation-grant-decision":
+        return _compensation_period_review_snapshot(version, document)
+    return None
+
+
 def _review_activity_command(
     command: ReviewEvidenceVersionCommand,
     version: DocumentEvidenceVersion,
     review_state: EvidenceReviewState,
+    source_snapshot: tuple[dict[str, object], str] | None,
 ) -> LifecycleEventCommand:
+    payload: dict[str, object] = {
+        "creator_id": version.creator_id,
+        "decision": command.decision.value,
+        "evidence_version_id": version.id,
+        "previous_review_state": EvidenceReviewState.PENDING.value,
+        "review_state": review_state.value,
+        "reviewer_id": command.reviewer_id,
+    }
+    content_hash = version.content_hash
+    if source_snapshot is not None:
+        payload["source_snapshot"], payload["source_snapshot_hash"] = source_snapshot
+        content_hash = source_snapshot[1]
     return LifecycleEventCommand(
         case_id=command.case_id,
         event_type="DOCUMENT_EVIDENCE_REVIEW_DECIDED",
@@ -955,7 +985,7 @@ def _review_activity_command(
                 evidence_kind="DOCUMENT_EVIDENCE_VERSION",
                 object_type="DocumentEvidenceVersion",
                 object_id=version.id,
-                content_hash=version.content_hash,
+                content_hash=content_hash,
                 captured_at=command.reviewed_at,
             ),
         ),
@@ -965,14 +995,7 @@ def _review_activity_command(
         source_activity_id=None,
         supersedes_event_id=None,
         confirmation_status=ConfirmationStatus.CONFIRMED,
-        payload={
-            "creator_id": version.creator_id,
-            "decision": command.decision.value,
-            "evidence_version_id": version.id,
-            "previous_review_state": EvidenceReviewState.PENDING.value,
-            "review_state": review_state.value,
-            "reviewer_id": command.reviewer_id,
-        },
+        payload=payload,
     )
 
 
@@ -1063,7 +1086,13 @@ def review_evidence_version(
             CaseActivityEvent.idempotency_key == activity_key,
         )
     )
-    activity_command = _review_activity_command(command, version, review_state)
+    source_snapshot = _review_source_snapshot(command, version, transaction)
+    activity_command = _review_activity_command(
+        command,
+        version,
+        review_state,
+        source_snapshot,
+    )
     if existing_activity is not None:
         previous_projection = _stored_activity_projection(
             existing_activity,
