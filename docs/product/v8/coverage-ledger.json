@@ -3492,6 +3492,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-CURRENT-VERIFICATION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "14f1b83",
+        "5d60e88",
+        "7d04e97"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_delta4_legacy_fee_reduction_provenance.py",
+        "backend/app/modules/fees/models.py",
+        "backend/tests/test_v8_legacy_fee_reduction_provenance_carrier.py"
+      ],
+      "tree_sha256": "ace7d1dc71540d91a632240fc0e940ede7531ec1d9a8edb999d90595c6803879",
+      "tests": [
+        "pytest -q tests/test_v8_legacy_fee_reduction_provenance_carrier.py from backend cwd (4 passed)",
+        "independent focused rerun after the SQLite no-coercion correction (4 passed)",
+        "scoped Ruff, exact correction diff-check, migration-lineage and archive-provenance checks passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-CURRENT-VERIFICATION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-CURRENT-VERIFICATION.md"
     }
   ]
 }
