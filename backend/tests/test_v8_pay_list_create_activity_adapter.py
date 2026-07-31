@@ -37,6 +37,7 @@ from app.modules.fees.obligation_contracts import (
 from app.modules.masterdata.clients.models import Client
 
 CASE_ID = "case-pay-list-create-activity"
+OTHER_CASE_ID = "case-pay-list-create-other"
 CLIENT_ID = "client-pay-list-create-activity"
 ACTOR_ID = "actor-pay-list-create-activity"
 SOURCE_ACTIVITY_ID = "activity-pay-list-create-source"
@@ -264,6 +265,41 @@ def test_create_pay_list_fails_closed_for_multiple_source_activities_in_one_case
             )
 
         assert exc_info.value.code == "PAY_LIST_SOURCE_ACTIVITY_CONFLICT"
+        assert exc_info.value.status_code == 409
+        _assert_no_pay_list_writes(transaction)
+
+
+def test_create_pay_list_fails_closed_for_cross_case_obligation_link(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        _seed_pay_list_activity_context(transaction)
+        transaction.add(
+            Case(
+                id=OTHER_CASE_ID,
+                case_no="NO-PAY-LIST-CREATE-OTHER",
+                client_id=CLIENT_ID,
+                status="OPEN",
+            )
+        )
+        draft = transaction.get(FeeDraft, DRAFT_ID)
+        assert draft is not None
+        draft.case_id = OTHER_CASE_ID
+        for item_id in ITEM_IDS:
+            item = transaction.get(FeeItem, item_id)
+            assert item is not None
+            item.case_id = OTHER_CASE_ID
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as exc_info:
+            create_pay_list_from_fee_items(
+                transaction,
+                fee_item_ids=list(ITEM_IDS),
+                planned_pay_date=date(2026, 8, 20),
+                actor_id=ACTOR_ID,
+            )
+
+        assert exc_info.value.code == "PAY_LIST_OBLIGATION_SCOPE_MISMATCH"
         assert exc_info.value.status_code == 409
         _assert_no_pay_list_writes(transaction)
 

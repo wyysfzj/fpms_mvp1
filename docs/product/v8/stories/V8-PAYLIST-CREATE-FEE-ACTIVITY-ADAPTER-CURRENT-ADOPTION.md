@@ -27,9 +27,11 @@ Story-owned paths:
 - `docs/product/v8/cutover-dirty-path-disposition.json`
 - this story card.
 
-The focused public test is adopted byte-for-byte from the independently accepted archive
-checkpoint with SHA-256
-`9ff792e45db6294e225770b511e7d626866d76d36ac54c1343b4c59f24d4b2d8`.
+The focused public test starts from the independently accepted archive checkpoint with
+SHA-256
+`9ff792e45db6294e225770b511e7d626866d76d36ac54c1343b4c59f24d4b2d8`
+and adds the independent-review same-case regression. Its final SHA-256 is
+`8db0c8528990bfaaef81813805395862de19a732f5f2fe5ff1b82a2da6e7e32e`.
 The product change is limited to pre-resolving obligation link/activity context, appending
 the exact per-case activity, and replacing the internal commit with a flush.
 
@@ -43,7 +45,10 @@ The adopted public test produced the contract-complete RED with `4 failed`: miss
 activity, missing-link and source-conflict acceptance, and an internal commit that survived
 caller rollback. After the minimum adapter port, the focused GREEN passed `4` tests and
 the combined PayList activity, government-payment activity and prepare-draft regression
-passed `28` tests. Scoped Ruff and diff checks passed. The disposition transfer leaves
+passed `28` tests. Independent review then found that the link preflight did not prove
+`fee_item.case_id == draft.case_id == obligation.case_id`; the exact new regression failed
+before the same-case guard and the corrected focused plus inherited tranche passed `29`
+tests. Scoped Ruff and diff checks passed. The disposition transfer leaves
 `474` unique paths with exact story counts and SHA-256
 `dd26fa48ec2d74f8c95df7db3de2fb6594df0c12673c4e3629ae709ad65bc04c`.
 

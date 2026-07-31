@@ -1284,6 +1284,12 @@ def create_pay_list_from_fee_items(
                 status_code=409,
             )
         obligation, obligation_line_ids = obligation_context
+        if item.case_id != draft.case_id or obligation.case_id != item.case_id:
+            raise_business_error(
+                "PAY_LIST_OBLIGATION_SCOPE_MISMATCH",
+                "Fee item, draft, and obligation must belong to the same case",
+                status_code=409,
+            )
         linked_activity_rows.append((item, draft, obligation, obligation_line_ids))
 
     activity_rows_by_case: dict[
