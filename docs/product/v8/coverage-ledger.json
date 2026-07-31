@@ -478,8 +478,8 @@
     {
       "catalog_id": "FPMS-V8-CASE-BATCH-FILING-EVENT-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CASE-BATCH-FILING-EVENT-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -1025,8 +1025,8 @@
     {
       "catalog_id": "FPMS-V8-FEE-REDUCTION-APPROVAL-NOTICE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-NOTICE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2397,7 +2397,8 @@
         "6834710cae300aa2b748268a909f11a8239b9977",
         "9c94ce38d231a8052995061b6130591715099a39",
         "cea2ca2e34dafee278fc2087f1ab5bfe36f8aa34",
-        "8fa0bf8a048147ce63b32069098b42fb89541217"
+        "8fa0bf8a048147ce63b32069098b42fb89541217",
+        "3b0c4e2"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-status-gate.spec.ts",
@@ -2413,7 +2414,7 @@
         "frontend/src/modules/cases/pages/CaseCreate.vue",
         "frontend/src/modules/cases/pages/CaseEdit.vue"
       ],
-      "tree_sha256": "0636ddf8e397fbdd4e659ea20124b086fe34fce712c4789dc1429303cd759959",
+      "tree_sha256": "1ef3404a768af0d389c2c1b93ebc6e88a9862181e8f76435bdfb8718898ce5bf",
       "tests": [
         "pytest -q tests/test_v8_lifecycle_case_opened.py tests/test_v8_case_create_status_gate.py tests/test_v8_case_update_status_gate.py from backend cwd (45 passed)",
         "playwright test v8-case-create-status-gate.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (2 passed)",
@@ -2422,7 +2423,8 @@
         "independent filing-identity successor re-attestation: exact backend canary tranche 45 passed; six UI/test blobs unchanged",
         "independent prosecution successor tranche included exact CASE_OPENED regression in 577 passed; all status-gate paths unchanged",
         "independent post-OA successor review: lifecycle_rules only gained rows29-34 after all prior rule bodies; exact 461-test tranche passed",
-        "independent terminal/restoration successor review: lifecycle_rules only gained rows35-41; formal exact tranche 294 passed"
+        "independent terminal/restoration successor review: lifecycle_rules only gained rows35-41; formal exact tranche 294 passed",
+        "independent row60 successor attestation confirmed the status-gate vertical remains intact after the batch-filing lifecycle adapter"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES.md",
@@ -2884,7 +2886,8 @@
       "story_id": "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "05e88ef32f4393a0161ca6e176dd0b47fc7dc3c6"
+        "05e88ef32f4393a0161ca6e176dd0b47fc7dc3c6",
+        "3b0c4e2"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-create-fee-reduction.spec.ts",
@@ -2896,10 +2899,11 @@
         "frontend/src/api/cases.types.ts",
         "frontend/src/modules/cases/pages/CaseCreate.vue"
       ],
-      "tree_sha256": "63231a6b9dd4a22c1a7e860ff04fe4e28fdcf65bc9d7e1df2666788a9bdd0153",
+      "tree_sha256": "516012351d4a9fbf029a72d521007e266476b9317dca4ac1d2379c322ce28f37",
       "tests": [
         "pytest -q tests/test_v8_case_create_fee_reduction.py tests/test_v8_case_update_fee_reduction.py tests/test_v8_case_create_status_gate.py tests/test_v8_case_update_status_gate.py tests/test_v8_lifecycle_case_opened.py from backend cwd (98 passed, 19 subtests passed)",
-        "playwright test v8-case-create-fee-reduction.spec.ts v8-case-create-status-gate.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (5 passed)"
+        "playwright test v8-case-create-fee-reduction.spec.ts v8-case-create-status-gate.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (5 passed)",
+        "independent row60 successor attestation confirmed the fee-reduction vertical remains intact after the batch-filing lifecycle adapter"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION.md",
@@ -3352,7 +3356,8 @@
       "commits": [
         "70f7c80e07750420ec5c4a53160eddff58aa3144",
         "c0b206c716e07770fa0a2828f4811842280b7236",
-        "e307d68"
+        "e307d68",
+        "b61069d"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_service.py",
@@ -3367,12 +3372,13 @@
         "backend/tests/test_v8_ic_layout_right_restoration_request_obligation.py",
         "backend/tests/test_v8_patent_term_compensation_request_obligation.py"
       ],
-      "tree_sha256": "c8ee6382c288e75bcd9fb2ca1e33a1efd6e710b481b0e19f5ed8bdf43a67fb6a",
+      "tree_sha256": "7feac6fdd4c4755638a1786deb1e106c5b33314e57b70640487cdd882fb6de39",
       "tests": [
         "pytest -q exact nine special-fee evidence-obligation files from backend cwd (143 passed)",
         "combined exact adapter plus document-review/finalize and obligation-core regression tranche from backend cwd (424 passed)",
         "scoped Ruff, format-check, exact 13-path diff-check and 474-path disposition validation passed",
-        "independent row126 successor attestation confirmed special-fee evidence and obligation handlers remain intact"
+        "independent row126 successor attestation confirmed special-fee evidence and obligation handlers remain intact",
+        "independent row127 successor attestation confirmed the special-fee handlers remain intact after approval-notice recognition"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md",
@@ -3688,7 +3694,8 @@
       "story_id": "V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "e307d68"
+        "e307d68",
+        "b61069d"
       ],
       "paths": [
         "backend/app/modules/documents/application_fee_notice_contracts.py",
@@ -3696,15 +3703,57 @@
         "backend/app/modules/documents/semantics.py",
         "backend/tests/test_v8_application_fee_notice_obligation.py"
       ],
-      "tree_sha256": "44378ecefbc2673037a16f2d26486db761531c224c07844c5da4a59b5376dbf1",
+      "tree_sha256": "849e4dda1cd800017ea7ea27e33758517d2ddfde2f9695aca880482fd4ea760c",
       "tests": [
         "pytest -q tests/test_v8_application_fee_notice_obligation.py from backend cwd (26 passed)",
         "scoped Ruff, compile and exact four-path diff check passed",
-        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested the shared special-fee story"
+        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested the shared special-fee story",
+        "independent row127 successor attestation confirmed the application-fee notice handler remains intact after approval-notice recognition"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CASE-BATCH-FILING-EVENT-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "3b0c4e2"
+      ],
+      "paths": [
+        "backend/app/modules/cases/service.py",
+        "backend/tests/test_v8_batch_filing_lifecycle_adapter.py"
+      ],
+      "tree_sha256": "a40c4d9c7dc4c520b768685e2acbf8f095f1548ff46a828ee728655a9ce884c7",
+      "tests": [
+        "pytest -q tests/test_v8_batch_filing_lifecycle_adapter.py from backend cwd (6 passed)",
+        "scoped Ruff and exact two-path diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0 and successor-attested the case-status and fee-reduction verticals"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CASE-BATCH-FILING-EVENT-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CASE-BATCH-FILING-EVENT-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-NOTICE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "b61069d"
+      ],
+      "paths": [
+        "backend/app/modules/documents/semantics.py",
+        "backend/app/modules/documents/fee_linking_service.py",
+        "backend/tests/test_v8_fee_reduction_approval_notice_adapter.py"
+      ],
+      "tree_sha256": "bb9c4ab60ef4106cb6a742f0eaffcb983800ed18b5546c33bb1a73e9f421db0b",
+      "tests": [
+        "pytest -q tests/test_v8_fee_reduction_approval_notice_adapter.py from backend cwd (4 passed)",
+        "scoped Ruff, format, compile and exact three-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0 and successor-attested the application-fee and special-fee handlers"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-NOTICE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-NOTICE-CURRENT-ADOPTION.md"
     }
   ]
 }
