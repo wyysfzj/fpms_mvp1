@@ -1314,14 +1314,10 @@
     {
       "catalog_id": "FPMS-V8-PAYLIST-BOUNDARY-FE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "WIP",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "kind": "HISTORICAL_NONTERMINAL",
-        "historical_state": "READY_FOR_REVIEW",
-        "source": "artifacts/FPMS-V8-PAYLIST-BOUNDARY-FE-ADAPTER-20260712-01/state.json"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-20260712-01",
@@ -3434,6 +3430,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "94f14c2"
+      ],
+      "paths": [
+        "frontend/src/api/contracts/v8_pay_list_boundary.contract.ts",
+        "frontend/src/api/govPayments.ts",
+        "frontend/src/api/govPayments.types.ts"
+      ],
+      "tree_sha256": "8fbda6101237bbee9aa28c08aa07c7f33955f4072bb2b0fdf4053f43a0d7d062",
+      "tests": [
+        "direct strict TypeScript contract probe for src/api/contracts/v8_pay_list_boundary.contract.ts from frontend cwd (exit 0)",
+        "exact-file ESLint for the three owned frontend paths from frontend cwd (exit 0)",
+        "exact five-path diff-check, inherited full-typecheck baseline subtraction and 474-path disposition validation passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
