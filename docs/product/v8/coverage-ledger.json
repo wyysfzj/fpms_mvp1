@@ -990,8 +990,8 @@
     {
       "catalog_id": "FPMS-V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2704,7 +2704,8 @@
         "114d26b8a4967a517e1ae6c4da73692d921ad020",
         "f89e67e60db95ce34046acc84aaafd53703f3fea",
         "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
-        "895bfc22c6642baacfce2ae6a83916af0dbc3ade"
+        "895bfc22c6642baacfce2ae6a83916af0dbc3ade",
+        "607261b"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
@@ -2712,13 +2713,14 @@
         "backend/tests/test_v8_certificate_archived_activity.py",
         "backend/tests/test_v8_gov_payment_activity_adapter.py"
       ],
-      "tree_sha256": "3e61a9d8fdcf924eef6660e784bae900c2910f81e536bf587414824718b08491",
+      "tree_sha256": "99da8799da156cbd3d9e216f477a9adfe49fbee85feace87e4627bdc549f26b0",
       "tests": [
         "pytest -q tests/test_v8_certificate_archived_activity.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "successor re-attestation with row125 focused test from backend cwd (3 passed)",
         "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)",
         "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)",
-        "independent document-evidence successor review: shared service additions left the two activity adapters unchanged; exact document tranche 92 passed"
+        "independent document-evidence successor review: shared service additions left the two activity adapters unchanged; exact document tranche 92 passed",
+        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md",
@@ -2813,18 +2815,20 @@
       "commits": [
         "114d26b8a4967a517e1ae6c4da73692d921ad020",
         "f89e67e60db95ce34046acc84aaafd53703f3fea",
-        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755"
+        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
+        "607261b"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/tests/test_v8_official_payment_evidence_activity_adapter.py"
       ],
-      "tree_sha256": "4befe0c4c9a633dd78313e462c2b7e26787ae0535652498de4178d2bd36c1ea0",
+      "tree_sha256": "5c98aea218b22d55915656c9190f434245632ddb4a38eeb8e7ad6e94bcce2d7d",
       "tests": [
         "pytest -q tests/test_v8_official_payment_evidence_activity_adapter.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "independent successor re-attestation with certificate, GovPayment and row125 tests from backend cwd (3 passed)",
         "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)",
-        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)"
+        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)",
+        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
@@ -2835,18 +2839,20 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "f89e67e60db95ce34046acc84aaafd53703f3fea",
-        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755"
+        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
+        "607261b"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/app/modules/annuity/export_excel.py",
         "backend/tests/test_v8_internal_pay_list_export.py"
       ],
-      "tree_sha256": "74033c523ef9fafab723221e1782c24664b2a8a777d306c3d14f1233d57c2182",
+      "tree_sha256": "975f701dcb643c9e7fe8e8358bef97459574cd7b43ce50874fa6002282a7119f",
       "tests": [
         "pytest -q tests/test_v8_internal_pay_list_export.py from backend cwd (13 passed)",
         "independent row159, row160, row124 and row125 tranche from backend cwd (19 passed)",
-        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)"
+        "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)",
+        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
@@ -2923,16 +2929,18 @@
       "story_id": "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755"
+        "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
+        "607261b"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/tests/test_v8_pay_list_export_artifact_read.py",
         "backend/tests/test_v8_pay_list_payment_export_decouple.py"
       ],
-      "tree_sha256": "05c6b1e1c8d9a6a05f40d7b461a2cfb3e1554010255ae953df7f3c8b3da3f104",
+      "tree_sha256": "7cfc10471413c01a848dfdadc70587f9f63c722de1a088c7c87001a78917c513",
       "tests": [
-        "pytest -q rows161/162 plus row159/160 and row124/125 successor files from backend cwd (25 passed)"
+        "pytest -q rows161/162 plus row159/160 and row124/125 successor files from backend cwd (25 passed)",
+        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
@@ -3404,6 +3412,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "cc4d96b",
+        "607261b"
+      ],
+      "paths": [
+        "backend/app/modules/annuity/service.py",
+        "backend/tests/test_v8_pay_list_create_activity_adapter.py"
+      ],
+      "tree_sha256": "7a2c80ff48aae42c93433188c54fc6f8454990ca78d385d9d77d9ebe9ae78a35",
+      "tests": [
+        "pytest -q tests/test_v8_pay_list_create_activity_adapter.py from backend cwd (5 passed)",
+        "pytest -q focused plus government-payment activity and prepare-draft regressions from backend cwd (29 passed)",
+        "pytest -q complete affected predecessor tranche from backend cwd (26 passed)",
+        "scoped Ruff, exact four-path diff-check and 474-path disposition validation passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
