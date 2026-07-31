@@ -8,7 +8,7 @@
   "story_counts": {
     "ARCHIVE_ONLY_HISTORY": 283,
     "V8-CASE-FEE-REDUCTION-VERTICAL-CURRENT-ADOPTION": 8,
-    "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION": 12,
+    "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION": 11,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
     "V8-ADOPT-ANNUITY-RATE-SOURCES": 36,
@@ -17,7 +17,8 @@
     "V8-ADOPT-LIFECYCLE-CENTER": 21,
     "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 1,
     "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES": 1,
-    "V8-ADOPT-DOCUMENT-EVIDENCE": 37,
+    "V8-ADOPT-DOCUMENT-EVIDENCE": 30,
+    "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION": 8,
     "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION": 4,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
@@ -131,8 +132,8 @@
     {
       "path": "backend/app/modules/documents/api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
-      "rationale": "current-reviewed document evidence review API and attachment projection"
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API routes"
     },
     {
       "path": "backend/app/modules/documents/application_fee_notice_contracts.py",
@@ -197,8 +198,8 @@
     {
       "path": "backend/app/modules/documents/lifecycle_evidence_adapters.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage and workflow"
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence adapters"
     },
     {
       "path": "backend/app/modules/documents/oa_attachment_promotion_service.py",
@@ -983,14 +984,14 @@
     {
       "path": "backend/tests/test_v8_preliminary_passed_evidence_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
     },
     {
       "path": "backend/tests/test_v8_preliminary_started_evidence_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
     },
     {
       "path": "backend/tests/test_v8_prepare_oa_reply_seam.py",
@@ -1001,26 +1002,26 @@
     {
       "path": "backend/tests/test_v8_publication_notice_evidence_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
     },
     {
       "path": "backend/tests/test_v8_rectification_notice_evidence_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
     },
     {
       "path": "backend/tests/test_v8_reexamination_started_evidence_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
     },
     {
       "path": "backend/tests/test_v8_substantive_started_evidence_api.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "rationale": "current-reviewed lifecycle evidence API behavior"
     },
     {
       "path": "backend/tests/test_v8_term_compensation_request_fee_rule.py",
