@@ -505,8 +505,8 @@
     {
       "catalog_id": "FPMS-V8-FILING-FULL-WORD-READINESS-GATE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FILING-FULL-WORD-READINESS-GATE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2731,17 +2731,19 @@
       "commits": [
         "d66ab96cee2878215d3a9ac81d7390b75ab6e5b1",
         "d7150cafd4d0dc4ccd19d1abeab78ec0798b9f01",
-        "c11ac99"
+        "c11ac99",
+        "f408aa9c07ab83d268cb46bf15f0c1ce251a942b"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_policy.py",
         "backend/tests/test_v8_oa_copyable_attachment_policy.py",
         "backend/tests/test_v8_oa_noncopyable_appendix_policy.py"
       ],
-      "tree_sha256": "ec9bd1237ecb283ef18b5f4658a546bf6ee68c07c290a49c114e447f11cc077e",
+      "tree_sha256": "1b79dbb0c1bf70668385fa2ce2c14afdf3d049b720a25a4d264817400e99441c",
       "tests": [
         "pytest -q tests/test_v8_oa_noncopyable_appendix_policy.py tests/test_v8_oa_copyable_attachment_policy.py tests/test_v8_document_evidence_derivation.py tests/test_v8_oa_structured_attachment_promotion.py from backend cwd (245 passed)",
-        "filing-XML successor re-attestation with the noncopyable appendix regression from backend cwd (347 passed)"
+        "filing-XML successor re-attestation with the noncopyable appendix regression from backend cwd (347 passed)",
+        "independent row63 successor attestation confirmed the OA appendix policies remain intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-NONCOPYABLE-APPENDIX-POLICY.md",
@@ -3389,17 +3391,19 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "ef938aa",
-        "c11ac99"
+        "c11ac99",
+        "f408aa9c07ab83d268cb46bf15f0c1ce251a942b"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_policy.py",
         "backend/tests/test_v8_filing_xml_derivation_gate.py"
       ],
-      "tree_sha256": "99726ebb0c6cf31a3c6353262b71f05a461fb560f70c8b732123bebfa5b28865",
+      "tree_sha256": "8c679a850b0c6f9e954d6834bcd720c4c118db774547ce21b76e9e5ae3275cd4",
       "tests": [
         "pytest -q tests/test_v8_filing_xml_derivation_gate.py from backend cwd (196 passed)",
         "pytest -q tests/test_v8_filing_xml_derivation_gate.py tests/test_v8_oa_noncopyable_appendix_policy.py from backend cwd (347 passed)",
-        "scoped Ruff, exact four-path diff-check and 474-path disposition validation passed"
+        "scoped Ruff, exact four-path diff-check and 474-path disposition validation passed",
+        "independent row63 successor attestation confirmed the filing XML derivation gate remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION.md",
@@ -3476,21 +3480,23 @@
         "ed6a4c5",
         "54b32d5",
         "749eb1d",
-        "3e5e1d5"
+        "3e5e1d5",
+        "f408aa9c07ab83d268cb46bf15f0c1ce251a942b"
       ],
       "paths": [
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_addgap_oa_receipt_archive_event.py",
         "backend/tests/test_v8_oa_receipt_lifecycle_adapter.py"
       ],
-      "tree_sha256": "c50394d26126cc8dbf09b9b23ea6921ebd728fa2a54754886647f20431d7891a",
+      "tree_sha256": "da2b606072895b85af33226f2c196e250afcf156fdb91be0812b3b06cbf16f93",
       "tests": [
         "pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py tests/test_addgap_oa_receipt_archive_event.py from backend cwd (12 passed)",
         "independent pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py from backend cwd (2 passed)",
         "scoped Ruff, exact five-path diff-check and 474-path disposition validation passed",
         "independent row71 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact",
         "independent row62 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact",
-        "independent row59 successor review confirmed OA receipt lifecycle and replay remain intact"
+        "independent row59 successor review confirmed OA receipt lifecycle and replay remain intact",
+        "independent row63 successor attestation confirmed OA receipt lifecycle behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
@@ -3523,20 +3529,22 @@
         "54b32d5",
         "f179e8e",
         "749eb1d",
-        "3e5e1d5"
+        "3e5e1d5",
+        "f408aa9c07ab83d268cb46bf15f0c1ce251a942b"
       ],
       "paths": [
         "backend/app/modules/documents/service.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_oa_reply_date_receipt_projection.py"
       ],
-      "tree_sha256": "704c22b45c5cbbbe2ebf34600b08dc8a269b73be70150371a7e21fa329b10ea0",
+      "tree_sha256": "6ad2884a4b1fe6cc1efb56a0a97e3bf77cd4f242de694a60b2799d76d9cc2f82",
       "tests": [
         "pytest -q tests/test_v8_oa_reply_date_receipt_projection.py from backend cwd (2 passed)",
         "independent focused rerun from backend cwd (2 passed)",
         "scoped Ruff, exact five-path diff-check, disposition integrity and predecessor successor-attestation passed",
         "independent row62 successor review confirmed receipt-derived reply-date and replay behavior remain intact",
-        "independent row59 successor review confirmed receipt-derived reply-date behavior remains intact"
+        "independent row59 successor review confirmed receipt-derived reply-date behavior remains intact",
+        "independent row63 successor attestation confirmed reply-date receipt projection remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION.md",
@@ -3590,19 +3598,21 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "749eb1d",
-        "3e5e1d5"
+        "3e5e1d5",
+        "f408aa9c07ab83d268cb46bf15f0c1ce251a942b"
       ],
       "paths": [
         "backend/app/modules/official_workflows/schemas.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_work_package_manifest_evidence_version.py"
       ],
-      "tree_sha256": "09de5d67b18b993ea8b995ddbb41cf9171114fc11af260c41a9a4f60d523d97c",
+      "tree_sha256": "260527ddb523543138883273760db20f488f570750d4da5b45a1b86688e90ce7",
       "tests": [
         "pytest -q tests/test_v8_work_package_manifest_evidence_version.py from backend cwd (1 passed)",
         "scoped Ruff and exact three-path diff check passed",
         "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row70/row71",
-        "independent row59 successor review confirmed manifest evidence identity behavior remains intact"
+        "independent row59 successor review confirmed manifest evidence identity behavior remains intact",
+        "independent row63 successor attestation confirmed manifest evidence-version behavior remains intact under the narrower full-Word rule"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION.md",
@@ -3673,18 +3683,20 @@
       "story_id": "V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "3e5e1d5"
+        "3e5e1d5",
+        "f408aa9c07ab83d268cb46bf15f0c1ce251a942b"
       ],
       "paths": [
         "backend/app/modules/official_workflows/api.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_filing_preparation_started_adapter.py"
       ],
-      "tree_sha256": "40465e09a4a21a84deedd67c1c53044ec4f655fbcd71cbf6959e1b2742667a2d",
+      "tree_sha256": "f9b83e5d318b9d570217e511bfdab09712c47d00e6930b134e2181a9a2041b06",
       "tests": [
         "pytest -q tests/test_v8_filing_preparation_started_adapter.py from backend cwd (11 passed)",
         "scoped Ruff and exact three-path diff check passed",
-        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row62/row70/row71"
+        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row62/row70/row71",
+        "independent row63 successor attestation confirmed filing-preparation lifecycle behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION.md",
@@ -3754,6 +3766,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-NOTICE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-NOTICE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FILING-FULL-WORD-READINESS-GATE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "f408aa9c07ab83d268cb46bf15f0c1ce251a942b"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_policy.py",
+        "backend/app/modules/official_workflows/service.py",
+        "backend/tests/test_v8_filing_full_word_gate.py"
+      ],
+      "tree_sha256": "3b9079f025c3c347bf78d33547ea50b36d5568db13d0953f4f74207f381da8e9",
+      "tests": [
+        "pytest -q tests/test_v8_filing_full_word_gate.py from backend cwd (3 passed; 6 subtests)",
+        "current dependency-aligned affected backend tranche (276 passed; 6 subtests)",
+        "scoped Ruff and exact three-path diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0 and successor-attested six shared-path stories"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FILING-FULL-WORD-READINESS-GATE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FILING-FULL-WORD-READINESS-GATE-CURRENT-ADOPTION.md"
     }
   ]
 }
