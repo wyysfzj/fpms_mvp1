@@ -1073,8 +1073,8 @@
     {
       "catalog_id": "FPMS-V8-FUTURE-ANNUITY-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FUTURE-ANNUITY-OBLIGATION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2708,7 +2708,8 @@
         "895bfc22c6642baacfce2ae6a83916af0dbc3ade",
         "607261b",
         "54b32d5",
-        "f14d269"
+        "f14d269",
+        "807c93e0d389e05f4c620c287d8eed17a74b2f83"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
@@ -2716,7 +2717,7 @@
         "backend/tests/test_v8_certificate_archived_activity.py",
         "backend/tests/test_v8_gov_payment_activity_adapter.py"
       ],
-      "tree_sha256": "e6802f427c7c3407f87cb4f3f64f2a2499df0ba12c7f43f3fd4458a5029f67bf",
+      "tree_sha256": "455ff5c2b1b597fdecae548f2a3f2c14893c3a681859d32f044539962c9dcebf",
       "tests": [
         "pytest -q tests/test_v8_certificate_archived_activity.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "successor re-attestation with row125 focused test from backend cwd (3 passed)",
@@ -2725,7 +2726,8 @@
         "independent document-evidence successor review: shared service additions left the two activity adapters unchanged; exact document tranche 92 passed",
         "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)",
         "independent row71 successor review confirmed reply-date-only service changes leave activity adapters intact",
-        "independent row128 correction successor tranche confirmed activity adapters remain intact"
+        "independent row128 correction successor tranche confirmed activity adapters remain intact",
+        "Task 133 annuity-service successor tranche (26 passed) and independent High review P0/P1/P2 0/0/0"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md",
@@ -2831,19 +2833,21 @@
         "114d26b8a4967a517e1ae6c4da73692d921ad020",
         "f89e67e60db95ce34046acc84aaafd53703f3fea",
         "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
-        "607261b"
+        "607261b",
+        "807c93e0d389e05f4c620c287d8eed17a74b2f83"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/tests/test_v8_official_payment_evidence_activity_adapter.py"
       ],
-      "tree_sha256": "5c98aea218b22d55915656c9190f434245632ddb4a38eeb8e7ad6e94bcce2d7d",
+      "tree_sha256": "3ea0ef90b14895aeec6b8fc0e88bbb609654484ebcb8e6e7cec73e6c6f2f07e2",
       "tests": [
         "pytest -q tests/test_v8_official_payment_evidence_activity_adapter.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "independent successor re-attestation with certificate, GovPayment and row125 tests from backend cwd (3 passed)",
         "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)",
         "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)",
-        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)"
+        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)",
+        "Task 133 annuity-service successor tranche (26 passed) and independent High review P0/P1/P2 0/0/0"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
@@ -2855,19 +2859,21 @@
       "commits": [
         "f89e67e60db95ce34046acc84aaafd53703f3fea",
         "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
-        "607261b"
+        "607261b",
+        "807c93e0d389e05f4c620c287d8eed17a74b2f83"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/app/modules/annuity/export_excel.py",
         "backend/tests/test_v8_internal_pay_list_export.py"
       ],
-      "tree_sha256": "975f701dcb643c9e7fe8e8358bef97459574cd7b43ce50874fa6002282a7119f",
+      "tree_sha256": "27625147a48b612015b640396a98a203b9481b22272073b26ad3b8e130333ad1",
       "tests": [
         "pytest -q tests/test_v8_internal_pay_list_export.py from backend cwd (13 passed)",
         "independent row159, row160, row124 and row125 tranche from backend cwd (19 passed)",
         "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)",
-        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)"
+        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)",
+        "Task 133 annuity-service successor tranche (26 passed) and independent High review P0/P1/P2 0/0/0"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
@@ -2949,17 +2955,19 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
-        "607261b"
+        "607261b",
+        "807c93e0d389e05f4c620c287d8eed17a74b2f83"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/tests/test_v8_pay_list_export_artifact_read.py",
         "backend/tests/test_v8_pay_list_payment_export_decouple.py"
       ],
-      "tree_sha256": "7cfc10471413c01a848dfdadc70587f9f63c722de1a088c7c87001a78917c513",
+      "tree_sha256": "dcc13e4f88beab06279ad50ef0b4989c38dd253d24a9f0ee3541158f90ed71cd",
       "tests": [
         "pytest -q rows161/162 plus row159/160 and row124/125 successor files from backend cwd (25 passed)",
-        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)"
+        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)",
+        "Task 133 annuity-service successor tranche (26 passed) and independent High review P0/P1/P2 0/0/0"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION.md",
@@ -3457,18 +3465,20 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "cc4d96b",
-        "607261b"
+        "607261b",
+        "807c93e0d389e05f4c620c287d8eed17a74b2f83"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
         "backend/tests/test_v8_pay_list_create_activity_adapter.py"
       ],
-      "tree_sha256": "7a2c80ff48aae42c93433188c54fc6f8454990ca78d385d9d77d9ebe9ae78a35",
+      "tree_sha256": "4fde1e68dac4419e57a3eb4684ad3964df90f9d387be81bed353cdfb4a3d788b",
       "tests": [
         "pytest -q tests/test_v8_pay_list_create_activity_adapter.py from backend cwd (5 passed)",
         "pytest -q focused plus government-payment activity and prepare-draft regressions from backend cwd (29 passed)",
         "pytest -q complete affected predecessor tranche from backend cwd (26 passed)",
-        "scoped Ruff, exact four-path diff-check and 474-path disposition validation passed"
+        "scoped Ruff, exact four-path diff-check and 474-path disposition validation passed",
+        "Task 133 annuity-service successor tranche (26 passed) and independent High review P0/P1/P2 0/0/0"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md",
@@ -4008,6 +4018,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-REDUCTION-LINEAGE-CARRIER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-REDUCTION-LINEAGE-CARRIER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FUTURE-ANNUITY-OBLIGATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "807c93e0d389e05f4c620c287d8eed17a74b2f83"
+      ],
+      "paths": [
+        "backend/app/modules/annuity/service.py",
+        "backend/tests/test_v8_future_annuity_obligation.py"
+      ],
+      "tree_sha256": "db0eb2eccfb9343948367d01639c0eae0fbf6a702b05b4887a4ba6eb54092486",
+      "tests": [
+        "focused sourced Future Annuity SQLite suite (27 passed)",
+        "six pre-existing annuity-service consumers successor tranche (26 passed)",
+        "scoped Ruff and exact commit diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-OBLIGATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-OBLIGATION-CURRENT-ADOPTION.md"
     }
   ]
 }

@@ -39,3 +39,9 @@ Lean exact Git path/mode/blob fingerprints are respectively
 `4befe0c4c9a633dd78313e462c2b7e26787ae0535652498de4178d2bd36c1ea0`
 and `e3788d75ffe844ee66292083e62dff2ec9642458c2dda739206acba387f0d72d`.
 No Future Annuity service/model/test symbol is present in the adopted range.
+
+Task 133 successor commit `807c93e0d389e05f4c620c287d8eed17a74b2f83` later adds
+the separately reviewed Future Annuity seam. The exact six-consumer successor tranche
+passed `26/26`; independent Task 133 review approved P0/P1/P2 `0/0/0`. The current
+three-path fingerprint is
+`dcc13e4f88beab06279ad50ef0b4989c38dd253d24a9f0ee3541158f90ed71cd`.
