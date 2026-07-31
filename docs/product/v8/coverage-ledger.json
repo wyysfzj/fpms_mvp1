@@ -2061,8 +2061,8 @@
     {
       "catalog_id": "FPMS-V8-LEGACY-FEE-TRUTH-LINK-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LEGACY-FEE-TRUTH-LINK-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3634,6 +3634,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-OBLIGATION-API-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-OBLIGATION-API-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-LEGACY-FEE-TRUTH-LINK-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "f7ee133"
+      ],
+      "paths": [
+        "backend/scripts/backfill_v8_fee_truth.py",
+        "backend/tests/test_v8_legacy_fee_truth_link.py"
+      ],
+      "tree_sha256": "6c496477e43cc77d1f71da8ee651b5810d182b717d5f4b10ed91746d9ae29e9e",
+      "tests": [
+        "pytest -q tests/test_v8_legacy_fee_truth_link.py from backend cwd (9 passed)",
+        "scoped Ruff format/check and exact two-path diff check passed",
+        "final independent exact-candidate review approved P0/P1/P2 0/0/0 without repeating SQLite verification"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-TRUTH-LINK-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-TRUTH-LINK-CURRENT-ADOPTION.md"
     }
   ]
 }
