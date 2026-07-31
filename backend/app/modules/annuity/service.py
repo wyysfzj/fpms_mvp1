@@ -5,18 +5,27 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
+from enum import Enum
 from hashlib import sha256
 from pathlib import Path
+from re import fullmatch
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.export_excel import build_pay_list_export_xlsx
-from app.modules.annuity.models import AnnuityTask, GovPayment, PayList, PayListExportArtifact
+from app.modules.annuity.models import (
+    AnnuityTask,
+    FutureAnnuityReductionLineage,
+    GovPayment,
+    PayList,
+    PayListExportArtifact,
+)
 from app.modules.billing.models import CaseReceipt
 from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
@@ -30,6 +39,20 @@ from app.modules.cases.lifecycle_contracts import (
     OfficialProcedureStage,
 )
 from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
+from app.modules.documents.models import Document, DocumentEvidenceVersion
+from app.modules.fees.annuity_reduction import (
+    AnnuityReductionScopeError,
+    validate_annuity_fee_reduction,
+)
+from app.modules.fees.cnipa_annuity_rate_candidate import select_cnipa_annuity_amount
+from app.modules.fees.fee_reduction import (
+    FeeReductionApprovalContext,
+    FeeReductionApprovalScopeType,
+    FeeReductionEvaluationContext,
+    FeeReductionInput,
+    FeeReductionInputProvenance,
+    FeeReductionValidationError,
+)
 from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
@@ -37,12 +60,24 @@ from app.modules.fees.models import (
     FeeObligationDraftItemLink,
     FeeObligationLine,
     FeeRate,
+    FeeReductionApproval,
+    OfficialRateBook,
 )
 from app.modules.fees.obligation_contracts import (
+    FeeClientInstructionStatus,
+    FeeDifferenceReviewState,
+    FeeDomain,
+    FeeObligationLineInput,
     FeeOfficialEvidenceStatus,
+    FeeSourceStatus,
+    RecognizeFeeObligationCommand,
     RecordFeePaymentEvidenceCommand,
 )
-from app.modules.fees.obligation_service import record_payment_evidence
+from app.modules.fees.obligation_service import (
+    calculate_annuity_payable_amount,
+    recognize_obligation,
+    record_payment_evidence,
+)
 from app.modules.fees.service import (
     fee_rate_effective_on_conditions,
     fee_rate_source_enabled_condition,
@@ -2919,6 +2954,773 @@ def add_manual_gov_payment(
             "client_id": pay_list.client_id,
         },
     }
+
+
+class FutureAnnuityObligationErrorCode(str, Enum):
+    INVALID_COMMAND = "FUTURE_ANNUITY_INVALID_COMMAND"
+    TRANSACTION_DIRTY = "FUTURE_ANNUITY_TRANSACTION_DIRTY"
+    TASK_NOT_FOUND = "FUTURE_ANNUITY_TASK_NOT_FOUND"
+    CASE_NOT_FOUND = "FUTURE_ANNUITY_CASE_NOT_FOUND"
+    SOURCE_ACTIVITY_NOT_FOUND = "FUTURE_ANNUITY_SOURCE_ACTIVITY_NOT_FOUND"
+    SOURCE_DOCUMENT_NOT_FOUND = "FUTURE_ANNUITY_SOURCE_DOCUMENT_NOT_FOUND"
+    SOURCE_EVIDENCE_NOT_FOUND = "FUTURE_ANNUITY_SOURCE_EVIDENCE_NOT_FOUND"
+    REDUCTION_APPROVAL_NOT_FOUND = "FUTURE_ANNUITY_REDUCTION_APPROVAL_NOT_FOUND"
+    TASK_CONFLICT = "FUTURE_ANNUITY_TASK_CONFLICT"
+    SOURCE_ACTIVITY_CONFLICT = "FUTURE_ANNUITY_SOURCE_ACTIVITY_CONFLICT"
+    SOURCE_DOCUMENT_CONFLICT = "FUTURE_ANNUITY_SOURCE_DOCUMENT_CONFLICT"
+    SOURCE_EVIDENCE_CONFLICT = "FUTURE_ANNUITY_SOURCE_EVIDENCE_CONFLICT"
+    PROJECTION_CONFLICT = "FUTURE_ANNUITY_PROJECTION_CONFLICT"
+    LINEAGE_CONFLICT = "FUTURE_ANNUITY_LINEAGE_CONFLICT"
+    RATE_MISSING = "FUTURE_ANNUITY_RATE_MISSING"
+    RATE_AMBIGUOUS = "FUTURE_ANNUITY_RATE_AMBIGUOUS"
+    RATE_INVALID = "FUTURE_ANNUITY_RATE_INVALID"
+    REDUCTION_INVALID = "FUTURE_ANNUITY_REDUCTION_INVALID"
+    REDUCTION_CONFLICT = "FUTURE_ANNUITY_REDUCTION_CONFLICT"
+    IDEMPOTENCY_CONFLICT = "FUTURE_ANNUITY_IDEMPOTENCY_CONFLICT"
+    OBLIGATION_CONFLICT = "FUTURE_ANNUITY_OBLIGATION_CONFLICT"
+
+
+class FutureAnnuityObligationError(ValueError):
+    def __init__(
+        self,
+        code: FutureAnnuityObligationErrorCode,
+        status_code: int,
+        details: dict[str, str | int | bool | None] | None = None,
+    ) -> None:
+        self.code = code
+        self.status_code = status_code
+        self._details = {} if details is None else dict(details)
+        super().__init__(code.value)
+
+    @property
+    def details(self) -> dict[str, str | int | bool | None]:
+        return dict(self._details)
+
+
+@dataclass(frozen=True, slots=True)
+class RecognizeFutureAnnuityObligationCommand:
+    annuity_task_id: int
+    source_activity_id: str
+    source_document_id: str
+    source_evidence_version_id: str
+    source_evidence_content_hash: str
+    grant_fee_year_key: int
+    rate_effective_on: date
+    reduction_input: FeeReductionInput
+    reduction_approval_id: str | None
+    actor_id: str
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class RecognizeFutureAnnuityObligationResult:
+    annuity_task_id: int
+    fee_obligation_id: str
+    fee_obligation_line_id: str
+    source_activity_id: str
+    source_document_id: str
+    source_evidence_version_id: str
+    source_evidence_content_hash: str
+    grant_fee_year_key: int
+    fee_code: str
+    due_date: date
+    official_full_amount: Decimal
+    reduction_ratio: Decimal
+    payable_amount: Decimal
+    late_fee_base: Decimal
+    client_instruction_status: FeeClientInstructionStatus
+    activity_id: str
+    idempotency_key: str
+    reused: bool
+
+
+_FUTURE_ANNUITY_FEE_CODE = {
+    "INV": "CN_ANNUITY_FEE_INV",
+    "UM": "CN_ANNUITY_FEE_UM",
+    "DES": "CN_ANNUITY_FEE_DES",
+}
+_FUTURE_ANNUITY_FEE_CODES = frozenset(_FUTURE_ANNUITY_FEE_CODE.values())
+_FUTURE_ANNUITY_CALC_PARAMS = {
+    "CN_ANNUITY_FEE_INV": (
+        '{"schema":"CNIPA_ANNUITY_TIER_V1","tiers":['
+        '{"amount":"900.00","from":1,"to":3},'
+        '{"amount":"1200.00","from":4,"to":6},'
+        '{"amount":"2000.00","from":7,"to":9},'
+        '{"amount":"4000.00","from":10,"to":12},'
+        '{"amount":"6000.00","from":13,"to":15},'
+        '{"amount":"8000.00","from":16,"to":20}]}'
+    ),
+    "CN_ANNUITY_FEE_UM": (
+        '{"schema":"CNIPA_ANNUITY_TIER_V1","tiers":['
+        '{"amount":"600.00","from":1,"to":3},'
+        '{"amount":"900.00","from":4,"to":5},'
+        '{"amount":"1200.00","from":6,"to":8},'
+        '{"amount":"2000.00","from":9,"to":10}]}'
+    ),
+    "CN_ANNUITY_FEE_DES": (
+        '{"schema":"CNIPA_ANNUITY_TIER_V1","tiers":['
+        '{"amount":"600.00","from":1,"to":3},'
+        '{"amount":"900.00","from":4,"to":5},'
+        '{"amount":"1200.00","from":6,"to":8},'
+        '{"amount":"2000.00","from":9,"to":10},'
+        '{"amount":"3000.00","from":11,"to":15}]}'
+    ),
+}
+_FUTURE_ANNUITY_PROJECTION = (
+    "POST_GRANT_MAINTENANCE",
+    "GRANT_ANNOUNCED",
+    "PATENT_IN_FORCE",
+    "CONFIRMED",
+    "GRANTED",
+)
+
+
+def _future_annuity_fail(
+    code: FutureAnnuityObligationErrorCode,
+    status_code: int,
+    details: dict[str, str | int | bool | None] | None = None,
+) -> None:
+    raise FutureAnnuityObligationError(code, status_code, details)
+
+
+def _future_annuity_invalid(field: str) -> None:
+    _future_annuity_fail(
+        FutureAnnuityObligationErrorCode.INVALID_COMMAND,
+        400,
+        {"field": field},
+    )
+
+
+def _future_annuity_exact_string(value: object, limit: int) -> bool:
+    return type(value) is str and bool(value) and value.strip() == value and len(value) <= limit
+
+
+def _validate_future_annuity_command(
+    command: RecognizeFutureAnnuityObligationCommand,
+) -> None:
+    if type(command) is not RecognizeFutureAnnuityObligationCommand:
+        _future_annuity_invalid("command")
+    for field in ("annuity_task_id", "grant_fee_year_key"):
+        value = getattr(command, field)
+        if type(value) is not int or value < 1:
+            _future_annuity_invalid(field)
+    for field in (
+        "source_activity_id",
+        "source_document_id",
+        "source_evidence_version_id",
+        "actor_id",
+    ):
+        if not _future_annuity_exact_string(getattr(command, field), 36):
+            _future_annuity_invalid(field)
+    if (
+        type(command.source_evidence_content_hash) is not str
+        or fullmatch(r"sha256:[0-9a-f]{64}", command.source_evidence_content_hash) is None
+    ):
+        _future_annuity_invalid("source_evidence_content_hash")
+    if type(command.rate_effective_on) is not date:
+        _future_annuity_invalid("rate_effective_on")
+    if type(command.reduction_input) is not FeeReductionInput:
+        _future_annuity_invalid("reduction_input")
+    if command.reduction_approval_id is not None and not _future_annuity_exact_string(
+        command.reduction_approval_id, 36
+    ):
+        _future_annuity_invalid("reduction_approval_id")
+    if not _future_annuity_exact_string(command.idempotency_key, 128):
+        _future_annuity_invalid("idempotency_key")
+
+
+def _future_annuity_fee_code(case: Case) -> str:
+    fee_code = _FUTURE_ANNUITY_FEE_CODE.get(case.patent_category)
+    if fee_code is None:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.TASK_CONFLICT, 409)
+    return fee_code
+
+
+def _future_annuity_carrier_state(task: AnnuityTask) -> tuple[object, ...]:
+    return (
+        task.source_activity_id,
+        task.source_document_id,
+        task.source_evidence_version_id,
+        task.source_evidence_content_hash,
+        task.fee_obligation_id,
+        task.grant_fee_year_key,
+    )
+
+
+def _future_annuity_line_input(
+    *,
+    fee_code: str,
+    fee_name: str,
+    year: int,
+    due_date: date,
+    full_amount: Decimal,
+    reduction_ratio: Decimal,
+    payable_amount: Decimal,
+) -> FeeObligationLineInput:
+    return FeeObligationLineInput(
+        fee_code=fee_code,
+        fee_name=fee_name,
+        fee_year_key=year,
+        official_full_amount=full_amount,
+        reduction_ratio=reduction_ratio,
+        payable_amount=payable_amount,
+        source_amount=None,
+        source_date=due_date,
+        difference_review_state=FeeDifferenceReviewState.MATCHED,
+    )
+
+
+def _future_annuity_delegate_command(
+    command: RecognizeFutureAnnuityObligationCommand,
+    *,
+    case_id: str,
+    line: FeeObligationLineInput,
+) -> RecognizeFeeObligationCommand:
+    return RecognizeFeeObligationCommand(
+        case_id=case_id,
+        source_activity_id=command.source_activity_id,
+        source_document_id=command.source_document_id,
+        fee_domain=FeeDomain.GOV,
+        obligation_type="FUTURE_ANNUITY",
+        due_date=command.rate_effective_on,
+        currency="CNY",
+        source_status=FeeSourceStatus.VERIFIED,
+        lines=(line,),
+        actor_id=command.actor_id,
+        idempotency_key=command.idempotency_key,
+        supersedes_obligation_id=None,
+        supersede_reason=None,
+    )
+
+
+def _future_annuity_result(
+    command: RecognizeFutureAnnuityObligationCommand,
+    delegated,
+    *,
+    reused: bool,
+) -> RecognizeFutureAnnuityObligationResult:
+    obligation = delegated.obligation
+    if len(obligation.lines) != 1:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.OBLIGATION_CONFLICT, 409)
+    line = obligation.lines[0]
+    if obligation.due_date is None or line.official_full_amount is None:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.OBLIGATION_CONFLICT, 409)
+    return RecognizeFutureAnnuityObligationResult(
+        annuity_task_id=command.annuity_task_id,
+        fee_obligation_id=obligation.id,
+        fee_obligation_line_id=line.id,
+        source_activity_id=command.source_activity_id,
+        source_document_id=command.source_document_id,
+        source_evidence_version_id=command.source_evidence_version_id,
+        source_evidence_content_hash=command.source_evidence_content_hash,
+        grant_fee_year_key=command.grant_fee_year_key,
+        fee_code=line.fee_code,
+        due_date=obligation.due_date,
+        official_full_amount=line.official_full_amount,
+        reduction_ratio=line.reduction_ratio,
+        payable_amount=line.payable_amount,
+        late_fee_base=line.official_full_amount,
+        client_instruction_status=obligation.statuses.client_instruction_status,
+        activity_id=delegated.activity_id,
+        idempotency_key=command.idempotency_key,
+        reused=reused,
+    )
+
+
+def _future_annuity_replay(
+    command: RecognizeFutureAnnuityObligationCommand,
+    transaction: Session,
+    task: AnnuityTask,
+    case: Case,
+):
+    carrier = _future_annuity_carrier_state(task)
+    if any(value is None for value in carrier):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+    expected_carrier = (
+        command.source_activity_id,
+        command.source_document_id,
+        command.source_evidence_version_id,
+        command.source_evidence_content_hash,
+        task.fee_obligation_id,
+        command.grant_fee_year_key,
+    )
+    if carrier != expected_carrier:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.IDEMPOTENCY_CONFLICT, 409)
+    if task.year_no != command.grant_fee_year_key or task.due_date != command.rate_effective_on:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.IDEMPOTENCY_CONFLICT, 409)
+    obligation = transaction.get(FeeObligation, task.fee_obligation_id)
+    if obligation is None:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+    lines = tuple(
+        transaction.scalars(
+            select(FeeObligationLine).where(FeeObligationLine.obligation_id == obligation.id)
+        )
+    )
+    if len(lines) != 1:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+    stored = lines[0]
+    lineage = transaction.get(FutureAnnuityReductionLineage, task.id)
+    if (
+        lineage is None
+        or lineage.fee_obligation_line_id != stored.id
+        or task.case_id != case.id
+        or obligation.case_id != case.id
+        or obligation.source_activity_id != task.source_activity_id
+        or obligation.source_document_id != task.source_document_id
+        or stored.obligation_id != obligation.id
+        or stored.case_id != case.id
+        or stored.source_activity_id != task.source_activity_id
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+    stored_ratio = stored.reduction_ratio
+    stored_provenance = lineage.reduction_input_provenance
+    stored_approval_id = lineage.reduction_approval_id
+    stored_zero = (
+        type(stored_ratio) is Decimal
+        and stored_ratio == Decimal("0.0000")
+        and stored_ratio.as_tuple().exponent == -4
+        and stored_provenance == FeeReductionInputProvenance.EXPLICIT_ENTRY.value
+        and stored_approval_id is None
+    )
+    stored_reduced = (
+        type(stored_ratio) is Decimal
+        and stored_ratio in {Decimal("0.7000"), Decimal("0.8500")}
+        and stored_ratio.as_tuple().exponent == -4
+        and stored_provenance
+        in {
+            FeeReductionInputProvenance.EXPLICIT_ENTRY.value,
+            FeeReductionInputProvenance.CONFIRMED_MIGRATION.value,
+        }
+        and stored_approval_id is not None
+    )
+    if not (stored_zero or stored_reduced):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+    if (
+        stored.fee_code not in _FUTURE_ANNUITY_FEE_CODES
+        or not _future_annuity_exact_string(stored.fee_name, 256)
+        or stored.fee_year_key != task.year_no
+        or stored.official_full_amount is None
+        or type(stored.official_full_amount) is not Decimal
+        or not stored.official_full_amount.is_finite()
+        or stored.official_full_amount < 0
+        or type(stored.payable_amount) is not Decimal
+        or not stored.payable_amount.is_finite()
+        or stored.payable_amount < 0
+        or stored.source_amount is not None
+        or stored.source_date != task.due_date
+        or stored.difference_review_state != FeeDifferenceReviewState.MATCHED.value
+        or obligation.due_date != task.due_date
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+    ratio = command.reduction_input.reduction_ratio
+    provenance = command.reduction_input.provenance
+    if (
+        type(ratio) is not Decimal
+        or not ratio.is_finite()
+        or ratio != stored_ratio
+        or type(provenance) is not FeeReductionInputProvenance
+        or provenance.value != stored_provenance
+        or command.reduction_approval_id != stored_approval_id
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.IDEMPOTENCY_CONFLICT, 409)
+    line = _future_annuity_line_input(
+        fee_code=stored.fee_code,
+        fee_name=stored.fee_name,
+        year=stored.fee_year_key,
+        due_date=stored.source_date,
+        full_amount=stored.official_full_amount,
+        reduction_ratio=stored.reduction_ratio,
+        payable_amount=stored.payable_amount,
+    )
+    try:
+        delegated = recognize_obligation(
+            _future_annuity_delegate_command(command, case_id=case.id, line=line),
+            transaction,
+        )
+    except BusinessError as exc:
+        if exc.code in {
+            "FEE_OBLIGATION_STORED_STATE_INVALID",
+            "FEE_OBLIGATION_IDEMPOTENCY_CONFLICT",
+        }:
+            _future_annuity_fail(
+                FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT,
+                409,
+                {"cause": exc.code},
+            )
+        _future_annuity_fail(
+            FutureAnnuityObligationErrorCode.OBLIGATION_CONFLICT,
+            409,
+            {"cause": exc.code},
+        )
+    delegated_lines = delegated.obligation.lines
+    delegated_activity = transaction.get(CaseActivityEvent, delegated.activity_id)
+    if (
+        not delegated.reused
+        or delegated.obligation.id != task.fee_obligation_id
+        or delegated.obligation.id != obligation.id
+        or len(delegated_lines) != 1
+        or delegated_lines[0].id != stored.id
+        or delegated.activity_id == task.source_activity_id
+        or delegated_activity is None
+        or delegated_activity.case_id != case.id
+        or delegated_activity.lane != ActivityLane.FEE.value
+        or delegated_activity.activity_type != "FEE_OBLIGATION_RECOGNIZED"
+        or delegated_activity.idempotency_key != command.idempotency_key
+        or delegated_activity.source_activity_id != task.source_activity_id
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+    return delegated
+
+
+def _validate_future_annuity_source(
+    command: RecognizeFutureAnnuityObligationCommand,
+    *,
+    task: AnnuityTask,
+    case: Case,
+    activity: CaseActivityEvent,
+    document: Document,
+    evidence: DocumentEvidenceVersion,
+    evidence_links: tuple[CaseActivityEventEvidence, ...],
+) -> None:
+    if (
+        task.year_no != command.grant_fee_year_key
+        or type(task.due_date) is not date
+        or task.due_date != command.rate_effective_on
+        or task.case_id != case.id
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.TASK_CONFLICT, 409)
+    if (
+        activity.case_id != case.id
+        or activity.activity_type != "GRANT_ANNOUNCEMENT_CONFIRMED"
+        or activity.lane != ActivityLane.LIFECYCLE.value
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or type(activity.effective_at) is not datetime
+        or activity.effective_at.tzinfo is not None
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.SOURCE_ACTIVITY_CONFLICT, 409)
+    if document.case_id != case.id:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.SOURCE_DOCUMENT_CONFLICT, 409)
+    if len(evidence_links) != 1:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.SOURCE_EVIDENCE_CONFLICT, 409)
+    link = evidence_links[0]
+    if (
+        link.case_id != case.id
+        or link.evidence_kind != "DOCUMENT_EVIDENCE_VERSION"
+        or link.object_type != "DocumentEvidenceVersion"
+        or link.object_id != command.source_evidence_version_id
+        or link.content_hash != command.source_evidence_content_hash
+        or link.captured_at != activity.effective_at
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.SOURCE_EVIDENCE_CONFLICT, 409)
+    if (
+        evidence.case_id != case.id
+        or evidence.document_id != command.source_document_id
+        or evidence.role != "OFFICIAL_FINAL_PDF"
+        or evidence.state != "FINAL"
+        or evidence.review_state != "APPROVED"
+        or type(evidence.reviewed_at) is not datetime
+        or evidence.reviewed_at.tzinfo is not None
+        or not _future_annuity_exact_string(evidence.reviewer_id, 36)
+        or evidence.reviewer_id == evidence.creator_id
+        or evidence.content_hash != command.source_evidence_content_hash
+        or evidence.current_identity_key != f"{case.id}|{evidence.lineage_key}"
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.SOURCE_EVIDENCE_CONFLICT, 409)
+    if (
+        case.business_stage,
+        case.official_procedure_stage,
+        case.legal_status,
+        case.lifecycle_verification_status,
+        case.status,
+    ) != _FUTURE_ANNUITY_PROJECTION:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.PROJECTION_CONFLICT, 409)
+
+
+def _future_annuity_rate(
+    transaction: Session,
+    *,
+    fee_code: str,
+    fee_year_key: int,
+    effective_on: date,
+) -> tuple[FeeRate, Decimal]:
+    books = tuple(
+        transaction.scalars(
+            select(OfficialRateBook).where(
+                OfficialRateBook.book_code == "CNIPA_PATENT_ANNUITY_20260330",
+                OfficialRateBook.approval_status == "APPROVED",
+                OfficialRateBook.activation_status == "ACTIVE",
+                OfficialRateBook.effective_from <= effective_on,
+                or_(
+                    OfficialRateBook.effective_to.is_(None),
+                    OfficialRateBook.effective_to >= effective_on,
+                ),
+            )
+        )
+    )
+    if not books:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.RATE_MISSING, 409)
+    if len(books) != 1:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.RATE_AMBIGUOUS, 409)
+    rates = tuple(
+        transaction.scalars(
+            select(FeeRate).where(
+                FeeRate.official_rate_book_id == books[0].id,
+                FeeRate.fee_code == fee_code,
+                FeeRate.effective_from <= effective_on,
+                or_(FeeRate.effective_to.is_(None), FeeRate.effective_to >= effective_on),
+            )
+        )
+    )
+    if not rates:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.RATE_MISSING, 409)
+    if len(rates) != 1:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.RATE_AMBIGUOUS, 409)
+    rate = rates[0]
+    if (
+        rate.enabled is not True
+        or rate.fee_type != "GOV"
+        or rate.currency != "CNY"
+        or rate.calc_mode != "TIER"
+        or rate.allow_reduction is not True
+        or rate.calc_params is None
+        or rate.calc_params != _FUTURE_ANNUITY_CALC_PARAMS.get(fee_code)
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.RATE_INVALID, 409)
+    try:
+        amount = select_cnipa_annuity_amount(fee_code, rate.calc_params, fee_year_key)
+    except BusinessError:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.RATE_INVALID, 409)
+    return rate, amount
+
+
+def _future_annuity_approval_context(
+    transaction: Session,
+    approval: FeeReductionApproval,
+    *,
+    case_id: str,
+) -> FeeReductionApprovalContext:
+    try:
+        scope = json.loads(approval.fee_scope_snapshot)
+        canonical_scope = json.dumps(
+            scope,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        scope_type = FeeReductionApprovalScopeType(approval.scope_type)
+    except (TypeError, ValueError):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.REDUCTION_CONFLICT, 409)
+    if (
+        type(scope) is not dict
+        or set(scope) != {"fee_codes", "schema"}
+        or scope.get("schema") != "FPMS_FEE_REDUCTION_FEE_SCOPE_V1"
+        or type(scope.get("fee_codes")) is not list
+        or not scope["fee_codes"]
+        or scope["fee_codes"] != sorted(set(scope["fee_codes"]))
+        or any(not _future_annuity_exact_string(code, 64) for code in scope["fee_codes"])
+        or canonical_scope != approval.fee_scope_snapshot
+        or sha256(approval.fee_scope_snapshot.encode()).hexdigest() != approval.fee_scope_hash
+    ):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.REDUCTION_CONFLICT, 409)
+    source = transaction.get(DocumentEvidenceVersion, approval.source_evidence_version_id)
+    is_current = bool(
+        source is not None
+        and source.case_id == case_id
+        and source.current_identity_key == f"{case_id}|{source.lineage_key}"
+    )
+    return FeeReductionApprovalContext(
+        approval_id=approval.id,
+        scope_type=scope_type,
+        case_id=approval.case_id,
+        applicant_set_key=approval.applicant_set_key,
+        reduction_ratio=approval.reduction_ratio,
+        fee_codes=frozenset(scope["fee_codes"]),
+        fee_year_from=approval.fee_year_from,
+        fee_year_to=approval.fee_year_to,
+        effective_from=approval.effective_from,
+        effective_to=approval.effective_to,
+        source_evidence_version_id=approval.source_evidence_version_id,
+        confirmation_status=approval.confirmation_status,
+        is_current=is_current,
+    )
+
+
+def _future_annuity_reduction(
+    command: RecognizeFutureAnnuityObligationCommand,
+    transaction: Session,
+    *,
+    case_id: str,
+    fee_code: str,
+):
+    ratio = command.reduction_input.reduction_ratio
+    provenance = command.reduction_input.provenance
+    approval_context = None
+    if type(ratio) is Decimal and ratio == Decimal("0"):
+        if (
+            provenance is not FeeReductionInputProvenance.EXPLICIT_ENTRY
+            or command.reduction_approval_id is not None
+        ):
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.REDUCTION_INVALID, 400)
+    elif (
+        type(ratio) is Decimal
+        and ratio in {Decimal("0.7"), Decimal("0.85")}
+        and provenance
+        in {
+            FeeReductionInputProvenance.EXPLICIT_ENTRY,
+            FeeReductionInputProvenance.CONFIRMED_MIGRATION,
+        }
+    ):
+        if command.reduction_approval_id is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.REDUCTION_INVALID, 400)
+        approval = transaction.get(FeeReductionApproval, command.reduction_approval_id)
+        if approval is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.REDUCTION_APPROVAL_NOT_FOUND, 404)
+        approval_context = _future_annuity_approval_context(transaction, approval, case_id=case_id)
+    else:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.REDUCTION_INVALID, 400)
+    context = FeeReductionEvaluationContext(
+        case_id=case_id,
+        applicant_set_key=None,
+        fee_code=fee_code,
+        fee_year_key=command.grant_fee_year_key,
+        as_of_date=command.rate_effective_on,
+    )
+    try:
+        return validate_annuity_fee_reduction(
+            reduction_input=command.reduction_input,
+            context=context,
+            approval=approval_context,
+            grant_fee_year_key=command.grant_fee_year_key,
+        )
+    except (AnnuityReductionScopeError, FeeReductionValidationError):
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.REDUCTION_CONFLICT, 409)
+
+
+def recognize_future_annuity_obligation(
+    command: RecognizeFutureAnnuityObligationCommand,
+    transaction: Session,
+) -> RecognizeFutureAnnuityObligationResult:
+    _validate_future_annuity_command(command)
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.TRANSACTION_DIRTY, 409)
+    with transaction.no_autoflush:
+        task = transaction.get(AnnuityTask, command.annuity_task_id)
+        if task is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.TASK_NOT_FOUND, 404)
+        case = transaction.get(Case, task.case_id)
+        if case is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.CASE_NOT_FOUND, 404)
+        activity = transaction.get(CaseActivityEvent, command.source_activity_id)
+        if activity is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.SOURCE_ACTIVITY_NOT_FOUND, 404)
+        document = transaction.get(Document, command.source_document_id)
+        if document is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.SOURCE_DOCUMENT_NOT_FOUND, 404)
+        evidence = transaction.get(DocumentEvidenceVersion, command.source_evidence_version_id)
+        if evidence is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.SOURCE_EVIDENCE_NOT_FOUND, 404)
+        carrier = _future_annuity_carrier_state(task)
+        if all(value is not None for value in carrier):
+            delegated = _future_annuity_replay(command, transaction, task, case)
+            return _future_annuity_result(command, delegated, reused=True)
+        if any(value is not None for value in carrier):
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+        evidence_links = tuple(
+            transaction.scalars(
+                select(CaseActivityEventEvidence).where(
+                    CaseActivityEventEvidence.activity_id == activity.id
+                )
+            )
+        )
+        _validate_future_annuity_source(
+            command,
+            task=task,
+            case=case,
+            activity=activity,
+            document=document,
+            evidence=evidence,
+            evidence_links=evidence_links,
+        )
+        fee_code = _future_annuity_fee_code(case)
+        rate, full_amount = _future_annuity_rate(
+            transaction,
+            fee_code=fee_code,
+            fee_year_key=command.grant_fee_year_key,
+            effective_on=command.rate_effective_on,
+        )
+        reduction = _future_annuity_reduction(
+            command,
+            transaction,
+            case_id=case.id,
+            fee_code=fee_code,
+        )
+        try:
+            amount = calculate_annuity_payable_amount(
+                full_annual_fee=full_amount,
+                eligible_ratio=reduction.payable_ratio,
+            )
+        except ValueError:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.RATE_INVALID, 409)
+        line = _future_annuity_line_input(
+            fee_code=fee_code,
+            fee_name=rate.fee_name or "年费",
+            year=command.grant_fee_year_key,
+            due_date=command.rate_effective_on,
+            full_amount=amount.full_annual_fee,
+            reduction_ratio=reduction.reduction_ratio,
+            payable_amount=amount.payable_amount,
+        )
+    try:
+        with transaction.begin_nested():
+            delegated = recognize_obligation(
+                _future_annuity_delegate_command(command, case_id=case.id, line=line),
+                transaction,
+            )
+            if delegated.reused:
+                _future_annuity_fail(FutureAnnuityObligationErrorCode.IDEMPOTENCY_CONFLICT, 409)
+            delegated_lines = delegated.obligation.lines
+            if (
+                delegated.obligation.case_id != case.id
+                or delegated.obligation.source.source_activity_id != command.source_activity_id
+                or delegated.obligation.source.source_document_id != command.source_document_id
+                or len(delegated_lines) != 1
+                or delegated_lines[0].obligation_id != delegated.obligation.id
+                or delegated_lines[0].case_id != case.id
+                or delegated_lines[0].source_activity_id != command.source_activity_id
+                or delegated_lines[0].fee_code != fee_code
+                or delegated_lines[0].fee_year_key != command.grant_fee_year_key
+                or delegated_lines[0].reduction_ratio != reduction.reduction_ratio
+                or reduction.provenance is not command.reduction_input.provenance
+                or reduction.approval_id != command.reduction_approval_id
+            ):
+                _future_annuity_fail(FutureAnnuityObligationErrorCode.OBLIGATION_CONFLICT, 409)
+            transaction.add(
+                FutureAnnuityReductionLineage(
+                    annuity_task_id=task.id,
+                    fee_obligation_line_id=delegated_lines[0].id,
+                    reduction_input_provenance=reduction.provenance.value,
+                    reduction_approval_id=reduction.approval_id,
+                )
+            )
+            task.source_activity_id = command.source_activity_id
+            task.source_document_id = command.source_document_id
+            task.source_evidence_version_id = command.source_evidence_version_id
+            task.source_evidence_content_hash = command.source_evidence_content_hash
+            task.fee_obligation_id = delegated.obligation.id
+            task.grant_fee_year_key = command.grant_fee_year_key
+            transaction.flush()
+    except FutureAnnuityObligationError:
+        raise
+    except BusinessError as exc:
+        _future_annuity_fail(
+            FutureAnnuityObligationErrorCode.OBLIGATION_CONFLICT,
+            409,
+            {"cause": exc.code},
+        )
+    except IntegrityError:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+    return _future_annuity_result(command, delegated, reused=False)
 
 
 def generate_annuity_tasks_for_case(
