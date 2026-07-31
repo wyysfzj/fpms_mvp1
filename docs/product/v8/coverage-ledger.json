@@ -3255,6 +3255,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-ANNUITY-PAYABLE-AMOUNT-RULE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-PAYABLE-AMOUNT-RULE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "82bc4f7ac2507b1eef740d538baf60797b3e7559"
+      ],
+      "paths": [
+        "backend/app/modules/fees/cnipa_layout_rate_candidate.py",
+        "backend/app/modules/fees/data/cnipa_246_layout_rate.json",
+        "backend/tests/test_v8_cnipa_246_layout_rate_candidate.py"
+      ],
+      "tree_sha256": "dbd0a7467b0ebd301df17ae41c6a1c3892f15a0e986d4b5f1c6498d211dfb96f",
+      "tests": [
+        "pytest -q tests/test_v8_cnipa_246_layout_rate_candidate.py from backend cwd (17 passed)",
+        "scoped Ruff, exact five-path diff-check, disposition inventory and source/data hash checks passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION.md"
     }
   ]
 }

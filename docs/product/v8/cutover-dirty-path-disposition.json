@@ -11,7 +11,8 @@
     "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION": 11,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
-    "V8-ADOPT-ANNUITY-RATE-SOURCES": 34,
+    "V8-ADOPT-ANNUITY-RATE-SOURCES": 31,
+    "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION": 3,
     "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION": 2,
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
     "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 3,
@@ -248,14 +249,14 @@
     {
       "path": "backend/app/modules/fees/cnipa_layout_rate_candidate.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "activated official rate source/candidate"
+      "story_id": "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION",
+      "rationale": "frozen inactive CNIPA 246 rate-book candidate materializer"
     },
     {
       "path": "backend/app/modules/fees/data/cnipa_246_layout_rate.json",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "activated official rate source/candidate"
+      "story_id": "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION",
+      "rationale": "frozen inactive CNIPA 246 rate-book candidate data"
     },
     {
       "path": "backend/app/modules/fees/data/cnipa_payment_guide_20260330_annuity_rates.json",
@@ -506,8 +507,8 @@
     {
       "path": "backend/tests/test_v8_cnipa_246_layout_rate_candidate.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION",
+      "rationale": "frozen inactive CNIPA 246 candidate behavior"
     },
     {
       "path": "backend/tests/test_v8_cnipa_annuity_rate_candidate.py",
