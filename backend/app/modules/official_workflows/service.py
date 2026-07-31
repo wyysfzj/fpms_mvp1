@@ -2524,6 +2524,7 @@ def _apply_oa_receipt_archive_event(
         ),
         db,
     )
+    source.reply_date = captured_at.date()
     evidence_note = json.dumps(
         {
             "actor_id": _normalize_text(actor_id),

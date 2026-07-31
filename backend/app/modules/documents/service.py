@@ -532,6 +532,7 @@ def _apply_reply_chain(
     *,
     document: Document,
     doc_date: date | None,
+    template: DocTemplate | None,
 ) -> None:
     if not document.reply_to_id or document.direction != DocumentDirection.OUT:
         return
@@ -544,7 +545,8 @@ def _apply_reply_chain(
             "REPLY_TO_DOC_NOT_FOUND", "Reply-to document not found", status_code=404
         )
 
-    original_doc.reply_date = doc_date
+    if not _is_oa_out_template(template):
+        original_doc.reply_date = doc_date
     if _reply_source_waits_for_receipt_archive(db, original_doc):
         return
 
@@ -984,6 +986,7 @@ def _create_document_record(
         db,
         document=document,
         doc_date=data.doc_date,
+        template=template,
     )
 
     if commit:
@@ -2617,6 +2620,7 @@ def update_document(db: Session, document_id: str, data: DocumentUpdateIn) -> Do
             db,
             document=document,
             doc_date=document.doc_date,
+            template=template,
         )
 
     db.commit()
