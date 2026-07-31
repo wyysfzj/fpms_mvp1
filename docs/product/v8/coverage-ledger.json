@@ -497,8 +497,8 @@
     {
       "catalog_id": "FPMS-V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3460,19 +3460,21 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "ed6a4c5",
-        "54b32d5"
+        "54b32d5",
+        "749eb1d"
       ],
       "paths": [
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_addgap_oa_receipt_archive_event.py",
         "backend/tests/test_v8_oa_receipt_lifecycle_adapter.py"
       ],
-      "tree_sha256": "86c63d89f883d1c135cd8929a272714f9036001e4aafde54613975d7558d2f72",
+      "tree_sha256": "2246489bd3560f854d3c53799bd62f004075f1774c6c64a8b2d798b359102a95",
       "tests": [
         "pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py tests/test_addgap_oa_receipt_archive_event.py from backend cwd (12 passed)",
         "independent pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py from backend cwd (2 passed)",
         "scoped Ruff, exact five-path diff-check and 474-path disposition validation passed",
-        "independent row71 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact"
+        "independent row71 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact",
+        "independent row62 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
@@ -3503,18 +3505,20 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "54b32d5",
-        "f179e8e"
+        "f179e8e",
+        "749eb1d"
       ],
       "paths": [
         "backend/app/modules/documents/service.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_oa_reply_date_receipt_projection.py"
       ],
-      "tree_sha256": "288d77d505dc930443d0fd7084a33725da790aaa0bcb683ca07d0433e017c82f",
+      "tree_sha256": "9de8ab5251df8296c5bf8fba7f6ceacca09bab40e63541c07b0b3c1b1b02cb58",
       "tests": [
         "pytest -q tests/test_v8_oa_reply_date_receipt_projection.py from backend cwd (2 passed)",
         "independent focused rerun from backend cwd (2 passed)",
-        "scoped Ruff, exact five-path diff-check, disposition integrity and predecessor successor-attestation passed"
+        "scoped Ruff, exact five-path diff-check, disposition integrity and predecessor successor-attestation passed",
+        "independent row62 successor review confirmed receipt-derived reply-date and replay behavior remain intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION.md",
@@ -3562,6 +3566,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-REDUCTION-IMPORT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FEE-REDUCTION-IMPORT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "749eb1d"
+      ],
+      "paths": [
+        "backend/app/modules/official_workflows/schemas.py",
+        "backend/app/modules/official_workflows/service.py",
+        "backend/tests/test_v8_work_package_manifest_evidence_version.py"
+      ],
+      "tree_sha256": "af35586a8f9706953df0e003f90ff425b5ab7e29603f8074677c9e3bd65541cc",
+      "tests": [
+        "pytest -q tests/test_v8_work_package_manifest_evidence_version.py from backend cwd (1 passed)",
+        "scoped Ruff and exact three-path diff check passed",
+        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row70/row71"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION.md"
     }
   ]
 }
