@@ -1,7 +1,7 @@
 # Story V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION
 
 - Risk: `PROTECTED`
-- Integration parent: `ef938aa`
+- Integration parent: `c11ac99`
 - Catalog row: `115`,
   `FPMS-V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-20260712-01`.
 - Outcome: the existing generic fee-draft entrypoint accepts an explicit obligation ID
