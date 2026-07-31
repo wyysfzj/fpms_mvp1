@@ -2,6 +2,8 @@
 
 - Risk: `PROTECTED`
 - Implementation base: `21b12ae9dc740f19686584978acbd2e22555dd06`.
+- Current integration parent for independent review:
+  `60c35213c67218ff4c2f1664bbdc832e3f976a6c`.
 - Outcome: current-adopt frozen D4-09 as exactly one inactive, unapproved
   `CNIPA_LAYOUT_246` candidate and one linked
   `IC_LAYOUT_REGISTRATION_FEE=1000.00 CNY` rate.
