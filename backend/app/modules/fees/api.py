@@ -301,7 +301,36 @@ def create_fee_draft(
     - 404: Case or client not found
     - 422: VALIDATION_ERROR
     """
-    draft = create_fee_draft_service(db, data=payload, actor_id=current_user.id)
+    if payload.obligation_id is None:
+        draft = create_fee_draft_service(
+            db,
+            data=payload,
+            actor_id=current_user.id,
+            obligation_id=None,
+        )
+    else:
+        try:
+            draft = create_fee_draft_service(
+                db,
+                data=payload,
+                actor_id=current_user.id,
+                obligation_id=payload.obligation_id,
+            )
+            db.commit()
+            db.refresh(draft)
+        except BusinessError as exc:
+            db.rollback()
+            if exc.code == "FEE_OBLIGATION_NOT_FOUND":
+                raise BusinessError(
+                    code=exc.code,
+                    message=exc.message,
+                    details=exc.details,
+                    status_code=status.HTTP_409_CONFLICT,
+                ) from exc
+            raise
+        except Exception:
+            db.rollback()
+            raise
     return FeeDraftOut.model_validate(draft)
 
 

@@ -28,6 +28,7 @@ class FeeDraftCreateIn(BaseModel):
     client_id: str | None = None
     draft_type: str | None = None
     currency: str
+    obligation_id: str | None = None
 
 
 class FeeDraftUpdateIn(BaseModel):
