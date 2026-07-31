@@ -85,9 +85,73 @@
           <el-card shadow="never" class="rows-card">
             <template #header>
               <div class="card-header">
-                <span class="form-card-title">缴费明细</span>
+                <span class="form-card-title">内部导出</span>
+                <span class="page-count">
+                  共 {{ detail.internal_artifacts?.length ?? 0 }} 个
+                </span>
+              </div>
+            </template>
+
+            <el-empty
+              v-if="!detail.internal_artifacts?.length"
+              description="当前没有内部导出产物"
+            />
+
+            <el-table
+              v-else
+              :data="detail.internal_artifacts"
+              stripe
+              size="small"
+              class="compact-table"
+            >
+              <el-table-column prop="id" label="产物编号" min-width="180" />
+              <el-table-column prop="status" label="产物状态" min-width="150" />
+              <el-table-column prop="content_sha256" label="内容摘要" min-width="220" />
+              <el-table-column label="生成时间" min-width="160">
+                <template #default="{ row }">
+                  {{ formatDateTime(row.generated_at) }}
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card shadow="never" class="rows-card">
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">官方工作簿</span>
+              </div>
+            </template>
+
+            <el-descriptions v-if="detail.official_workbook" :column="2" border>
+              <el-descriptions-item label="模板门禁状态">
+                {{ detail.official_workbook.official_upload_template_status || '待确认' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="模板名称">
+                {{ detail.official_workbook.official_upload_template_name || '待确认' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="单批上限">
+                {{ detail.official_workbook.official_upload_batch_limit ?? '待确认' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="边界说明">
+                {{ detail.official_workbook.official_pay_list_boundary_note || '—' }}
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <el-alert
+              v-else
+              title="官方工作簿门禁尚未开放"
+              type="warning"
+              :closable="false"
+              description="仅显示服务端返回的官方工作簿事实，不依据清单头状态推断。"
+            />
+          </el-card>
+
+          <el-card shadow="never" class="rows-card">
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">支付记录</span>
                 <div class="card-header-actions">
-                  <span class="page-count">共 {{ detail.gov_payments.length }} 条</span>
+                  <span class="page-count">共 {{ detail.payment.length }} 条</span>
                   <el-button
                     v-if="canAddManualRow"
                     size="small"
@@ -102,13 +166,13 @@
             </template>
 
             <el-empty
-              v-if="detail.gov_payments.length === 0"
-              description="当前清单暂无缴费明细"
+              v-if="detail.payment.length === 0"
+              description="当前清单暂无支付记录"
             />
 
             <el-table
               v-else
-              :data="detail.gov_payments"
+              :data="detail.payment"
               stripe
               size="small"
               class="compact-table"
@@ -160,6 +224,48 @@
                   >
                     登记缴费
                   </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-card>
+
+          <el-card shadow="never" class="rows-card">
+            <template #header>
+              <div class="card-header">
+                <span class="form-card-title">官方凭证</span>
+                <span class="page-count">
+                  共 {{ detail.official_evidence?.length ?? 0 }} 个
+                </span>
+              </div>
+            </template>
+
+            <el-empty
+              v-if="!detail.official_evidence?.length"
+              description="当前没有官方凭证"
+            />
+
+            <el-table
+              v-else
+              :data="detail.official_evidence"
+              stripe
+              size="small"
+              class="compact-table"
+            >
+              <el-table-column prop="id" label="产物编号" min-width="180" />
+              <el-table-column prop="status" label="凭证状态" min-width="190" />
+              <el-table-column
+                prop="official_acceptance_evidence_ref"
+                label="接受凭证引用"
+                min-width="190"
+              />
+              <el-table-column
+                prop="official_acceptance_evidence_hash"
+                label="接受凭证摘要"
+                min-width="220"
+              />
+              <el-table-column label="官方接受时间" min-width="160">
+                <template #default="{ row }">
+                  {{ formatDateTime(row.official_accepted_at) }}
                 </template>
               </el-table-column>
             </el-table>
