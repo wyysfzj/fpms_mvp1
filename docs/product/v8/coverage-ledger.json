@@ -1178,72 +1178,72 @@
     {
       "catalog_id": "FPMS-V8-IC-LAYOUT-REGISTRATION-FILED-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-IC-LAYOUT-REEXAM-REQUEST-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-IC-LAYOUT-RIGHT-RESTORATION-REQUEST-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-IC-LAYOUT-BIBLIOGRAPHIC-CHANGE-SUBMISSION-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-IC-LAYOUT-EXTENSION-REQUEST-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-IC-LAYOUT-NONVOLUNTARY-LICENSE-REQUEST-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-IC-LAYOUT-REMUNERATION-ADJUDICATION-REQUEST-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-PATENT-TERM-COMPENSATION-REQUEST-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-COMPENSATION-PERIOD-ANNUITY-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2478,7 +2478,8 @@
       "commits": [
         "d33e3f992dda142cc47d7bbd66a95846af425559",
         "6b61f681cc0df4ff472388edd577c1633f5a6827",
-        "bfa42b9a5a4b0393837345a48f9d199c0891fd86"
+        "bfa42b9a5a4b0393837345a48f9d199c0891fd86",
+        "70f7c80e07750420ec5c4a53160eddff58aa3144"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_contracts.py",
@@ -2489,14 +2490,15 @@
         "backend/tests/test_v8_external_submission_role_allowlist.py",
         "backend/tests/test_v8_raw_attachment_registration_guard.py"
       ],
-      "tree_sha256": "eb02405a08df80c97982995cc89cb783f0954a1a90bac020a0eeab6cb5214c12",
+      "tree_sha256": "b10ca8528291c3b096c388f68f74e110cfaed502ea55353097b5c9dff6790085",
       "tests": [
         "pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_delta4_evidence_role_extension.py tests/test_v8_raw_attachment_registration_guard.py tests/test_v8_external_submission_role_allowlist.py from backend cwd (52 passed)",
-        "independent row48 successor tranche included exact document evidence contracts and role-allowlist predecessors in 269 passed"
+        "independent row48 successor tranche included exact document evidence contracts and role-allowlist predecessors in 269 passed",
+        "special-fee evidence-obligation successor combined regression tranche (424 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
@@ -2526,7 +2528,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "6672d239e4f0aa7c0575ad5392987ef954140f0f",
-        "bfa42b9a5a4b0393837345a48f9d199c0891fd86"
+        "bfa42b9a5a4b0393837345a48f9d199c0891fd86",
+        "70f7c80e07750420ec5c4a53160eddff58aa3144"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_service.py",
@@ -2539,14 +2542,15 @@
         "backend/tests/test_v8_finalize_external_submission_seam.py",
         "backend/tests/test_v8_lifecycle_activity_append.py"
       ],
-      "tree_sha256": "d9c6d2c589141b17c33fa40de4c1b44690f03052c44dc807d200c4518811ce54",
+      "tree_sha256": "4a2a2066d5489d58352a4e79a8c6023981fde4df5f4519eebe222a40be58f2a1",
       "tests": [
         "pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_lifecycle_activity_append.py tests/test_v8_document_evidence_register_version.py tests/test_v8_document_evidence_derivation.py tests/test_v8_document_evidence_current_version.py tests/test_v8_document_evidence_review_service.py tests/test_v8_finalize_external_submission_seam.py from backend cwd (164 passed)",
-        "independent row48 successor tranche included exact document contracts and finalize-submission predecessors in 269 passed"
+        "independent row48 successor tranche included exact document contracts and finalize-submission predecessors in 269 passed",
+        "special-fee evidence-obligation successor combined regression tranche (424 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION",
@@ -2598,7 +2602,8 @@
       "story_id": "V8-D4-07-REGISTRATION-MATRIX-CURRENT-VERIFICATION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "86c6c8e3b05232a31745ebce976be7cd3330950d"
+        "86c6c8e3b05232a31745ebce976be7cd3330950d",
+        "70f7c80e07750420ec5c4a53160eddff58aa3144"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_service.py",
@@ -2607,13 +2612,14 @@
         "backend/tests/test_v8_external_submission_role_allowlist.py",
         "backend/tests/test_v8_raw_attachment_registration_guard.py"
       ],
-      "tree_sha256": "94e3cd27abdb156a10dc5e3f5198e925c131f742a169c0b61ac5112bb79f8130",
+      "tree_sha256": "0d5de1f07191773b4a0d9a79e38d12f598f06aa8accfd1950fb5da9cc896c570",
       "tests": [
-        "pytest -q tests/test_v8_delta4_registration_matrix.py tests/test_v8_raw_attachment_registration_guard.py tests/test_v8_document_evidence_register_version.py tests/test_v8_external_submission_role_allowlist.py from backend cwd (62 passed)"
+        "pytest -q tests/test_v8_delta4_registration_matrix.py tests/test_v8_raw_attachment_registration_guard.py tests/test_v8_document_evidence_register_version.py tests/test_v8_external_submission_role_allowlist.py from backend cwd (62 passed)",
+        "special-fee evidence-obligation successor combined regression tranche (424 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-D4-07-REGISTRATION-MATRIX-CURRENT-VERIFICATION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-D4-07-REGISTRATION-MATRIX-CURRENT-VERIFICATION.md"
+      "review_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-ANNUITY-LATE-FEE-RULE-CURRENT-VERIFICATION",
@@ -3324,6 +3330,36 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "70f7c80e07750420ec5c4a53160eddff58aa3144",
+        "c0b206c716e07770fa0a2828f4811842280b7236"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_service.py",
+        "backend/app/modules/documents/fee_linking_service.py",
+        "backend/tests/test_v8_compensation_period_annuity_obligation.py",
+        "backend/tests/test_v8_ic_layout_bibliographic_change_submission_obligation.py",
+        "backend/tests/test_v8_ic_layout_extension_request_obligation.py",
+        "backend/tests/test_v8_ic_layout_nonvoluntary_license_request_obligation.py",
+        "backend/tests/test_v8_ic_layout_reexamination_request_obligation.py",
+        "backend/tests/test_v8_ic_layout_registration_filed_obligation.py",
+        "backend/tests/test_v8_ic_layout_remuneration_adjudication_request_obligation.py",
+        "backend/tests/test_v8_ic_layout_right_restoration_request_obligation.py",
+        "backend/tests/test_v8_patent_term_compensation_request_obligation.py"
+      ],
+      "tree_sha256": "5d716d80d124f9fee058f11f48c1971b5b5a9f734d09559c234688e8b575b8eb",
+      "tests": [
+        "pytest -q exact nine special-fee evidence-obligation files from backend cwd (143 passed)",
+        "combined exact adapter plus document-review/finalize and obligation-core regression tranche from backend cwd (424 passed)",
+        "scoped Ruff, format-check, exact 13-path diff-check and 474-path disposition validation passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md"
     }
   ]
 }
