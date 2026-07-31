@@ -18,7 +18,7 @@
 2. `IC_LAYOUT_REEXAM_REQUESTED` recognizes only
    `IC_LAYOUT_REEXAM_REQUEST_FEE`; rejection or a possible request does not trigger it.
 3. `IC_LAYOUT_RESTORE_RIGHT_REQUESTED` recognizes only
-   `IC_LAYOUT_RESTORE_RIGHT_FEE`; a loss-of-right notice alone does not trigger it.
+   `IC_LAYOUT_RESTORATION_REQUEST_FEE`; a loss-of-right notice alone does not trigger it.
 4. `IC_LAYOUT_BIBLIO_CHANGE_SUBMITTED` recognizes only its own
    `IC_LAYOUT_BIBLIO_CHANGE_FEE`.
 5. `IC_LAYOUT_EXTENSION_REQUESTED` recognizes only
