@@ -1066,8 +1066,8 @@
     {
       "catalog_id": "FPMS-V8-ANNUITY-PAYABLE-AMOUNT-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-ANNUITY-PAYABLE-AMOUNT-RULE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3236,6 +3236,25 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-ANNUITY-PAYABLE-AMOUNT-RULE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "def9414f585466c6c8907230a7f5d5b0fce24ed9"
+      ],
+      "paths": [
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/tests/test_v8_annuity_payable_amount.py"
+      ],
+      "tree_sha256": "6ac44d3db8583507822a4241ed947da984c82804d9f38d65feb8e145469a9b43",
+      "tests": [
+        "pytest -q exact annuity payable-amount test plus first-ten-year dependency regression from backend cwd (62 passed)",
+        "scoped Ruff, exact story-only diff-check and archive/current focused-test and rule-slice identity passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-ANNUITY-PAYABLE-AMOUNT-RULE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-PAYABLE-AMOUNT-RULE-CURRENT-ADOPTION.md"
     }
   ]
 }
