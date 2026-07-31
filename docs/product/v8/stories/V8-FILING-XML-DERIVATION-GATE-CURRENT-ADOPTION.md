@@ -47,7 +47,7 @@ error members. After the minimum policy port, the exact focused GREEN passed `19
 The combined focused plus noncopyable-OA-appendix regression passed `347` tests. Scoped
 Ruff and diff checks passed. The disposition transfer leaves `474` unique paths, assigns
 the two story paths here, and has SHA-256
-`cf07860fa1604abdb30a7de71e23f418c86581373384d8da34e9fa271251ac05`.
+`328467f45b5b1e15ff3ee5cc41ab635b1c5ae9d4c299a9d06216c3b1b3c552d0`.
 
 No XML generation, packaging, external submission write, evidence mutation, API, UI,
 schema, migration, fee behavior, unrelated document policy or adjacent refactor is
