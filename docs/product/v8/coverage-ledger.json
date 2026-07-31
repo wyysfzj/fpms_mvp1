@@ -1029,8 +1029,8 @@
     {
       "catalog_id": "FPMS-V8-APPLICATION-FEE-NOTICE-ACTIVATION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-APPLICATION-FEE-NOTICE-ACTIVATION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2655,17 +2655,19 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "409918c74405213e0ca294baa45e214d0a0f1ed9",
-        "5211b1b5b7480c8178fd3b0200194f4e335a1101"
+        "5211b1b5b7480c8178fd3b0200194f4e335a1101",
+        "36ab390"
       ],
       "paths": [
         "backend/app/modules/fees/official_rate_book.py",
         "backend/scripts/seed_dev.py",
         "backend/tests/test_v8_official_rate_book_activation.py"
       ],
-      "tree_sha256": "20315f382b16ffe92cda7802663814183aedf13a109fe01f0c392046d3efa94c",
+      "tree_sha256": "5cd8967c50012127289bc65096448940115551acbc021f7e791b3ae8a694c690",
       "tests": [
         "pytest -q tests/test_v8_official_rate_book_activation.py tests/test_v8_official_rate_book_schema.py tests/test_official_fee_rate_catalog_seed.py from backend cwd (43 passed)",
-        "same exact serialized activation/schema/seed tranche after the 5211b1b special-fee successor (43 passed)"
+        "same exact serialized activation/schema/seed tranche after the 5211b1b special-fee successor (43 passed)",
+        "independent row128 successor tranche confirmed official rate-book activation remains intact (43 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-SUCCESSOR-COMPAT.md",
@@ -2699,7 +2701,8 @@
         "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
         "895bfc22c6642baacfce2ae6a83916af0dbc3ade",
         "607261b",
-        "54b32d5"
+        "54b32d5",
+        "f14d269"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
@@ -2707,7 +2710,7 @@
         "backend/tests/test_v8_certificate_archived_activity.py",
         "backend/tests/test_v8_gov_payment_activity_adapter.py"
       ],
-      "tree_sha256": "5db84f0aca72440545618750608173fe43f8002af43b99701db8768982d411f6",
+      "tree_sha256": "e6802f427c7c3407f87cb4f3f64f2a2499df0ba12c7f43f3fd4458a5029f67bf",
       "tests": [
         "pytest -q tests/test_v8_certificate_archived_activity.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "successor re-attestation with row125 focused test from backend cwd (3 passed)",
@@ -2715,7 +2718,8 @@
         "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)",
         "independent document-evidence successor review: shared service additions left the two activity adapters unchanged; exact document tranche 92 passed",
         "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)",
-        "independent row71 successor review confirmed reply-date-only service changes leave activity adapters intact"
+        "independent row71 successor review confirmed reply-date-only service changes leave activity adapters intact",
+        "independent row128 correction successor tranche confirmed activity adapters remain intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md",
@@ -2792,15 +2796,17 @@
       "story_id": "V8-OFFICIAL-FEE-CATEGORY-CORRECTION-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "bca7de8f05505ee4eb3103ee95161a627436efa1"
+        "bca7de8f05505ee4eb3103ee95161a627436efa1",
+        "36ab390"
       ],
       "paths": [
         "backend/scripts/seed_dev.py",
         "backend/tests/test_v8_official_fee_category_correction.py"
       ],
-      "tree_sha256": "f20be8ac5439e22fab810756975a1e76ac506cdaf957c5112e72d7e015713aba",
+      "tree_sha256": "e79dea96bdd90c140726933080b4bae16ec6464c1f69c4d9d9d11202af0ebe52",
       "tests": [
-        "pytest -q tests/test_v8_official_fee_category_correction.py from backend cwd (controller 1 passed; independent reviewer 1 passed)"
+        "pytest -q tests/test_v8_official_fee_category_correction.py from backend cwd (controller 1 passed; independent reviewer 1 passed)",
+        "independent row128 successor test confirmed official-fee category correction remains intact (1 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-FEE-CATEGORY-CORRECTION-CURRENT-ADOPTION.md",
@@ -3094,7 +3100,8 @@
       "commits": [
         "895bfc22c6642baacfce2ae6a83916af0dbc3ade",
         "13a40c33bdbb4eb89909284e088786f4232833f5",
-        "54b32d5"
+        "54b32d5",
+        "f14d269"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-document-evidence-review-ui.spec.ts",
@@ -3111,14 +3118,15 @@
         "frontend/src/api/documents.types.ts",
         "frontend/src/modules/documents/components/AttachmentList.vue"
       ],
-      "tree_sha256": "ff39bc44e9d95ed39b34f4ed3d56405755e32191193b84ddedc39b3d39e93260",
+      "tree_sha256": "a453fdce8916fb67b483f55cd5cc3eb1a5904cfe2c107f2ef89ecc0e3d204a4d",
       "tests": [
         "pytest -q exact four-file document attachment/evidence/review backend tranche from backend cwd (92 passed)",
         "isolated TypeScript contract and exact-file ESLint passed",
         "playwright test v8-document-evidence-review-ui.spec.ts --project=chromium --workers=1 (3 passed)",
         "scoped Ruff and exact two-tree diff-check passed",
         "independent lifecycle-evidence successor review confirmed documents API changed only by ten protected routes; canonical adapter tranche 313 passed",
-        "independent row71 successor review confirmed reply-date-only service changes leave attachment/evidence behavior intact"
+        "independent row71 successor review confirmed reply-date-only service changes leave attachment/evidence behavior intact",
+        "independent row128 correction successor tranche confirmed attachment/evidence review behavior remains intact (92 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION.md",
@@ -3535,14 +3543,15 @@
         "749eb1d",
         "3e5e1d5",
         "f408aa9c07ab83d268cb46bf15f0c1ce251a942b",
-        "ce0d950"
+        "ce0d950",
+        "f14d269"
       ],
       "paths": [
         "backend/app/modules/documents/service.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_oa_reply_date_receipt_projection.py"
       ],
-      "tree_sha256": "5ecfadc3e08e302ffcef656d9a97c9a76b2211d7ba519376d454389933f53668",
+      "tree_sha256": "8738c1c087e4a370da500bd809c51853d9ef5f11d4558dde94ab28416bde7b28",
       "tests": [
         "pytest -q tests/test_v8_oa_reply_date_receipt_projection.py from backend cwd (2 passed)",
         "independent focused rerun from backend cwd (2 passed)",
@@ -3550,7 +3559,8 @@
         "independent row62 successor review confirmed receipt-derived reply-date and replay behavior remain intact",
         "independent row59 successor review confirmed receipt-derived reply-date behavior remains intact",
         "independent row63 successor attestation confirmed reply-date receipt projection remains intact",
-        "independent row65 successor suite confirmed reply-date receipt projection remains intact"
+        "independent row65 successor suite confirmed reply-date receipt projection remains intact",
+        "independent row128 correction successor tranche confirmed OA reply-date projection remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION.md",
@@ -3845,6 +3855,32 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-EXTERNAL-SUBMISSION-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FILING-EXTERNAL-SUBMISSION-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-APPLICATION-FEE-NOTICE-ACTIVATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "36ab390",
+        "f14d269"
+      ],
+      "paths": [
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/app/modules/documents/service.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_application_fee_notice_activation.py"
+      ],
+      "tree_sha256": "0be1deb316c639384ba438edc882c96a4e42aa3fb870525ed9b1fe31184a440f",
+      "tests": [
+        "pytest -q tests/test_v8_application_fee_notice_activation.py from backend cwd (5 passed)",
+        "public wizard correction pair (2 passed)",
+        "row128 activation plus row126 obligation tranche (29 passed)",
+        "rate-book 43 passed; fee-category 1 passed; activity/OA 4 passed; document evidence/review 92 passed",
+        "scoped Ruff and combined/correction diff checks passed",
+        "independent High re-review approved P0/P1/P2 0/0/0 after closing the wizard no-draft P1"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-APPLICATION-FEE-NOTICE-ACTIVATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-FEE-NOTICE-ACTIVATION-CURRENT-ADOPTION.md"
     }
   ]
 }
