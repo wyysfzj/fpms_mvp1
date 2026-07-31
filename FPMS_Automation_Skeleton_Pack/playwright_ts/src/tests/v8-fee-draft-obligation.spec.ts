@@ -99,6 +99,116 @@ test('非 PAY 义务保持可见但阻止关联草稿提交', async ({ page }) =
     expect(draftPostCount).toBe(0)
 })
 
+test('重复义务查询不猜测任一标识且不发起义务或草稿请求', async ({ page }) => {
+    let obligationGetCount = 0
+    let draftPostCount = 0
+
+    await mockFeeDraftApi(page, async (route, apiPath) => {
+        if (route.request().method() === 'GET' && apiPath.startsWith('/fees/obligations/')) {
+            obligationGetCount += 1
+        }
+        if (route.request().method() === 'POST' && apiPath.startsWith('/fees/drafts')) {
+            draftPostCount += 1
+        }
+        return fulfillJson(route, { detail: '未处理的费用草稿义务模拟请求' }, 404)
+    })
+
+    await openFeeDraftCreate(
+        page,
+        `?obligation_id=${obligationId}&obligation_id=other-obligation`,
+    )
+
+    const obligation = page.getByTestId('linked-fee-obligation')
+    await expect(
+        obligation.getByText('链接中缺少唯一有效的缴费义务编号，无法创建关联草稿。', {
+            exact: true,
+        }),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: '创建草稿' })).toBeDisabled()
+    expect(obligationGetCount).toBe(0)
+    expect(draftPostCount).toBe(0)
+})
+
+test('义务详情加载失败时显示失败关闭原因且不创建草稿', async ({ page }) => {
+    let draftPostCount = 0
+
+    await mockFeeDraftApi(page, async (route, apiPath) => {
+        if (route.request().method() === 'GET' && apiPath === `/fees/obligations/${obligationId}`) {
+            return fulfillJson(route, {
+                error: {
+                    code: 'FEE_OBLIGATION_UNAVAILABLE',
+                    message: '缴费义务详情暂不可用。',
+                },
+            }, 503)
+        }
+        if (route.request().method() === 'POST' && apiPath.startsWith('/fees/drafts')) {
+            draftPostCount += 1
+        }
+        return fulfillJson(route, { detail: '未处理的费用草稿义务模拟请求' }, 404)
+    })
+
+    await openFeeDraftCreate(page, `?obligation_id=${obligationId}`)
+
+    const obligation = page.getByTestId('linked-fee-obligation')
+    await expect(
+        obligation.getByText('缴费义务详情加载失败，无法创建关联草稿。', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: '创建草稿' })).toBeDisabled()
+    expect(draftPostCount).toBe(0)
+})
+
+test('后端返回不同义务标识时显示不一致原因且不创建草稿', async ({ page }) => {
+    let draftPostCount = 0
+
+    await mockFeeDraftApi(page, async (route, apiPath) => {
+        if (route.request().method() === 'GET' && apiPath === `/fees/obligations/${obligationId}`) {
+            return fulfillJson(route, { ...payableObligation, id: 'other-obligation' })
+        }
+        if (route.request().method() === 'POST' && apiPath.startsWith('/fees/drafts')) {
+            draftPostCount += 1
+        }
+        return fulfillJson(route, { detail: '未处理的费用草稿义务模拟请求' }, 404)
+    })
+
+    await openFeeDraftCreate(page, `?obligation_id=${obligationId}`)
+
+    const obligation = page.getByTestId('linked-fee-obligation')
+    await expect(
+        obligation.getByText('后端返回的缴费义务与链接不一致，无法创建关联草稿。', {
+            exact: true,
+        }),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: '创建草稿' })).toBeDisabled()
+    expect(draftPostCount).toBe(0)
+})
+
+test('关联义务与申请费生成模式混用时显示阻止原因且不创建草稿', async ({ page }) => {
+    let draftPostCount = 0
+
+    await mockFeeDraftApi(page, async (route, apiPath) => {
+        if (route.request().method() === 'GET' && apiPath === `/fees/obligations/${obligationId}`) {
+            return fulfillJson(route, payableObligation)
+        }
+        if (route.request().method() === 'POST' && apiPath.startsWith('/fees/drafts')) {
+            draftPostCount += 1
+        }
+        return fulfillJson(route, { detail: '未处理的费用草稿义务模拟请求' }, 404)
+    })
+
+    await openFeeDraftCreate(
+        page,
+        `?obligation_id=${obligationId}&draft_type=APPLY_FEE`,
+        '生成申请费草稿',
+    )
+
+    const obligation = page.getByTestId('linked-fee-obligation')
+    await expect(
+        obligation.getByText('关联缴费义务仅支持创建普通费用草稿。', { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: '生成申请费草稿' })).toBeDisabled()
+    expect(draftPostCount).toBe(0)
+})
+
 test('未提供义务标识时不猜测义务并保留未关联草稿创建', async ({ page }) => {
     let obligationGetCount = 0
     let draftPayload: Record<string, unknown> | undefined
@@ -141,12 +251,16 @@ async function mockFeeDraftApi(
     })
 }
 
-async function openFeeDraftCreate(page: Page, query = ''): Promise<void> {
+async function openFeeDraftCreate(
+    page: Page,
+    query = '',
+    title = '草稿基础信息',
+): Promise<void> {
     await page.addInitScript(() => {
         window.localStorage.setItem('fpms_token', 'v8-fee-draft-obligation-token')
     })
     await page.goto(`/fees/drafts/new${query}`, { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('草稿基础信息', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
