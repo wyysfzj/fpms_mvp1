@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -39,9 +40,39 @@ from app.modules.fees.obligation_service import (
 __all__ = (
     "ActivateOfficialRateBookCommand",
     "ActivateOfficialRateBookResult",
+    "CalculateCompensationPeriodAnnuityFeeCommand",
+    "CalculateCompensationPeriodAnnuityFeeResult",
+    "CalculateOpenLicenseAnnuityReductionCommand",
+    "CalculateOpenLicenseAnnuityReductionResult",
+    "GetLayoutRegistrationFeeCommand",
+    "GetLayoutRegistrationFeeResult",
+    "GetLayoutBibliographicChangeFeeCommand",
+    "GetLayoutBibliographicChangeFeeResult",
+    "GetLayoutExtensionFeeCommand",
+    "GetLayoutExtensionFeeResult",
+    "GetLayoutNonvoluntaryLicenseFeeCommand",
+    "GetLayoutNonvoluntaryLicenseFeeResult",
+    "GetLayoutRemunerationAdjudicationFeeCommand",
+    "GetLayoutRemunerationAdjudicationFeeResult",
+    "GetPatentTermCompensationRequestFeeCommand",
+    "GetPatentTermCompensationRequestFeeResult",
+    "GetLayoutReexaminationFeeCommand",
+    "GetLayoutReexaminationFeeResult",
+    "GetLayoutRestorationFeeCommand",
+    "GetLayoutRestorationFeeResult",
     "OfficialRateBookActivationDisposition",
     "SqlAlchemyOfficialFeeEstimateRateProvider",
     "activate_official_rate_book",
+    "calculate_compensation_period_annuity_fee",
+    "calculate_open_license_annuity_reduction",
+    "get_layout_registration_fee",
+    "get_layout_bibliographic_change_fee",
+    "get_layout_extension_fee",
+    "get_layout_nonvoluntary_license_fee",
+    "get_layout_remuneration_adjudication_fee",
+    "get_patent_term_compensation_request_fee",
+    "get_layout_reexamination_fee",
+    "get_layout_restoration_fee",
 )
 
 
@@ -70,6 +101,177 @@ class ActivateOfficialRateBookResult:
     approval_status: str
     activation_status: str
     disposition: OfficialRateBookActivationDisposition
+
+
+@dataclass(frozen=True, slots=True)
+class CalculateCompensationPeriodAnnuityFeeCommand:
+    effective_date: date
+    complete_years: int
+
+
+@dataclass(frozen=True, slots=True)
+class CalculateCompensationPeriodAnnuityFeeResult:
+    fee_code: str
+    currency: str
+    complete_years: int
+    unit_amount: Decimal
+    amount: Decimal
+    effective_from: date
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class CalculateOpenLicenseAnnuityReductionCommand:
+    existing_reduction_ratio: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class CalculateOpenLicenseAnnuityReductionResult:
+    open_license_reduction_ratio: Decimal
+    existing_reduction_ratio: Decimal
+    applied_reduction_ratio: Decimal
+    payable_ratio: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutRegistrationFeeCommand:
+    effective_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutRegistrationFeeResult:
+    rate_id: str
+    fee_code: str
+    fee_type: str
+    currency: str
+    calc_mode: str
+    allow_reduction: bool
+    enabled: bool
+    amount: Decimal
+    rate_book_id: str
+    book_code: str
+    version_code: str
+    effective_from: date
+    effective_to: date | None
+    approval_status: str
+    activation_status: str
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutBibliographicChangeFeeCommand:
+    effective_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutBibliographicChangeFeeResult:
+    fee_code: str
+    currency: str
+    amount: Decimal
+    effective_from: date
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutExtensionFeeCommand:
+    effective_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutExtensionFeeResult:
+    fee_code: str
+    currency: str
+    amount: Decimal
+    effective_from: date
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutNonvoluntaryLicenseFeeCommand:
+    effective_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutNonvoluntaryLicenseFeeResult:
+    fee_code: str
+    currency: str
+    amount: Decimal
+    effective_from: date
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutRemunerationAdjudicationFeeCommand:
+    effective_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutRemunerationAdjudicationFeeResult:
+    fee_code: str
+    currency: str
+    amount: Decimal
+    effective_from: date
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class GetPatentTermCompensationRequestFeeCommand:
+    effective_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class GetPatentTermCompensationRequestFeeResult:
+    fee_code: str
+    currency: str
+    amount: Decimal
+    effective_from: date
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutReexaminationFeeCommand:
+    effective_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutReexaminationFeeResult:
+    fee_code: str
+    currency: str
+    amount: Decimal
+    effective_from: date
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutRestorationFeeCommand:
+    effective_date: date
+
+
+@dataclass(frozen=True, slots=True)
+class GetLayoutRestorationFeeResult:
+    fee_code: str
+    currency: str
+    amount: Decimal
+    effective_from: date
+    source_reference: str
+    source_version: str
+    source_snapshot_hash: str
 
 
 _SOURCE_SCHEMA = "CNIPA_RATE_SOURCE_V1"
@@ -1228,3 +1430,667 @@ class SqlAlchemyOfficialFeeEstimateRateProvider:
             )
             for required, row, amount in selected
         )
+
+
+_LAYOUT_FEE_CODE = "IC_LAYOUT_REGISTRATION_FEE"
+_LAYOUT_BOOK_CODE = "CNIPA_LAYOUT_246"
+_LAYOUT_VERSION = "2017-07-01"
+_LAYOUT_EFFECTIVE_FROM = date(2017, 7, 1)
+_LAYOUT_SOURCE_REFERENCE = "https://www.cnipa.gov.cn/art/2017/6/30/art_74_27462.html"
+_LAYOUT_SOURCE_PUBLISHED_ON = date(2017, 6, 30)
+_LAYOUT_SOURCE_SNAPSHOT_HASH = "f05e0f4200ce89a7cb1a8b5fb5d81508f76040a9a008b55969049460298cbfc4"
+_LAYOUT_SOURCE_TITLE = "关于执行新的集成电路布图设计保护费收费标准的公告（第246号）"
+_LAYOUT_DOCUMENT_NUMBER = "第二四六号"
+_LAYOUT_AMOUNT = Decimal("1000.00")
+_LAYOUT_REEXAMINATION_FEE_CODE = "IC_LAYOUT_REEXAM_REQUEST_FEE"
+_LAYOUT_REEXAMINATION_AMOUNT = Decimal("1000.00")
+_LAYOUT_RESTORATION_FEE_CODE = "IC_LAYOUT_RESTORATION_REQUEST_FEE"
+_LAYOUT_RESTORATION_AMOUNT = Decimal("500.00")
+_LAYOUT_BIBLIOGRAPHIC_CHANGE_FEE_CODE = "IC_LAYOUT_BIBLIOGRAPHIC_CHANGE_FEE"
+_LAYOUT_BIBLIOGRAPHIC_CHANGE_AMOUNT = Decimal("50.00")
+_LAYOUT_EXTENSION_FEE_CODE = "IC_LAYOUT_EXTENSION_REQUEST_FEE"
+_LAYOUT_EXTENSION_AMOUNT = Decimal("150.00")
+_LAYOUT_NONVOLUNTARY_LICENSE_FEE_CODE = "IC_LAYOUT_NONVOLUNTARY_LICENSE_REQUEST_FEE"
+_LAYOUT_NONVOLUNTARY_LICENSE_AMOUNT = Decimal("150.00")
+_LAYOUT_REMUNERATION_ADJUDICATION_FEE_CODE = (
+    "IC_LAYOUT_NONVOLUNTARY_LICENSE_REMUNERATION_ADJUDICATION_FEE"
+)
+_LAYOUT_REMUNERATION_ADJUDICATION_AMOUNT = Decimal("150.00")
+_PATENT_TERM_COMPENSATION_REQUEST_FEE_CODE = "CN_PATENT_TERM_COMPENSATION_REQUEST_FEE"
+_PATENT_TERM_COMPENSATION_REQUEST_FEE_AMOUNT = Decimal("200.00")
+_PATENT_TERM_COMPENSATION_REQUEST_FEE_EFFECTIVE_FROM = date(2024, 8, 6)
+_PATENT_TERM_COMPENSATION_REQUEST_FEE_SOURCE_REFERENCE = (
+    "CNIPA_ANNOUNCEMENT_594_AND_PAYMENT_GUIDE_20260330"
+)
+_PATENT_TERM_COMPENSATION_REQUEST_FEE_SOURCE_VERSION = "2024-08-06/2026-03-30"
+_PATENT_TERM_COMPENSATION_REQUEST_FEE_SOURCE_SNAPSHOT_HASH = (
+    "e8599a13429e3f536312eaeed0ec1a09b5f91533caacf2d8514dbeef1533d544"
+)
+_COMPENSATION_PERIOD_ANNUITY_FEE_CODE = "CN_COMPENSATION_PERIOD_ANNUITY_FEE"
+_COMPENSATION_PERIOD_ANNUITY_FEE_UNIT_AMOUNT = Decimal("8000.00")
+_COMPENSATION_PERIOD_ANNUITY_FEE_EFFECTIVE_FROM = date(2024, 7, 26)
+_COMPENSATION_PERIOD_ANNUITY_FEE_SOURCE_REFERENCE = (
+    "NDRC_2024_1156_CNIPA_594_PAYMENT_NOTICE_AND_GUIDE_20260330"
+)
+_COMPENSATION_PERIOD_ANNUITY_FEE_SOURCE_VERSION = "2024-07-26/2024-08-06/2026-03-30"
+_COMPENSATION_PERIOD_ANNUITY_FEE_SOURCE_SNAPSHOT_HASH = (
+    "e8599a13429e3f536312eaeed0ec1a09b5f91533caacf2d8514dbeef1533d544"
+)
+_OPEN_LICENSE_ANNUITY_REDUCTION_RATIO = Decimal("0.15")
+
+
+@dataclass(frozen=True, slots=True)
+class _LayoutRate:
+    id: str
+    fee_code: str
+    fee_type: str
+    currency: str
+    default_amount: Decimal | None
+    enabled: bool
+    calc_mode: str | None
+    allow_reduction: bool | None
+    effective_from: date | None
+    effective_to: date | None
+    source_doc: str | None
+    source_url: str | None
+    source_policy: str | None
+    source_version: str | None
+    source_status: str | None
+    official_rate_book_id: str | None
+
+
+def _layout_invalid(field: str) -> None:
+    _fail(
+        "LAYOUT_REGISTRATION_FEE_INVALID_INPUT",
+        "Invalid layout registration fee command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _layout_unavailable(field: str) -> None:
+    _fail(
+        "LAYOUT_REGISTRATION_FEE_UNAVAILABLE",
+        "The authoritative layout registration fee is unavailable",
+        status_code=409,
+        details={"field": field},
+    )
+
+
+def _layout_reexamination_invalid(field: str) -> None:
+    _fail(
+        "LAYOUT_REEXAMINATION_FEE_INVALID_INPUT",
+        "Invalid layout reexamination fee command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _layout_restoration_invalid(field: str) -> None:
+    _fail(
+        "LAYOUT_RESTORATION_FEE_INVALID_INPUT",
+        "Invalid layout restoration fee command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _layout_bibliographic_change_invalid(field: str) -> None:
+    _fail(
+        "LAYOUT_BIBLIOGRAPHIC_CHANGE_FEE_INVALID_INPUT",
+        "Invalid layout bibliographic change fee command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _layout_extension_invalid(field: str) -> None:
+    _fail(
+        "LAYOUT_EXTENSION_FEE_INVALID_INPUT",
+        "Invalid layout extension fee command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _layout_nonvoluntary_license_invalid(field: str) -> None:
+    _fail(
+        "LAYOUT_NONVOLUNTARY_LICENSE_FEE_INVALID_INPUT",
+        "Invalid layout nonvoluntary license fee command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _layout_remuneration_adjudication_invalid(field: str) -> None:
+    _fail(
+        "LAYOUT_REMUNERATION_ADJUDICATION_FEE_INVALID_INPUT",
+        "Invalid layout remuneration adjudication fee command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _patent_term_compensation_request_fee_invalid() -> None:
+    _fail(
+        "PATENT_TERM_COMPENSATION_REQUEST_FEE_INVALID_INPUT",
+        "Invalid patent term compensation request fee command",
+        status_code=400,
+        details={"field": "effective_date"},
+    )
+
+
+def _patent_term_compensation_request_fee_unavailable(effective_date: date) -> None:
+    _fail(
+        "PATENT_TERM_COMPENSATION_REQUEST_FEE_UNAVAILABLE",
+        "The patent term compensation request fee is unavailable",
+        status_code=400,
+        details={
+            "effective_date": effective_date.isoformat(),
+            "effective_from": (_PATENT_TERM_COMPENSATION_REQUEST_FEE_EFFECTIVE_FROM.isoformat()),
+        },
+    )
+
+
+def _compensation_period_annuity_fee_invalid(field: str) -> None:
+    _fail(
+        "COMPENSATION_PERIOD_ANNUITY_FEE_INVALID_INPUT",
+        "Invalid compensation period annuity fee command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _compensation_period_annuity_fee_unavailable(effective_date: date) -> None:
+    _fail(
+        "COMPENSATION_PERIOD_ANNUITY_FEE_UNAVAILABLE",
+        "The compensation period annuity fee is unavailable",
+        status_code=400,
+        details={
+            "effective_date": effective_date.isoformat(),
+            "effective_from": _COMPENSATION_PERIOD_ANNUITY_FEE_EFFECTIVE_FROM.isoformat(),
+        },
+    )
+
+
+def _open_license_annuity_reduction_invalid(field: str) -> None:
+    _fail(
+        "OPEN_LICENSE_ANNUITY_REDUCTION_INVALID_INPUT",
+        "Invalid open-license annuity reduction command",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _layout_date(
+    value: object,
+    field: str,
+    *,
+    optional: bool = False,
+    unavailable: Callable[[str], None] = _layout_unavailable,
+) -> date | None:
+    if value is None and optional:
+        return None
+    if type(value) is not str:
+        unavailable(field)
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        unavailable(field)
+    if parsed.isoformat() != value:
+        unavailable(field)
+    return parsed
+
+
+def _layout_datetime(
+    value: object,
+    field: str,
+    *,
+    unavailable: Callable[[str], None] = _layout_unavailable,
+) -> datetime:
+    if type(value) is not str:
+        unavailable(field)
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        unavailable(field)
+    if parsed.utcoffset() is not None:
+        unavailable(field)
+    return parsed
+
+
+def _layout_canonical_uuid(value: object) -> bool:
+    if type(value) is not str:
+        return False
+    try:
+        return str(UUID(value)) == value
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def _layout_book(
+    transaction: Session,
+    effective_date: date,
+    *,
+    unavailable: Callable[[str], None] = _layout_unavailable,
+) -> _ProviderBook:
+    book_bundle = Bundle(
+        "book",
+        OfficialRateBook.id,
+        OfficialRateBook.book_code,
+        OfficialRateBook.version_code,
+        OfficialRateBook.source_authority,
+        OfficialRateBook.source_reference,
+        OfficialRateBook.source_version,
+        cast(OfficialRateBook.source_published_on, String).label("source_published_on"),
+        OfficialRateBook.source_snapshot,
+        OfficialRateBook.source_snapshot_hash,
+        OfficialRateBook.approval_status,
+        OfficialRateBook.approved_by,
+        cast(OfficialRateBook.approved_at, String).label("approved_at"),
+        cast(OfficialRateBook.effective_from, String).label("effective_from"),
+        cast(OfficialRateBook.effective_to, String).label("effective_to"),
+        OfficialRateBook.activation_status,
+        OfficialRateBook.activated_by,
+        cast(OfficialRateBook.activated_at, String).label("activated_at"),
+        OfficialRateBook.current_identity_key,
+    )
+    rows = transaction.execute(
+        select(book_bundle)
+        .where(
+            OfficialRateBook.source_authority == "CNIPA",
+            OfficialRateBook.book_code == _LAYOUT_BOOK_CODE,
+            OfficialRateBook.version_code == _LAYOUT_VERSION,
+            OfficialRateBook.effective_from == _LAYOUT_EFFECTIVE_FROM,
+            OfficialRateBook.effective_to.is_(None),
+            OfficialRateBook.approval_status == "APPROVED",
+            OfficialRateBook.activation_status == "ACTIVE",
+            OfficialRateBook.effective_from <= effective_date,
+            or_(
+                OfficialRateBook.effective_to.is_(None),
+                OfficialRateBook.effective_to >= effective_date,
+            ),
+        )
+        .order_by(OfficialRateBook.id)
+    ).all()
+    if len(rows) != 1:
+        unavailable("rate_book")
+    raw = rows[0].book
+    book = _ProviderBook(
+        id=raw.id,
+        book_code=raw.book_code,
+        version_code=raw.version_code,
+        source_authority=raw.source_authority,
+        source_reference=raw.source_reference,
+        source_version=raw.source_version,
+        source_published_on=_layout_date(
+            raw.source_published_on,
+            "source_published_on",
+            unavailable=unavailable,
+        ),
+        source_snapshot=raw.source_snapshot,
+        source_snapshot_hash=raw.source_snapshot_hash,
+        approval_status=raw.approval_status,
+        approved_by=raw.approved_by,
+        approved_at=_layout_datetime(
+            raw.approved_at,
+            "approved_at",
+            unavailable=unavailable,
+        ),
+        effective_from=_layout_date(
+            raw.effective_from,
+            "effective_from",
+            unavailable=unavailable,
+        ),
+        effective_to=_layout_date(
+            raw.effective_to,
+            "effective_to",
+            optional=True,
+            unavailable=unavailable,
+        ),
+        activation_status=raw.activation_status,
+        activated_by=raw.activated_by,
+        activated_at=_layout_datetime(
+            raw.activated_at,
+            "activated_at",
+            unavailable=unavailable,
+        ),
+        current_identity_key=raw.current_identity_key,
+    )
+    invalid_field = _provider_book_invalid_field(book)
+    if invalid_field is not None:
+        unavailable(invalid_field)
+    for field in ("id", "approved_by", "activated_by"):
+        if not _layout_canonical_uuid(getattr(book, field)):
+            unavailable(field)
+    if book.approved_at > book.activated_at:
+        unavailable("approved_at/activated_at")
+    exact_values = (
+        ("source_reference", book.source_reference, _LAYOUT_SOURCE_REFERENCE),
+        ("source_version", book.source_version, _LAYOUT_VERSION),
+        ("source_published_on", book.source_published_on, _LAYOUT_SOURCE_PUBLISHED_ON),
+        ("source_snapshot_hash", book.source_snapshot_hash, _LAYOUT_SOURCE_SNAPSHOT_HASH),
+        ("approval_status", book.approval_status, "APPROVED"),
+        ("activation_status", book.activation_status, "ACTIVE"),
+        ("current_identity_key", book.current_identity_key, f"CNIPA|{_LAYOUT_BOOK_CODE}"),
+    )
+    for field, value, expected in exact_values:
+        if value != expected:
+            unavailable(field)
+    return book
+
+
+def _layout_rate(
+    transaction: Session,
+    book: _ProviderBook,
+) -> _LayoutRate:
+    rate_bundle = Bundle(
+        "rate",
+        FeeRate.id,
+        FeeRate.fee_code,
+        FeeRate.fee_type,
+        FeeRate.currency,
+        cast(FeeRate.default_amount, String).label("default_amount"),
+        cast(FeeRate.enabled, String).label("enabled"),
+        FeeRate.calc_mode,
+        cast(FeeRate.allow_reduction, String).label("allow_reduction"),
+        cast(FeeRate.effective_from, String).label("effective_from"),
+        cast(FeeRate.effective_to, String).label("effective_to"),
+        FeeRate.source_doc,
+        FeeRate.source_url,
+        FeeRate.source_policy,
+        FeeRate.source_version,
+        FeeRate.source_status,
+        FeeRate.official_rate_book_id,
+    )
+    rows = transaction.execute(
+        select(
+            rate_bundle,
+        )
+        .where(
+            FeeRate.official_rate_book_id == book.id,
+            FeeRate.fee_code == _LAYOUT_FEE_CODE,
+        )
+        .order_by(FeeRate.id)
+    ).all()
+    if len(rows) != 1:
+        _layout_unavailable("rate")
+    raw = rows[0].rate
+    try:
+        stored_amount = Decimal(raw.default_amount)
+    except (InvalidOperation, TypeError, ValueError):
+        _layout_unavailable("default_amount")
+    if raw.enabled != "1":
+        _layout_unavailable("enabled")
+    if raw.allow_reduction != "0":
+        _layout_unavailable("allow_reduction")
+    rate = _LayoutRate(
+        id=raw.id,
+        fee_code=raw.fee_code,
+        fee_type=raw.fee_type,
+        currency=raw.currency,
+        default_amount=stored_amount,
+        enabled=True,
+        calc_mode=raw.calc_mode,
+        allow_reduction=False,
+        effective_from=_layout_date(raw.effective_from, "effective_from"),
+        effective_to=_layout_date(raw.effective_to, "effective_to", optional=True),
+        source_doc=raw.source_doc,
+        source_url=raw.source_url,
+        source_policy=raw.source_policy,
+        source_version=raw.source_version,
+        source_status=raw.source_status,
+        official_rate_book_id=raw.official_rate_book_id,
+    )
+    exact_values = (
+        ("id", rate.id, rate.id if _layout_canonical_uuid(rate.id) else None),
+        ("fee_code", rate.fee_code, _LAYOUT_FEE_CODE),
+        ("fee_type", rate.fee_type, "GOV"),
+        ("currency", rate.currency, "CNY"),
+        ("enabled", rate.enabled, True),
+        ("calc_mode", rate.calc_mode, "FIXED"),
+        ("allow_reduction", rate.allow_reduction, False),
+        ("effective_from", rate.effective_from, _LAYOUT_EFFECTIVE_FROM),
+        ("effective_to", rate.effective_to, None),
+        ("source_doc", rate.source_doc, _LAYOUT_SOURCE_TITLE),
+        ("source_url", rate.source_url, _LAYOUT_SOURCE_REFERENCE),
+        ("source_policy", rate.source_policy, _LAYOUT_DOCUMENT_NUMBER),
+        ("source_version", rate.source_version, _LAYOUT_VERSION),
+        ("source_status", rate.source_status, "PENDING_CONFIRMATION"),
+        ("official_rate_book_id", rate.official_rate_book_id, book.id),
+    )
+    for field, value, expected in exact_values:
+        if value != expected:
+            _layout_unavailable(field)
+    if (
+        type(rate.default_amount) is not Decimal
+        or not rate.default_amount.is_finite()
+        or rate.default_amount != _LAYOUT_AMOUNT
+        or not stored_amount.is_finite()
+        or stored_amount != _LAYOUT_AMOUNT
+        or stored_amount != stored_amount.quantize(_PROVIDER_TWO_PLACES)
+    ):
+        _layout_unavailable("default_amount")
+    return rate
+
+
+def get_layout_registration_fee(
+    command: GetLayoutRegistrationFeeCommand,
+    transaction: Session,
+) -> GetLayoutRegistrationFeeResult:
+    if type(command) is not GetLayoutRegistrationFeeCommand:
+        _layout_invalid("command")
+    if type(command.effective_date) is not date or command.effective_date < _LAYOUT_EFFECTIVE_FROM:
+        _layout_invalid("effective_date")
+    if not isinstance(transaction, Session):
+        _layout_invalid("transaction")
+
+    with transaction.no_autoflush:
+        book = _layout_book(transaction, command.effective_date)
+        rate = _layout_rate(transaction, book)
+
+    return GetLayoutRegistrationFeeResult(
+        rate_id=rate.id,
+        fee_code=rate.fee_code,
+        fee_type=rate.fee_type,
+        currency=rate.currency,
+        calc_mode=rate.calc_mode,
+        allow_reduction=rate.allow_reduction,
+        enabled=rate.enabled,
+        amount=rate.default_amount,
+        rate_book_id=book.id,
+        book_code=book.book_code,
+        version_code=book.version_code,
+        effective_from=book.effective_from,
+        effective_to=book.effective_to,
+        approval_status=book.approval_status,
+        activation_status=book.activation_status,
+        source_reference=book.source_reference,
+        source_version=book.source_version,
+        source_snapshot_hash=book.source_snapshot_hash,
+    )
+
+
+def get_layout_bibliographic_change_fee(
+    command: GetLayoutBibliographicChangeFeeCommand,
+) -> GetLayoutBibliographicChangeFeeResult:
+    if type(command) is not GetLayoutBibliographicChangeFeeCommand:
+        _layout_bibliographic_change_invalid("command")
+    if type(command.effective_date) is not date or command.effective_date < _LAYOUT_EFFECTIVE_FROM:
+        _layout_bibliographic_change_invalid("effective_date")
+
+    return GetLayoutBibliographicChangeFeeResult(
+        fee_code=_LAYOUT_BIBLIOGRAPHIC_CHANGE_FEE_CODE,
+        currency="CNY",
+        amount=_LAYOUT_BIBLIOGRAPHIC_CHANGE_AMOUNT,
+        effective_from=_LAYOUT_EFFECTIVE_FROM,
+        source_reference=_LAYOUT_SOURCE_REFERENCE,
+        source_version=_LAYOUT_VERSION,
+        source_snapshot_hash=_LAYOUT_SOURCE_SNAPSHOT_HASH,
+    )
+
+
+def get_layout_extension_fee(
+    command: GetLayoutExtensionFeeCommand,
+) -> GetLayoutExtensionFeeResult:
+    if type(command) is not GetLayoutExtensionFeeCommand:
+        _layout_extension_invalid("command")
+    if type(command.effective_date) is not date or command.effective_date < _LAYOUT_EFFECTIVE_FROM:
+        _layout_extension_invalid("effective_date")
+
+    return GetLayoutExtensionFeeResult(
+        fee_code=_LAYOUT_EXTENSION_FEE_CODE,
+        currency="CNY",
+        amount=_LAYOUT_EXTENSION_AMOUNT,
+        effective_from=_LAYOUT_EFFECTIVE_FROM,
+        source_reference=_LAYOUT_SOURCE_REFERENCE,
+        source_version=_LAYOUT_VERSION,
+        source_snapshot_hash=_LAYOUT_SOURCE_SNAPSHOT_HASH,
+    )
+
+
+def get_layout_nonvoluntary_license_fee(
+    command: GetLayoutNonvoluntaryLicenseFeeCommand,
+) -> GetLayoutNonvoluntaryLicenseFeeResult:
+    if type(command) is not GetLayoutNonvoluntaryLicenseFeeCommand:
+        _layout_nonvoluntary_license_invalid("command")
+    if type(command.effective_date) is not date or command.effective_date < _LAYOUT_EFFECTIVE_FROM:
+        _layout_nonvoluntary_license_invalid("effective_date")
+
+    return GetLayoutNonvoluntaryLicenseFeeResult(
+        fee_code=_LAYOUT_NONVOLUNTARY_LICENSE_FEE_CODE,
+        currency="CNY",
+        amount=_LAYOUT_NONVOLUNTARY_LICENSE_AMOUNT,
+        effective_from=_LAYOUT_EFFECTIVE_FROM,
+        source_reference=_LAYOUT_SOURCE_REFERENCE,
+        source_version=_LAYOUT_VERSION,
+        source_snapshot_hash=_LAYOUT_SOURCE_SNAPSHOT_HASH,
+    )
+
+
+def get_layout_remuneration_adjudication_fee(
+    command: GetLayoutRemunerationAdjudicationFeeCommand,
+) -> GetLayoutRemunerationAdjudicationFeeResult:
+    if type(command) is not GetLayoutRemunerationAdjudicationFeeCommand:
+        _layout_remuneration_adjudication_invalid("command")
+    if type(command.effective_date) is not date or command.effective_date < _LAYOUT_EFFECTIVE_FROM:
+        _layout_remuneration_adjudication_invalid("effective_date")
+
+    return GetLayoutRemunerationAdjudicationFeeResult(
+        fee_code=_LAYOUT_REMUNERATION_ADJUDICATION_FEE_CODE,
+        currency="CNY",
+        amount=_LAYOUT_REMUNERATION_ADJUDICATION_AMOUNT,
+        effective_from=_LAYOUT_EFFECTIVE_FROM,
+        source_reference=_LAYOUT_SOURCE_REFERENCE,
+        source_version=_LAYOUT_VERSION,
+        source_snapshot_hash=_LAYOUT_SOURCE_SNAPSHOT_HASH,
+    )
+
+
+def get_patent_term_compensation_request_fee(
+    command: GetPatentTermCompensationRequestFeeCommand,
+) -> GetPatentTermCompensationRequestFeeResult:
+    if type(command) is not GetPatentTermCompensationRequestFeeCommand:
+        _patent_term_compensation_request_fee_invalid()
+    if type(command.effective_date) is not date:
+        _patent_term_compensation_request_fee_invalid()
+    if command.effective_date < _PATENT_TERM_COMPENSATION_REQUEST_FEE_EFFECTIVE_FROM:
+        _patent_term_compensation_request_fee_unavailable(command.effective_date)
+
+    return GetPatentTermCompensationRequestFeeResult(
+        fee_code=_PATENT_TERM_COMPENSATION_REQUEST_FEE_CODE,
+        currency="CNY",
+        amount=_PATENT_TERM_COMPENSATION_REQUEST_FEE_AMOUNT,
+        effective_from=_PATENT_TERM_COMPENSATION_REQUEST_FEE_EFFECTIVE_FROM,
+        source_reference=_PATENT_TERM_COMPENSATION_REQUEST_FEE_SOURCE_REFERENCE,
+        source_version=_PATENT_TERM_COMPENSATION_REQUEST_FEE_SOURCE_VERSION,
+        source_snapshot_hash=(_PATENT_TERM_COMPENSATION_REQUEST_FEE_SOURCE_SNAPSHOT_HASH),
+    )
+
+
+def calculate_compensation_period_annuity_fee(
+    command: CalculateCompensationPeriodAnnuityFeeCommand,
+) -> CalculateCompensationPeriodAnnuityFeeResult:
+    if type(command) is not CalculateCompensationPeriodAnnuityFeeCommand:
+        _compensation_period_annuity_fee_invalid("command")
+    if type(command.effective_date) is not date:
+        _compensation_period_annuity_fee_invalid("effective_date")
+    if type(command.complete_years) is not int or command.complete_years < 0:
+        _compensation_period_annuity_fee_invalid("complete_years")
+    if command.effective_date < _COMPENSATION_PERIOD_ANNUITY_FEE_EFFECTIVE_FROM:
+        _compensation_period_annuity_fee_unavailable(command.effective_date)
+
+    return CalculateCompensationPeriodAnnuityFeeResult(
+        fee_code=_COMPENSATION_PERIOD_ANNUITY_FEE_CODE,
+        currency="CNY",
+        complete_years=command.complete_years,
+        unit_amount=_COMPENSATION_PERIOD_ANNUITY_FEE_UNIT_AMOUNT,
+        amount=_COMPENSATION_PERIOD_ANNUITY_FEE_UNIT_AMOUNT * command.complete_years,
+        effective_from=_COMPENSATION_PERIOD_ANNUITY_FEE_EFFECTIVE_FROM,
+        source_reference=_COMPENSATION_PERIOD_ANNUITY_FEE_SOURCE_REFERENCE,
+        source_version=_COMPENSATION_PERIOD_ANNUITY_FEE_SOURCE_VERSION,
+        source_snapshot_hash=(_COMPENSATION_PERIOD_ANNUITY_FEE_SOURCE_SNAPSHOT_HASH),
+    )
+
+
+def calculate_open_license_annuity_reduction(
+    command: CalculateOpenLicenseAnnuityReductionCommand,
+) -> CalculateOpenLicenseAnnuityReductionResult:
+    if type(command) is not CalculateOpenLicenseAnnuityReductionCommand:
+        _open_license_annuity_reduction_invalid("command")
+    existing_reduction_ratio = command.existing_reduction_ratio
+    if (
+        type(existing_reduction_ratio) is not Decimal
+        or not existing_reduction_ratio.is_finite()
+        or existing_reduction_ratio not in (Decimal("0"), Decimal("0.7"), Decimal("0.85"))
+    ):
+        _open_license_annuity_reduction_invalid("existing_reduction_ratio")
+
+    applied_reduction_ratio = max(
+        _OPEN_LICENSE_ANNUITY_REDUCTION_RATIO,
+        existing_reduction_ratio,
+    )
+    return CalculateOpenLicenseAnnuityReductionResult(
+        open_license_reduction_ratio=_OPEN_LICENSE_ANNUITY_REDUCTION_RATIO,
+        existing_reduction_ratio=existing_reduction_ratio,
+        applied_reduction_ratio=applied_reduction_ratio,
+        payable_ratio=Decimal("1") - applied_reduction_ratio,
+    )
+
+
+def get_layout_reexamination_fee(
+    command: GetLayoutReexaminationFeeCommand,
+) -> GetLayoutReexaminationFeeResult:
+    if type(command) is not GetLayoutReexaminationFeeCommand:
+        _layout_reexamination_invalid("command")
+    if type(command.effective_date) is not date or command.effective_date < _LAYOUT_EFFECTIVE_FROM:
+        _layout_reexamination_invalid("effective_date")
+
+    return GetLayoutReexaminationFeeResult(
+        fee_code=_LAYOUT_REEXAMINATION_FEE_CODE,
+        currency="CNY",
+        amount=_LAYOUT_REEXAMINATION_AMOUNT,
+        effective_from=_LAYOUT_EFFECTIVE_FROM,
+        source_reference=_LAYOUT_SOURCE_REFERENCE,
+        source_version=_LAYOUT_VERSION,
+        source_snapshot_hash=_LAYOUT_SOURCE_SNAPSHOT_HASH,
+    )
+
+
+def get_layout_restoration_fee(
+    command: GetLayoutRestorationFeeCommand,
+) -> GetLayoutRestorationFeeResult:
+    if type(command) is not GetLayoutRestorationFeeCommand:
+        _layout_restoration_invalid("command")
+    if type(command.effective_date) is not date or command.effective_date < _LAYOUT_EFFECTIVE_FROM:
+        _layout_restoration_invalid("effective_date")
+
+    return GetLayoutRestorationFeeResult(
+        fee_code=_LAYOUT_RESTORATION_FEE_CODE,
+        currency="CNY",
+        amount=_LAYOUT_RESTORATION_AMOUNT,
+        effective_from=_LAYOUT_EFFECTIVE_FROM,
+        source_reference=_LAYOUT_SOURCE_REFERENCE,
+        source_version=_LAYOUT_VERSION,
+        source_snapshot_hash=_LAYOUT_SOURCE_SNAPSHOT_HASH,
+    )

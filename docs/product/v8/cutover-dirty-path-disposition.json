@@ -11,7 +11,8 @@
     "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION": 11,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
-    "V8-ADOPT-ANNUITY-RATE-SOURCES": 31,
+    "V8-ADOPT-ANNUITY-RATE-SOURCES": 20,
+    "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION": 11,
     "V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION": 3,
     "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION": 2,
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
@@ -285,8 +286,8 @@
     {
       "path": "backend/app/modules/fees/official_rate_book.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "activated official rate source/candidate"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/app/modules/fees/pct_policy.py",
@@ -525,8 +526,8 @@
     {
       "path": "backend/tests/test_v8_compensation_period_annuity_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_decision_gate_list_api.py",
@@ -729,20 +730,20 @@
     {
       "path": "backend/tests/test_v8_layout_bibliographic_change_fee_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_layout_extension_fee_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_layout_nonvoluntary_license_fee_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_layout_reexamination_active_source_gate.py",
@@ -753,26 +754,26 @@
     {
       "path": "backend/tests/test_v8_layout_reexamination_fee_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_layout_registration_fee_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_layout_remuneration_adjudication_fee_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_layout_restoration_fee_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_legacy_document_evidence_import.py",
@@ -945,8 +946,8 @@
     {
       "path": "backend/tests/test_v8_open_license_annuity_reduction_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_patent_term_compensation_request_obligation.py",
@@ -1029,8 +1030,8 @@
     {
       "path": "backend/tests/test_v8_term_compensation_request_fee_rule.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
-      "rationale": "official-fee or obligation behavior"
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "rationale": "current-reviewed special official-fee rule set"
     },
     {
       "path": "backend/tests/test_v8_w1_l3_case_activity_evidence.py",
