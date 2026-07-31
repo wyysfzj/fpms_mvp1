@@ -949,8 +949,8 @@
     {
       "catalog_id": "FPMS-V8-FEE-DRAFT-OBLIGATION-UI-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-DRAFT-OBLIGATION-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -1037,8 +1037,8 @@
     {
       "catalog_id": "FPMS-V8-FEE-REDUCTION-APPROVAL-NOTICE-ACTIVATION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-NOTICE-ACTIVATION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2330,7 +2330,8 @@
       "story_id": "V8-CANARY-SCHEMA-SPINE-CURRENT-VERIFICATION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "38e3e6bc61f20c4c18872dbabe8a19150e56f0ce"
+        "38e3e6bc61f20c4c18872dbabe8a19150e56f0ce",
+        "5d60e88"
       ],
       "paths": [
         "backend/alembic/versions/v8_w1_d1_document_evidence_version.py",
@@ -2353,9 +2354,10 @@
         "backend/tests/test_v8_w1_f4_obligation_payment_link.py",
         "backend/tests/test_v8_w1_f5_fee_reduction_approval.py"
       ],
-      "tree_sha256": "50d49bd547e9cdc81109ae9b7bfbba94104fc6ead23604bb30527caff109c732",
+      "tree_sha256": "ad259164cdce38f23e0cb2cbd3851461558485950c1d87016e161e7c008e4f72",
       "tests": [
-        "pytest -q backend/tests/test_v8_w1_{l1,l2,l3,d1,d2,d3,f1,f2,f3,f4,f5}_*.py (11 exact catalog primary files; 53 passed)"
+        "pytest -q backend/tests/test_v8_w1_{l1,l2,l3,d1,d2,d3,f1,f2,f3,f4,f5}_*.py (11 exact catalog primary files; 53 passed)",
+        "controller successor tranche after SQLite fee-reduction type correction: schema spine plus rate-book carrier and provenance (65 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CANARY-SCHEMA-SPINE-CURRENT-VERIFICATION.md",
@@ -2575,17 +2577,19 @@
       "story_id": "V8-OFFICIAL-RATE-BOOK-CARRIER-CURRENT-VERIFICATION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "c8c56a5a993760064b88d4b3da1986d52f9bec13"
+        "c8c56a5a993760064b88d4b3da1986d52f9bec13",
+        "5d60e88"
       ],
       "paths": [
         "backend/alembic/versions/v8_w4_official_rate_book.py",
         "backend/app/modules/fees/models.py",
         "backend/tests/test_v8_official_rate_book_schema.py"
       ],
-      "tree_sha256": "afeee1695b8d9fad72a971769a273b7e7b1bc5d9d46e64cc4e3b74497f4ae07b",
+      "tree_sha256": "3b74e8f9edd4c6e25aefd8f7ad237ac37e49e559154b1bf1d6109d17222862fe",
       "tests": [
         "pytest -q tests/test_v8_official_rate_book_schema.py from backend cwd (8 passed)",
-        "alembic heads plus isolated SQLite upgrade head/current (v8_d4_evidence_kind_capacity_01 head)"
+        "alembic heads plus isolated SQLite upgrade head/current (v8_d4_evidence_kind_capacity_01 head)",
+        "controller successor tranche after SQLite fee-reduction type correction: schema spine plus rate-book carrier and provenance (65 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-CARRIER-CURRENT-VERIFICATION.md",
@@ -2656,18 +2660,20 @@
       "commits": [
         "409918c74405213e0ca294baa45e214d0a0f1ed9",
         "5211b1b5b7480c8178fd3b0200194f4e335a1101",
-        "36ab390"
+        "36ab390",
+        "caf0da6"
       ],
       "paths": [
         "backend/app/modules/fees/official_rate_book.py",
         "backend/scripts/seed_dev.py",
         "backend/tests/test_v8_official_rate_book_activation.py"
       ],
-      "tree_sha256": "5cd8967c50012127289bc65096448940115551acbc021f7e791b3ae8a694c690",
+      "tree_sha256": "87f849a8e577c374a0abddf8eab92876c4799789a4fd762cda8db509293af1c6",
       "tests": [
         "pytest -q tests/test_v8_official_rate_book_activation.py tests/test_v8_official_rate_book_schema.py tests/test_official_fee_rate_catalog_seed.py from backend cwd (43 passed)",
         "same exact serialized activation/schema/seed tranche after the 5211b1b special-fee successor (43 passed)",
-        "independent row128 successor tranche confirmed official rate-book activation remains intact (43 passed)"
+        "independent row128 successor tranche confirmed official rate-book activation remains intact (43 passed)",
+        "independent row129 successor review confirmed the rate-book bytes and seed behavior remain compatible"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-SUCCESSOR-COMPAT.md",
@@ -2797,16 +2803,18 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "bca7de8f05505ee4eb3103ee95161a627436efa1",
-        "36ab390"
+        "36ab390",
+        "caf0da6"
       ],
       "paths": [
         "backend/scripts/seed_dev.py",
         "backend/tests/test_v8_official_fee_category_correction.py"
       ],
-      "tree_sha256": "e79dea96bdd90c140726933080b4bae16ec6464c1f69c4d9d9d11202af0ebe52",
+      "tree_sha256": "e9e75914c2cbabc83e0492506b8aea8b03e2ad81487eea11dc10c30dc8893357",
       "tests": [
         "pytest -q tests/test_v8_official_fee_category_correction.py from backend cwd (controller 1 passed; independent reviewer 1 passed)",
-        "independent row128 successor test confirmed official-fee category correction remains intact (1 passed)"
+        "independent row128 successor test confirmed official-fee category correction remains intact (1 passed)",
+        "independent row129 successor review confirmed the official-fee category seed remains compatible"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-FEE-CATEGORY-CORRECTION-CURRENT-ADOPTION.md",
@@ -3861,7 +3869,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "36ab390",
-        "f14d269"
+        "f14d269",
+        "caf0da6"
       ],
       "paths": [
         "backend/app/modules/documents/official_notice_catalog.py",
@@ -3869,18 +3878,63 @@
         "backend/scripts/seed_dev.py",
         "backend/tests/test_v8_application_fee_notice_activation.py"
       ],
-      "tree_sha256": "0be1deb316c639384ba438edc882c96a4e42aa3fb870525ed9b1fe31184a440f",
+      "tree_sha256": "7b33cf02646cded236974e80eea63b843f946dc33a5141560bf928e9411db499",
       "tests": [
         "pytest -q tests/test_v8_application_fee_notice_activation.py from backend cwd (5 passed)",
         "public wizard correction pair (2 passed)",
         "row128 activation plus row126 obligation tranche (29 passed)",
         "rate-book 43 passed; fee-category 1 passed; activity/OA 4 passed; document evidence/review 92 passed",
         "scoped Ruff and combined/correction diff checks passed",
-        "independent High re-review approved P0/P1/P2 0/0/0 after closing the wizard no-draft P1"
+        "independent High re-review approved P0/P1/P2 0/0/0 after closing the wizard no-draft P1",
+        "independent row129 successor tranche confirmed application-fee activation remains compatible"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-APPLICATION-FEE-NOTICE-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-FEE-NOTICE-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FEE-DRAFT-OBLIGATION-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "0386185",
+        "6c34db4"
+      ],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-fee-draft-obligation.spec.ts",
+        "frontend/src/modules/fees/pages/FeeDraftCreate.vue"
+      ],
+      "tree_sha256": "df1e8198e62ca3eb7b8b7c4465bbd7f6340eb5eab8c283706bf46fe85da2f085",
+      "tests": [
+        "focused Playwright probe with one worker (7 passed)",
+        "exact-page ESLint and combined two-path diff check passed",
+        "independent High re-review approved P0/P1/P2 0/0/0 after explicit fail-closed coverage"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-DRAFT-OBLIGATION-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-DRAFT-OBLIGATION-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FEE-REDUCTION-APPROVAL-NOTICE-ACTIVATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "caf0da6"
+      ],
+      "paths": [
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_fee_reduction_approval_notice_activation.py"
+      ],
+      "tree_sha256": "8a063a9cac42b0e656d6584c7b4258046dbed4912b7af62ed658e27182f7351e",
+      "tests": [
+        "focused row129 activation and side-effect tests (2 passed)",
+        "independent row127/128/129 decisive tranche excluding one legal predecessor snapshot (10 passed)",
+        "inherited UI-clarity Playwright probe (1 passed)",
+        "scoped Ruff and exact commit scope checks passed",
+        "independent controller review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-NOTICE-ACTIVATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-REDUCTION-APPROVAL-NOTICE-ACTIVATION-CURRENT-ADOPTION.md"
     }
   ]
 }
