@@ -3,7 +3,7 @@ from __future__ import annotations
 import calendar
 import hashlib
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import uuid4
@@ -25,9 +25,12 @@ from app.modules.cases.document_gate_service import (
 from app.modules.cases.enums import CaseStatus, CaseType, FlowDir, PatentCategory
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
+    BusinessStage,
     ConfirmationStatus,
     EvidenceReference,
+    LegalStatus,
     LifecycleEventCommand,
+    OfficialProcedureStage,
 )
 from app.modules.cases.lifecycle_service import apply_lifecycle_event
 from app.modules.cases.models import (
@@ -59,6 +62,10 @@ from app.modules.cases.schemas import (
 )
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.evidence_contracts import EvidenceReviewState, EvidenceVersionState
+from app.modules.documents.evidence_workflow_service import (
+    FinalizeExternalSubmissionCommand,
+    finalize_external_submission,
+)
 from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
 from app.modules.fees.fee_reduction import (
     FeeReductionApprovalContext,
@@ -72,6 +79,10 @@ from app.modules.fees.fee_reduction import (
 from app.modules.fees.models import FeeDraft, FeeReductionApproval
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress
+from app.modules.official_workflows.filing_evidence_resolver import (
+    resolve_filing_final_evidence,
+)
+from app.modules.official_workflows.models import OfficialWorkPackage
 from app.modules.tasks.enums import TaskAction, TaskDeadlineBase, TaskRemindBase
 from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 
@@ -499,10 +510,7 @@ def _canonical_create_fee_reduction(
     matching = [
         (approval, applicant_set_key)
         for approval in approvals
-        if (
-            applicant_set_key := _approval_applicant_set_key(approval, submitted_ids)
-        )
-        is not None
+        if (applicant_set_key := _approval_applicant_set_key(approval, submitted_ids)) is not None
     ]
     last_error: FeeReductionValidationError | None = None
     valid_results = []
@@ -1847,8 +1855,12 @@ def execute_batch_filing(
             status_code=404,
         )
 
+    valid_batch_statuses = {
+        CaseStatus.NOT_FILED.value,
+        CaseStatus.WAITING_RECEIPT.value,
+    }
     invalid_status_case_nos = [
-        case.case_no for case in cases if case.status != CaseStatus.NOT_FILED.value
+        case.case_no for case in cases if case.status not in valid_batch_statuses
     ]
     if invalid_status_case_nos:
         raise_business_error(
@@ -1888,32 +1900,209 @@ def execute_batch_filing(
             status_code=400,
         )
 
+    submitted_at = datetime.combine(submitted_date, time.min)
     updated_case_ids: list[str] = []
-    ordered_cases: list[Case] = []
+    fresh_cases: list[Case] = []
     for case_id in unique_case_ids:
         case = case_by_id[case_id]
+        package_ids = db.scalars(
+            select(OfficialWorkPackage.id)
+            .where(OfficialWorkPackage.resolve_key == f"FILING_PREP:{case_id}")
+            .limit(2)
+        ).all()
+        if not package_ids:
+            raise_business_error(
+                "OFFICIAL_WORK_PACKAGE_NOT_FOUND",
+                "Official work package not found",
+                status_code=404,
+            )
+        if len(package_ids) != 1:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Filing work package identity is ambiguous",
+                status_code=409,
+            )
+        package_id = package_ids[0]
+        initial_evidence = resolve_filing_final_evidence(package_id, db)
+        if initial_evidence.package_id != package_id or initial_evidence.case_id != case_id:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Filing evidence resolution does not match the selected case",
+                status_code=409,
+            )
+        is_fresh = (
+            initial_evidence.final_submitted_at is None
+            and initial_evidence.submission_activity_id is None
+            and initial_evidence.submission_activity_hash is None
+        )
+        is_document_replay = (
+            initial_evidence.final_submitted_at == submitted_at
+            and initial_evidence.submission_activity_id is not None
+            and initial_evidence.submission_activity_hash is not None
+        )
+        if not is_fresh and not is_document_replay:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Filing submission evidence conflicts with this batch",
+                status_code=409,
+            )
+        fresh_projection_matches = (
+            case.status == CaseStatus.NOT_FILED.value
+            and case.business_stage == BusinessStage.FILING_PREPARATION.value
+            and case.official_procedure_stage == OfficialProcedureStage.NOT_SUBMITTED.value
+            and case.legal_status == LegalStatus.NOT_ESTABLISHED.value
+            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+        )
+        replay_projection_matches = (
+            case.status == CaseStatus.WAITING_RECEIPT.value
+            and case.business_stage == BusinessStage.WAITING_EXTERNAL_RECEIPT.value
+            and case.official_procedure_stage
+            == OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT.value
+            and case.legal_status == LegalStatus.NOT_ESTABLISHED.value
+            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+        )
+        if not (
+            (is_fresh and fresh_projection_matches)
+            or (is_document_replay and replay_projection_matches)
+        ):
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Case projection conflicts with the filing submission evidence",
+                status_code=409,
+            )
+
+        idempotency_key = f"batch-filing:{case_id}:{submitted_date.isoformat()}"
+        finalized = finalize_external_submission(
+            FinalizeExternalSubmissionCommand(
+                case_id=case_id,
+                evidence_version_id=initial_evidence.evidence_version_id,
+                actor_id=user_id,
+                submitted_at=submitted_at,
+                idempotency_key=idempotency_key,
+            ),
+            db,
+        )
+        db.flush()
+        resolved_evidence = resolve_filing_final_evidence(package_id, db)
+        unchanged_resolution = (
+            resolved_evidence.package_id == initial_evidence.package_id
+            and resolved_evidence.case_id == initial_evidence.case_id
+            and resolved_evidence.evidence_version_id == initial_evidence.evidence_version_id
+            and resolved_evidence.content_hash == initial_evidence.content_hash
+            and resolved_evidence.reviewer_id == initial_evidence.reviewer_id
+            and resolved_evidence.reviewed_at == initial_evidence.reviewed_at
+        )
+        exact_finalization = (
+            finalized.case_id == case_id
+            and finalized.evidence_version_id == initial_evidence.evidence_version_id
+            and finalized.content_hash == initial_evidence.content_hash
+            and finalized.submitted_at == submitted_at
+            and finalized.idempotency_key == idempotency_key
+            and finalized.reused is is_document_replay
+            and resolved_evidence.final_submitted_at == submitted_at
+            and resolved_evidence.submission_activity_id == finalized.activity_id
+            and resolved_evidence.submission_activity_hash is not None
+        )
+        exact_replay = is_fresh or (
+            resolved_evidence.submission_activity_id == initial_evidence.submission_activity_id
+            and resolved_evidence.submission_activity_hash
+            == initial_evidence.submission_activity_hash
+        )
+        if not unchanged_resolution or not exact_finalization or not exact_replay:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Finalized filing evidence does not match the batch submission",
+                status_code=409,
+            )
+
+        lifecycle_idempotency_key = f"batch-filing-lifecycle:{case_id}:{submitted_date.isoformat()}"
+        lifecycle_result = apply_lifecycle_event(
+            LifecycleEventCommand(
+                case_id=case_id,
+                event_type="FILING_EXTERNAL_SUBMISSION_RECORDED",
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=submitted_at,
+                occurred_at=submitted_at,
+                evidence_refs=(
+                    EvidenceReference(
+                        case_id=case_id,
+                        evidence_kind="FINAL_SUBMISSION_VERSION",
+                        object_type="DocumentEvidenceVersion",
+                        object_id=resolved_evidence.evidence_version_id,
+                        content_hash=resolved_evidence.content_hash,
+                        captured_at=resolved_evidence.reviewed_at,
+                    ),
+                    EvidenceReference(
+                        case_id=case_id,
+                        evidence_kind="MANUAL_EXTERNAL_SUBMISSION_RECORD",
+                        object_type="CaseActivityEvent",
+                        object_id=resolved_evidence.submission_activity_id,
+                        content_hash=resolved_evidence.submission_activity_hash,
+                        captured_at=submitted_at,
+                    ),
+                ),
+                actor_id=user_id,
+                idempotency_key=lifecycle_idempotency_key,
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={},
+            ),
+            db,
+        )
+        previous_projection = lifecycle_result.previous_projection
+        current_projection = lifecycle_result.current_projection
+        exact_lifecycle = (
+            lifecycle_result.case_id == case_id
+            and lifecycle_result.activity_id != finalized.activity_id
+            and lifecycle_result.sequence == finalized.activity_sequence + 1
+            and lifecycle_result.lifecycle_revision == finalized.lifecycle_revision + 1
+            and lifecycle_result.lane is ActivityLane.LIFECYCLE
+            and lifecycle_result.event_type == "FILING_EXTERNAL_SUBMISSION_RECORDED"
+            and lifecycle_result.confirmation_status is ConfirmationStatus.CONFIRMED
+            and lifecycle_result.idempotency_key == lifecycle_idempotency_key
+            and lifecycle_result.reused is is_document_replay
+            and lifecycle_result.legacy_case_status == CaseStatus.WAITING_RECEIPT.value
+            and lifecycle_result.conflict_codes == ()
+            and previous_projection.business_stage is BusinessStage.FILING_PREPARATION
+            and previous_projection.official_procedure_stage is OfficialProcedureStage.NOT_SUBMITTED
+            and previous_projection.legal_status is LegalStatus.NOT_ESTABLISHED
+            and previous_projection.lifecycle_verification_status is ConfirmationStatus.CONFIRMED
+            and current_projection.business_stage is BusinessStage.WAITING_EXTERNAL_RECEIPT
+            and current_projection.official_procedure_stage
+            is OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT
+            and current_projection.legal_status is LegalStatus.NOT_ESTABLISHED
+            and current_projection.lifecycle_verification_status is ConfirmationStatus.CONFIRMED
+        )
+        if not exact_lifecycle:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Lifecycle result conflicts with the filing submission evidence",
+                status_code=409,
+            )
+        db.flush()
+
         case.submitted_date = submitted_date
-        case.status = CaseStatus.WAITING_RECEIPT.value
         if apply_exam_now:
             case.has_exam_request = True
         case.updated_by = user_id
         updated_case_ids.append(case.id)
-        ordered_cases.append(case)
+        if is_fresh:
+            fresh_cases.append(case)
+        db.flush()
 
     document_ids = (
         _create_batch_filing_documents(
             db,
-            cases=ordered_cases,
-            selected_case_ids=unique_case_ids,
+            cases=fresh_cases,
+            selected_case_ids=[case.id for case in fresh_cases],
             submitted_date=submitted_date,
             user_id=user_id,
         )
-        if generate_list
+        if generate_list and fresh_cases
         else []
     )
     created_task_ids = _create_apply_fee_limit_tasks(
         db,
-        cases=ordered_cases,
+        cases=fresh_cases,
         submitted_date=submitted_date,
         user_id=user_id,
     )
@@ -2412,13 +2601,8 @@ def update_case_full(db: Session, case_id: str, data: CaseUpdateFull, user_id: s
         )
         current_composition = tuple(applicant.applicant_id for applicant in current_applicants)
         submitted_applicants = sorted(data.applicants, key=lambda applicant: applicant.seq)
-        submitted_composition = tuple(
-            applicant.applicant_id for applicant in submitted_applicants
-        )
-        if (
-            submitted_composition != current_composition
-            and "fee_reduction" not in provided_fields
-        ):
+        submitted_composition = tuple(applicant.applicant_id for applicant in submitted_applicants)
+        if submitted_composition != current_composition and "fee_reduction" not in provided_fields:
             raise_business_error(
                 "FEE_REDUCTION_EXPLICIT_SELECTION_REQUIRED",
                 "FEE_REDUCTION_EXPLICIT_SELECTION_REQUIRED",
