@@ -626,80 +626,80 @@
     {
       "catalog_id": "FPMS-V8-PRELIMINARY-STARTED-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-PRELIMINARY-PASSED-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-RECTIFICATION-NOTICE-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-PUBLICATION-NOTICE-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SUBSTANTIVE-STARTED-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-REEXAMINATION-STARTED-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-APPLICATION-REJECTION-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-APPLICATION-WITHDRAWAL-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-APPLICATION-ABANDONMENT-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-APPLICATION-RESTORATION-EVIDENCE-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -1058,8 +1058,8 @@
     {
       "catalog_id": "FPMS-V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3065,7 +3065,8 @@
       "story_id": "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "895bfc22c6642baacfce2ae6a83916af0dbc3ade"
+        "895bfc22c6642baacfce2ae6a83916af0dbc3ade",
+        "13a40c33bdbb4eb89909284e088786f4232833f5"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-document-evidence-review-ui.spec.ts",
@@ -3082,16 +3083,17 @@
         "frontend/src/api/documents.types.ts",
         "frontend/src/modules/documents/components/AttachmentList.vue"
       ],
-      "tree_sha256": "83dcb5fba47307c3aa90cffc653c4da46790be7d9a25673467756f6e3b799616",
+      "tree_sha256": "388406e461305c8a9fd3dd0eb5d212d264403f271916fa6458404a9fd63c692a",
       "tests": [
         "pytest -q exact four-file document attachment/evidence/review backend tranche from backend cwd (92 passed)",
         "isolated TypeScript contract and exact-file ESLint passed",
         "playwright test v8-document-evidence-review-ui.spec.ts --project=chromium --workers=1 (3 passed)",
-        "scoped Ruff and exact two-tree diff-check passed"
+        "scoped Ruff and exact two-tree diff-check passed",
+        "independent lifecycle-evidence successor review confirmed documents API changed only by ten protected routes; canonical adapter tranche 313 passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md"
+      "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES",
@@ -3164,6 +3166,55 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "13a40c33bdbb4eb89909284e088786f4232833f5"
+      ],
+      "paths": [
+        "backend/app/modules/documents/api.py",
+        "backend/app/modules/documents/lifecycle_evidence_adapters.py",
+        "backend/tests/test_v8_application_abandonment_evidence_api.py",
+        "backend/tests/test_v8_application_rejection_evidence_api.py",
+        "backend/tests/test_v8_application_restoration_evidence_api.py",
+        "backend/tests/test_v8_application_withdrawal_evidence_api.py",
+        "backend/tests/test_v8_preliminary_passed_evidence_api.py",
+        "backend/tests/test_v8_preliminary_started_evidence_api.py",
+        "backend/tests/test_v8_publication_notice_evidence_api.py",
+        "backend/tests/test_v8_rectification_notice_evidence_api.py",
+        "backend/tests/test_v8_reexamination_started_evidence_api.py",
+        "backend/tests/test_v8_substantive_started_evidence_api.py"
+      ],
+      "tree_sha256": "cdd3a69a72a67ccaf130bfacb4a0a5bf380a32de354190c412b8130503e388a5",
+      "tests": [
+        "pytest -q exact ten lifecycle evidence API files plus deadline-carrier regression from backend cwd (313 passed)",
+        "targeted corrupt-carrier rejection and rectification tranche from backend cwd (70 passed)",
+        "scoped Ruff and exact full/fix diff-check passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "1a289152ea03956ab84e305787e78c27df29e6d1"
+      ],
+      "paths": [
+        "backend/app/modules/fees/annuity_reduction.py",
+        "backend/tests/test_v8_annuity_first_ten_year_reduction_scope.py"
+      ],
+      "tree_sha256": "5fddadd7ba66676c77dbf7ab101fde7fbdfe760e7e902c68f412d557c83ae5c4",
+      "tests": [
+        "pytest -q exact focused annuity-reduction wrapper plus base-validator regression from backend cwd (125 passed)",
+        "scoped Ruff, exact story-only diff-check and archive/current product-test zero-diff passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION.md"
     }
   ]
 }
