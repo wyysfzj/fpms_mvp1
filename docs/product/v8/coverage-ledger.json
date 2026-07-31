@@ -486,10 +486,13 @@
     {
       "catalog_id": "FPMS-V8-DOCUMENT-SEMANTICS-EVENT-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
+      "disposition": "AUTHORITY_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "kind": "LIFECYCLE_DISPATCH_AUTHORITY_CONFLICT",
+        "detail": "The frozen row requires ordinary document create to dispatch non-grant lifecycle events, while the preserved focused test requires zero activity and the current domain contract permits only reviewed evidence to trigger central lifecycle change. Actor, evidence, confirmation and idempotency lineage are not frozen for this create seam."
+      }
     },
     {
       "catalog_id": "FPMS-V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-20260712-01",
