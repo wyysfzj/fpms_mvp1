@@ -21,9 +21,11 @@ continues through `v8_d4_legacy_fee_provenance_01` to the later accepted
 - `backend/alembic/versions/v8_delta4_legacy_fee_reduction_provenance.py`
 - `backend/tests/test_v8_legacy_fee_reduction_provenance_carrier.py`
 
-Current blobs are byte-identical to their introducing commit `83d014f` and the preserved
-archive comparison source `6b2ef89`; those historical commits are provenance inputs, not
-current acceptance.
+Before the P1 correction, all three product/test blobs were byte-identical to their
+introducing commit `83d014f` and preserved archive comparison source `6b2ef89`. Those old
+blobs remain pre-correction provenance inputs, not current acceptance. Correction commit
+`5d60e88` intentionally changes the model, migration and focused test; their corrected Git
+blob IDs are respectively `25428b6`, `f5e3554` and `5922dc3`.
 
 ## Verification
 
@@ -49,6 +51,6 @@ lane.
 ## Non-goals and rollback
 
 No importer/backfill, approval creation or inference, customer decision, fee entitlement,
-source activation, API/UI/seed change, migration rewrite, old task/evidence mutation,
-coverage row or milestone claim. Rollback reverts only this story-card commit; existing
-product/test bytes remain unchanged.
+source activation, API/UI/seed change, unrelated migration rewrite, old task/evidence
+mutation, coverage row or milestone claim. Rollback reverts the exact correction commit's
+four paths: model, D4-12 migration, focused test and this story card.
