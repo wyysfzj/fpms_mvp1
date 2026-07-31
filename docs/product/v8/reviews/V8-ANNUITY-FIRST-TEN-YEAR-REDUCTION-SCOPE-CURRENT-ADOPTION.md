@@ -22,7 +22,7 @@ Scoped Ruff, exact story-only diff-check, and base/archive product-test zero-dif
 passed. The warning is the inherited third-party passlib `crypt` deprecation.
 
 The exact two-path Git tree fingerprint is
-`5fddadd7ba66676c77dbf7ab101fde7fbdfe760e7e902c68f412d557c83ae5c4`.
+`f512a71301f972a9d45ba1af60ed53141fe54d2fc1e9de679d020f89bf707848`.
 The binary patch SHA-256 is
 `38272f88b06a49a3ec39b9ca985e83edc442b6f28ec39a8e2073ca9bc01df7c5`;
 the stable patch ID is `1bf313dac2b5b938603962c58cfe3244c92d3141`.
