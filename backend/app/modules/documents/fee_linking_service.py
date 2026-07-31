@@ -17,6 +17,14 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
+from app.modules.documents.application_fee_notice_contracts import (
+    ApplicationFeeNotice,
+    ApplicationFeeNoticeEvidence,
+    ApplicationFeeNoticeItem,
+    ApplicationFeeNoticePct,
+    ApplicationFeeNoticeSource,
+    ApplicationFeeNoticeSourceError,
+)
 from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
 from app.modules.documents.schemas import DocumentWizardFeeFinalRowIn
 from app.modules.documents.semantics import resolve_document_semantics
@@ -24,6 +32,9 @@ from app.modules.fees.models import FeeDraft, FeeItem
 from app.modules.fees.obligation_contracts import (
     FeeDifferenceReviewState,
     FeeDomain,
+    FeeEstimate,
+    FeeEstimateCandidate,
+    FeeEstimateStatus,
     FeeObligationLineInput,
     FeeSourceStatus,
     RecognizeFeeObligationCommand,
@@ -50,8 +61,45 @@ from app.modules.fees.official_rate_book import (
     get_layout_restoration_fee,
     get_patent_term_compensation_request_fee,
 )
+from app.modules.fees.pct_policy import (
+    ConfirmedPctEvidence,
+    EvaluatePctNationalStageFeePolicyCommand,
+    PctFeePolicyError,
+    evaluate_pct_national_stage_fee_policy,
+    validate_confirmed_pct_evidence_set,
+)
 
 logger = logging.getLogger(__name__)
+
+_APPLICATION_FEE_NOTICE_SCHEMA = "FPMS_APPLICATION_FEE_NOTICE_V1"
+_APPLICATION_FEE_NOTICE_FIELD = "ApplicationFeeNotice"
+_APPLICATION_FEE_NOTICE_ERROR = "APPLICATION_FEE_NOTICE_SOURCE_INVALID"
+_APPLICATION_FEE_CODES = frozenset(
+    {
+        "CN_INV_APPLICATION_FEE",
+        "CN_UM_APPLICATION_FEE",
+        "CN_DES_APPLICATION_FEE",
+        "CN_EXCESS_CLAIM_FEE",
+        "CN_SPEC_PAGE_31_300_FEE",
+        "CN_SPEC_PAGE_301_PLUS_FEE",
+        "CN_PUBLICATION_PRINT_FEE",
+        "CN_PRIORITY_CLAIM_FEE",
+    }
+)
+_PCT_APPLICATION_FEE_CODES = frozenset(
+    {
+        "CN_INV_APPLICATION_FEE",
+        "CN_UM_APPLICATION_FEE",
+        "CN_EXCESS_CLAIM_FEE",
+        "CN_SPEC_PAGE_31_300_FEE",
+        "CN_SPEC_PAGE_301_PLUS_FEE",
+    }
+)
+_PCT_APPLICATION_EVIDENCE = frozenset({"CNIPA_RO_RECEIPT", "CNIPA_ISR"})
+_PCT_EVIDENCE_TYPES = _PCT_APPLICATION_EVIDENCE | {"CNIPA_IPRP"}
+_APPLICATION_FEE_DUE_DATE_SOURCES = frozenset(
+    {"MANUAL_OFFICIAL_NOTICE", "IMPORTED_OFFICIAL_NOTICE"}
+)
 
 
 def _to_decimal(value) -> Decimal | None:
@@ -119,8 +167,16 @@ def maybe_create_fee_draft(
     semantics = resolve_document_semantics(template)
     if str(getattr(template, "code", "")).strip().upper() == "GRANT_NOTICE" or (
         semantics.catalog_status == "EXECUTABLE"
-        and semantics.execution_behavior == "GRANT_NOTICE"
-        and semantics.fee_trigger == "GRANT_FEE"
+        and (
+            (
+                semantics.execution_behavior == "GRANT_NOTICE"
+                and semantics.fee_trigger == "GRANT_FEE"
+            )
+            or (
+                semantics.execution_behavior == "APPLICATION_FEE_NOTICE"
+                and semantics.fee_trigger == "APPLICATION_FEE"
+            )
+        )
     ):
         return None
 
@@ -458,6 +514,444 @@ class RecognizeCompensationPeriodAnnuityObligationCommand:
 
 def _exact_text(value: object) -> bool:
     return type(value) is str and bool(value) and value == value.strip()
+
+
+def _application_fee_notice_invalid() -> None:
+    raise ApplicationFeeNoticeSourceError(
+        status_code=400,
+        code=_APPLICATION_FEE_NOTICE_ERROR,
+        details={"field": _APPLICATION_FEE_NOTICE_FIELD},
+    )
+
+
+def _application_fee_notice_conflict(field: str) -> None:
+    raise_business_error(
+        "APPLICATION_FEE_NOTICE_SOURCE_CONFLICT",
+        "Application-fee notice review authority conflicts with the frozen contract",
+        details={"field": field},
+        status_code=409,
+    )
+
+
+def _notice_amount(value: object) -> bool:
+    if type(value) is not Decimal or not value.is_finite() or value < 0:
+        return False
+    return value.as_tuple().exponent == -2
+
+
+def _canonical_notice_bytes(notice: ApplicationFeeNotice) -> bytes:
+    payload: dict[str, object] = {
+        "schema": notice.schema,
+        "currency": notice.currency,
+        "total_amount": format(notice.total_amount, ".2f"),
+        "items": [
+            {
+                "fee_code": item.fee_code,
+                "fee_name": item.fee_name,
+                "source_amount": format(item.source_amount, ".2f"),
+            }
+            for item in notice.items
+        ],
+    }
+    if notice.pct is not None:
+        payload["pct"] = {
+            "national_stage_entry_date": notice.pct.national_stage_entry_date.isoformat(),
+            "evidence": [
+                {
+                    "evidence_version_id": item.evidence_version_id,
+                    "source_document_id": item.source_document_id,
+                    "content_hash": item.content_hash,
+                    "lineage_key": item.lineage_key,
+                    "issuer": item.issuer,
+                    "document_type": item.document_type,
+                    "issued_on": item.issued_on.isoformat(),
+                    "role": item.role,
+                }
+                for item in notice.pct.evidence
+            ],
+        }
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _validated_application_fee_source(
+    source: object,
+) -> ApplicationFeeNoticeSource:
+    if type(source) is not ApplicationFeeNoticeSource:
+        _application_fee_notice_invalid()
+    assert isinstance(source, ApplicationFeeNoticeSource)
+    if (
+        not _exact_text(source.document_id)
+        or not _exact_text(source.case_id)
+        or type(source.source_date) is not date
+        or type(source.due_date) is not date
+        or source.due_date_source not in _APPLICATION_FEE_DUE_DATE_SOURCES
+        or source.due_date_status != "CONFIRMED"
+        or type(source.notice) is not ApplicationFeeNotice
+        or type(source.canonical_bytes) is not bytes
+        or type(source.canonical_sha256) is not str
+    ):
+        _application_fee_notice_invalid()
+
+    notice = source.notice
+    if (
+        notice.schema != _APPLICATION_FEE_NOTICE_SCHEMA
+        or notice.currency != "CNY"
+        or not _notice_amount(notice.total_amount)
+        or type(notice.items) is not tuple
+        or not notice.items
+    ):
+        _application_fee_notice_invalid()
+
+    seen_codes: set[str] = set()
+    total = Decimal("0.00")
+    for item in notice.items:
+        if (
+            type(item) is not ApplicationFeeNoticeItem
+            or item.fee_code not in _APPLICATION_FEE_CODES
+            or item.fee_code in seen_codes
+            or not _exact_text(item.fee_name)
+            or not _notice_amount(item.source_amount)
+        ):
+            _application_fee_notice_invalid()
+        seen_codes.add(item.fee_code)
+        total += item.source_amount
+    if total != notice.total_amount:
+        _application_fee_notice_invalid()
+
+    if notice.pct is not None and (
+        type(notice.pct) is not ApplicationFeeNoticePct
+        or type(notice.pct.national_stage_entry_date) is not date
+        or type(notice.pct.evidence) is not tuple
+        or not notice.pct.evidence
+    ):
+        _application_fee_notice_invalid()
+    try:
+        canonical_bytes = _canonical_notice_bytes(notice)
+    except (AttributeError, TypeError, ValueError):
+        _application_fee_notice_invalid()
+    if (
+        source.canonical_bytes != canonical_bytes
+        or source.canonical_sha256 != sha256(canonical_bytes).hexdigest()
+    ):
+        _application_fee_notice_invalid()
+    return source
+
+
+def _validated_preview_by_code(
+    source: ApplicationFeeNoticeSource,
+    preview: object,
+) -> dict[str, FeeObligationLineInput]:
+    if (
+        type(preview) is not FeeEstimate
+        or preview.case_id != source.case_id
+        or preview.estimate_status is not FeeEstimateStatus.ESTIMATE
+        or preview.currency != "CNY"
+        or preview.trigger_context.trigger != "APPLICATION_FEE_NOTICE"
+        or preview.trigger_context.source_document_id != source.document_id
+        or type(preview.candidates) is not tuple
+    ):
+        _application_fee_notice_invalid()
+
+    by_code: dict[str, FeeObligationLineInput] = {}
+    for candidate in preview.candidates:
+        if (
+            type(candidate) is not FeeEstimateCandidate
+            or candidate.source.status is not FeeSourceStatus.VERIFIED
+            or type(candidate.line) is not FeeObligationLineInput
+            or candidate.line.fee_code in by_code
+            or candidate.line.fee_year_key != 0
+            or type(candidate.line.official_full_amount) is not Decimal
+            or not candidate.line.official_full_amount.is_finite()
+            or candidate.line.official_full_amount <= 0
+            or type(candidate.line.reduction_ratio) is not Decimal
+            or not candidate.line.reduction_ratio.is_finite()
+            or not Decimal("0") <= candidate.line.reduction_ratio <= Decimal("1")
+            or type(candidate.line.payable_amount) is not Decimal
+            or not candidate.line.payable_amount.is_finite()
+            or candidate.line.payable_amount < 0
+        ):
+            _application_fee_notice_invalid()
+        by_code[candidate.line.fee_code] = candidate.line
+
+    if set(by_code) != {item.fee_code for item in source.notice.items}:
+        _application_fee_notice_invalid()
+    return by_code
+
+
+def _validated_pct_evidence(
+    source: ApplicationFeeNoticeSource,
+    confirmed: object,
+) -> tuple[ConfirmedPctEvidence, ...]:
+    if type(confirmed) is not tuple or any(
+        type(item) is not ConfirmedPctEvidence for item in confirmed
+    ):
+        _application_fee_notice_invalid()
+    assert isinstance(confirmed, tuple)
+
+    pct = source.notice.pct
+    if pct is None:
+        if confirmed:
+            _application_fee_notice_invalid()
+        return ()
+
+    references: dict[str, ApplicationFeeNoticeEvidence] = {}
+    for reference in pct.evidence:
+        if (
+            type(reference) is not ApplicationFeeNoticeEvidence
+            or not _exact_text(reference.evidence_version_id)
+            or not _exact_text(reference.source_document_id)
+            or type(reference.content_hash) is not str
+            or fullmatch(_CANONICAL_HASH_PATTERN, reference.content_hash) is None
+            or not _exact_text(reference.lineage_key)
+            or reference.issuer != "CNIPA"
+            or reference.document_type not in _PCT_EVIDENCE_TYPES
+            or type(reference.issued_on) is not date
+            or reference.issued_on > pct.national_stage_entry_date
+            or reference.role != "OFFICIAL_FINAL_PDF"
+            or reference.evidence_version_id in references
+        ):
+            _application_fee_notice_invalid()
+        references[reference.evidence_version_id] = reference
+
+    try:
+        validate_confirmed_pct_evidence_set(
+            source.case_id,
+            pct.national_stage_entry_date,
+            confirmed,
+        )
+    except PctFeePolicyError:
+        _application_fee_notice_invalid()
+
+    confirmed_by_id: dict[str, ConfirmedPctEvidence] = {}
+    for item in confirmed:
+        if item.evidence_version_id in confirmed_by_id or item.case_id != source.case_id:
+            _application_fee_notice_invalid()
+        confirmed_by_id[item.evidence_version_id] = item
+    if set(confirmed_by_id) != set(references):
+        _application_fee_notice_invalid()
+
+    for evidence_version_id, reference in references.items():
+        item = confirmed_by_id[evidence_version_id]
+        if (
+            item.source_document_id != reference.source_document_id
+            or item.content_hash != reference.content_hash
+            or item.lineage_key != reference.lineage_key
+            or item.issuer != reference.issuer
+            or item.document_type != reference.document_type
+            or item.issued_on != reference.issued_on
+            or item.role != reference.role
+        ):
+            _application_fee_notice_invalid()
+    return confirmed
+
+
+def _pct_application_exemption_applies(source: ApplicationFeeNoticeSource) -> bool:
+    pct = source.notice.pct
+    if pct is None or len(pct.evidence) != 2:
+        return False
+    return {item.document_type for item in pct.evidence} == _PCT_APPLICATION_EVIDENCE
+
+
+def _validated_application_fee_review(
+    *,
+    transaction: Session,
+    source: ApplicationFeeNoticeSource,
+    review_activity_id: str,
+    reviewed_evidence_version_id: str,
+    reviewer_id: str,
+) -> None:
+    if not isinstance(transaction, Session):
+        _application_fee_notice_conflict("transaction")
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _application_fee_notice_conflict("transaction")
+
+    with transaction.no_autoflush:
+        activity = transaction.get(CaseActivityEvent, review_activity_id)
+        evidence = transaction.get(
+            DocumentEvidenceVersion,
+            reviewed_evidence_version_id,
+        )
+        if activity is None or evidence is None:
+            _application_fee_notice_conflict("review_authority")
+        assert isinstance(activity, CaseActivityEvent)
+        assert isinstance(evidence, DocumentEvidenceVersion)
+        document = transaction.get(Document, evidence.document_id)
+        if document is None:
+            _application_fee_notice_conflict("source_document")
+        assert isinstance(document, Document)
+
+        if (
+            evidence.case_id != source.case_id
+            or evidence.document_id != source.document_id
+            or document.id != source.document_id
+            or document.case_id != source.case_id
+            or document.direction != "IN"
+            or evidence.role != "OFFICIAL_FINAL_PDF"
+            or evidence.state != "FINAL"
+            or evidence.review_state != "APPROVED"
+            or evidence.current_identity_key != f"{source.case_id}|{evidence.lineage_key}"
+            or not _exact_text(evidence.lineage_key)
+            or not _exact_text(evidence.creator_id)
+            or not _exact_text(evidence.reviewer_id)
+            or evidence.creator_id == evidence.reviewer_id
+            or evidence.reviewer_id != reviewer_id
+            or type(evidence.reviewed_at) is not datetime
+            or evidence.reviewed_at.tzinfo is not None
+            or type(evidence.content_hash) is not str
+            or fullmatch(_CANONICAL_HASH_PATTERN, evidence.content_hash) is None
+        ):
+            _application_fee_notice_conflict("reviewed_evidence")
+
+        if (
+            activity.case_id != source.case_id
+            or activity.activity_type != "DOCUMENT_EVIDENCE_REVIEW_DECIDED"
+            or activity.lane != "DOCUMENT"
+            or activity.confirmation_status != "CONFIRMED"
+            or activity.source_activity_id is not None
+            or activity.supersedes_event_id is not None
+            or activity.old_business_stage != activity.new_business_stage
+            or activity.old_official_procedure_stage != activity.new_official_procedure_stage
+            or activity.old_legal_status != activity.new_legal_status
+            or type(activity.effective_at) is not datetime
+            or activity.effective_at.tzinfo is not None
+            or activity.occurred_at != activity.effective_at
+            or activity.actor_id != reviewer_id
+            or activity.reviewer_id != reviewer_id
+            or evidence.reviewed_at != activity.effective_at
+        ):
+            _application_fee_notice_conflict("review_activity")
+
+        expected_payload = {
+            "creator_id": evidence.creator_id,
+            "decision": "APPROVE",
+            "evidence_version_id": evidence.id,
+            "previous_review_state": "PENDING",
+            "review_state": "APPROVED",
+            "reviewer_id": reviewer_id,
+        }
+        try:
+            payload = json.loads(activity.payload_json)
+        except (RecursionError, TypeError, ValueError):
+            _application_fee_notice_conflict("review_activity_payload")
+        if payload != expected_payload or activity.payload_json != _canonical_json(payload):
+            _application_fee_notice_conflict("review_activity_payload")
+
+        references = tuple(
+            transaction.scalars(
+                select(CaseActivityEventEvidence).where(
+                    CaseActivityEventEvidence.activity_id == activity.id
+                )
+            )
+        )
+        if len(references) != 1:
+            _application_fee_notice_conflict("review_activity_reference")
+        reference = references[0]
+        if (
+            reference.case_id != source.case_id
+            or reference.evidence_kind != "DOCUMENT_EVIDENCE_VERSION"
+            or reference.object_type != "DocumentEvidenceVersion"
+            or reference.object_id != evidence.id
+            or reference.content_hash != evidence.content_hash
+            or reference.captured_at != activity.effective_at
+        ):
+            _application_fee_notice_conflict("review_activity_reference")
+
+
+def recognize_application_fee_notice_obligation(
+    *,
+    transaction: Session,
+    source: ApplicationFeeNoticeSource,
+    review_activity_id: str,
+    reviewed_evidence_version_id: str,
+    reviewer_id: str,
+    official_preview: FeeEstimate,
+    confirmed_pct_evidence: tuple[ConfirmedPctEvidence, ...] = (),
+) -> RecognizeFeeObligationResult:
+    source = _validated_application_fee_source(source)
+    if (
+        not _exact_text(review_activity_id)
+        or not _exact_text(reviewed_evidence_version_id)
+        or not _exact_text(reviewer_id)
+    ):
+        _application_fee_notice_invalid()
+    _validated_application_fee_review(
+        transaction=transaction,
+        source=source,
+        review_activity_id=review_activity_id,
+        reviewed_evidence_version_id=reviewed_evidence_version_id,
+        reviewer_id=reviewer_id,
+    )
+    preview_by_code = _validated_preview_by_code(source, official_preview)
+    pct_evidence = _validated_pct_evidence(source, confirmed_pct_evidence)
+    apply_pct = _pct_application_exemption_applies(source)
+
+    lines: list[FeeObligationLineInput] = []
+    for item in source.notice.items:
+        preview_line = preview_by_code[item.fee_code]
+        official_full_amount = preview_line.official_full_amount
+        reduction_ratio = preview_line.reduction_ratio
+        official_payable_amount = preview_line.payable_amount
+        if apply_pct and item.fee_code in _PCT_APPLICATION_FEE_CODES:
+            assert source.notice.pct is not None
+            assert official_full_amount is not None
+            policy = evaluate_pct_national_stage_fee_policy(
+                EvaluatePctNationalStageFeePolicyCommand(
+                    case_id=source.case_id,
+                    fee_code=item.fee_code,
+                    full_amount=official_full_amount,
+                    effective_on=source.notice.pct.national_stage_entry_date,
+                    evidence=pct_evidence,
+                    reduction_context=None,
+                )
+            )
+            official_full_amount = policy.full_amount
+            reduction_ratio = policy.reduction_ratio
+            official_payable_amount = policy.payable_amount
+
+        lines.append(
+            FeeObligationLineInput(
+                fee_code=item.fee_code,
+                fee_name=item.fee_name,
+                fee_year_key=0,
+                official_full_amount=official_full_amount,
+                reduction_ratio=reduction_ratio,
+                payable_amount=item.source_amount,
+                source_amount=item.source_amount,
+                source_date=source.source_date,
+                difference_review_state=(
+                    FeeDifferenceReviewState.MATCHED
+                    if official_payable_amount == item.source_amount
+                    else FeeDifferenceReviewState.REVIEW_REQUIRED
+                ),
+            )
+        )
+
+    return recognize_obligation(
+        RecognizeFeeObligationCommand(
+            case_id=source.case_id,
+            source_activity_id=review_activity_id,
+            source_document_id=source.document_id,
+            fee_domain=FeeDomain.GOV,
+            obligation_type="APPLICATION_FEE",
+            due_date=source.due_date,
+            currency="CNY",
+            source_status=FeeSourceStatus.VERIFIED,
+            lines=tuple(lines),
+            actor_id=reviewer_id,
+            idempotency_key=(
+                f"application-fee-notice:{reviewed_evidence_version_id}:{source.due_date_source}"
+            ),
+            supersedes_obligation_id=None,
+            supersede_reason=None,
+        ),
+        transaction,
+    )
 
 
 def _ic_layout_invalid(field: str) -> None:

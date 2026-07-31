@@ -7,7 +7,12 @@ from typing import Any, Literal
 from app.core.errors import BusinessError
 
 CatalogStatus = Literal["EXECUTABLE", "REFERENCE_ONLY"]
-ExecutionBehavior = Literal["ACCEPTANCE_NOTICE", "OA_REPLY", "GRANT_NOTICE"]
+ExecutionBehavior = Literal[
+    "ACCEPTANCE_NOTICE",
+    "APPLICATION_FEE_NOTICE",
+    "OA_REPLY",
+    "GRANT_NOTICE",
+]
 
 _CATALOG_KIND = "OFFICIAL_NOTICE"
 _EXECUTABLE = "EXECUTABLE"
@@ -43,7 +48,7 @@ class ResolvedDocumentSemantics:
 class _ExecutionContract:
     behavior: ExecutionBehavior
     canonical_code: str
-    status_effect: str
+    status_effect: str | None
     task_template_code: str | None
     requires_reply: bool
     completion_event: str | None = None
@@ -67,6 +72,15 @@ _GRANT = _ExecutionContract(
     requires_reply=False,
     deadline_source_policy="EXPLICIT_OFFICIAL_DUE_REQUIRED",
     fee_trigger="GRANT_FEE",
+)
+_APPLICATION_FEE_NOTICE = _ExecutionContract(
+    behavior="APPLICATION_FEE_NOTICE",
+    canonical_code="APPLICATION_FEE_NOTICE",
+    status_effect=None,
+    task_template_code=None,
+    requires_reply=False,
+    deadline_source_policy="EXPLICIT_OFFICIAL_DUE_REQUIRED",
+    fee_trigger="APPLICATION_FEE",
 )
 _OA_BY_STATUS = {
     status: _ExecutionContract(
@@ -448,6 +462,8 @@ def _resolve_declared_metadata(
         contract = _OA_BY_STATUS[status_effect]
     elif behavior == "GRANT_NOTICE":
         contract = _GRANT
+    elif behavior == "APPLICATION_FEE_NOTICE":
+        contract = _APPLICATION_FEE_NOTICE
     elif behavior == "ACCEPTANCE_NOTICE":
         contract = _ACCEPTANCE
     else:
