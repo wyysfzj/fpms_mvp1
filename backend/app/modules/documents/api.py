@@ -37,6 +37,46 @@ from app.modules.documents.export_excel import (
 )
 from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.fee_linking_service import maybe_create_fee_draft
+from app.modules.documents.lifecycle_evidence_adapters import (
+    ApplicationAbandonmentIn,
+    ApplicationRejectionIn,
+    ApplicationRestorationIn,
+    ApplicationWithdrawalEvidenceResult,
+    ApplicationWithdrawalIn,
+    PassPreliminaryExaminationCommand,
+    PassPreliminaryExaminationResult,
+    PreliminaryExaminationPassIn,
+    PreliminaryExaminationStartIn,
+    PublicationNoticeIn,
+    RecordApplicationAbandonmentCommand,
+    RecordApplicationRejectionCommand,
+    RecordApplicationRestorationCommand,
+    RecordApplicationWithdrawalCommand,
+    RecordPublicationNoticeCommand,
+    RecordPublicationNoticeResult,
+    RecordRectificationNoticeCommand,
+    RecordRectificationNoticeResult,
+    RectificationNoticeIn,
+    ReexaminationStartIn,
+    StartPreliminaryExaminationCommand,
+    StartPreliminaryExaminationResult,
+    StartReexaminationCommand,
+    StartReexaminationResult,
+    StartSubstantiveExaminationCommand,
+    StartSubstantiveExaminationResult,
+    SubstantiveExaminationStartIn,
+    TerminalLifecycleEvidenceResult,
+    pass_preliminary_examination_from_evidence,
+    record_application_abandonment_from_evidence,
+    record_application_rejection_from_evidence,
+    record_application_restoration_from_evidence,
+    record_application_withdrawal_from_evidence,
+    record_publication_notice_from_evidence,
+    record_rectification_notice_from_evidence,
+    start_preliminary_examination_from_evidence,
+    start_reexamination_from_evidence,
+    start_substantive_examination_from_evidence,
+)
 from app.modules.documents.models import DocTemplate
 from app.modules.documents.schemas import (
     DocAttachmentOut,
@@ -282,6 +322,324 @@ def update_doc_template_endpoint(
 # ---------------------------------------------------------------------------
 # Document endpoints
 # ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/preliminary-start",
+    status_code=status.HTTP_200_OK,
+    response_model=StartPreliminaryExaminationResult,
+)
+def start_document_preliminary_examination(
+    document_id: str,
+    payload: PreliminaryExaminationStartIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> StartPreliminaryExaminationResult:
+    try:
+        result = start_preliminary_examination_from_evidence(
+            StartPreliminaryExaminationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/preliminary-pass",
+    status_code=status.HTTP_200_OK,
+    response_model=PassPreliminaryExaminationResult,
+)
+def pass_document_preliminary_examination(
+    document_id: str,
+    payload: PreliminaryExaminationPassIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> PassPreliminaryExaminationResult:
+    try:
+        result = pass_preliminary_examination_from_evidence(
+            PassPreliminaryExaminationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/rectification-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=RecordRectificationNoticeResult,
+)
+def record_document_rectification_notice(
+    document_id: str,
+    payload: RectificationNoticeIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> RecordRectificationNoticeResult:
+    try:
+        result = record_rectification_notice_from_evidence(
+            RecordRectificationNoticeCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/publication-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=RecordPublicationNoticeResult,
+)
+def record_document_publication_notice(
+    document_id: str,
+    payload: PublicationNoticeIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> RecordPublicationNoticeResult:
+    try:
+        result = record_publication_notice_from_evidence(
+            RecordPublicationNoticeCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/substantive-start",
+    status_code=status.HTTP_200_OK,
+    response_model=StartSubstantiveExaminationResult,
+)
+def start_document_substantive_examination(
+    document_id: str,
+    payload: SubstantiveExaminationStartIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> StartSubstantiveExaminationResult:
+    try:
+        result = start_substantive_examination_from_evidence(
+            StartSubstantiveExaminationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/reexamination-start",
+    status_code=status.HTTP_200_OK,
+    response_model=StartReexaminationResult,
+)
+def start_document_reexamination(
+    document_id: str,
+    payload: ReexaminationStartIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> StartReexaminationResult:
+    try:
+        result = start_reexamination_from_evidence(
+            StartReexaminationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/application-rejection",
+    status_code=status.HTTP_200_OK,
+    response_model=TerminalLifecycleEvidenceResult,
+)
+def record_document_application_rejection(
+    document_id: str,
+    payload: ApplicationRejectionIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> TerminalLifecycleEvidenceResult:
+    try:
+        result = record_application_rejection_from_evidence(
+            RecordApplicationRejectionCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                evidence_kind=payload.evidence_kind,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/application-withdrawal",
+    status_code=status.HTTP_200_OK,
+    response_model=ApplicationWithdrawalEvidenceResult,
+)
+def record_document_application_withdrawal(
+    document_id: str,
+    payload: ApplicationWithdrawalIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ApplicationWithdrawalEvidenceResult:
+    try:
+        result = record_application_withdrawal_from_evidence(
+            RecordApplicationWithdrawalCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                confirmation_evidence_version_id=(
+                    payload.confirmation_evidence_version_id
+                ),
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/application-abandonment",
+    status_code=status.HTTP_200_OK,
+    response_model=TerminalLifecycleEvidenceResult,
+)
+def record_document_application_abandonment(
+    document_id: str,
+    payload: ApplicationAbandonmentIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> TerminalLifecycleEvidenceResult:
+    try:
+        result = record_application_abandonment_from_evidence(
+            RecordApplicationAbandonmentCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                evidence_kind=payload.evidence_kind,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/application-restoration",
+    status_code=status.HTTP_200_OK,
+    response_model=TerminalLifecycleEvidenceResult,
+)
+def record_document_application_restoration(
+    document_id: str,
+    payload: ApplicationRestorationIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> TerminalLifecycleEvidenceResult:
+    try:
+        result = record_application_restoration_from_evidence(
+            RecordApplicationRestorationCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                restored_official_procedure_stage=(
+                    payload.restored_official_procedure_stage
+                ),
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
 
 
 @router.get("/documents", response_model=DocumentListOut, summary="List documents")
