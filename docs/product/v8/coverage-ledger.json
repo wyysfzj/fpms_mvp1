@@ -933,8 +933,8 @@
     {
       "catalog_id": "FPMS-V8-GENERIC-FEE-DRAFT-OBLIGATION-API-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GENERIC-FEE-DRAFT-OBLIGATION-API-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2860,7 +2860,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "bd8590eed6ef2b0636ef54035501a61c75f7fbd9",
-        "446d295fd860bda3bfee2466da0a222f7aa8ff6b"
+        "446d295fd860bda3bfee2466da0a222f7aa8ff6b",
+        "d494e95"
       ],
       "paths": [
         "backend/app/modules/fees/api.py",
@@ -2868,11 +2869,12 @@
         "backend/tests/test_v8_fee_reduction_approval_create_api.py",
         "backend/tests/test_v8_fee_reduction_approval_list_api.py"
       ],
-      "tree_sha256": "f62c7cd3dff5a1972c2b80b7a29ca7e894ea13f66737243ec395e0577c5b0dc3",
+      "tree_sha256": "cfe9091071bbdf1facc584b7a80ecba556a65151c3b0c386668239551280064f",
       "tests": [
         "pytest -q tests/test_v8_fee_reduction_approval_create_api.py tests/test_v8_fee_reduction_approval_list_api.py from backend cwd (39 passed)",
         "independent real SQLite malformed evidence identity probe returned deterministic 409",
-        "independent fee-obligation HTTP/FE successor tranche included both approval API files (168 passed)"
+        "independent fee-obligation HTTP/FE successor tranche included both approval API files (168 passed)",
+        "independent row116 successor attestation confirmed approval API routes and permissions remain byte-identical"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
@@ -2972,7 +2974,8 @@
       "story_id": "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "446d295fd860bda3bfee2466da0a222f7aa8ff6b"
+        "446d295fd860bda3bfee2466da0a222f7aa8ff6b",
+        "d494e95"
       ],
       "paths": [
         "backend/app/modules/fees/api.py",
@@ -2984,11 +2987,12 @@
         "frontend/src/api/fees.ts",
         "frontend/src/api/fees.types.ts"
       ],
-      "tree_sha256": "cd9a24ee83d1a53ef8d01e182ebf9b6cd98ce1d0da19a928fb4568fb10b4df9b",
+      "tree_sha256": "0f7e1ae7387e7b0bf92169afab543e3d58ae6d0b04098dd61e5135e1304e7e20",
       "tests": [
         "pytest -q instruction/detail HTTP, instruction/detail service and fee-reduction approval create/list files from backend cwd (168 passed)",
         "strict isolated TypeScript probes and exact-file ESLint passed",
-        "playwright test exact three CaseEdit fee-reduction/status specs --project=chromium --workers=1 (5 passed)"
+        "playwright test exact three CaseEdit fee-reduction/status specs --project=chromium --workers=1 (5 passed)",
+        "independent row116 successor attestation confirmed obligation routes, permissions and frontend paths remain unchanged"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
@@ -3144,7 +3148,8 @@
       "story_id": "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "20ac8b44495442861aae3acffbcbe9082769a3c3"
+        "20ac8b44495442861aae3acffbcbe9082769a3c3",
+        "d494e95"
       ],
       "paths": [
         "backend/app/modules/fees/api.py",
@@ -3154,11 +3159,12 @@
         "frontend/src/api/fees.ts",
         "frontend/src/api/fees.types.ts"
       ],
-      "tree_sha256": "dc295f65a708cede08802d01c4ef0bb263cca057611726b4da5fbeccfe6231f6",
+      "tree_sha256": "e2ae32056b6185e37611e4b277cd525465859cad477e7e26f4d7563f264e1fea",
       "tests": [
         "pytest -q tests/test_v8_fee_estimate_preview_api.py from backend cwd (40 passed)",
         "pytest -q exact two-file row103/104 predecessor tranche from backend cwd (101 passed)",
-        "isolated TypeScript contract, exact-file ESLint, scoped Ruff and exact diff-check passed"
+        "isolated TypeScript contract, exact-file ESLint, scoped Ruff and exact diff-check passed",
+        "independent row116 successor attestation confirmed preview routes, schemas and frontend paths remain unchanged"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
@@ -3607,6 +3613,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-DOCUMENT-EVIDENCE-IMPORT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-DOCUMENT-EVIDENCE-IMPORT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GENERIC-FEE-DRAFT-OBLIGATION-API-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "d494e95"
+      ],
+      "paths": [
+        "backend/app/modules/fees/api.py",
+        "backend/app/modules/fees/schemas.py",
+        "backend/tests/test_v8_generic_fee_draft_obligation_api.py"
+      ],
+      "tree_sha256": "cc345e2d6801574f39ee0d4ff00ce070f7a9e146fa4547778cbd7a979b3e9554",
+      "tests": [
+        "pytest -q tests/test_v8_generic_fee_draft_obligation_api.py from backend cwd (9 passed)",
+        "scoped Ruff and exact three-path diff check passed",
+        "independent exact-candidate review approved P0/P1/P2 0/0/0 and successor-attested three shared fee stories"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-OBLIGATION-API-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-OBLIGATION-API-CURRENT-ADOPTION.md"
     }
   ]
 }
