@@ -3,7 +3,9 @@
 - Risk: `PROTECTED`
 - Catalog ID: `FPMS-V8-PCT-FEE-POLICY-20260712-01` (ordinal 135)
 - Runbook: `P0-prereq-heavy-story`
-- Integration base: `60c35213c67218ff4c2f1664bbdc832e3f976a6c`
+- Initial implementation base: `60c35213c67218ff4c2f1664bbdc832e3f976a6c`
+- Current integration parent for final review:
+  `dfc312b4fde48872ebb11b940167fa0cbc0f8bb2`
 - Archive comparison anchor: `6b2ef89da447353380b99853168d4d38aaf9210a`
 - Status: implemented and locally verified; independent acceptance remains required.
 
