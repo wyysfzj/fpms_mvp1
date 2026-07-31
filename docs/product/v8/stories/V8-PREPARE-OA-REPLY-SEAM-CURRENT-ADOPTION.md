@@ -75,12 +75,14 @@ does not repair or select among contradictory carriers.
 
 - `docs/product/v8/stories/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md`
 
-The workflow service is byte-identical to archive ref
-`6b2ef89da447353380b99853168d4d38aaf9210a`. The focused row-48 test differs from its
-archive blob by one successor-only fixture line: its full-reply parent is explicitly
-`DRAFT`, as required by the current independently accepted row-73 carrier policy. The two
-public-contract files differ from their current base by only the archive's matching
-`OA_REPLY_PREPARATION` lines.
+The initial workflow adoption was byte-identical to archive ref
+`6b2ef89da447353380b99853168d4d38aaf9210a`. Independent review then required the
+preparation and replay derivation queries to load complete exact-parent/type and
+exact-child/type candidate sets before explicit same-case and cardinality validation.
+The focused row-48 test retains its successor-only `DRAFT` full-reply parent alignment
+required by the current independently accepted row-73 carrier policy and adds the matching
+cross-case preparation/replay tracers. The two public-contract files differ from their
+current base by only the archive's matching `OA_REPLY_PREPARATION` lines.
 
 ## Historical RED and fresh verification
 
@@ -108,16 +110,33 @@ the declared regression tranche, and no ungranted rerun occurred. The minimum te
 alignment above preserves independent approval while making the fixture satisfy the
 current parent-state authority.
 
-After the one-line test-only alignment, the fresh controller-granted verification
+After the one-line test-only alignment, the initial fresh controller-granted verification
 produced:
 
 - focused row-48 GREEN: `36 passed, 1 warning` in `9.93s`; and
 - the exact six-file public-contract, row-47, allowlist, D4-08, row-72 and row-73
   regression tranche: `269 passed, 1 warning` in `66.44s`.
 
-Both warnings are the inherited passlib `crypt` deprecation. No other pytest command or
-rerun occurred, and the controller's SQLite lane was released immediately after the
-declared tranche.
+The independent-review correction then preserved each targeted tracer transition:
+
+- fresh cross-case source preparation: expected RED `DID NOT RAISE`, then `1 passed`;
+- replay cross-case exact-source/exact-reply edges: expected RED `2 failed`, then
+  `2 passed`;
+- derivation-only correction focused row-48 GREEN: `39 passed, 1 warning` in `10.55s`; and
+- unchanged exact six-file regression tranche: `269 passed, 1 warning` in `66.41s`.
+
+The closure-version review extension then preserved:
+
+- fresh cross-case same-lineage version: expected RED `DID NOT RAISE`, then `1 passed`;
+- replay with same-case and cross-case same-lineage versions: immediate `1 passed`
+  because the same minimum complete-lineage query fix covers both branches; no second RED
+  was manufactured;
+- final updated focused row-48 GREEN: `41 passed, 1 warning` in `10.55s`; and
+- final unchanged exact six-file regression tranche: `269 passed, 1 warning` in `64.39s`.
+
+All warnings are the inherited passlib `crypt` deprecation. No historical RED or broad
+pytest command was rerun, and the controller's SQLite lane was released immediately after
+each declared tranche.
 
 ## Non-goals and rollback
 

@@ -944,10 +944,12 @@ def _seed_unrelated_version(
     *,
     offset: int,
     lineage_key: str,
+    case_id: str | None = None,
 ) -> DocumentEvidenceVersion:
+    version_case_id = case_id or fixture["case"].id
     document = Document(
         id=_id(offset),
-        case_id=fixture["case"].id,
+        case_id=version_case_id,
         direction="OUT",
         title=f"unrelated-{offset}",
     )
@@ -963,7 +965,7 @@ def _seed_unrelated_version(
     version = _seed_version(
         transaction,
         version_id=_id(offset + 2),
-        case_id=fixture["case"].id,
+        case_id=version_case_id,
         document_id=document.id,
         attachment_id=attachment.id,
         lineage_key=lineage_key,
@@ -1012,6 +1014,114 @@ def test_fresh_requires_empty_complete_source_parent_preparation_set(
 
         assert _durable_counts(transaction) == before
         assert fixture["package"].reply_document_id is None
+
+
+def test_fresh_rejects_cross_case_persisted_source_preparation_derivation(
+    session_factory: sessionmaker[Session],
+) -> None:
+    workflow = _workflow()
+    with session_factory() as transaction:
+        fixture = _seed_fixture(transaction)
+        other_case = Case(
+            id=_id(2),
+            case_no="V8-PREPARE-OA-REPLY-OTHER",
+            status="OA1",
+        )
+        transaction.add(other_case)
+        other_child = _seed_unrelated_version(
+            transaction,
+            fixture,
+            offset=150,
+            lineage_key="unrelated:cross-case-child",
+        )
+        transaction.add(
+            DocumentEvidenceDerivation(
+                id=_id(160),
+                case_id=other_case.id,
+                parent_evidence_version_id=fixture["source_version"].id,
+                child_evidence_version_id=other_child.id,
+                derivation_type=PREPARATION_TYPE,
+                actor_id=_id(700),
+                derived_at=REVIEWED_AT,
+                source_snapshot="{}",
+            )
+        )
+        transaction.commit()
+        before = _durable_counts(transaction)
+
+        _assert_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            409,
+            lambda: workflow.prepare_oa_reply(_command(fixture), transaction),
+        )
+
+        assert _durable_counts(transaction) == before
+        assert fixture["package"].reply_document_id is None
+
+
+def test_fresh_rejects_cross_case_persisted_reply_lineage_version(
+    session_factory: sessionmaker[Session],
+) -> None:
+    workflow = _workflow()
+    with session_factory() as transaction:
+        fixture = _seed_fixture(transaction)
+        other_case = Case(
+            id=_id(2),
+            case_no="V8-PREPARE-OA-REPLY-OTHER",
+            status="OA1",
+        )
+        transaction.add(other_case)
+        lineage_key = f"oa-reply:{fixture['source'].id}"
+        _seed_unrelated_version(
+            transaction,
+            fixture,
+            offset=150,
+            lineage_key=lineage_key,
+            case_id=other_case.id,
+        )
+        transaction.commit()
+        before = _durable_counts(transaction)
+
+        _assert_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            409,
+            lambda: workflow.prepare_oa_reply(_command(fixture), transaction),
+        )
+
+        assert _durable_counts(transaction) == before
+        assert fixture["package"].reply_document_id is None
+
+
+def test_replay_rejects_same_and_cross_case_reply_lineage_versions(
+    session_factory: sessionmaker[Session],
+) -> None:
+    workflow = _workflow()
+    with session_factory() as transaction:
+        fixture = _seed_fixture(transaction)
+        workflow.prepare_oa_reply(_command(fixture), transaction)
+        other_case = Case(
+            id=_id(2),
+            case_no="V8-PREPARE-OA-REPLY-OTHER",
+            status="OA1",
+        )
+        transaction.add(other_case)
+        _seed_unrelated_version(
+            transaction,
+            fixture,
+            offset=150,
+            lineage_key=f"oa-reply:{fixture['source'].id}",
+            case_id=other_case.id,
+        )
+        transaction.flush()
+        before = _durable_counts(transaction)
+
+        _assert_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            409,
+            lambda: workflow.prepare_oa_reply(_command(fixture), transaction),
+        )
+
+        assert _durable_counts(transaction) == before
 
 
 def test_reply_lineage_cardinality_uses_all_versions_not_document_or_role_subset(
@@ -1138,6 +1248,56 @@ def test_exact_replay_reuses_same_derivation_and_extra_same_source_edge_conflict
             lambda: workflow.prepare_oa_reply(_command(fixture), transaction),
         )
         assert _durable_counts(transaction) == counts_with_extra
+
+
+@pytest.mark.parametrize("carrier", ("source", "reply"))
+def test_replay_rejects_cross_case_preparation_edge(
+    session_factory: sessionmaker[Session],
+    carrier: str,
+) -> None:
+    workflow = _workflow()
+    with session_factory() as transaction:
+        fixture = _seed_fixture(transaction)
+        first = workflow.prepare_oa_reply(_command(fixture), transaction)
+        original = _preparation_derivations(transaction)[0]
+        other_case = Case(
+            id=_id(2),
+            case_no="V8-PREPARE-OA-REPLY-OTHER",
+            status="OA1",
+        )
+        transaction.add(other_case)
+        other_version = _seed_unrelated_version(
+            transaction,
+            fixture,
+            offset=150,
+            lineage_key=f"unrelated:cross-case-{carrier}",
+        )
+        transaction.add(
+            DocumentEvidenceDerivation(
+                id=_id(160),
+                case_id=other_case.id,
+                parent_evidence_version_id=(
+                    fixture["source_version"].id if carrier == "source" else other_version.id
+                ),
+                child_evidence_version_id=(
+                    other_version.id if carrier == "source" else first.reply_evidence_version_id
+                ),
+                derivation_type=PREPARATION_TYPE,
+                actor_id=_id(700),
+                derived_at=original.derived_at,
+                source_snapshot=original.source_snapshot,
+            )
+        )
+        transaction.flush()
+        before = _durable_counts(transaction)
+
+        _assert_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            409,
+            lambda: workflow.prepare_oa_reply(_command(fixture), transaction),
+        )
+
+        assert _durable_counts(transaction) == before
 
 
 @pytest.mark.parametrize(

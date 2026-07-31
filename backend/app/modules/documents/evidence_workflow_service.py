@@ -765,10 +765,11 @@ def prepare_oa_reply(
     lineage_key = f"oa-reply:{source.id}"
     versions = transaction.scalars(
         select(DocumentEvidenceVersion).where(
-            DocumentEvidenceVersion.case_id == command.case_id,
             DocumentEvidenceVersion.lineage_key == lineage_key,
         )
     ).all()
+    if any(version.case_id != command.case_id for version in versions):
+        _oa_conflict("OA reply lineage crosses cases")
     if len(versions) > 1:
         _oa_conflict("OA reply lineage has multiple persisted evidence closures")
     if versions:
@@ -794,18 +795,18 @@ def prepare_oa_reply(
             _oa_conflict("Persisted OA reply closure contradicts the requested replay")
         source_derivations = transaction.scalars(
             select(DocumentEvidenceDerivation).where(
-                DocumentEvidenceDerivation.case_id == command.case_id,
                 DocumentEvidenceDerivation.parent_evidence_version_id == source_version.id,
                 DocumentEvidenceDerivation.derivation_type == _OA_PREPARATION_TYPE,
             )
         ).all()
         reply_derivations = transaction.scalars(
             select(DocumentEvidenceDerivation).where(
-                DocumentEvidenceDerivation.case_id == command.case_id,
                 DocumentEvidenceDerivation.child_evidence_version_id == version.id,
                 DocumentEvidenceDerivation.derivation_type == _OA_PREPARATION_TYPE,
             )
         ).all()
+        if any(row.case_id != command.case_id for row in (*source_derivations, *reply_derivations)):
+            _oa_conflict("Persisted OA preparation derivation crosses cases")
         if (
             len(source_derivations) != 1
             or len(reply_derivations) != 1
@@ -841,11 +842,12 @@ def prepare_oa_reply(
         _oa_conflict("OA reply package link exists without its evidence closure")
     source_derivations = transaction.scalars(
         select(DocumentEvidenceDerivation).where(
-            DocumentEvidenceDerivation.case_id == command.case_id,
             DocumentEvidenceDerivation.parent_evidence_version_id == source_version.id,
             DocumentEvidenceDerivation.derivation_type == _OA_PREPARATION_TYPE,
         )
     ).all()
+    if any(row.case_id != command.case_id for row in source_derivations):
+        _oa_conflict("Source OA notice preparation derivation crosses cases")
     if source_derivations:
         _oa_conflict("Source OA notice already has a preparation derivation")
 
