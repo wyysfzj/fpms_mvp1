@@ -1310,6 +1310,30 @@ def create_document_wizard_batch(
         )
     if data.fee_rows:
         fee_rows_by_row_index = _group_document_wizard_fee_rows(data.fee_rows, row_count=len(rows))
+    if fee_rows_by_row_index:
+        semantics = resolve_document_semantics(template)
+        if (
+            semantics.catalog_status == "EXECUTABLE"
+            and semantics.execution_behavior == "APPLICATION_FEE_NOTICE"
+        ):
+            raise_business_error(
+                "DOCUMENT_WIZARD_BATCH_INVALID",
+                "Document wizard batch contains invalid fee rows",
+                details={
+                    "row_errors": [
+                        {
+                            "row_index": row_index,
+                            "field": "fee_draft_type",
+                            "code": "APPLICATION_FEE_NOTICE_DRAFT_FORBIDDEN",
+                            "message": (
+                                "Application-fee notice wizard rows cannot create generic fee drafts"
+                            ),
+                        }
+                        for row_index in sorted(fee_rows_by_row_index)
+                    ]
+                },
+                status_code=400,
+            )
     if data.attachment_rows:
         attachment_rows_by_row_index = _group_document_wizard_attachment_rows(
             data.attachment_rows, row_count=len(rows)
@@ -1542,6 +1566,13 @@ def preview_document_wizard_fee_candidates(
 
     fee_draft_type = _normalize_text(getattr(template, "fee_draft_type", None))
     if not fee_draft_type:
+        return []
+
+    semantics = resolve_document_semantics(template)
+    if (
+        semantics.catalog_status == "EXECUTABLE"
+        and semantics.execution_behavior == "APPLICATION_FEE_NOTICE"
+    ):
         return []
 
     case_ids = [_normalize_text(row.case_id) for row in data.rows]

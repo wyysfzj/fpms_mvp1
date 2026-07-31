@@ -6,6 +6,7 @@ from decimal import Decimal
 from hashlib import sha256
 from uuid import uuid4
 
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -143,6 +144,106 @@ def test_seed_dev_uses_application_fee_target_state_idempotently(
         second_rows = _catalog_rows(db)
         _assert_application_fee_target_state(second_rows)
         assert [(row.id, row.code, row.input_fields) for row in second_rows] == first_snapshot
+
+
+def _public_wizard_context(
+    session_factory: sessionmaker[Session],
+) -> tuple[str, str]:
+    case_id = str(uuid4())
+    with session_factory() as db:
+        _seed_application_fee_catalog(db)
+        db.add(
+            Case(
+                id=case_id,
+                case_no=f"APP-FEE-WIZ-{uuid4().hex[:8].upper()}",
+                case_type="NORMAL",
+                patent_category="INV",
+                flow_dir="CN_DOMESTIC",
+                status="ACCEPTED",
+            )
+        )
+        db.flush()
+        template_id = db.scalar(
+            select(DocTemplate.id).where(DocTemplate.code == APPLICATION_FEE_NOTICE_CODE)
+        )
+        assert template_id is not None
+        db.commit()
+    return case_id, template_id
+
+
+def _public_wizard_payload(case_id: str, template_id: str) -> dict[str, object]:
+    return {
+        "defaults": {
+            "doc_template_id": template_id,
+            "direction": "IN",
+            "doc_date": "2026-07-21",
+            "official_due_date": "2026-08-05",
+            "official_due_date_source": "MANUAL_OFFICIAL_NOTICE",
+            "official_due_date_status": "CONFIRMED",
+        },
+        "rows": [{"case_id": case_id, "title": "缴纳申请费通知书"}],
+    }
+
+
+def test_public_wizard_preview_does_not_surface_generic_application_fee_candidate(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker[Session],
+) -> None:
+    case_id, template_id = _public_wizard_context(session_factory)
+
+    response = client.post(
+        "/api/v1/documents/wizard/fee-preview",
+        headers=auth_headers,
+        json=_public_wizard_payload(case_id, template_id),
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert (payload["total_candidates"], payload["items"]) == (0, [])
+
+
+def test_public_wizard_batch_rejects_explicit_application_fee_row_without_writes(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker[Session],
+) -> None:
+    case_id, template_id = _public_wizard_context(session_factory)
+    payload = _public_wizard_payload(case_id, template_id)
+    payload["fee_rows"] = [
+        {
+            "row_index": 1,
+            "case_id": case_id,
+            "fee_draft_type": "APPLICATION_FEE",
+            "skip_this_candidate": False,
+            "fee_items": [],
+        }
+    ]
+
+    response = client.post(
+        "/api/v1/documents/wizard/batch-create",
+        headers=auth_headers,
+        json=payload,
+    )
+
+    with session_factory() as db:
+        draft_count = db.scalar(
+            select(func.count()).select_from(FeeDraft).where(FeeDraft.case_id == case_id)
+        )
+        document_count = db.scalar(
+            select(func.count()).select_from(Document).where(Document.case_id == case_id)
+        )
+    assert (response.status_code, draft_count, document_count) == (400, 0, 0)
+    error = response.json()["error"]
+    assert error["code"] == "DOCUMENT_WIZARD_BATCH_INVALID"
+    assert error["details"]["row_errors"] == [
+        {
+            "row_index": 1,
+            "field": "fee_draft_type",
+            "code": "APPLICATION_FEE_NOTICE_DRAFT_FORBIDDEN",
+            "message": "Application-fee notice wizard rows cannot create generic fee drafts",
+        }
+    ]
 
 
 def _canonical_notice_bytes(notice: ApplicationFeeNotice) -> bytes:
