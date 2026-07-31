@@ -41,7 +41,8 @@
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
     "V8-ADOPT-DECISION-GATES": 2,
     "V8-PAYLIST-INTERNAL-EXPORT-SERVICE": 1,
-    "V8-ADOPT-PAYLIST-PAYMENT": 5,
+    "V8-ADOPT-PAYLIST-PAYMENT": 2,
+    "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION": 3,
     "V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION": 2,
     "V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY": 1,
     "C3-LEAN-GOVERNANCE-ADOPTION": 2
@@ -1346,8 +1347,8 @@
     {
       "path": "frontend/src/api/contracts/v8_pay_list_boundary.contract.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
-      "rationale": "PayList/payment frontend boundary"
+      "story_id": "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed separated PayList frontend boundary"
     },
     {
       "path": "frontend/src/api/documents.ts",
@@ -1376,14 +1377,14 @@
     {
       "path": "frontend/src/api/govPayments.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
-      "rationale": "PayList/payment frontend boundary"
+      "story_id": "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed separated PayList frontend boundary"
     },
     {
       "path": "frontend/src/api/govPayments.types.ts",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-PAYLIST-PAYMENT",
-      "rationale": "PayList/payment frontend boundary"
+      "story_id": "V8-PAYLIST-BOUNDARY-FE-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed separated PayList frontend boundary"
     },
     {
       "path": "frontend/src/modules/cases/pages/CaseCreate.vue",

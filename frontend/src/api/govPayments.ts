@@ -12,6 +12,10 @@ import type {
     PayListMarkPaidPayload,
     PayListMarkPaidResult,
     PayListQuery,
+    PayListExportArtifactInfo,
+    PayListInternalArtifactInfo,
+    PayListOfficialEvidenceInfo,
+    PayListOfficialWorkbookInfo,
     GovPaymentsApiError,
     GovPaymentsErrorCategory,
     PayListCreatePayload,
@@ -125,6 +129,8 @@ interface BackendPayListDetailResult {
         official_receipt_no: string | null
         remark: string | null
     }[]
+    export_artifacts?: PayListExportArtifactInfo[]
+    official_workbook?: PayListOfficialWorkbookInfo
 }
 
 interface BackendHistoricalPayListCreateResult {
@@ -337,16 +343,33 @@ export async function listPayLists(
 
 export async function getPayListDetail(payListId: number): Promise<PayListDetailResult> {
     const response = await http.get<BackendPayListDetailResult>(`/pay-lists/${payListId}`)
+    const payment = response.data.gov_payments.map((item) => ({
+        ...item,
+        paid_amount: asNumber(item.paid_amount),
+    }))
 
     return {
         pay_list: {
             ...response.data.pay_list,
             total_amount: asNumber(response.data.pay_list.total_amount),
         },
-        gov_payments: response.data.gov_payments.map((item) => ({
-            ...item,
-            paid_amount: asNumber(item.paid_amount),
-        })),
+        gov_payments: payment,
+        payment,
+        ...(response.data.export_artifacts === undefined
+            ? {}
+            : {
+                  internal_artifacts: response.data.export_artifacts.filter(
+                      (artifact): artifact is PayListInternalArtifactInfo =>
+                          artifact.kind === 'INTERNAL_XLSX',
+                  ),
+                  official_evidence: response.data.export_artifacts.filter(
+                      (artifact): artifact is PayListOfficialEvidenceInfo =>
+                          artifact.kind === 'OFFICIAL_XLSM',
+                  ),
+              }),
+        ...(response.data.official_workbook === undefined
+            ? {}
+            : { official_workbook: response.data.official_workbook }),
     }
 }
 

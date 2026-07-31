@@ -111,6 +111,38 @@ export interface PayListListResult {
     total: number
 }
 
+export interface PayListExportArtifactInfo {
+    id: string
+    pay_list_id: number
+    kind: 'INTERNAL_XLSX' | 'OFFICIAL_XLSM'
+    status: 'GENERATED' | 'OFFICIAL_SITE_ACCEPTED'
+    content_sha256: string
+    managed_storage_path: string
+    template_version: string | null
+    generated_by: string
+    generated_at: string
+    idempotency_key: string
+    official_acceptance_evidence_ref: string | null
+    official_acceptance_evidence_hash: string | null
+    official_accepted_at: string | null
+    updated_at: string
+}
+
+export type PayListInternalArtifactInfo = PayListExportArtifactInfo & {
+    kind: 'INTERNAL_XLSX'
+}
+
+export type PayListOfficialEvidenceInfo = PayListExportArtifactInfo & {
+    kind: 'OFFICIAL_XLSM'
+}
+
+export interface PayListOfficialWorkbookInfo {
+    official_upload_template_status: string | null
+    official_upload_template_name: string | null
+    official_upload_batch_limit: number | null
+    official_pay_list_boundary_note: string | null
+}
+
 export interface PayListDetailResult {
     pay_list: PayListInfo & {
         remark: string | null
@@ -120,6 +152,10 @@ export interface PayListDetailResult {
         updated_by: string | null
     }
     gov_payments: GovPaymentInfo[]
+    internal_artifacts?: PayListInternalArtifactInfo[]
+    official_workbook?: PayListOfficialWorkbookInfo
+    payment: GovPaymentInfo[]
+    official_evidence?: PayListOfficialEvidenceInfo[]
 }
 
 export interface HistoricalPayListCreatePayload {
