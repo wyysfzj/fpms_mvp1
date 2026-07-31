@@ -1098,80 +1098,80 @@
     {
       "catalog_id": "FPMS-V8-LAYOUT-REGISTRATION-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LAYOUT-REEXAMINATION-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LAYOUT-RESTORATION-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LAYOUT-BIBLIOGRAPHIC-CHANGE-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LAYOUT-EXTENSION-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LAYOUT-NONVOLUNTARY-LICENSE-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LAYOUT-REMUNERATION-ADJUDICATION-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-PATENT-TERM-COMPENSATION-REQUEST-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-COMPENSATION-PERIOD-ANNUITY-FEE-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OPEN-LICENSE-ANNUITY-REDUCTION-RULE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2655,20 +2655,22 @@
       "story_id": "V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-CURRENT-VERIFICATION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "409918c74405213e0ca294baa45e214d0a0f1ed9"
+        "409918c74405213e0ca294baa45e214d0a0f1ed9",
+        "5211b1b5b7480c8178fd3b0200194f4e335a1101"
       ],
       "paths": [
         "backend/app/modules/fees/official_rate_book.py",
         "backend/scripts/seed_dev.py",
         "backend/tests/test_v8_official_rate_book_activation.py"
       ],
-      "tree_sha256": "e94cd606e571354d1b7652b0ea43ddbaa64b3f263e4b6c2a79961808377c1c29",
+      "tree_sha256": "20315f382b16ffe92cda7802663814183aedf13a109fe01f0c392046d3efa94c",
       "tests": [
-        "pytest -q tests/test_v8_official_rate_book_activation.py tests/test_v8_official_rate_book_schema.py tests/test_official_fee_rate_catalog_seed.py from backend cwd (43 passed)"
+        "pytest -q tests/test_v8_official_rate_book_activation.py tests/test_v8_official_rate_book_schema.py tests/test_official_fee_rate_catalog_seed.py from backend cwd (43 passed)",
+        "same exact serialized activation/schema/seed tranche after the 5211b1b special-fee successor (43 passed)"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-CURRENT-VERIFICATION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-CURRENT-VERIFICATION.md"
+      "review_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-SUCCESSOR-COMPAT.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OFFICIAL-RATE-BOOK-SOURCE-ACTIVATION-SUCCESSOR-COMPAT.md"
     },
     {
       "story_id": "V8-OVERLAY-CONTRACTS-CURRENT-ADOPTION",
@@ -3294,6 +3296,34 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PCT-FEE-POLICY-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PCT-FEE-POLICY-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "5211b1b5b7480c8178fd3b0200194f4e335a1101"
+      ],
+      "paths": [
+        "backend/app/modules/fees/official_rate_book.py",
+        "backend/tests/test_v8_layout_registration_fee_rule.py",
+        "backend/tests/test_v8_layout_reexamination_fee_rule.py",
+        "backend/tests/test_v8_layout_restoration_fee_rule.py",
+        "backend/tests/test_v8_layout_bibliographic_change_fee_rule.py",
+        "backend/tests/test_v8_layout_extension_fee_rule.py",
+        "backend/tests/test_v8_layout_nonvoluntary_license_fee_rule.py",
+        "backend/tests/test_v8_layout_remuneration_adjudication_fee_rule.py",
+        "backend/tests/test_v8_term_compensation_request_fee_rule.py",
+        "backend/tests/test_v8_compensation_period_annuity_rule.py",
+        "backend/tests/test_v8_open_license_annuity_reduction_rule.py"
+      ],
+      "tree_sha256": "f9b313b96fbd8e31932cf98d034fc7ffdd7b01100dedb20949f9d813a8e04188",
+      "tests": [
+        "pytest -q exact ten special official-fee test files from backend cwd (60 passed; 89 subtests)",
+        "scoped Ruff and format-check, inventory, exact 13-path diff-check, disposition ownership and PCT unchanged checks passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-SPECIAL-OFFICIAL-FEE-RULES-CURRENT-ADOPTION.md"
     }
   ]
 }
