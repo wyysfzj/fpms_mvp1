@@ -941,14 +941,10 @@
     {
       "catalog_id": "FPMS-V8-GENERIC-FEE-DRAFT-OBLIGATION-FE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "WIP",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GENERIC-FEE-DRAFT-OBLIGATION-FE-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "kind": "HISTORICAL_NONTERMINAL",
-        "historical_state": "IMPLEMENTING",
-        "source": "artifacts/FPMS-V8-GENERIC-FEE-DRAFT-OBLIGATION-FE-ADAPTER-20260712-01/state.json"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FEE-DRAFT-OBLIGATION-UI-ADAPTER-20260712-01",
@@ -2956,7 +2952,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "2e12c4644c4228a7bee3487243544f1d486c8746",
-        "446d295fd860bda3bfee2466da0a222f7aa8ff6b"
+        "446d295fd860bda3bfee2466da0a222f7aa8ff6b",
+        "1cb8be0"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-edit-fee-reduction.spec.ts",
@@ -2966,11 +2963,12 @@
         "frontend/src/api/fees.types.ts",
         "frontend/src/modules/cases/pages/CaseEdit.vue"
       ],
-      "tree_sha256": "018ad6e98f485d27eb552da80f4354bb67a163194062571773cad062c6fc7a5b",
+      "tree_sha256": "54f436abb84014ceff8cbcf46da76b3d8bd250921f55a889c9c39c8e56235b6e",
       "tests": [
         "playwright test v8-fee-reduction-approval-case-edit.spec.ts v8-case-edit-fee-reduction.spec.ts v8-case-edit-status-gate.spec.ts --project=chromium --workers=1 (5 passed)",
         "exact-file ESLint passed; full typecheck matched the integration base with zero new or owned-path errors",
-        "independent fee-obligation HTTP/FE successor re-attestation: exact three Chromium specs 5 passed"
+        "independent fee-obligation HTTP/FE successor re-attestation: exact three Chromium specs 5 passed",
+        "independent row117 successor attestation confirmed CaseEdit fee-reduction behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
@@ -2981,7 +2979,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "446d295fd860bda3bfee2466da0a222f7aa8ff6b",
-        "d494e95"
+        "d494e95",
+        "1cb8be0"
       ],
       "paths": [
         "backend/app/modules/fees/api.py",
@@ -2993,12 +2992,13 @@
         "frontend/src/api/fees.ts",
         "frontend/src/api/fees.types.ts"
       ],
-      "tree_sha256": "0f7e1ae7387e7b0bf92169afab543e3d58ae6d0b04098dd61e5135e1304e7e20",
+      "tree_sha256": "64e522b10c51fe6829595d08874c47a27d67052082fb377bd3745b8462adf136",
       "tests": [
         "pytest -q instruction/detail HTTP, instruction/detail service and fee-reduction approval create/list files from backend cwd (168 passed)",
         "strict isolated TypeScript probes and exact-file ESLint passed",
         "playwright test exact three CaseEdit fee-reduction/status specs --project=chromium --workers=1 (5 passed)",
-        "independent row116 successor attestation confirmed obligation routes, permissions and frontend paths remain unchanged"
+        "independent row116 successor attestation confirmed obligation routes, permissions and frontend paths remain unchanged",
+        "independent row117 successor attestation and strict obligation probes confirmed the existing HTTP/FE vertical remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
@@ -3155,7 +3155,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "20ac8b44495442861aae3acffbcbe9082769a3c3",
-        "d494e95"
+        "d494e95",
+        "1cb8be0"
       ],
       "paths": [
         "backend/app/modules/fees/api.py",
@@ -3165,12 +3166,13 @@
         "frontend/src/api/fees.ts",
         "frontend/src/api/fees.types.ts"
       ],
-      "tree_sha256": "e2ae32056b6185e37611e4b277cd525465859cad477e7e26f4d7563f264e1fea",
+      "tree_sha256": "c2a70876ffd8959993ee893a39545a785376d7ae2735f0da130b54bc0d0ab32d",
       "tests": [
         "pytest -q tests/test_v8_fee_estimate_preview_api.py from backend cwd (40 passed)",
         "pytest -q exact two-file row103/104 predecessor tranche from backend cwd (101 passed)",
         "isolated TypeScript contract, exact-file ESLint, scoped Ruff and exact diff-check passed",
-        "independent row116 successor attestation confirmed preview routes, schemas and frontend paths remain unchanged"
+        "independent row116 successor attestation confirmed preview routes, schemas and frontend paths remain unchanged",
+        "independent row117 successor attestation confirmed the fee-estimate preview contract remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
@@ -3788,6 +3790,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-FULL-WORD-READINESS-GATE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FILING-FULL-WORD-READINESS-GATE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GENERIC-FEE-DRAFT-OBLIGATION-FE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "1cb8be0"
+      ],
+      "paths": [
+        "frontend/src/api/fees.ts",
+        "frontend/src/api/fees.types.ts",
+        "frontend/src/api/contracts/v8_fee_draft_obligation.contract.ts"
+      ],
+      "tree_sha256": "cfc0102ae641bec5b03a2fa15149530f1c09c792ba8c030c1fc250a3c5ac65fa",
+      "tests": [
+        "strict isolated TypeScript contract probe passed",
+        "exact-file ESLint and exact commit diff check passed",
+        "full frontend typecheck contained only seven documented outside-lane baseline errors and no owned-path error",
+        "independent High review approved P0/P1/P2 0/0/0 after mechanical parent-binding correction"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-OBLIGATION-FE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-OBLIGATION-FE-CURRENT-ADOPTION.md"
     }
   ]
 }
