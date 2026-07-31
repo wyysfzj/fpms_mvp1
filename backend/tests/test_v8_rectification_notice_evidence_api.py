@@ -758,6 +758,12 @@ def _invalidate_evidence(version: DocumentEvidenceVersion, conflict: str) -> Non
         version.creator_id = f" {version.creator_id}"
     elif conflict == "whitespace_reviewer":
         version.reviewer_id = f"{version.reviewer_id} "
+    elif conflict == "zero_version":
+        version.version_number = 0
+    elif conflict == "negative_version":
+        version.version_number = -1
+    elif conflict == "malformed_attachment_id":
+        version.attachment_id = "x" * 37
     else:
         raise AssertionError(f"unknown evidence conflict fixture: {conflict}")
 
@@ -775,6 +781,9 @@ def _invalidate_evidence(version: DocumentEvidenceVersion, conflict: str) -> Non
         "malformed_hash",
         "whitespace_creator",
         "whitespace_reviewer",
+        "zero_version",
+        "negative_version",
+        "malformed_attachment_id",
     ),
 )
 def test_invalid_evidence_state_is_exact_409(
@@ -787,6 +796,18 @@ def test_invalid_evidence_state_is_exact_409(
     with session_factory() as transaction:
         version = transaction.get(DocumentEvidenceVersion, EVIDENCE_VERSION_ID)
         assert version is not None
+        if conflict == "malformed_attachment_id":
+            transaction.add(
+                DocAttachment(
+                    id="x" * 37,
+                    document_id=DOCUMENT_ID,
+                    file_name="malformed-attachment-id.pdf",
+                    file_path="/evidence/malformed-attachment-id.pdf",
+                    mime_type="application/pdf",
+                    content_hash=CONTENT_HASH,
+                )
+            )
+            transaction.flush()
         _invalidate_evidence(version, conflict)
         transaction.commit()
 

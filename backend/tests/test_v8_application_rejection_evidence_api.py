@@ -8,6 +8,7 @@ import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.modules.cases.lifecycle_contracts import (
@@ -21,7 +22,7 @@ from app.modules.cases.lifecycle_contracts import (
     LifecycleTransitionResult,
     OfficialProcedureStage,
 )
-from app.modules.cases.models import Case
+from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.documents import api as documents_api
 from app.modules.documents import lifecycle_evidence_adapters as adapters
 from app.modules.documents.models import DocAttachment, Document, DocumentEvidenceVersion
@@ -270,6 +271,42 @@ def test_relation_missing_and_conflict_statuses_are_preserved(
         409,
         "APPLICATION_REJECTION_EVIDENCE_CONFLICT",
     )
+
+
+@pytest.mark.parametrize("version_number", (0, -1))
+def test_nonpositive_stored_version_is_409_without_lifecycle_commit(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+    version_number: int,
+) -> None:
+    _seed(session_factory)
+    with session_factory() as transaction:
+        version = transaction.get(DocumentEvidenceVersion, EVIDENCE_ID)
+        assert version is not None
+        version.version_number = version_number
+        transaction.commit()
+
+    response = client.post(
+        PATH.format(document_id=DOCUMENT_ID),
+        headers=auth_headers,
+        json=_request(),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "APPLICATION_REJECTION_EVIDENCE_CONFLICT"
+    with session_factory() as transaction:
+        case = transaction.get(Case, CASE_ID)
+        assert case is not None
+        assert case.lifecycle_revision == 0
+        assert (
+            transaction.scalar(
+                select(func.count())
+                .select_from(CaseActivityEvent)
+                .where(CaseActivityEvent.case_id == CASE_ID)
+            )
+            == 0
+        )
 
 
 def test_endpoint_requires_authentication(client: TestClient) -> None:

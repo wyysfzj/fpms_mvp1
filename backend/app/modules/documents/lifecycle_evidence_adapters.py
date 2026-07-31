@@ -543,6 +543,9 @@ def _require_rectification_evidence(
         not _valid_stored_id(version.id)
         or not _valid_stored_id(version.case_id)
         or not _valid_stored_id(version.document_id)
+        or not _valid_stored_id(version.attachment_id)
+        or type(version.version_number) is not int
+        or version.version_number <= 0
         or type(version.lineage_key) is not str
         or not version.lineage_key
         or version.lineage_key != version.lineage_key.strip()
@@ -575,6 +578,8 @@ def _require_eligible_evidence(
         or not _valid_stored_id(version.case_id)
         or not _valid_stored_id(version.document_id)
         or not _valid_stored_id(version.attachment_id)
+        or type(version.version_number) is not int
+        or version.version_number <= 0
         or type(version.lineage_key) is not str
         or not version.lineage_key
         or version.lineage_key != version.lineage_key.strip()

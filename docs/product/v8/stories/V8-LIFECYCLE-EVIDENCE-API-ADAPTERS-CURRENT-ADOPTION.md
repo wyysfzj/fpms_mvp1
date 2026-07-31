@@ -60,23 +60,36 @@ invoke only their named accepted lifecycle event through the existing lifecycle 
 - `backend/app/modules/documents/api.py`
 - the ten matching `backend/tests/test_v8_*_evidence_api.py` focused files
 
-The six ordinal 78–83 test files are byte-identical to the archive anchor. The adapter
-module adopts only their required archive slices; acceptance-notice and OA-notice archive
-functions are intentionally excluded. The current API adopts only the six required route
-hunks so later evidence-review/read successors remain intact.
+Five ordinal 78–83 test files remain byte-identical to the archive anchor. The
+rectification test intentionally diverges from archive blob
+`b0438f0e1008ba3711d71e4fd0f2c1186d25205f` to preserve the independent P1 regression:
+nonpositive stored evidence versions and a malformed stored attachment identity fail
+closed with the existing 409 conflict and no lifecycle activity. The adapter module adopts
+only the required archive slices; acceptance-notice and OA-notice archive functions are
+intentionally excluded. The current API adopts only the six required route hunks so later
+evidence-review/read successors remain intact.
 
 ## Current verification
 
 Before terminal implementation, the exact four ordinal 84–87 tests produced `15 failed`;
 the failures proved the four route surfaces were absent (router count zero / HTTP 404).
 
-The final controller-authorized serialized tranche contained the ten focused adapter tests
-plus `test_addgap_document_deadline_carrier.py`: `308 passed`, with only three inherited
-third-party/Pydantic deprecation warnings. Scoped Ruff check and exact diff-check pass.
+The initial controller-authorized serialized tranche contained the ten focused adapter
+tests plus `test_addgap_document_deadline_carrier.py`: `308 passed`, with only three
+inherited third-party/Pydantic deprecation warnings.
 
-An independent High reviewer must review the exact candidate/range, verify the six archive
-test blob identities, rerun the decisive tranche once and confirm the product/test
-fingerprint and non-goals.
+Independent P1 review then proved that nonpositive stored evidence versions reached the
+lifecycle service in the common adapter (`2 failed`, each erroneous 200), while
+rectification independently accepted two nonpositive versions and an overlength stored
+attachment identity (`10 passed, 3 failed`, each new case erroneous 200). The minimum
+stored-evidence guards now require an exact positive integer version; rectification also
+requires a canonical attachment identity. The affected two-file set passed `70` tests.
+The final unchanged ten-focused-plus-inherited tranche passed `313` tests with the same
+three inherited warnings. Scoped Ruff check and exact diff-check pass.
+
+An independent High reviewer must review the exact candidate/range, verify the five
+retained archive test blob identities and disclosed rectification divergence, rerun the
+decisive tranche once and confirm the product/test fingerprint and non-goals.
 
 ## Non-goals and rollback
 
