@@ -382,8 +382,8 @@
     {
       "catalog_id": "FPMS-V8-DE-PREPARE-OA-REPLY-SEAM-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2475,7 +2475,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "d33e3f992dda142cc47d7bbd66a95846af425559",
-        "6b61f681cc0df4ff472388edd577c1633f5a6827"
+        "6b61f681cc0df4ff472388edd577c1633f5a6827",
+        "bfa42b9a5a4b0393837345a48f9d199c0891fd86"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_contracts.py",
@@ -2486,13 +2487,14 @@
         "backend/tests/test_v8_external_submission_role_allowlist.py",
         "backend/tests/test_v8_raw_attachment_registration_guard.py"
       ],
-      "tree_sha256": "a929310a6e8bea81f1d5d085ea86fe1828da0a0cbd0dd3c73bff5638adfd77dc",
+      "tree_sha256": "eb02405a08df80c97982995cc89cb783f0954a1a90bac020a0eeab6cb5214c12",
       "tests": [
-        "pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_delta4_evidence_role_extension.py tests/test_v8_raw_attachment_registration_guard.py tests/test_v8_external_submission_role_allowlist.py from backend cwd (52 passed)"
+        "pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_delta4_evidence_role_extension.py tests/test_v8_raw_attachment_registration_guard.py tests/test_v8_external_submission_role_allowlist.py from backend cwd (52 passed)",
+        "independent row48 successor tranche included exact document evidence contracts and role-allowlist predecessors in 269 passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION.md"
+      "review_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION",
@@ -2521,7 +2523,8 @@
       "story_id": "V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "6672d239e4f0aa7c0575ad5392987ef954140f0f"
+        "6672d239e4f0aa7c0575ad5392987ef954140f0f",
+        "bfa42b9a5a4b0393837345a48f9d199c0891fd86"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_service.py",
@@ -2534,13 +2537,14 @@
         "backend/tests/test_v8_finalize_external_submission_seam.py",
         "backend/tests/test_v8_lifecycle_activity_append.py"
       ],
-      "tree_sha256": "255a3fadd4fd4af473cf9cbd449869f9f2c79abfd9304db55ca92192282d9e13",
+      "tree_sha256": "d9c6d2c589141b17c33fa40de4c1b44690f03052c44dc807d200c4518811ce54",
       "tests": [
-        "pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_lifecycle_activity_append.py tests/test_v8_document_evidence_register_version.py tests/test_v8_document_evidence_derivation.py tests/test_v8_document_evidence_current_version.py tests/test_v8_document_evidence_review_service.py tests/test_v8_finalize_external_submission_seam.py from backend cwd (164 passed)"
+        "pytest -q tests/test_v8_document_evidence_contracts.py tests/test_v8_lifecycle_activity_append.py tests/test_v8_document_evidence_register_version.py tests/test_v8_document_evidence_derivation.py tests/test_v8_document_evidence_current_version.py tests/test_v8_document_evidence_review_service.py tests/test_v8_finalize_external_submission_seam.py from backend cwd (164 passed)",
+        "independent row48 successor tranche included exact document contracts and finalize-submission predecessors in 269 passed"
       ],
       "review_class": "PROTECTED",
-      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION.md",
-      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION.md"
+      "review_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-FEE-OBLIGATION-CORE-CURRENT-VERIFICATION",
@@ -3138,6 +3142,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "bfa42b9a5a4b0393837345a48f9d199c0891fd86"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_contracts.py",
+        "backend/app/modules/documents/evidence_workflow_service.py",
+        "backend/tests/test_v8_document_evidence_contracts.py",
+        "backend/tests/test_v8_prepare_oa_reply_seam.py"
+      ],
+      "tree_sha256": "ac40c207fce7391c2f99aee4989397eefd8b160832399a97cabcfa064c6f0967",
+      "tests": [
+        "pytest -q tests/test_v8_prepare_oa_reply_seam.py from backend cwd (41 passed)",
+        "pytest -q exact six-file document predecessor/policy tranche from backend cwd (269 passed)",
+        "scoped Ruff, format-check and exact diff-check passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION.md"
     }
   ]
 }

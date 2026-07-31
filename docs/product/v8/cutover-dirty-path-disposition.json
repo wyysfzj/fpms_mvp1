@@ -17,7 +17,8 @@
     "V8-ADOPT-LIFECYCLE-CENTER": 21,
     "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 1,
     "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES": 1,
-    "V8-ADOPT-DOCUMENT-EVIDENCE": 41,
+    "V8-ADOPT-DOCUMENT-EVIDENCE": 37,
+    "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION": 4,
     "V8-OA-NONCOPYABLE-APPENDIX-POLICY": 3,
     "V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION": 2,
     "V8-ACTIVITY-ADAPTERS-CURRENT-ADOPTION": 1,
@@ -142,8 +143,8 @@
     {
       "path": "backend/app/modules/documents/evidence_contracts.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage and workflow"
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA reply preparation lineage and workflow"
     },
     {
       "path": "backend/app/modules/documents/evidence_policy.py",
@@ -166,8 +167,8 @@
     {
       "path": "backend/app/modules/documents/evidence_workflow_service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage and workflow"
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA reply preparation lineage and workflow"
     },
     {
       "path": "backend/app/modules/documents/extra_data.py",
@@ -532,8 +533,8 @@
     {
       "path": "backend/tests/test_v8_document_evidence_contracts.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA reply preparation lineage contract"
     },
     {
       "path": "backend/tests/test_v8_document_evidence_review_api.py",
@@ -994,8 +995,8 @@
     {
       "path": "backend/tests/test_v8_prepare_oa_reply_seam.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage behavior"
+      "story_id": "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA reply preparation lineage behavior"
     },
     {
       "path": "backend/tests/test_v8_publication_notice_evidence_api.py",
