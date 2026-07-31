@@ -2294,7 +2294,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "ee73aa18ea84fb9fb47b0fe3b065e14282a39fcc",
-        "ea006c7b75710d5d4e2985c29f5a92da640de166"
+        "ea006c7b75710d5d4e2985c29f5a92da640de166",
+        "65efb39db3837f1bf94af192c230713d4794ccfe"
       ],
       "paths": [
         "AGENTS.md",
@@ -2303,14 +2304,15 @@
         "docs/product/v8/source-decision-registry.md",
         "docs/superpowers/specs/2026-07-28-fpms-c3-git-native-lean-56-reset-design.md"
       ],
-      "tree_sha256": "fd08d5c93e607a5dc9f1904beb6be80248c2a81c40b9d4a4b0d18cf785cd8ec1",
+      "tree_sha256": "f1568815f1c3c9c9a1e57d48afcd10f323a8adf626d9c2866cd2f11953995908",
       "tests": [
         "python -m pytest -q scripts/tests/test_v8_lean_coverage_check.py",
-        "python scripts/v8_lean_coverage_check.py --milestone inventory"
+        "python scripts/v8_lean_coverage_check.py --milestone inventory",
+        "independent CNIPA 246 source-successor review verified the exact source-registry addition and unchanged governance siblings"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/C3-LEAN-GOVERNANCE-ADOPTION.md",
-      "verification_ref": "docs/product/v8/reviews/C3-LEAN-GOVERNANCE-ADOPTION.md"
+      "verification_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "C3-LEAN-LEDGER-INTEGRATION-REF-CORRECTION",
@@ -3207,7 +3209,7 @@
         "backend/app/modules/fees/annuity_reduction.py",
         "backend/tests/test_v8_annuity_first_ten_year_reduction_scope.py"
       ],
-      "tree_sha256": "5fddadd7ba66676c77dbf7ab101fde7fbdfe760e7e902c68f412d557c83ae5c4",
+      "tree_sha256": "f512a71301f972a9d45ba1af60ed53141fe54d2fc1e9de679d020f89bf707848",
       "tests": [
         "pytest -q exact focused annuity-reduction wrapper plus base-validator regression from backend cwd (125 passed)",
         "scoped Ruff, exact story-only diff-check and archive/current product-test zero-diff passed"
@@ -3215,6 +3217,25 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "65efb39db3837f1bf94af192c230713d4794ccfe"
+      ],
+      "paths": [
+        "reference/cnipa/announcement_246_20170630.normalized.txt",
+        "reference/cnipa/announcement_246_20170630.provenance.json"
+      ],
+      "tree_sha256": "fb4b9e7cf30c33f5e5dc1d9488ed0360c3e79ed5359e5dccacd8cc1dcf053ecc",
+      "tests": [
+        "exact archive/current blob and SHA-256 identity, canonical provenance and normalized-source coherence passed",
+        "dirty-path inventory, exact five-path diff-check and content-aware secret/PII inspection passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION.md"
     }
   ]
 }
