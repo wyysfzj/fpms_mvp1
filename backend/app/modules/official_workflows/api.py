@@ -288,6 +288,7 @@ def record_filing_preparation_external_operation_endpoint(
     package_id: str,
     payload: FilingPreparationExternalOperationIn,
     _perm: None = Depends(require_perm("OfficialWorkflow.Update")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> FilingPreparationChecklistResultOut:
     checklist = record_filing_preparation_external_operation(
@@ -296,6 +297,7 @@ def record_filing_preparation_external_operation_endpoint(
         operation_code=payload.operation_code,
         occurred_at=payload.occurred_at,
         note=payload.note,
+        actor_id=current_user.id,
     )
     return FilingPreparationChecklistResultOut(
         package_id=package_id,

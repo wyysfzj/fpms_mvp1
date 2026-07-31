@@ -27,6 +27,10 @@ from app.modules.cases.models import (
     T_CaseInventor,
 )
 from app.modules.documents.evidence_policy import is_filing_full_word_ready
+from app.modules.documents.evidence_workflow_service import (
+    FinalizeExternalSubmissionCommand,
+    finalize_external_submission,
+)
 from app.modules.documents.models import (
     DocAttachment,
     DocTemplate,
@@ -41,6 +45,9 @@ from app.modules.documents.service import summarize_attachment_manifest
 from app.modules.fees.models import FeeDraft, OfficialFeeChecklist
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import ClientContact
+from app.modules.official_workflows.filing_evidence_resolver import (
+    resolve_filing_final_evidence,
+)
 from app.modules.official_workflows.models import (
     OfficialWorkPackage,
     OfficialWorkPackageChecklist,
@@ -1420,7 +1427,142 @@ def record_filing_preparation_external_operation(
     operation_code: str,
     occurred_at: datetime,
     note: str | None = None,
+    actor_id: str | None = None,
 ) -> OfficialWorkPackageChecklist:
+    normalized_operation = _normalize_code(operation_code) or operation_code
+    if normalized_operation == "EXTERNAL_SUBMISSION_RECORDED":
+        initial_evidence = resolve_filing_final_evidence(package_id, db)
+        is_fresh = (
+            initial_evidence.final_submitted_at is None
+            and initial_evidence.submission_activity_id is None
+            and initial_evidence.submission_activity_hash is None
+        )
+        is_replay = (
+            initial_evidence.final_submitted_at == occurred_at
+            and initial_evidence.submission_activity_id is not None
+            and initial_evidence.submission_activity_hash is not None
+        )
+        if not is_fresh and not is_replay:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Filing submission evidence conflicts with this external operation",
+                status_code=409,
+            )
+
+        idempotency_key = f"filing-external:{package_id}:{occurred_at.isoformat()}"
+        finalized = finalize_external_submission(
+            FinalizeExternalSubmissionCommand(
+                case_id=initial_evidence.case_id,
+                evidence_version_id=initial_evidence.evidence_version_id,
+                actor_id=actor_id,
+                submitted_at=occurred_at,
+                idempotency_key=idempotency_key,
+            ),
+            db,
+        )
+        db.flush()
+        resolved_evidence = resolve_filing_final_evidence(package_id, db)
+        unchanged_resolution = (
+            resolved_evidence.package_id == initial_evidence.package_id
+            and resolved_evidence.case_id == initial_evidence.case_id
+            and resolved_evidence.evidence_version_id == initial_evidence.evidence_version_id
+            and resolved_evidence.content_hash == initial_evidence.content_hash
+            and resolved_evidence.reviewer_id == initial_evidence.reviewer_id
+            and resolved_evidence.reviewed_at == initial_evidence.reviewed_at
+        )
+        exact_finalization = (
+            finalized.case_id == initial_evidence.case_id
+            and finalized.evidence_version_id == initial_evidence.evidence_version_id
+            and finalized.content_hash == initial_evidence.content_hash
+            and finalized.submitted_at == occurred_at
+            and finalized.idempotency_key == idempotency_key
+            and finalized.reused is is_replay
+            and resolved_evidence.final_submitted_at == occurred_at
+            and resolved_evidence.submission_activity_id == finalized.activity_id
+            and resolved_evidence.submission_activity_hash is not None
+        )
+        exact_replay = is_fresh or (
+            resolved_evidence.submission_activity_id == initial_evidence.submission_activity_id
+            and resolved_evidence.submission_activity_hash
+            == initial_evidence.submission_activity_hash
+        )
+        if not unchanged_resolution or not exact_finalization or not exact_replay:
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Finalized filing evidence does not match the external operation",
+                status_code=409,
+            )
+
+        lifecycle_idempotency_key = (
+            f"filing-external-lifecycle:{package_id}:{occurred_at.isoformat()}"
+        )
+        lifecycle_result = apply_lifecycle_event(
+            LifecycleEventCommand(
+                case_id=resolved_evidence.case_id,
+                event_type="FILING_EXTERNAL_SUBMISSION_RECORDED",
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=occurred_at,
+                occurred_at=occurred_at,
+                evidence_refs=(
+                    EvidenceReference(
+                        case_id=resolved_evidence.case_id,
+                        evidence_kind="FINAL_SUBMISSION_VERSION",
+                        object_type="DocumentEvidenceVersion",
+                        object_id=resolved_evidence.evidence_version_id,
+                        content_hash=resolved_evidence.content_hash,
+                        captured_at=resolved_evidence.reviewed_at,
+                    ),
+                    EvidenceReference(
+                        case_id=resolved_evidence.case_id,
+                        evidence_kind="MANUAL_EXTERNAL_SUBMISSION_RECORD",
+                        object_type="CaseActivityEvent",
+                        object_id=resolved_evidence.submission_activity_id,
+                        content_hash=resolved_evidence.submission_activity_hash,
+                        captured_at=occurred_at,
+                    ),
+                ),
+                actor_id=actor_id,
+                idempotency_key=lifecycle_idempotency_key,
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={},
+            ),
+            db,
+        )
+        if (
+            lifecycle_result.case_id != resolved_evidence.case_id
+            or lifecycle_result.activity_id == finalized.activity_id
+            or lifecycle_result.sequence != finalized.activity_sequence + 1
+            or lifecycle_result.lifecycle_revision != finalized.lifecycle_revision + 1
+            or lifecycle_result.lane is not ActivityLane.LIFECYCLE
+            or lifecycle_result.event_type != "FILING_EXTERNAL_SUBMISSION_RECORDED"
+            or lifecycle_result.confirmation_status is not ConfirmationStatus.CONFIRMED
+            or lifecycle_result.idempotency_key != lifecycle_idempotency_key
+            or lifecycle_result.reused is not is_replay
+        ):
+            raise_business_error(
+                "FILING_FINAL_EVIDENCE_CONFLICT",
+                "Lifecycle result conflicts with the filing submission evidence",
+                status_code=409,
+            )
+
+        evidence_parts = [f"occurred_at={occurred_at.isoformat()}"]
+        normalized_note = _normalize_text(note)
+        if normalized_note:
+            evidence_parts.append(f"note={normalized_note}")
+        checklist = _upsert_checklist(
+            db,
+            package_id=package_id,
+            section_code="OFFICIAL_PAGE",
+            item_code=normalized_operation,
+            item_label=normalized_operation,
+            status="DONE",
+            required=True,
+            evidence_note="; ".join(evidence_parts),
+        )
+        db.commit()
+        db.refresh(checklist)
+        return checklist
+
     evidence_parts = [f"occurred_at={occurred_at.isoformat()}"]
     normalized_note = _normalize_text(note)
     if normalized_note:
