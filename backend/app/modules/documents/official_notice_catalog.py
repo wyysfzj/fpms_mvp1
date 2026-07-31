@@ -125,6 +125,16 @@ OFFICIAL_NOTICE_APPLICATION_FEE_ACTIVATIONS = {
         False,
     ),
 }
+OFFICIAL_NOTICE_FEE_REDUCTION_APPROVAL_ACTIVATIONS = {
+    **OFFICIAL_NOTICE_APPLICATION_FEE_ACTIVATIONS,
+    "费用减缓审批通知书": (
+        "FEE_REDUCTION_APPROVAL_NOTICE",
+        "FEE_REDUCTION_APPROVAL_NOTICE",
+        None,
+        None,
+        False,
+    ),
+}
 
 
 def _split_official_codes(code_text: str) -> list[str]:
@@ -233,6 +243,13 @@ def seed_grant_official_notice_catalog(db: Session) -> int:
 
 def seed_application_fee_official_notice_catalog(db: Session) -> int:
     return _seed_official_notice_catalog(db, OFFICIAL_NOTICE_APPLICATION_FEE_ACTIVATIONS)
+
+
+def seed_fee_reduction_approval_official_notice_catalog(db: Session) -> int:
+    return _seed_official_notice_catalog(
+        db,
+        OFFICIAL_NOTICE_FEE_REDUCTION_APPROVAL_ACTIVATIONS,
+    )
 
 
 OFFICIAL_LETTER_OUT_CATALOG_SOURCE = "相关流程操作-20260526.docx [P0102] TABLE 002"
