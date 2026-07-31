@@ -35,7 +35,8 @@
     "V8-CASE-EDIT-FEE-REDUCTION-CURRENT-ADOPTION": 2,
     "V8-FEE-OBLIGATION-HTTP-FE-VERTICAL-CURRENT-ADOPTION": 4,
     "V8-FEE-ESTIMATE-PREVIEW-HTTP-FE-VERTICAL-CURRENT-ADOPTION": 5,
-    "V8-ADOPT-OFFICIAL-WORKFLOW": 6,
+    "V8-ADOPT-OFFICIAL-WORKFLOW": 5,
+    "V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION": 1,
     "V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION": 2,
     "V8-DECISION-GATE-SERVICE-API-VERTICAL-ADOPTION": 3,
     "V8-ADOPT-LEGACY-RECONCILIATION": 9,
@@ -333,8 +334,8 @@
     {
       "path": "backend/app/modules/official_workflows/service.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-OFFICIAL-WORKFLOW",
-      "rationale": "official workflow API/service"
+      "story_id": "V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION",
+      "rationale": "current-reviewed OA receipt lifecycle adapter"
     },
     {
       "path": "backend/app/modules/system/api.py",

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
@@ -11,6 +12,13 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
 from app.modules.annuity.models import GovPayment, PayList
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    ConfirmationStatus,
+    EvidenceReference,
+    LifecycleEventCommand,
+)
+from app.modules.cases.lifecycle_service import apply_lifecycle_event
 from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor
 from app.modules.documents.models import (
     DocAttachment,
@@ -2465,6 +2473,57 @@ def _apply_oa_receipt_archive_event(
 ) -> None:
     case, source, task, restore_status, receipt_ids = event_context
     from_case_status = case.status
+    receipt = db.execute(
+        select(OfficialWorkPackageReceipt).where(OfficialWorkPackageReceipt.id == receipt_ids[0])
+    ).scalar_one()
+    receipt_snapshot = {
+        "archive_status": receipt.archive_status,
+        "id": receipt.id,
+        "note": receipt.note,
+        "package_id": receipt.package_id,
+        "received_at": receipt.received_at.isoformat() if receipt.received_at else None,
+        "received_file_list": receipt.received_file_list,
+        "receipt_attachment_id": receipt.receipt_attachment_id,
+        "receipt_kind": receipt.receipt_kind,
+        "receiving_case_no": receipt.receiving_case_no,
+        "submitter": receipt.submitter,
+    }
+    receipt_content = json.dumps(
+        receipt_snapshot,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    captured_at = receipt.received_at or receipt.created_at
+    if captured_at.tzinfo is not None:
+        captured_at = captured_at.astimezone(timezone.utc).replace(tzinfo=None)
+    apply_lifecycle_event(
+        LifecycleEventCommand(
+            case_id=case.id,
+            event_type="OA_RECEIPT_ARCHIVED",
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=captured_at,
+            occurred_at=captured_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=case.id,
+                    evidence_kind="OA_RECEIPT",
+                    object_type="OfficialWorkPackageReceipt",
+                    object_id=receipt.id,
+                    content_hash=(
+                        "sha256:" + hashlib.sha256(receipt_content.encode("utf-8")).hexdigest()
+                    ),
+                    captured_at=captured_at,
+                ),
+            ),
+            actor_id=_normalize_text(actor_id) or "",
+            idempotency_key=f"oa-receipt-archived:{receipt.id}",
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={},
+        ),
+        db,
+    )
     evidence_note = json.dumps(
         {
             "actor_id": _normalize_text(actor_id),
@@ -2482,7 +2541,6 @@ def _apply_oa_receipt_archive_event(
     )
     task.status = TaskStatus.DONE.value
     task.done_at = datetime.utcnow()
-    case.status = restore_status
     db.add(
         TaskLog(
             id=str(uuid4()),

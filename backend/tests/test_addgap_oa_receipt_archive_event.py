@@ -67,6 +67,7 @@ def _create_archive_fixture(
     case_status: str | None = None,
     matching_task_count: int = 1,
     receipt_mode: str = "valid",
+    lifecycle_ready: bool = False,
 ) -> dict[str, object]:
     with session_factory() as db:
         case = Case(
@@ -78,6 +79,12 @@ def _create_archive_fixture(
             title_cn="OA官方回执事件测试案件",
             status=case_status or semantic_status,
         )
+        if lifecycle_ready:
+            case.business_stage = "OA_REPLY_IN_PROGRESS"
+            case.official_procedure_stage = "OFFICE_ACTION_RESPONSE"
+            case.legal_status = "APPLICATION_PENDING"
+            case.lifecycle_verification_status = "CONFIRMED"
+            case.lifecycle_revision = 0
         other_case = Case(
             id=str(uuid4()),
             case_no=f"OA-ARCHIVE-X-{uuid4().hex[:8].upper()}",
@@ -359,7 +366,11 @@ def test_valid_receipt_archive_closes_exact_task_and_restores_case(
     session_factory: sessionmaker,
     semantic_status: str,
 ) -> None:
-    ids = _create_archive_fixture(session_factory, semantic_status=semantic_status)
+    ids = _create_archive_fixture(
+        session_factory,
+        semantic_status=semantic_status,
+        lifecycle_ready=True,
+    )
 
     response = _archive(client, auth_headers, ids["package_id"])
 
@@ -527,7 +538,7 @@ def test_repeated_archive_is_idempotent_without_duplicate_logs_or_evidence(
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
-    ids = _create_archive_fixture(session_factory)
+    ids = _create_archive_fixture(session_factory, lifecycle_ready=True)
 
     first = _archive(client, auth_headers, ids["package_id"])
     repeated = _archive(client, auth_headers, ids["package_id"])
