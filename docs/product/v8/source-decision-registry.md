@@ -128,10 +128,38 @@ updates this index.
 
 | Record | Status | Exact effect |
 | --- | --- | --- |
+| `SRC-CNIPA-LAYOUT-246-20170630` | `source-metadata-reviewed/not activated` | The locked Announcement 246 normalized source and provenance below are accepted only as the D4-09 source prerequisite. They do not activate a rate book, rate, legal conclusion or customer decision. |
 | `SRC-CNIPA-ANNUITY-20260330` | Source metadata reviewed | The 32-page CNIPA payment guide and hashes above are the current reviewed D4-10 annuity source. This does not by itself activate runtime rates or infer earlier legal effect. |
 | Historical 31-page CNIPA guide | Superseded source history | Read-only comparison input; never current D4-10 authority. |
 | Customer `标准费率.XLS` | Customer pricing/configuration | Never automatic legal or official-fee authority. |
 | Customer `补充缴费信息模板.xlsm` | Unverified operational template | Preserve provenance/macros/hidden sheets; controlled upload remains gated. |
+
+### `SRC-CNIPA-LAYOUT-246-20170630`
+
+- Source URL:
+  `https://www.cnipa.gov.cn/art/2017/6/30/art_74_27462.html`.
+- Title: `关于执行新的集成电路布图设计保护费收费标准的公告（第246号）`.
+- Document number: `第二四六号`.
+- Published on: `2017-06-30`.
+- Effective from: `2017-07-01`.
+- Retrieval method: `normalized-primary-page-excerpt`.
+- Retrieved at UTC: `2026-07-18T08:39:40Z`.
+- Locked normalized-content SHA-256:
+  `13a487ed0575e86412830420fdb652d93ba0a8eb915bfeecd02097d75631d2b8`.
+- Locked provenance-record SHA-256:
+  `2ff9eb7e84253359b2075e972bdd955313b95955f0ebad5e3d1b9fe9ec642377`.
+- Decision value: `source-metadata-reviewed/not activated`.
+- Actor and acceptance authority: the repository controller-authorized
+  `V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION` lane records this metadata;
+  one independent HIGH reviewer of its exact commit is the acceptance authority. Neither
+  role acts as a customer, legal or runtime source activator.
+- Effective scope and time: the source's recorded effective date is `2017-07-01`, while
+  this registry decision becomes active only when the exact source-adoption story is
+  independently approved and integrated. Its scope is only the locked-source prerequisite
+  for D4-09; it creates no retroactive runtime, fee-book or legal activation.
+- Rollback impact: reverting that source-adoption story removes this record and its two
+  locked source files, returns D4-09 to `PARKED_DEPENDENCY`, and performs no runtime
+  deactivation because no source, candidate or rate was activated.
 
 ## Customer and authority decision gates
 

@@ -11,7 +11,8 @@
     "V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION": 12,
     "V8-ADOPT-SCHEMA-LINEAGE-FOUNDATION": 1,
     "V8-CANARY-LIFECYCLE-CORE-EVIDENCE-KIND-ADOPTION": 4,
-    "V8-ADOPT-ANNUITY-RATE-SOURCES": 36,
+    "V8-ADOPT-ANNUITY-RATE-SOURCES": 34,
+    "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION": 2,
     "V8-PAYLIST-EXPORT-CARRIER-CURRENT-ADOPTION": 1,
     "V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION": 3,
     "V8-ADOPT-LIFECYCLE-CENTER": 21,
@@ -1397,13 +1398,13 @@
     {
       "path": "reference/cnipa/announcement_246_20170630.normalized.txt",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "story_id": "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION",
       "rationale": "official-source snapshot and provenance"
     },
     {
       "path": "reference/cnipa/announcement_246_20170630.provenance.json",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-ANNUITY-RATE-SOURCES",
+      "story_id": "V8-CNIPA-246-LAYOUT-SOURCE-SNAPSHOT-CURRENT-ADOPTION",
       "rationale": "official-source snapshot and provenance"
     },
     {
