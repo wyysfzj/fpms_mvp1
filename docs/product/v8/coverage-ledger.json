@@ -1090,8 +1090,8 @@
     {
       "catalog_id": "FPMS-V8-PCT-FEE-POLICY-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PCT-FEE-POLICY-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3275,6 +3275,25 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-PCT-FEE-POLICY-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "b155bd5"
+      ],
+      "paths": [
+        "backend/app/modules/fees/pct_policy.py",
+        "backend/tests/test_v8_pct_fee_policy.py"
+      ],
+      "tree_sha256": "d7c7e2210d3da4a4012729c8b9b29037099712c8ef64bd100cc68a0fcc1c5dfd",
+      "tests": [
+        "pytest -q exact PCT policy plus accepted base and annuity reduction validators from backend cwd (194 passed)",
+        "scoped Ruff, exact four-path diff-check, disposition inventory and clean-status checks passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PCT-FEE-POLICY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PCT-FEE-POLICY-CURRENT-ADOPTION.md"
     }
   ]
 }
