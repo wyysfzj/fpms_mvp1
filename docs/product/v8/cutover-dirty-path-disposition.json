@@ -20,7 +20,8 @@
     "V8-ADOPT-LIFECYCLE-CENTER": 21,
     "V8-LIFECYCLE-POST-OA-GRANT-OUTCOMES-CURRENT-ADOPTION": 1,
     "V8-LIFECYCLE-TERMINAL-AND-RESTORATION-OUTCOMES": 1,
-    "V8-ADOPT-DOCUMENT-EVIDENCE": 28,
+    "V8-ADOPT-DOCUMENT-EVIDENCE": 27,
+    "V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION": 1,
     "V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION": 11,
     "V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION": 8,
     "V8-PREPARE-OA-REPLY-SEAM-CURRENT-ADOPTION": 4,
@@ -148,8 +149,8 @@
     {
       "path": "backend/app/modules/documents/application_fee_notice_contracts.py",
       "disposition": "ADOPTION_STORY",
-      "story_id": "V8-ADOPT-DOCUMENT-EVIDENCE",
-      "rationale": "document/evidence lineage and workflow"
+      "story_id": "V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION",
+      "rationale": "direct frozen application-fee notice input/error contract"
     },
     {
       "path": "backend/app/modules/documents/evidence_contracts.py",

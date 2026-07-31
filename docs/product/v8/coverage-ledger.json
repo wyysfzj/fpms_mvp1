@@ -1017,8 +1017,8 @@
     {
       "catalog_id": "FPMS-V8-APPLICATION-FEE-NOTICE-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3351,7 +3351,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "70f7c80e07750420ec5c4a53160eddff58aa3144",
-        "c0b206c716e07770fa0a2828f4811842280b7236"
+        "c0b206c716e07770fa0a2828f4811842280b7236",
+        "e307d68"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_service.py",
@@ -3366,11 +3367,12 @@
         "backend/tests/test_v8_ic_layout_right_restoration_request_obligation.py",
         "backend/tests/test_v8_patent_term_compensation_request_obligation.py"
       ],
-      "tree_sha256": "5d716d80d124f9fee058f11f48c1971b5b5a9f734d09559c234688e8b575b8eb",
+      "tree_sha256": "c8ee6382c288e75bcd9fb2ca1e33a1efd6e710b481b0e19f5ed8bdf43a67fb6a",
       "tests": [
         "pytest -q exact nine special-fee evidence-obligation files from backend cwd (143 passed)",
         "combined exact adapter plus document-review/finalize and obligation-core regression tranche from backend cwd (424 passed)",
-        "scoped Ruff, format-check, exact 13-path diff-check and 474-path disposition validation passed"
+        "scoped Ruff, format-check, exact 13-path diff-check and 474-path disposition validation passed",
+        "independent row126 successor attestation confirmed special-fee evidence and obligation handlers remain intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-SPECIAL-FEE-EVIDENCE-OBLIGATION-CHAIN-CURRENT-ADOPTION.md",
@@ -3681,6 +3683,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "e307d68"
+      ],
+      "paths": [
+        "backend/app/modules/documents/application_fee_notice_contracts.py",
+        "backend/app/modules/documents/fee_linking_service.py",
+        "backend/app/modules/documents/semantics.py",
+        "backend/tests/test_v8_application_fee_notice_obligation.py"
+      ],
+      "tree_sha256": "44378ecefbc2673037a16f2d26486db761531c224c07844c5da4a59b5376dbf1",
+      "tests": [
+        "pytest -q tests/test_v8_application_fee_notice_obligation.py from backend cwd (26 passed)",
+        "scoped Ruff, compile and exact four-path diff check passed",
+        "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested the shared special-fee story"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION.md"
     }
   ]
 }
