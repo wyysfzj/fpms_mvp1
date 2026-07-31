@@ -566,8 +566,8 @@
     {
       "catalog_id": "FPMS-V8-OA-REPLY-DATE-RECEIPT-PROJECTION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2701,7 +2701,8 @@
         "f89e67e60db95ce34046acc84aaafd53703f3fea",
         "c53bf63fbce05bcb2d1f5f40c5657b0ed51ad755",
         "895bfc22c6642baacfce2ae6a83916af0dbc3ade",
-        "607261b"
+        "607261b",
+        "54b32d5"
       ],
       "paths": [
         "backend/app/modules/annuity/service.py",
@@ -2709,14 +2710,15 @@
         "backend/tests/test_v8_certificate_archived_activity.py",
         "backend/tests/test_v8_gov_payment_activity_adapter.py"
       ],
-      "tree_sha256": "99da8799da156cbd3d9e216f477a9adfe49fbee85feace87e4627bdc549f26b0",
+      "tree_sha256": "5db84f0aca72440545618750608173fe43f8002af43b99701db8768982d411f6",
       "tests": [
         "pytest -q tests/test_v8_certificate_archived_activity.py tests/test_v8_gov_payment_activity_adapter.py from backend cwd (2 passed)",
         "successor re-attestation with row125 focused test from backend cwd (3 passed)",
         "successor re-attestation with row159, row160, row124 and row125 tests from backend cwd (19 passed)",
         "independent rows159–162 plus row124/125 successor tranche from backend cwd (25 passed)",
         "independent document-evidence successor review: shared service additions left the two activity adapters unchanged; exact document tranche 92 passed",
-        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)"
+        "PayList-create successor tranche covering both activity adapters and export readers from backend cwd (26 passed)",
+        "independent row71 successor review confirmed reply-date-only service changes leave activity adapters intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-ATTACHMENT-EVIDENCE-REVIEW-VERTICAL-CURRENT-ADOPTION.md",
@@ -3082,7 +3084,8 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "895bfc22c6642baacfce2ae6a83916af0dbc3ade",
-        "13a40c33bdbb4eb89909284e088786f4232833f5"
+        "13a40c33bdbb4eb89909284e088786f4232833f5",
+        "54b32d5"
       ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-document-evidence-review-ui.spec.ts",
@@ -3099,13 +3102,14 @@
         "frontend/src/api/documents.types.ts",
         "frontend/src/modules/documents/components/AttachmentList.vue"
       ],
-      "tree_sha256": "388406e461305c8a9fd3dd0eb5d212d264403f271916fa6458404a9fd63c692a",
+      "tree_sha256": "ff39bc44e9d95ed39b34f4ed3d56405755e32191193b84ddedc39b3d39e93260",
       "tests": [
         "pytest -q exact four-file document attachment/evidence/review backend tranche from backend cwd (92 passed)",
         "isolated TypeScript contract and exact-file ESLint passed",
         "playwright test v8-document-evidence-review-ui.spec.ts --project=chromium --workers=1 (3 passed)",
         "scoped Ruff and exact two-tree diff-check passed",
-        "independent lifecycle-evidence successor review confirmed documents API changed only by ten protected routes; canonical adapter tranche 313 passed"
+        "independent lifecycle-evidence successor review confirmed documents API changed only by ten protected routes; canonical adapter tranche 313 passed",
+        "independent row71 successor review confirmed reply-date-only service changes leave attachment/evidence behavior intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-EVIDENCE-API-ADAPTERS-CURRENT-ADOPTION.md",
@@ -3456,18 +3460,20 @@
       "story_id": "V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "ed6a4c5"
+        "ed6a4c5",
+        "54b32d5"
       ],
       "paths": [
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_addgap_oa_receipt_archive_event.py",
         "backend/tests/test_v8_oa_receipt_lifecycle_adapter.py"
       ],
-      "tree_sha256": "bac409435c8dff690d4eb649f19581e94d52f70ac877ada32ea3b7d3749d7b8c",
+      "tree_sha256": "86c63d89f883d1c135cd8929a272714f9036001e4aafde54613975d7558d2f72",
       "tests": [
         "pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py tests/test_addgap_oa_receipt_archive_event.py from backend cwd (12 passed)",
         "independent pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py from backend cwd (2 passed)",
-        "scoped Ruff, exact five-path diff-check and 474-path disposition validation passed"
+        "scoped Ruff, exact five-path diff-check and 474-path disposition validation passed",
+        "independent row71 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
@@ -3492,6 +3498,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-INTERNAL-OFFICIAL-BOUNDARY-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "54b32d5",
+        "f179e8e"
+      ],
+      "paths": [
+        "backend/app/modules/documents/service.py",
+        "backend/app/modules/official_workflows/service.py",
+        "backend/tests/test_v8_oa_reply_date_receipt_projection.py"
+      ],
+      "tree_sha256": "288d77d505dc930443d0fd7084a33725da790aaa0bcb683ca07d0433e017c82f",
+      "tests": [
+        "pytest -q tests/test_v8_oa_reply_date_receipt_projection.py from backend cwd (2 passed)",
+        "independent focused rerun from backend cwd (2 passed)",
+        "scoped Ruff, exact five-path diff-check, disposition integrity and predecessor successor-attestation passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-CURRENT-VERIFICATION",
