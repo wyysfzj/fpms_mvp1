@@ -209,6 +209,7 @@ export interface FeeDraftCreatePayload {
     client_id?: string | null
     currency: string
     draft_type?: string
+    obligation_id?: string | null
 }
 
 export interface ApplyFeeDraftGeneratePayload {
