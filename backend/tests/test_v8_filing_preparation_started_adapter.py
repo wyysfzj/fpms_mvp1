@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -84,7 +85,9 @@ def test_resolve_api_records_exact_filing_preparation_activity_once(
             "package_kind": "FILING_PREP",
             "resolve_key": f"FILING_PREP:{case_id}",
         }
-        snapshot_hash = f"sha256:{hashlib.sha256(_canonical_json(snapshot).encode('utf-8')).hexdigest()}"
+        snapshot_hash = (
+            f"sha256:{hashlib.sha256(_canonical_json(snapshot).encode('utf-8')).hexdigest()}"
+        )
         expected_payload = {
             "evidence_schema": "FPMS_FILING_PREPARATION_EVIDENCE_V1",
             "source_snapshot": snapshot,
@@ -181,11 +184,14 @@ def test_existing_package_without_creator_fails_closed_without_activity(
     assert response.status_code == 409, response.text
     assert response.json()["error"]["code"] == "FILING_PREPARATION_PROVENANCE_CONFLICT"
     with session_factory() as transaction:
-        assert transaction.scalar(
-            select(func.count())
-            .select_from(CaseActivityEvent)
-            .where(CaseActivityEvent.case_id == case_id)
-        ) == 0
+        assert (
+            transaction.scalar(
+                select(func.count())
+                .select_from(CaseActivityEvent)
+                .where(CaseActivityEvent.case_id == case_id)
+            )
+            == 0
+        )
 
 
 @pytest.mark.parametrize("tampered_part", ("payload", "evidence"))
@@ -223,16 +229,117 @@ def test_replay_rejects_changed_persisted_provenance(
     assert replayed.status_code == 409, replayed.text
     assert replayed.json()["error"]["code"] == "LIFECYCLE_IDEMPOTENCY_CONFLICT"
     with session_factory() as transaction:
-        assert transaction.scalar(
-            select(func.count())
-            .select_from(CaseActivityEvent)
-            .where(CaseActivityEvent.case_id == case_id)
-        ) == 1
-        assert transaction.scalar(
-            select(func.count())
-            .select_from(CaseActivityEventEvidence)
-            .where(CaseActivityEventEvidence.case_id == case_id)
-        ) == 1
+        assert (
+            transaction.scalar(
+                select(func.count())
+                .select_from(CaseActivityEvent)
+                .where(CaseActivityEvent.case_id == case_id)
+            )
+            == 1
+        )
+        assert (
+            transaction.scalar(
+                select(func.count())
+                .select_from(CaseActivityEventEvidence)
+                .where(CaseActivityEventEvidence.case_id == case_id)
+            )
+            == 1
+        )
+
+
+def test_replay_rejects_coherent_timestamp_drift_from_package_creation(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    case_id = _create_case(session_factory)
+    created = _resolve(client, auth_headers, case_id=case_id)
+    assert created.status_code == 200, created.text
+
+    with session_factory() as transaction:
+        package = transaction.scalar(
+            select(OfficialWorkPackage).where(OfficialWorkPackage.case_id == case_id)
+        )
+        activity = transaction.scalar(
+            select(CaseActivityEvent).where(CaseActivityEvent.case_id == case_id)
+        )
+        assert package is not None
+        assert activity is not None
+        evidence = transaction.scalar(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == activity.id
+            )
+        )
+        assert evidence is not None
+        shifted_time = package.created_at + timedelta(seconds=1)
+        activity.effective_at = shifted_time
+        activity.occurred_at = shifted_time
+        evidence.captured_at = shifted_time
+        transaction.commit()
+
+    replayed = _resolve(client, auth_headers, case_id=case_id)
+
+    assert replayed.status_code == 409, replayed.text
+    assert replayed.json()["error"]["code"] == "LIFECYCLE_IDEMPOTENCY_CONFLICT"
+
+
+def test_stored_replay_uses_persisted_provenance_not_later_mutable_package_fields(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> None:
+    import app.modules.official_workflows.service as service
+
+    case_id = _create_case(session_factory)
+    created = _resolve(client, auth_headers, case_id=case_id)
+    assert created.status_code == 200, created.text
+    package_id = created.json()["package"]["id"]
+
+    with session_factory() as transaction:
+        package = transaction.get(OfficialWorkPackage, package_id)
+        activity = transaction.scalar(
+            select(CaseActivityEvent).where(CaseActivityEvent.case_id == case_id)
+        )
+        assert package is not None
+        assert activity is not None
+        evidence = transaction.scalar(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == activity.id
+            )
+        )
+        assert evidence is not None
+        stored_payload_json = activity.payload_json
+
+        # The public adapter intentionally rejects persisted identity corruption before
+        # replay. Mutate only the loaded package to isolate the helper's stored-byte contract.
+        package.package_kind = "LATER_MUTABLE_KIND"
+        package.resolve_key = "LATER_MUTABLE_RESOLVE_KEY"
+
+        command = service._stored_filing_command(
+            transaction,
+            package=package,
+            actor_id=activity.actor_id,
+            activity=activity,
+        )
+        reference = command.evidence_refs[0]
+
+        assert _canonical_json(command.payload) == stored_payload_json
+        assert (
+            reference.case_id,
+            reference.evidence_kind,
+            reference.object_type,
+            reference.object_id,
+            reference.content_hash,
+            reference.captured_at,
+        ) == (
+            evidence.case_id,
+            evidence.evidence_kind,
+            evidence.object_type,
+            evidence.object_id,
+            evidence.content_hash,
+            evidence.captured_at,
+        )
+        assert service.apply_lifecycle_event(command, transaction).reused is True
 
 
 @pytest.mark.parametrize("actor_id", ("", "   "))
@@ -282,28 +389,40 @@ def test_service_leaves_all_writes_in_caller_transaction(
         )
 
     with session_factory() as verification:
-        assert verification.scalar(
-            select(func.count())
-            .select_from(OfficialWorkPackage)
-            .where(OfficialWorkPackage.case_id == case_id)
-        ) == 0
-        assert verification.scalar(
-            select(func.count())
-            .select_from(CaseActivityEvent)
-            .where(CaseActivityEvent.case_id == case_id)
-        ) == 0
-        assert verification.scalar(
-            select(func.count())
-            .select_from(OfficialWorkPackageManifest)
-            .join(OfficialWorkPackage)
-            .where(OfficialWorkPackage.case_id == case_id)
-        ) == 0
-        assert verification.scalar(
-            select(func.count())
-            .select_from(OfficialWorkPackageChecklist)
-            .join(OfficialWorkPackage)
-            .where(OfficialWorkPackage.case_id == case_id)
-        ) == 0
+        assert (
+            verification.scalar(
+                select(func.count())
+                .select_from(OfficialWorkPackage)
+                .where(OfficialWorkPackage.case_id == case_id)
+            )
+            == 0
+        )
+        assert (
+            verification.scalar(
+                select(func.count())
+                .select_from(CaseActivityEvent)
+                .where(CaseActivityEvent.case_id == case_id)
+            )
+            == 0
+        )
+        assert (
+            verification.scalar(
+                select(func.count())
+                .select_from(OfficialWorkPackageManifest)
+                .join(OfficialWorkPackage)
+                .where(OfficialWorkPackage.case_id == case_id)
+            )
+            == 0
+        )
+        assert (
+            verification.scalar(
+                select(func.count())
+                .select_from(OfficialWorkPackageChecklist)
+                .join(OfficialWorkPackage)
+                .where(OfficialWorkPackage.case_id == case_id)
+            )
+            == 0
+        )
 
 
 def test_api_rolls_back_package_refresh_and_activity_on_lifecycle_failure(
@@ -325,13 +444,19 @@ def test_api_rolls_back_package_refresh_and_activity_on_lifecycle_failure(
 
     assert response.status_code == 500, response.text
     with session_factory() as transaction:
-        assert transaction.scalar(
-            select(func.count())
-            .select_from(OfficialWorkPackage)
-            .where(OfficialWorkPackage.case_id == case_id)
-        ) == 0
-        assert transaction.scalar(
-            select(func.count())
-            .select_from(CaseActivityEvent)
-            .where(CaseActivityEvent.case_id == case_id)
-        ) == 0
+        assert (
+            transaction.scalar(
+                select(func.count())
+                .select_from(OfficialWorkPackage)
+                .where(OfficialWorkPackage.case_id == case_id)
+            )
+            == 0
+        )
+        assert (
+            transaction.scalar(
+                select(func.count())
+                .select_from(CaseActivityEvent)
+                .where(CaseActivityEvent.case_id == case_id)
+            )
+            == 0
+        )

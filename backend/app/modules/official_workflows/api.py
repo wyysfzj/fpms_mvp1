@@ -208,9 +208,16 @@ def update_oa_reply_checklist_endpoint(
 def resolve_filing_preparation_package_endpoint(
     case_id: UUID,
     _perm: None = Depends(require_perm("OfficialWorkflow.Update")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> FilingPreparationPackageOut:
-    return ensure_filing_preparation_package(db, case_id=str(case_id))
+    result = ensure_filing_preparation_package(
+        db,
+        case_id=str(case_id),
+        actor_id=current_user.id,
+    )
+    db.commit()
+    return result
 
 
 @router.get(

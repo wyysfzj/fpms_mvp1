@@ -19,7 +19,13 @@ from app.modules.cases.lifecycle_contracts import (
     LifecycleEventCommand,
 )
 from app.modules.cases.lifecycle_service import apply_lifecycle_event
-from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor
+from app.modules.cases.models import (
+    Case,
+    CaseActivityEvent,
+    CaseActivityEventEvidence,
+    T_CaseApplicant,
+    T_CaseInventor,
+)
 from app.modules.documents.models import (
     DocAttachment,
     DocTemplate,
@@ -936,7 +942,14 @@ def ensure_filing_preparation_package(
     db: Session,
     *,
     case_id: str,
+    actor_id: str,
 ) -> FilingPreparationPackageOut:
+    if type(actor_id) is not str or not actor_id.strip() or len(actor_id) > 36:
+        raise_business_error(
+            "FILING_PREPARATION_ACTOR_INVALID",
+            "Filing preparation actor is invalid",
+            status_code=400,
+        )
     case = _get_case(db, case_id)
     resolve_key = f"FILING_PREP:{case.id}"
     existing = (
@@ -965,7 +978,19 @@ def ensure_filing_preparation_package(
             status_code=409,
         )
     if existing:
-        return get_filing_preparation_package(db, package_id=existing[0].id)
+        package = existing[0]
+        if (
+            type(package.created_by) is not str
+            or not package.created_by.strip()
+            or len(package.created_by) > 36
+        ):
+            raise_business_error(
+                "FILING_PREPARATION_PROVENANCE_CONFLICT",
+                "Filing preparation package creator is missing or invalid",
+                status_code=409,
+            )
+        _record_filing_preparation_started(db, package=package, actor_id=actor_id)
+        return get_filing_preparation_package(db, package_id=package.id)
 
     if _normalize_code(case.status) != "NOT_FILED":
         raise_business_error(
@@ -981,28 +1006,198 @@ def ensure_filing_preparation_package(
         package_kind="FILING_PREP",
         status="PREPARING",
         resolve_key=resolve_key,
+        created_by=actor_id,
+        updated_by=actor_id,
     )
-    db.add(package)
-    try:
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        winner = db.execute(
-            select(OfficialWorkPackage).where(
-                OfficialWorkPackage.resolve_key == resolve_key,
-                OfficialWorkPackage.case_id == case.id,
-                OfficialWorkPackage.package_kind == "FILING_PREP",
-            )
-        ).scalar_one_or_none()
-        if winner:
-            return get_filing_preparation_package(db, package_id=winner.id)
+    resolve_collision = db.execute(
+        select(OfficialWorkPackage).where(OfficialWorkPackage.resolve_key == resolve_key)
+    ).scalar_one_or_none()
+    if resolve_collision is not None:
         raise_business_error(
             "FILING_PREPARATION_IDENTITY_CONFLICT",
             "Filing preparation package identity is inconsistent",
             details={"case_id": case.id, "expected_resolve_key": resolve_key},
             status_code=409,
         )
-    return refresh_filing_preparation_package(db, package_id=package.id)
+    db.add(package)
+    try:
+        db.flush()
+    except IntegrityError:
+        raise_business_error(
+            "FILING_PREPARATION_IDENTITY_CONFLICT",
+            "Filing preparation package identity is inconsistent",
+            details={"case_id": case.id, "expected_resolve_key": resolve_key},
+            status_code=409,
+        )
+    db.refresh(package)
+    result = _refresh_filing_preparation_package(db, package=package)
+    _record_filing_preparation_started(db, package=package, actor_id=actor_id)
+    return result
+
+
+def _canonical_filing_json(value: object) -> str:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def _filing_snapshot(package: OfficialWorkPackage) -> dict[str, object]:
+    return {
+        "case_id": package.case_id,
+        "id": package.id,
+        "package_kind": package.package_kind,
+        "resolve_key": package.resolve_key,
+    }
+
+
+def _filing_snapshot_hash(snapshot: dict[str, object]) -> str:
+    canonical = _canonical_filing_json(snapshot).encode("utf-8")
+    return f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+
+
+def _filing_provenance_conflict() -> None:
+    raise_business_error(
+        "LIFECYCLE_IDEMPOTENCY_CONFLICT",
+        "Persisted filing preparation provenance is inconsistent",
+        status_code=409,
+    )
+
+
+def _stored_filing_command(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    actor_id: str,
+    activity: CaseActivityEvent,
+) -> LifecycleEventCommand:
+    evidence_rows = (
+        db.execute(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == activity.id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    try:
+        payload = json.loads(activity.payload_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        _filing_provenance_conflict()
+    if (
+        type(payload) is not dict
+        or _canonical_filing_json(payload) != activity.payload_json
+        or set(payload) != {"evidence_schema", "source_snapshot", "source_snapshot_hash"}
+        or payload.get("evidence_schema") != "FPMS_FILING_PREPARATION_EVIDENCE_V1"
+    ):
+        _filing_provenance_conflict()
+    snapshot = payload.get("source_snapshot")
+    if (
+        type(snapshot) is not dict
+        or set(snapshot) != {"case_id", "id", "package_kind", "resolve_key"}
+        or any(type(snapshot.get(key)) is not str or not snapshot[key] for key in snapshot)
+        or snapshot["case_id"] != package.case_id
+        or snapshot["id"] != package.id
+        or snapshot["package_kind"] != "FILING_PREP"
+        or snapshot["resolve_key"] != f"FILING_PREP:{snapshot['case_id']}"
+    ):
+        _filing_provenance_conflict()
+    snapshot_hash = _filing_snapshot_hash(snapshot)
+    if payload.get("source_snapshot_hash") != snapshot_hash or len(evidence_rows) != 1:
+        _filing_provenance_conflict()
+    evidence = evidence_rows[0]
+    if (
+        activity.activity_type != "FILING_PREPARATION_STARTED"
+        or activity.lane != ActivityLane.LIFECYCLE.value
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or activity.effective_at != activity.occurred_at
+        or activity.effective_at != package.created_at
+        or activity.occurred_at != package.created_at
+        or evidence.case_id != package.case_id
+        or evidence.evidence_kind != "FILING_WORK_PACKAGE"
+        or evidence.object_type != "OfficialWorkPackage"
+        or evidence.object_id != package.id
+        or evidence.content_hash != snapshot_hash
+        or evidence.captured_at != activity.effective_at
+        or evidence.captured_at != package.created_at
+    ):
+        _filing_provenance_conflict()
+    return LifecycleEventCommand(
+        case_id=package.case_id,
+        event_type="FILING_PREPARATION_STARTED",
+        lane=ActivityLane.LIFECYCLE,
+        effective_at=activity.effective_at,
+        occurred_at=activity.occurred_at,
+        evidence_refs=(
+            EvidenceReference(
+                case_id=evidence.case_id,
+                evidence_kind=evidence.evidence_kind,
+                object_type=evidence.object_type,
+                object_id=evidence.object_id,
+                content_hash=evidence.content_hash,
+                captured_at=evidence.captured_at,
+            ),
+        ),
+        actor_id=actor_id,
+        idempotency_key=f"filing-preparation-started:{package.id}",
+        confirmation_status=ConfirmationStatus.CONFIRMED,
+        payload=payload,
+    )
+
+
+def _record_filing_preparation_started(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    actor_id: str,
+) -> None:
+    idempotency_key = f"filing-preparation-started:{package.id}"
+    activity = db.execute(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == package.case_id,
+            CaseActivityEvent.idempotency_key == idempotency_key,
+        )
+    ).scalar_one_or_none()
+    if activity is None:
+        snapshot = _filing_snapshot(package)
+        snapshot_hash = _filing_snapshot_hash(snapshot)
+        payload = {
+            "evidence_schema": "FPMS_FILING_PREPARATION_EVIDENCE_V1",
+            "source_snapshot": snapshot,
+            "source_snapshot_hash": snapshot_hash,
+        }
+        command = LifecycleEventCommand(
+            case_id=package.case_id,
+            event_type="FILING_PREPARATION_STARTED",
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=package.created_at,
+            occurred_at=package.created_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=package.case_id,
+                    evidence_kind="FILING_WORK_PACKAGE",
+                    object_type="OfficialWorkPackage",
+                    object_id=package.id,
+                    content_hash=snapshot_hash,
+                    captured_at=package.created_at,
+                ),
+            ),
+            actor_id=actor_id,
+            idempotency_key=idempotency_key,
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload=payload,
+        )
+    else:
+        command = _stored_filing_command(
+            db,
+            package=package,
+            actor_id=actor_id,
+            activity=activity,
+        )
+    apply_lifecycle_event(command, db)
 
 
 def get_filing_preparation_package(
@@ -1065,6 +1260,21 @@ def refresh_filing_preparation_package(
 ) -> FilingPreparationPackageOut:
     package = _get_package(db, package_id)
     _require_filing_package(package)
+    result = _refresh_filing_preparation_package(
+        db,
+        package=package,
+        require_commission_instruction=require_commission_instruction,
+    )
+    db.commit()
+    return result
+
+
+def _refresh_filing_preparation_package(
+    db: Session,
+    *,
+    package: OfficialWorkPackage,
+    require_commission_instruction: bool = False,
+) -> FilingPreparationPackageOut:
     attachments = _case_attachments(db, case_id=package.case_id)
     summary = summarize_attachment_manifest(
         attachments,
@@ -1129,8 +1339,8 @@ def refresh_filing_preparation_package(
     )
 
     package.status = "NEEDS_MAINTENANCE"
-    db.commit()
-    return get_filing_preparation_package(db, package_id=package_id)
+    db.flush()
+    return get_filing_preparation_package(db, package_id=package.id)
 
 
 def update_filing_preparation_checklist(
@@ -1832,7 +2042,9 @@ def _letter_first_applicant_name(db: Session, *, case: Case) -> str:
     )
     if first_applicant is None:
         return ""
-    return _normalize_text(first_applicant.name_cn) or _normalize_text(first_applicant.name_en) or ""
+    return (
+        _normalize_text(first_applicant.name_cn) or _normalize_text(first_applicant.name_en) or ""
+    )
 
 
 def _letter_output_filename(
@@ -1917,9 +2129,7 @@ def get_letter_handoff_preview(
     template_ready = _letter_template_ready(db, mapping)
     generated_word_path = None
     if template_ready:
-        output_filename = _letter_output_filename(
-            db, case=case, document=document, mapping=mapping
-        )
+        output_filename = _letter_output_filename(db, case=case, document=document, mapping=mapping)
         generated_word_path = f"letters/{case.case_no}/{output_filename}"
 
     mail_subject = f"{case.case_no} {document.title or '官方来文'}"
