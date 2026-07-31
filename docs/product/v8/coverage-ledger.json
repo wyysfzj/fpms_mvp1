@@ -922,8 +922,8 @@
     {
       "catalog_id": "FPMS-V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3383,6 +3383,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FILING-XML-DERIVATION-GATE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "41365ca",
+        "9f5e99b"
+      ],
+      "paths": [
+        "backend/app/modules/fees/service.py",
+        "backend/tests/test_v8_generic_fee_draft_activity_adapter.py"
+      ],
+      "tree_sha256": "651f08aeb0689345e29cec33b4901869df03b02060e40ef346710bca6d745c23",
+      "tests": [
+        "pytest -q tests/test_v8_generic_fee_draft_activity_adapter.py from backend cwd (10 passed)",
+        "pytest -q tests/test_v8_generic_fee_draft_activity_adapter.py tests/test_v8_fee_obligation_prepare_draft.py from backend cwd (33 passed)",
+        "scoped Ruff, exact four-path diff-check and 474-path disposition validation passed"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GENERIC-FEE-DRAFT-ACTIVITY-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
