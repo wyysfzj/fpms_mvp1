@@ -958,10 +958,13 @@
     {
       "catalog_id": "FPMS-V8-GRANT-DRAFT-OBLIGATION-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
+      "disposition": "AUTHORITY_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "GRANT_YEAR_REVIEW_REQUIRED_MATCH_AUTHORITY_MISSING",
+        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-ANNUITY-INSTRUCTION-OBLIGATION-ADAPTER-20260712-01",
@@ -2198,10 +2201,13 @@
     {
       "catalog_id": "FPMS-V8-LIVE-FIXTURE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
+      "disposition": "AUTHORITY_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "OVERLAY_WARNING_CONFLICT_PROJECTION_CONTRACT_MISSING",
+        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-20260712-01",
@@ -2209,7 +2215,13 @@
       "disposition": "PENDING",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "DEPENDENCY_BLOCKED",
+        "dependencies": [
+          "FPMS-V8-LIVE-FIXTURE-20260712-01"
+        ],
+        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-PAYLIST-BOUNDARY-REAL-UI-E2E-20260712-01",
@@ -2233,7 +2245,13 @@
       "disposition": "PENDING",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "DEPENDENCY_BLOCKED",
+        "dependencies": [
+          "FPMS-V8-GRANT-DRAFT-OBLIGATION-ADAPTER-20260712-01"
+        ],
+        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-FOUNDATION-CLOSE-20260712-01",
@@ -2241,7 +2259,16 @@
       "disposition": "PENDING",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "DEPENDENCY_BLOCKED",
+        "dependencies": [
+          "FPMS-V8-GRANT-DRAFT-OBLIGATION-ADAPTER-20260712-01",
+          "FPMS-V8-LIVE-FIXTURE-20260712-01",
+          "FPMS-V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-20260712-01",
+          "FPMS-V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-20260712-01"
+        ],
+        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01",
