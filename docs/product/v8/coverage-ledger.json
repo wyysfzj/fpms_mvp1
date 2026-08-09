@@ -2078,8 +2078,8 @@
     {
       "catalog_id": "FPMS-V8-OVERLAY-CENTER-QUERY-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-CENTER-QUERY-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4745,6 +4745,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DUAL-READ-RECONCILIATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-DUAL-READ-RECONCILIATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-CENTER-QUERY-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "a71adf9450ad36a24ce1fd984ec4a2363e2f9215",
+        "cac66aee1d57dd0cb0ac2569563c774cf4979b5a",
+        "4d8c2e0329f4964248adb78c058f6bff6dd92ee7"
+      ],
+      "paths": [
+        "backend/app/modules/cases/lifecycle_overlay_service.py",
+        "backend/tests/test_v8_lifecycle_overlay_center.py"
+      ],
+      "tree_sha256": "5fe21e6ea9b2c9939a3bd9a42d7fb50c2a5c5de7688a688b3f94fc3416a8eff5",
+      "tests": [
+        "initial focused RED failed because the overlay service module was absent",
+        "corrected focused suite 16 passed",
+        "scoped Ruff, format and exact product-range diff checks passed",
+        "independent High review approved corrected exact range P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-CENTER-QUERY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-CENTER-QUERY-CURRENT-ADOPTION.md"
     }
   ]
 }
