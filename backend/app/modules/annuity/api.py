@@ -10,13 +10,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
+from app.core.errors import raise_business_error
 from app.db.session import get_db
+from app.modules.annuity.models import PayList
 from app.modules.annuity.schemas import AnnuityTaskListResponse
 from app.modules.annuity.service import (
+    ExportInternalPayListCommand,
     add_manual_gov_payment,
+    compensate_internal_pay_list_export,
     create_historical_pay_list,
     create_pay_list_from_fee_items,
-    export_pay_list,
+    export_internal_pay_list,
     generate_fee_drafts_from_annuity_tasks,
     get_pay_list_detail,
     list_annuity_tasks_report,
@@ -264,14 +268,22 @@ def generate_annuity_tasks_endpoint(
 def post_pay_list_from_fee_items(
     payload: PayListFromFeeItemsIn,
     _perm: None = Depends(require_perm("PayList.Create")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return create_pay_list_from_fee_items(
-        db,
-        fee_item_ids=payload.fee_item_ids,
-        planned_pay_date=payload.planned_pay_date,
-        remark=payload.remark,
-    )
+    try:
+        result = create_pay_list_from_fee_items(
+            db,
+            fee_item_ids=payload.fee_item_ids,
+            planned_pay_date=payload.planned_pay_date,
+            remark=payload.remark,
+            actor_id=current_user.id,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
 
 
 @router.get("/pay-lists", summary="List pay lists")
@@ -372,12 +384,38 @@ def post_pay_list_export(
     current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> Response:
-    export_payload = export_pay_list(db, pay_list_id=pay_list_id, actor_id=current_user.id)
+    pay_list = db.get(PayList, pay_list_id)
+    if pay_list is None:
+        raise_business_error("PAY_LIST_NOT_FOUND", "Pay list not found", status_code=404)
+    if (pay_list.status or "").strip().upper() != "DRAFT":
+        raise_business_error(
+            "PAY_LIST_STATE_CONFLICT",
+            "Pay list can only be exported from DRAFT status",
+            details={"status": pay_list.status},
+            status_code=409,
+        )
+
+    export_result = None
+    try:
+        export_result = export_internal_pay_list(
+            ExportInternalPayListCommand(
+                pay_list_id=pay_list_id,
+                actor_id=current_user.id,
+                idempotency_key=f"pay-list-internal-export:http-v1:{pay_list_id}",
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        if export_result is not None and not export_result.reused:
+            compensate_internal_pay_list_export(export_result.managed_storage_path)
+        raise
     return Response(
-        content=export_payload["content"],
-        media_type=export_payload["content_type"],
+        content=export_result.content,
+        media_type=export_result.content_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{export_payload["filename"]}"',
+            "Content-Disposition": f'attachment; filename="{export_result.filename}"',
         },
     )
 
