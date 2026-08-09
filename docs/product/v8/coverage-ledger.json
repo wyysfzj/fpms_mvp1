@@ -734,9 +734,9 @@
     {
       "catalog_id": "FPMS-V8-FORMAT-LETTER-IN-SOURCE-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
+      "disposition": "SUPERSEDED_BY_STORY",
       "story_id": null,
-      "successor_story_id": null,
+      "successor_story_id": "V8-FORMAT-LETTER-IN-SOURCE-UI-SUCCESSOR-CURRENT-ADOPTION",
       "blocker": null
     },
     {
