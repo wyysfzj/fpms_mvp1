@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -121,6 +123,30 @@ CONFIRMATION_MISSING_KINDS = {
 }
 RECEIPT_ARCHIVED_STATUSES = {"ARCHIVED", "CONFIRMED", "RECEIVED"}
 _MULTI_FILE_MANIFEST_ROLES = {"OA_ADDITIONAL_FILE", "OA_OTHER_PROOF"}
+_OA_EXTERNAL_ACTIVITY_PREFIX = "document-external-submission:oa-external:"
+_OA_EXTERNAL_CONTENT_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FinalizeOaExternalSubmissionCommand:
+    package_id: str
+    evidence_version_id: str
+    actor_id: str
+    submitted_at: datetime
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FinalizeOaExternalSubmissionResult:
+    package_id: str
+    evidence_version_id: str
+    checklist_item: OfficialWorkPackageChecklistOut
+    activity_id: str
+    activity_sequence: int
+    lifecycle_revision: int
+    submitted_at: datetime
+    idempotency_key: str
+    reused: bool
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -1732,6 +1758,266 @@ def _oa_reply_status(source: Document | None, reply: Document | None) -> str:
     if reply:
         return "REPLY_DOCUMENT_LINKED"
     return "WAITING_REPLY_DOCUMENT"
+
+
+def _oa_external_invalid(field: str) -> None:
+    raise_business_error(
+        "OA_EXTERNAL_SUBMISSION_INVALID",
+        f"Invalid OA external-submission field: {field}",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _oa_external_conflict(message: str) -> None:
+    raise_business_error(
+        "OA_EXTERNAL_SUBMISSION_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _validate_oa_external_command(command: FinalizeOaExternalSubmissionCommand) -> None:
+    if type(command) is not FinalizeOaExternalSubmissionCommand:
+        _oa_external_invalid("command")
+    for field in ("package_id", "evidence_version_id", "actor_id"):
+        value = getattr(command, field)
+        if type(value) is not str or not value or value != value.strip() or len(value) > 36:
+            _oa_external_invalid(field)
+    if type(command.submitted_at) is not datetime or command.submitted_at.tzinfo is not None:
+        _oa_external_invalid("submitted_at")
+    if (
+        type(command.idempotency_key) is not str
+        or not command.idempotency_key
+        or command.idempotency_key != command.idempotency_key.strip()
+        or len(command.idempotency_key) > 50
+    ):
+        _oa_external_invalid("idempotency_key")
+
+
+def _oa_external_activity(
+    command: FinalizeOaExternalSubmissionCommand,
+    transaction: Session,
+) -> CaseActivityEvent | None:
+    expected_key = f"{_OA_EXTERNAL_ACTIVITY_PREFIX}{command.package_id}:{command.idempotency_key}"
+    package_ids = set(transaction.scalars(select(OfficialWorkPackage.id)))
+    package_ids.add(command.package_id)
+    candidate_keys = {
+        f"{_OA_EXTERNAL_ACTIVITY_PREFIX}{package_id}:{command.idempotency_key}"
+        for package_id in package_ids
+    }
+    same_upstream_key = [
+        activity
+        for activity in transaction.scalars(
+            select(CaseActivityEvent).where(CaseActivityEvent.idempotency_key.in_(candidate_keys))
+        )
+    ]
+    if len(same_upstream_key) > 1 or (
+        same_upstream_key and same_upstream_key[0].idempotency_key != expected_key
+    ):
+        _oa_external_conflict("OA external-submission idempotency key payload drifted")
+    return same_upstream_key[0] if same_upstream_key else None
+
+
+def _require_oa_external_carriers(
+    command: FinalizeOaExternalSubmissionCommand,
+    transaction: Session,
+) -> tuple[OfficialWorkPackage, DocumentEvidenceVersion]:
+    package = transaction.get(OfficialWorkPackage, command.package_id)
+    if package is None:
+        raise_business_error(
+            "OFFICIAL_WORK_PACKAGE_NOT_FOUND",
+            "Official work package not found",
+            status_code=404,
+        )
+    source = (
+        transaction.get(Document, package.source_document_id)
+        if package.source_document_id
+        else None
+    )
+    reply = (
+        transaction.get(Document, package.reply_document_id) if package.reply_document_id else None
+    )
+    if (
+        package.package_kind != "OA_REPLY"
+        or source is None
+        or reply is None
+        or package.resolve_key != f"OA_REPLY:{source.id}"
+        or source.case_id != package.case_id
+        or reply.case_id != package.case_id
+        or reply.reply_to_id != source.id
+    ):
+        _oa_external_conflict("OA reply package identity is inconsistent")
+
+    manifests = list(
+        transaction.scalars(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package.id,
+                OfficialWorkPackageManifest.official_file_role == "OFFICIAL_SUBMISSION_LIST",
+                OfficialWorkPackageManifest.present.is_(True),
+            )
+        )
+    )
+    if len(manifests) != 1:
+        _oa_external_conflict("OA official-submission-list manifest identity is not unique")
+    manifest = manifests[0]
+
+    version = transaction.get(
+        DocumentEvidenceVersion,
+        command.evidence_version_id,
+    )
+    if version is None:
+        raise_business_error(
+            "EVIDENCE_VERSION_NOT_FOUND",
+            "Evidence version not found",
+            status_code=404,
+        )
+    attachment = transaction.get(DocAttachment, version.attachment_id)
+    expected_current_identity = f"{package.case_id}|{version.lineage_key}"
+    if (
+        version.case_id != package.case_id
+        or version.document_id != reply.id
+        or version.role != "OFFICIAL_SUBMISSION_LIST"
+        or version.state != EvidenceVersionState.FINAL.value
+        or version.review_state != EvidenceReviewState.APPROVED.value
+        or type(version.reviewer_id) is not str
+        or not version.reviewer_id.strip()
+        or len(version.reviewer_id) > 36
+        or type(version.reviewed_at) is not datetime
+        or version.reviewed_at.tzinfo is not None
+        or version.reviewer_id == version.creator_id
+        or version.current_identity_key != expected_current_identity
+        or attachment is None
+        or attachment.document_id != reply.id
+        or attachment.id != version.attachment_id
+        or manifest.evidence_version_id != version.id
+        or manifest.attachment_id != attachment.id
+        or manifest.content_hash != version.content_hash
+        or attachment.content_hash != version.content_hash
+        or type(version.content_hash) is not str
+        or _OA_EXTERNAL_CONTENT_HASH_PATTERN.fullmatch(version.content_hash) is None
+    ):
+        _oa_external_conflict("OA external-submission evidence identity is inconsistent")
+    return package, version
+
+
+def _require_oa_external_replay(
+    command: FinalizeOaExternalSubmissionCommand,
+    *,
+    package: OfficialWorkPackage,
+    version: DocumentEvidenceVersion,
+    activity: CaseActivityEvent,
+    checklist: OfficialWorkPackageChecklist | None,
+) -> None:
+    submitted_at = command.submitted_at
+    try:
+        payload = json.loads(activity.payload_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        _oa_external_conflict("OA external-submission activity payload is malformed")
+    expected_note = f"evidence_version_id={version.id}; activity_id={activity.id}"
+    if (
+        activity.case_id != package.case_id
+        or activity.lane != ActivityLane.DOCUMENT.value
+        or activity.activity_type != "DOCUMENT_EVIDENCE_EXTERNAL_SUBMISSION_FINALIZED"
+        or activity.actor_id != command.actor_id
+        or activity.effective_at != submitted_at
+        or activity.occurred_at != submitted_at
+        or type(payload) is not dict
+        or payload.get("evidence_version_id") != version.id
+        or payload.get("role") != "OFFICIAL_SUBMISSION_LIST"
+        or payload.get("submitted_at") != submitted_at.isoformat()
+        or checklist is None
+        or checklist.section_code != "OA_REPLY"
+        or checklist.item_code != "SUBMISSION_CONFIRMED"
+        or checklist.item_label != "SUBMISSION_CONFIRMED"
+        or checklist.status != "DONE"
+        or checklist.required is not True
+        or checklist.evidence_note != expected_note
+    ):
+        _oa_external_conflict("OA external-submission replay payload drifted")
+
+
+def finalize_oa_external_submission(
+    command: FinalizeOaExternalSubmissionCommand,
+    transaction: Session,
+) -> FinalizeOaExternalSubmissionResult:
+    _validate_oa_external_command(command)
+    activity = _oa_external_activity(command, transaction)
+    package, version = _require_oa_external_carriers(command, transaction)
+    checklists = list(
+        transaction.scalars(
+            select(OfficialWorkPackageChecklist).where(
+                OfficialWorkPackageChecklist.package_id == package.id,
+                OfficialWorkPackageChecklist.item_code == "SUBMISSION_CONFIRMED",
+            )
+        )
+    )
+    if len(checklists) > 1:
+        _oa_external_conflict("OA submission-confirmed checklist is not unique")
+    checklist = checklists[0] if checklists else None
+    if activity is not None:
+        _require_oa_external_replay(
+            command,
+            package=package,
+            version=version,
+            activity=activity,
+            checklist=checklist,
+        )
+
+    submitted_at = command.submitted_at
+    downstream_key = f"oa-external:{command.package_id}:{command.idempotency_key}"
+    finalized = finalize_external_submission(
+        FinalizeExternalSubmissionCommand(
+            case_id=package.case_id,
+            evidence_version_id=version.id,
+            actor_id=command.actor_id,
+            submitted_at=submitted_at,
+            idempotency_key=downstream_key,
+        ),
+        transaction,
+    )
+    if (
+        finalized.case_id != package.case_id
+        or finalized.evidence_version_id != version.id
+        or finalized.content_hash != version.content_hash
+        or finalized.submitted_at != submitted_at
+        or finalized.idempotency_key != downstream_key
+        or finalized.reused is not (activity is not None)
+    ):
+        _oa_external_conflict("Deep external-submission result is inconsistent")
+
+    evidence_note = f"evidence_version_id={version.id}; activity_id={finalized.activity_id}"
+    if checklist is None:
+        checklist = _upsert_checklist(
+            transaction,
+            package_id=package.id,
+            section_code="OA_REPLY",
+            item_code="SUBMISSION_CONFIRMED",
+            item_label="SUBMISSION_CONFIRMED",
+            status="DONE",
+            required=True,
+            evidence_note=evidence_note,
+        )
+        transaction.flush([checklist])
+    elif activity is None:
+        checklist.section_code = "OA_REPLY"
+        checklist.item_label = "SUBMISSION_CONFIRMED"
+        checklist.status = "DONE"
+        checklist.required = True
+        checklist.evidence_note = evidence_note
+        transaction.flush([checklist])
+
+    return FinalizeOaExternalSubmissionResult(
+        package_id=package.id,
+        evidence_version_id=version.id,
+        checklist_item=_checklist_out(checklist),
+        activity_id=finalized.activity_id,
+        activity_sequence=finalized.activity_sequence,
+        lifecycle_revision=finalized.lifecycle_revision,
+        submitted_at=command.submitted_at,
+        idempotency_key=command.idempotency_key,
+        reused=finalized.reused,
+    )
 
 
 def _oa_atomic_link_conflict(message: str) -> None:
