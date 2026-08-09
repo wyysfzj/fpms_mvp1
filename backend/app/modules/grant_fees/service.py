@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -14,11 +16,23 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.billing.models import Bill, BillItem
-from app.modules.cases.models import Case
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    ConfirmationStatus,
+    EvidenceReference,
+    LifecycleEventCommand,
+    LifecycleTransitionResult,
+)
+from app.modules.cases.lifecycle_service import apply_lifecycle_event
+from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
 from app.modules.cases.service import has_required_granted_status_fields
 from app.modules.documents.enums import DocumentDirection
 from app.modules.documents.extra_data import DocumentExtraDataError, parse_document_extra_data
-from app.modules.documents.models import DocTemplate, Document
+from app.modules.documents.grant_fee_lines import (
+    GrantNoticeFeeLineSnapshot,
+    extract_grant_notice_fee_line_snapshot,
+)
+from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
 from app.modules.documents.schemas import DocumentCreateIn
 from app.modules.documents.semantics import resolve_document_semantics
 from app.modules.documents.service import (
@@ -57,6 +71,29 @@ _ZERO = Decimal("0")
 _MONEY_QUANT = Decimal("0.01")
 _SQLITE_LOCK_RETRY_ATTEMPTS = 10
 _SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.05
+_GRANT_NOTICE_EVENT_TYPE = "GRANT_REGISTRATION_NOTICE_RECORDED"
+_GRANT_NOTICE_EVENT_SCHEMA = "FPMS_GRANT_REGISTRATION_NOTICE_RECORDED_V1"
+_GRANT_NOTICE_FEE_LINES_SCHEMA = "FPMS_GRANT_NOTICE_FEE_LINES_V1"
+_GRANT_NOTICE_IDEMPOTENCY_PREFIX = "grant-registration-notice:"
+_GRANT_NOTICE_PAYLOAD_KEYS = {
+    "schema",
+    "case_id",
+    "grant_fee_task_id",
+    "source_document_id",
+    "reviewed_evidence_version_id",
+    "reviewed_evidence_content_hash",
+    "reviewed_at",
+    "grant_fee_lines_schema",
+    "grant_fee_lines_snapshot",
+    "grant_fee_lines_snapshot_hash",
+    "due_date",
+    "deadline_source",
+    "deadline_confirmed_at",
+    "predecessor_grant_fee_task_id",
+    "supersedes_activity_id",
+}
+_GRANT_NOTICE_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+_GRANT_NOTICE_SNAPSHOT_HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 _STATE_ALLOWED_ACTIONS = {
     "OPEN": ("mark_waiting_client",),
@@ -90,6 +127,592 @@ class GrantFeeTaskReplacementResult:
     replacement_task: T_GrantFeeTask
     superseded_task_id: str
     reused: bool
+
+
+def _grant_notice_invalid() -> None:
+    raise_business_error(
+        "GRANT_NOTICE_LIFECYCLE_INVALID",
+        "Grant notice lifecycle input is invalid",
+        status_code=400,
+    )
+
+
+def _grant_notice_source_conflict() -> None:
+    raise_business_error(
+        "GRANT_NOTICE_LIFECYCLE_SOURCE_CONFLICT",
+        "Grant notice lifecycle source is inconsistent",
+        status_code=409,
+    )
+
+
+def _grant_notice_hash_conflict() -> None:
+    raise_business_error(
+        "GRANT_NOTICE_EVIDENCE_HASH_CONFLICT",
+        "Grant notice evidence hash does not match",
+        status_code=409,
+    )
+
+
+def _grant_notice_fee_lines_conflict() -> None:
+    raise_business_error(
+        "GRANT_NOTICE_FEE_LINES_CONFLICT",
+        "Grant notice fee lines are inconsistent",
+        status_code=409,
+    )
+
+
+def _grant_notice_replacement_conflict() -> None:
+    raise_business_error(
+        "GRANT_NOTICE_REPLACEMENT_LINEAGE_CONFLICT",
+        "Grant notice replacement lineage is inconsistent",
+        status_code=409,
+    )
+
+
+def _grant_notice_idempotency_conflict() -> None:
+    raise_business_error(
+        "LIFECYCLE_IDEMPOTENCY_CONFLICT",
+        "Lifecycle idempotency key conflicts with the stored activity",
+        status_code=409,
+    )
+
+
+def _exact_grant_notice_text(value: object, *, max_length: int) -> bool:
+    return (
+        type(value) is str and bool(value) and value == value.strip() and len(value) <= max_length
+    )
+
+
+def _validate_grant_notice_dispatch_input(
+    *,
+    grant_fee_task_id: object,
+    source_document_id: object,
+    reviewed_evidence_version_id: object,
+    expected_content_hash: object,
+    actor_id: object,
+    recorded_at: object,
+    idempotency_key: object,
+) -> None:
+    if (
+        not _exact_grant_notice_text(grant_fee_task_id, max_length=36)
+        or not _exact_grant_notice_text(source_document_id, max_length=36)
+        or not _exact_grant_notice_text(reviewed_evidence_version_id, max_length=36)
+        or not _exact_grant_notice_text(actor_id, max_length=36)
+        or not _exact_grant_notice_text(
+            idempotency_key,
+            max_length=128 - len(_GRANT_NOTICE_IDEMPOTENCY_PREFIX),
+        )
+        or type(expected_content_hash) is not str
+        or _GRANT_NOTICE_HASH_PATTERN.fullmatch(expected_content_hash) is None
+        or type(recorded_at) is not datetime
+        or recorded_at.tzinfo is not None
+    ):
+        _grant_notice_invalid()
+
+
+def _grant_notice_payload(value: str) -> dict[str, object]:
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        _grant_notice_idempotency_conflict()
+    if type(parsed) is not dict or set(parsed) != _GRANT_NOTICE_PAYLOAD_KEYS:
+        _grant_notice_idempotency_conflict()
+    return parsed
+
+
+def _grant_notice_stored_date(value: object) -> date:
+    if type(value) is not str:
+        _grant_notice_idempotency_conflict()
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        _grant_notice_idempotency_conflict()
+    if parsed.isoformat() != value:
+        _grant_notice_idempotency_conflict()
+    return parsed
+
+
+def _grant_notice_stored_datetime(value: object) -> datetime:
+    if type(value) is not str:
+        _grant_notice_idempotency_conflict()
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        _grant_notice_idempotency_conflict()
+    if parsed.tzinfo is not None or parsed.isoformat() != value:
+        _grant_notice_idempotency_conflict()
+    return parsed
+
+
+def _validate_grant_notice_stored_snapshot(payload: dict[str, object]) -> None:
+    snapshot = payload["grant_fee_lines_snapshot"]
+    snapshot_hash = payload["grant_fee_lines_snapshot_hash"]
+    if (
+        type(snapshot) is not str
+        or not snapshot
+        or type(snapshot_hash) is not str
+        or _GRANT_NOTICE_SNAPSHOT_HASH_PATTERN.fullmatch(snapshot_hash) is None
+        or hashlib.sha256(snapshot.encode("utf-8")).hexdigest() != snapshot_hash
+    ):
+        _grant_notice_idempotency_conflict()
+    try:
+        parsed = json.loads(snapshot)
+        canonical = json.dumps(
+            parsed,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (RecursionError, TypeError, ValueError):
+        _grant_notice_idempotency_conflict()
+    if (
+        type(parsed) is not dict
+        or canonical != snapshot
+        or set(parsed)
+        != {
+            "schema",
+            "source_document_id",
+            "reviewed_evidence_version_id",
+            "reviewed_evidence_content_hash",
+            "lines",
+        }
+        or parsed["schema"] != payload["grant_fee_lines_schema"]
+        or parsed["source_document_id"] != payload["source_document_id"]
+        or parsed["reviewed_evidence_version_id"] != payload["reviewed_evidence_version_id"]
+        or parsed["reviewed_evidence_content_hash"] != payload["reviewed_evidence_content_hash"]
+        or type(parsed["lines"]) is not list
+        or not parsed["lines"]
+    ):
+        _grant_notice_idempotency_conflict()
+
+
+def _validated_stored_grant_notice(
+    transaction: Session,
+    *,
+    activity: CaseActivityEvent,
+    task: T_GrantFeeTask,
+) -> tuple[dict[str, object], tuple[EvidenceReference, EvidenceReference]]:
+    payload = _grant_notice_payload(activity.payload_json)
+    reviewed_at = _grant_notice_stored_datetime(payload["reviewed_at"])
+    deadline_confirmed_at = _grant_notice_stored_datetime(payload["deadline_confirmed_at"])
+    due_date = _grant_notice_stored_date(payload["due_date"])
+    predecessor_task_id = payload["predecessor_grant_fee_task_id"]
+    supersedes_activity_id = payload["supersedes_activity_id"]
+    if (
+        activity.activity_type != _GRANT_NOTICE_EVENT_TYPE
+        or activity.lane != ActivityLane.LIFECYCLE.value
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or activity.source_activity_id is not None
+        or type(activity.occurred_at) is not datetime
+        or activity.occurred_at.tzinfo is not None
+        or activity.effective_at != activity.occurred_at
+        or not _exact_grant_notice_text(activity.actor_id, max_length=36)
+        or not _exact_grant_notice_text(activity.reviewer_id, max_length=36)
+        or payload["schema"] != _GRANT_NOTICE_EVENT_SCHEMA
+        or payload["case_id"] != activity.case_id
+        or payload["grant_fee_task_id"] != task.id
+        or payload["source_document_id"] != task.source_document_id
+        or not _exact_grant_notice_text(
+            payload["reviewed_evidence_version_id"],
+            max_length=36,
+        )
+        or type(payload["reviewed_evidence_content_hash"]) is not str
+        or _GRANT_NOTICE_HASH_PATTERN.fullmatch(payload["reviewed_evidence_content_hash"]) is None
+        or payload["grant_fee_lines_schema"] != _GRANT_NOTICE_FEE_LINES_SCHEMA
+        or due_date != task.due_date
+        or payload["deadline_source"] != task.deadline_source
+        or not _exact_grant_notice_text(payload["deadline_source"], max_length=32)
+        or deadline_confirmed_at != task.deadline_confirmed_at
+        or (
+            predecessor_task_id is None
+            and (supersedes_activity_id is not None or activity.supersedes_event_id is not None)
+        )
+        or (
+            predecessor_task_id is not None
+            and (
+                not _exact_grant_notice_text(predecessor_task_id, max_length=36)
+                or not _exact_grant_notice_text(supersedes_activity_id, max_length=36)
+                or activity.supersedes_event_id != supersedes_activity_id
+            )
+        )
+    ):
+        _grant_notice_idempotency_conflict()
+    _validate_grant_notice_stored_snapshot(payload)
+    evidence_refs = _grant_notice_evidence_references(
+        transaction,
+        activity=activity,
+        payload=payload,
+    )
+    if any(reference.case_id != activity.case_id for reference in evidence_refs):
+        _grant_notice_idempotency_conflict()
+    if reviewed_at != evidence_refs[0].captured_at:
+        _grant_notice_idempotency_conflict()
+    return payload, evidence_refs
+
+
+def _grant_notice_evidence_references(
+    transaction: Session,
+    *,
+    activity: CaseActivityEvent,
+    payload: dict[str, object],
+) -> tuple[EvidenceReference, EvidenceReference]:
+    rows = list(
+        transaction.scalars(
+            select(CaseActivityEventEvidence)
+            .where(
+                CaseActivityEventEvidence.case_id == activity.case_id,
+                CaseActivityEventEvidence.activity_id == activity.id,
+            )
+            .order_by(
+                CaseActivityEventEvidence.evidence_kind.asc(),
+                CaseActivityEventEvidence.id.asc(),
+            )
+        ).all()
+    )
+    if len(rows) != 2:
+        _grant_notice_idempotency_conflict()
+    by_kind = {row.evidence_kind: row for row in rows}
+    if set(by_kind) != {"SOURCE_DOCUMENT", "DOCUMENT_EVIDENCE_VERSION"}:
+        _grant_notice_idempotency_conflict()
+    source = by_kind["SOURCE_DOCUMENT"]
+    evidence = by_kind["DOCUMENT_EVIDENCE_VERSION"]
+    expected_reviewed_at = _grant_notice_stored_datetime(payload["reviewed_at"])
+    if (
+        source.object_type != "Document"
+        or source.object_id != payload["source_document_id"]
+        or evidence.object_type != "DocumentEvidenceVersion"
+        or evidence.object_id != payload["reviewed_evidence_version_id"]
+        or source.content_hash != payload["reviewed_evidence_content_hash"]
+        or evidence.content_hash != payload["reviewed_evidence_content_hash"]
+        or source.captured_at != expected_reviewed_at
+        or evidence.captured_at != expected_reviewed_at
+    ):
+        _grant_notice_idempotency_conflict()
+    return (
+        EvidenceReference(
+            case_id=source.case_id,
+            evidence_kind=source.evidence_kind,
+            object_type=source.object_type,
+            object_id=source.object_id,
+            content_hash=source.content_hash,
+            captured_at=source.captured_at,
+        ),
+        EvidenceReference(
+            case_id=evidence.case_id,
+            evidence_kind=evidence.evidence_kind,
+            object_type=evidence.object_type,
+            object_id=evidence.object_id,
+            content_hash=evidence.content_hash,
+            captured_at=evidence.captured_at,
+        ),
+    )
+
+
+def _replay_grant_registration_notice(
+    *,
+    activity: CaseActivityEvent,
+    task: T_GrantFeeTask,
+    grant_fee_task_id: str,
+    source_document_id: str,
+    reviewed_evidence_version_id: str,
+    expected_content_hash: str,
+    actor_id: str,
+    recorded_at: datetime,
+    transaction: Session,
+) -> LifecycleTransitionResult:
+    payload, evidence_refs = _validated_stored_grant_notice(
+        transaction,
+        activity=activity,
+        task=task,
+    )
+    if (
+        activity.occurred_at != recorded_at
+        or activity.effective_at != recorded_at
+        or activity.actor_id != actor_id
+        or payload["grant_fee_task_id"] != grant_fee_task_id
+        or payload["source_document_id"] != source_document_id
+        or payload["reviewed_evidence_version_id"] != reviewed_evidence_version_id
+        or payload["reviewed_evidence_content_hash"] != expected_content_hash
+    ):
+        _grant_notice_idempotency_conflict()
+    return apply_lifecycle_event(
+        LifecycleEventCommand(
+            case_id=activity.case_id,
+            event_type=_GRANT_NOTICE_EVENT_TYPE,
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=activity.effective_at,
+            occurred_at=activity.occurred_at,
+            evidence_refs=evidence_refs,
+            actor_id=activity.actor_id,
+            reviewer_id=activity.reviewer_id,
+            idempotency_key=activity.idempotency_key,
+            source_activity_id=activity.source_activity_id,
+            supersedes_event_id=activity.supersedes_event_id,
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload=payload,
+        ),
+        transaction,
+    )
+
+
+def _grant_notice_predecessor(
+    transaction: Session,
+    *,
+    task: T_GrantFeeTask,
+) -> tuple[T_GrantFeeTask | None, CaseActivityEvent | None]:
+    if task.superseded_by_task_id is not None:
+        _grant_notice_replacement_conflict()
+    predecessors = list(
+        transaction.scalars(
+            select(T_GrantFeeTask)
+            .where(T_GrantFeeTask.superseded_by_task_id == task.id)
+            .order_by(T_GrantFeeTask.created_at.asc(), T_GrantFeeTask.id.asc())
+        ).all()
+    )
+    if not predecessors:
+        return None, None
+    if len(predecessors) != 1:
+        _grant_notice_replacement_conflict()
+    predecessor = predecessors[0]
+    if predecessor.id == task.id or predecessor.case_id != task.case_id:
+        _grant_notice_replacement_conflict()
+
+    candidate_activities = list(
+        transaction.scalars(
+            select(CaseActivityEvent)
+            .where(
+                CaseActivityEvent.case_id == task.case_id,
+                CaseActivityEvent.activity_type == _GRANT_NOTICE_EVENT_TYPE,
+            )
+            .order_by(CaseActivityEvent.sequence.asc(), CaseActivityEvent.id.asc())
+        ).all()
+    )
+    matching: list[CaseActivityEvent] = []
+    for activity in candidate_activities:
+        try:
+            payload = json.loads(activity.payload_json)
+        except (TypeError, ValueError):
+            continue
+        if type(payload) is dict and payload.get("grant_fee_task_id") == predecessor.id:
+            matching.append(activity)
+    if len(matching) != 1:
+        _grant_notice_replacement_conflict()
+    predecessor_activity = matching[0]
+    try:
+        predecessor_payload, _ = _validated_stored_grant_notice(
+            transaction,
+            activity=predecessor_activity,
+            task=predecessor,
+        )
+    except BusinessError:
+        _grant_notice_replacement_conflict()
+    if (
+        predecessor_payload["grant_fee_task_id"] != predecessor.id
+        or predecessor_payload["case_id"] != task.case_id
+    ):
+        _grant_notice_replacement_conflict()
+    return predecessor, predecessor_activity
+
+
+def dispatch_grant_registration_notice(
+    *,
+    grant_fee_task_id: str,
+    source_document_id: str,
+    reviewed_evidence_version_id: str,
+    expected_content_hash: str,
+    actor_id: str,
+    recorded_at: datetime,
+    idempotency_key: str,
+    transaction: Session,
+) -> LifecycleTransitionResult:
+    _validate_grant_notice_dispatch_input(
+        grant_fee_task_id=grant_fee_task_id,
+        source_document_id=source_document_id,
+        reviewed_evidence_version_id=reviewed_evidence_version_id,
+        expected_content_hash=expected_content_hash,
+        actor_id=actor_id,
+        recorded_at=recorded_at,
+        idempotency_key=idempotency_key,
+    )
+    if not isinstance(transaction, Session):
+        _grant_notice_invalid()
+    prefixed_idempotency_key = f"{_GRANT_NOTICE_IDEMPOTENCY_PREFIX}{idempotency_key}"
+
+    with transaction.no_autoflush:
+        task = transaction.get(T_GrantFeeTask, grant_fee_task_id)
+        if task is None:
+            raise_business_error(
+                "GRANT_FEE_TASK_NOT_FOUND",
+                "Grant fee task not found",
+                status_code=404,
+            )
+        existing = transaction.scalar(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == task.case_id,
+                CaseActivityEvent.idempotency_key == prefixed_idempotency_key,
+            )
+        )
+        if existing is not None:
+            return _replay_grant_registration_notice(
+                activity=existing,
+                task=task,
+                grant_fee_task_id=grant_fee_task_id,
+                source_document_id=source_document_id,
+                reviewed_evidence_version_id=reviewed_evidence_version_id,
+                expected_content_hash=expected_content_hash,
+                actor_id=actor_id,
+                recorded_at=recorded_at,
+                transaction=transaction,
+            )
+
+        document = transaction.get(Document, source_document_id)
+        if document is None:
+            raise_business_error(
+                "DOCUMENT_NOT_FOUND",
+                "Document not found",
+                status_code=404,
+            )
+        evidence = transaction.get(
+            DocumentEvidenceVersion,
+            reviewed_evidence_version_id,
+        )
+        if evidence is None:
+            raise_business_error(
+                "EVIDENCE_VERSION_NOT_FOUND",
+                "Evidence version not found",
+                status_code=404,
+            )
+        case = transaction.get(Case, task.case_id)
+        if case is None:
+            raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+
+        template = (
+            transaction.get(DocTemplate, document.doc_template_id)
+            if document.doc_template_id
+            else None
+        )
+        try:
+            semantics = resolve_document_semantics(template)
+        except BusinessError:
+            _grant_notice_source_conflict()
+        if (
+            task.type != "GRANT"
+            or task.case_id != document.case_id
+            or task.source_document_id != document.id
+            or type(task.due_date) is not date
+            or not _exact_grant_notice_text(task.deadline_source, max_length=32)
+            or type(task.deadline_confirmed_at) is not datetime
+            or task.deadline_confirmed_at.tzinfo is not None
+            or document.direction != DocumentDirection.IN.value
+            or semantics.catalog_status != "EXECUTABLE"
+            or semantics.execution_behavior != "GRANT_NOTICE"
+            or semantics.lifecycle_event_type != _GRANT_NOTICE_EVENT_TYPE
+        ):
+            _grant_notice_source_conflict()
+
+        current_identity = f"{task.case_id}|{evidence.lineage_key}"
+        current_versions = list(
+            transaction.scalars(
+                select(DocumentEvidenceVersion).where(
+                    DocumentEvidenceVersion.current_identity_key == current_identity
+                )
+            ).all()
+        )
+        if (
+            evidence.case_id != task.case_id
+            or evidence.document_id != document.id
+            or evidence.current_identity_key != current_identity
+            or len(current_versions) != 1
+            or current_versions[0].id != evidence.id
+            or evidence.state != "FINAL"
+            or evidence.review_state != "APPROVED"
+            or not _exact_grant_notice_text(evidence.reviewer_id, max_length=36)
+            or type(evidence.reviewed_at) is not datetime
+            or evidence.reviewed_at.tzinfo is not None
+        ):
+            _grant_notice_source_conflict()
+        if evidence.content_hash != expected_content_hash:
+            _grant_notice_hash_conflict()
+
+        predecessor, predecessor_activity = _grant_notice_predecessor(
+            transaction,
+            task=task,
+        )
+        try:
+            snapshot = extract_grant_notice_fee_line_snapshot(
+                document=document,
+                reviewed_evidence_version_id=reviewed_evidence_version_id,
+                expected_evidence_content_hash=expected_content_hash,
+            )
+        except DocumentExtraDataError:
+            _grant_notice_fee_lines_conflict()
+        if (
+            type(snapshot) is not GrantNoticeFeeLineSnapshot
+            or snapshot.schema != _GRANT_NOTICE_FEE_LINES_SCHEMA
+            or snapshot.source_document_id != document.id
+            or snapshot.reviewed_evidence_version_id != evidence.id
+            or snapshot.reviewed_evidence_content_hash != evidence.content_hash
+            or type(snapshot.lines) is not tuple
+            or type(snapshot.canonical_json) is not str
+            or not snapshot.canonical_json
+            or type(snapshot.snapshot_hash) is not str
+            or _GRANT_NOTICE_SNAPSHOT_HASH_PATTERN.fullmatch(snapshot.snapshot_hash) is None
+        ):
+            _grant_notice_fee_lines_conflict()
+
+    payload = {
+        "schema": _GRANT_NOTICE_EVENT_SCHEMA,
+        "case_id": task.case_id,
+        "grant_fee_task_id": task.id,
+        "source_document_id": document.id,
+        "reviewed_evidence_version_id": evidence.id,
+        "reviewed_evidence_content_hash": evidence.content_hash,
+        "reviewed_at": evidence.reviewed_at.isoformat(),
+        "grant_fee_lines_schema": snapshot.schema,
+        "grant_fee_lines_snapshot": snapshot.canonical_json,
+        "grant_fee_lines_snapshot_hash": snapshot.snapshot_hash,
+        "due_date": task.due_date.isoformat(),
+        "deadline_source": task.deadline_source,
+        "deadline_confirmed_at": task.deadline_confirmed_at.isoformat(),
+        "predecessor_grant_fee_task_id": predecessor.id if predecessor else None,
+        "supersedes_activity_id": predecessor_activity.id if predecessor_activity else None,
+    }
+    return apply_lifecycle_event(
+        LifecycleEventCommand(
+            case_id=task.case_id,
+            event_type=_GRANT_NOTICE_EVENT_TYPE,
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=recorded_at,
+            occurred_at=recorded_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=task.case_id,
+                    evidence_kind="SOURCE_DOCUMENT",
+                    object_type="Document",
+                    object_id=document.id,
+                    content_hash=evidence.content_hash,
+                    captured_at=evidence.reviewed_at,
+                ),
+                EvidenceReference(
+                    case_id=task.case_id,
+                    evidence_kind="DOCUMENT_EVIDENCE_VERSION",
+                    object_type="DocumentEvidenceVersion",
+                    object_id=evidence.id,
+                    content_hash=evidence.content_hash,
+                    captured_at=evidence.reviewed_at,
+                ),
+            ),
+            actor_id=actor_id,
+            reviewer_id=evidence.reviewer_id,
+            idempotency_key=prefixed_idempotency_key,
+            source_activity_id=None,
+            supersedes_event_id=(predecessor_activity.id if predecessor_activity else None),
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload=payload,
+        ),
+        transaction,
+    )
 
 
 def get_grant_fee_module_contract() -> dict[str, object]:
