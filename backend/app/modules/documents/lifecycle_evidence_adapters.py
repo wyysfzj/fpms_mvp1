@@ -642,6 +642,9 @@ def _require_reviewed_notice_evidence(
         not _valid_stored_id(version.id)
         or not _valid_stored_id(version.case_id)
         or not _valid_stored_id(version.document_id)
+        or not _valid_stored_id(version.attachment_id)
+        or type(version.version_number) is not int
+        or version.version_number <= 0
         or type(version.lineage_key) is not str
         or not version.lineage_key
         or version.lineage_key != version.lineage_key.strip()
@@ -1071,11 +1074,11 @@ def record_oa_notice_from_evidence(
         if document.direction != "IN":
             _oa_semantics_conflict()
         if not _valid_stored_id(document.doc_template_id):
-            raise BusinessError("DOC_TEMPLATE_NOT_FOUND", "文件模板不存在", status_code=404)
+            _oa_semantics_conflict()
 
         template = transaction.get(DocTemplate, document.doc_template_id)
         if template is None:
-            raise BusinessError("DOC_TEMPLATE_NOT_FOUND", "文件模板不存在", status_code=404)
+            _oa_semantics_conflict()
         oa_sequence = resolve_oa_notice_sequence(template.code)
         expected_status = "OA1" if oa_sequence == 1 else "OA2"
         expected_task = "OA_REPLY" if oa_sequence == 1 else "OA_REPLY_SUBSEQUENT"

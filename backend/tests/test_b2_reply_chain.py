@@ -477,6 +477,24 @@ def test_doc_template_cascade_rejects_illegal_status_regression(
     """Terminal case status remains unchanged by document status metadata."""
     case = _create_case(client, auth_headers)
 
+    promote_resp = client.put(
+        f"{CASE_BASE}/{case['id']}",
+        headers=auth_headers,
+        json={
+            "status": "GRANTED",
+            "app_no": "CN202510123456.7",
+            "filing_date": "2025-01-15",
+            "pub_no": "CN123456789A",
+            "pub_date": "2025-07-15",
+            "grant_no": "ZL202510123456.7",
+            "grant_date": "2026-01-15",
+            "first_annuity_year": 1,
+            "valid_until": "2045-01-15",
+        },
+    )
+    assert promote_resp.status_code == 409, promote_resp.text
+    assert promote_resp.json()["error"]["code"] == "CASE_STATUS_MANAGED_BY_LIFECYCLE"
+
     with session_factory() as db:
         case_model = db.execute(select(Case).where(Case.id == case["id"])).scalar_one()
         case_model.status = "GRANTED"

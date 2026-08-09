@@ -756,7 +756,7 @@ def test_invalid_or_mismatched_source_fails_closed_without_dispatch(
     )
     with session_factory() as transaction, pytest.raises(BusinessError) as exc_info:
         adapter.record_oa_notice_from_evidence(_command(), transaction)
-    assert exc_info.value.status_code == (404 if conflict == "missing_template" else 409)
+    assert exc_info.value.status_code == 409
     _assert_no_write(session_factory)
 
 
@@ -824,6 +824,8 @@ def test_missing_partial_legacy_or_unconfirmed_due_tuple_is_409_without_dispatch
         "missing_reviewed_at",
         "malformed_hash",
         "malformed_lineage",
+        "blank_attachment",
+        "non_positive_version",
     ),
 )
 def test_invalid_evidence_is_409_without_dispatch(
@@ -851,8 +853,14 @@ def test_invalid_evidence_is_409_without_dispatch(
             version.reviewed_at = None
         elif conflict == "malformed_hash":
             version.content_hash = "sha256:not-canonical"
-        else:
+        elif conflict == "malformed_lineage":
             version.lineage_key = " oa-notice-final"
+        elif conflict == "blank_attachment":
+            transaction.add(_attachment(attachment_id=" "))
+            transaction.flush()
+            version.attachment_id = " "
+        else:
+            version.version_number = 0
         transaction.commit()
     adapter = _adapter()
     monkeypatch.setattr(
@@ -935,7 +943,7 @@ def test_missing_document_template_and_evidence_are_404(
         missing_document.status_code,
         missing_template.status_code,
         missing_evidence.status_code,
-    ) == (404, 404, 404)
+    ) == (404, 409, 404)
     _assert_no_write(session_factory)
 
 

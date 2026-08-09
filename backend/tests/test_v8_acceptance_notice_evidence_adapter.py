@@ -633,6 +633,8 @@ def test_non_acceptance_document_semantics_are_409_without_dispatch(
         "missing_reviewed_at",
         "malformed_hash",
         "malformed_lineage",
+        "blank_attachment",
+        "non_positive_version",
     ),
 )
 def test_invalid_persisted_evidence_is_409_without_dispatch(
@@ -660,8 +662,14 @@ def test_invalid_persisted_evidence_is_409_without_dispatch(
             version.reviewed_at = None
         elif conflict == "malformed_hash":
             version.content_hash = "sha256:not-canonical"
-        else:
+        elif conflict == "malformed_lineage":
             version.lineage_key = " acceptance"
+        elif conflict == "blank_attachment":
+            transaction.add(_attachment(attachment_id=" "))
+            transaction.flush()
+            version.attachment_id = " "
+        else:
+            version.version_number = 0
         transaction.commit()
 
     adapter = _adapter()
