@@ -194,7 +194,8 @@ class CaseActivityEvent(UUIDPrimaryKeyMixin, Base):
         CheckConstraint(
             "(conflict_lineage_version IS NULL AND conflict_code_count IS NULL "
             "AND conflict_codes_sha256 IS NULL) OR "
-            "(conflict_lineage_version = 'V1' AND conflict_code_count >= 0 "
+            "(conflict_lineage_version = 'V1' AND conflict_code_count IS NOT NULL "
+            "AND conflict_code_count >= 0 AND conflict_codes_sha256 IS NOT NULL "
             "AND length(conflict_codes_sha256) = 64 "
             "AND conflict_codes_sha256 = lower(conflict_codes_sha256))",
             name="ck_t_case_activity_event_conflict_lineage_shape",

@@ -544,15 +544,28 @@ def read_activity_conflict_codes(
     if not activities:
         return {}
     activity_ids = tuple(activity.id for activity in activities)
-    rows = transaction.execute(
-        select(
-            CaseActivityEventConflict.activity_id,
-            CaseActivityEventConflict.case_id,
-            CaseActivityEventConflict.code,
-        )
-        .where(CaseActivityEventConflict.activity_id.in_(activity_ids))
-        .order_by(CaseActivityEventConflict.activity_id, CaseActivityEventConflict.code)
-    ).all()
+    with transaction.no_autoflush:
+        snapshots = transaction.execute(
+            select(
+                CaseActivityEvent.id,
+                CaseActivityEvent.case_id,
+                CaseActivityEvent.conflict_lineage_version,
+                CaseActivityEvent.conflict_code_count,
+                CaseActivityEvent.conflict_codes_sha256,
+            ).where(CaseActivityEvent.id.in_(activity_ids))
+        ).mappings().all()
+        rows = transaction.execute(
+            select(
+                CaseActivityEventConflict.activity_id,
+                CaseActivityEventConflict.case_id,
+                CaseActivityEventConflict.code,
+            )
+            .where(CaseActivityEventConflict.activity_id.in_(activity_ids))
+            .order_by(CaseActivityEventConflict.activity_id, CaseActivityEventConflict.code)
+        ).all()
+    snapshot_by_id = {snapshot["id"]: snapshot for snapshot in snapshots}
+    if len(snapshot_by_id) != len(activity_ids) or len(set(activity_ids)) != len(activity_ids):
+        _conflict_lineage_invalid()
     grouped: dict[str, list[tuple[str, str]]] = {activity_id: [] for activity_id in activity_ids}
     for activity_id, case_id, code in rows:
         if activity_id not in grouped:
@@ -561,10 +574,11 @@ def read_activity_conflict_codes(
 
     result: dict[str, tuple[str, ...]] = {}
     for activity in activities:
+        snapshot = snapshot_by_id[activity.id]
         triple = (
-            activity.conflict_lineage_version,
-            activity.conflict_code_count,
-            activity.conflict_codes_sha256,
+            snapshot["conflict_lineage_version"],
+            snapshot["conflict_code_count"],
+            snapshot["conflict_codes_sha256"],
         )
         if triple == (None, None, None):
             _fail(
@@ -582,7 +596,9 @@ def read_activity_conflict_codes(
             or digest != digest.lower()
         ):
             _conflict_lineage_invalid()
-        codes = tuple(code for case_id, code in grouped[activity.id] if case_id == activity.case_id)
+        codes = tuple(
+            code for case_id, code in grouped[activity.id] if case_id == snapshot["case_id"]
+        )
         if (
             len(codes) != len(grouped[activity.id])
             or any(type(code) is not str or not code or len(code) > 128 for code in codes)

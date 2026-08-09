@@ -108,6 +108,30 @@ _DECISION_GATE_CASE_CODES = (
     DecisionGateCode.PAYMENT_WORKBOOK,
     DecisionGateCode.SERVICE_RATE_VERSION,
 )
+_LEGACY_IMPORT_STATUSES = frozenset(
+    {
+        "NOT_FILED",
+        "PENDING",
+        "GRANTED",
+        "REJECTED",
+        "WITHDRAWN",
+        "ABANDONED",
+        "EXPIRED",
+        "WAITING_RECEIPT",
+        "PRELIM_EXAM",
+        "PRELIM_PASS",
+        "AMENDMENT",
+        "PUBLISHED",
+        "SUB_EXAM",
+        "OA1",
+        "OA2",
+        "REEXAM",
+        "ACCEPTED",
+        "GRANT_PENDING",
+        "TERMINATED",
+        "INVALIDATED",
+    }
+)
 
 
 def read_lifecycle_overlay(
@@ -235,8 +259,10 @@ def read_lifecycle_overlay(
             message="历史生命周期活动存在待核对冲突",
         )
         for activity, _lane, _axes in page
-        if activity.activity_type == "LEGACY_IMPORT"
-        and activity.confirmation_status == ConfirmationStatus.LEGACY_UNVERIFIED.value
+        if _is_exact_legacy_import(
+            activity,
+            evidence_by_activity.get(activity.id, ()),
+        )
         for code in conflict_codes_by_activity[activity.id]
     )
     return LifecycleOverlay(
@@ -1109,6 +1135,50 @@ def _activity_warning(
         activity_id=activity.id,
         source_object_type="CASE_ACTIVITY_EVENT",
         source_object_id=activity.id,
+    )
+
+
+def _is_exact_legacy_import(
+    activity: CaseActivityEvent,
+    evidence: tuple[EvidenceReference, ...],
+) -> bool:
+    if (
+        activity.lane != ActivityLane.LIFECYCLE.value
+        or activity.activity_type != "LEGACY_IMPORT"
+        or activity.confirmation_status != ConfirmationStatus.LEGACY_UNVERIFIED.value
+        or activity.source_activity_id is not None
+        or activity.supersedes_event_id is not None
+        or activity.reviewer_id is not None
+        or activity.old_business_stage is not None
+        or activity.new_business_stage is not None
+        or activity.old_official_procedure_stage is not None
+        or activity.new_official_procedure_stage is not None
+        or activity.old_legal_status is not None
+        or activity.new_legal_status != LegalStatus.UNKNOWN.value
+        or activity.occurred_at != activity.effective_at
+        or activity.idempotency_key != f"v8-legacy-lifecycle-import:{activity.case_id}"
+        or evidence
+    ):
+        return False
+    try:
+        payload = json.loads(activity.payload_json)
+        canonical = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return bool(
+        type(payload) is dict
+        and set(payload) == {"case_id", "legacy_status", "reverse_mapping", "schema"}
+        and payload["case_id"] == activity.case_id
+        and payload["legacy_status"] in _LEGACY_IMPORT_STATUSES
+        and payload["reverse_mapping"] == "NONE"
+        and payload["schema"] == "FPMS_V8_LEGACY_LIFECYCLE_IMPORT_V1"
+        and canonical == activity.payload_json
     )
 
 

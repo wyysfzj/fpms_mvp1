@@ -127,15 +127,20 @@ def test_overlay_keyset_freezes_revision_and_keeps_complete_gate_snapshot_on_eve
         ) -> DecisionGateReadResult:
             assert actual is transaction
             commands.append(command)
+            shared_legacy_carrier = command.scope_key in {"form-001", "form-002"}
             return DecisionGateReadResult(
-                gate_id=f"gate:{command.scope_key}",
+                gate_id="gate:ALL-22" if shared_legacy_carrier else f"gate:{command.scope_key}",
                 gate_code=command.gate_code,
                 requested_scope_key=command.scope_key,
                 resolved_scope_key=(
-                    "ALL-22" if command.scope_key == "form-001" else command.scope_key
+                    "ALL-22" if shared_legacy_carrier else command.scope_key
                 ),
                 decision_value=(
-                    "HISTORICAL" if command.scope_key == "form-001" else "CURRENT_OFFICIAL"
+                    "HISTORICAL"
+                    if command.scope_key == "form-001"
+                    else "INTERNAL_ONLY"
+                    if command.scope_key == "form-002"
+                    else "CURRENT_OFFICIAL"
                 ),
                 source_reference="customer-answer:2026-07-14",
                 source_version="v2",
@@ -195,12 +200,17 @@ def test_overlay_keyset_freezes_revision_and_keeps_complete_gate_snapshot_on_eve
             assert len(page.decision_gates) == 29
             assert page.decision_gates[7].requested_scope_key == "form-001"
             assert page.decision_gates[7].resolved_scope_key == "ALL-22"
+            assert page.decision_gates[8].requested_scope_key == "form-002"
+            assert page.decision_gates[8].resolved_scope_key == "ALL-22"
             assert all(gate.requested_scope_key != "ALL-22" for gate in page.decision_gates)
-            assert len(page.warnings) == 1
-            assert page.warnings[0].kind.value == "REFERENCE_ONLY"
-            assert page.warnings[0].source_object_id == (
-                "DG-LEGACY-FORM-CLASS:form-001:gate:form-001"
-            )
+            assert [warning.kind.value for warning in page.warnings] == [
+                "REFERENCE_ONLY",
+                "REFERENCE_ONLY",
+            ]
+            assert [warning.source_object_id for warning in page.warnings] == [
+                "DG-LEGACY-FORM-CLASS:form-001:gate:ALL-22",
+                "DG-LEGACY-FORM-CLASS:form-002:gate:ALL-22",
+            ]
         assert len(commands) == 116
         for index, page in enumerate((first, second, third, empty)):
             page_commands = commands[index * 29 : (index + 1) * 29]

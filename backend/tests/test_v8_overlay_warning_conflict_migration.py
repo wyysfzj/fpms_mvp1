@@ -66,6 +66,7 @@ def _insert_activity(
     event_type: str,
     status: str,
     confirmation: str = "LEGACY_UNVERIFIED",
+    sequence: int = 1,
 ) -> None:
     connection.execute(
         text(
@@ -75,13 +76,14 @@ def _insert_activity(
             "old_official_procedure_stage, new_official_procedure_stage, old_legal_status, "
             "new_legal_status, actor_id, reviewer_id, idempotency_key, source_activity_id, "
             "supersedes_event_id, payload_json) VALUES "
-            "(:id, :case_id, 1, 'LIFECYCLE', :event_type, :at, :at, :confirmation, "
+            "(:id, :case_id, :sequence, 'LIFECYCLE', :event_type, :at, :at, :confirmation, "
             "NULL, NULL, NULL, NULL, NULL, :new_legal, 'migration-actor', NULL, :key, "
             "NULL, NULL, :payload)"
         ),
         {
-            "id": f"activity-{case_id}",
+            "id": f"activity-{case_id}-{sequence}",
             "case_id": case_id,
+            "sequence": sequence,
             "event_type": event_type,
             "at": "2026-07-01 09:00:00",
             "confirmation": confirmation,
@@ -123,6 +125,80 @@ def _insert_followup(connection, case_id: str) -> None:
         ),
         {"case_id": case_id},
     )
+
+
+def _insert_material_near_misses(connection) -> tuple[str, ...]:
+    mutations = {
+        "lane": ("lane", "DOCUMENT"),
+        "confirmation": ("confirmation_status", "CONFIRMED"),
+        "key": ("idempotency_key", "wrong-key"),
+        "source": ("source_activity_id", "SELF"),
+        "supersession": ("supersedes_event_id", "SELF"),
+        "reviewer": ("reviewer_id", "reviewer"),
+        "old-axis": ("old_business_stage", "NEW_CASE"),
+        "new-axis": ("new_business_stage", "NEW_CASE"),
+        "timestamp": ("occurred_at", "2026-07-01 08:59:59"),
+        "payload-canonical": (
+            "payload_json",
+            '{"schema": "FPMS_V8_LEGACY_LIFECYCLE_IMPORT_V1"}',
+        ),
+    }
+    case_ids: list[str] = []
+    for name, (column, value) in mutations.items():
+        case_id = f"near-{name}"
+        case_ids.append(case_id)
+        _insert_case(connection, case_id, status="NOT_FILED", revision=1)
+        _insert_activity(
+            connection,
+            case_id,
+            event_type="LEGACY_IMPORT",
+            status="NOT_FILED",
+        )
+        activity_id = f"activity-{case_id}-1"
+        connection.execute(
+            text(f"UPDATE t_case_activity_event SET {column} = :value WHERE id = :id"),
+            {"value": activity_id if value == "SELF" else value, "id": activity_id},
+        )
+
+    evidence_case = "near-evidence"
+    case_ids.append(evidence_case)
+    _insert_case(connection, evidence_case, status="NOT_FILED", revision=1)
+    _insert_activity(
+        connection,
+        evidence_case,
+        event_type="LEGACY_IMPORT",
+        status="NOT_FILED",
+    )
+    connection.execute(
+        text(
+            "INSERT INTO t_case_activity_event_evidence "
+            "(id, case_id, activity_id, evidence_kind, object_type, object_id, "
+            "content_hash, captured_at) VALUES "
+            "('near-evidence-link', :case_id, :activity_id, 'DOCUMENT', 'Document', "
+            "'object', 'sha256:evidence', '2026-07-01 09:00:00')"
+        ),
+        {"case_id": evidence_case, "activity_id": f"activity-{evidence_case}-1"},
+    )
+
+    not_first = "near-not-first"
+    case_ids.append(not_first)
+    _insert_case(connection, not_first, status="NOT_FILED", revision=2)
+    _insert_activity(
+        connection,
+        not_first,
+        event_type="CASE_OPENED",
+        status="NOT_FILED",
+        confirmation="CONFIRMED",
+        sequence=1,
+    )
+    _insert_activity(
+        connection,
+        not_first,
+        event_type="LEGACY_IMPORT",
+        status="NOT_FILED",
+        sequence=2,
+    )
+    return tuple(case_ids)
 
 
 def test_upgrade_backfills_only_exact_authoritative_history(tmp_path, monkeypatch) -> None:
@@ -175,13 +251,15 @@ def test_upgrade_backfills_only_exact_authoritative_history(tmp_path, monkeypatc
                 event_type="LEGACY_IMPORT",
                 status="NOT_FILED",
             )
+            near_miss_case_ids = _insert_material_near_misses(connection)
 
         command.upgrade(config, REVISION)
         with engine.connect() as connection:
             carriers = connection.execute(
                 text(
                     "SELECT case_id, conflict_lineage_version, conflict_code_count "
-                    "FROM t_case_activity_event ORDER BY case_id, sequence"
+                    "FROM t_case_activity_event WHERE case_id NOT LIKE 'near-%' "
+                    "ORDER BY case_id, sequence"
                 )
             ).all()
             assert carriers == [
@@ -205,6 +283,16 @@ def test_upgrade_backfills_only_exact_authoritative_history(tmp_path, monkeypatc
                 ("exact-later", "LEGACY_STATUS_UNVERIFIED"),
                 ("exact-later", "NO_REVERSE_MAPPING_AUTHORITY"),
             ]
+            near_misses = connection.execute(
+                text(
+                    "SELECT case_id, conflict_lineage_version, conflict_code_count, "
+                    "conflict_codes_sha256 FROM t_case_activity_event "
+                    "WHERE case_id LIKE 'near-%' AND activity_type = 'LEGACY_IMPORT' "
+                    "ORDER BY case_id"
+                )
+            ).all()
+            assert [row[0] for row in near_misses] == sorted(near_miss_case_ids)
+            assert all(row[1:] == (None, None, None) for row in near_misses)
     finally:
         engine.dispose()
         get_settings.cache_clear()
