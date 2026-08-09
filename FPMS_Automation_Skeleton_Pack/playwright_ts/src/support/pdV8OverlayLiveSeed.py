@@ -16,6 +16,7 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+import app.models as _model_registry  # noqa: E402, F401
 from app.core.config import get_settings  # noqa: E402
 from app.modules.auth.models import T_User  # noqa: E402
 from app.modules.cases.lifecycle_contracts import (  # noqa: E402

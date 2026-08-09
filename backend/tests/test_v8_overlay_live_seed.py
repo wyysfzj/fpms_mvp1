@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from importlib import util
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -379,3 +383,31 @@ def test_seed_rejects_non_sqlite_and_foreign_keys_off_before_mutation(
     finally:
         transaction.close()
         engine.dispose()
+
+
+def test_seed_runs_as_a_standalone_process(
+    monkeypatch: pytest.MonkeyPatch,
+    test_db_url: str,
+) -> None:
+    _approve_environment(monkeypatch, test_db_url)
+    result = subprocess.run(
+        [sys.executable, str(SEED_PATH)],
+        cwd=SEED_PATH.parents[4] / "backend",
+        env={
+            **dict(os.environ),
+            "FPMS_ENV": "test",
+            "DATABASE_URL": test_db_url,
+            "PYTHONPATH": str(SEED_PATH.parents[4] / "backend"),
+        },
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "activityCount": 401,
+        "caseId": "CASE-V8-OVERLAY-LIVE",
+        "caseNo": "V8-OVERLAY-LIVE",
+        "gateCount": 29,
+        "namespace": "V8OVL-LIVE",
+    }
