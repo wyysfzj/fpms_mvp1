@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.modules.documents.schemas import LetterHandoffOut
 
@@ -313,6 +314,34 @@ class LetterHandoffStatusUpdateIn(BaseModel):
 class LetterHandoffResultOut(BaseModel):
     preview: LetterHandoffPreviewOut | None = None
     handoff: LetterHandoffOut
+
+
+class FormatLetterArchiveIn(BaseModel):
+    operation_id: UUID
+    selected_contact_id: UUID | None = None
+    remark: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("remark", mode="before")
+    @classmethod
+    def normalize_remark(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        return value.strip() or None
+
+
+class FormatLetterArchiveOut(BaseModel):
+    handoff: LetterHandoffOut
+    evidence_version_id: str
+    version_number: int
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    generated_document_id: str
+    attachment_id: str
+    file_name: str
+    role: str
+    state: str
+    review_state: str
+    is_current: bool
+    reused: bool
 
 
 class OfficialFeeDraftLinkOut(BaseModel):

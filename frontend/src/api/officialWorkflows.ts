@@ -4,6 +4,8 @@ import type {
     FilingPreparationExternalOperationPayload,
     FilingPreparationPackage,
     FilingPreparationRefreshPayload,
+    FormatLetterArchivePayload,
+    FormatLetterArchiveResult,
     LetterHandoffCreatePayload,
     LetterHandoffPreview,
     LetterHandoffResult,
@@ -166,6 +168,17 @@ export async function createLetterHandoff(
 ): Promise<LetterHandoffResult> {
     const response = await http.post<LetterHandoffResult>(
         `/official-documents/${documentId}/letter-handoff`,
+        payload
+    )
+    return response.data
+}
+
+export async function archiveFormatLetter(
+    documentId: string,
+    payload: FormatLetterArchivePayload
+): Promise<FormatLetterArchiveResult> {
+    const response = await http.post<FormatLetterArchiveResult>(
+        `/official-documents/${documentId}/format-letter-archive`,
         payload
     )
     return response.data

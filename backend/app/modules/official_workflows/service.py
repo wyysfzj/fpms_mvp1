@@ -65,8 +65,15 @@ from app.modules.documents.evidence_workflow_service import (
     finalize_external_submission,
     prepare_oa_reply,
 )
-from app.modules.documents.letter_context import FormatLetterContextResult
-from app.modules.documents.letter_render_service import RenderedFormatLetter
+from app.modules.documents.letter_context import (
+    BuildFormatLetterContextCommand,
+    FormatLetterContextResult,
+    build_format_letter_context,
+)
+from app.modules.documents.letter_render_service import (
+    RenderedFormatLetter,
+    render_format_letter,
+)
 from app.modules.documents.models import (
     DocAttachment,
     DocTemplate,
@@ -164,6 +171,38 @@ class PendingFormatLetterArchive:
     evidence_version: EvidenceVersionResult
     managed_file_path: Path
     managed_file_identity: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FormatLetterArchiveCommand:
+    source_document_id: str
+    operation_id: str
+    selected_contact_id: str | None
+    remark: str | None
+    actor_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class FormatLetterArchiveResult:
+    handoff: LetterHandoffOut
+    evidence_version_id: str
+    version_number: int
+    content_hash: str
+    generated_document_id: str
+    attachment_id: str
+    file_name: str
+    role: EvidenceRole
+    state: EvidenceVersionState
+    review_state: EvidenceReviewState
+    is_current: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PendingFormatLetterArchiveOperation:
+    result: FormatLetterArchiveResult
+    managed_file_path: Path | None
+    managed_file_identity: tuple[int, int] | None
+    reused: bool
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -3385,6 +3424,384 @@ def archive_format_letter(
         evidence_version=version,
         managed_file_path=managed_path,
         managed_file_identity=managed_file_identity,
+    )
+
+
+def _require_clean_format_letter_archive_transaction(db: Session) -> None:
+    if db.new or db.dirty or db.deleted:
+        _format_letter_archive_conflict("Format-letter archive requires a clean caller transaction")
+
+
+def _format_letter_archive_result(
+    db: Session,
+    *,
+    handoff: LetterHandoff,
+    evidence_version: EvidenceVersionResult,
+    file_name: str,
+) -> FormatLetterArchiveResult:
+    return FormatLetterArchiveResult(
+        handoff=_letter_handoff_out(db, handoff=handoff),
+        evidence_version_id=evidence_version.evidence_version_id,
+        version_number=evidence_version.version_number,
+        content_hash=evidence_version.content_hash,
+        generated_document_id=evidence_version.document_id,
+        attachment_id=evidence_version.attachment_id,
+        file_name=file_name,
+        role=evidence_version.role,
+        state=evidence_version.state,
+        review_state=evidence_version.review_state,
+        is_current=evidence_version.is_current,
+    )
+
+
+def _stored_format_letter_archive_result(
+    db: Session,
+    *,
+    command: FormatLetterArchiveCommand,
+    handoff: LetterHandoff,
+    version: DocumentEvidenceVersion,
+) -> FormatLetterArchiveResult:
+    source = db.get(Document, command.source_document_id)
+    generated_document = db.get(Document, handoff.generated_document_id)
+    attachment = db.get(DocAttachment, version.attachment_id)
+    case = db.get(Case, version.case_id)
+    mapping = db.get(FormatLetterMapping, handoff.format_letter_mapping_id)
+    template = db.get(Template, handoff.format_letter_template_id)
+    handoff_attachments = (
+        db.execute(
+            select(LetterHandoffAttachment).where(LetterHandoffAttachment.handoff_id == handoff.id)
+        )
+        .scalars()
+        .all()
+    )
+    derivations = (
+        db.execute(
+            select(DocumentEvidenceDerivation).where(
+                DocumentEvidenceDerivation.child_evidence_version_id == version.id,
+                DocumentEvidenceDerivation.derivation_type
+                == EvidenceDerivationType.CUSTOMER_LETTER_RENDER.value,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if (
+        source is None
+        or generated_document is None
+        or attachment is None
+        or case is None
+        or mapping is None
+        or template is None
+        or len(handoff_attachments) != 1
+        or len(derivations) != 1
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive is partial")
+    handoff_attachment = handoff_attachments[0]
+    derivation = derivations[0]
+    source_version = db.get(
+        DocumentEvidenceVersion,
+        derivation.parent_evidence_version_id,
+    )
+    latest_source = db.scalar(
+        select(Document)
+        .where(
+            Document.case_id == source.case_id,
+            Document.direction == "IN",
+        )
+        .order_by(
+            Document.doc_date.desc(),
+            Document.created_at.desc(),
+            Document.id.desc(),
+        )
+        .limit(1)
+    )
+    if (
+        source.case_id != case.id
+        or source.direction != "IN"
+        or latest_source is None
+        or latest_source.id != source.id
+        or generated_document.case_id != case.id
+        or generated_document.direction != "OUT"
+        or generated_document.reply_to_id != source.id
+        or generated_document.id != handoff.generated_document_id
+        or generated_document.created_by != version.creator_id
+        or source_version is None
+        or source_version.case_id != case.id
+        or source_version.document_id != source.id
+        or source_version.role != EvidenceRole.OFFICIAL_FINAL_PDF.value
+        or source_version.state != EvidenceVersionState.FINAL.value
+        or source_version.review_state != EvidenceReviewState.APPROVED.value
+        or source_version.current_identity_key is None
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive source is inconsistent")
+    if (
+        mapping.format_letter_template_id != template.id
+        or mapping.format_letter_template_code != template.name
+        or mapping.enabled is not True
+        or template.enabled is not True
+        or template.group != "FORMAT_LETTER"
+        or not _normalize_text(template.file_path)
+        or handoff.contact_selection_source not in {"EXPLICIT", "PRIMARY", "DEFAULT"}
+        or handoff.salutation_source not in {"SELECTED_CONTACT", "DEFAULT"}
+        or not _normalize_text(handoff.salutation_text)
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive provenance is inconsistent")
+    if command.selected_contact_id is not None:
+        if (
+            handoff.client_contact_id != command.selected_contact_id
+            or handoff.contact_selection_source != "EXPLICIT"
+        ):
+            _format_letter_archive_conflict(
+                "Stored format-letter archive contact request has drifted"
+            )
+    elif handoff.contact_selection_source == "EXPLICIT":
+        _format_letter_archive_conflict("Stored format-letter archive contact request has drifted")
+    if handoff.client_contact_id is None:
+        if handoff.contact_selection_source != "DEFAULT" or handoff.salutation_source != "DEFAULT":
+            _format_letter_archive_conflict(
+                "Stored format-letter archive contact provenance is inconsistent"
+            )
+    else:
+        contact = db.get(ClientContact, handoff.client_contact_id)
+        if (
+            contact is None
+            or contact.client_id != case.client_id
+            or handoff.contact_selection_source not in {"EXPLICIT", "PRIMARY"}
+            or handoff.salutation_source != "SELECTED_CONTACT"
+        ):
+            _format_letter_archive_conflict(
+                "Stored format-letter archive contact provenance is inconsistent"
+            )
+    case_no = _normalize_text(case.case_no)
+    if not case_no:
+        _format_letter_archive_conflict("Stored format-letter archive case number is missing")
+    expected_path = f"letters/{case_no}/{attachment.file_name}"
+    if (
+        handoff.generated_word_path != expected_path
+        or attachment.document_id != generated_document.id
+        or attachment.file_name != Path(expected_path).name
+        or attachment.file_path != expected_path
+        or attachment.official_file_role != EvidenceRole.CLIENT_LETTER_WORD.value
+        or attachment.content_hash != version.content_hash
+        or attachment.is_archive_evidence is not True
+        or handoff_attachment.attachment_id != attachment.id
+        or handoff_attachment.file_name != attachment.file_name
+        or handoff_attachment.file_path != expected_path
+        or handoff_attachment.attachment_role != "FORMAT_LETTER_WORD"
+        or handoff_attachment.required is not True
+        or handoff_attachment.included is not True
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive attachment is inconsistent")
+    expected_current_identity = f"{case.id}|format-letter:{command.operation_id}"
+    expected_hash = _normalize_text(version.content_hash)
+    if (
+        version.document_id != generated_document.id
+        or version.lineage_key != f"format-letter:{command.operation_id}"
+        or version.role != EvidenceRole.CLIENT_LETTER_WORD.value
+        or version.version_number != 1
+        or version.state != EvidenceVersionState.DRAFT.value
+        or version.creator_id != command.actor_id
+        or version.review_state != EvidenceReviewState.PENDING.value
+        or version.reviewer_id is not None
+        or version.reviewed_at is not None
+        or version.current_identity_key != expected_current_identity
+        or expected_hash is None
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", expected_hash) is None
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive evidence is inconsistent")
+    try:
+        source_snapshot = json.loads(derivation.source_snapshot)
+    except (TypeError, json.JSONDecodeError):
+        _format_letter_archive_conflict("Stored format-letter archive provenance is invalid")
+    expected_snapshot = {
+        "handoff_id": handoff.id,
+        "format_letter_mapping_id": handoff.format_letter_mapping_id,
+        "format_letter_template_id": handoff.format_letter_template_id,
+        "client_contact_id": handoff.client_contact_id,
+        "contact_selection_source": handoff.contact_selection_source,
+        "salutation_source": handoff.salutation_source,
+        "salutation_text": handoff.salutation_text,
+        "rendered_content_hash": version.content_hash,
+        "source_document_id": source.id,
+        "source_evidence_version_id": source_version.id,
+    }
+    if (
+        source_snapshot != expected_snapshot
+        or derivation.case_id != case.id
+        or derivation.actor_id != version.creator_id
+    ):
+        _format_letter_archive_conflict("Stored format-letter archive provenance has drifted")
+    candidate = Path(expected_path)
+    storage_root = _format_letter_storage_root().resolve()
+    managed_path = (storage_root / candidate).resolve()
+    if candidate.is_absolute() or ".." in candidate.parts:
+        _format_letter_archive_conflict("Stored format-letter archive path is invalid")
+    try:
+        managed_path.relative_to(storage_root)
+        managed_hash = f"sha256:{hashlib.sha256(managed_path.read_bytes()).hexdigest()}"
+    except (OSError, ValueError):
+        _format_letter_archive_conflict("Stored format-letter archive file is missing")
+    if managed_hash != version.content_hash:
+        _format_letter_archive_conflict("Stored format-letter archive file hash has drifted")
+    evidence_result = EvidenceVersionResult(
+        evidence_version_id=version.id,
+        case_id=version.case_id,
+        document_id=version.document_id,
+        attachment_id=version.attachment_id,
+        lineage_key=version.lineage_key,
+        role=EvidenceRole(version.role),
+        version_number=version.version_number,
+        state=EvidenceVersionState(version.state),
+        creator_id=version.creator_id,
+        review_state=EvidenceReviewState(version.review_state),
+        reviewer_id=version.reviewer_id,
+        reviewed_at=version.reviewed_at,
+        final_submitted_at=version.final_submitted_at,
+        content_hash=version.content_hash,
+        is_current=version.current_identity_key is not None,
+        is_final=False,
+    )
+    return _format_letter_archive_result(
+        db,
+        handoff=handoff,
+        evidence_version=evidence_result,
+        file_name=attachment.file_name,
+    )
+
+
+def prepare_format_letter_archive(
+    command: FormatLetterArchiveCommand,
+    db: Session,
+) -> PendingFormatLetterArchiveOperation:
+    if type(command) is not FormatLetterArchiveCommand:
+        _format_letter_archive_conflict("Format-letter archive command is invalid")
+    for value in (
+        command.source_document_id,
+        command.operation_id,
+        command.actor_id,
+    ):
+        if type(value) is not str or not value or value != value.strip() or len(value) > 36:
+            _format_letter_archive_conflict("Format-letter archive identity is invalid")
+    if command.selected_contact_id is not None and (
+        type(command.selected_contact_id) is not str
+        or not command.selected_contact_id
+        or command.selected_contact_id != command.selected_contact_id.strip()
+        or len(command.selected_contact_id) > 36
+    ):
+        _format_letter_archive_conflict("Format-letter archive contact is invalid")
+    normalized_remark = _normalize_text(command.remark)
+    if normalized_remark != command.remark or (
+        normalized_remark is not None and len(normalized_remark) > 2000
+    ):
+        _format_letter_archive_conflict("Format-letter archive remark is invalid")
+    _require_clean_format_letter_archive_transaction(db)
+
+    handoff = db.get(LetterHandoff, command.operation_id)
+    versions = (
+        db.execute(
+            select(DocumentEvidenceVersion).where(
+                DocumentEvidenceVersion.lineage_key == f"format-letter:{command.operation_id}"
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if handoff is not None or versions:
+        if (
+            handoff is None
+            or len(versions) != 1
+            or handoff.source_document_id != command.source_document_id
+            or handoff.remark != normalized_remark
+            or handoff.generated_document_id is None
+        ):
+            _format_letter_archive_conflict("Format-letter archive operation has drifted")
+        result = _stored_format_letter_archive_result(
+            db,
+            command=command,
+            handoff=handoff,
+            version=versions[0],
+        )
+        return PendingFormatLetterArchiveOperation(
+            result=result,
+            managed_file_path=None,
+            managed_file_identity=None,
+            reused=True,
+        )
+
+    source = db.get(Document, command.source_document_id)
+    if source is None:
+        raise BusinessError(
+            "FORMAT_LETTER_SOURCE_NOT_FOUND",
+            "FORMAT_LETTER_SOURCE_NOT_FOUND",
+            status_code=404,
+        )
+    context_result = build_format_letter_context(
+        BuildFormatLetterContextCommand(
+            case_id=source.case_id,
+            source_document_id=command.source_document_id,
+            selected_contact_id=command.selected_contact_id,
+        ),
+        db,
+    )
+    rendered = render_format_letter(context_result)
+    case_no = _normalize_text(context_result.context.get("case_no"))
+    if not case_no:
+        _format_letter_archive_conflict("Format-letter archive case number is missing")
+    handoff = LetterHandoff(
+        id=command.operation_id,
+        source_document_id=command.source_document_id,
+        format_letter_mapping_id=context_result.mapping_id,
+        format_letter_template_id=context_result.template_id,
+        client_contact_id=context_result.selected_contact_id,
+        contact_selection_source=context_result.contact_selection_source,
+        salutation_source=context_result.salutation_source,
+        salutation_text=context_result.context.get("salutation_text"),
+        generated_word_path=f"letters/{case_no}/{rendered.file_name}",
+        longxia_handoff_status="READY",
+        remark=normalized_remark,
+    )
+    db.add(handoff)
+    db.flush()
+    db.add(
+        LetterHandoffAttachment(
+            id=str(uuid4()),
+            handoff_id=handoff.id,
+            attachment_id=None,
+            file_name=rendered.file_name,
+            file_path=handoff.generated_word_path,
+            attachment_role="FORMAT_LETTER_WORD",
+            required=True,
+            included=True,
+            sort_order=1,
+        )
+    )
+    db.flush()
+    pending = archive_format_letter(
+        db,
+        handoff_id=handoff.id,
+        context_result=context_result,
+        rendered=rendered,
+        actor_id=command.actor_id,
+    )
+    try:
+        result = _format_letter_archive_result(
+            db,
+            handoff=handoff,
+            evidence_version=pending.evidence_version,
+            file_name=rendered.file_name,
+        )
+    except Exception as exc:
+        _remove_format_letter_archive_file(
+            pending.managed_file_path,
+            expected_identity=pending.managed_file_identity,
+            original_error=exc,
+        )
+        raise
+    return PendingFormatLetterArchiveOperation(
+        result=result,
+        managed_file_path=pending.managed_file_path,
+        managed_file_identity=pending.managed_file_identity,
+        reused=False,
     )
 
 

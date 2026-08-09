@@ -320,6 +320,27 @@ export interface LetterHandoffResult {
     handoff: LetterHandoff
 }
 
+export interface FormatLetterArchivePayload {
+    operation_id: string
+    selected_contact_id: string | null
+    remark: string | null
+}
+
+export interface FormatLetterArchiveResult {
+    handoff: LetterHandoff
+    evidence_version_id: string
+    version_number: number
+    content_hash: string
+    generated_document_id: string
+    attachment_id: string
+    file_name: string
+    role: 'CLIENT_LETTER_WORD'
+    state: 'DRAFT'
+    review_state: 'PENDING'
+    is_current: boolean
+    reused: boolean
+}
+
 export interface OfficialFeeDraftLink {
     id: string
     draft_type: string

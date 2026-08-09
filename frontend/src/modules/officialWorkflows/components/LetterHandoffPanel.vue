@@ -146,6 +146,20 @@
           >
             生成交接记录
           </el-button>
+          <el-button
+            v-if="isIncoming"
+            type="primary"
+            :loading="archiving"
+            :disabled="Boolean(archiveResult)"
+            @click="handleArchiveFormatLetter"
+          >
+            生成并归档格式函
+          </el-button>
+        </div>
+
+        <div v-if="isIncoming && archiveResult" class="archive-result">
+          <strong>证据版本 v{{ archiveResult.version_number }}</strong>
+          <code>{{ archiveResult.content_hash }}</code>
         </div>
 
         <div v-if="handoff" class="handoff-status-form">
@@ -178,11 +192,13 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
+  archiveFormatLetter,
   createLetterHandoff,
   getLetterHandoffPreview,
   updateLetterHandoffStatus,
 } from '../../../api/officialWorkflows'
 import type {
+  FormatLetterArchiveResult,
   LetterHandoff,
   LetterHandoffPreview,
 } from '../../../api/officialWorkflows.types'
@@ -191,17 +207,22 @@ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 
 const props = withDefaults(defineProps<{
   documentId?: string
+  direction?: string
 }>(), {
   documentId: '',
+  direction: '',
 })
 
 const preview = ref<LetterHandoffPreview | null>(null)
 const handoff = ref<LetterHandoff | null>(null)
 const loading = ref(false)
 const creating = ref(false)
+const archiving = ref(false)
 const updatingStatus = ref(false)
 const error = ref<ApiError | null>(null)
 const handoffRemark = ref('')
+const archiveResult = ref<FormatLetterArchiveResult | null>(null)
+const archiveOperationId = ref('')
 const statusForm = reactive({
   longxia_handoff_status: 'PENDING',
   longxia_handoff_payload: '',
@@ -209,6 +230,7 @@ const statusForm = reactive({
 })
 
 const documentId = computed(() => String(props.documentId || '').trim())
+const isIncoming = computed(() => String(props.direction || '').trim().toUpperCase() === 'IN')
 
 const displaySalutation = computed(() => {
   const value = preview.value?.salutation_text?.trim()
@@ -231,6 +253,8 @@ const handoffStatusTagType = computed((): 'success' | 'warning' | 'danger' | 'in
 })
 
 watch(documentId, () => {
+  archiveResult.value = null
+  archiveOperationId.value = ''
   void fetchPreview()
 })
 
@@ -277,6 +301,30 @@ async function handleCreateHandoff() {
     error.value = err as ApiError
   } finally {
     creating.value = false
+  }
+}
+
+async function handleArchiveFormatLetter() {
+  if (!documentId.value || !isIncoming.value || archiveResult.value) return
+
+  if (!archiveOperationId.value) {
+    archiveOperationId.value = crypto.randomUUID()
+  }
+  archiving.value = true
+  error.value = null
+  try {
+    const result = await archiveFormatLetter(documentId.value, {
+      operation_id: archiveOperationId.value,
+      selected_contact_id: null,
+      remark: handoffRemark.value.trim() || null,
+    })
+    handoff.value = result.handoff
+    archiveResult.value = result
+    ElMessage.success('格式函已生成并归档')
+  } catch (err) {
+    error.value = err as ApiError
+  } finally {
+    archiving.value = false
   }
 }
 
@@ -437,6 +485,15 @@ function getHandoffStatusText(value?: string | null): string {
 .handoff-status-form {
   display: grid;
   gap: 10px;
+}
+
+.archive-result {
+  display: grid;
+  gap: 6px;
+}
+
+.archive-result code {
+  overflow-wrap: anywhere;
 }
 
 .handoff-status-form {

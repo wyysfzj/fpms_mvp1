@@ -72,6 +72,7 @@
             v-if="showLetterHandoffAction"
             class="letter-handoff-section"
             :document-id="doc.id"
+            :direction="doc.direction"
           />
         </div>
 
@@ -256,7 +257,7 @@ const oaReplyPackageRoute = computed(() => ({
     document_id: doc.value?.id || '',
   },
 }))
-const showLetterHandoffAction = computed(() => doc.value?.direction === 'OUT')
+const showLetterHandoffAction = computed(() => ['IN', 'OUT'].includes(normalizeCode(doc.value?.direction)))
 
 const OFFICIAL_ROLE_TEXT: Record<string, string> = {
   TECHNICAL_DISCLOSURE: '技术交底书',
