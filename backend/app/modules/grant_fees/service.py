@@ -56,6 +56,7 @@ from app.modules.fees.models import (
     T_GrantFeeTask,
 )
 from app.modules.fees.obligation_contracts import (
+    FeeClientInstruction,
     FeeDifferenceReviewState,
     FeeDomain,
     FeeObligationLineInput,
@@ -63,8 +64,13 @@ from app.modules.fees.obligation_contracts import (
     FeeSourceStatus,
     RecognizeFeeObligationCommand,
     RecognizeFeeObligationResult,
+    RecordFeeObligationInstructionCommand,
 )
-from app.modules.fees.obligation_service import recognize_obligation
+from app.modules.fees.obligation_service import (
+    get_fee_obligation,
+    recognize_obligation,
+    record_client_instruction,
+)
 from app.modules.fees.service import (
     fee_rate_effective_on_conditions,
     fee_rate_source_enabled_condition,
@@ -158,6 +164,349 @@ class RecognizeGrantYearAnnuityObligationCommand:
     source_activity_id: str
     actor_id: str
     idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RecordGrantFeeTaskInstructionCommand:
+    grant_fee_task_id: str
+    source_activity_id: str
+    instruction: str
+    actor_id: str
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class RecordGrantFeeTaskInstructionResult:
+    grant_fee_task_id: str
+    fee_obligation_id: str
+    instruction: FeeClientInstruction
+    activity_id: str
+    idempotency_key: str
+    reused: bool
+
+
+def _grant_instruction_command_invalid(field: str) -> None:
+    raise_business_error(
+        "GRANT_INSTRUCTION_COMMAND_INVALID",
+        "授权费用任务客户指示命令无效",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _grant_instruction_link_not_found() -> None:
+    raise_business_error(
+        "GRANT_INSTRUCTION_LINK_NOT_FOUND",
+        "授权费用任务客户指示关联不存在",
+        status_code=404,
+    )
+
+
+def _grant_instruction_lineage_conflict() -> None:
+    raise_business_error(
+        "GRANT_INSTRUCTION_LINEAGE_CONFLICT",
+        "授权费用任务客户指示谱系不一致",
+        status_code=409,
+    )
+
+
+def _validate_grant_instruction_command(command: object) -> None:
+    if type(command) is not RecordGrantFeeTaskInstructionCommand:
+        _grant_instruction_command_invalid("command")
+    for field, limit in (
+        ("grant_fee_task_id", 36),
+        ("source_activity_id", 36),
+        ("actor_id", 36),
+        ("idempotency_key", 128),
+    ):
+        value = getattr(command, field)
+        if (
+            type(value) is not str
+            or not value
+            or value != value.strip()
+            or "\x00" in value
+            or len(value) > limit
+        ):
+            _grant_instruction_command_invalid(field)
+    if type(command.instruction) is not str or command.instruction not in {
+        "PAY",
+        "HOLD",
+        "ABANDON",
+    }:
+        _grant_instruction_command_invalid("instruction")
+
+
+def _grant_instruction_expected_source(
+    transaction: Session,
+    *,
+    task: T_GrantFeeTask,
+    activity: CaseActivityEvent,
+) -> tuple[Case, tuple[FeeObligationLineInput, ...], dict[str, object]]:
+    if (
+        task.type != "GRANT"
+        or type(task.case_id) is not str
+        or not task.case_id
+        or task.source_document_id is None
+        or type(task.due_date) is not date
+        or not _exact_grant_notice_text(task.deadline_source, max_length=32)
+        or type(task.deadline_confirmed_at) is not datetime
+        or task.deadline_confirmed_at.tzinfo is not None
+        or activity.case_id != task.case_id
+        or activity.activity_type != _GRANT_NOTICE_EVENT_TYPE
+        or activity.lane != ActivityLane.LIFECYCLE.value
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+    ):
+        _grant_instruction_lineage_conflict()
+    try:
+        payload, _ = _validated_stored_grant_notice(
+            transaction,
+            activity=activity,
+            task=task,
+        )
+    except BusinessError:
+        _grant_instruction_lineage_conflict()
+    document = transaction.get(Document, task.source_document_id)
+    evidence = transaction.get(
+        DocumentEvidenceVersion,
+        payload["reviewed_evidence_version_id"],
+    )
+    case = transaction.get(Case, task.case_id)
+    if document is None or evidence is None or case is None:
+        _grant_instruction_link_not_found()
+    if (
+        document.id != payload["source_document_id"]
+        or document.case_id != task.case_id
+        or evidence.case_id != task.case_id
+        or evidence.document_id != document.id
+        or evidence.id != payload["reviewed_evidence_version_id"]
+        or evidence.content_hash != payload["reviewed_evidence_content_hash"]
+        or payload["case_id"] != task.case_id
+        or payload["grant_fee_task_id"] != task.id
+        or payload["due_date"] != task.due_date.isoformat()
+        or payload["deadline_source"] != task.deadline_source
+        or payload["deadline_confirmed_at"] != task.deadline_confirmed_at.isoformat()
+    ):
+        _grant_instruction_lineage_conflict()
+    fee_code = {
+        "INV": "CN_ANNUITY_FEE_INV",
+        "UM": "CN_ANNUITY_FEE_UM",
+        "DES": "CN_ANNUITY_FEE_DES",
+    }.get(case.patent_category)
+    if fee_code is None:
+        _grant_instruction_lineage_conflict()
+    try:
+        lines = _grant_year_annuity_lines(payload, fee_code=fee_code)
+    except BusinessError:
+        _grant_instruction_lineage_conflict()
+    return case, lines, payload
+
+
+def _grant_instruction_recognition_count(
+    transaction: Session,
+    *,
+    case_id: str,
+    obligation_id: str,
+) -> int:
+    matches = 0
+    for activity in transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == case_id,
+            CaseActivityEvent.lane == ActivityLane.FEE.value,
+            CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
+        )
+    ):
+        try:
+            payload = json.loads(activity.payload_json)
+        except (TypeError, ValueError):
+            continue
+        if type(payload) is dict and payload.get("obligation_id") == obligation_id:
+            matches += 1
+    return matches
+
+
+def _validate_grant_instruction_obligation(
+    transaction: Session,
+    *,
+    task: T_GrantFeeTask,
+    activity: CaseActivityEvent,
+    expected_lines: tuple[FeeObligationLineInput, ...],
+    obligation_id: str,
+) -> None:
+    recognition_count = _grant_instruction_recognition_count(
+        transaction,
+        case_id=task.case_id,
+        obligation_id=obligation_id,
+    )
+    if recognition_count == 0:
+        _grant_instruction_link_not_found()
+    if recognition_count != 1:
+        _grant_instruction_lineage_conflict()
+    try:
+        obligation = get_fee_obligation(obligation_id, transaction)
+    except BusinessError as exc:
+        if exc.code == "FEE_OBLIGATION_NOT_FOUND":
+            _grant_instruction_link_not_found()
+        _grant_instruction_lineage_conflict()
+    expected_by_year = {line.fee_year_key: line for line in expected_lines}
+    actual_by_year = {line.fee_year_key: line for line in obligation.lines}
+    if (
+        obligation.case_id != task.case_id
+        or obligation.source.source_activity_id != activity.id
+        or obligation.source.source_document_id != task.source_document_id
+        or obligation.source.status is not FeeSourceStatus.VERIFIED
+        or obligation.fee_domain is not FeeDomain.GOV
+        or obligation.obligation_type != "GRANT_YEAR_ANNUITY"
+        or obligation.due_date != task.due_date
+        or obligation.currency != "CNY"
+        or len(actual_by_year) != len(obligation.lines)
+        or set(actual_by_year) != set(expected_by_year)
+    ):
+        _grant_instruction_lineage_conflict()
+    for year, expected in expected_by_year.items():
+        actual = actual_by_year[year]
+        expected_identity = hashlib.sha256(
+            (f"{task.case_id}|{activity.id}|{expected.fee_code}|{expected.fee_year_key}").encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        expected_current_identity = (
+            expected_identity
+            if obligation.statuses.obligation_status is FeeObligationStatus.RECOGNIZED
+            else None
+        )
+        if (
+            actual.case_id != task.case_id
+            or actual.source_activity_id != activity.id
+            or actual.fee_code != expected.fee_code
+            or actual.fee_name != expected.fee_name
+            or actual.official_full_amount != expected.official_full_amount
+            or actual.reduction_ratio != expected.reduction_ratio
+            or actual.payable_amount != expected.payable_amount
+            or actual.source_amount != expected.source_amount
+            or actual.source_date != expected.source_date
+            or actual.difference_review_state is not expected.difference_review_state
+            or actual.current_identity_key != expected_current_identity
+        ):
+            _grant_instruction_lineage_conflict()
+
+    try:
+        predecessor_id, _ = _grant_year_annuity_predecessor(
+            transaction,
+            task=task,
+            activity=activity,
+            payload=_grant_notice_payload(activity.payload_json),
+            fee_code=next(iter(expected_by_year.values())).fee_code,
+        )
+    except BusinessError:
+        _grant_instruction_lineage_conflict()
+    if predecessor_id is not None:
+        if obligation.supersedes_obligation_id != predecessor_id:
+            _grant_instruction_lineage_conflict()
+        return
+    if obligation.supersedes_obligation_id is not None:
+        _grant_instruction_lineage_conflict()
+    if obligation.statuses.obligation_status is FeeObligationStatus.RECOGNIZED:
+        return
+
+    children = tuple(
+        transaction.scalars(
+            select(FeeObligation).where(FeeObligation.supersedes_obligation_id == obligation.id)
+        )
+    )
+    if len(children) != 1:
+        _grant_instruction_lineage_conflict()
+    child_activity = transaction.get(CaseActivityEvent, children[0].source_activity_id)
+    if child_activity is None:
+        _grant_instruction_link_not_found()
+    try:
+        child_payload = _grant_notice_payload(child_activity.payload_json)
+    except BusinessError:
+        _grant_instruction_lineage_conflict()
+    child_task_id = child_payload["grant_fee_task_id"]
+    child_task = transaction.get(T_GrantFeeTask, child_task_id)
+    if child_task is None:
+        _grant_instruction_link_not_found()
+    try:
+        _validated_stored_grant_notice(
+            transaction,
+            activity=child_activity,
+            task=child_task,
+        )
+        child_predecessor_id, _ = _grant_year_annuity_predecessor(
+            transaction,
+            task=child_task,
+            activity=child_activity,
+            payload=child_payload,
+            fee_code=next(iter(expected_by_year.values())).fee_code,
+        )
+    except BusinessError:
+        _grant_instruction_lineage_conflict()
+    if child_predecessor_id != obligation.id:
+        _grant_instruction_lineage_conflict()
+
+
+def record_grant_fee_task_instruction(
+    command: RecordGrantFeeTaskInstructionCommand,
+    transaction: Session,
+) -> RecordGrantFeeTaskInstructionResult:
+    _validate_grant_instruction_command(command)
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _grant_instruction_lineage_conflict()
+    with transaction.no_autoflush:
+        task = transaction.get(T_GrantFeeTask, command.grant_fee_task_id)
+        if task is None:
+            raise_business_error(
+                "GRANT_INSTRUCTION_TASK_NOT_FOUND",
+                "授权费用任务不存在",
+                status_code=404,
+            )
+        activity = transaction.get(CaseActivityEvent, command.source_activity_id)
+        if activity is None:
+            _grant_instruction_link_not_found()
+        _case, expected_lines, _payload = _grant_instruction_expected_source(
+            transaction,
+            task=task,
+            activity=activity,
+        )
+        obligations = tuple(
+            transaction.scalars(
+                select(FeeObligation).where(
+                    FeeObligation.case_id == task.case_id,
+                    FeeObligation.source_activity_id == activity.id,
+                    FeeObligation.obligation_type == "GRANT_YEAR_ANNUITY",
+                )
+            )
+        )
+        if not obligations:
+            _grant_instruction_link_not_found()
+        if len(obligations) != 1:
+            _grant_instruction_lineage_conflict()
+        obligation_id = obligations[0].id
+        _validate_grant_instruction_obligation(
+            transaction,
+            task=task,
+            activity=activity,
+            expected_lines=expected_lines,
+            obligation_id=obligation_id,
+        )
+    instruction = FeeClientInstruction(command.instruction)
+    delegated = record_client_instruction(
+        RecordFeeObligationInstructionCommand(
+            obligation_id=obligation_id,
+            instruction=instruction,
+            actor_id=command.actor_id,
+            idempotency_key=command.idempotency_key,
+        ),
+        transaction,
+    )
+    return RecordGrantFeeTaskInstructionResult(
+        grant_fee_task_id=task.id,
+        fee_obligation_id=obligation_id,
+        instruction=instruction,
+        activity_id=delegated.activity_id,
+        idempotency_key=delegated.idempotency_key,
+        reused=delegated.reused,
+    )
 
 
 def recognize_grant_year_annuity_obligation(
