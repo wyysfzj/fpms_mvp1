@@ -16,7 +16,9 @@ test('中央案件生命周期只展示当前三轴状态和已确认的中心�
     await expect(lane.getByText('业务阶段：PROSECUTION_MANAGEMENT', { exact: true })).toBeVisible()
     await expect(lane.getByText('官方程序阶段：SUBSTANTIVE_EXAMINATION', { exact: true })).toBeVisible()
     await expect(lane.getByText('法律状态：APPLICATION_PENDING', { exact: true })).toBeVisible()
-    await expect(lane.getByText('核验状态：CONFIRMED', { exact: true })).toBeVisible()
+    await expect(
+        lane.getByLabel('当前案件生命周期状态').getByText('核验状态：CONFIRMED', { exact: true }),
+    ).toBeVisible()
 
     const confirmed = lane.getByTestId('center-change-activity-confirmed')
     await expect(confirmed.getByText('事件类型：SUBSTANTIVE_EXAMINATION_STARTED', { exact: true })).toBeVisible()
