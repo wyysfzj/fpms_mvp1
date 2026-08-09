@@ -250,6 +250,23 @@ def test_reads_historical_revision_without_comparing_current_case_projection(
         assert [milestone.sequence for milestone in result.milestones] == [2]
 
 
+def test_historical_revision_is_not_invalidated_by_later_corrupt_activity(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        case = _seed_three_lane_history(transaction, value=6)
+        transaction.get(CaseActivityEvent, _id(1003)).new_legal_status = "CORRUPT"
+        transaction.commit()
+
+        historical = _read(transaction, case.id, as_of_revision=2)
+
+        assert historical.lifecycle_revision == 2
+        assert historical.center_snapshot.legal_status is LegalStatus.NOT_ESTABLISHED
+        with pytest.raises(BusinessError) as caught:
+            _read(transaction, case.id)
+        assert caught.value.code == "LIFECYCLE_OVERLAY_STATE_CONFLICT"
+
+
 def test_fully_unmanaged_legacy_case_reads_as_empty_revision_zero(
     session_factory: sessionmaker,
 ) -> None:

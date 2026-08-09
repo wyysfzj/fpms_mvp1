@@ -82,17 +82,20 @@ def read_lifecycle_overlay(
     activities = (
         transaction.execute(
             select(CaseActivityEvent)
-            .where(CaseActivityEvent.case_id == case_id)
+            .where(
+                CaseActivityEvent.case_id == case_id,
+                CaseActivityEvent.sequence <= revision,
+            )
             .order_by(CaseActivityEvent.sequence, CaseActivityEvent.id)
         )
         .scalars()
         .all()
     )
-    if [activity.sequence for activity in activities] != list(range(1, current_revision + 1)):
+    if [activity.sequence for activity in activities] != list(range(1, revision + 1)):
         _state_conflict(case_id, "ACTIVITY_SEQUENCE_INVALID")
 
     parsed = _validate_and_parse_activities(case_id, activities)
-    frozen = tuple(item for item in parsed if item[0].sequence <= revision)
+    frozen = parsed
     center_activity = next(
         (item for item in reversed(frozen) if item[1] is ActivityLane.LIFECYCLE),
         None,
