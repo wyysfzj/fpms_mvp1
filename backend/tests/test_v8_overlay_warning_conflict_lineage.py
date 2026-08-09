@@ -449,6 +449,56 @@ def test_non_string_legacy_status_is_not_projected_as_legacy(
         assert overlay.legacy_conflicts == ()
 
 
+def test_later_exact_legacy_shape_is_not_relabelled_when_first_event_is_off_page(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        case = _case(transaction)
+        actor_id = _actor(transaction)
+        append_case_activity(
+            LifecycleEventCommand(
+                case_id=case.id,
+                event_type="PRELUDE",
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=AT,
+                evidence_refs=(),
+                actor_id=actor_id,
+                idempotency_key=f"prelude:{case.id}",
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={},
+                occurred_at=AT,
+            ),
+            transaction,
+            previous_projection=EMPTY,
+            current_projection=EMPTY,
+            legacy_case_status=case.status,
+            conflict_codes=(),
+        )
+        append_case_activity(
+            _command(case, actor_id),
+            transaction,
+            previous_projection=EMPTY,
+            current_projection=LEGACY,
+            legacy_case_status=case.status,
+            conflict_codes=CONFLICTS,
+        )
+        transaction.commit()
+
+        page = read_lifecycle_overlay(
+            case_id=case.id,
+            after_sequence=1,
+            limit=1,
+            as_of_revision=2,
+            transaction=transaction,
+        )
+        assert [milestone.sequence for milestone in page.milestones] == [2]
+        assert [warning.code for warning in page.milestones[0].warnings] == [
+            "LEGACY_ACTIVITY_UNVERIFIED",
+            *CONFLICTS,
+        ]
+        assert page.legacy_conflicts == ()
+
+
 def test_activity_warnings_and_legacy_conflicts_are_page_local(
     session_factory: sessionmaker,
 ) -> None:
