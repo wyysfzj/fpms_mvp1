@@ -163,6 +163,31 @@ updates this index.
 
 ## Customer and authority decision gates
 
+### `DEC-V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-20260809`
+
+- Status: `APPROVED`.
+- Source/version: user authority decision in Codex Goal thread
+  `019f4a1a-6f55-77a2-b558-b6555201415c`, exact UTF-8 decision text
+  `批准方案 A，Resume Goal`, received on `2026-08-09` in timezone `Asia/Shanghai`.
+- Source SHA-256:
+  `91a336042550c2ee616f43654f4216955f6fff774528b696c676faebb4f1ac64`.
+- Decision value: ordinary document create, batch create and ordinary document edit are
+  lifecycle-neutral. They may persist document, deadline, reply, task and fee-routing
+  facts, but must not directly write `Case.status` or the three central lifecycle
+  projections and must not append a lifecycle event. A legal/lifecycle transition is
+  accepted only through its dedicated actor-aware, reviewed-evidence, confirmed and
+  idempotent lifecycle adapter.
+- Actor and acceptance authority: the repository user approved option A. One independent
+  High reviewer of the exact frozen successor contract and one independent High reviewer
+  of its exact implementation candidate remain required before ledger activation.
+- Effective scope/time: the decision becomes active only for V8 current-tree acceptance
+  after the exact successor implementation is independently approved and integrated. It
+  supersedes the conflicting ordinary-create dispatch requirement of catalog row 61; it
+  does not retroactively rewrite historical evidence or authorize a new lifecycle event.
+- Rollback impact: reverting the successor adoption restores the pre-adoption runtime and
+  returns row 61 and its dependent lanes to `AUTHORITY_BLOCKED`; no lifecycle event,
+  status or historical record may be synthesized during rollback.
+
 The following statuses are the cutover snapshot. `PENDING` means no sufficient reviewed
 decision is present in the approved source record. Missing or conflicting input blocks
 only the named lane; it never activates a default.
