@@ -2,7 +2,9 @@
 
 - Status: `READY_FOR_REVIEW`.
 - Risk: `PROTECTED`.
-- Product/test commit: `ae26fc6db220a6f54dc85e8a7bfc7b16982131e5`.
+- Product/test commits:
+  `ae26fc6db220a6f54dc85e8a7bfc7b16982131e5` and the independent-review correction
+  `d5ea31f2293f2497e854029e7a6015c23aa6ac07`.
 - Integration parent: `acf934bd050387c86bbe2ff7c43acf4dd61f1cfe`.
 - Superseded catalog row after independent acceptance:
   `FPMS-V8-DOCUMENT-SEMANTICS-EVENT-ADAPTER-20260712-01` (ordinal `61`).
@@ -51,7 +53,16 @@ Exact inherited alignment/fixture paths:
 The wizard file changes only one prerequisite fixture value,
 `fee_reduction: "0"`, after the first exact regression tranche proved eight requests
 stopped at the current required CaseCreate field with HTTP 422 before reaching the named
-shared seam. No wizard assertion or product behavior changed.
+shared seam. The same current-tree prerequisite stopped the direct alignment assertions in
+`test_addgap_document_semantic_state_effect.py` and
+`test_document_impact_preview_api.py`; those allowed alignment fixtures add only the same
+explicit no-reduction value. No wizard assertion or product behavior changed.
+
+The terminal-status alignment preserves the public protected-status HTTP check. A parent-
+tree node rerun proved the public Case update returns HTTP 409 with
+`CASE_STATUS_MANAGED_BY_LIFECYCLE`; the current test retains that assertion, then uses a
+direct database fixture only to establish `GRANTED` before proving ordinary document POST
+returns 201 and leaves `GRANTED` unchanged.
 
 ## TDD and current verification
 
@@ -68,6 +79,16 @@ Minimum GREEN results:
   `235.20s`;
 - scoped Ruff: PASS;
 - staged exact diff check: PASS.
+
+Independent review found and the exact successor correction `d5ea31f` closed three
+fail-closed/scope defects before adoption: invalid or missing document-template
+configuration now returns the contract-required 409 rather than resource 404; a stored
+evidence version with an invalid attachment identity or non-positive/non-integer version
+number now fails 409 without dispatch; and the protected public Case-update 409 assertion
+is retained before the terminal-state fixture. Correction RED was `2 failed` for the
+404/409 mismatch and `4 failed` because invalid evidence identity reached dispatch.
+Correction GREEN was `2 passed`, then `5 passed`; the full acceptance/OA decisive files
+passed `147/147`, scoped Ruff and exact diff check passed.
 
 The four remaining failures are the same unrelated current-tree OA_OUT reply-date/filter
 baseline in `test_b2_reply_chain.py` and `test_spec_alignment_e2e.py`: the source OA_IN
