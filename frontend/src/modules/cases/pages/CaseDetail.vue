@@ -53,8 +53,7 @@
         </div>
       </div>
 
-      <!-- V3 Stepper (above tabs) -->
-      <CaseStepper :status="caseData.status" />
+      <CaseLifecycleOverlay :case-id="caseData.id" />
 
       <!-- Main content grid: left tabs + right panel -->
       <div class="case-detail-v3-grid">
@@ -522,7 +521,7 @@ import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
 import LimitedEditDialog from '../components/LimitedEditDialog.vue'
 import CaseReceiptsSummary from '../components/CaseReceiptsSummary.vue'
-import CaseStepper from '../components/CaseStepper.vue'
+import CaseLifecycleOverlay from '../components/CaseLifecycleOverlay.vue'
 import CaseDeadlineCard from '../components/CaseDeadlineCard.vue'
 import CaseRelatedTasks from '../components/CaseRelatedTasks.vue'
 import CaseDocumentsTab from '../components/CaseDocumentsTab.vue'
