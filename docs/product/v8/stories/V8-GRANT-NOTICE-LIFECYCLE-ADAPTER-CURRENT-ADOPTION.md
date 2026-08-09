@@ -6,7 +6,8 @@
   (ordinal `74`).
 - Product/test commits:
   `997a6896b90deae18ecda7bde9db35e48513b242` and
-  `06cd5882ac92a7ac3d6c7f102ccdecb67bb2c43b`.
+  `06cd5882ac92a7ac3d6c7f102ccdecb67bb2c43b`, with review correction
+  `0ddab25caf2aee017bc3662a3b1068e13be631be`.
 - Integration parent: `37beb56c66a2dc450a7cb9e0ba6acffee4b0ef51`.
 - Production-entry correction contract commit: `68bfd75`.
 - Authority: `DEC-V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-20260809`, the exact frozen Row74
@@ -115,7 +116,10 @@ as the source of detailed failure-matrix coverage.
 - hash-boundary correction RED: `1 failed, 7 passed`; Pydantic's unanchored pattern
   admitted a prefixed hash and delegated it to service validation instead of returning
   the contracted HTTP 422;
-- final dedicated API plus dispatcher GREEN: `66 passed`;
+- pre-review dedicated API plus dispatcher GREEN: `66 passed`;
+- independent review found one P2: newly exposed English validation/error messages;
+  correction RED was `16 failed, 57 deselected`, then the exact API plus dispatcher
+  GREEN was `73 passed`; codes, statuses, fields and transaction behavior were unchanged;
 - current snapshot plus lifecycle-rule dependency tranche: `114 passed`;
 - Row61 semantics/acceptance/OA affected regression tranche: `159 passed`;
 - exact inherited 26-file backend tranche: `162 passed, 55 failed`;
