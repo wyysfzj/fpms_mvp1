@@ -213,6 +213,11 @@ async function loadMoreOverlay(): Promise<void> {
     const milestones = [...current.milestones]
     for (const milestone of nextPage.milestones) {
       if (!seenSequences.has(milestone.sequence)) {
+        const lastAccepted = milestones[milestones.length - 1]
+        if (lastAccepted && milestone.sequence <= lastAccepted.sequence) {
+          loadMoreError.value = invalidPageError('分页新增里程碑会破坏累计顺序')
+          return
+        }
         seenSequences.add(milestone.sequence)
         milestones.push(milestone)
       }

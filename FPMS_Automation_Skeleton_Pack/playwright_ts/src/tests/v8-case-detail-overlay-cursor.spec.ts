@@ -80,6 +80,7 @@ test('invalid pages keep the accepted snapshot and retry the same cursor and rev
     const invalidMessages = [
         '分页响应修订与首次修订不一致',
         '分页里程碑序列必须严格递增',
+        '分页新增里程碑会破坏累计顺序',
         '分页响应缺少下一游标',
         '分页响应下一游标未前进',
     ]
@@ -97,6 +98,11 @@ test('invalid pages keep the accepted snapshot and retry the same cursor and rev
             ...overlayPage(2),
             lifecycle_revision: firstRevision,
             milestones: [milestone(40), milestone(30)],
+        },
+        {
+            ...overlayPage(2),
+            lifecycle_revision: firstRevision,
+            milestones: [milestone(25), milestone(30, true), milestone(40)],
         },
         {
             ...overlayPage(2),
@@ -134,8 +140,8 @@ test('invalid pages keep the accepted snapshot and retry the same cursor and rev
     }
 
     await loadMore.click()
-    await expect.poll(() => overlayRequests.length).toBe(6)
-    expectOverlayQuery(overlayRequests[5], '37', String(firstRevision))
+    await expect.poll(() => overlayRequests.length).toBe(7)
+    expectOverlayQuery(overlayRequests[6], '37', String(firstRevision))
     await expectMilestoneActivities(page, [
         'activity-010',
         'activity-020',
@@ -298,7 +304,7 @@ function milestone(sequence: number, replayed = false): Record<string, unknown> 
         lane: 'LIFECYCLE',
         activity_type: replayed ? `REPLAYED_${suffix}` : `MILESTONE_${suffix}`,
         source_activity_id: null,
-        effective_at: `2026-08-10T${String(sequence / 10).padStart(2, '0')}:00:00Z`,
+        effective_at: `2026-08-10T${String(Math.ceil(sequence / 10)).padStart(2, '0')}:00:00Z`,
         confirmation_status: 'CONFIRMED',
         center_changes: {
             BUSINESS_STAGE: {
