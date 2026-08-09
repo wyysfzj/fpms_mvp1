@@ -10,7 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError
-from app.modules.annuity.models import GovPayment, PayList
+from app.modules.annuity.models import GovPayment, PayList, PayListExportArtifact
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
     BusinessStage,
@@ -1193,8 +1193,137 @@ def _fee_activity_roots(
                 official=activity.activity_type == "OFFICIAL_PAYMENT_EVIDENCE_VERIFIED",
             )
         )
+    _validate_fee_payload_relations(
+        transaction,
+        case_id=case_id,
+        activity_type=activity.activity_type,
+        payload=payload,
+        obligation_ids=obligation_ids,
+    )
     return tuple(sorted(obligation_ids)), tuple(
         sorted(related, key=lambda item: (item[0], item[1].kind.value, item[1].object_id))
+    )
+
+
+def _validate_fee_payload_relations(
+    transaction: Session,
+    *,
+    case_id: str,
+    activity_type: str,
+    payload: dict[str, object],
+    obligation_ids: tuple[str, ...],
+) -> None:
+    if activity_type == "FEE_DRAFT_CREATED":
+        draft_id = cast(str, payload["draft_id"])
+        declared = payload.get("links")
+        if type(declared) is not list:
+            _fee_conflict(case_id, "DRAFT_LINKS_INVALID")
+        normalized: list[tuple[str, str]] = []
+        for item in cast(list[object], declared):
+            if (
+                type(item) is not dict
+                or set(item) != {"fee_item_id", "obligation_line_id"}
+                or type(item.get("fee_item_id")) is not str
+                or type(item.get("obligation_line_id")) is not str
+            ):
+                _fee_conflict(case_id, "DRAFT_LINKS_INVALID")
+            normalized.append(
+                (cast(str, item["fee_item_id"]), cast(str, item["obligation_line_id"]))
+            )
+        rows = transaction.execute(
+            select(FeeItem.id, FeeObligationDraftItemLink.obligation_line_id)
+            .join(
+                FeeObligationDraftItemLink,
+                FeeObligationDraftItemLink.fee_item_id == FeeItem.id,
+            )
+            .where(FeeItem.draft_id == draft_id)
+        ).all()
+        if sorted(normalized) != sorted((row.id, row.obligation_line_id) for row in rows):
+            _fee_conflict(case_id, "DRAFT_PAYLOAD_LINK_MISMATCH")
+    elif activity_type == "PAY_LIST_CREATED":
+        pay_list_id = cast(int, payload["pay_list_id"])
+        rows = _pay_list_relation_rows(transaction, pay_list_id)
+        declared_items = _string_list(case_id, payload.get("fee_item_ids"), "FEE_ITEM_IDS")
+        declared_lines = _string_list(
+            case_id,
+            payload.get("obligation_line_ids"),
+            "OBLIGATION_LINE_IDS",
+        )
+        if (
+            tuple(sorted(declared_items)) != tuple(sorted({row.fee_item_id for row in rows}))
+            or tuple(sorted(declared_lines))
+            != tuple(sorted({row.obligation_line_id for row in rows}))
+            or tuple(sorted(obligation_ids)) != tuple(sorted({row.obligation_id for row in rows}))
+        ):
+            _fee_conflict(case_id, "PAY_LIST_PAYLOAD_LINK_MISMATCH")
+    elif activity_type in {"PAYMENT_RECORDED", "OFFICIAL_PAYMENT_EVIDENCE_VERIFIED"}:
+        payment_id = cast(int, payload["gov_payment_id"])
+        declared_lines = _string_list(
+            case_id,
+            payload.get("obligation_line_ids"),
+            "OBLIGATION_LINE_IDS",
+        )
+        rows = transaction.execute(
+            select(
+                FeeObligationPaymentEvidenceLink.obligation_line_id,
+                FeeObligationLine.obligation_id,
+            )
+            .join(
+                FeeObligationLine,
+                FeeObligationLine.id == FeeObligationPaymentEvidenceLink.obligation_line_id,
+            )
+            .where(FeeObligationPaymentEvidenceLink.gov_payment_id == payment_id)
+        ).all()
+        if tuple(sorted(declared_lines)) != tuple(
+            sorted(row.obligation_line_id for row in rows)
+        ) or tuple(sorted(obligation_ids)) != tuple(sorted({row.obligation_id for row in rows})):
+            _fee_conflict(case_id, "PAYMENT_PAYLOAD_LINK_MISMATCH")
+    elif activity_type == "PAY_LIST_INTERNAL_EXPORTED":
+        artifact_id = payload.get("artifact_id")
+        if type(artifact_id) is not str or not artifact_id:
+            _fee_conflict(case_id, "PAY_LIST_ARTIFACT_ID_INVALID")
+        artifact = transaction.get(PayListExportArtifact, artifact_id)
+        if (
+            artifact is None
+            or artifact.pay_list_id != payload.get("pay_list_id")
+            or artifact.content_sha256 != payload.get("content_sha256")
+            or artifact.managed_storage_path != payload.get("managed_storage_path")
+        ):
+            _fee_conflict(case_id, "PAY_LIST_ARTIFACT_MISMATCH")
+
+
+def _string_list(case_id: str, value: object, field: str) -> tuple[str, ...]:
+    if (
+        type(value) is not list
+        or not value
+        or any(type(item) is not str or not item or item.strip() != item for item in value)
+        or len(set(value)) != len(value)
+    ):
+        _fee_conflict(case_id, f"{field}_INVALID")
+    return tuple(cast(list[str], value))
+
+
+def _pay_list_relation_rows(transaction: Session, pay_list_id: int) -> tuple[object, ...]:
+    return tuple(
+        transaction.execute(
+            select(
+                FeeItem.id.label("fee_item_id"),
+                FeeObligationDraftItemLink.obligation_line_id.label("obligation_line_id"),
+                FeeObligationLine.obligation_id.label("obligation_id"),
+                GovPayment.case_id.label("case_id"),
+            )
+            .select_from(GovPayment)
+            .join(FeeItem, FeeItem.id == GovPayment.fee_item_id)
+            .join(
+                FeeObligationDraftItemLink,
+                FeeObligationDraftItemLink.fee_item_id == FeeItem.id,
+            )
+            .join(
+                FeeObligationLine,
+                FeeObligationLine.id == FeeObligationDraftItemLink.obligation_line_id,
+            )
+            .where(GovPayment.pay_list_id == pay_list_id)
+        ).all()
     )
 
 
@@ -1306,21 +1435,13 @@ def _pay_list_obligation_ids(
     case_id: str,
     pay_list_id: int,
 ) -> tuple[str, ...]:
-    rows = transaction.execute(
-        select(FeeObligationLine.obligation_id, GovPayment.case_id)
-        .select_from(GovPayment)
-        .join(FeeItem, FeeItem.id == GovPayment.fee_item_id)
-        .join(
-            FeeObligationDraftItemLink,
-            FeeObligationDraftItemLink.fee_item_id == FeeItem.id,
-        )
-        .join(
-            FeeObligationLine,
-            FeeObligationLine.id == FeeObligationDraftItemLink.obligation_line_id,
-        )
-        .where(GovPayment.pay_list_id == pay_list_id)
-    ).all()
-    if not rows or any(row.case_id != case_id for row in rows):
+    rows = _pay_list_relation_rows(transaction, pay_list_id)
+    if (
+        not rows
+        or any(row.case_id != case_id for row in rows)
+        or len(rows) != len({row.fee_item_id for row in rows})
+        or len(rows) != len({row.obligation_line_id for row in rows})
+    ):
         _fee_conflict(case_id, "PAY_LIST_CASE_MISMATCH")
     return tuple(sorted({row.obligation_id for row in rows}))
 
@@ -1361,7 +1482,24 @@ def _validate_fee_activity_lineage(
             _fee_conflict(case_id, "RECOGNITION_SOURCE_MISMATCH")
         return
     if activity.activity_type in {"FEE_CLIENT_INSTRUCTION_RECORDED", "FEE_DRAFT_CREATED"}:
-        recognition = transaction.get(CaseActivityEvent, activity.source_activity_id)
+        predecessor = transaction.get(CaseActivityEvent, activity.source_activity_id)
+        if predecessor is None or predecessor.case_id != case_id:
+            _fee_conflict(case_id, "FEE_ACTIVITY_PREDECESSOR_MISSING")
+        if activity.activity_type == "FEE_DRAFT_CREATED":
+            instruction_payload = _fee_payload(
+                case_id,
+                predecessor,
+                expected_schema="FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1",
+                expected_keys=_FEE_ACTIVITY_SCHEMAS["FEE_CLIENT_INSTRUCTION_RECORDED"][2],
+            )
+            if (
+                predecessor.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
+                or instruction_payload.get("obligation_id") != obligation_id
+            ):
+                _fee_conflict(case_id, "INSTRUCTION_LINEAGE_MISMATCH")
+            recognition = transaction.get(CaseActivityEvent, predecessor.source_activity_id)
+        else:
+            recognition = predecessor
         if recognition is None or recognition.case_id != case_id:
             _fee_conflict(case_id, "RECOGNITION_ACTIVITY_MISSING")
         payload = _fee_payload(
