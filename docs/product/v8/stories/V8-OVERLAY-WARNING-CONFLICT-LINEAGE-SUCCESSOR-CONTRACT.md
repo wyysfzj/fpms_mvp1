@@ -40,9 +40,17 @@
    lifecycle lane; legacy-unverified confirmation; reserved idempotency key; source,
    supersession and reviewer are null; old axes are null; new business/official axes are null;
    new legal status is `UNKNOWN`; occurred/effective timestamps match; payload is the exact
-   canonical `FPMS_V8_LEGACY_LIFECYCLE_IMPORT_V1` object for the same case and current legacy
-   status; no evidence row exists; and the parent case has the matching imported projection and
-   revision. A near-miss `LEGACY_IMPORT` receives no child or attestation.
+   canonical `FPMS_V8_LEGACY_LIFECYCLE_IMPORT_V1` object for the same case and a `legacy_status`
+   in the exact accepted importer set (`NOT_FILED`, `PENDING`, `GRANTED`, `REJECTED`, `WITHDRAWN`,
+   `ABANDONED`, `EXPIRED`, `WAITING_RECEIPT`, `PRELIM_EXAM`, `PRELIM_PASS`, `AMENDMENT`,
+   `PUBLISHED`, `SUB_EXAM`, `OA1`, `OA2`, `REEXAM`, `ACCEPTED`, `GRANT_PENDING`, `TERMINATED`,
+   `INVALIDATED`); and no evidence row exists. The import must be the first lifecycle-lane event.
+   Its case ledger must have contiguous sequences `1..Case.lifecycle_revision`, every event's old
+   axes must equal the preceding event's new axes, and the final event's new axes must equal the
+   current Case axes. Current Case status, projection and revision are not required to remain at
+   the initial imported values, because accepted later events may have advanced them. A near-miss
+   `LEGACY_IMPORT` receives no child or attestation. Migration tests include an exact import with
+   later valid events plus unknown-status and broken-ledger near misses.
 5. Pre-carrier `PATENT_REGISTER_STATUS_CONFIRMED` rows receive no inferred child or attestation.
    Reading or replaying one returns exact 409 code `LIFECYCLE_CONFLICT_LINEAGE_MISSING` without a
    write, because the previously transient tuple cannot be reconstructed safely. New
