@@ -136,10 +136,23 @@ def _case_instance_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> se
 
 def _case_update_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
     names: set[str] = set()
+    aliases: list[tuple[str, str]] = []
     for node in ast.walk(function):
         if isinstance(node, ast.Assign) and _is_update_case_chain(node.value):
             names.update(target.id for target in node.targets if isinstance(target, ast.Name))
-    return names
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Name)
+        ):
+            aliases.append((node.targets[0].id, node.value.id))
+
+    while True:
+        additions = {target for target, source in aliases if source in names}
+        if additions <= names:
+            return names
+        names.update(additions)
 
 
 class _StatusWriteVisitor(ast.NodeVisitor):
@@ -282,6 +295,12 @@ def unpacked_keywords():
 
 def query_update(db):
     db.query(Case).update({"status": "NEW"})
+
+def multi_hop_alias():
+    statement = update(Case)
+    first_alias = statement
+    final_alias = first_alias
+    final_alias.values(status="NEW")
 """
     )
 
@@ -289,4 +308,5 @@ def query_update(db):
         ("probe.py", "bound_statement", "orm_update", ()),
         ("probe.py", "unpacked_keywords", "orm_update", ()),
         ("probe.py", "query_update", "orm_update", ()),
+        ("probe.py", "multi_hop_alias", "orm_update", ()),
     ]
