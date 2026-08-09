@@ -11,7 +11,7 @@ from types import ModuleType
 from typing import cast
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.errors import BusinessError
@@ -24,7 +24,7 @@ from app.modules.cases.lifecycle_contracts import (
     LifecycleProjection,
     OfficialProcedureStage,
 )
-from app.modules.cases.models import Case, CaseActivityEvent
+from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventConflict
 
 CASE_ID = "case-register-service"
 OTHER_CASE_ID = "case-register-service-other"
@@ -300,6 +300,37 @@ def test_conflict_appends_once_and_exact_replay_reuses_typed_result(
     assert len(contexts) == 2
     assert all(context.predecessor_event_type is None for context in contexts)
     assert all(context.predecessor_status_snapshot_hash is None for context in contexts)
+
+
+def test_pre_carrier_register_replay_fails_closed_without_reconstruction(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_registry(monkeypatch, _registry_with_exact_register([]))
+    command = _command()
+    with session_factory() as transaction:
+        transaction.add(_case())
+        transaction.commit()
+        first = _service().apply_lifecycle_event(command, transaction)
+        transaction.commit()
+
+        activity = transaction.get(CaseActivityEvent, first.activity_id)
+        assert activity is not None
+        transaction.execute(
+            delete(CaseActivityEventConflict).where(
+                CaseActivityEventConflict.activity_id == activity.id
+            )
+        )
+        activity.conflict_lineage_version = None
+        activity.conflict_code_count = None
+        activity.conflict_codes_sha256 = None
+        transaction.commit()
+
+        _expect_error(
+            "LIFECYCLE_CONFLICT_LINEAGE_MISSING",
+            lambda: _service().apply_lifecycle_event(command, transaction),
+        )
+        assert _activity_count(transaction) == 1
 
 
 def test_same_register_key_with_different_fact_is_idempotency_conflict_before_rule(

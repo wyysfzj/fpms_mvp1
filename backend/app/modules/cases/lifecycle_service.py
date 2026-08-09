@@ -12,7 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError
-from app.modules.cases.lifecycle_activity_service import append_case_activity
+from app.modules.cases.lifecycle_activity_service import (
+    append_case_activity,
+    read_activity_conflict_codes,
+)
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
     BusinessStage,
@@ -149,18 +152,29 @@ def _replay(
         command.event_type == _PATENT_REGISTER_STATUS_EVENT
         and existing["activity_type"] == _PATENT_REGISTER_STATUS_EVENT
     ):
+        stored_activity = transaction.get(CaseActivityEvent, cast(str, existing["id"]))
+        if stored_activity is None:
+            _fail(
+                "LIFECYCLE_CONFLICT_LINEAGE_INVALID",
+                "生命周期冲突谱系无效",
+                status_code=409,
+            )
+        conflict_codes = read_activity_conflict_codes(transaction, (stored_activity,))[
+            stored_activity.id
+        ]
         append_case_activity(
             command,
             transaction,
             previous_projection=previous_projection,
             current_projection=current_projection,
             legacy_case_status=legacy_projection.legacy_case_status,
-            conflict_codes=(),
+            conflict_codes=conflict_codes,
         )
         decision = _resolve_decision(command, previous_projection, transaction)
         if decision.current_projection != current_projection:
             _invalid_decision()
-        conflict_codes = decision.conflict_codes
+        if decision.conflict_codes != conflict_codes:
+            _invalid_decision()
     return append_case_activity(
         command,
         transaction,

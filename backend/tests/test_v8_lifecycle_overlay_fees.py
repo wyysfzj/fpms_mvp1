@@ -122,6 +122,9 @@ def _seed(transaction: Session) -> None:
                 actor_id=ACTOR_ID,
                 idempotency_key="overlay-fees-source",
                 payload_json="{}",
+                conflict_lineage_version="V1",
+                conflict_code_count=0,
+                conflict_codes_sha256="4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             ),
             Document(id=DOCUMENT_ID, case_id=CASE_ID, direction="IN"),
         )
@@ -183,6 +186,9 @@ def _seed(transaction: Session) -> None:
                 actor_id=ACTOR_ID,
                 idempotency_key="overlay-fees-recognition",
                 payload_json=_payload(),
+                conflict_lineage_version="V1",
+                conflict_code_count=0,
+                conflict_codes_sha256="4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             ),
         )
     )
@@ -226,6 +232,9 @@ def _fee_activity(
         actor_id=ACTOR_ID,
         idempotency_key=f"overlay-fees-{activity_id}",
         payload_json=_canonical(payload),
+        conflict_lineage_version="V1",
+        conflict_code_count=0,
+        conflict_codes_sha256="4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     )
 
 
@@ -663,6 +672,9 @@ def test_pay_list_projects_multiple_obligations_in_id_order(
                         "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
                     }
                 ),
+                conflict_lineage_version="V1",
+                conflict_code_count=0,
+                conflict_codes_sha256="4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             )
         )
         draft = FeeDraft(

@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
+from hashlib import sha256
 from typing import TypeVar, cast
 from uuid import uuid4
 
@@ -22,9 +23,14 @@ from app.modules.cases.lifecycle_contracts import (
     LifecycleTransitionResult,
     OfficialProcedureStage,
 )
-from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
+from app.modules.cases.models import (
+    Case,
+    CaseActivityEvent,
+    CaseActivityEventConflict,
+    CaseActivityEventEvidence,
+)
 
-__all__ = ("append_case_activity",)
+__all__ = ("append_case_activity", "read_activity_conflict_codes")
 
 _EnumT = TypeVar("_EnumT", bound=StrEnum)
 _CASE_SERVICE_ATTRIBUTES = (
@@ -226,8 +232,19 @@ def append_case_activity(
             idempotency_key=command.idempotency_key,
             supersedes_event_id=command.supersedes_event_id,
             payload_json=payload_json,
+            conflict_lineage_version="V1",
+            conflict_code_count=len(conflict_codes),
+            conflict_codes_sha256=_conflict_codes_sha256(conflict_codes),
         )
         transaction.add(activity)
+        transaction.add_all(
+            CaseActivityEventConflict(
+                case_id=command.case_id,
+                activity_id=activity_id,
+                code=code,
+            )
+            for code in conflict_codes
+        )
         transaction.add_all(
             CaseActivityEventEvidence(
                 id=str(uuid4()),
@@ -295,7 +312,7 @@ def _validate_general_shape(
 
     if type(conflict_codes) is not tuple:
         _invalid("conflict_codes")
-    if any(type(code) is not str or not code for code in conflict_codes):
+    if any(type(code) is not str or not code or len(code) > 128 for code in conflict_codes):
         _invalid("conflict_codes")
     if tuple(sorted(conflict_codes)) != conflict_codes or len(set(conflict_codes)) != len(
         conflict_codes
@@ -406,6 +423,14 @@ def _replay_existing(
     legacy_case_status: str,
     conflict_codes: tuple[str, ...],
 ) -> LifecycleTransitionResult:
+    activity = transaction.get(CaseActivityEvent, cast(str, existing["id"]))
+    if activity is None:
+        _fail(
+            "LIFECYCLE_CONFLICT_LINEAGE_INVALID",
+            "生命周期冲突谱系无效",
+            status_code=409,
+        )
+    stored_conflict_codes = read_activity_conflict_codes(transaction, (activity,))[activity.id]
     comparable = (
         (existing["activity_type"], command.event_type),
         (existing["lane"], command.lane.value),
@@ -474,8 +499,10 @@ def _replay_existing(
         )
         for reference in evidence_refs
     )
-    if any(stored != supplied for stored, supplied in comparable) or (
-        stored_evidence_identity != command_evidence_identity
+    if (
+        any(stored != supplied for stored, supplied in comparable)
+        or stored_evidence_identity != command_evidence_identity
+        or stored_conflict_codes != conflict_codes
     ):
         _fail(
             "LIFECYCLE_IDEMPOTENCY_CONFLICT",
@@ -497,6 +524,83 @@ def _replay_existing(
         idempotency_key=command.idempotency_key,
         reused=True,
         conflict_codes=conflict_codes,
+    )
+
+
+def _conflict_codes_sha256(conflict_codes: tuple[str, ...]) -> str:
+    canonical = json.dumps(
+        conflict_codes,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def read_activity_conflict_codes(
+    transaction: Session,
+    activities: tuple[CaseActivityEvent, ...],
+) -> dict[str, tuple[str, ...]]:
+    if not activities:
+        return {}
+    activity_ids = tuple(activity.id for activity in activities)
+    rows = transaction.execute(
+        select(
+            CaseActivityEventConflict.activity_id,
+            CaseActivityEventConflict.case_id,
+            CaseActivityEventConflict.code,
+        )
+        .where(CaseActivityEventConflict.activity_id.in_(activity_ids))
+        .order_by(CaseActivityEventConflict.activity_id, CaseActivityEventConflict.code)
+    ).all()
+    grouped: dict[str, list[tuple[str, str]]] = {activity_id: [] for activity_id in activity_ids}
+    for activity_id, case_id, code in rows:
+        if activity_id not in grouped:
+            _conflict_lineage_invalid()
+        grouped[activity_id].append((case_id, code))
+
+    result: dict[str, tuple[str, ...]] = {}
+    for activity in activities:
+        triple = (
+            activity.conflict_lineage_version,
+            activity.conflict_code_count,
+            activity.conflict_codes_sha256,
+        )
+        if triple == (None, None, None):
+            _fail(
+                "LIFECYCLE_CONFLICT_LINEAGE_MISSING",
+                "生命周期冲突谱系缺失",
+                status_code=409,
+            )
+        version, count, digest = triple
+        if (
+            version != "V1"
+            or type(count) is not int
+            or count < 0
+            or type(digest) is not str
+            or len(digest) != 64
+            or digest != digest.lower()
+        ):
+            _conflict_lineage_invalid()
+        codes = tuple(code for case_id, code in grouped[activity.id] if case_id == activity.case_id)
+        if (
+            len(codes) != len(grouped[activity.id])
+            or any(type(code) is not str or not code or len(code) > 128 for code in codes)
+            or tuple(sorted(codes)) != codes
+            or len(set(codes)) != len(codes)
+            or count != len(codes)
+            or digest != _conflict_codes_sha256(codes)
+        ):
+            _conflict_lineage_invalid()
+        result[activity.id] = codes
+    return result
+
+
+def _conflict_lineage_invalid() -> None:
+    _fail(
+        "LIFECYCLE_CONFLICT_LINEAGE_INVALID",
+        "生命周期冲突谱系无效",
+        status_code=409,
     )
 
 

@@ -87,6 +87,9 @@ def _add_activity(
         actor_id=_actor_id(transaction),
         idempotency_key=f"overlay-{case.id}-{sequence}",
         payload_json="{}",
+        conflict_lineage_version="V1",
+        conflict_code_count=0,
+        conflict_codes_sha256="4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     )
     transaction.add(activity)
     transaction.flush()
@@ -230,7 +233,8 @@ def test_reads_current_center_mixed_lanes_and_evidence_without_writing(
             and gate.unresolved_reason == "DECISION_GATE_NOT_FOUND"
             for gate in result.decision_gates
         )
-        assert result.warnings == ()
+        assert len(result.warnings) == 29
+        assert all(warning.kind.value == "CUSTOMER_DECISION_GATE" for warning in result.warnings)
         assert result.legacy_conflicts == ()
         assert result.has_more is False
         assert result.next_cursor is None

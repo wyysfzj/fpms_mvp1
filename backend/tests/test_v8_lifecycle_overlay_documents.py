@@ -99,6 +99,9 @@ def _activity(transaction: Session, case: Case) -> CaseActivityEvent:
         actor_id=actor_id,
         idempotency_key=f"overlay-document-{case.id}",
         payload_json="{}",
+        conflict_lineage_version="V1",
+        conflict_code_count=0,
+        conflict_codes_sha256="4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     )
     transaction.add(activity)
     transaction.flush()

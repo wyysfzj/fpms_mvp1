@@ -59,6 +59,9 @@ def _add_activity(
             actor_id=actor_id,
             idempotency_key=f"overlay-pagination:{case.id}:{sequence}",
             payload_json="{}",
+            conflict_lineage_version="V1",
+            conflict_code_count=0,
+            conflict_codes_sha256="4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
         )
     )
 
@@ -193,6 +196,11 @@ def test_overlay_keyset_freezes_revision_and_keeps_complete_gate_snapshot_on_eve
             assert page.decision_gates[7].requested_scope_key == "form-001"
             assert page.decision_gates[7].resolved_scope_key == "ALL-22"
             assert all(gate.requested_scope_key != "ALL-22" for gate in page.decision_gates)
+            assert len(page.warnings) == 1
+            assert page.warnings[0].kind.value == "REFERENCE_ONLY"
+            assert page.warnings[0].source_object_id == (
+                "DG-LEGACY-FORM-CLASS:form-001:gate:form-001"
+            )
         assert len(commands) == 116
         for index, page in enumerate((first, second, third, empty)):
             page_commands = commands[index * 29 : (index + 1) * 29]

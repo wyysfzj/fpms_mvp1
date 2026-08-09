@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError
 from app.modules.annuity.models import GovPayment, PayList, PayListExportArtifact
+from app.modules.cases.lifecycle_activity_service import read_activity_conflict_codes
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
     BusinessStage,
@@ -31,8 +32,11 @@ from app.modules.cases.lifecycle_overlay_schemas import (
     OverlayFeeRelatedFact,
     OverlayFeeRelatedFactKind,
     OverlayGateResolutionStatus,
+    OverlayLegacyConflict,
     OverlayMilestone,
     OverlayTask,
+    OverlayWarning,
+    OverlayWarningKind,
     OverlayWorkPackage,
     OverlayWorkPackageReceipt,
 )
@@ -199,6 +203,10 @@ def read_lifecycle_overlay(
         case_id=case_id,
         activities=tuple(item[0] for item in page),
     )
+    conflict_codes_by_activity = read_activity_conflict_codes(
+        transaction,
+        tuple(item[0] for item in page),
+    )
     milestones = tuple(
         _milestone(
             activity,
@@ -207,6 +215,7 @@ def read_lifecycle_overlay(
             evidence_by_activity.get(activity.id, ()),
             *document_facts.get(activity.id, ((), (), ())),
             fee_facts.get(activity.id, ()),
+            conflict_codes_by_activity[activity.id],
         )
         for activity, lane, axes in page
     )
@@ -215,6 +224,21 @@ def read_lifecycle_overlay(
         generated_at=generated_at,
         transaction=transaction,
     )
+    gate_warnings = _decision_gate_warnings(decision_gates)
+    warnings = tuple(
+        warning for milestone in milestones for warning in milestone.warnings
+    ) + gate_warnings
+    legacy_conflicts = tuple(
+        OverlayLegacyConflict(
+            code=code,
+            activity_id=activity.id,
+            message="历史生命周期活动存在待核对冲突",
+        )
+        for activity, _lane, _axes in page
+        if activity.activity_type == "LEGACY_IMPORT"
+        and activity.confirmation_status == ConfirmationStatus.LEGACY_UNVERIFIED.value
+        for code in conflict_codes_by_activity[activity.id]
+    )
     return LifecycleOverlay(
         case_id=case_id,
         lifecycle_revision=revision,
@@ -222,8 +246,8 @@ def read_lifecycle_overlay(
         center_snapshot=center_snapshot,
         milestones=milestones,
         decision_gates=decision_gates,
-        warnings=(),
-        legacy_conflicts=(),
+        warnings=warnings,
+        legacy_conflicts=legacy_conflicts,
         next_cursor=page[-1][0].sequence if has_more else None,
         has_more=has_more,
     )
@@ -1011,6 +1035,7 @@ def _milestone(
     work_packages: tuple[OverlayWorkPackage, ...],
     tasks: tuple[OverlayTask, ...],
     fee_obligations: tuple[OverlayFeeObligation, ...],
+    conflict_codes: tuple[str, ...],
 ) -> OverlayMilestone:
     changes: dict[OverlayCenterAxis, OverlayCenterAxisChange] = {}
     if lane is ActivityLane.LIFECYCLE:
@@ -1024,6 +1049,34 @@ def _milestone(
                     previous_value=old,
                     current_value=new,
                 )
+    warnings: list[OverlayWarning] = []
+    if activity.confirmation_status == ConfirmationStatus.NEEDS_REVIEW.value:
+        warnings.append(
+            _activity_warning(
+                activity,
+                kind=OverlayWarningKind.UNVERIFIED,
+                code="LIFECYCLE_ACTIVITY_NEEDS_REVIEW",
+                message="该生命周期活动尚待复核",
+            )
+        )
+    elif activity.confirmation_status == ConfirmationStatus.LEGACY_UNVERIFIED.value:
+        warnings.append(
+            _activity_warning(
+                activity,
+                kind=OverlayWarningKind.UNVERIFIED,
+                code="LEGACY_ACTIVITY_UNVERIFIED",
+                message="该历史生命周期活动尚未核验",
+            )
+        )
+    warnings.extend(
+        _activity_warning(
+            activity,
+            kind=OverlayWarningKind.CONFLICT,
+            code=code,
+            message="生命周期活动存在待核对冲突",
+        )
+        for code in conflict_codes
+    )
     return OverlayMilestone(
         sequence=activity.sequence,
         activity_id=activity.id,
@@ -1038,8 +1091,61 @@ def _milestone(
         tasks=tasks,
         fee_obligations=fee_obligations,
         evidence_summary=evidence,
-        warnings=(),
+        warnings=tuple(warnings),
     )
+
+
+def _activity_warning(
+    activity: CaseActivityEvent,
+    *,
+    kind: OverlayWarningKind,
+    code: str,
+    message: str,
+) -> OverlayWarning:
+    return OverlayWarning(
+        kind=kind,
+        code=code,
+        message=message,
+        activity_id=activity.id,
+        source_object_type="CASE_ACTIVITY_EVENT",
+        source_object_id=activity.id,
+    )
+
+
+def _decision_gate_warnings(
+    decision_gates: tuple[OverlayDecisionGate, ...],
+) -> tuple[OverlayWarning, ...]:
+    result: list[OverlayWarning] = []
+    for gate in decision_gates:
+        if gate.resolution_status is OverlayGateResolutionStatus.UNRESOLVED:
+            if gate.unresolved_reason is None:
+                _state_conflict(None, "DECISION_GATE_WARNING_INVALID")
+            result.append(
+                OverlayWarning(
+                    kind=OverlayWarningKind.CUSTOMER_DECISION_GATE,
+                    code=gate.unresolved_reason,
+                    message="客户决策门禁尚未解析",
+                    activity_id=None,
+                    source_object_type="CUSTOMER_DECISION_GATE",
+                    source_object_id=f"{gate.gate_code.value}:{gate.requested_scope_key}",
+                )
+            )
+        elif gate.decision_value in {"HISTORICAL", "INTERNAL_ONLY"}:
+            if gate.gate_id is None:
+                _state_conflict(None, "DECISION_GATE_WARNING_INVALID")
+            result.append(
+                OverlayWarning(
+                    kind=OverlayWarningKind.REFERENCE_ONLY,
+                    code="DECISION_GATE_REFERENCE_ONLY",
+                    message="该客户决策分类仅供参考，不得激活",
+                    activity_id=None,
+                    source_object_type="CUSTOMER_DECISION_GATE",
+                    source_object_id=(
+                        f"{gate.gate_code.value}:{gate.requested_scope_key}:{gate.gate_id}"
+                    ),
+                )
+            )
+    return tuple(result)
 
 
 _FEE_ACTIVITY_SCHEMAS: dict[str, tuple[str | None, str, frozenset[str]]] = {
