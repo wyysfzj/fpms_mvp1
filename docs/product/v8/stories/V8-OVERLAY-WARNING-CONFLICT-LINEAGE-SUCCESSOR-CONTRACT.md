@@ -47,10 +47,12 @@
    `INVALIDATED`); and no evidence row exists. The import must be the first lifecycle-lane event.
    Its case ledger must have contiguous sequences `1..Case.lifecycle_revision`, every event's old
    axes must equal the preceding event's new axes, and the final event's new axes must equal the
-   current Case axes. Current Case status, projection and revision are not required to remain at
-   the initial imported values, because accepted later events may have advanced them. A near-miss
-   `LEGACY_IMPORT` receives no child or attestation. Migration tests include an exact import with
-   later valid events plus unknown-status and broken-ledger near misses.
+   current Case axes. Current `Case.status` must also remain inside the same accepted importer set,
+   but need not equal the initial payload status; current projection and revision likewise need
+   not remain at the initial imported values, because accepted later events may have advanced
+   them. A near-miss `LEGACY_IMPORT` receives no child or attestation. Migration tests include an
+   exact import with later valid events plus unknown payload status, known payload/unknown current
+   Case status, and broken-ledger near misses.
 5. Pre-carrier `PATENT_REGISTER_STATUS_CONFIRMED` rows receive no inferred child or attestation.
    Reading or replaying one returns exact 409 code `LIFECYCLE_CONFLICT_LINEAGE_MISSING` without a
    write, because the previously transient tuple cannot be reconstructed safely. New
@@ -110,6 +112,9 @@ For each accepted overlay page, process milestones in ascending server sequence 
 - `backend/app/modules/cases/lifecycle_overlay_service.py`
 - `backend/tests/test_v8_overlay_warning_conflict_lineage.py`
 - `backend/tests/test_v8_overlay_warning_conflict_migration.py`
+- affected lifecycle append/register replay, legacy-import and overlay regression modules may
+  receive only the mechanical fixture attestation fields or assertions required by this carrier;
+  they may not change their pre-existing product expectations.
 
 Required RED proves the missing carrier and empty overlay projection. GREEN proves atomic append and
 exact replay, strict same-case storage, migration upgrade/backfill, exact warning ordering and
