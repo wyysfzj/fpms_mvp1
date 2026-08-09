@@ -409,6 +409,46 @@ def test_needs_review_nonlegacy_conflict_stays_out_of_legacy_projection(
         assert overlay.legacy_conflicts == ()
 
 
+def test_non_string_legacy_status_is_not_projected_as_legacy(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        case = _case(transaction)
+        result = append_case_activity(
+            _command(case, _actor(transaction)),
+            transaction,
+            previous_projection=EMPTY,
+            current_projection=LEGACY,
+            legacy_case_status=case.status,
+            conflict_codes=CONFLICTS,
+        )
+        transaction.commit()
+        malformed = json.dumps(
+            {
+                "case_id": case.id,
+                "legacy_status": [],
+                "reverse_mapping": "NONE",
+                "schema": "FPMS_V8_LEGACY_LIFECYCLE_IMPORT_V1",
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        transaction.execute(
+            update(CaseActivityEvent)
+            .where(CaseActivityEvent.id == result.activity_id)
+            .values(payload_json=malformed)
+        )
+        transaction.commit()
+
+        overlay = _read(transaction, case.id)
+        assert [warning.code for warning in overlay.milestones[0].warnings] == [
+            "LEGACY_ACTIVITY_UNVERIFIED",
+            *CONFLICTS,
+        ]
+        assert overlay.legacy_conflicts == ()
+
+
 def test_activity_warnings_and_legacy_conflicts_are_page_local(
     session_factory: sessionmaker,
 ) -> None:

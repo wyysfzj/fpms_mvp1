@@ -1180,6 +1180,7 @@ def _is_exact_legacy_import(
         type(payload) is dict
         and set(payload) == {"case_id", "legacy_status", "reverse_mapping", "schema"}
         and payload["case_id"] == activity.case_id
+        and type(payload["legacy_status"]) is str
         and payload["legacy_status"] in _LEGACY_IMPORT_STATUSES
         and payload["reverse_mapping"] == "NONE"
         and payload["schema"] == "FPMS_V8_LEGACY_LIFECYCLE_IMPORT_V1"
