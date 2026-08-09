@@ -101,6 +101,7 @@ the decisive checks plus the exact affected tranche.
 
 No generic dispatcher, grant-notice transition, new lifecycle event, schema/migration,
 fee amount, deadline rule, evidence-kind expansion, public ordinary-document request
-shape, adjacent cleanup or OA_OUT reply-date repair. Rollback reverts only
-`ae26fc6db220a6f54dc85e8a7bfc7b16982131e5`; it must not rewrite lifecycle history or
+shape, adjacent cleanup or OA_OUT reply-date repair. Rollback reverts exactly
+`ae26fc6db220a6f54dc85e8a7bfc7b16982131e5` and
+`d5ea31f2293f2497e854029e7a6015c23aa6ac07`; it must not rewrite lifecycle history or
 accepted predecessor stories.
