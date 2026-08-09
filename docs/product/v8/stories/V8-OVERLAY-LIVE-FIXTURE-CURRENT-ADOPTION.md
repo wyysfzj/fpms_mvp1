@@ -1,7 +1,7 @@
 # Story V8 Overlay Live Fixture Current Adoption
 
 - Risk: `PROTECTED`.
-- Product commits: `89375d9`, `fbf87f6`, `b07a4ac`.
+- Product commits: `89375d9`, `fbf87f6`, `b07a4ac`, `f9ffa97`.
 - Catalog owner: `FPMS-V8-LIVE-FIXTURE-20260712-01`.
 
 The dedicated dev/test/demo SQLite seed owns one deterministic `V8OVL-LIVE` namespace,
@@ -15,6 +15,7 @@ The seed fails before mutation for unsafe environments, non-SQLite binds, disabl
 foreign current-identity ownership and lock contention. Cleanup is namespace-limited, failures
 roll back atomically, sessions close before lock release, and reruns are logically idempotent.
 
-The original RED proved the missing dedicated fixture. Final focused verification passed four
-tests, scoped Ruff and exact diff checks passed, and independent High review approved the exact
-candidate with P0/P1/P2 all zero.
+The original RED proved the missing dedicated fixture. A real-stack run then exposed and closed a
+standalone SQLAlchemy registry gap; a fresh-interpreter subprocess test now proves the executable
+seed path. Final focused verification passed five tests, scoped Ruff and exact diff checks passed,
+and independent High review approved the exact candidate with P0/P1/P2 all zero.

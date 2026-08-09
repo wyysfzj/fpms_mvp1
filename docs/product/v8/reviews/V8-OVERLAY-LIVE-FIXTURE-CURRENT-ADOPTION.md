@@ -1,7 +1,7 @@
 # Independent Review — V8 Overlay Live Fixture
 
 - Review class: `PROTECTED`.
-- Product commits: `89375d9`, `fbf87f6`, `b07a4ac`.
+- Product commits: `89375d9`, `fbf87f6`, `b07a4ac`, `f9ffa97`.
 - Verdict: `APPROVED`.
 - P0/P1/P2: `0/0/0`.
 
@@ -14,6 +14,8 @@ reference-only warning projection on every page.
 The accepted corrections removed the pre-existing-admin prerequisite through a namespaced
 inactive fixture actor, placed the preservation sentinel write under the fixture lock, added
 non-SQLite and foreign-key-off fail-before-mutation proofs, cleaned settings cache state, and
-strengthened the complete gate/reference matrix. Fresh focused pytest passed four tests; scoped
-Ruff and full candidate diff checks passed. Exact final tree fingerprint:
-`c385ce24aa7ec69f30a9a8a2f3371377fdbd6bd0f941b1eafecf5af6c2559299`.
+strengthened the complete gate/reference matrix. The final correction registers the standard ORM
+model registry in the standalone process and proves it with a fresh-interpreter subprocess run;
+it changes no fixture semantics. Fresh focused pytest passed five tests; scoped Ruff and full
+candidate diff checks passed. Exact final tree fingerprint:
+`66d5b35ff8bab5cfdd78fa82f409add343dcb978139e754b683d484be15a7452`.
