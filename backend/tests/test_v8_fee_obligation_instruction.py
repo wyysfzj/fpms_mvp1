@@ -42,6 +42,7 @@ SERVICE_MODULE = "app.modules.fees.obligation_service"
 SERVICE_SPEC = util.find_spec(SERVICE_MODULE)
 
 CASE_ID = "case-fee-instruction"
+GRANT_SOURCE_ID = "grant-source-fee-instruction"
 RECOGNITION_ID = "recognition-fee-instruction"
 OBLIGATION_ID = "obligation-fee-instruction"
 LINE_ID = "line-fee-instruction"
@@ -468,6 +469,138 @@ def test_malformed_recognition_fails_closed(
             409,
             lambda: _record(_command(), transaction),
         )
+
+
+def test_cross_linked_recognition_fails_closed(session_factory: sessionmaker) -> None:
+    with session_factory() as transaction:
+        _seed_recognized_obligation(transaction)
+        transaction.add(
+            Case(
+                id="cross-linked-recognition-case",
+                case_no="CROSS-LINKED-RECOGNITION",
+                status="OPEN",
+                business_stage=BusinessStage.PROSECUTION_MANAGEMENT.value,
+                official_procedure_stage=(
+                    OfficialProcedureStage.SUBSTANTIVE_EXAMINATION.value
+                ),
+                legal_status=LegalStatus.APPLICATION_PENDING.value,
+                lifecycle_verification_status=ConfirmationStatus.CONFIRMED.value,
+                lifecycle_revision=1,
+            )
+        )
+        transaction.flush()
+        recognition = transaction.get(CaseActivityEvent, RECOGNITION_ID)
+        assert recognition is not None
+        recognition.payload_json = json.dumps(
+            {
+                "obligation_id": "other-obligation",
+                "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        transaction.add(
+            CaseActivityEvent(
+                id="cross-linked-recognition",
+                case_id="cross-linked-recognition-case",
+                sequence=1,
+                lane=ActivityLane.FEE.value,
+                activity_type="FEE_OBLIGATION_RECOGNIZED",
+                source_activity_id=None,
+                occurred_at=datetime(2026, 7, 13, 10, 5),
+                effective_at=datetime(2026, 7, 13, 10, 5),
+                confirmation_status=ConfirmationStatus.CONFIRMED.value,
+                old_business_stage=BusinessStage.PROSECUTION_MANAGEMENT.value,
+                new_business_stage=BusinessStage.PROSECUTION_MANAGEMENT.value,
+                old_official_procedure_stage=(
+                    OfficialProcedureStage.SUBSTANTIVE_EXAMINATION.value
+                ),
+                new_official_procedure_stage=(
+                    OfficialProcedureStage.SUBSTANTIVE_EXAMINATION.value
+                ),
+                old_legal_status=LegalStatus.APPLICATION_PENDING.value,
+                new_legal_status=LegalStatus.APPLICATION_PENDING.value,
+                actor_id=ACTOR_ID,
+                reviewer_id=None,
+                idempotency_key="recognize:cross-linked",
+                supersedes_event_id=None,
+                payload_json=json.dumps(
+                    {
+                        "obligation_id": OBLIGATION_ID,
+                        "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        )
+        transaction.commit()
+
+        _expect_error(
+            "FEE_CLIENT_INSTRUCTION_RECOGNITION_INVALID",
+            409,
+            lambda: _record(_command(), transaction),
+        )
+        assert _instruction_activities(transaction) == []
+
+
+def test_instruction_accepts_payload_linked_recognition_child_of_header_source(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        _seed_recognized_obligation(transaction)
+        recognition = transaction.get(CaseActivityEvent, RECOGNITION_ID)
+        case = transaction.get(Case, CASE_ID)
+        assert recognition is not None and case is not None
+        recognition.sequence = 2
+        case.lifecycle_revision = 2
+        transaction.commit()
+
+        transaction.add(
+            CaseActivityEvent(
+                id=GRANT_SOURCE_ID,
+                case_id=CASE_ID,
+                sequence=1,
+                lane=ActivityLane.LIFECYCLE.value,
+                activity_type="GRANT_ANNOUNCEMENT_CONFIRMED",
+                source_activity_id=None,
+                occurred_at=datetime(2026, 7, 13, 9, 45),
+                effective_at=datetime(2026, 7, 13, 9, 50),
+                confirmation_status=ConfirmationStatus.CONFIRMED.value,
+                old_business_stage=BusinessStage.PROSECUTION_MANAGEMENT.value,
+                new_business_stage=BusinessStage.PROSECUTION_MANAGEMENT.value,
+                old_official_procedure_stage=(
+                    OfficialProcedureStage.SUBSTANTIVE_EXAMINATION.value
+                ),
+                new_official_procedure_stage=(
+                    OfficialProcedureStage.SUBSTANTIVE_EXAMINATION.value
+                ),
+                old_legal_status=LegalStatus.APPLICATION_PENDING.value,
+                new_legal_status=LegalStatus.APPLICATION_PENDING.value,
+                actor_id=ACTOR_ID,
+                reviewer_id=None,
+                idempotency_key="grant-source:fee-instruction",
+                supersedes_event_id=None,
+                payload_json="{}",
+            )
+        )
+        transaction.flush()
+        header = transaction.get(FeeObligationModel, OBLIGATION_ID)
+        line = transaction.get(FeeObligationLineModel, LINE_ID)
+        assert header is not None and line is not None
+        recognition.source_activity_id = GRANT_SOURCE_ID
+        header.source_activity_id = GRANT_SOURCE_ID
+        line.source_activity_id = GRANT_SOURCE_ID
+        transaction.commit()
+
+        result = _record(_command(), transaction)
+
+        instruction = transaction.get(CaseActivityEvent, result.activity_id)
+        assert result.reused is False
+        assert instruction is not None
+        assert instruction.source_activity_id == RECOGNITION_ID
+        assert header.source_activity_id == GRANT_SOURCE_ID
+        assert recognition.source_activity_id == GRANT_SOURCE_ID
 
 
 def test_duplicate_recognition_fails_closed(session_factory: sessionmaker) -> None:

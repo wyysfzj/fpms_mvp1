@@ -1977,7 +1977,7 @@ def _instruction_recognition(
             _instruction_recognition_invalid()
         if payload.get("obligation_id") == header.id:
             matches.append(activity)
-    if len(matches) != 1 or matches[0].id != header.source_activity_id:
+    if len(matches) != 1:
         _instruction_recognition_invalid()
     return matches[0]
 
