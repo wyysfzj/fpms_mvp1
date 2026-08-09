@@ -2094,8 +2094,8 @@
     {
       "catalog_id": "FPMS-V8-OVERLAY-FEE-JOIN-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-FEE-JOIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4812,6 +4812,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-DOCUMENT-JOIN-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-DOCUMENT-JOIN-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-FEE-JOIN-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "677a8877244cc9eb8ede7adc8539df98af9f3e7b",
+        "29776169539444be21a694f15faf6635dd862437",
+        "faf3b91e952a7a111f73b6ceee9ab0fed253593e"
+      ],
+      "paths": [
+        "backend/app/modules/cases/lifecycle_overlay_service.py",
+        "backend/tests/test_v8_lifecycle_overlay_fees.py"
+      ],
+      "tree_sha256": "dd9050c727e6ba5ecc48837c52c6d427eecf3ab860d2c1929aca9832f840423c",
+      "tests": [
+        "focused RED observed empty predecessor fee tuples",
+        "final fee plus document and center regression suite 38 passed",
+        "scoped Ruff, format and complete-range diff checks passed",
+        "independent High review approved corrected exact range P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-FEE-JOIN-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-FEE-JOIN-CURRENT-ADOPTION.md"
     }
   ]
 }
