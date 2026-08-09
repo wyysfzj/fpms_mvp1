@@ -111,6 +111,55 @@
         <span>{{ fact.objectId }}</span>
         <span>{{ fact.status }}</span>
       </div>
+      <div class="instruction-actions">
+        <el-button
+          size="small"
+          :disabled="instructionLoading[obligation.obligationId]"
+          @click="recordInstruction(obligation.obligationId, 'PAY')"
+        >
+          记录支付指示
+        </el-button>
+        <el-button
+          size="small"
+          :disabled="instructionLoading[obligation.obligationId]"
+          @click="recordInstruction(obligation.obligationId, 'HOLD')"
+        >
+          记录暂缓指示
+        </el-button>
+        <el-button
+          size="small"
+          :disabled="instructionLoading[obligation.obligationId]"
+          @click="recordInstruction(obligation.obligationId, 'ABANDON')"
+        >
+          记录放弃指示
+        </el-button>
+      </div>
+      <el-alert
+        v-if="instructionErrors[obligation.obligationId]"
+        :title="instructionErrors[obligation.obligationId]?.code"
+        :description="instructionErrors[obligation.obligationId]?.message"
+        type="warning"
+        show-icon
+        :closable="false"
+      />
+      <div
+        v-if="instructionResults[obligation.obligationId]"
+        class="instruction-result"
+        data-testid="fee-instruction-result"
+      >
+        <strong>服务端指示事实</strong>
+        <span>服务端义务编号：{{ instructionResults[obligation.obligationId]?.obligation_id }}</span>
+        <span>服务端客户指示：{{ instructionResults[obligation.obligationId]?.client_instruction_status }}</span>
+        <span>服务端活动编号：{{ instructionResults[obligation.obligationId]?.activity_id }}</span>
+        <span>服务端幂等键：{{ instructionResults[obligation.obligationId]?.idempotency_key }}</span>
+        <span>服务端复用结果：{{ instructionResults[obligation.obligationId]?.reused ? '是' : '否' }}</span>
+        <router-link
+          v-if="instructionResults[obligation.obligationId]?.client_instruction_status === 'PAY'"
+          :to="`/fees/drafts/new?obligation_id=${encodeURIComponent(instructionResults[obligation.obligationId]!.obligation_id)}`"
+        >
+          创建关联费用草稿
+        </router-link>
+      </div>
     </div>
   </div>
 
@@ -144,8 +193,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { getFeeDrafts, previewOfficialFeeCandidates } from '../../../api/fees'
-import type { FeeDraftListItem, OfficialFeeEstimateResult } from '../../../api/fees.types'
+import { getFeeDrafts, previewOfficialFeeCandidates, recordFeeObligationInstruction } from '../../../api/fees'
+import type {
+  FeeDraftListItem,
+  FeeObligationInstructionPayload,
+  FeeObligationInstructionResult,
+  OfficialFeeEstimateResult,
+} from '../../../api/fees.types'
 import { getLifecycleOverlay } from '../../../api/lifecycleOverlay'
 import type { LifecycleOverlay } from '../../../api/lifecycleOverlay.types'
 import type { ApiError } from '../../../api/types'
@@ -169,6 +223,17 @@ const rateEffectiveOn = ref('')
 const estimate = ref<OfficialFeeEstimateResult | null>(null)
 const previewError = ref<ApiError | null>(null)
 const validationMessage = ref('')
+const pendingInstructionAttempts = ref<Record<string, PendingInstructionAttempt | undefined>>({})
+const instructionLoading = ref<Record<string, boolean | undefined>>({})
+const instructionErrors = ref<Record<string, ApiError | undefined>>({})
+const instructionResults = ref<Record<string, FeeObligationInstructionResult | undefined>>({})
+
+type FeeInstruction = FeeObligationInstructionPayload['instruction']
+
+interface PendingInstructionAttempt {
+  instruction: FeeInstruction
+  idempotencyKey: string
+}
 
 const isLifecycleOverlayManaged = computed(
   () =>
@@ -270,6 +335,34 @@ async function estimateOfficialFee() {
   }
 }
 
+async function recordInstruction(obligationId: string, instruction: FeeInstruction) {
+  const retainedAttempt = pendingInstructionAttempts.value[obligationId]
+  const attempt = retainedAttempt?.instruction === instruction
+    ? retainedAttempt
+    : { instruction, idempotencyKey: crypto.randomUUID() }
+
+  pendingInstructionAttempts.value[obligationId] = attempt
+  instructionLoading.value[obligationId] = true
+  instructionErrors.value[obligationId] = undefined
+  instructionResults.value[obligationId] = undefined
+
+  try {
+    instructionResults.value[obligationId] = await recordFeeObligationInstruction(obligationId, {
+      instruction,
+      idempotency_key: attempt.idempotencyKey,
+    })
+    pendingInstructionAttempts.value[obligationId] = undefined
+  } catch (error) {
+    const apiError = error as ApiError
+    instructionErrors.value[obligationId] = apiError
+    if (apiError.status !== 0) {
+      pendingInstructionAttempts.value[obligationId] = undefined
+    }
+  } finally {
+    instructionLoading.value[obligationId] = false
+  }
+}
+
 function handleCreate() {
   router.push(`/fees/drafts/new?case_id=${props.caseId}&draft_type=APPLY_FEE`)
 }
@@ -290,7 +383,9 @@ function formatDraftType(type?: string | null): string {
 .estimate-summary,
 .estimate-candidate,
 .obligation-card,
-.nested-fact {
+.nested-fact,
+.instruction-actions,
+.instruction-result {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -316,7 +411,8 @@ function formatDraftType(type?: string | null): string {
 
 .estimate-candidate,
 .obligation-card,
-.nested-fact {
+.nested-fact,
+.instruction-result {
   flex-direction: column;
 }
 
