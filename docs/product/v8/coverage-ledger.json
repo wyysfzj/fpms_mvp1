@@ -2201,8 +2201,8 @@
     {
       "catalog_id": "FPMS-V8-LIVE-FIXTURE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-LIVE-FIXTURE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2212,13 +2212,7 @@
       "disposition": "PENDING",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": {
-        "code": "DEPENDENCY_BLOCKED",
-        "dependencies": [
-          "FPMS-V8-LIVE-FIXTURE-20260712-01"
-        ],
-        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-PAYLIST-BOUNDARY-REAL-UI-E2E-20260712-01",
@@ -5162,6 +5156,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-WARNING-CONFLICT-LINEAGE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-WARNING-CONFLICT-LINEAGE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-LIVE-FIXTURE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "89375d9a5ba44807925c65fb2c8398fc132942be",
+        "fbf87f6e1f8db8022ff7b5e14e3d736797800934",
+        "b07a4ac82ce532315ab15b1404fdd15125abf46c"
+      ],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/support/pdV8OverlayLiveSeed.py",
+        "backend/tests/test_v8_overlay_live_seed.py"
+      ],
+      "tree_sha256": "c385ce24aa7ec69f30a9a8a2f3371377fdbd6bd0f941b1eafecf5af6c2559299",
+      "tests": [
+        "focused RED proved the absent dedicated live overlay fixture",
+        "final focused pytest passed 4 tests",
+        "scoped Ruff and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-LIVE-FIXTURE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-LIVE-FIXTURE-CURRENT-ADOPTION.md"
     }
   ]
 }
