@@ -105,6 +105,22 @@ def _activity(transaction: Session, case: Case) -> CaseActivityEvent:
     return activity
 
 
+def _case(transaction: Session, *, prefix: str) -> Case:
+    case = Case(
+        id=_id(),
+        case_no=f"{prefix}-{uuid4().hex}",
+        status="NOT_FILED",
+        business_stage=BusinessStage.NEW_CASE.value,
+        official_procedure_stage=OfficialProcedureStage.NOT_SUBMITTED.value,
+        legal_status=LegalStatus.NOT_ESTABLISHED.value,
+        lifecycle_verification_status=ConfirmationStatus.CONFIRMED.value,
+        lifecycle_revision=1,
+    )
+    transaction.add(case)
+    transaction.flush()
+    return case
+
+
 def test_overlay_projects_only_exact_document_evidence_graph_without_writing(
     session_factory: sessionmaker,
 ) -> None:
@@ -300,6 +316,140 @@ def test_overlay_rejects_missing_selected_document_evidence_without_writing(
                 object_type="DocumentEvidenceVersion",
                 object_id=_id(),
                 content_hash="sha256:missing",
+                captured_at=datetime(2026, 8, 1, 13, 0),
+            )
+        )
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as caught:
+            read_lifecycle_overlay(
+                case_id=case.id,
+                after_sequence=0,
+                limit=25,
+                as_of_revision=None,
+                transaction=transaction,
+            )
+
+        assert caught.value.code == "LIFECYCLE_OVERLAY_DOCUMENT_CONFLICT"
+        assert not transaction.new
+        assert not transaction.dirty
+        assert not transaction.deleted
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    (
+        "cross_case_version",
+        "cross_case_package",
+        "cross_case_receipt_package",
+        "cross_case_manifest_package",
+        "cross_case_derivation_endpoint",
+        "corrupt_evidence_role",
+    ),
+)
+def test_overlay_rejects_cross_case_document_graph_and_corrupt_enum_without_writing(
+    session_factory: sessionmaker,
+    scenario: str,
+) -> None:
+    with session_factory() as transaction:
+        case = _case(transaction, prefix="OVERLAY-DOCUMENT-GUARD")
+        activity = _activity(transaction, case)
+        object_type = "DocumentEvidenceVersion"
+        object_id: str
+        if scenario == "cross_case_version":
+            other_case = _case(transaction, prefix="OTHER")
+            other_document = _document(transaction, other_case.id, title="外部案件证据")
+            object_id = _evidence_version(
+                transaction,
+                case_id=other_case.id,
+                document=other_document,
+                lineage_key="other-version",
+            ).id
+        elif scenario == "cross_case_package":
+            other_case = _case(transaction, prefix="OTHER")
+            package = OfficialWorkPackage(
+                id=_id(),
+                case_id=other_case.id,
+                package_kind="OA_REPLY",
+                status="PREPARING",
+            )
+            transaction.add(package)
+            object_type, object_id = "OfficialWorkPackage", package.id
+        elif scenario == "cross_case_receipt_package":
+            other_case = _case(transaction, prefix="OTHER")
+            package = OfficialWorkPackage(
+                id=_id(),
+                case_id=other_case.id,
+                package_kind="OA_REPLY",
+                status="PREPARING",
+            )
+            receipt = OfficialWorkPackageReceipt(
+                id=_id(),
+                package_id=package.id,
+                receipt_kind="RECEIPT_PDF",
+            )
+            transaction.add_all((package, receipt))
+            object_type, object_id = "OfficialWorkPackageReceipt", receipt.id
+        else:
+            document = _document(transaction, case.id, title="本案证据")
+            version = _evidence_version(
+                transaction,
+                case_id=case.id,
+                document=document,
+                lineage_key=scenario,
+            )
+            object_id = version.id
+            if scenario == "cross_case_manifest_package":
+                other_case = _case(transaction, prefix="OTHER")
+                package = OfficialWorkPackage(
+                    id=_id(),
+                    case_id=other_case.id,
+                    package_kind="OA_REPLY",
+                    status="PREPARING",
+                )
+                transaction.add_all(
+                    (
+                        package,
+                        OfficialWorkPackageManifest(
+                            id=_id(),
+                            package_id=package.id,
+                            evidence_version_id=version.id,
+                        ),
+                    )
+                )
+            elif scenario == "cross_case_derivation_endpoint":
+                other_case = _case(transaction, prefix="OTHER")
+                other_document = _document(transaction, other_case.id, title="外部派生证据")
+                child = _evidence_version(
+                    transaction,
+                    case_id=other_case.id,
+                    document=other_document,
+                    lineage_key="other-child",
+                )
+                transaction.add(
+                    DocumentEvidenceDerivation(
+                        id=_id(),
+                        case_id=case.id,
+                        parent_evidence_version_id=version.id,
+                        child_evidence_version_id=child.id,
+                        derivation_type="REVISION",
+                        actor_id="deriver",
+                        derived_at=datetime(2026, 8, 1, 11, 0),
+                        source_snapshot="{}",
+                    )
+                )
+            else:
+                assert scenario == "corrupt_evidence_role"
+                version.role = "CORRUPT"
+        transaction.add(
+            CaseActivityEventEvidence(
+                id=_id(),
+                case_id=case.id,
+                activity_id=activity.id,
+                evidence_kind=f"DOCUMENT_FACT:{scenario}",
+                object_type=object_type,
+                object_id=object_id,
+                content_hash=f"sha256:{object_id}",
                 captured_at=datetime(2026, 8, 1, 13, 0),
             )
         )
