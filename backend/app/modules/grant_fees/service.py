@@ -132,7 +132,7 @@ class GrantFeeTaskReplacementResult:
 def _grant_notice_invalid() -> None:
     raise_business_error(
         "GRANT_NOTICE_LIFECYCLE_INVALID",
-        "Grant notice lifecycle input is invalid",
+        "办理登记手续通知书生命周期输入无效",
         status_code=400,
     )
 
@@ -140,7 +140,7 @@ def _grant_notice_invalid() -> None:
 def _grant_notice_source_conflict() -> None:
     raise_business_error(
         "GRANT_NOTICE_LIFECYCLE_SOURCE_CONFLICT",
-        "Grant notice lifecycle source is inconsistent",
+        "办理登记手续通知书生命周期来源不一致",
         status_code=409,
     )
 
@@ -148,7 +148,7 @@ def _grant_notice_source_conflict() -> None:
 def _grant_notice_hash_conflict() -> None:
     raise_business_error(
         "GRANT_NOTICE_EVIDENCE_HASH_CONFLICT",
-        "Grant notice evidence hash does not match",
+        "办理登记手续通知书证据哈希不匹配",
         status_code=409,
     )
 
@@ -156,7 +156,7 @@ def _grant_notice_hash_conflict() -> None:
 def _grant_notice_fee_lines_conflict() -> None:
     raise_business_error(
         "GRANT_NOTICE_FEE_LINES_CONFLICT",
-        "Grant notice fee lines are inconsistent",
+        "办理登记手续通知书费用明细不一致",
         status_code=409,
     )
 
@@ -164,7 +164,7 @@ def _grant_notice_fee_lines_conflict() -> None:
 def _grant_notice_replacement_conflict() -> None:
     raise_business_error(
         "GRANT_NOTICE_REPLACEMENT_LINEAGE_CONFLICT",
-        "Grant notice replacement lineage is inconsistent",
+        "办理登记手续通知书替换谱系不一致",
         status_code=409,
     )
 
@@ -172,7 +172,7 @@ def _grant_notice_replacement_conflict() -> None:
 def _grant_notice_idempotency_conflict() -> None:
     raise_business_error(
         "LIFECYCLE_IDEMPOTENCY_CONFLICT",
-        "Lifecycle idempotency key conflicts with the stored activity",
+        "生命周期幂等键与已存活动冲突",
         status_code=409,
     )
 
@@ -544,7 +544,7 @@ def dispatch_grant_registration_notice(
         if task is None:
             raise_business_error(
                 "GRANT_FEE_TASK_NOT_FOUND",
-                "Grant fee task not found",
+                "未找到授权费用任务",
                 status_code=404,
             )
         existing = transaction.scalar(
@@ -570,7 +570,7 @@ def dispatch_grant_registration_notice(
         if document is None:
             raise_business_error(
                 "DOCUMENT_NOT_FOUND",
-                "Document not found",
+                "未找到文书",
                 status_code=404,
             )
         evidence = transaction.get(
@@ -580,12 +580,12 @@ def dispatch_grant_registration_notice(
         if evidence is None:
             raise_business_error(
                 "EVIDENCE_VERSION_NOT_FOUND",
-                "Evidence version not found",
+                "未找到证据版本",
                 status_code=404,
             )
         case = transaction.get(Case, task.case_id)
         if case is None:
-            raise_business_error("CASE_NOT_FOUND", "Case not found", status_code=404)
+            raise_business_error("CASE_NOT_FOUND", "未找到案件", status_code=404)
 
         template = (
             transaction.get(DocTemplate, document.doc_template_id)

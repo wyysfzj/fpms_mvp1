@@ -56,6 +56,53 @@ def _grant_extra_data() -> str:
     )
 
 
+@pytest.mark.parametrize(
+    ("helper_name", "expected_code", "expected_message"),
+    (
+        (
+            "_grant_notice_invalid",
+            "GRANT_NOTICE_LIFECYCLE_INVALID",
+            "办理登记手续通知书生命周期输入无效",
+        ),
+        (
+            "_grant_notice_source_conflict",
+            "GRANT_NOTICE_LIFECYCLE_SOURCE_CONFLICT",
+            "办理登记手续通知书生命周期来源不一致",
+        ),
+        (
+            "_grant_notice_hash_conflict",
+            "GRANT_NOTICE_EVIDENCE_HASH_CONFLICT",
+            "办理登记手续通知书证据哈希不匹配",
+        ),
+        (
+            "_grant_notice_fee_lines_conflict",
+            "GRANT_NOTICE_FEE_LINES_CONFLICT",
+            "办理登记手续通知书费用明细不一致",
+        ),
+        (
+            "_grant_notice_replacement_conflict",
+            "GRANT_NOTICE_REPLACEMENT_LINEAGE_CONFLICT",
+            "办理登记手续通知书替换谱系不一致",
+        ),
+        (
+            "_grant_notice_idempotency_conflict",
+            "LIFECYCLE_IDEMPOTENCY_CONFLICT",
+            "生命周期幂等键与已存活动冲突",
+        ),
+    ),
+)
+def test_grant_notice_domain_errors_use_simplified_chinese(
+    helper_name: str,
+    expected_code: str,
+    expected_message: str,
+) -> None:
+    with pytest.raises(BusinessError) as caught:
+        getattr(grant_fee_service, helper_name)()
+
+    assert caught.value.code == expected_code
+    assert caught.value.message == expected_message
+
+
 def _grant_template(db: Session) -> DocTemplate:
     return db.execute(select(DocTemplate).where(DocTemplate.code == "GRANT_NOTICE")).scalar_one()
 
@@ -442,12 +489,12 @@ def test_malformed_dispatch_input_is_http_400_and_write_free(
 
 
 @pytest.mark.parametrize(
-    ("missing", "expected_code"),
+    ("missing", "expected_code", "expected_message"),
     [
-        ("task", "GRANT_FEE_TASK_NOT_FOUND"),
-        ("document", "DOCUMENT_NOT_FOUND"),
-        ("evidence", "EVIDENCE_VERSION_NOT_FOUND"),
-        ("case", "CASE_NOT_FOUND"),
+        ("task", "GRANT_FEE_TASK_NOT_FOUND", "未找到授权费用任务"),
+        ("document", "DOCUMENT_NOT_FOUND", "未找到文书"),
+        ("evidence", "EVIDENCE_VERSION_NOT_FOUND", "未找到证据版本"),
+        ("case", "CASE_NOT_FOUND", "未找到案件"),
     ],
 )
 def test_missing_source_row_is_resource_specific_http_404_and_write_free(
@@ -455,6 +502,7 @@ def test_missing_source_row_is_resource_specific_http_404_and_write_free(
     monkeypatch: pytest.MonkeyPatch,
     missing: str,
     expected_code: str,
+    expected_message: str,
 ) -> None:
     with session_factory() as db:
         case, document, task, evidence = _grant_fixture(db, label=f"MISSING-{missing}")
@@ -487,6 +535,7 @@ def test_missing_source_row_is_resource_specific_http_404_and_write_free(
             _dispatch_public(**call)
 
         assert caught.value.code == expected_code
+        assert caught.value.message == expected_message
         assert caught.value.status_code == 404
         assert _activity_count(db, case.id) == 0
         assert case.lifecycle_revision == 0

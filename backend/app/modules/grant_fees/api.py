@@ -183,7 +183,7 @@ def post_grant_notice_lifecycle_endpoint(
         if task is None:
             raise_business_error(
                 "GRANT_FEE_TASK_NOT_FOUND",
-                "Grant fee task not found",
+                "未找到授权费用任务",
                 status_code=404,
             )
         source_document_id = task.source_document_id
@@ -195,7 +195,7 @@ def post_grant_notice_lifecycle_endpoint(
         ):
             raise_business_error(
                 "GRANT_NOTICE_LIFECYCLE_SOURCE_CONFLICT",
-                "Grant notice source document lineage is invalid",
+                "办理登记手续通知书来源文书谱系无效",
                 status_code=409,
             )
         result = dispatch_grant_registration_notice(

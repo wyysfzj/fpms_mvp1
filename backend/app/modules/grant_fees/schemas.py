@@ -40,14 +40,14 @@ class GrantNoticeLifecycleIn(BaseModel):
     @classmethod
     def require_exact_trimmed_text(cls, value: str) -> str:
         if value != value.strip():
-            raise ValueError("must be trimmed")
+            raise ValueError("必须移除首尾空白")
         return value
 
     @field_validator("recorded_at")
     @classmethod
     def require_naive_recorded_at(cls, value: datetime) -> datetime:
         if value.tzinfo is not None:
-            raise ValueError("must be timezone-naive")
+            raise ValueError("必须为不带时区的日期时间")
         return value
 
 

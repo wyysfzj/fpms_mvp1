@@ -152,6 +152,17 @@ def test_route_and_strict_body_are_exact() -> None:
         payload_type.model_validate({**_request_data(), "case_id": "client-owned"})
 
 
+def test_custom_validation_messages_use_simplified_chinese() -> None:
+    payload_type = _payload_type()
+    with pytest.raises(ValidationError) as trimmed:
+        payload_type.model_validate(_request_data(reviewed_evidence_version_id=" evidence"))
+    with pytest.raises(ValidationError) as zoned:
+        payload_type.model_validate(_request_data(recorded_at="2026-08-09T18:00:00Z"))
+
+    assert trimmed.value.errors()[0]["msg"] == "Value error, 必须移除首尾空白"
+    assert zoned.value.errors()[0]["msg"] == "Value error, 必须为不带时区的日期时间"
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (
@@ -233,6 +244,7 @@ def test_invalid_stored_source_is_write_free_409(source_document_id: object) -> 
         response = client.post(API_PATH.format(task_id="task-1"), json=_request_data())
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "GRANT_NOTICE_LIFECYCLE_SOURCE_CONFLICT"
+    assert response.json()["error"]["message"] == "办理登记手续通知书来源文书谱系无效"
     assert session.commit_calls == 0
     assert session.rollback_calls == 1
 
@@ -249,6 +261,7 @@ def test_missing_task_is_404_and_service_failure_rolls_back(
     with TestClient(app) as client:
         response = client.post(API_PATH.format(task_id="task-1"), json=_request_data())
     assert response.status_code == 404
+    assert response.json()["error"]["message"] == "未找到授权费用任务"
     assert missing.rollback_calls == 1
 
 
