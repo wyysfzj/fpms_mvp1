@@ -22,8 +22,12 @@ test('case fees keeps estimates, real obligations, and drafts independent', asyn
     await expect(page.getByText('请选择费率生效日期', { exact: true })).toBeVisible()
     expect(previewRequests).toHaveLength(0)
 
+    await expect(page.getByLabel('来源文档').locator('option')).toHaveText([
+        '不选择来源文档',
+        'document-approved',
+        'document-second',
+    ])
     await page.getByLabel('估算触发上下文').selectOption('FILING_ACCEPTED')
-    await page.getByLabel('来源文档').selectOption('document-approved')
     await page.getByLabel('费率生效日').fill('2026-08-01')
     await page.getByRole('button', { name: '估算官费' }).click()
 
@@ -32,26 +36,37 @@ test('case fees keeps estimates, real obligations, and drafts independent', asyn
         case_id: caseId,
         trigger_context: {
             trigger: 'FILING_ACCEPTED',
-            source_document_id: 'document-approved',
+            source_document_id: null,
         },
         currency: 'CNY',
         rate_effective_on: '2026-08-01',
     })
     await expect(page.getByRole('heading', { name: '官费估算' })).toBeVisible()
     await expect(page.getByText('ESTIMATE', { exact: true })).toBeVisible()
-    await expect(page.getByText('官方全额：100.00', { exact: true })).toBeVisible()
-    await expect(page.getByText('费减比例：85.0000', { exact: true })).toBeVisible()
-    await expect(page.getByText('应缴金额：85.00', { exact: true })).toBeVisible()
-    await expect(page.getByText('费率标识：rate-approved', { exact: true })).toBeVisible()
-    await expect(page.getByText('来源文件：reviewed-source.pdf', { exact: true })).toBeVisible()
-    await expect(page.getByText('来源日期：2026-08-01', { exact: true })).toBeVisible()
-    await expect(page.getByText('差异复核：MATCHED', { exact: true })).toBeVisible()
+    const estimateRegion = page.getByTestId('official-fee-estimate')
+    await expect(estimateRegion.getByText('官方全额：100.00', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('费减比例：85.0000', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('应缴金额：85.00', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('费率标识：rate-approved', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('来源文件：reviewed-source.pdf', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('来源日期：2026-08-01', { exact: true })).toHaveCount(2)
+    await expect(estimateRegion.getByText('差异复核：MATCHED', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('来源文档：document-approved', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('来源地址：https://example.test/rates', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('来源政策：official-policy', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('来源版本：2026.08', { exact: true })).toBeVisible()
+    await expect(estimateRegion.getByText('来源状态：VERIFIED', { exact: true })).toBeVisible()
+    await expect(estimateRegion.locator('.estimate-candidate strong')).toHaveText([
+        '申请费（CN-APPLICATION）',
+        '复审费（CN-REEXAM）',
+    ])
 
     const obligations = page.getByTestId('real-fee-obligations')
     await expect(obligations.getByText('真实费用义务', { exact: true })).toBeVisible()
     await expect(obligations.getByText('obligation-real-1', { exact: true })).toBeVisible()
     await expect(obligations.getByText('来源活动：activity-real-1', { exact: true })).toBeVisible()
     await expect(obligations.getByText('来源文档：document-real-1', { exact: true })).toBeVisible()
+    await expect(obligations.getByText('估算状态：', { exact: true })).toBeVisible()
     await expect(obligations.getByText('PAYMENT', { exact: true })).toBeVisible()
     await expect(obligations.getByText('替代义务：legacy-obligation-0', { exact: true })).toBeVisible()
     await expect(obligations.getByText('20.00', { exact: true })).toHaveCount(3)
@@ -61,7 +76,7 @@ test('case fees keeps estimates, real obligations, and drafts independent', asyn
     await expect(drafts.getByText('draft-real-1', { exact: true })).toBeVisible()
     expect(mutationRequests).toEqual([])
 
-    await page.getByLabel('费率生效日').fill('2026-08-02')
+    await page.getByLabel('来源文档').selectOption('document-approved')
     await expect(page.getByText('ESTIMATE', { exact: true })).toHaveCount(0)
     expect(previewRequests).toHaveLength(1)
     await page.getByRole('button', { name: '估算官费' }).click()
@@ -73,8 +88,13 @@ test('case fees keeps estimates, real obligations, and drafts independent', asyn
             source_document_id: 'document-approved',
         },
         currency: 'CNY',
-        rate_effective_on: '2026-08-02',
+        rate_effective_on: '2026-08-01',
     })
+    await page.getByLabel('费率生效日').fill('2026-08-02')
+    expect(previewRequests).toHaveLength(2)
+    await page.getByRole('button', { name: '估算官费' }).click()
+    await expect.poll(() => previewRequests.length).toBe(3)
+    expect(previewRequests[2].postDataJSON()).toMatchObject({ rate_effective_on: '2026-08-02' })
 })
 
 test('a preview error leaves persisted obligations and drafts visible', async ({ page }) => {
@@ -107,10 +127,42 @@ test('a preview error leaves persisted obligations and drafts visible', async ({
     expect(mutationRequests).toEqual([])
 })
 
+test('an overlay load error is visible and is not treated as zero real obligations', async ({ page }) => {
+    await mockCaseFeesApi(page, {
+        onPreview: async (route) => fulfillJson(route, estimate()),
+        onOverlay: async (route) =>
+            fulfillJson(route, { error: { code: 'OVERLAY_UNAVAILABLE', message: '生命周期视图不可用' } }, 503),
+        mutationRequests: [],
+    })
+    await openCaseFees(page)
+
+    const obligations = page.getByTestId('real-fee-obligations')
+    await expect(obligations.getByText('OVERLAY_UNAVAILABLE', { exact: true })).toBeVisible()
+    await expect(obligations.getByText('生命周期视图不可用', { exact: true })).toBeVisible()
+    await expect(obligations.getByText('暂无真实费用义务', { exact: true })).toHaveCount(0)
+})
+
+test('an estimate does not populate a zero-obligation overlay', async ({ page }) => {
+    await mockCaseFeesApi(page, {
+        onPreview: async (route) => fulfillJson(route, estimate()),
+        onOverlay: async (route) => fulfillJson(route, overlay(false)),
+        mutationRequests: [],
+    })
+    await openCaseFees(page)
+    await page.getByLabel('估算触发上下文').selectOption('FILING_ACCEPTED')
+    await page.getByLabel('费率生效日').fill('2026-08-04')
+    await page.getByRole('button', { name: '估算官费' }).click()
+
+    await expect(page.getByText('ESTIMATE', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('real-fee-obligations').getByText('暂无真实费用义务')).toBeVisible()
+    await expect(page.getByTestId('real-fee-obligations').getByText('CN-APPLICATION')).toHaveCount(0)
+})
+
 async function mockCaseFeesApi(
     page: Page,
     options: {
         onPreview: (route: Route) => Promise<void>
+        onOverlay?: (route: Route) => Promise<void>
         mutationRequests: string[]
     },
 ): Promise<void> {
@@ -124,7 +176,7 @@ async function mockCaseFeesApi(
             return fulfillJson(route, caseDetail())
         }
         if (request.method() === 'GET' && apiPath === `/cases/${caseId}/lifecycle-overlay`) {
-            return fulfillJson(route, overlay())
+            return options.onOverlay ? options.onOverlay(route) : fulfillJson(route, overlay())
         }
         if (request.method() === 'GET' && apiPath === '/fees/drafts') {
             return fulfillJson(route, {
@@ -223,11 +275,33 @@ function estimate(): Record<string, unknown> {
                     status: 'VERIFIED',
                 },
             },
+            {
+                line: {
+                    fee_code: 'CN-REEXAM',
+                    fee_name: '复审费',
+                    fee_year_key: 2026,
+                    official_full_amount: '50.00',
+                    reduction_ratio: '1.0000',
+                    payable_amount: '50.00',
+                    source_amount: '50.00',
+                    source_date: '2026-08-01',
+                    difference_review_state: 'SOURCE_PENDING',
+                },
+                source: {
+                    rate_id: null,
+                    source_document_id: null,
+                    source_doc: null,
+                    source_url: null,
+                    source_policy: null,
+                    source_version: null,
+                    status: 'REVIEW_REQUIRED',
+                },
+            },
         ],
     }
 }
 
-function overlay(): Record<string, unknown> {
+function overlay(withObligation = true): Record<string, unknown> {
     return {
         case_id: caseId,
         lifecycle_revision: 1,
@@ -251,31 +325,14 @@ function overlay(): Record<string, unknown> {
                 confirmation_status: 'CONFIRMED',
                 center_changes: {},
                 document_evidence: [
-                    {
-                        version: {
-                            evidence_version_id: 'evidence-approved',
-                            case_id: caseId,
-                            document_id: 'document-approved',
-                            attachment_id: 'attachment-approved',
-                            lineage_key: 'lineage-approved',
-                            role: 'RAW_ATTACHMENT',
-                            version_number: 1,
-                            state: 'FINAL',
-                            creator_id: 'creator-1',
-                            review_state: 'APPROVED',
-                            reviewer_id: 'reviewer-1',
-                            reviewed_at: '2026-08-01T00:00:00Z',
-                            final_submitted_at: null,
-                            content_hash: 'hash-approved',
-                            is_current: false,
-                            is_final: false,
-                        },
-                        derivations: [],
-                    },
+                    documentEvidence('document-approved', 'APPROVED', 1),
+                    documentEvidence('document-pending', 'PENDING', 2),
+                    documentEvidence('document-approved', 'APPROVED', 3),
+                    documentEvidence('document-second', 'APPROVED', 4),
                 ],
                 work_packages: [],
                 tasks: [],
-                fee_obligations: [
+                fee_obligations: withObligation ? [
                     {
                         obligation_id: 'obligation-real-1',
                         source_activity_id: 'activity-real-1',
@@ -312,7 +369,7 @@ function overlay(): Record<string, unknown> {
                         supersedes_obligation_id: 'legacy-obligation-0',
                         supersede_reason: '官方费率更新',
                     },
-                ],
+                ] : [],
                 evidence_summary: [],
                 warnings: [],
             },
@@ -322,5 +379,33 @@ function overlay(): Record<string, unknown> {
         legacy_conflicts: [],
         next_cursor: null,
         has_more: false,
+    }
+}
+
+function documentEvidence(
+    documentId: string,
+    reviewState: 'APPROVED' | 'PENDING',
+    versionNumber: number,
+): Record<string, unknown> {
+    return {
+        version: {
+            evidence_version_id: `evidence-${versionNumber}`,
+            case_id: caseId,
+            document_id: documentId,
+            attachment_id: `attachment-${versionNumber}`,
+            lineage_key: `lineage-${versionNumber}`,
+            role: 'RAW_ATTACHMENT',
+            version_number: versionNumber,
+            state: 'FINAL',
+            creator_id: 'creator-1',
+            review_state: reviewState,
+            reviewer_id: reviewState === 'APPROVED' ? 'reviewer-1' : null,
+            reviewed_at: reviewState === 'APPROVED' ? '2026-08-01T00:00:00Z' : null,
+            final_submitted_at: null,
+            content_hash: `hash-${versionNumber}`,
+            is_current: false,
+            is_final: false,
+        },
+        derivations: [],
     }
 }

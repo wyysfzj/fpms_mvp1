@@ -70,7 +70,15 @@
 
   <div class="case-panel" data-testid="real-fee-obligations">
     <h3 class="panel-heading">真实费用义务</h3>
-    <div v-if="realObligations.length === 0" class="placeholder-content">暂无真实费用义务</div>
+    <el-alert
+      v-if="overlayError"
+      :title="overlayError.code"
+      :description="overlayError.message"
+      type="warning"
+      show-icon
+      :closable="false"
+    />
+    <div v-else-if="realObligations.length === 0" class="placeholder-content">暂无真实费用义务</div>
     <div v-for="(obligation, obligationIndex) in realObligations" :key="obligationIndex" class="obligation-card">
       <strong>{{ obligation.obligationId }}</strong>
       <span>来源活动：{{ obligation.sourceActivityId }}</span>
@@ -79,6 +87,7 @@
       <span>费用域：{{ obligation.feeDomain }}</span>
       <span>义务类型：{{ obligation.obligationType }}</span>
       <span>到期日：{{ obligation.dueDate ?? '' }}</span>
+      <span>估算状态：{{ obligation.statuses.estimateStatus ?? '' }}</span>
       <span>义务状态：{{ obligation.statuses.obligationStatus }}</span>
       <span>客户指示：{{ obligation.statuses.clientInstructionStatus }}</span>
       <span>草稿状态：{{ obligation.statuses.draftStatus }}</span>
@@ -149,6 +158,7 @@ const router = useRouter()
 const items = ref<FeeDraftListItem[]>([])
 const draftLoading = ref(true)
 const overlay = ref<LifecycleOverlay | null>(null)
+const overlayError = ref<ApiError | null>(null)
 const trigger = ref('')
 const sourceDocumentId = ref('')
 const rateEffectiveOn = ref('')
@@ -193,14 +203,16 @@ async function loadFeeDrafts() {
 }
 
 async function loadLifecycleOverlay() {
+  overlayError.value = null
   try {
     overlay.value = await getLifecycleOverlay(props.caseId, {
       afterSequence: 0,
       limit: 50,
       asOfRevision: null,
     })
-  } catch {
+  } catch (error) {
     overlay.value = null
+    overlayError.value = error as ApiError
   }
 }
 
