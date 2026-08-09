@@ -53,7 +53,9 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _git(repo_root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+def _git(
+    repo_root: Path, *args: str, check: bool = True
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
         cwd=repo_root,
@@ -92,7 +94,9 @@ def validate_dirty_path_disposition(
     story_counts: dict[str, int] = {}
     for entry in entries:
         if not isinstance(entry, dict):
-            raise ValidationError("every dirty-path disposition entry must be an object")
+            raise ValidationError(
+                "every dirty-path disposition entry must be an object"
+            )
         owned_path = entry.get("path")
         if not isinstance(owned_path, str) or not owned_path:
             raise ValidationError("every dirty-path disposition requires a path")
@@ -116,8 +120,7 @@ def validate_dirty_path_disposition(
     path_manifest = "".join(f"{owned_path}\n" for owned_path in sorted(paths)).encode()
     actual_manifest_sha = hashlib.sha256(path_manifest).hexdigest()
     if (
-        payload.get("source_path_manifest_sha256")
-        != expected_path_manifest_sha256
+        payload.get("source_path_manifest_sha256") != expected_path_manifest_sha256
         or actual_manifest_sha != expected_path_manifest_sha256
     ):
         raise ValidationError("dirty-path source manifest SHA-256 mismatch")
@@ -136,9 +139,7 @@ def compute_tree_fingerprint(
     for owned_path in sorted(set(paths)):
         result = _git(repo_root, "ls-tree", commit_sha, "--", owned_path, check=False)
         if result.returncode != 0 or not result.stdout.strip():
-            raise ValidationError(
-                f"story path is absent at {commit_sha}: {owned_path}"
-            )
+            raise ValidationError(f"story path is absent at {commit_sha}: {owned_path}")
         lines = result.stdout.rstrip("\n").splitlines()
         exact = [line for line in lines if line.split("\t", 1)[-1] == owned_path]
         if len(exact) != 1:
@@ -148,9 +149,7 @@ def compute_tree_fingerprint(
         metadata, resolved_path = exact[0].split("\t", 1)
         mode, object_type, object_sha = metadata.split()
         records.append(
-            (
-                f"{resolved_path}\0{mode}\0{object_type}\0{object_sha}\n"
-            ).encode()
+            (f"{resolved_path}\0{mode}\0{object_type}\0{object_sha}\n").encode()
         )
     return hashlib.sha256(b"".join(records)).hexdigest()
 
@@ -194,9 +193,76 @@ def _validate_current_story(
     reviewed_tree_sha = compute_tree_fingerprint(repo_root, commits[-1], paths)
     if reviewed_tree_sha != recorded_tree_sha:
         raise ValidationError(f"{story_id} review fingerprint does not match commit")
-    integrated_tree_sha = compute_tree_fingerprint(repo_root, integration_sha, paths)
-    if integrated_tree_sha != recorded_tree_sha:
-        raise ValidationError(f"{story_id} integrated bytes changed after review")
+
+
+def _validate_integrated_path_owners(
+    stories: list[dict[str, Any]],
+    *,
+    repo_root: Path,
+    integration_sha: str,
+) -> None:
+    """Require current bytes to match each path's latest accepted owner."""
+
+    owners: dict[str, dict[str, set[str]]] = {}
+    for story in stories:
+        story_id = story["story_id"]
+        final_commit = story["commits"][-1]
+        for owned_path in story["paths"]:
+            owners.setdefault(owned_path, {}).setdefault(final_commit, set()).add(
+                story_id
+            )
+
+    ancestry: dict[tuple[str, str], bool] = {}
+
+    def is_ancestor(ancestor: str, descendant: str) -> bool:
+        if ancestor == descendant:
+            return True
+        key = (ancestor, descendant)
+        if key not in ancestry:
+            ancestry[key] = (
+                _git(
+                    repo_root,
+                    "merge-base",
+                    "--is-ancestor",
+                    ancestor,
+                    descendant,
+                    check=False,
+                ).returncode
+                == 0
+            )
+        return ancestry[key]
+
+    for owned_path, owners_by_commit in owners.items():
+        commits = tuple(owners_by_commit)
+        latest = tuple(
+            commit
+            for commit in commits
+            if not any(
+                commit != other and is_ancestor(commit, other) for other in commits
+            )
+        )
+        if len(latest) != 1:
+            story_ids = sorted(
+                story_id for commit in latest for story_id in owners_by_commit[commit]
+            )
+            raise ValidationError(
+                f"{owned_path} has incomparable latest accepted owners: "
+                + ", ".join(story_ids)
+            )
+        reviewed_tree_sha = compute_tree_fingerprint(
+            repo_root,
+            latest[0],
+            [owned_path],
+        )
+        integrated_tree_sha = compute_tree_fingerprint(
+            repo_root,
+            integration_sha,
+            [owned_path],
+        )
+        if integrated_tree_sha != reviewed_tree_sha:
+            raise ValidationError(
+                f"{owned_path} integrated bytes changed after latest accepted review"
+            )
 
 
 def validate(
@@ -297,13 +363,20 @@ def validate(
                 )
 
     if resolved_integration_sha is not None:
-        for story in stories:
-            if story.get("status") == "CURRENT_VERIFIED":
-                _validate_current_story(
-                    story,
-                    repo_root=repo_root,
-                    integration_sha=resolved_integration_sha,
-                )
+        current_stories = [
+            story for story in stories if story.get("status") == "CURRENT_VERIFIED"
+        ]
+        for story in current_stories:
+            _validate_current_story(
+                story,
+                repo_root=repo_root,
+                integration_sha=resolved_integration_sha,
+            )
+        _validate_integrated_path_owners(
+            current_stories,
+            repo_root=repo_root,
+            integration_sha=resolved_integration_sha,
+        )
 
     if milestone != "inventory":
         required_rows = (
@@ -318,8 +391,7 @@ def validate(
         unresolved = [
             row["catalog_id"]
             for row in required_rows
-            if row.get("disposition")
-            not in {"CURRENT_VERIFIED", "SUPERSEDED_BY_STORY"}
+            if row.get("disposition") not in {"CURRENT_VERIFIED", "SUPERSEDED_BY_STORY"}
         ]
         if unresolved:
             raise ValidationError(

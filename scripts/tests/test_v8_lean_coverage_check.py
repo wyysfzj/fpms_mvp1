@@ -87,7 +87,9 @@ def _git_repo(tmp_path: Path) -> tuple[Path, str]:
     return repo, _git(repo, "rev-parse", "HEAD")
 
 
-def test_inventory_accepts_exactly_one_pending_row_per_catalog_id(tmp_path: Path) -> None:
+def test_inventory_accepts_exactly_one_pending_row_per_catalog_id(
+    tmp_path: Path,
+) -> None:
     checker = _load_checker()
     catalog_path = tmp_path / "catalog.json"
     ledger_path = tmp_path / "ledger.json"
@@ -249,6 +251,129 @@ def test_current_verified_rejects_integrated_tree_drift(tmp_path: Path) -> None:
     _write_json(ledger_path, ledger)
 
     with pytest.raises(checker.ValidationError, match="integrated bytes changed"):
+        checker.validate(
+            catalog_path=catalog_path,
+            ledger_path=ledger_path,
+            expected_catalog_sha256=digest,
+            milestone="foundation",
+            repo_root=repo,
+            integration_sha=integration_sha,
+        )
+
+
+def test_current_verified_accepts_linear_reviewed_successor_on_shared_path(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    repo, first_sha = _git_repo(tmp_path)
+    first_tree_sha = checker.compute_tree_fingerprint(repo, first_sha, ["owned.txt"])
+    (repo / "owned.txt").write_text("reviewed successor\n")
+    _git(repo, "add", "owned.txt")
+    _git(repo, "commit", "-q", "-m", "reviewed successor")
+    successor_sha = _git(repo, "rev-parse", "HEAD")
+    successor_tree_sha = checker.compute_tree_fingerprint(
+        repo, successor_sha, ["owned.txt"]
+    )
+
+    catalog_path = tmp_path / "catalog.json"
+    ledger_path = tmp_path / "ledger.json"
+    digest = _write_json(catalog_path, _catalog(["A", "B"]))
+    first_row = _row("A", "CURRENT_VERIFIED")
+    first_row["story_id"] = "STORY-A"
+    successor_row = _row("B", "CURRENT_VERIFIED")
+    successor_row["story_id"] = "STORY-B"
+    ledger = _ledger(digest, [first_row, successor_row])
+    ledger["integration_sha"] = successor_sha
+    ledger["stories"] = [
+        {
+            "story_id": "STORY-A",
+            "status": "CURRENT_VERIFIED",
+            "commits": [first_sha],
+            "paths": ["owned.txt"],
+            "tree_sha256": first_tree_sha,
+            "tests": ["pytest first"],
+            "review_class": "PROTECTED",
+            "review_ref": "reviews/first.md",
+            "verification_ref": "verification/first.md",
+        },
+        {
+            "story_id": "STORY-B",
+            "status": "CURRENT_VERIFIED",
+            "commits": [successor_sha],
+            "paths": ["owned.txt"],
+            "tree_sha256": successor_tree_sha,
+            "tests": ["pytest successor"],
+            "review_class": "PROTECTED",
+            "review_ref": "reviews/successor.md",
+            "verification_ref": "verification/successor.md",
+        },
+    ]
+    _write_json(ledger_path, ledger)
+
+    checker.validate(
+        catalog_path=catalog_path,
+        ledger_path=ledger_path,
+        expected_catalog_sha256=digest,
+        milestone="foundation",
+        repo_root=repo,
+        integration_sha=successor_sha,
+    )
+
+
+def test_current_verified_rejects_unreviewed_drift_after_reviewed_successor(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    repo, first_sha = _git_repo(tmp_path)
+    first_tree_sha = checker.compute_tree_fingerprint(repo, first_sha, ["owned.txt"])
+    (repo / "owned.txt").write_text("reviewed successor\n")
+    _git(repo, "add", "owned.txt")
+    _git(repo, "commit", "-q", "-m", "reviewed successor")
+    successor_sha = _git(repo, "rev-parse", "HEAD")
+    successor_tree_sha = checker.compute_tree_fingerprint(
+        repo, successor_sha, ["owned.txt"]
+    )
+    (repo / "owned.txt").write_text("unreviewed drift\n")
+    _git(repo, "add", "owned.txt")
+    _git(repo, "commit", "-q", "-m", "unreviewed drift")
+    integration_sha = _git(repo, "rev-parse", "HEAD")
+
+    catalog_path = tmp_path / "catalog.json"
+    ledger_path = tmp_path / "ledger.json"
+    digest = _write_json(catalog_path, _catalog(["A", "B"]))
+    first_row = _row("A", "CURRENT_VERIFIED")
+    first_row["story_id"] = "STORY-A"
+    successor_row = _row("B", "CURRENT_VERIFIED")
+    successor_row["story_id"] = "STORY-B"
+    ledger = _ledger(digest, [first_row, successor_row])
+    ledger["integration_sha"] = integration_sha
+    ledger["stories"] = [
+        {
+            "story_id": "STORY-A",
+            "status": "CURRENT_VERIFIED",
+            "commits": [first_sha],
+            "paths": ["owned.txt"],
+            "tree_sha256": first_tree_sha,
+            "tests": ["pytest first"],
+            "review_class": "PROTECTED",
+            "review_ref": "reviews/first.md",
+            "verification_ref": "verification/first.md",
+        },
+        {
+            "story_id": "STORY-B",
+            "status": "CURRENT_VERIFIED",
+            "commits": [successor_sha],
+            "paths": ["owned.txt"],
+            "tree_sha256": successor_tree_sha,
+            "tests": ["pytest successor"],
+            "review_class": "PROTECTED",
+            "review_ref": "reviews/successor.md",
+            "verification_ref": "verification/successor.md",
+        },
+    ]
+    _write_json(ledger_path, ledger)
+
+    with pytest.raises(checker.ValidationError, match="latest accepted review"):
         checker.validate(
             catalog_path=catalog_path,
             ledger_path=ledger_path,
