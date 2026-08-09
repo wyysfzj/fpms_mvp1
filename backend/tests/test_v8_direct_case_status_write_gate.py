@@ -73,6 +73,41 @@ def _is_update_case_chain(node: ast.AST) -> bool:
     return False
 
 
+def _is_case_query_chain(node: ast.AST) -> bool:
+    while isinstance(node, ast.Call):
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "query"
+            and any(
+                isinstance(argument, ast.Name) and argument.id == "Case" for argument in node.args
+            )
+        ):
+            return True
+        if not isinstance(node.func, ast.Attribute):
+            return False
+        node = node.func.value
+    return False
+
+
+def _mapping_has_status_key(node: ast.AST) -> bool:
+    return isinstance(node, ast.Dict) and any(
+        _is_case_status(key) or (isinstance(key, ast.Constant) and key.value == "status")
+        for key in node.keys
+        if key is not None
+    )
+
+
+def _call_writes_status(node: ast.Call) -> bool:
+    return (
+        any(keyword.arg == "status" for keyword in node.keywords)
+        or any(
+            keyword.arg is None and _mapping_has_status_key(keyword.value)
+            for keyword in node.keywords
+        )
+        or any(_mapping_has_status_key(argument) for argument in node.args)
+    )
+
+
 def _contains_case_annotation(node: ast.AST | None) -> bool:
     return node is not None and any(
         isinstance(part, ast.Name) and part.id == "Case" for part in ast.walk(node)
@@ -99,6 +134,14 @@ def _case_instance_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> se
     return names
 
 
+def _case_update_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(function):
+        if isinstance(node, ast.Assign) and _is_update_case_chain(node.value):
+            names.update(target.id for target in node.targets if isinstance(target, ast.Name))
+    return names
+
+
 class _StatusWriteVisitor(ast.NodeVisitor):
     def __init__(self, path: str) -> None:
         self.path = path
@@ -106,6 +149,7 @@ class _StatusWriteVisitor(ast.NodeVisitor):
         self._functions: list[str] = []
         self._conditions: list[str] = []
         self._case_names: list[set[str]] = []
+        self._update_names: list[set[str]] = []
 
     def _function(self) -> str:
         return ".".join(self._functions)
@@ -124,7 +168,9 @@ class _StatusWriteVisitor(ast.NodeVisitor):
     def _visit_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         self._functions.append(node.name)
         self._case_names.append(_case_instance_names(node))
+        self._update_names.append(_case_update_names(node))
         self.generic_visit(node)
+        self._update_names.pop()
         self._case_names.pop()
         self._functions.pop()
 
@@ -137,24 +183,21 @@ class _StatusWriteVisitor(ast.NodeVisitor):
         self._conditions.pop()
 
     def visit_Call(self, node: ast.Call) -> None:
-        if (
-            isinstance(node.func, ast.Attribute)
-            and node.func.attr == "values"
-            and _is_update_case_chain(node.func.value)
-        ):
-            if any(keyword.arg == "status" for keyword in node.keywords):
-                self._record("orm_update", node)
-            if any(
-                isinstance(argument, ast.Dict)
-                and any(_is_case_status(key) for key in argument.keys if key is not None)
-                for argument in node.args
-            ):
-                self._record("bulk_mapping", node)
-        self.generic_visit(node)
+        if not isinstance(node.func, ast.Attribute) or not _call_writes_status(node):
+            self.generic_visit(node)
+            return
 
-    def visit_Dict(self, node: ast.Dict) -> None:
-        if any(_is_case_status(key) for key in node.keys if key is not None):
-            self._record("bulk_mapping", node)
+        is_bound_update = (
+            isinstance(node.func.value, ast.Name)
+            and self._update_names
+            and node.func.value.id in self._update_names[-1]
+        )
+        if node.func.attr == "values" and (
+            _is_update_case_chain(node.func.value) or is_bound_update
+        ):
+            self._record("orm_update", node)
+        if node.func.attr == "update" and _is_case_query_chain(node.func.value):
+            self._record("orm_update", node)
         self.generic_visit(node)
 
     def _visit_assignment(self, node: ast.AST, targets: list[ast.AST]) -> None:
@@ -189,6 +232,12 @@ def _status_writes() -> list[_StatusWrite]:
     return writes
 
 
+def _writes_from_source(source: str) -> list[_StatusWrite]:
+    visitor = _StatusWriteVisitor("probe.py")
+    visitor.visit(ast.parse(source))
+    return visitor.writes
+
+
 def _keyword_values(node: ast.Call) -> dict[str, str]:
     return {keyword.arg: _expression(keyword.value) for keyword in node.keywords if keyword.arg}
 
@@ -219,3 +268,25 @@ def test_direct_case_status_writes_match_only_the_two_frozen_structures() -> Non
     assert isinstance(legacy_write.node, ast.Call)
     assert _keyword_values(legacy_write.node) == {"status": "requested_status"}
     assert _where_predicates(legacy_write.node) == _LEGACY_CAS_PREDICATES
+
+
+def test_direct_case_status_write_bypasses_are_detected() -> None:
+    writes = _writes_from_source(
+        """
+def bound_statement():
+    statement = update(Case)
+    statement.values(status="NEW")
+
+def unpacked_keywords():
+    update(Case).values(**{"status": "NEW"})
+
+def query_update(db):
+    db.query(Case).update({"status": "NEW"})
+"""
+    )
+
+    assert [write.identity for write in writes] == [
+        ("probe.py", "bound_statement", "orm_update", ()),
+        ("probe.py", "unpacked_keywords", "orm_update", ()),
+        ("probe.py", "query_update", "orm_update", ()),
+    ]
