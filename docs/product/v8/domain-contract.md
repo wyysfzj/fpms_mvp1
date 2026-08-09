@@ -37,6 +37,20 @@ Generated Word/XML/output, its source version, review state, external-submission
 and receipt must be linked by durable lineage. Ambiguous type, version, currentness,
 cardinality or predecessor evidence fails closed.
 
+## Lifecycle warning and conflict lineage
+
+An overlay warning is a read-only projection of a durable lifecycle activity, customer-decision
+result or source classification. It never creates, confirms or changes a legal state, lifecycle
+event, decision gate or fee fact. Activity conflict codes that are expected to survive a request
+must be stored as explicit child facts of that exact activity; the overlay must not reconstruct
+them from free text, mutable case state or test-only payload keys.
+
+Activity-local warnings preserve activity identity and conflict-code multiplicity. Top-level
+warnings aggregate the current page's activity warnings followed by the complete decision-gate
+snapshot warnings, preserving source order and provenance without deduplication. A
+`HISTORICAL` or `INTERNAL_ONLY` gate is reference-only and never activation-ready. Missing or
+corrupt conflict lineage fails closed rather than returning a partial or inferred overlay.
+
 ## Authentication, authorization and permission
 
 Protected endpoints enforce permission. Inject permission as a function parameter:
