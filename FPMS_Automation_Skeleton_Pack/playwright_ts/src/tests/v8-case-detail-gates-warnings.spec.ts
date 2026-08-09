@@ -56,9 +56,9 @@ test('案件详情无损展示 29 个客户决策和两级警告且不发起写�
     }
 
     for (const [index, [code, chinese]] of unresolvedReasons.entries()) {
-        await expect(gates.getByText(`${chinese}（${code}）`, { exact: true })).toHaveCount(
-            index === 0 ? 2 : 1,
-        )
+        const visibleReason = gates.getByText(`${chinese}（${code}）`, { exact: true })
+        await expect(visibleReason).toHaveCount(index === 0 ? 2 : 1)
+        await expect(visibleReason.first()).toBeVisible()
     }
     await expect(gates.getByText('请求范围：ALL-22', { exact: true })).toHaveCount(0)
     const unresolvedLegacy = rows.filter({
