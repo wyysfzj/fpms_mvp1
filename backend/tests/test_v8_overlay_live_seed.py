@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
+from app.modules.auth.models import T_User
 from app.modules.cases.lifecycle_contracts import ActivityLane
 from app.modules.cases.lifecycle_overlay_service import read_lifecycle_overlay
 from app.modules.cases.models import Case, CaseActivityEvent
@@ -164,10 +165,16 @@ def test_seed_is_idempotent_preserves_p1_and_projects_real_three_page_fixture(
         ].unresolved_reason == "DECISION_GATE_CURRENT_ROW_CORRUPT"
 
         legacy_code = DecisionGateCode.LEGACY_FORM_CLASS.value
+        admin_id = transaction.scalar(select(T_User.id).where(T_User.username == "admin"))
+        assert admin_id is not None
         direct = by_identity[(legacy_code, "form-001")]
+        assert direct.gate_id == seed._gate_id("FORM-001")
         assert direct.resolved_scope_key == "form-001"
         assert direct.decision_value == "CURRENT_OFFICIAL"
         assert direct.source_reference == "v8-overlay-live-direct"
+        assert direct.source_version == "2026-08-10"
+        assert direct.confirmed_by == admin_id
+        assert direct.effective_at.isoformat() == "2026-08-01T09:00:00"
         assert by_identity[(legacy_code, "form-002")].decision_value == "HISTORICAL"
         assert by_identity[(legacy_code, "form-003")].decision_value == "INTERNAL_ONLY"
         for scope, classification in (
@@ -179,7 +186,11 @@ def test_seed_is_idempotent_preserves_p1_and_projects_real_three_page_fixture(
             assert fallback.requested_scope_key == scope
             assert fallback.resolved_scope_key == "ALL-22"
             assert fallback.decision_value == classification
+            assert fallback.gate_id == seed._gate_id("ALL-22")
             assert fallback.source_reference == "v8-overlay-live-all-22"
+            assert fallback.source_version == "2026-08-10"
+            assert fallback.confirmed_by == admin_id
+            assert fallback.effective_at.isoformat() == "2026-08-01T09:00:00"
         assert by_identity[(legacy_code, "form-007")].unresolved_reason == (
             "DECISION_GATE_REVOKED"
         )
@@ -201,7 +212,27 @@ def test_seed_is_idempotent_preserves_p1_and_projects_real_three_page_fixture(
         assert [warning.code for warning in pages[0].milestones[1].warnings] == [
             "LIFECYCLE_ACTIVITY_NEEDS_REVIEW"
         ]
-        assert any(warning.kind.value == "REFERENCE_ONLY" for warning in pages[0].warnings)
+        reference_warnings = [
+            warning
+            for warning in pages[0].warnings
+            if warning.kind.value == "REFERENCE_ONLY"
+        ]
+        assert reference_warnings
+        assert all(warning.code == "DECISION_GATE_REFERENCE_ONLY" for warning in reference_warnings)
+        assert all(warning.message == "该客户决策分类仅供参考，不得激活" for warning in reference_warnings)
+        assert all(warning.activity_id is None for warning in reference_warnings)
+        assert all(
+            warning.source_object_type == "CUSTOMER_DECISION_GATE"
+            and warning.source_object_id is not None
+            and warning.source_object_id.endswith(
+                (
+                    seed._gate_id("FORM-002"),
+                    seed._gate_id("FORM-003"),
+                    seed._gate_id("ALL-22"),
+                )
+            )
+            for warning in reference_warnings
+        )
         assert not transaction.new and not transaction.dirty and not transaction.deleted
 
 
