@@ -6,9 +6,13 @@
   (ordinal `74`).
 - Product/test commit: `997a6896b90deae18ecda7bde9db35e48513b242`.
 - Integration parent: `37beb56c66a2dc450a7cb9e0ba6acffee4b0ef51`.
-- Authority: the exact frozen Row74 task contract, current-verified grant-registration
-  lifecycle rule, Row61 lifecycle-neutral successor, and current-verified grant-notice
-  fee-line snapshot prerequisite.
+- Production-entry correction contract commit: `68bfd75`.
+- Authority: `DEC-V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-20260809`, the exact frozen Row74
+  dispatcher contract, current-verified grant-registration lifecycle rule, Row61
+  lifecycle-neutral successor, and current-verified grant-notice fee-line snapshot
+  prerequisite. The source decision and this current-tree story supersede only Row74's
+  obsolete `documents/service.py` automatic-call clause. The frozen dispatcher
+  validation, payload/evidence/replay/lineage/transaction contract remains unchanged.
 
 ## Observable outcome
 
@@ -49,13 +53,22 @@ recorded_at: naive datetime
 idempotency_key: str
 ```
 
+Request validation is exact: the path task ID and evidence-version ID are trimmed,
+nonblank strings of at most 36 characters; `expected_content_hash` matches exactly
+`sha256:[0-9a-f]{64}`; `recorded_at` is timezone-naïve; and `idempotency_key` is trimmed,
+nonblank and at most 102 characters. Body/path shape violations return FastAPI 422. The
+unchanged service retains its own HTTP 400 validation for non-HTTP callers.
+
 The adapter does not resolve, create, promote, mutate or approve evidence. It requires the
 named version already to be the exact current `FINAL / APPROVED` version accepted by the
 frozen service, resolves `source_document_id` only from the named task, and passes all four
 body values plus server actor and the caller-owned Session to
 `dispatch_grant_registration_notice()`. Missing task preserves 404; all same-case,
 document, evidence, hash, deadline, snapshot, replay and replacement checks remain solely
-owned by that service. Exact replay returns the same activity with no new write. Client-
+owned by that service. A present task with a null, blank, whitespace-padded or over-36
+`source_document_id` fails 409 `GRANT_NOTICE_LIFECYCLE_SOURCE_CONFLICT` before delegation
+and writes nothing; otherwise the adapter passes the exact stored source-document ID.
+Exact replay returns the same activity with no new write. Client-
 supplied case, source document, reviewer, event type, evidence state or fee-line snapshot
 is forbidden.
 
@@ -72,6 +85,11 @@ reachable for an existing valid version.
 - `backend/app/modules/grant_fees/schemas.py`
 - `backend/tests/test_v8_grant_notice_lifecycle_adapter.py`
 - `backend/tests/test_v8_grant_notice_lifecycle_api.py`
+
+These API/schema/API-test paths plus the already-committed dispatcher service/test are the
+complete executable allowlist for this current-tree correction. The historical task file,
+`documents/service.py`, evidence/promotion services and every other source/test remain
+read-only.
 
 The test was recovered from archive input `6b2ef89` and adapted only to remove the old
 case-status-unchanged assertion owned by the separate pending Row75 contract. It retains
@@ -110,6 +128,9 @@ adoption.
 No generic dispatcher, ordinary-document/evidence-review lifecycle write, grant evidence
 promotion protocol, grant attachment-status rule,
 grant-fee-done status rule, annuity obligation, fee/draft creation, schema/migration,
-second entrypoint, parser change, mutable source reread or adjacent cleanup. Rollback
-reverts exactly `997a6896b90deae18ecda7bde9db35e48513b242`; it must not rewrite existing
-lifecycle history or current-verified dependency stories.
+second lifecycle event, parser change, mutable source reread or adjacent cleanup. Before
+the API correction is committed, rollback removes only the correction-contract/story
+commits while retaining the independently exercised dispatcher seam at `997a689`. After
+implementation, rollback reverts only the exact API/schema/API-test successor commit and
+retains `997a689`; it must not rewrite existing lifecycle history or current-verified
+dependency stories.
