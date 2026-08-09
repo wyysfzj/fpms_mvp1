@@ -49,6 +49,46 @@ The Task-121 commit adds only its three imports, its disjoint adapter block afte
 `add_manual_gov_payment`, and its focused test. It does not alter either existing activity
 adapter or absorb their closures.
 
+## Additional shared-service successor attestation
+
+Receipt amendment review found zero successor findings for the other five
+`CURRENT_VERIFIED` stories that share `backend/app/modules/annuity/service.py`:
+
+- `V8-OFFICIAL-PAYMENT-EVIDENCE-ACTIVITY`: `_record_gov_payment_official_evidence_activity`
+  and `register_gov_payment` remain before and outside the Task-121 hunk. The exact focused
+  test remains blob `fb44f59e80ee7d067e3920b14580b8ca274c7dc3`; its single payment activity,
+  separate official-evidence state/activity and existing transaction behavior remain
+  intact.
+- `V8-PAYLIST-INTERNAL-EXPORT-SERVICE`: `ExportInternalPayListCommand`,
+  `ExportInternalPayListResult`, `export_internal_pay_list` and their storage/replay/
+  compensation helpers remain before and outside the Task-121 hunk. The workbook dependency
+  remains blob `beafa9b6ad228a26947e3bbd321fe9c2a7b63a0f` and the focused test remains blob
+  `7322dd5f7081ae8102a6831bfd506a0de3d4c90a`; artifact, activity, replay and
+  caller-transaction semantics remain intact.
+- `V8-PAYLIST-EXPORT-BOUNDARY-CURRENT-ADOPTION`: `mark_pay_list_paid` and
+  `get_pay_list_detail` remain before and outside the Task-121 hunk. The payment/export
+  decoupling and artifact-read tests remain blobs
+  `150572fa1024b821f9765167ac45e392d6459e20` and
+  `8a81afde52206090c0d236d843fb2afd043f401c`; payment evidence, internal artifacts and
+  official workbook projections remain separate.
+- `V8-PAYLIST-CREATE-FEE-ACTIVITY-ADAPTER-CURRENT-ADOPTION`:
+  `create_pay_list_from_fee_items` remains before and outside the Task-121 hunk. Its focused
+  test remains blob `59d6c94f743fc2ee84440d78346ac5baf5c1fe93`; exact same-case obligation-link
+  preflight, one per-case `PAY_LIST_CREATED` activity and caller-owned transaction remain
+  intact.
+- `V8-FUTURE-ANNUITY-OBLIGATION-CURRENT-ADOPTION`:
+  `RecognizeFutureAnnuityObligationCommand`, `RecognizeFutureAnnuityObligationResult`,
+  `recognize_future_annuity_obligation` and all `_future_annuity_*` helpers follow the new
+  adapter block and retain their prior bytes. The focused test remains blob
+  `d54e9e1e5132a874b0d9a3150934e4e55549ed83`; sourced recognition, immutable replay,
+  six-field carrier, durable reduction lineage, fail-closed behavior and caller-owned
+  transaction remain intact.
+
+The exact service diff contains `260` additions and `0` deletions: three non-colliding
+imports used only by Task 121 plus its 257-line adapter block. Every named successor test
+and dependency blob above is identical across `05a2c93^..05a2c93`. This amendment is an
+independent static successor attestation only; no SQLite or other test was rerun.
+
 ## Fresh independent verification
 
 - `cd backend && pytest -q tests/test_v8_annuity_instruction_obligation_adapter.py` —
