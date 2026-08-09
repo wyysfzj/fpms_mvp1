@@ -178,7 +178,12 @@ def read_lifecycle_overlay(
     if revision == current_revision:
         _validate_current_projection(case_id, case_state, center_snapshot, current_revision)
 
-    page = tuple(item for item in frozen if item[0].sequence > after_sequence)
+    page = tuple(item for item in frozen if after_sequence < item[0].sequence <= revision)[
+        : limit + 1
+    ]
+    has_more = len(page) > limit
+    if has_more:
+        page = page[:limit]
     evidence_by_activity = _read_evidence(
         transaction,
         case_id=case_id,
@@ -219,8 +224,8 @@ def read_lifecycle_overlay(
         decision_gates=decision_gates,
         warnings=(),
         legacy_conflicts=(),
-        next_cursor=None,
-        has_more=False,
+        next_cursor=page[-1][0].sequence if has_more else None,
+        has_more=has_more,
     )
 
 

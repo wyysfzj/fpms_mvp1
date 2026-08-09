@@ -195,7 +195,7 @@ def test_reads_current_center_mixed_lanes_and_evidence_without_writing(
 
         event.listen(transaction.get_bind(), "before_cursor_execute", capture_sql)
         try:
-            result = _read(transaction, case.id, limit=1)
+            result = _read(transaction, case.id, limit=25)
         finally:
             event.remove(transaction.get_bind(), "before_cursor_execute", capture_sql)
 
