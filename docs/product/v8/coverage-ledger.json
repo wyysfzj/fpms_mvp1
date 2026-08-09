@@ -718,8 +718,8 @@
     {
       "catalog_id": "FPMS-V8-FORMAT-LETTER-RENDER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FORMAT-LETTER-RENDER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4538,6 +4538,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-CONTEXT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-CONTEXT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FORMAT-LETTER-RENDER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "ebfe28073314a5267a6e26743b5ab4d665a22e10"
+      ],
+      "paths": [
+        "backend/app/modules/documents/letter_render_service.py",
+        "backend/tests/test_v8_format_letter_render.py"
+      ],
+      "tree_sha256": "352dbbdeab9256856451aa2655c46a038939cdd54898463d3ae9cc9cf4cc8fcf",
+      "tests": [
+        "real RED 6 failed on the missing module",
+        "focused format-letter render suite 6 passed",
+        "current format-letter context, template and mapping tranche 61 passed",
+        "scoped Ruff, format and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-RENDER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-RENDER-CURRENT-ADOPTION.md"
     }
   ]
 }
