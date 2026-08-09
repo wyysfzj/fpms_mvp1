@@ -4604,6 +4604,37 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-INSTRUCTION-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-INSTRUCTION-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FORMAT-LETTER-IN-SOURCE-UI-SUCCESSOR-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "d41d5e3388e93766746f5bb47fc9a4934f0149cc"
+      ],
+      "paths": [
+        "backend/app/modules/official_workflows/service.py",
+        "backend/app/modules/official_workflows/api.py",
+        "backend/app/modules/official_workflows/schemas.py",
+        "backend/tests/test_v8_format_letter_archive_api.py",
+        "frontend/src/api/officialWorkflows.ts",
+        "frontend/src/api/officialWorkflows.types.ts",
+        "frontend/src/modules/officialWorkflows/components/LetterHandoffPanel.vue",
+        "frontend/src/modules/documents/pages/DocumentDetail.vue",
+        "frontend/src/modules/documents/pages/DocumentDispatch.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-format-letter-in-source-ui.spec.ts"
+      ],
+      "tree_sha256": "c2c55e86fc7d147f92969c682c45dce5df8f1b0acfa6b483ac71bef4a95eef81",
+      "tests": [
+        "contract-complete backend RED 2 failed and 2 passed before implementation",
+        "focused backend plus exact Row89, Row90, Row91 and handoff tranche 83 passed",
+        "targeted Chromium Playwright 2 passed with one worker",
+        "scoped Ruff, format, ESLint and exact diff checks passed",
+        "baseline-subtracted frontend type diagnostics added no successor-owned identity",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-IN-SOURCE-UI-SUCCESSOR-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-IN-SOURCE-UI-SUCCESSOR-CURRENT-ADOPTION.md"
     }
   ]
 }
