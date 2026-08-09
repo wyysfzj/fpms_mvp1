@@ -37,3 +37,12 @@ read-service regressions, scoped Ruff/format/diff, then independent High review.
 No gate record/revoke, lane activation, source classification, schema, endpoint/UI, pagination,
 fee/document change or adjacent cleanup. Rollback reverts only the row-263 service/test change
 and its adoption; prior overlay successors remain intact.
+
+## Predecessor-test compatibility
+
+The accepted row-260 center test asserted the then-unimplemented `decision_gates == ()`
+placeholder. Row 263 replaces that exact observable with the mandatory 29-entry snapshot. Its
+implementation may update only that one predecessor assertion to expect 29 unresolved
+`DECISION_GATE_NOT_FOUND` entries in the gate-empty fixture. All center, evidence, timestamp and
+read-only assertions remain unchanged. This successor-owned test migration does not alter row-260
+acceptance history or authorize any other predecessor-test edit.
