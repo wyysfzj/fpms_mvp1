@@ -2062,8 +2062,8 @@
     {
       "catalog_id": "FPMS-V8-DIRECT-STATUS-WRITE-STATIC-GATE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DIRECT-CASE-STATUS-WRITE-GATE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4768,6 +4768,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-CENTER-QUERY-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-CENTER-QUERY-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-DIRECT-CASE-STATUS-WRITE-GATE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "7fce9fbc3d01f64eea89671c3e6772217daec85d",
+        "806852916e3d8475f697d0f1d2a7cec02a268902",
+        "465ea2f8e610dea2ad07b4f971c93ae9ccac7468"
+      ],
+      "paths": [
+        "backend/tests/test_v8_direct_case_status_write_gate.py"
+      ],
+      "tree_sha256": "82b3cac9dba083d745108a7c47e1a9d3ac0111199b91d332bd819dbc3f00dcc1",
+      "tests": [
+        "focused RED exposed the missing static guard and review-driven bypass probes",
+        "final pure static focused suite 2 passed without repository SQLite",
+        "scoped Ruff, format and complete-range diff checks passed",
+        "independent High review approved corrected exact range P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DIRECT-CASE-STATUS-WRITE-GATE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DIRECT-CASE-STATUS-WRITE-GATE-CURRENT-ADOPTION.md"
     }
   ]
 }
