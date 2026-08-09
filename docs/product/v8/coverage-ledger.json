@@ -2142,8 +2142,8 @@
     {
       "catalog_id": "FPMS-V8-CASE-FEES-INSTRUCTION-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CASE-FEES-INSTRUCTION-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2182,8 +2182,8 @@
     {
       "catalog_id": "FPMS-V8-CASEDETAIL-GATES-WARNINGS-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CASEDETAIL-GATES-WARNINGS-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -5034,6 +5034,51 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CASE-FEES-INSTRUCTION-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "1420fb8349a4fc3c4d7e690ae0186436d8c4bc24"
+      ],
+      "paths": [
+        "frontend/src/modules/cases/components/CaseFeesTab.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-fees-instruction.spec.ts"
+      ],
+      "tree_sha256": "55d865421d48f0cab4e3e3546dc0c54f033e644e06b878dca367428072ca2ac8",
+      "tests": [
+        "focused RED proved that instruction controls were absent",
+        "focused Playwright suite passed 3 tests and Row267 regression passed 5",
+        "combined serial Playwright run passed all 8 tests",
+        "scoped ESLint and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CASE-FEES-INSTRUCTION-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CASE-FEES-INSTRUCTION-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CASEDETAIL-GATES-WARNINGS-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "46962b1229f6bf5dd5ea485e974141578a67cf1e",
+        "ce6663429663c43482f68f34e2f5d14f8f7a99e5",
+        "1f4e955fa4476db4c039f9c84a189abfd4f0b6d2"
+      ],
+      "paths": [
+        "frontend/src/modules/cases/components/CaseLifecycleOverlay.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-detail-gates-warnings.spec.ts"
+      ],
+      "tree_sha256": "97791ecfdbc4b314d5a2b352a80420f1bee412248e372164071b9020aed1b1f7",
+      "tests": [
+        "focused RED proved the missing exact gate and warning presentation",
+        "final focused Playwright test passed",
+        "scoped ESLint and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CASEDETAIL-GATES-WARNINGS-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CASEDETAIL-GATES-WARNINGS-UI-CURRENT-ADOPTION.md"
     }
   ]
 }
