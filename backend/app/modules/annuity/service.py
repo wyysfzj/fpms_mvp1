@@ -64,6 +64,7 @@ from app.modules.fees.models import (
     OfficialRateBook,
 )
 from app.modules.fees.obligation_contracts import (
+    FeeClientInstruction,
     FeeClientInstructionStatus,
     FeeDifferenceReviewState,
     FeeDomain,
@@ -71,11 +72,13 @@ from app.modules.fees.obligation_contracts import (
     FeeOfficialEvidenceStatus,
     FeeSourceStatus,
     RecognizeFeeObligationCommand,
+    RecordFeeObligationInstructionCommand,
     RecordFeePaymentEvidenceCommand,
 )
 from app.modules.fees.obligation_service import (
     calculate_annuity_payable_amount,
     recognize_obligation,
+    record_client_instruction,
     record_payment_evidence,
 )
 from app.modules.fees.service import (
@@ -2954,6 +2957,263 @@ def add_manual_gov_payment(
             "client_id": pay_list.client_id,
         },
     }
+
+
+@dataclass(frozen=True, slots=True)
+class RecordAnnuityTaskInstructionCommand:
+    annuity_task_id: int
+    instruction: str
+    actor_id: str
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class RecordAnnuityTaskInstructionResult:
+    annuity_task_id: int
+    fee_obligation_id: str
+    instruction: FeeClientInstruction
+    activity_id: str
+    idempotency_key: str
+    reused: bool
+
+
+def _annuity_instruction_fail(
+    code: str,
+    message: str,
+    *,
+    status_code: int,
+    details: dict[str, str] | None = None,
+) -> None:
+    raise_business_error(code, message, details=details, status_code=status_code)
+
+
+def _annuity_instruction_command_invalid(field: str) -> None:
+    _annuity_instruction_fail(
+        "ANNUITY_INSTRUCTION_COMMAND_INVALID",
+        "年费任务客户指示命令无效",
+        status_code=400,
+        details={"field": field},
+    )
+
+
+def _annuity_instruction_required_string(value: object, limit: int, field: str) -> None:
+    if (
+        type(value) is not str
+        or not value
+        or value != value.strip()
+        or len(value) > limit
+    ):
+        _annuity_instruction_command_invalid(field)
+
+
+def _validate_annuity_instruction_command(command: RecordAnnuityTaskInstructionCommand) -> None:
+    if type(command) is not RecordAnnuityTaskInstructionCommand:
+        _annuity_instruction_command_invalid("command")
+    if (
+        type(command.annuity_task_id) is not int
+        or type(command.annuity_task_id) is bool
+        or command.annuity_task_id <= 0
+    ):
+        _annuity_instruction_command_invalid("annuity_task_id")
+    if type(command.instruction) is not str or command.instruction not in {
+        "PAY",
+        "HOLD",
+        "ABANDON",
+    }:
+        _annuity_instruction_command_invalid("instruction")
+    _annuity_instruction_required_string(command.actor_id, 36, "actor_id")
+    _annuity_instruction_required_string(command.idempotency_key, 128, "idempotency_key")
+
+
+def _annuity_instruction_not_found(message: str) -> None:
+    _annuity_instruction_fail(
+        "ANNUITY_INSTRUCTION_LINK_NOT_FOUND",
+        message,
+        status_code=404,
+    )
+
+
+def _annuity_instruction_conflict(message: str) -> None:
+    _annuity_instruction_fail(
+        "ANNUITY_INSTRUCTION_LINEAGE_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _annuity_instruction_exact_string(value: object, limit: int = 36) -> bool:
+    return (
+        type(value) is str
+        and bool(value)
+        and value == value.strip()
+        and len(value) <= limit
+    )
+
+
+def _validate_annuity_instruction_lineage(
+    transaction: Session,
+    *,
+    task: AnnuityTask,
+    obligation: FeeObligation,
+    case: Case,
+) -> None:
+    lines = tuple(
+        transaction.scalars(
+            select(FeeObligationLine).where(FeeObligationLine.obligation_id == obligation.id)
+        )
+    )
+    if len(lines) != 1:
+        _annuity_instruction_not_found("年费任务费用义务分项不存在或不唯一")
+    line = lines[0]
+    expected_fee_code = _FUTURE_ANNUITY_FEE_CODE.get(case.patent_category)
+    if (
+        task.case_id != case.id
+        or task.client_id != case.client_id
+        or obligation.case_id != case.id
+        or obligation.obligation_type != "FUTURE_ANNUITY"
+        or obligation.source_activity_id != task.source_activity_id
+        or obligation.source_document_id != task.source_document_id
+        or obligation.due_date != task.due_date
+        or obligation.currency != "CNY"
+        or line.obligation_id != obligation.id
+        or line.case_id != case.id
+        or line.source_activity_id != task.source_activity_id
+        or line.fee_code != expected_fee_code
+        or line.fee_year_key != task.year_no
+        or line.fee_year_key != task.grant_fee_year_key
+        or line.source_date != task.due_date
+    ):
+        _annuity_instruction_conflict("年费任务费用义务谱系不一致")
+    source_activity = transaction.get(CaseActivityEvent, task.source_activity_id)
+    document = transaction.get(Document, task.source_document_id)
+    evidence = transaction.get(DocumentEvidenceVersion, task.source_evidence_version_id)
+    if source_activity is None:
+        _annuity_instruction_not_found("年费任务来源活动不存在")
+    if document is None:
+        _annuity_instruction_not_found("年费任务来源文档不存在")
+    if evidence is None:
+        _annuity_instruction_not_found("年费任务来源证据不存在")
+    evidence_links = tuple(
+        transaction.scalars(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == task.source_activity_id
+            )
+        )
+    )
+    if len(evidence_links) != 1:
+        _annuity_instruction_not_found("年费任务来源证据关联不存在或不唯一")
+    evidence_link = evidence_links[0]
+    expected_recognition_payload = json.dumps(
+        {
+            "obligation_id": obligation.id,
+            "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    recognitions = tuple(
+        transaction.scalars(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == task.case_id,
+                CaseActivityEvent.lane == ActivityLane.FEE.value,
+                CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
+                CaseActivityEvent.payload_json == expected_recognition_payload,
+            )
+        )
+    )
+    if len(recognitions) != 1:
+        _annuity_instruction_not_found("年费任务费用义务识别活动不存在或不唯一")
+    recognition = recognitions[0]
+    if (
+        source_activity.case_id != case.id
+        or source_activity.lane != ActivityLane.LIFECYCLE.value
+        or source_activity.activity_type != "GRANT_ANNOUNCEMENT_CONFIRMED"
+        or source_activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or document.case_id != case.id
+        or evidence.case_id != case.id
+        or evidence.document_id != document.id
+        or evidence.role != "OFFICIAL_FINAL_PDF"
+        or evidence.state != "FINAL"
+        or evidence.review_state != "APPROVED"
+        or evidence.content_hash != task.source_evidence_content_hash
+        or evidence.current_identity_key != f"{case.id}|{evidence.lineage_key}"
+        or evidence_link.case_id != case.id
+        or evidence_link.evidence_kind != "DOCUMENT_EVIDENCE_VERSION"
+        or evidence_link.object_type != "DocumentEvidenceVersion"
+        or evidence_link.object_id != evidence.id
+        or evidence_link.content_hash != task.source_evidence_content_hash
+        or recognition.source_activity_id != task.source_activity_id
+    ):
+        _annuity_instruction_conflict("年费任务费用义务谱系不一致")
+
+
+def record_annuity_task_instruction(
+    command: RecordAnnuityTaskInstructionCommand,
+    transaction: Session,
+) -> RecordAnnuityTaskInstructionResult:
+    _validate_annuity_instruction_command(command)
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _annuity_instruction_conflict("调用方事务包含未刷新的变更")
+    with transaction.no_autoflush:
+        task = transaction.get(AnnuityTask, command.annuity_task_id)
+        if task is None:
+            _annuity_instruction_fail(
+                "ANNUITY_INSTRUCTION_TASK_NOT_FOUND",
+                "年费任务不存在",
+                status_code=404,
+            )
+        carrier = (
+            task.source_activity_id,
+            task.source_document_id,
+            task.source_evidence_version_id,
+            task.source_evidence_content_hash,
+            task.fee_obligation_id,
+            task.grant_fee_year_key,
+        )
+        if all(value is None for value in carrier):
+            _annuity_instruction_not_found("年费任务尚未关联费用义务")
+        if any(value is None for value in carrier):
+            _annuity_instruction_conflict("年费任务费用义务谱系不完整")
+        if (
+            not all(_annuity_instruction_exact_string(value) for value in carrier[:3])
+            or not _annuity_instruction_exact_string(carrier[3], 71)
+            or fullmatch(r"sha256:[0-9a-f]{64}", carrier[3]) is None
+            or not _annuity_instruction_exact_string(carrier[4])
+            or type(carrier[5]) is not int
+            or type(carrier[5]) is bool
+            or carrier[5] <= 0
+        ):
+            _annuity_instruction_conflict("年费任务费用义务谱系格式无效")
+        obligation = transaction.get(FeeObligation, task.fee_obligation_id)
+        case = transaction.get(Case, task.case_id)
+        if obligation is None:
+            _annuity_instruction_not_found("年费任务费用义务不存在")
+        if case is None:
+            _annuity_instruction_not_found("年费任务案件不存在")
+        _validate_annuity_instruction_lineage(
+            transaction,
+            task=task,
+            obligation=obligation,
+            case=case,
+        )
+    instruction = FeeClientInstruction(command.instruction)
+    delegated = record_client_instruction(
+        RecordFeeObligationInstructionCommand(
+            obligation_id=obligation.id,
+            instruction=instruction,
+            actor_id=command.actor_id,
+            idempotency_key=command.idempotency_key,
+        ),
+        transaction,
+    )
+    return RecordAnnuityTaskInstructionResult(
+        annuity_task_id=task.id,
+        fee_obligation_id=obligation.id,
+        instruction=instruction,
+        activity_id=delegated.activity_id,
+        idempotency_key=delegated.idempotency_key,
+        reused=delegated.reused,
+    )
 
 
 class FutureAnnuityObligationErrorCode(str, Enum):
