@@ -71,12 +71,14 @@ from app.modules.fees.obligation_contracts import (
     FeeObligationLineInput,
     FeeOfficialEvidenceStatus,
     FeeSourceStatus,
+    PrepareFeeObligationDraftCommand,
     RecognizeFeeObligationCommand,
     RecordFeeObligationInstructionCommand,
     RecordFeePaymentEvidenceCommand,
 )
 from app.modules.fees.obligation_service import (
     calculate_annuity_payable_amount,
+    prepare_draft,
     recognize_obligation,
     record_client_instruction,
     record_payment_evidence,
@@ -1082,14 +1084,6 @@ def generate_fee_drafts_from_annuity_tasks(
                     status_code=409,
                 )
 
-            instruction = (task.client_instruction or "").strip().upper()
-            if instruction == "ABANDON":
-                raise_business_error(
-                    "ANNUITY_STATE_CONFLICT",
-                    "Cannot generate draft for ABANDON instruction",
-                    status_code=409,
-                )
-
             if _draft_exists_for_target(db, task_id=task_id, year_no=year_no):
                 raise_business_error(
                     "ANNUITY_DRAFT_ALREADY_GENERATED",
@@ -1097,59 +1091,109 @@ def generate_fee_drafts_from_annuity_tasks(
                     status_code=409,
                 )
 
-            gov_amount = _money_amount(task.gov_fee_amt)
-            service_amount = _ZERO
-            total_amount = gov_amount + service_amount
-            marker = _annuity_marker(task_id, year_no)
-
-            draft = FeeDraft(
-                id=str(uuid4()),
-                case_id=task.case_id,
-                client_id=task.client_id,
-                draft_type=_ANNUITY_DRAFT_TYPE,
-                currency=normalized_currency,
-                status="OPEN",
-                total_gov=gov_amount,
-                total_service=service_amount,
-                total_misc=Decimal("0"),
-                amount=total_amount,
-                created_by=actor_id,
-                updated_by=actor_id,
+            carrier = (
+                task.source_activity_id,
+                task.source_document_id,
+                task.source_evidence_version_id,
+                task.source_evidence_content_hash,
+                task.fee_obligation_id,
+                task.grant_fee_year_key,
             )
-            db.add(draft)
+            if all(value is None for value in carrier):
+                _annuity_instruction_not_found("年费任务尚未关联费用义务")
+            if any(value is None for value in carrier):
+                _annuity_instruction_conflict("年费任务费用义务谱系不完整")
+            if (
+                not all(_annuity_instruction_exact_string(value) for value in carrier[:3])
+                or not _annuity_instruction_exact_string(carrier[3], 71)
+                or fullmatch(r"sha256:[0-9a-f]{64}", carrier[3]) is None
+                or not _annuity_instruction_exact_string(carrier[4])
+                or type(carrier[5]) is not int
+                or type(carrier[5]) is bool
+                or carrier[5] <= 0
+            ):
+                _annuity_instruction_conflict("年费任务费用义务谱系格式无效")
+            obligation = db.get(FeeObligation, task.fee_obligation_id)
+            case = db.get(Case, task.case_id)
+            if obligation is None:
+                _annuity_instruction_not_found("年费任务费用义务不存在")
+            if case is None:
+                _annuity_instruction_not_found("年费任务案件不存在")
+            _validate_annuity_instruction_lineage(
+                db,
+                task=task,
+                obligation=obligation,
+                case=case,
+            )
+            if obligation.currency != normalized_currency:
+                _annuity_instruction_conflict("年费任务请款币种与费用义务不一致")
 
-            db.add(
-                FeeItem(
-                    id=str(uuid4()),
-                    draft_id=draft.id,
-                    case_id=task.case_id,
-                    fee_code="ANNUITY_GOV",
-                    fee_name="Annuity Government Fee",
-                    fee_type="GOV",
-                    year_no=year_no,
-                    quantity=Decimal("1"),
-                    unit_price=gov_amount,
-                    amount=gov_amount,
-                    remark=marker,
-                    created_by=actor_id,
-                    updated_by=actor_id,
+            idempotency_key = f"annuity-draft:{task_id}:{obligation.id}"
+            connection = db.connection()
+            if (
+                connection.dialect.name == "sqlite"
+                and not connection.connection.driver_connection.in_transaction
+            ):
+                connection.exec_driver_sql("BEGIN")
+            with db.begin_nested():
+                delegated = prepare_draft(
+                    PrepareFeeObligationDraftCommand(
+                        obligation_id=obligation.id,
+                        actor_id=actor_id,
+                        idempotency_key=idempotency_key,
+                    ),
+                    db,
                 )
-            )
-            task.draft_generated = True
-            db.commit()
+                draft = db.get(FeeDraft, delegated.draft_id)
+                if (
+                    delegated.obligation_id != obligation.id
+                    or delegated.idempotency_key != idempotency_key
+                    or not delegated.activity_id
+                    or not delegated.links
+                    or draft is None
+                    or draft.case_id != task.case_id
+                    or draft.client_id != task.client_id
+                    or draft.currency != normalized_currency
+                ):
+                    _annuity_instruction_conflict("年费任务请款草稿谱系不一致")
+                links: list[dict[str, Any]] = []
+                for link in delegated.links:
+                    stored_link = db.get(FeeObligationDraftItemLink, link.id)
+                    fee_item = db.get(FeeItem, link.fee_item_id)
+                    if (
+                        stored_link is None
+                        or stored_link.obligation_line_id != link.obligation_line_id
+                        or stored_link.fee_item_id != link.fee_item_id
+                        or fee_item is None
+                        or fee_item.draft_id != draft.id
+                        or fee_item.case_id != task.case_id
+                    ):
+                        _annuity_instruction_conflict("年费任务请款草稿谱系不一致")
+                    links.append(
+                        {
+                            "id": link.id,
+                            "obligation_line_id": link.obligation_line_id,
+                            "fee_item_id": link.fee_item_id,
+                            "reused": link.reused,
+                        }
+                    )
             success.append(
                 {
                     "source_task_id": target["source_task_id"],
                     "task_id": task_id,
                     "year_no": year_no,
+                    "obligation_id": delegated.obligation_id,
                     "draft_id": draft.id,
-                    "currency": normalized_currency,
-                    "amount": str(total_amount),
+                    "links": links,
+                    "activity_id": delegated.activity_id,
+                    "activity_reused": delegated.activity_reused,
+                    "idempotency_key": delegated.idempotency_key,
+                    "currency": draft.currency,
+                    "amount": str(draft.amount),
                     "pay_next_year": target["pay_next_year"],
                 }
             )
         except BusinessError as exc:
-            db.rollback()
             failed.append(
                 {
                     "source_task_id": target["source_task_id"],
