@@ -47,7 +47,22 @@ from app.modules.documents.service import (
     persist_generated_attachment,
     resolve_document_template_render_source,
 )
-from app.modules.fees.models import FeeDraft, FeeItem, FeeRate, T_GrantFeeTask
+from app.modules.fees.models import (
+    FeeDraft,
+    FeeItem,
+    FeeObligation,
+    FeeRate,
+    T_GrantFeeTask,
+)
+from app.modules.fees.obligation_contracts import (
+    FeeDifferenceReviewState,
+    FeeDomain,
+    FeeObligationLineInput,
+    FeeSourceStatus,
+    RecognizeFeeObligationCommand,
+    RecognizeFeeObligationResult,
+)
+from app.modules.fees.obligation_service import recognize_obligation
 from app.modules.fees.service import (
     fee_rate_effective_on_conditions,
     fee_rate_source_enabled_condition,
@@ -132,6 +147,375 @@ class GrantFeeTaskReplacementResult:
     replacement_task: T_GrantFeeTask
     superseded_task_id: str
     reused: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RecognizeGrantYearAnnuityObligationCommand:
+    grant_fee_task_id: str
+    source_activity_id: str
+    actor_id: str
+    idempotency_key: str
+
+
+def recognize_grant_year_annuity_obligation(
+    command: RecognizeGrantYearAnnuityObligationCommand,
+    transaction: Session,
+) -> RecognizeFeeObligationResult:
+    _validate_grant_year_annuity_command(command, transaction)
+
+    with transaction.no_autoflush:
+        task = transaction.get(T_GrantFeeTask, command.grant_fee_task_id)
+        if task is None:
+            raise_business_error(
+                "GRANT_FEE_TASK_NOT_FOUND",
+                "未找到授权费用任务",
+                status_code=404,
+            )
+        activity = transaction.get(CaseActivityEvent, command.source_activity_id)
+        if activity is None:
+            _grant_year_annuity_source_conflict("activity_missing")
+        if (
+            task.type != "GRANT"
+            or type(task.case_id) is not str
+            or not task.case_id
+            or task.source_document_id is None
+            or type(task.due_date) is not date
+            or not _exact_grant_notice_text(task.deadline_source, max_length=32)
+            or type(task.deadline_confirmed_at) is not datetime
+            or task.deadline_confirmed_at.tzinfo is not None
+            or task.superseded_by_task_id is not None
+            or activity.case_id != task.case_id
+            or activity.activity_type != _GRANT_NOTICE_EVENT_TYPE
+            or activity.lane != ActivityLane.LIFECYCLE.value
+            or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        ):
+            _grant_year_annuity_source_conflict("task_activity_mismatch")
+
+        try:
+            preliminary_payload = _grant_notice_payload(activity.payload_json)
+            preliminary_snapshot = json.loads(preliminary_payload["grant_fee_lines_snapshot"])
+        except (BusinessError, TypeError, ValueError):
+            _grant_year_annuity_source_conflict("stored_notice_invalid")
+        if type(preliminary_snapshot) is dict and preliminary_snapshot.get("lines") == []:
+            _grant_year_annuity_line_conflict("lines")
+        try:
+            payload, _ = _validated_stored_grant_notice(
+                transaction,
+                activity=activity,
+                task=task,
+            )
+        except BusinessError:
+            _grant_year_annuity_source_conflict("stored_notice_invalid")
+
+        document = transaction.get(Document, task.source_document_id)
+        evidence_id = payload["reviewed_evidence_version_id"]
+        evidence = transaction.get(DocumentEvidenceVersion, evidence_id)
+        if (
+            document is None
+            or evidence is None
+            or document.id != payload["source_document_id"]
+            or document.case_id != task.case_id
+            or evidence.case_id != task.case_id
+            or evidence.document_id != document.id
+            or evidence.id != evidence_id
+            or evidence.content_hash != payload["reviewed_evidence_content_hash"]
+            or payload["case_id"] != task.case_id
+            or payload["grant_fee_task_id"] != task.id
+            or payload["due_date"] != task.due_date.isoformat()
+            or payload["deadline_source"] != task.deadline_source
+            or payload["deadline_confirmed_at"] != task.deadline_confirmed_at.isoformat()
+        ):
+            _grant_year_annuity_source_conflict("bound_source_mismatch")
+
+        case = transaction.get(Case, task.case_id)
+        if case is None:
+            _grant_year_annuity_source_conflict("case_missing")
+        fee_code = {
+            "INV": "CN_ANNUITY_FEE_INV",
+            "UM": "CN_ANNUITY_FEE_UM",
+            "DES": "CN_ANNUITY_FEE_DES",
+        }.get(case.patent_category)
+        if fee_code is None:
+            raise_business_error(
+                "GRANT_YEAR_ANNUITY_PATENT_CATEGORY_UNSUPPORTED",
+                "案件专利类型不支持授权当年年费识别",
+                status_code=409,
+            )
+
+        lines = _grant_year_annuity_lines(payload, fee_code=fee_code)
+        supersedes_obligation_id, supersede_reason = _grant_year_annuity_predecessor(
+            transaction,
+            task=task,
+            activity=activity,
+            payload=payload,
+        )
+
+    return recognize_obligation(
+        RecognizeFeeObligationCommand(
+            case_id=task.case_id,
+            source_activity_id=activity.id,
+            source_document_id=document.id,
+            fee_domain=FeeDomain.GOV,
+            obligation_type="GRANT_YEAR_ANNUITY",
+            due_date=task.due_date,
+            currency="CNY",
+            source_status=FeeSourceStatus.VERIFIED,
+            lines=lines,
+            actor_id=command.actor_id,
+            idempotency_key=command.idempotency_key,
+            supersedes_obligation_id=supersedes_obligation_id,
+            supersede_reason=supersede_reason,
+        ),
+        transaction,
+    )
+
+
+def _grant_year_annuity_command_invalid(field: str) -> None:
+    raise_business_error(
+        "GRANT_YEAR_ANNUITY_COMMAND_INVALID",
+        "授权当年年费识别命令无效",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _grant_year_annuity_source_conflict(reason: str) -> None:
+    raise_business_error(
+        "GRANT_YEAR_ANNUITY_SOURCE_LINEAGE_CONFLICT",
+        "授权当年年费来源谱系不一致",
+        details={"reason": reason},
+        status_code=409,
+    )
+
+
+def _grant_year_annuity_line_conflict(reason: str) -> None:
+    raise_business_error(
+        "GRANT_YEAR_ANNUITY_FEE_LINE_CONFLICT",
+        "授权当年年费明细不一致",
+        details={"reason": reason},
+        status_code=409,
+    )
+
+
+def _grant_year_annuity_predecessor_conflict(reason: str) -> None:
+    raise_business_error(
+        "GRANT_YEAR_ANNUITY_PREDECESSOR_CONFLICT",
+        "授权当年年费更正谱系不一致",
+        details={"reason": reason},
+        status_code=409,
+    )
+
+
+def _validate_grant_year_annuity_command(
+    command: object,
+    transaction: object,
+) -> None:
+    if type(command) is not RecognizeGrantYearAnnuityObligationCommand:
+        _grant_year_annuity_command_invalid("command")
+    for field, limit in (
+        ("grant_fee_task_id", 36),
+        ("source_activity_id", 36),
+        ("actor_id", 36),
+        ("idempotency_key", 128),
+    ):
+        value = getattr(command, field)
+        if (
+            type(value) is not str
+            or not value
+            or value != value.strip()
+            or "\x00" in value
+            or len(value) > limit
+        ):
+            _grant_year_annuity_command_invalid(field)
+    if not isinstance(transaction, Session):
+        _grant_year_annuity_command_invalid("transaction")
+
+
+def _grant_year_annuity_lines(
+    payload: dict[str, object],
+    *,
+    fee_code: str,
+) -> tuple[FeeObligationLineInput, ...]:
+    snapshot = payload["grant_fee_lines_snapshot"]
+    snapshot_hash = payload["grant_fee_lines_snapshot_hash"]
+    if (
+        type(snapshot) is not str
+        or type(snapshot_hash) is not str
+        or _GRANT_NOTICE_SNAPSHOT_HASH_PATTERN.fullmatch(snapshot_hash) is None
+        or hashlib.sha256(snapshot.encode("utf-8")).hexdigest() != snapshot_hash
+    ):
+        _grant_year_annuity_source_conflict("snapshot_hash_mismatch")
+    try:
+        parsed = json.loads(snapshot)
+        canonical = json.dumps(
+            parsed,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (RecursionError, TypeError, ValueError):
+        _grant_year_annuity_source_conflict("snapshot_invalid")
+    if (
+        canonical != snapshot
+        or type(parsed) is not dict
+        or set(parsed)
+        != {
+            "schema",
+            "source_document_id",
+            "reviewed_evidence_version_id",
+            "reviewed_evidence_content_hash",
+            "lines",
+        }
+        or parsed["schema"] != _GRANT_NOTICE_FEE_LINES_SCHEMA
+        or parsed["schema"] != payload["grant_fee_lines_schema"]
+        or parsed["source_document_id"] != payload["source_document_id"]
+        or parsed["reviewed_evidence_version_id"] != payload["reviewed_evidence_version_id"]
+        or parsed["reviewed_evidence_content_hash"] != payload["reviewed_evidence_content_hash"]
+        or type(parsed["lines"]) is not list
+        or not parsed["lines"]
+    ):
+        _grant_year_annuity_source_conflict("snapshot_binding_mismatch")
+
+    projected: list[FeeObligationLineInput] = []
+    seen_years: set[int] = set()
+    for index, raw in enumerate(parsed["lines"]):
+        if type(raw) is not dict or set(raw) != {
+            "fee_name",
+            "year",
+            "amount",
+            "reduction_ratio",
+        }:
+            _grant_year_annuity_line_conflict(f"lines[{index}].shape")
+        name = raw["fee_name"]
+        year = raw["year"]
+        amount_text = raw["amount"]
+        ratio_text = raw["reduction_ratio"]
+        if (
+            type(name) is not str
+            or not name
+            or name != name.strip()
+            or "\x00" in name
+            or len(name) > 256
+        ):
+            _grant_year_annuity_line_conflict(f"lines[{index}].fee_name")
+        if type(year) is not int or year <= 0 or year > 2147483647 or year in seen_years:
+            _grant_year_annuity_line_conflict(f"lines[{index}].year")
+        seen_years.add(year)
+        if type(amount_text) is not str:
+            _grant_year_annuity_line_conflict(f"lines[{index}].amount")
+        try:
+            amount = Decimal(amount_text)
+        except (InvalidOperation, ValueError):
+            _grant_year_annuity_line_conflict(f"lines[{index}].amount")
+        if (
+            not amount.is_finite()
+            or amount <= 0
+            or amount > Decimal("9999999999999999.99")
+            or max(-amount.as_tuple().exponent, 0) > 2
+        ):
+            _grant_year_annuity_line_conflict(f"lines[{index}].amount")
+        ratios = {
+            "0": Decimal("0"),
+            "0.7": Decimal("0.7"),
+            "0.85": Decimal("0.85"),
+        }
+        if type(ratio_text) is not str or ratio_text not in ratios:
+            _grant_year_annuity_line_conflict(f"lines[{index}].reduction_ratio")
+        projected.append(
+            FeeObligationLineInput(
+                fee_code=fee_code,
+                fee_name=name,
+                fee_year_key=year,
+                official_full_amount=None,
+                reduction_ratio=ratios[ratio_text],
+                payable_amount=amount,
+                source_amount=amount,
+                source_date=None,
+                difference_review_state=FeeDifferenceReviewState.REVIEW_REQUIRED,
+            )
+        )
+    return tuple(projected)
+
+
+def _grant_year_annuity_predecessor(
+    transaction: Session,
+    *,
+    task: T_GrantFeeTask,
+    activity: CaseActivityEvent,
+    payload: dict[str, object],
+) -> tuple[str | None, str | None]:
+    predecessors = tuple(
+        transaction.scalars(
+            select(T_GrantFeeTask)
+            .where(T_GrantFeeTask.superseded_by_task_id == task.id)
+            .order_by(T_GrantFeeTask.id)
+        ).all()
+    )
+    payload_task_id = payload["predecessor_grant_fee_task_id"]
+    payload_activity_id = payload["supersedes_activity_id"]
+    if payload_task_id is None:
+        if (
+            predecessors
+            or payload_activity_id is not None
+            or activity.supersedes_event_id is not None
+        ):
+            _grant_year_annuity_predecessor_conflict("partial_original_lineage")
+        return None, None
+    if (
+        len(predecessors) != 1
+        or predecessors[0].id != payload_task_id
+        or type(payload_activity_id) is not str
+        or activity.supersedes_event_id != payload_activity_id
+    ):
+        _grant_year_annuity_predecessor_conflict("direct_predecessor_mismatch")
+    predecessor_task = predecessors[0]
+    predecessor_activity = transaction.get(CaseActivityEvent, payload_activity_id)
+    if (
+        predecessor_task.case_id != task.case_id
+        or predecessor_activity is None
+        or predecessor_activity.case_id != task.case_id
+        or predecessor_activity.id != activity.supersedes_event_id
+    ):
+        _grant_year_annuity_predecessor_conflict("cross_case_predecessor")
+    try:
+        predecessor_payload, _ = _validated_stored_grant_notice(
+            transaction,
+            activity=predecessor_activity,
+            task=predecessor_task,
+        )
+    except BusinessError:
+        _grant_year_annuity_predecessor_conflict("predecessor_source_invalid")
+    if (
+        predecessor_payload["grant_fee_task_id"] != predecessor_task.id
+        or predecessor_payload["case_id"] != task.case_id
+    ):
+        _grant_year_annuity_predecessor_conflict("predecessor_source_mismatch")
+
+    obligations = tuple(
+        transaction.scalars(
+            select(FeeObligation)
+            .where(
+                FeeObligation.case_id == task.case_id,
+                FeeObligation.source_activity_id == predecessor_activity.id,
+                FeeObligation.obligation_type == "GRANT_YEAR_ANNUITY",
+            )
+            .order_by(FeeObligation.id)
+        ).all()
+    )
+    if len(obligations) != 1:
+        _grant_year_annuity_predecessor_conflict("predecessor_obligation_multiplicity")
+    prior = obligations[0]
+    children = tuple(
+        transaction.scalars(
+            select(FeeObligation)
+            .where(FeeObligation.supersedes_obligation_id == prior.id)
+            .order_by(FeeObligation.id)
+        ).all()
+    )
+    if len(children) > 1 or (children and children[0].source_activity_id != activity.id):
+        _grant_year_annuity_predecessor_conflict("predecessor_already_diverged")
+    return prior.id, "GRANT_REGISTRATION_NOTICE_CORRECTION"
 
 
 def _grant_notice_invalid() -> None:
