@@ -3,7 +3,7 @@
 - Status: `READY_FOR_REVIEW`.
 - Risk: `PROTECTED`.
 - Product/test commit: `ae26fc6db220a6f54dc85e8a7bfc7b16982131e5`.
-- Integration parent: `acf934b5949858357163698e94fb713276217da7`.
+- Integration parent: `acf934bd050387c86bbe2ff7c43acf4dd61f1cfe`.
 - Superseded catalog row after independent acceptance:
   `FPMS-V8-DOCUMENT-SEMANTICS-EVENT-ADAPTER-20260712-01` (ordinal `61`).
 - Authority: approved source decision
