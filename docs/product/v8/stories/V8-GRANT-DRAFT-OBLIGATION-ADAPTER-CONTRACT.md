@@ -62,10 +62,19 @@ Delegate exactly once to `prepare_draft` using the resolved obligation and uncha
 and idempotency key. Return the deep result's exact draft, link, activity, key and reuse
 identities; never generate substitutes.
 
-Within the generic writer's nested transaction, validate the returned draft and persisted
-links: same obligation, key, case, client and currency; every returned link exists and joins
-one obligation line to an item belonging to the returned draft. Any post-delegation
-identity or lineage mismatch rolls back that savepoint and raises the adapter conflict.
+Wrap the delegation and every post-delegation check in one adapter-owned
+`transaction.begin_nested()` savepoint. The generic writer may use and exit its own private
+nested transaction inside that boundary. Validate the returned draft and persisted state:
+same obligation, key, case, client and currency; unique returned link/item identities; and
+exact set equality between returned links, persisted links and **all** resolved Row130
+obligation lines. Each line must still belong to the resolved obligation and each item to
+the returned draft.
+
+Load the returned `activity_id` and require the exact persisted Row113
+`FEE_DRAFT_CREATED` activity for the same case, idempotency key, obligation, draft, links,
+actor and instruction-source activity, including its canonical payload and empty
+`center_changes`. Any post-delegation identity, omission, duplication or lineage mismatch
+raises the adapter conflict and therefore rolls back the adapter-owned savepoint.
 
 ## Replay, transaction and non-goals
 
@@ -75,8 +84,10 @@ same-key actor/input drift and a new key after draft creation remain 409. Histor
 replay is permitted only through the intact explicitly named correction lineage and an
 existing matching deep activity.
 
-The adapter performs no commit, rollback, refresh, retry, clock/UUID generation or second
-activity append. Caller rollback removes all delegated changes. Allowed mutation is only
+The adapter performs no commit, explicit session rollback, refresh, retry, clock/UUID
+generation or second activity append. It owns only the enclosing nested savepoint required
+to contain post-delegation validation; raising from that context rolls back the savepoint.
+Caller rollback removes all delegated changes. Allowed mutation is only
 the accepted Row113 draft/item/link creation or reuse, obligation draft status, and one
 `FEE_DRAFT_CREATED` activity/revision. Never mutate the legacy task instruction, counters,
 `draft_generated`, notice/deadline/source/amount facts, case lifecycle/legal projection,
