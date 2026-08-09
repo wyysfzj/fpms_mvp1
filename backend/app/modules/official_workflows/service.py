@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy import or_, select
@@ -12,11 +13,15 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
 from app.modules.annuity.models import GovPayment, PayList
+from app.modules.cases.enums import CaseStatus
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
+    BusinessStage,
     ConfirmationStatus,
     EvidenceReference,
+    LegalStatus,
     LifecycleEventCommand,
+    OfficialProcedureStage,
 )
 from app.modules.cases.lifecycle_service import apply_lifecycle_event
 from app.modules.cases.models import (
@@ -2607,6 +2612,134 @@ def evaluate_official_work_package(
     )
 
 
+def _filing_receipt_conflict(message: str) -> None:
+    raise_business_error(
+        "FILING_RECEIPT_EVIDENCE_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _filing_receipt_attachment_hash(attachment: DocAttachment) -> str:
+    file_path = _normalize_text(attachment.file_path)
+    if not file_path:
+        _filing_receipt_conflict("Receipt attachment path is missing")
+    candidate = Path(file_path)
+    backend_root = Path(__file__).resolve().parents[3]
+    storage_root = (backend_root / "storage").resolve()
+    if candidate.is_absolute():
+        resolved = candidate
+    elif file_path.startswith("storage/"):
+        resolved = (backend_root / candidate).resolve()
+    else:
+        resolved = (storage_root / candidate).resolve()
+    if not candidate.is_absolute():
+        try:
+            resolved.relative_to(storage_root)
+        except ValueError:
+            _filing_receipt_conflict("Receipt attachment path is invalid")
+    try:
+        content = resolved.read_bytes()
+    except OSError:
+        _filing_receipt_conflict("Receipt attachment bytes are unavailable")
+    content_hash = f"sha256:{hashlib.sha256(content).hexdigest()}"
+    if attachment.content_hash != content_hash:
+        _filing_receipt_conflict("Receipt attachment content hash is inconsistent")
+    return content_hash
+
+
+def _require_filing_submission_lifecycle_link(
+    db: Session,
+    *,
+    package_id: str,
+    case_id: str,
+    evidence_version_id: str,
+    evidence_content_hash: str,
+    reviewed_at: datetime,
+    submitted_at: datetime,
+    submission_activity_id: str,
+    submission_activity_hash: str,
+) -> CaseActivityEvent:
+    submission_activity = db.get(CaseActivityEvent, submission_activity_id)
+    lifecycle_key = f"filing-external-lifecycle:{package_id}:{submitted_at.isoformat()}"
+    lifecycle_activities = (
+        db.execute(
+            select(CaseActivityEvent)
+            .where(
+                CaseActivityEvent.case_id == case_id,
+                CaseActivityEvent.idempotency_key == lifecycle_key,
+            )
+            .limit(2)
+        )
+        .scalars()
+        .all()
+    )
+    if submission_activity is None or len(lifecycle_activities) != 1:
+        _filing_receipt_conflict("Final filing submission lifecycle link is missing")
+    lifecycle_activity = lifecycle_activities[0]
+    evidence_links = (
+        db.execute(
+            select(CaseActivityEventEvidence)
+            .where(CaseActivityEventEvidence.activity_id == lifecycle_activity.id)
+            .order_by(CaseActivityEventEvidence.evidence_kind)
+            .limit(3)
+        )
+        .scalars()
+        .all()
+    )
+    exact_activity = (
+        submission_activity.case_id == case_id
+        and lifecycle_activity.case_id == case_id
+        and lifecycle_activity.sequence == submission_activity.sequence + 1
+        and lifecycle_activity.lane == ActivityLane.LIFECYCLE.value
+        and lifecycle_activity.activity_type == "FILING_EXTERNAL_SUBMISSION_RECORDED"
+        and lifecycle_activity.confirmation_status == ConfirmationStatus.CONFIRMED.value
+        and lifecycle_activity.actor_id == submission_activity.actor_id
+        and lifecycle_activity.effective_at == submitted_at
+        and lifecycle_activity.occurred_at == submitted_at
+        and lifecycle_activity.idempotency_key == lifecycle_key
+        and lifecycle_activity.old_business_stage == BusinessStage.FILING_PREPARATION.value
+        and lifecycle_activity.new_business_stage == BusinessStage.WAITING_EXTERNAL_RECEIPT.value
+        and lifecycle_activity.old_official_procedure_stage
+        == OfficialProcedureStage.NOT_SUBMITTED.value
+        and lifecycle_activity.new_official_procedure_stage
+        == OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT.value
+        and lifecycle_activity.old_legal_status == LegalStatus.NOT_ESTABLISHED.value
+        and lifecycle_activity.new_legal_status == LegalStatus.NOT_ESTABLISHED.value
+    )
+    exact_links = [
+        (
+            link.case_id,
+            link.evidence_kind,
+            link.object_type,
+            link.object_id,
+            link.content_hash,
+            link.captured_at,
+        )
+        for link in evidence_links
+    ] == [
+        (
+            case_id,
+            "FINAL_SUBMISSION_VERSION",
+            "DocumentEvidenceVersion",
+            evidence_version_id,
+            evidence_content_hash,
+            reviewed_at,
+        ),
+        (
+            case_id,
+            "MANUAL_EXTERNAL_SUBMISSION_RECORD",
+            "CaseActivityEvent",
+            submission_activity_id,
+            submission_activity_hash,
+            submitted_at,
+        ),
+    ]
+    if not exact_activity or not exact_links:
+        _filing_receipt_conflict("Final filing submission lifecycle link is inconsistent")
+    return lifecycle_activity
+
+
 def record_official_work_package_receipt(
     db: Session,
     *,
@@ -2622,7 +2755,14 @@ def record_official_work_package_receipt(
     actor_id: str | None = None,
 ) -> OfficialWorkPackageReceipt:
     package = _get_package(db, package_id)
+    case = _get_case(db, package.case_id)
     normalized_receipt_kind = _normalize_code(receipt_kind) or "RECEIPT_PDF"
+    normalized_archive_status = _normalize_code(archive_status) or "PENDING"
+    normalized_receiving_case_no = _normalize_text(receiving_case_no)
+    normalized_submitter = _normalize_text(submitter)
+    normalized_received_file_list = _normalize_text(received_file_list)
+    normalized_note = _normalize_text(note)
+    normalized_actor = _normalize_text(actor_id)
     if normalized_receipt_kind not in OFFICIAL_WORK_PACKAGE_RECEIPT_KINDS:
         raise_business_error(
             "OFFICIAL_WORK_PACKAGE_RECEIPT_KIND_INVALID",
@@ -2631,6 +2771,7 @@ def record_official_work_package_receipt(
             status_code=400,
         )
 
+    attachment = None
     if receipt_attachment_id:
         attachment = _get_attachment(db, receipt_attachment_id)
         attachment_document = _get_document(db, attachment.document_id)
@@ -2671,27 +2812,203 @@ def record_official_work_package_receipt(
                     },
                     status_code=400,
                 )
+
+    receipt_candidates: list[OfficialWorkPackageReceipt] = []
+    filing_archived = (
+        _normalize_code(package.package_kind) == "FILING_PREP"
+        and normalized_archive_status == "ARCHIVED"
+    )
+    if filing_archived and receipt_attachment_id is not None and received_at is not None:
+        receipt_candidates = (
+            db.execute(
+                select(OfficialWorkPackageReceipt)
+                .where(
+                    OfficialWorkPackageReceipt.package_id == package.id,
+                    OfficialWorkPackageReceipt.receipt_attachment_id == receipt_attachment_id,
+                    OfficialWorkPackageReceipt.received_at == received_at,
+                )
+                .order_by(OfficialWorkPackageReceipt.id)
+                .limit(2)
+            )
+            .scalars()
+            .all()
+        )
+    legacy_projection = (
+        case.business_stage is None
+        and case.official_procedure_stage is None
+        and case.legal_status is None
+        and case.lifecycle_verification_status is None
+        and case.lifecycle_revision is None
+    )
+    filing_lifecycle = filing_archived and (bool(receipt_candidates) or not legacy_projection)
+    receipt_replay = bool(receipt_candidates)
+
+    resolution = None
+    receipt_content_hash = None
+    prior_revision = case.lifecycle_revision
+    if filing_lifecycle:
+        _require_filing_package(package)
+        if (
+            attachment is None
+            or received_at is None
+            or received_at.tzinfo is not None
+            or normalized_actor is None
+        ):
+            _filing_receipt_conflict("Archived filing receipt identity is incomplete")
+        if len(receipt_candidates) > 1:
+            _filing_receipt_conflict("Archived filing receipt identity is ambiguous")
+        receipt_content_hash = _filing_receipt_attachment_hash(attachment)
+        resolution = resolve_filing_final_evidence(package.id, db)
+        if (
+            resolution.final_submitted_at is None
+            or resolution.submission_activity_id is None
+            or resolution.submission_activity_hash is None
+            or type(prior_revision) is not int
+            or prior_revision < 0
+        ):
+            _filing_receipt_conflict("Final filing submission evidence is incomplete")
+        submission_lifecycle = _require_filing_submission_lifecycle_link(
+            db,
+            package_id=package.id,
+            case_id=package.case_id,
+            evidence_version_id=resolution.evidence_version_id,
+            evidence_content_hash=resolution.content_hash,
+            reviewed_at=resolution.reviewed_at,
+            submitted_at=resolution.final_submitted_at,
+            submission_activity_id=resolution.submission_activity_id,
+            submission_activity_hash=resolution.submission_activity_hash,
+        )
+        fresh_projection_matches = (
+            case.status == CaseStatus.WAITING_RECEIPT.value
+            and case.business_stage == BusinessStage.WAITING_EXTERNAL_RECEIPT.value
+            and case.official_procedure_stage
+            == OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT.value
+            and case.legal_status == LegalStatus.NOT_ESTABLISHED.value
+            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+            and prior_revision == submission_lifecycle.sequence
+        )
+        replay_projection_matches = (
+            case.status == CaseStatus.WAITING_RECEIPT.value
+            and case.business_stage == BusinessStage.PROSECUTION_MANAGEMENT.value
+            and case.official_procedure_stage
+            == OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE.value
+            and case.legal_status == LegalStatus.APPLICATION_PENDING.value
+            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+            and prior_revision == submission_lifecycle.sequence + 1
+        )
+        if not (
+            (not receipt_replay and fresh_projection_matches)
+            or (receipt_replay and replay_projection_matches)
+        ):
+            _filing_receipt_conflict("Case projection conflicts with the archived filing receipt")
+
+    if receipt_replay:
+        receipt = receipt_candidates[0]
+        if (
+            receipt.receipt_kind != normalized_receipt_kind
+            or receipt.receiving_case_no != normalized_receiving_case_no
+            or receipt.submitter != normalized_submitter
+            or receipt.received_file_list != normalized_received_file_list
+            or receipt.archive_status != normalized_archive_status
+            or receipt.note != normalized_note
+            or receipt.created_by != normalized_actor
+            or receipt.updated_by != normalized_actor
+        ):
+            _filing_receipt_conflict("Archived filing receipt replay is inconsistent")
+    else:
+        receipt = OfficialWorkPackageReceipt(
+            id=str(uuid4()),
+            package_id=package_id,
+            receipt_kind=normalized_receipt_kind,
+            receipt_attachment_id=receipt_attachment_id,
+            receiving_case_no=normalized_receiving_case_no,
+            submitter=normalized_submitter,
+            received_at=received_at,
+            received_file_list=normalized_received_file_list,
+            archive_status=normalized_archive_status,
+            note=normalized_note,
+            created_by=normalized_actor,
+            updated_by=normalized_actor,
+        )
+        db.add(receipt)
+
+    if receipt_attachment_id and filing_lifecycle and receipt_replay:
+        if (
+            attachment.is_archive_evidence is not True
+            or attachment.is_receipt_evidence is not (normalized_receipt_kind != "MERGED_PDF")
+            or attachment.updated_by != normalized_actor
+        ):
+            _filing_receipt_conflict("Archived filing receipt attachment state is inconsistent")
+    elif receipt_attachment_id:
         attachment.is_archive_evidence = True
         attachment.is_receipt_evidence = normalized_receipt_kind != "MERGED_PDF"
-        attachment.updated_by = _normalize_text(actor_id)
+        attachment.updated_by = normalized_actor
+    db.flush()
 
-    receipt = OfficialWorkPackageReceipt(
-        id=str(uuid4()),
-        package_id=package_id,
-        receipt_kind=normalized_receipt_kind,
-        receipt_attachment_id=receipt_attachment_id,
-        receiving_case_no=_normalize_text(receiving_case_no),
-        submitter=_normalize_text(submitter),
-        received_at=received_at,
-        received_file_list=_normalize_text(received_file_list),
-        archive_status=_normalize_code(archive_status) or "PENDING",
-        note=_normalize_text(note),
-        created_by=_normalize_text(actor_id),
-        updated_by=_normalize_text(actor_id),
-    )
-    db.add(receipt)
+    if filing_lifecycle:
+        lifecycle_key = f"filing-receipt-archived:{receipt.id}"
+        lifecycle_result = apply_lifecycle_event(
+            LifecycleEventCommand(
+                case_id=package.case_id,
+                event_type="FILING_RECEIPT_ARCHIVED",
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=received_at,
+                occurred_at=received_at,
+                evidence_refs=(
+                    EvidenceReference(
+                        case_id=package.case_id,
+                        evidence_kind="FINAL_SUBMISSION_VERSION",
+                        object_type="DocumentEvidenceVersion",
+                        object_id=resolution.evidence_version_id,
+                        content_hash=resolution.content_hash,
+                        captured_at=resolution.reviewed_at,
+                    ),
+                    EvidenceReference(
+                        case_id=package.case_id,
+                        evidence_kind="VALID_FILING_RECEIPT",
+                        object_type="OfficialWorkPackageReceipt",
+                        object_id=receipt.id,
+                        content_hash=receipt_content_hash,
+                        captured_at=received_at,
+                    ),
+                ),
+                actor_id=normalized_actor,
+                idempotency_key=lifecycle_key,
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={},
+            ),
+            db,
+        )
+        previous_projection = lifecycle_result.previous_projection
+        current_projection = lifecycle_result.current_projection
+        expected_revision = prior_revision if receipt_replay else prior_revision + 1
+        exact_lifecycle = (
+            lifecycle_result.case_id == package.case_id
+            and lifecycle_result.activity_id != resolution.submission_activity_id
+            and lifecycle_result.sequence == expected_revision
+            and lifecycle_result.lifecycle_revision == expected_revision
+            and lifecycle_result.lane is ActivityLane.LIFECYCLE
+            and lifecycle_result.event_type == "FILING_RECEIPT_ARCHIVED"
+            and lifecycle_result.confirmation_status is ConfirmationStatus.CONFIRMED
+            and lifecycle_result.idempotency_key == lifecycle_key
+            and lifecycle_result.reused is receipt_replay
+            and lifecycle_result.legacy_case_status == CaseStatus.WAITING_RECEIPT.value
+            and lifecycle_result.conflict_codes == ()
+            and previous_projection.business_stage is BusinessStage.WAITING_EXTERNAL_RECEIPT
+            and previous_projection.official_procedure_stage
+            is OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT
+            and previous_projection.legal_status is LegalStatus.NOT_ESTABLISHED
+            and previous_projection.lifecycle_verification_status is ConfirmationStatus.CONFIRMED
+            and current_projection.business_stage is BusinessStage.PROSECUTION_MANAGEMENT
+            and current_projection.official_procedure_stage
+            is OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE
+            and current_projection.legal_status is LegalStatus.APPLICATION_PENDING
+            and current_projection.lifecycle_verification_status is ConfirmationStatus.CONFIRMED
+        )
+        if not exact_lifecycle:
+            _filing_receipt_conflict("Lifecycle result conflicts with the archived filing receipt")
+
     db.commit()
-    db.refresh(receipt)
     return receipt
 
 
