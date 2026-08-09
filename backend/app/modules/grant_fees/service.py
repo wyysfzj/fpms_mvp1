@@ -16,16 +16,20 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.billing.models import Bill, BillItem
+from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
+    BusinessStage,
     ConfirmationStatus,
     EvidenceReference,
+    LegalStatus,
     LifecycleEventCommand,
+    LifecycleProjection,
     LifecycleTransitionResult,
+    OfficialProcedureStage,
 )
 from app.modules.cases.lifecycle_service import apply_lifecycle_event
 from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
-from app.modules.cases.service import has_required_granted_status_fields
 from app.modules.documents.enums import DocumentDirection
 from app.modules.documents.extra_data import DocumentExtraDataError, parse_document_extra_data
 from app.modules.documents.grant_fee_lines import (
@@ -94,6 +98,7 @@ _GRANT_NOTICE_PAYLOAD_KEYS = {
 }
 _GRANT_NOTICE_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 _GRANT_NOTICE_SNAPSHOT_HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
+_GRANT_FEE_TASK_DONE_EVENT_TYPE = "GRANT_FEE_TASK_DONE"
 
 _STATE_ALLOWED_ACTIONS = {
     "OPEN": ("mark_waiting_client",),
@@ -999,16 +1004,69 @@ def _require_grant_fee_task_actionable(task: T_GrantFeeTask) -> str:
     return lineage_status
 
 
-def _case_has_required_grant_fields(case: Case) -> bool:
-    return has_required_granted_status_fields(case)
+def _grant_fee_task_done_projection(case: Case) -> LifecycleProjection:
+    try:
+        return LifecycleProjection(
+            business_stage=(
+                BusinessStage(case.business_stage) if case.business_stage is not None else None
+            ),
+            official_procedure_stage=(
+                OfficialProcedureStage(case.official_procedure_stage)
+                if case.official_procedure_stage is not None
+                else None
+            ),
+            legal_status=LegalStatus(case.legal_status) if case.legal_status is not None else None,
+            lifecycle_verification_status=(
+                ConfirmationStatus(case.lifecycle_verification_status)
+                if case.lifecycle_verification_status is not None
+                else None
+            ),
+        )
+    except ValueError:
+        raise_business_error(
+            "LIFECYCLE_PROJECTION_CONFLICT",
+            "案件生命周期投影无效",
+            status_code=409,
+        )
 
 
-def _advance_case_to_granted_if_ready(db: Session, *, task: T_GrantFeeTask) -> None:
-    case = db.execute(select(Case).where(Case.id == task.case_id)).scalar_one_or_none()
-    if case is None or case.status == "GRANTED":
-        return
-    if _case_has_required_grant_fields(case):
-        case.status = "GRANTED"
+def _append_grant_fee_task_done_activity(db: Session, *, task: T_GrantFeeTask) -> None:
+    case = db.get(Case, task.case_id)
+    if case is None:
+        raise_business_error("CASE_NOT_FOUND", "案件不存在", status_code=404)
+    actor_id = task.updated_by or task.created_by
+    if (
+        type(actor_id) is not str
+        or not actor_id
+        or actor_id != actor_id.strip()
+        or len(actor_id) > 36
+    ):
+        raise_business_error(
+            "GRANT_FEE_TASK_DONE_ACTOR_REQUIRED",
+            "授权费任务完成活动缺少可追溯操作者",
+            status_code=409,
+        )
+    projection = _grant_fee_task_done_projection(case)
+    occurred_at = datetime.now()
+    append_case_activity(
+        LifecycleEventCommand(
+            case_id=case.id,
+            event_type=_GRANT_FEE_TASK_DONE_EVENT_TYPE,
+            lane=ActivityLane.FEE,
+            effective_at=occurred_at,
+            occurred_at=occurred_at,
+            evidence_refs=(),
+            actor_id=actor_id,
+            idempotency_key=f"grant-fee-task:{task.id}:done",
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={"center_changes": {}},
+        ),
+        db,
+        previous_projection=projection,
+        current_projection=projection,
+        legacy_case_status=case.status,
+        conflict_codes=(),
+    )
 
 
 def get_grant_fee_task_state(db: Session, *, task_id: str) -> dict[str, Any]:
@@ -1045,9 +1103,14 @@ def apply_grant_fee_task_action(
 
     _apply_grant_fee_task_mutation(task, normalized_action=normalized_action)
     if normalized_action == "mark_done":
-        _advance_case_to_granted_if_ready(db, task=task)
-
-    db.commit()
+        try:
+            _append_grant_fee_task_done_activity(db, task=task)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+    else:
+        db.commit()
     db.refresh(task)
     return _serialize_grant_fee_task_state(task, state=derive_grant_fee_task_state(task))
 
