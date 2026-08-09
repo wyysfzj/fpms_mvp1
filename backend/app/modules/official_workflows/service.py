@@ -31,10 +31,23 @@ from app.modules.cases.models import (
     T_CaseApplicant,
     T_CaseInventor,
 )
-from app.modules.documents.evidence_policy import is_filing_full_word_ready
+from app.modules.documents.evidence_contracts import (
+    EvidenceReviewState,
+    EvidenceRole,
+    EvidenceVersionResult,
+    EvidenceVersionState,
+)
+from app.modules.documents.evidence_policy import (
+    _COPYABLE_OA_ATTACHMENT_ROLES,
+    CopyableOaAttachmentEvidence,
+    is_filing_full_word_ready,
+)
 from app.modules.documents.evidence_workflow_service import (
     FinalizeExternalSubmissionCommand,
+    OaReplyPackageResult,
+    PrepareOaReplyCommand,
     finalize_external_submission,
+    prepare_oa_reply,
 )
 from app.modules.documents.models import (
     DocAttachment,
@@ -1712,6 +1725,123 @@ def _oa_reply_status(source: Document | None, reply: Document | None) -> str:
     if reply:
         return "REPLY_DOCUMENT_LINKED"
     return "WAITING_REPLY_DOCUMENT"
+
+
+def _oa_atomic_link_conflict(message: str) -> None:
+    raise_business_error(
+        "OA_REPLY_IDENTITY_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _oa_evidence_result(version: DocumentEvidenceVersion) -> EvidenceVersionResult:
+    try:
+        role = EvidenceRole(version.role)
+        state = EvidenceVersionState(version.state)
+        review_state = EvidenceReviewState(version.review_state)
+    except (TypeError, ValueError):
+        _oa_atomic_link_conflict("OA reply attachment evidence identity is invalid")
+    return EvidenceVersionResult(
+        evidence_version_id=version.id,
+        case_id=version.case_id,
+        document_id=version.document_id,
+        attachment_id=version.attachment_id,
+        lineage_key=version.lineage_key,
+        role=role,
+        version_number=version.version_number,
+        state=state,
+        creator_id=version.creator_id,
+        review_state=review_state,
+        reviewer_id=version.reviewer_id,
+        reviewed_at=version.reviewed_at,
+        final_submitted_at=version.final_submitted_at,
+        content_hash=version.content_hash,
+        is_current=version.current_identity_key is not None,
+        is_final=state is EvidenceVersionState.FINAL,
+    )
+
+
+def prepare_oa_out_package_link(
+    db: Session,
+    *,
+    reply_document: Document,
+    actor_id: str,
+) -> OaReplyPackageResult:
+    packages = list(
+        db.scalars(
+            select(OfficialWorkPackage).where(
+                OfficialWorkPackage.source_document_id == reply_document.reply_to_id,
+                OfficialWorkPackage.package_kind == "OA_REPLY",
+            )
+        )
+    )
+    if len(packages) != 1:
+        _oa_atomic_link_conflict("OA reply package identity is not unique")
+    package = packages[0]
+
+    source_versions = list(
+        db.scalars(
+            select(DocumentEvidenceVersion).where(
+                DocumentEvidenceVersion.case_id == reply_document.case_id,
+                DocumentEvidenceVersion.document_id == package.source_document_id,
+                DocumentEvidenceVersion.current_identity_key.is_not(None),
+            )
+        )
+    )
+    if len(source_versions) != 1:
+        _oa_atomic_link_conflict("Source OA notice evidence identity is not unique")
+    source_version = source_versions[0]
+
+    reply_attachments = list(
+        db.scalars(select(DocAttachment).where(DocAttachment.document_id == reply_document.id))
+    )
+    if len(reply_attachments) != 1:
+        _oa_atomic_link_conflict("OA reply attachment identity is not unique")
+    reply_attachment = reply_attachments[0]
+
+    manifests = list(
+        db.scalars(
+            select(OfficialWorkPackageManifest).where(
+                OfficialWorkPackageManifest.package_id == package.id,
+                OfficialWorkPackageManifest.official_file_role.in_(_COPYABLE_OA_ATTACHMENT_ROLES),
+                OfficialWorkPackageManifest.present.is_(True),
+            )
+        )
+    )
+    selected: list[CopyableOaAttachmentEvidence] = []
+    for manifest in manifests:
+        if not manifest.evidence_version_id:
+            _oa_atomic_link_conflict("OA reply manifest evidence identity is missing")
+        version = db.get(DocumentEvidenceVersion, manifest.evidence_version_id)
+        if version is None:
+            _oa_atomic_link_conflict("OA reply manifest evidence identity is missing")
+        selected.append(
+            CopyableOaAttachmentEvidence(
+                evidence_version=_oa_evidence_result(version),
+                manifest_id=manifest.id,
+                manifest_case_id=package.case_id,
+                manifest_package_id=package.id,
+                manifest_role=manifest.official_file_role,
+                manifest_evidence_version_id=manifest.evidence_version_id,
+                manifest_content_hash=manifest.content_hash,
+            )
+        )
+
+    return prepare_oa_reply(
+        PrepareOaReplyCommand(
+            case_id=reply_document.case_id,
+            source_document_id=package.source_document_id,
+            source_evidence_version_id=source_version.id,
+            package_id=package.id,
+            reply_document_id=reply_document.id,
+            reply_attachment_id=reply_attachment.id,
+            reply_content_hash=reply_attachment.content_hash,
+            actor_id=actor_id,
+            attachments=tuple(selected),
+        ),
+        db,
+    )
 
 
 def _oa_manifest_roles(

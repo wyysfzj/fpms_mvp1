@@ -1383,6 +1383,16 @@ def create_document_wizard_batch(
                         actor_id=actor_id,
                     )
                 )
+            if _is_oa_out_template(template):
+                from app.modules.official_workflows.service import (
+                    prepare_oa_out_package_link,
+                )
+
+                prepare_oa_out_package_link(
+                    db,
+                    reply_document=document,
+                    actor_id=actor_id,
+                )
             if not explicit_task_rows:
                 TaskGenerationService().generate_from_document(db, document)
             created_rows.append((idx, document))
