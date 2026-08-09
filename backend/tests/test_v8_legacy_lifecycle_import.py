@@ -399,6 +399,51 @@ def test_existing_import_with_evidence_is_a_conflict(
         assert report.rows[0].classification == "CONFLICT"
 
 
+def test_projection_history_revision_mismatch_is_a_conflict(
+    session_factory: sessionmaker[Session],
+) -> None:
+    api = _api()
+    with session_factory() as transaction:
+        transaction.add(_case(27, status="PENDING", revision=1))
+        transaction.commit()
+
+        report = _run(api, transaction, dry_run=True)
+
+        assert (report.conflicts, report.invalid, report.planned_writes) == (1, 0, 0)
+        assert report.rows[0].classification == "CONFLICT"
+
+
+def test_nullable_prior_activity_time_remains_a_visible_conflict(
+    session_factory: sessionmaker[Session],
+) -> None:
+    api = _api()
+    with session_factory() as transaction:
+        case = _case(28, status="OA1", revision=1)
+        transaction.add(case)
+        transaction.flush()
+        transaction.add(
+            CaseActivityEvent(
+                id=_id(9028),
+                case_id=case.id,
+                sequence=1,
+                lane="LIFECYCLE",
+                activity_type="CASE_OPENED",
+                occurred_at=None,
+                effective_at=RECORDED_AT,
+                confirmation_status="CONFIRMED",
+                actor_id=_actor_id(transaction),
+                idempotency_key="legacy-null-occurred-at",
+                payload_json="{}",
+            )
+        )
+        transaction.commit()
+
+        report = _run(api, transaction, dry_run=True)
+
+        assert (report.conflicts, report.invalid, report.planned_writes) == (1, 0, 0)
+        assert report.rows[0].classification == "CONFLICT"
+
+
 def test_apply_requires_exact_current_plan_and_rolls_back_nested_work(
     session_factory: sessionmaker[Session],
 ) -> None:

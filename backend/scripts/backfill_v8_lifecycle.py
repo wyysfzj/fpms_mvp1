@@ -155,7 +155,11 @@ def _activity_snapshot(
         "new_business_stage": activity.new_business_stage,
         "new_legal_status": activity.new_legal_status,
         "new_official_procedure_stage": activity.new_official_procedure_stage,
-        "occurred_at": activity.occurred_at.isoformat(timespec="microseconds"),
+        "occurred_at": (
+            activity.occurred_at.isoformat(timespec="microseconds")
+            if activity.occurred_at is not None
+            else None
+        ),
         "old_business_stage": activity.old_business_stage,
         "old_legal_status": activity.old_legal_status,
         "old_official_procedure_stage": activity.old_official_procedure_stage,
@@ -210,14 +214,20 @@ def _activities(transaction: Session, case_id: str) -> tuple[CaseActivityEvent, 
     )
 
 
-def _valid_revision(case: Case, activities: tuple[CaseActivityEvent, ...]) -> bool:
+def _valid_revision_shape(case: Case) -> bool:
     revision = case.lifecycle_revision
-    if revision is not None and (type(revision) is not int or revision < 0):
-        return False
+    return revision is None or (type(revision) is int and revision >= 0)
+
+
+def _history_is_consistent(
+    case: Case,
+    activities: tuple[CaseActivityEvent, ...],
+) -> bool:
+    revision = case.lifecycle_revision or 0
     sequences = tuple(activity.sequence for activity in activities)
     if any(type(sequence) is not int or sequence < 1 for sequence in sequences):
         return False
-    return len(set(sequences)) == len(sequences) and (max(sequences, default=0) == (revision or 0))
+    return len(set(sequences)) == len(sequences) and max(sequences, default=0) == revision
 
 
 def _exact_existing_import(
@@ -278,9 +288,12 @@ def _classify(
         not _exact_text(case.id, limit=36)
         or not _exact_text(status, limit=32)
         or status not in _KNOWN_STATUSES
-        or not _valid_revision(case, activities)
+        or not _valid_revision_shape(case)
     ):
         classification = "INVALID"
+        activity_id = None
+    elif not _history_is_consistent(case, activities):
+        classification = "CONFLICT"
         activity_id = None
     else:
         existing = _exact_existing_import(
