@@ -709,8 +709,8 @@
     {
       "catalog_id": "FPMS-V8-FORMAT-LETTER-REAL-TEMPLATE-SET-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FORMAT-LETTER-REAL-TEMPLATE-SET-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4321,6 +4321,37 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OPEN-LICENSE-ANNUITY-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OPEN-LICENSE-ANNUITY-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FORMAT-LETTER-REAL-TEMPLATE-SET-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "83d014fb825c76e90c53821c7db9ed7f3cd49436",
+        "36ab390e322d8ff7d53bd85140b48bf9aae3a236",
+        "caf0da6fe9547135cc910d87e2af35e4516a17b3"
+      ],
+      "paths": [
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_format_letter_real_template_set.py",
+        "backend/storage/templates/format_letters/format_letter_001.docx",
+        "backend/storage/templates/format_letters/format_letter_002.docx",
+        "backend/storage/templates/format_letters/format_letter_003.docx",
+        "backend/storage/templates/format_letters/format_letter_004.docx",
+        "backend/storage/templates/format_letters/format_letter_005.docx",
+        "backend/storage/templates/format_letters/format_letter_006.docx",
+        "backend/storage/templates/format_letters/format_letter_007.docx",
+        "backend/storage/templates/format_letters/format_letter_008.docx"
+      ],
+      "tree_sha256": "0cebfd664eb23a0056b6094a85358f3d478788b5cd56b2f78eb9dcbaf8b90d94",
+      "tests": [
+        "focused exact Row88 suite (14 passed)",
+        "exact inherited format-letter tranche (7 passed)",
+        "all eight template and focused-test blobs match the historical accepted anchor",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-REAL-TEMPLATE-SET-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-REAL-TEMPLATE-SET-CURRENT-ADOPTION.md"
     }
   ]
 }
