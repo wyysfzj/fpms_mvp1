@@ -2214,9 +2214,9 @@
     {
       "catalog_id": "FPMS-V8-PAYLIST-BOUNDARY-REAL-UI-E2E-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
+      "disposition": "SUPERSEDED_BY_STORY",
       "story_id": null,
-      "successor_story_id": null,
+      "successor_story_id": "V8-PAYLIST-REAL-ROUTE-ADAPTER-CURRENT-ADOPTION",
       "blocker": null
     },
     {
@@ -4635,6 +4635,30 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-IN-SOURCE-UI-SUCCESSOR-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-IN-SOURCE-UI-SUCCESSOR-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-PAYLIST-REAL-ROUTE-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "3c2abea7ae2780e54f3af82611cf70ec90b63fc8"
+      ],
+      "paths": [
+        "backend/app/modules/annuity/api.py",
+        "backend/tests/test_v8_pay_list_real_route_adapter.py",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-pay-list-boundary-live.spec.ts"
+      ],
+      "tree_sha256": "2394cd007865aefcc2b43a87949a31444d42cc08fcffa466b980632cba1746d2",
+      "tests": [
+        "missing-file RED and real-path adapter failures were captured before implementation",
+        "focused adapter plus accepted PayList rows 157 and 159-164 tranche 38 passed",
+        "existing static boundary UI Playwright 2 passed with one worker",
+        "exact live Chromium PayList boundary E2E 1 passed with one worker",
+        "scoped Ruff, format and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PAYLIST-REAL-ROUTE-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-REAL-ROUTE-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
