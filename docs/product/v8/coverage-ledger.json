@@ -2201,13 +2201,10 @@
     {
       "catalog_id": "FPMS-V8-LIVE-FIXTURE-20260712-01",
       "phase": "foundation",
-      "disposition": "AUTHORITY_BLOCKED",
+      "disposition": "PENDING",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": {
-        "code": "OVERLAY_WARNING_CONFLICT_PROJECTION_CONTRACT_MISSING",
-        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-20260712-01",
@@ -5129,6 +5126,42 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CASEDETAIL-OVERLAY-CURSOR-UI-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CASEDETAIL-OVERLAY-CURSOR-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-WARNING-CONFLICT-LINEAGE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "850422aaeaae3a2ae3317eb698b61288fac8f1aa",
+        "afb7bd654e521299cf1a625fb663ab0db1f7aff5",
+        "289686053d1de3ba212dbbfe2ce07f666737591a",
+        "edf47dc862a2366bc21c39ba18f34f5554629bb8",
+        "40ed8ed676be8dd10d1824985d2100d31657ae7b"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_delta31_overlay_warning_conflict_lineage.py",
+        "backend/app/modules/cases/lifecycle_activity_service.py",
+        "backend/app/modules/cases/lifecycle_overlay_service.py",
+        "backend/app/modules/cases/lifecycle_service.py",
+        "backend/app/modules/cases/models.py",
+        "backend/tests/test_v8_lifecycle_overlay_center.py",
+        "backend/tests/test_v8_lifecycle_overlay_documents.py",
+        "backend/tests/test_v8_lifecycle_overlay_fees.py",
+        "backend/tests/test_v8_lifecycle_overlay_pagination.py",
+        "backend/tests/test_v8_lifecycle_register_status_conflict_service.py",
+        "backend/tests/test_v8_overlay_warning_conflict_lineage.py",
+        "backend/tests/test_v8_overlay_warning_conflict_migration.py"
+      ],
+      "tree_sha256": "641a840834e05b40577ca44a1fbccb30f8573c488b9ea0eb3a77e67e3fec4060",
+      "tests": [
+        "focused RED proved the missing durable carrier and empty warning projection",
+        "final focused and affected overlay tranche passed 92 tests",
+        "lifecycle append, patent-register replay and legacy-import tranche passed 188 tests",
+        "scoped Ruff, Alembic single-head and exact diff checks passed",
+        "two independent High review axes approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-WARNING-CONFLICT-LINEAGE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-WARNING-CONFLICT-LINEAGE-CURRENT-ADOPTION.md"
     }
   ]
 }

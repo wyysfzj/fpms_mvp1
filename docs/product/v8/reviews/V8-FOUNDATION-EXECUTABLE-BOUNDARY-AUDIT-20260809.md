@@ -70,3 +70,11 @@ Foundation 的五个未验收行是 Row120、275、276、279、280。所有其�
 并取得授权年费 `REVIEW_REQUIRED -> MATCHED` 的客户/来源决定后完成 Row120。之后串行执行
 Row279、Row280，再进入 eligible Full、Final 和最后 release close。不得重做已验收的
 192 行或 Row274 的 RED/GREEN。
+
+## 2026-08-10 durable update
+
+第二个根已由 `V8-OVERLAY-WARNING-CONFLICT-LINEAGE-CURRENT-ADOPTION` 关闭。Delta-31 carrier、
+迁移、持久化 replay 校验和真实 overlay warning/conflict 投影均已获得独立 PROTECTED 验收，
+因此 Row275 已恢复为 dependency-ready `PENDING`。Row276 继续只依赖 Row275。第一个根
+（Row120 的授权年费人工复核权威动作）没有被本后继故事推断或改变，仍保持
+`AUTHORITY_BLOCKED`。
