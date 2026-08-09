@@ -49,7 +49,11 @@ Activity-local warnings preserve activity identity and conflict-code multiplicit
 warnings aggregate the current page's activity warnings followed by the complete decision-gate
 snapshot warnings, preserving source order and provenance without deduplication. A
 `HISTORICAL` or `INTERNAL_ONLY` gate is reference-only and never activation-ready. Missing or
-corrupt conflict lineage fails closed rather than returning a partial or inferred overlay.
+corrupt conflict lineage fails closed rather than returning a partial or inferred overlay. A
+durable version/count/hash attestation distinguishes a verified empty conflict tuple from missing
+pre-carrier lineage; child rows without a matching attestation are never treated as complete.
+Decision-gate warning provenance keeps both the requested scope identity and resolved carrier
+identity when a shared carrier satisfies multiple requests.
 
 ## Authentication, authorization and permission
 

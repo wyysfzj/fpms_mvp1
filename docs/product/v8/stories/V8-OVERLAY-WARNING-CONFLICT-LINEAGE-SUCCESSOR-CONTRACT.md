@@ -20,19 +20,36 @@
    `(case_id, activity_id)` to `t_case_activity_event(case_id, id)` with `ON DELETE CASCADE`.
    `code` is a non-empty string of at most 128 characters. No message, legal conclusion or
    mutable case snapshot is stored in this carrier.
-2. `append_case_activity` writes the already-validated, sorted, duplicate-free
-   `conflict_codes` in the caller-owned transaction. Exact replay compares the stored ordered
-   codes with the supplied codes and returns 409/no-write on drift. A failure rolls back the
-   activity, evidence and conflict rows together; the service still never commits.
-3. The migration is forward-only, follows current head `v8_d27_annuity_reduction_01`, and creates
-   no PostgreSQL-only type or function. It backfills only the two already-frozen conflict codes
-   for an exact historical importer identity:
-   `activity_type=LEGACY_IMPORT`, `confirmation_status=LEGACY_UNVERIFIED`, and
-   `idempotency_key='v8-legacy-lifecycle-import:' || case_id`. It does not reconstruct any other
-   previously transient conflict.
-4. Existing patent-register replay first validates against the stored conflict tuple and then
-   independently recomputes the pure rule decision; both tuples must match. No conflict may be
-   dropped merely to preserve replay compatibility.
+2. Add the nullable parent-event attestation triple `conflict_lineage_version`,
+   `conflict_code_count`, and `conflict_codes_sha256`. The only complete shape is exact version
+   `V1`, a non-negative integer count, and the lowercase SHA-256 of the canonical JSON array of
+   the ascending stored codes; the only other valid shape is all three fields `NULL`. Partial,
+   unknown-version, count/hash-mismatched or malformed attestations fail closed. This triple is
+   what distinguishes a verified empty tuple from missing pre-carrier lineage.
+3. `append_case_activity` writes the already-validated, sorted, duplicate-free
+   `conflict_codes`, their child rows and the exact attestation in the caller-owned transaction.
+   Exact replay validates the attestation against the stored ordered rows, compares that tuple
+   with the supplied codes, and returns 409/no-write on drift. A failure rolls back the activity,
+   evidence, conflict rows and attestation together; the service still never commits.
+4. The migration is forward-only, follows current head `v8_d27_annuity_reduction_01`, and creates
+   no PostgreSQL-only type or function. Repository search establishes that the accepted
+   pre-carrier production paths supplied non-empty conflicts only for `LEGACY_IMPORT` and
+   `PATENT_REGISTER_STATUS_CONFIRMED`; all other pre-carrier event types receive an attested empty
+   tuple. An exact legacy import receives the literal ascending codes
+   `LEGACY_STATUS_UNVERIFIED` and `NO_REVERSE_MAPPING_AUTHORITY` only when all of these hold:
+   lifecycle lane; legacy-unverified confirmation; reserved idempotency key; source,
+   supersession and reviewer are null; old axes are null; new business/official axes are null;
+   new legal status is `UNKNOWN`; occurred/effective timestamps match; payload is the exact
+   canonical `FPMS_V8_LEGACY_LIFECYCLE_IMPORT_V1` object for the same case and current legacy
+   status; no evidence row exists; and the parent case has the matching imported projection and
+   revision. A near-miss `LEGACY_IMPORT` receives no child or attestation.
+5. Pre-carrier `PATENT_REGISTER_STATUS_CONFIRMED` rows receive no inferred child or attestation.
+   Reading or replaying one returns exact 409 code `LIFECYCLE_CONFLICT_LINEAGE_MISSING` without a
+   write, because the previously transient tuple cannot be reconstructed safely. New
+   patent-register replay validates the stored attestation/tuple first and then independently
+   recomputes the pure rule decision; both tuples must match. No conflict may be dropped merely
+   to preserve replay compatibility. Migration tests cover exact backfill, each material legacy
+   near-miss, attested empty rows, and the pre-carrier patent-register 409.
 
 ## Exact read-only warning projection
 
@@ -59,7 +76,9 @@ For each accepted overlay page, process milestones in ascending server sequence 
    - each resolved `HISTORICAL` or `INTERNAL_ONLY` gate yields
      `kind=REFERENCE_ONLY`, `code=DECISION_GATE_REFERENCE_ONLY`,
      `message=该客户决策分类仅供参考，不得激活`, no activity ID, source type
-     `CUSTOMER_DECISION_GATE`, and source ID equal to the resolved gate ID.
+     `CUSTOMER_DECISION_GATE`, and source ID equal to the exact composite
+     `gate_code:requested_scope_key:resolved_gate_id`, so distinct requested form scopes remain
+     distinguishable even when they resolve through the same `ALL-22` carrier.
    `CURRENT_OFFICIAL` creates no reference-only warning and this story exposes no activation
    control.
 6. `legacy_conflicts` contains only stored conflict rows whose activity is the exact
@@ -67,7 +86,8 @@ For each accepted overlay page, process milestones in ascending server sequence 
    each item keeps the exact code and activity ID with
    `message=历史生命周期活动存在待核对冲突`. Other activity conflicts remain warnings and are
    not relabelled as legacy conflicts.
-7. Missing, duplicate, cross-case or overlong conflict lineage fails closed. Pagination changes
+7. Missing, partial, hash/count-mismatched, duplicate, cross-case or overlong conflict lineage
+   fails closed. Pagination changes
    only the page-local activity part; the full decision-gate warning suffix is rebuilt from each
    complete gate snapshot. The projection performs no write and does not infer center state.
 
