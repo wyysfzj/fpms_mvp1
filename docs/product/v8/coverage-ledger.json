@@ -2054,8 +2054,8 @@
     {
       "catalog_id": "FPMS-V8-DUAL-READ-RECONCILIATION-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-DUAL-READ-RECONCILIATION-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4724,6 +4724,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-LIFECYCLE-IMPORT-NONINFERENTIAL-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-LIFECYCLE-IMPORT-NONINFERENTIAL-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-DUAL-READ-RECONCILIATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "c5f689bc7c41196f4e68b08fb1e9a07b1f1de73e"
+      ],
+      "paths": [
+        "backend/scripts/audit_v8_dual_read.py",
+        "backend/tests/test_v8_dual_read_reconciliation.py"
+      ],
+      "tree_sha256": "dfc95c251ef8691339effd8208213dafb8339368400bdb2b7340086499aeb4ab",
+      "tests": [
+        "focused RED failed 5 cases because the compositor seam was absent",
+        "focused plus four importer and preflight affected regression tranche 81 passed",
+        "scoped Ruff, format and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DUAL-READ-RECONCILIATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DUAL-READ-RECONCILIATION-CURRENT-ADOPTION.md"
     }
   ]
 }
