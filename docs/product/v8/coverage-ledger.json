@@ -606,8 +606,8 @@
     {
       "catalog_id": "FPMS-V8-GRANT-FEE-DONE-NO-GRANTED-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-FEE-DONE-NO-LEGAL-EFFECT-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4428,6 +4428,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-FEE-DONE-NO-LEGAL-EFFECT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "bd73ceb851e7b4b4b8ba87a9914eeac283079d53"
+      ],
+      "paths": [
+        "backend/app/modules/grant_fees/service.py",
+        "backend/tests/test_v8_grant_fee_done_no_legal_effect.py"
+      ],
+      "tree_sha256": "1b08626ba493ad5d6cbc4ead7b0fd503ba44ae04e9022a5b8399701cba72bd51",
+      "tests": [
+        "real RED 3 failed then focused GREEN 3 passed",
+        "independent Row76 plus Row74 dependency tranche 54 passed",
+        "nearest inherited tranche 10 passed; nine known fee_reduction fixture baselines stopped before Row76",
+        "scoped Ruff, format and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-FEE-DONE-NO-LEGAL-EFFECT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-FEE-DONE-NO-LEGAL-EFFECT-CURRENT-ADOPTION.md"
     }
   ]
 }
