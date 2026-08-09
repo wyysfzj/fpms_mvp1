@@ -36,10 +36,11 @@ Row 264 will add `limit + 1` pagination without changing the seam.
 ## Exact center reconstruction
 
 The ledger is authoritative. For the frozen revision range, sequences must be unique,
-gap-free `1..R`, and count exactly `R`. Reconstruct the center from the latest activity at or
-before `R`: its `new_business_stage`, `new_official_procedure_stage`, and `new_legal_status`
-are the snapshot axes; its confirmation status, effective time, and id are the snapshot
-metadata. Every stored enum value must parse through the accepted lifecycle enums.
+gap-free `1..R`, and count exactly `R`. Reconstruct the center from the latest `LIFECYCLE`
+activity at or before `R`: its `new_business_stage`, `new_official_procedure_stage`, and
+`new_legal_status` are the snapshot axes; its confirmation status, effective time, and id are
+the snapshot metadata. A later `DOCUMENT` or `FEE` activity cannot erase or replace the
+center. Every stored enum value must parse through the accepted lifecycle enums.
 
 For current `R`, the reconstructed axes and confirmation status must equal the five persisted
 case carriers and persisted revision. Historical reads do not compare the historical snapshot
