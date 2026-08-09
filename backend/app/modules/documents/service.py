@@ -26,10 +26,6 @@ from app.modules.cases.lifecycle_contracts import (
     OfficialProcedureStage,
 )
 from app.modules.cases.models import Case, T_CaseApplicant
-from app.modules.cases.service import (
-    has_required_granted_status_fields,
-    validate_case_status_transition,
-)
 from app.modules.documents.enums import DocumentDirection, DocumentDocType
 from app.modules.documents.evidence_contracts import (
     EvidenceReviewState,
@@ -389,10 +385,6 @@ def _apply_template_defaults(
         document.need_reply = semantics.requires_reply
 
 
-def _has_required_grant_fields(case: Case) -> bool:
-    return has_required_granted_status_fields(case)
-
-
 def _advance_grant_notice_case_after_attachment(db: Session, *, document: Document) -> None:
     if document.direction != DocumentDirection.IN or not document.doc_template_id:
         return
@@ -406,13 +398,6 @@ def _advance_grant_notice_case_after_attachment(db: Session, *, document: Docume
     from app.modules.grant_fees.service import ensure_grant_fee_task_for_notice_document
 
     ensure_grant_fee_task_for_notice_document(db, document=document, template=template)
-
-    case = db.execute(select(Case).where(Case.id == document.case_id)).scalar_one_or_none()
-    if case is None or case.status == "GRANTED" or not _has_required_grant_fields(case):
-        return
-
-    validate_case_status_transition(case.status, "GRANTED")
-    case.status = "GRANTED"
 
 
 def _is_patent_certificate_document(db: Session, document: Document) -> bool:
