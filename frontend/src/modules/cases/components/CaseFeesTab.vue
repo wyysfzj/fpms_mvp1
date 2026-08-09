@@ -70,10 +70,11 @@
 
   <div class="case-panel" data-testid="real-fee-obligations">
     <h3 class="panel-heading">真实费用义务</h3>
+    <div v-if="overlayLoading" class="placeholder-content">正在加载真实费用义务...</div>
     <el-alert
-      v-if="overlayError"
-      :title="overlayError.code"
-      :description="overlayError.message"
+      v-else-if="activeOverlayError"
+      :title="activeOverlayError.code"
+      :description="activeOverlayError.message"
       type="warning"
       show-icon
       :closable="false"
@@ -152,13 +153,16 @@ import { getFeeDraftStatusText, getFeeDraftTypeText } from '../../../constants/d
 
 const props = defineProps<{
   caseId: string
+  lifecycleOverlay?: LifecycleOverlay | null
+  lifecycleOverlayError?: ApiError | null
+  lifecycleOverlayManaged?: boolean
 }>()
 
 const router = useRouter()
 const items = ref<FeeDraftListItem[]>([])
 const draftLoading = ref(true)
-const overlay = ref<LifecycleOverlay | null>(null)
-const overlayError = ref<ApiError | null>(null)
+const standaloneOverlay = ref<LifecycleOverlay | null>(null)
+const standaloneOverlayError = ref<ApiError | null>(null)
 const trigger = ref('')
 const sourceDocumentId = ref('')
 const rateEffectiveOn = ref('')
@@ -166,9 +170,30 @@ const estimate = ref<OfficialFeeEstimateResult | null>(null)
 const previewError = ref<ApiError | null>(null)
 const validationMessage = ref('')
 
+const isLifecycleOverlayManaged = computed(
+  () =>
+    props.lifecycleOverlayManaged === true ||
+    props.lifecycleOverlay !== undefined ||
+    props.lifecycleOverlayError !== undefined,
+)
+const activeOverlay = computed(() =>
+  isLifecycleOverlayManaged.value ? props.lifecycleOverlay ?? null : standaloneOverlay.value,
+)
+const activeOverlayError = computed(() =>
+  isLifecycleOverlayManaged.value
+    ? props.lifecycleOverlayError ?? null
+    : standaloneOverlayError.value,
+)
+const overlayLoading = computed(
+  () =>
+    isLifecycleOverlayManaged.value &&
+    activeOverlay.value === null &&
+    activeOverlayError.value === null,
+)
+
 const reviewedSourceDocumentIds = computed(() => {
   const documentIds: string[] = []
-  for (const milestone of overlay.value?.milestones ?? []) {
+  for (const milestone of activeOverlay.value?.milestones ?? []) {
     for (const evidence of milestone.documentEvidence) {
       const documentId = evidence.version.documentId
       if (evidence.version.reviewState === 'APPROVED' && documentId !== null && !documentIds.includes(documentId)) {
@@ -180,11 +205,15 @@ const reviewedSourceDocumentIds = computed(() => {
 })
 
 const realObligations = computed(() =>
-  (overlay.value?.milestones ?? []).flatMap((milestone) => milestone.feeObligations),
+  (activeOverlay.value?.milestones ?? []).flatMap((milestone) => milestone.feeObligations),
 )
 
 onMounted(async () => {
-  await Promise.all([loadFeeDrafts(), loadLifecycleOverlay()])
+  const loaders = [loadFeeDrafts()]
+  if (!isLifecycleOverlayManaged.value) {
+    loaders.push(loadLifecycleOverlay())
+  }
+  await Promise.all(loaders)
 })
 
 function clearEstimate() {
@@ -203,16 +232,16 @@ async function loadFeeDrafts() {
 }
 
 async function loadLifecycleOverlay() {
-  overlayError.value = null
+  standaloneOverlayError.value = null
   try {
-    overlay.value = await getLifecycleOverlay(props.caseId, {
+    standaloneOverlay.value = await getLifecycleOverlay(props.caseId, {
       afterSequence: 0,
       limit: 50,
       asOfRevision: null,
     })
   } catch (error) {
-    overlay.value = null
-    overlayError.value = error as ApiError
+    standaloneOverlay.value = null
+    standaloneOverlayError.value = error as ApiError
   }
 }
 

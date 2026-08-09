@@ -5,6 +5,7 @@ const caseId = 'case-v8-fees'
 
 test('case fees keeps estimates, real obligations, and drafts independent', async ({ page }) => {
     const previewRequests: Request[] = []
+    const overlayRequests: Request[] = []
     const mutationRequests: string[] = []
 
     await mockCaseFeesApi(page, {
@@ -12,10 +13,12 @@ test('case fees keeps estimates, real obligations, and drafts independent', asyn
             previewRequests.push(route.request())
             await fulfillJson(route, estimate())
         },
+        overlayRequests,
         mutationRequests,
     })
     await openCaseFees(page)
 
+    expect(overlayRequests).toHaveLength(1)
     await expect(page.getByLabel('费率生效日')).toHaveValue('')
     expect(previewRequests).toHaveLength(0)
     await page.getByRole('button', { name: '估算官费' }).click()
@@ -128,10 +131,12 @@ test('a preview error leaves persisted obligations and drafts visible', async ({
 })
 
 test('an overlay load error is visible and is not treated as zero real obligations', async ({ page }) => {
+    const overlayRequests: Request[] = []
     await mockCaseFeesApi(page, {
         onPreview: async (route) => fulfillJson(route, estimate()),
         onOverlay: async (route) =>
             fulfillJson(route, { error: { code: 'OVERLAY_UNAVAILABLE', message: '生命周期视图不可用' } }, 503),
+        overlayRequests,
         mutationRequests: [],
     })
     await openCaseFees(page)
@@ -140,6 +145,32 @@ test('an overlay load error is visible and is not treated as zero real obligatio
     await expect(obligations.getByText('OVERLAY_UNAVAILABLE', { exact: true })).toBeVisible()
     await expect(obligations.getByText('生命周期视图不可用', { exact: true })).toBeVisible()
     await expect(obligations.getByText('暂无真实费用义务', { exact: true })).toHaveCount(0)
+    expect(overlayRequests).toHaveLength(1)
+})
+
+test('managed overlay shows loading until the parent supplies snapshot or error', async ({ page }) => {
+    let releaseOverlay: (() => void) | undefined
+    const overlayRequests: Request[] = []
+    await mockCaseFeesApi(page, {
+        onPreview: async (route) => fulfillJson(route, estimate()),
+        onOverlay: async (route) => {
+            await new Promise<void>((resolve) => {
+                releaseOverlay = resolve
+            })
+            await fulfillJson(route, overlay(false))
+        },
+        overlayRequests,
+        mutationRequests: [],
+    })
+    await openCaseFees(page)
+
+    const obligations = page.getByTestId('real-fee-obligations')
+    await expect(obligations.getByText('正在加载真实费用义务...', { exact: true })).toBeVisible()
+    await expect(obligations.getByText('暂无真实费用义务', { exact: true })).toHaveCount(0)
+    expect(overlayRequests).toHaveLength(1)
+
+    releaseOverlay?.()
+    await expect(obligations.getByText('暂无真实费用义务', { exact: true })).toBeVisible()
 })
 
 test('an estimate does not populate a zero-obligation overlay', async ({ page }) => {
@@ -163,6 +194,7 @@ async function mockCaseFeesApi(
     options: {
         onPreview: (route: Route) => Promise<void>
         onOverlay?: (route: Route) => Promise<void>
+        overlayRequests?: Request[]
         mutationRequests: string[]
     },
 ): Promise<void> {
@@ -176,6 +208,7 @@ async function mockCaseFeesApi(
             return fulfillJson(route, caseDetail())
         }
         if (request.method() === 'GET' && apiPath === `/cases/${caseId}/lifecycle-overlay`) {
+            options.overlayRequests?.push(request)
             return options.onOverlay ? options.onOverlay(route) : fulfillJson(route, overlay())
         }
         if (request.method() === 'GET' && apiPath === '/fees/drafts') {
