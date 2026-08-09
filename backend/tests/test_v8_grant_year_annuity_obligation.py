@@ -122,6 +122,17 @@ def test_recognizes_only_the_canonical_row74_snapshot_lines(
         )
         transaction.flush()
 
+        def fail_if_touched(*args, **kwargs):
+            raise AssertionError("prohibited mutable fee source was touched")
+
+        for name in (
+            "extract_grant_notice_fee_line_snapshot",
+            "parse_document_extra_data",
+            "fee_rate_effective_on_conditions",
+            "fee_rate_source_enabled_condition",
+            "recalc_fee_draft_totals",
+        ):
+            monkeypatch.setattr(service, name, fail_if_touched)
         document.extra_data = "prohibited mutable source"
         task.gov_fee_amt = Decimal("999999.99")
         transaction.flush()
@@ -297,6 +308,11 @@ def test_unsupported_patent_category_is_write_free(
         lambda snapshot: snapshot["lines"][0].update(year=True),
         lambda snapshot: snapshot["lines"].append(dict(snapshot["lines"][0])),
         lambda snapshot: snapshot["lines"][0].update(amount=900),
+        lambda snapshot: snapshot["lines"][0].update(amount="900"),
+        lambda snapshot: snapshot["lines"][0].update(amount=" 900.00"),
+        lambda snapshot: snapshot["lines"][0].update(amount="+900.00"),
+        lambda snapshot: snapshot["lines"][0].update(amount="9e2"),
+        lambda snapshot: snapshot["lines"][0].update(amount="900_00"),
         lambda snapshot: snapshot["lines"][0].update(amount="0"),
         lambda snapshot: snapshot["lines"][0].update(amount="1.001"),
         lambda snapshot: snapshot["lines"][0].update(reduction_ratio=0.7),
@@ -389,6 +405,40 @@ def test_source_lineage_corruption_is_write_free(
                 _command(service, task, lifecycle, key=f"recognize-bad-source-{corrupt}"),
                 transaction,
             )
+        assert caught.value.code == "GRANT_YEAR_ANNUITY_SOURCE_LINEAGE_CONFLICT"
+        assert caught.value.status_code == 409
+        assert _write_counts(transaction) == before
+
+
+def test_invalid_snapshot_hash_precedes_empty_line_classification(
+    session_factory: sessionmaker,
+) -> None:
+    from app.modules.grant_fees import service
+
+    with session_factory() as transaction:
+        case, document, task, evidence = _grant_fixture(transaction, label="EMPTY-BAD-HASH")
+        lifecycle = _dispatch(
+            transaction,
+            task=task,
+            document=document,
+            evidence=evidence,
+            idempotency_key="empty-bad-hash-source",
+        )
+        activity = transaction.get(CaseActivityEvent, lifecycle.activity_id)
+        assert activity is not None
+        _rewrite_snapshot(activity, lambda snapshot: snapshot.update(lines=[]))
+        payload = json.loads(activity.payload_json)
+        payload["grant_fee_lines_snapshot_hash"] = "0" * 64
+        activity.payload_json = _canonical_json(payload)
+        transaction.flush()
+        before = _write_counts(transaction)
+
+        with pytest.raises(BusinessError) as caught:
+            service.recognize_grant_year_annuity_obligation(
+                _command(service, task, lifecycle, key="empty-bad-hash-recognition"),
+                transaction,
+            )
+
         assert caught.value.code == "GRANT_YEAR_ANNUITY_SOURCE_LINEAGE_CONFLICT"
         assert caught.value.status_code == 409
         assert _write_counts(transaction) == before
@@ -492,6 +542,167 @@ def test_direct_correction_supersedes_once_and_replays_exactly(
         assert replay.reused is True
         assert replay.obligation.id == second.obligation.id
         assert _write_counts(transaction) == counts
+
+
+def test_historical_original_can_be_recovered_and_replayed_after_correction_exists(
+    session_factory: sessionmaker,
+) -> None:
+    from app.modules.grant_fees import service
+
+    with session_factory() as transaction:
+        case, first_document, first_task, first_evidence = _grant_fixture(
+            transaction,
+            label="HISTORICAL-RECOVERY",
+        )
+        first_lifecycle = _dispatch(
+            transaction,
+            task=first_task,
+            document=first_document,
+            evidence=first_evidence,
+            idempotency_key="historical-source-1",
+        )
+        second_document, second_task, second_evidence = _replacement_fixture(
+            transaction,
+            case=case,
+            predecessor_task=first_task,
+            label="HISTORICAL",
+        )
+        second_lifecycle = _dispatch(
+            transaction,
+            task=second_task,
+            document=second_document,
+            evidence=second_evidence,
+            idempotency_key="historical-source-2",
+        )
+
+        original_command = _command(
+            service,
+            first_task,
+            first_lifecycle,
+            key="historical-recognition-1",
+        )
+        original = service.recognize_grant_year_annuity_obligation(
+            original_command,
+            transaction,
+        )
+        correction = service.recognize_grant_year_annuity_obligation(
+            _command(
+                service,
+                second_task,
+                second_lifecycle,
+                key="historical-recognition-2",
+            ),
+            transaction,
+        )
+        counts = _write_counts(transaction)
+        replay = service.recognize_grant_year_annuity_obligation(
+            original_command,
+            transaction,
+        )
+
+        assert correction.superseded_obligation_id == original.obligation.id
+        assert replay.reused is True
+        assert replay.obligation.id == original.obligation.id
+        assert _write_counts(transaction) == counts
+
+
+@pytest.mark.parametrize(
+    "corrupt",
+    (
+        "missing-obligation",
+        "missing-evidence",
+        "evidence-hash-drift",
+        "predecessor-task-type",
+        "predecessor-activity-type",
+        "partial-task-lineage",
+        "ambiguous-task",
+    ),
+)
+def test_correction_predecessor_conflicts_are_write_free(
+    session_factory: sessionmaker,
+    corrupt: str,
+) -> None:
+    from app.modules.grant_fees import service
+
+    with session_factory() as transaction:
+        case, first_document, first_task, first_evidence = _grant_fixture(
+            transaction,
+            label=f"CORRECTION-CONFLICT-{corrupt}",
+        )
+        first_lifecycle = _dispatch(
+            transaction,
+            task=first_task,
+            document=first_document,
+            evidence=first_evidence,
+            idempotency_key=f"correction-conflict-source-1-{corrupt}",
+        )
+        if corrupt != "missing-obligation":
+            service.recognize_grant_year_annuity_obligation(
+                _command(
+                    service,
+                    first_task,
+                    first_lifecycle,
+                    key=f"correction-conflict-1-{corrupt}",
+                ),
+                transaction,
+            )
+        second_document, second_task, second_evidence = _replacement_fixture(
+            transaction,
+            case=case,
+            predecessor_task=first_task,
+            label=f"CONFLICT-{corrupt}",
+        )
+        second_lifecycle = _dispatch(
+            transaction,
+            task=second_task,
+            document=second_document,
+            evidence=second_evidence,
+            idempotency_key=f"correction-conflict-source-2-{corrupt}",
+        )
+        if corrupt == "missing-evidence":
+            transaction.delete(first_evidence)
+        elif corrupt == "evidence-hash-drift":
+            first_evidence.content_hash = f"sha256:{'b' * 64}"
+        elif corrupt == "predecessor-task-type":
+            first_task.type = "OTHER"
+        elif corrupt == "predecessor-activity-type":
+            predecessor_activity = transaction.get(
+                CaseActivityEvent,
+                first_lifecycle.activity_id,
+            )
+            assert predecessor_activity is not None
+            predecessor_activity.activity_type = "OTHER"
+        elif corrupt == "partial-task-lineage":
+            first_task.superseded_by_task_id = None
+        elif corrupt == "ambiguous-task":
+            transaction.add(
+                T_GrantFeeTask(
+                    id=str(uuid4()),
+                    case_id=case.id,
+                    type="GRANT",
+                    due_date=second_task.due_date,
+                    source_document_id=None,
+                    deadline_source="CORRECTED_OFFICIAL_NOTICE",
+                    deadline_confirmed_at=second_task.deadline_confirmed_at,
+                    superseded_by_task_id=second_task.id,
+                    currency="CNY",
+                )
+            )
+        transaction.flush()
+        before = _write_counts(transaction)
+        with pytest.raises(BusinessError) as caught:
+            service.recognize_grant_year_annuity_obligation(
+                _command(
+                    service,
+                    second_task,
+                    second_lifecycle,
+                    key=f"correction-conflict-2-{corrupt}",
+                ),
+                transaction,
+            )
+        assert caught.value.code == "GRANT_YEAR_ANNUITY_PREDECESSOR_CONFLICT"
+        assert caught.value.status_code == 409
+        assert _write_counts(transaction) == before
 
 
 def test_caller_rollback_removes_recognition_without_committing(

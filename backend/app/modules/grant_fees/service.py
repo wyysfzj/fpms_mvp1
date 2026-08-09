@@ -113,6 +113,7 @@ _GRANT_NOTICE_PAYLOAD_KEYS = {
 }
 _GRANT_NOTICE_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 _GRANT_NOTICE_SNAPSHOT_HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
+_GRANT_NOTICE_CANONICAL_AMOUNT_PATTERN = re.compile(r"[0-9]+\.[0-9]{2}")
 _GRANT_FEE_TASK_DONE_EVENT_TYPE = "GRANT_FEE_TASK_DONE"
 
 _STATE_ALLOWED_ACTIONS = {
@@ -183,7 +184,6 @@ def recognize_grant_year_annuity_obligation(
             or not _exact_grant_notice_text(task.deadline_source, max_length=32)
             or type(task.deadline_confirmed_at) is not datetime
             or task.deadline_confirmed_at.tzinfo is not None
-            or task.superseded_by_task_id is not None
             or activity.case_id != task.case_id
             or activity.activity_type != _GRANT_NOTICE_EVENT_TYPE
             or activity.lane != ActivityLane.LIFECYCLE.value
@@ -193,11 +193,11 @@ def recognize_grant_year_annuity_obligation(
 
         try:
             preliminary_payload = _grant_notice_payload(activity.payload_json)
-            preliminary_snapshot = json.loads(preliminary_payload["grant_fee_lines_snapshot"])
-        except (BusinessError, TypeError, ValueError):
+            _reject_empty_grant_year_annuity_snapshot(preliminary_payload)
+        except BusinessError as exc:
+            if exc.code == "GRANT_YEAR_ANNUITY_FEE_LINE_CONFLICT":
+                raise
             _grant_year_annuity_source_conflict("stored_notice_invalid")
-        if type(preliminary_snapshot) is dict and preliminary_snapshot.get("lines") == []:
-            _grant_year_annuity_line_conflict("lines")
         try:
             payload, _ = _validated_stored_grant_notice(
                 transaction,
@@ -402,7 +402,10 @@ def _grant_year_annuity_lines(
         if type(year) is not int or year <= 0 or year > 2147483647 or year in seen_years:
             _grant_year_annuity_line_conflict(f"lines[{index}].year")
         seen_years.add(year)
-        if type(amount_text) is not str:
+        if (
+            type(amount_text) is not str
+            or _GRANT_NOTICE_CANONICAL_AMOUNT_PATTERN.fullmatch(amount_text) is None
+        ):
             _grant_year_annuity_line_conflict(f"lines[{index}].amount")
         try:
             amount = Decimal(amount_text)
@@ -436,6 +439,50 @@ def _grant_year_annuity_lines(
             )
         )
     return tuple(projected)
+
+
+def _reject_empty_grant_year_annuity_snapshot(payload: dict[str, object]) -> None:
+    snapshot = payload["grant_fee_lines_snapshot"]
+    snapshot_hash = payload["grant_fee_lines_snapshot_hash"]
+    if (
+        type(snapshot) is not str
+        or type(snapshot_hash) is not str
+        or _GRANT_NOTICE_SNAPSHOT_HASH_PATTERN.fullmatch(snapshot_hash) is None
+        or hashlib.sha256(snapshot.encode("utf-8")).hexdigest() != snapshot_hash
+    ):
+        _grant_year_annuity_source_conflict("snapshot_hash_mismatch")
+    try:
+        parsed = json.loads(snapshot)
+        canonical = json.dumps(
+            parsed,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (RecursionError, TypeError, ValueError):
+        _grant_year_annuity_source_conflict("snapshot_invalid")
+    if (
+        canonical != snapshot
+        or type(parsed) is not dict
+        or set(parsed)
+        != {
+            "schema",
+            "source_document_id",
+            "reviewed_evidence_version_id",
+            "reviewed_evidence_content_hash",
+            "lines",
+        }
+        or parsed["schema"] != _GRANT_NOTICE_FEE_LINES_SCHEMA
+        or parsed["schema"] != payload["grant_fee_lines_schema"]
+        or parsed["source_document_id"] != payload["source_document_id"]
+        or parsed["reviewed_evidence_version_id"] != payload["reviewed_evidence_version_id"]
+        or parsed["reviewed_evidence_content_hash"] != payload["reviewed_evidence_content_hash"]
+        or type(parsed["lines"]) is not list
+    ):
+        _grant_year_annuity_source_conflict("snapshot_binding_mismatch")
+    if not parsed["lines"]:
+        _grant_year_annuity_line_conflict("lines")
 
 
 def _grant_year_annuity_predecessor(
@@ -491,6 +538,28 @@ def _grant_year_annuity_predecessor(
         or predecessor_payload["case_id"] != task.case_id
     ):
         _grant_year_annuity_predecessor_conflict("predecessor_source_mismatch")
+    predecessor_document = transaction.get(
+        Document,
+        predecessor_task.source_document_id,
+    )
+    predecessor_evidence = transaction.get(
+        DocumentEvidenceVersion,
+        predecessor_payload["reviewed_evidence_version_id"],
+    )
+    if (
+        predecessor_task.type != "GRANT"
+        or predecessor_task.superseded_by_task_id != task.id
+        or predecessor_document is None
+        or predecessor_evidence is None
+        or predecessor_document.id != predecessor_payload["source_document_id"]
+        or predecessor_document.case_id != task.case_id
+        or predecessor_evidence.case_id != task.case_id
+        or predecessor_evidence.document_id != predecessor_document.id
+        or predecessor_evidence.id != predecessor_payload["reviewed_evidence_version_id"]
+        or predecessor_evidence.content_hash
+        != predecessor_payload["reviewed_evidence_content_hash"]
+    ):
+        _grant_year_annuity_predecessor_conflict("predecessor_bound_source_mismatch")
 
     obligations = tuple(
         transaction.scalars(
