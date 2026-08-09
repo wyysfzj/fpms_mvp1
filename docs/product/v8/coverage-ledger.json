@@ -590,14 +590,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "WIP",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "kind": "HISTORICAL_NONTERMINAL",
-        "historical_state": "IMPLEMENTING",
-        "source": "artifacts/FPMS-V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-20260712-01/state.json"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-ATTACHMENT-NO-GRANTED-20260712-01",
@@ -4404,6 +4400,34 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "997a6896b90deae18ecda7bde9db35e48513b242",
+        "06cd5882ac92a7ac3d6c7f102ccdecb67bb2c43b",
+        "0ddab25caf2aee017bc3662a3b1068e13be631be"
+      ],
+      "paths": [
+        "backend/app/modules/grant_fees/service.py",
+        "backend/app/modules/grant_fees/api.py",
+        "backend/app/modules/grant_fees/schemas.py",
+        "backend/tests/test_v8_grant_notice_lifecycle_adapter.py",
+        "backend/tests/test_v8_grant_notice_lifecycle_api.py"
+      ],
+      "tree_sha256": "30897eb30f288f9e25b7c4f83339227779a1d8f66a2161983234d6f3a28080da",
+      "tests": [
+        "dispatcher RED 45 failed then focused GREEN 45 passed",
+        "dedicated API RED 18 failed then pre-review exact tranche 66 passed",
+        "review correction RED 16 failed then final exact tranche 73 passed",
+        "snapshot/lifecycle dependency tranche 114 passed and Row61 regression tranche 159 passed",
+        "scoped Ruff, format and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
