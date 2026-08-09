@@ -198,6 +198,10 @@ def read_lifecycle_overlay(
 
     parsed = _validate_and_parse_activities(case_id, activities)
     frozen = parsed
+    first_lifecycle_activity_id = next(
+        (item[0].id for item in frozen if item[1] is ActivityLane.LIFECYCLE),
+        None,
+    )
     center_activity = next(
         (item for item in reversed(frozen) if item[1] is ActivityLane.LIFECYCLE),
         None,
@@ -263,6 +267,7 @@ def read_lifecycle_overlay(
             activity,
             evidence_by_activity.get(activity.id, ()),
         )
+        and activity.id == first_lifecycle_activity_id
         for code in conflict_codes_by_activity[activity.id]
     )
     return LifecycleOverlay(
