@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import raise_business_error
 from app.modules.annuity.models import GovPayment, PayList
 from app.modules.cases.enums import CaseStatus
+from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
     BusinessStage,
@@ -32,6 +33,7 @@ from app.modules.cases.models import (
     T_CaseInventor,
 )
 from app.modules.documents.evidence_contracts import (
+    EvidenceDerivationType,
     EvidenceReviewState,
     EvidenceRole,
     EvidenceVersionResult,
@@ -41,6 +43,10 @@ from app.modules.documents.evidence_policy import (
     _COPYABLE_OA_ATTACHMENT_ROLES,
     CopyableOaAttachmentEvidence,
     is_filing_full_word_ready,
+)
+from app.modules.documents.evidence_service import (
+    _capture_lifecycle_projection,
+    _stored_activity_projection,
 )
 from app.modules.documents.evidence_workflow_service import (
     FinalizeExternalSubmissionCommand,
@@ -53,6 +59,7 @@ from app.modules.documents.models import (
     DocAttachment,
     DocTemplate,
     Document,
+    DocumentEvidenceDerivation,
     DocumentEvidenceVersion,
     LetterHandoff,
     LetterHandoffAttachment,
@@ -1828,7 +1835,7 @@ def prepare_oa_out_package_link(
             )
         )
 
-    return prepare_oa_reply(
+    result = prepare_oa_reply(
         PrepareOaReplyCommand(
             case_id=reply_document.case_id,
             source_document_id=package.source_document_id,
@@ -1842,6 +1849,95 @@ def prepare_oa_out_package_link(
         ),
         db,
     )
+    reply_version = db.get(DocumentEvidenceVersion, result.reply_evidence_version_id)
+    preparations = list(
+        db.scalars(
+            select(DocumentEvidenceDerivation).where(
+                DocumentEvidenceDerivation.case_id == result.case_id,
+                DocumentEvidenceDerivation.parent_evidence_version_id
+                == result.source_evidence_version_id,
+                DocumentEvidenceDerivation.child_evidence_version_id
+                == result.reply_evidence_version_id,
+                DocumentEvidenceDerivation.derivation_type
+                == EvidenceDerivationType.OA_REPLY_PREPARATION.value,
+            )
+        )
+    )
+    if len(preparations) != 1:
+        _oa_atomic_link_conflict("OA preparation derivation identity is not unique")
+    preparation = preparations[0]
+    case = _get_case(db, result.case_id)
+    current_projection = _capture_lifecycle_projection(case)
+    activity_key = f"oa-reply-prepared:{result.package_id}"
+    existing_activity = db.scalar(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == result.case_id,
+            CaseActivityEvent.idempotency_key == activity_key,
+        )
+    )
+    previous_projection = current_projection
+    if existing_activity is not None:
+        previous_projection = _stored_activity_projection(
+            existing_activity,
+            old=True,
+            verification_status=current_projection.lifecycle_verification_status,
+        )
+        current_projection = _stored_activity_projection(
+            existing_activity,
+            old=False,
+            verification_status=current_projection.lifecycle_verification_status,
+        )
+        if previous_projection != current_projection:
+            _oa_atomic_link_conflict(
+                "Stored OA reply prepared activity changed the central lifecycle projection"
+            )
+    append_case_activity(
+        LifecycleEventCommand(
+            case_id=result.case_id,
+            event_type="OA_REPLY_PREPARED",
+            lane=ActivityLane.DOCUMENT,
+            effective_at=preparation.derived_at,
+            occurred_at=preparation.derived_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=result.case_id,
+                    evidence_kind="OA_REPLY_WORK_PACKAGE",
+                    object_type="OfficialWorkPackage",
+                    object_id=result.package_id,
+                    content_hash=(
+                        f"sha256:{hashlib.sha256(preparation.source_snapshot.encode()).hexdigest()}"
+                    ),
+                    captured_at=preparation.derived_at,
+                ),
+                EvidenceReference(
+                    case_id=result.case_id,
+                    evidence_kind="OA_REPLY_DOCUMENT",
+                    object_type="DocumentEvidenceVersion",
+                    object_id=result.reply_evidence_version_id,
+                    content_hash=reply_version.content_hash,
+                    captured_at=preparation.derived_at,
+                ),
+            ),
+            actor_id=actor_id,
+            idempotency_key=activity_key,
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={
+                "actor_id": actor_id,
+                "center_changes": {},
+                "package_id": result.package_id,
+                "reply_document_id": result.reply_document_id,
+                "reply_evidence_version_id": result.reply_evidence_version_id,
+                "schema": "FPMS_OA_REPLY_PREPARED_ACTIVITY_V1",
+                "source_document_id": result.source_document_id,
+            },
+        ),
+        db,
+        previous_projection=previous_projection,
+        current_projection=current_projection,
+        legacy_case_status=case.status,
+        conflict_codes=(),
+    )
+    return result
 
 
 def _oa_manifest_roles(
