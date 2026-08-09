@@ -61,6 +61,7 @@ def _create_case(client: TestClient, auth_headers: dict, **overrides) -> dict:
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
+        "fee_reduction": "0",
         "title_cn": "B2 Test Case",
         "applicants": [
             {

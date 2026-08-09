@@ -27,6 +27,7 @@ def _create_case(client, auth_headers) -> str:
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "client_id": client_resp.json()["id"],
             "title_cn": "UI文书期限测试案卷",
         },
