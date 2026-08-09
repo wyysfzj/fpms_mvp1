@@ -2190,8 +2190,8 @@
     {
       "catalog_id": "FPMS-V8-CASEDETAIL-OVERLAY-CURSOR-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CASEDETAIL-OVERLAY-CURSOR-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -5079,6 +5079,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-CASEDETAIL-GATES-WARNINGS-UI-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-CASEDETAIL-GATES-WARNINGS-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CASEDETAIL-OVERLAY-CURSOR-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "0958536c5cfc295847085d090058e00c5d55dc2c",
+        "29b3cba6b4b8240c121710d0a433dd6ab3e81cc4"
+      ],
+      "paths": [
+        "frontend/src/modules/cases/components/CaseLifecycleOverlay.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-detail-overlay-cursor.spec.ts"
+      ],
+      "tree_sha256": "d42cfce1c12504dd6f541c229591f77cc0977152074de269c159597152b75c92",
+      "tests": [
+        "decisive RED proved the missing load-more traversal and accumulated-order guard",
+        "final focused Playwright suite passed 2 tests and Row273 regression passed 1",
+        "scoped ESLint and exact-path diff checks passed",
+        "typecheck retained only five unrelated baseline diagnostics",
+        "independent High re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CASEDETAIL-OVERLAY-CURSOR-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CASEDETAIL-OVERLAY-CURSOR-UI-CURRENT-ADOPTION.md"
     }
   ]
 }
