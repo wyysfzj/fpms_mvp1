@@ -26,7 +26,7 @@ Exact current fingerprints:
 - product patch SHA-256:
   `d05339439db4f3ef66c3cba8d07fe8a8a29e97ca08d06545711353143fc54aa2`
 - Git tree fingerprint for all ten owned paths:
-  `c2c55e86fc7d147f92969c682c45dce5df8f1b0acfa6b483ac71bef4a95eef81`
+  `32416087f6815dc36cafb463d6b8b6c2d95b5b74d37cf0342854aef6ef3f4d76`
 - `backend/app/modules/official_workflows/service.py` SHA-256:
   `9ee6ec3c1c503474d7edc77034dd820b642d587d1ad185d3f64e347b2407c260`
 - `backend/app/modules/official_workflows/api.py` SHA-256:
