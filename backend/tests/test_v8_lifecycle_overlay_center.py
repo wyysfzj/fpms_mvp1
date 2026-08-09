@@ -267,6 +267,35 @@ def test_historical_revision_is_not_invalidated_by_later_corrupt_activity(
         assert caught.value.code == "LIFECYCLE_OVERLAY_STATE_CONFLICT"
 
 
+def test_current_read_rejects_activity_beyond_persisted_revision(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        case = _seed_three_lane_history(transaction, value=7)
+        _add_activity(
+            transaction,
+            case=case,
+            sequence=4,
+            lane=ActivityLane.FEE.value,
+            old_axes=(
+                BusinessStage.FILING_PREPARATION.value,
+                OfficialProcedureStage.NOT_SUBMITTED.value,
+                LegalStatus.APPLICATION_PENDING.value,
+            ),
+            new_axes=(
+                BusinessStage.FILING_PREPARATION.value,
+                OfficialProcedureStage.NOT_SUBMITTED.value,
+                LegalStatus.APPLICATION_PENDING.value,
+            ),
+        )
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as caught:
+            _read(transaction, case.id)
+
+        assert caught.value.code == "LIFECYCLE_OVERLAY_STATE_CONFLICT"
+
+
 def test_fully_unmanaged_legacy_case_reads_as_empty_revision_zero(
     session_factory: sessionmaker,
 ) -> None:

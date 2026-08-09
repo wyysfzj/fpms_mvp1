@@ -79,14 +79,12 @@ def read_lifecycle_overlay(
             status_code=400,
         )
 
+    activity_query = select(CaseActivityEvent).where(CaseActivityEvent.case_id == case_id)
+    if as_of_revision is not None:
+        activity_query = activity_query.where(CaseActivityEvent.sequence <= revision)
     activities = (
         transaction.execute(
-            select(CaseActivityEvent)
-            .where(
-                CaseActivityEvent.case_id == case_id,
-                CaseActivityEvent.sequence <= revision,
-            )
-            .order_by(CaseActivityEvent.sequence, CaseActivityEvent.id)
+            activity_query.order_by(CaseActivityEvent.sequence, CaseActivityEvent.id)
         )
         .scalars()
         .all()
