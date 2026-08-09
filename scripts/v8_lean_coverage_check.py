@@ -204,9 +204,17 @@ def _validate_integrated_path_owners(
     """Require current bytes to match each path's latest accepted owner."""
 
     owners: dict[str, dict[str, set[str]]] = {}
+    canonical_commits: dict[str, str] = {}
     for story in stories:
         story_id = story["story_id"]
-        final_commit = story["commits"][-1]
+        final_ref = story["commits"][-1]
+        if final_ref not in canonical_commits:
+            canonical_commits[final_ref] = _git(
+                repo_root,
+                "rev-parse",
+                f"{final_ref}^{{commit}}",
+            ).stdout.strip()
+        final_commit = canonical_commits[final_ref]
         for owned_path in story["paths"]:
             owners.setdefault(owned_path, {}).setdefault(final_commit, set()).add(
                 story_id

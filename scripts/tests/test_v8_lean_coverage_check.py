@@ -320,6 +320,57 @@ def test_current_verified_accepts_linear_reviewed_successor_on_shared_path(
     )
 
 
+def test_current_verified_coalesces_aliases_of_the_same_owner_commit(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    repo, integration_sha = _git_repo(tmp_path)
+    tree_sha = checker.compute_tree_fingerprint(repo, integration_sha, ["owned.txt"])
+    catalog_path = tmp_path / "catalog.json"
+    ledger_path = tmp_path / "ledger.json"
+    digest = _write_json(catalog_path, _catalog(["A", "B"]))
+    first_row = _row("A", "CURRENT_VERIFIED")
+    first_row["story_id"] = "STORY-A"
+    second_row = _row("B", "CURRENT_VERIFIED")
+    second_row["story_id"] = "STORY-B"
+    ledger = _ledger(digest, [first_row, second_row])
+    ledger["integration_sha"] = integration_sha
+    ledger["stories"] = [
+        {
+            "story_id": "STORY-A",
+            "status": "CURRENT_VERIFIED",
+            "commits": [integration_sha],
+            "paths": ["owned.txt"],
+            "tree_sha256": tree_sha,
+            "tests": ["pytest first"],
+            "review_class": "PROTECTED",
+            "review_ref": "reviews/first.md",
+            "verification_ref": "verification/first.md",
+        },
+        {
+            "story_id": "STORY-B",
+            "status": "CURRENT_VERIFIED",
+            "commits": [integration_sha[:12]],
+            "paths": ["owned.txt"],
+            "tree_sha256": tree_sha,
+            "tests": ["pytest second"],
+            "review_class": "PROTECTED",
+            "review_ref": "reviews/second.md",
+            "verification_ref": "verification/second.md",
+        },
+    ]
+    _write_json(ledger_path, ledger)
+
+    checker.validate(
+        catalog_path=catalog_path,
+        ledger_path=ledger_path,
+        expected_catalog_sha256=digest,
+        milestone="foundation",
+        repo_root=repo,
+        integration_sha=integration_sha,
+    )
+
+
 def test_current_verified_rejects_unreviewed_drift_after_reviewed_successor(
     tmp_path: Path,
 ) -> None:
