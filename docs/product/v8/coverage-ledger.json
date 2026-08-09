@@ -2102,8 +2102,8 @@
     {
       "catalog_id": "FPMS-V8-OVERLAY-DECISION-GATE-JOIN-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-DECISION-GATE-JOIN-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4835,6 +4835,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-FEE-JOIN-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-FEE-JOIN-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-DECISION-GATE-JOIN-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "5c125164969204fbdf36a2d07e869f30af124cad"
+      ],
+      "paths": [
+        "backend/app/modules/cases/lifecycle_overlay_service.py",
+        "backend/tests/test_v8_lifecycle_overlay_decision_gates.py",
+        "backend/tests/test_v8_lifecycle_overlay_center.py"
+      ],
+      "tree_sha256": "e64106aa6666d0fb1639af6ba189a74898aeca918a757477e93640041d12818a",
+      "tests": [
+        "focused RED failed 27 decision-gate cases on the empty predecessor",
+        "decision-gate plus fee, document, center and read-service suite 116 passed",
+        "scoped Ruff, format and exact commit diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-DECISION-GATE-JOIN-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-DECISION-GATE-JOIN-CURRENT-ADOPTION.md"
     }
   ]
 }
