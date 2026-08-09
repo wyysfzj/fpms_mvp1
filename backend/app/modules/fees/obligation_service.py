@@ -2097,7 +2097,7 @@ def _instruction_replay_existing(
     header: FeeObligationModel,
     activity: CaseActivityEvent,
 ) -> RecordFeeObligationInstructionResult:
-    _instruction_replay_recognition_source(transaction, header)
+    recognition = _instruction_replay_recognition_source(transaction, header)
     payload = _instruction_payload_or_idempotency_conflict(activity)
     if (
         payload.get("obligation_id") != command.obligation_id
@@ -2110,6 +2110,7 @@ def _instruction_replay_existing(
         activity,
         header,
         payload,
+        recognition_id=recognition.id,
     )
     previous = cast(str, payload["previous_instruction_status"])
     if previous == FeeClientInstructionStatus.PENDING.value:
@@ -2129,6 +2130,7 @@ def _instruction_replay_existing(
             activity,
             header,
             expected_instruction=previous,
+            recognition_id=recognition.id,
         )
     try:
         projection = _activity_projection(activity)
@@ -2178,6 +2180,8 @@ def _instruction_replay_activity_shape(
     activity: CaseActivityEvent,
     header: FeeObligationModel,
     payload: dict[str, object],
+    *,
+    recognition_id: str,
 ) -> None:
     evidence_count = transaction.scalar(
         select(func.count())
@@ -2188,7 +2192,7 @@ def _instruction_replay_activity_shape(
         activity.case_id != header.case_id
         or activity.activity_type != _INSTRUCTION_ACTIVITY_TYPE
         or activity.lane != ActivityLane.FEE.value
-        or activity.source_activity_id != header.source_activity_id
+        or activity.source_activity_id != recognition_id
         or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
         or activity.actor_id != payload.get("actor_id")
         or activity.reviewer_id is not None
@@ -2208,6 +2212,7 @@ def _instruction_replay_prior_fact(
     header: FeeObligationModel,
     *,
     expected_instruction: str,
+    recognition_id: str,
 ) -> None:
     prior = transaction.get(CaseActivityEvent, activity.supersedes_event_id)
     if prior is None:
@@ -2231,6 +2236,7 @@ def _instruction_replay_prior_fact(
         prior,
         header,
         prior_payload,
+        recognition_id=recognition_id,
     )
     prior_previous = cast(str, prior_payload["previous_instruction_status"])
     if prior_previous == FeeClientInstructionStatus.PENDING.value:
@@ -2250,6 +2256,7 @@ def _instruction_replay_prior_fact(
         prior,
         header,
         expected_instruction=prior_previous,
+        recognition_id=recognition_id,
     )
 
 
@@ -2286,23 +2293,13 @@ def _instruction_latest_prior_fact(
 def _instruction_replay_recognition_source(
     transaction: Session,
     header: FeeObligationModel,
-) -> None:
-    recognition = transaction.get(CaseActivityEvent, header.source_activity_id)
-    if recognition is None:
-        _instruction_idempotency_conflict()
+) -> CaseActivityEvent:
     try:
-        payload = _strict_json_loads(recognition.payload_json)
-    except (TypeError, ValueError):
-        _instruction_idempotency_conflict()
-    if (
-        recognition.case_id != header.case_id
-        or recognition.lane != ActivityLane.FEE.value
-        or recognition.activity_type != _ACTIVITY_TYPE
-        or type(payload) is not dict
-        or payload.get("schema") != _PAYLOAD_SCHEMA
-        or payload.get("obligation_id") != header.id
-    ):
-        _instruction_idempotency_conflict()
+        return _instruction_recognition(transaction, header)
+    except BusinessError as exc:
+        if exc.code == "FEE_CLIENT_INSTRUCTION_RECOGNITION_INVALID":
+            _instruction_idempotency_conflict()
+        raise
 
 
 def _instruction_payload_or_idempotency_conflict(

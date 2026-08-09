@@ -602,6 +602,26 @@ def test_instruction_accepts_payload_linked_recognition_child_of_header_source(
         assert header.source_activity_id == GRANT_SOURCE_ID
         assert recognition.source_activity_id == GRANT_SOURCE_ID
 
+        transaction.commit()
+        before_replay = (
+            transaction.scalar(select(func.count()).select_from(CaseActivityEvent)),
+            case.lifecycle_revision,
+        )
+
+        replay = _record(_command(), transaction)
+
+        replayed_instruction = transaction.get(CaseActivityEvent, replay.activity_id)
+        assert replay.reused is True
+        assert replay.activity_id == result.activity_id
+        assert replayed_instruction is not None
+        assert replayed_instruction.source_activity_id == RECOGNITION_ID
+        assert header.source_activity_id == GRANT_SOURCE_ID
+        assert recognition.source_activity_id == GRANT_SOURCE_ID
+        assert (
+            transaction.scalar(select(func.count()).select_from(CaseActivityEvent)),
+            case.lifecycle_revision,
+        ) == before_replay
+
 
 def test_duplicate_recognition_fails_closed(session_factory: sessionmaker) -> None:
     with session_factory() as transaction:
