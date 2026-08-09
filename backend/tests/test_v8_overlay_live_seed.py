@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from importlib import util
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
-from sqlalchemy import func, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.modules.auth.models import T_User
@@ -33,6 +34,12 @@ def _seed_module() -> ModuleType:
 def _approve_environment(monkeypatch: pytest.MonkeyPatch, test_db_url: str) -> None:
     monkeypatch.setenv("FPMS_ENV", "test")
     monkeypatch.setenv("DATABASE_URL", test_db_url)
+    get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _clear_settings_cache_after_test():
+    yield
     get_settings.cache_clear()
 
 
@@ -76,9 +83,12 @@ def test_seed_is_idempotent_preserves_p1_and_projects_real_three_page_fixture(
 ) -> None:
     _approve_environment(monkeypatch, test_db_url)
     seed = _seed_module()
-    with session_factory() as transaction:
-        transaction.add(Case(id="CASE-PD-P1-LIVE", case_no="P1-PRESERVED", status="NOT_FILED"))
-        transaction.commit()
+    with seed.sqlite_fixture_lock():
+        with session_factory() as transaction:
+            transaction.add(
+                Case(id="CASE-PD-P1-LIVE", case_no="P1-PRESERVED", status="NOT_FILED")
+            )
+            transaction.commit()
 
     first = seed.seed_live_fixture(session_factory)
     second = seed.seed_live_fixture(session_factory)
@@ -165,18 +175,29 @@ def test_seed_is_idempotent_preserves_p1_and_projects_real_three_page_fixture(
         ].unresolved_reason == "DECISION_GATE_CURRENT_ROW_CORRUPT"
 
         legacy_code = DecisionGateCode.LEGACY_FORM_CLASS.value
-        admin_id = transaction.scalar(select(T_User.id).where(T_User.username == "admin"))
-        assert admin_id is not None
+        assert transaction.get(T_User, seed.ACTOR_ID).username == seed.ACTOR_USERNAME
+        actor_id = seed.ACTOR_ID
         direct = by_identity[(legacy_code, "form-001")]
         assert direct.gate_id == seed._gate_id("FORM-001")
         assert direct.resolved_scope_key == "form-001"
         assert direct.decision_value == "CURRENT_OFFICIAL"
         assert direct.source_reference == "v8-overlay-live-direct"
         assert direct.source_version == "2026-08-10"
-        assert direct.confirmed_by == admin_id
+        assert direct.confirmed_by == actor_id
         assert direct.effective_at.isoformat() == "2026-08-01T09:00:00"
-        assert by_identity[(legacy_code, "form-002")].decision_value == "HISTORICAL"
-        assert by_identity[(legacy_code, "form-003")].decision_value == "INTERNAL_ONLY"
+        for scope, classification in (
+            ("form-002", "HISTORICAL"),
+            ("form-003", "INTERNAL_ONLY"),
+        ):
+            resolved = by_identity[(legacy_code, scope)]
+            assert resolved.resolution_status.value == "RESOLVED"
+            assert resolved.resolved_scope_key == scope
+            assert resolved.decision_value == classification
+            assert resolved.gate_id == seed._gate_id(scope.upper())
+            assert resolved.source_reference == "v8-overlay-live-direct"
+            assert resolved.source_version == "2026-08-10"
+            assert resolved.confirmed_by == actor_id
+            assert resolved.effective_at.isoformat() == "2026-08-01T09:00:00"
         for scope, classification in (
             ("form-004", "CURRENT_OFFICIAL"),
             ("form-005", "HISTORICAL"),
@@ -189,7 +210,25 @@ def test_seed_is_idempotent_preserves_p1_and_projects_real_three_page_fixture(
             assert fallback.gate_id == seed._gate_id("ALL-22")
             assert fallback.source_reference == "v8-overlay-live-all-22"
             assert fallback.source_version == "2026-08-10"
-            assert fallback.confirmed_by == admin_id
+            assert fallback.confirmed_by == actor_id
+            assert fallback.effective_at.isoformat() == "2026-08-01T09:00:00"
+        for number in range(10, 23):
+            scope = f"form-{number:03d}"
+            fallback = by_identity[(legacy_code, scope)]
+            expected_classification = (
+                "CURRENT_OFFICIAL"
+                if number % 3 == 1
+                else "HISTORICAL"
+                if number % 3 == 2
+                else "INTERNAL_ONLY"
+            )
+            assert fallback.resolution_status.value == "RESOLVED"
+            assert fallback.resolved_scope_key == "ALL-22"
+            assert fallback.decision_value == expected_classification
+            assert fallback.gate_id == seed._gate_id("ALL-22")
+            assert fallback.source_reference == "v8-overlay-live-all-22"
+            assert fallback.source_version == "2026-08-10"
+            assert fallback.confirmed_by == actor_id
             assert fallback.effective_at.isoformat() == "2026-08-01T09:00:00"
         assert by_identity[(legacy_code, "form-007")].unresolved_reason == (
             "DECISION_GATE_REVOKED"
@@ -200,6 +239,18 @@ def test_seed_is_idempotent_preserves_p1_and_projects_real_three_page_fixture(
         assert by_identity[(legacy_code, "form-009")].unresolved_reason == (
             "DECISION_GATE_CURRENT_ROW_CORRUPT"
         )
+        resolved_nonlegacy = {
+            DecisionGateCode.FEE_APPLICATION_DRAFT: "PAY",
+            DecisionGateCode.PAYMENT_WORKBOOK: "OFFICIAL",
+            DecisionGateCode.SERVICE_RATE_VERSION: "V8-LIVE",
+        }
+        for code, decision_value in resolved_nonlegacy.items():
+            gate = by_identity[(code.value, case_scope)]
+            assert gate.resolution_status.value == "RESOLVED"
+            assert gate.decision_value == decision_value
+            assert gate.source_reference == "v8-overlay-live-direct"
+            assert gate.source_version == "2026-08-10"
+            assert gate.confirmed_by == actor_id
 
         assert [item.code for item in pages[0].legacy_conflicts] == list(
             seed.LEGACY_CONFLICTS
@@ -212,27 +263,41 @@ def test_seed_is_idempotent_preserves_p1_and_projects_real_three_page_fixture(
         assert [warning.code for warning in pages[0].milestones[1].warnings] == [
             "LIFECYCLE_ACTIVITY_NEEDS_REVIEW"
         ]
-        reference_warnings = [
-            warning
-            for warning in pages[0].warnings
-            if warning.kind.value == "REFERENCE_ONLY"
+        expected_reference_sources = [
+            f"{legacy_code}:form-002:{seed._gate_id('FORM-002')}",
+            f"{legacy_code}:form-003:{seed._gate_id('FORM-003')}",
+            *[
+                f"{legacy_code}:form-{number:03d}:{seed._gate_id('ALL-22')}"
+                for number in (5, 6, 11, 12, 14, 15, 17, 18, 20, 21)
+            ],
         ]
-        assert reference_warnings
-        assert all(warning.code == "DECISION_GATE_REFERENCE_ONLY" for warning in reference_warnings)
-        assert all(warning.message == "该客户决策分类仅供参考，不得激活" for warning in reference_warnings)
-        assert all(warning.activity_id is None for warning in reference_warnings)
-        assert all(
-            warning.source_object_type == "CUSTOMER_DECISION_GATE"
-            and warning.source_object_id is not None
-            and warning.source_object_id.endswith(
+        for page in pages:
+            reference_warnings = [
+                warning
+                for warning in page.warnings
+                if warning.kind.value == "REFERENCE_ONLY"
+            ]
+            assert [
                 (
-                    seed._gate_id("FORM-002"),
-                    seed._gate_id("FORM-003"),
-                    seed._gate_id("ALL-22"),
+                    warning.kind.value,
+                    warning.code,
+                    warning.message,
+                    warning.activity_id,
+                    warning.source_object_type,
+                    warning.source_object_id,
                 )
-            )
-            for warning in reference_warnings
-        )
+                for warning in reference_warnings
+            ] == [
+                (
+                    "REFERENCE_ONLY",
+                    "DECISION_GATE_REFERENCE_ONLY",
+                    "该客户决策分类仅供参考，不得激活",
+                    None,
+                    "CUSTOMER_DECISION_GATE",
+                    source,
+                )
+                for source in expected_reference_sources
+            ]
         assert not transaction.new and not transaction.dirty and not transaction.deleted
 
 
@@ -282,3 +347,35 @@ def test_seed_fails_before_mutation_for_environment_and_lock_conflicts(
         seed.LOCK_DIR.rmdir()
     with session_factory() as transaction:
         assert transaction.get(Case, seed.CASE_ID) is None
+
+
+def test_seed_rejects_non_sqlite_and_foreign_keys_off_before_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+    test_db_url: str,
+) -> None:
+    _approve_environment(monkeypatch, test_db_url)
+    seed = _seed_module()
+
+    non_sqlite = Mock()
+    non_sqlite.get_bind.return_value = SimpleNamespace(
+        dialect=SimpleNamespace(name="postgresql")
+    )
+    with pytest.raises(RuntimeError, match="requires SQLite"):
+        seed.seed_live_fixture(lambda: non_sqlite)
+    non_sqlite.execute.assert_not_called()
+    non_sqlite.commit.assert_not_called()
+    non_sqlite.rollback.assert_called_once()
+    non_sqlite.close.assert_called_once()
+    assert not seed.LOCK_DIR.exists()
+
+    engine = create_engine("sqlite:///:memory:")
+    transaction = Session(engine)
+    try:
+        assert transaction.scalar(select(func.sqlite_version())) is not None
+        with pytest.raises(RuntimeError, match="foreign_keys=ON"):
+            seed.seed_live_fixture(lambda: transaction)
+        assert not transaction.new and not transaction.dirty and not transaction.deleted
+        assert not seed.LOCK_DIR.exists()
+    finally:
+        transaction.close()
+        engine.dispose()

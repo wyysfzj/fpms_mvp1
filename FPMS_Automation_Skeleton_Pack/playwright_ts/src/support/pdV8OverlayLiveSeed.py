@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import json
+import sys
 from contextlib import contextmanager
 from datetime import datetime
 from hashlib import sha256
-import json
 from pathlib import Path
-import sys
 from typing import Callable, Iterator
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, or_, select, text
 from sqlalchemy.orm import Session
-
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 BACKEND_ROOT = REPO_ROOT / "backend"
@@ -33,11 +32,12 @@ from app.modules.cases.models import (  # noqa: E402
 from app.modules.system.decision_gate_service import DecisionGateCode  # noqa: E402
 from app.modules.system.models import CustomerDecisionGate  # noqa: E402
 
-
 CASE_ID = "CASE-V8-OVERLAY-LIVE"
 CASE_NO = "V8-OVERLAY-LIVE"
 NAMESPACE = "V8OVL-LIVE"
 GATE_ID_PREFIX = f"{NAMESPACE}-GATE-"
+ACTOR_ID = f"{NAMESPACE}-ACTOR"
+ACTOR_USERNAME = "v8-overlay-live-actor"
 ACTIVITY_COUNT = 401
 LOCK_DIR = Path("/tmp/fpms_v8_sqlite.lockdir")
 SAFE_FPMS_ENVS = {"dev", "development", "local", "test", "demo"}
@@ -162,6 +162,25 @@ def _clear_fixture(transaction: Session) -> None:
     transaction.execute(
         delete(CustomerDecisionGate).where(CustomerDecisionGate.id.like(f"{GATE_ID_PREFIX}%"))
     )
+    transaction.execute(
+        delete(T_User).where(
+            or_(T_User.id == ACTOR_ID, T_User.username == ACTOR_USERNAME)
+        )
+    )
+
+
+def _seed_actor(transaction: Session) -> str:
+    transaction.add(
+        T_User(
+            id=ACTOR_ID,
+            username=ACTOR_USERNAME,
+            display_name="V8 Overlay Live Fixture Actor",
+            password_hash="fixture-not-login-capable",
+            is_active=False,
+        )
+    )
+    transaction.flush()
+    return ACTOR_ID
 
 
 def _seed_case_and_activities(transaction: Session, actor_id: str) -> None:
@@ -402,10 +421,8 @@ def seed_live_fixture(session_factory: Callable[[], Session] | None = None) -> d
         try:
             _assert_sqlite_contract(transaction)
             _preflight_current_identity_ownership(transaction)
-            actor_id = transaction.scalar(select(T_User.id).where(T_User.username == "admin"))
-            if actor_id is None:
-                raise RuntimeError("V8 overlay seed requires the existing admin user")
             _clear_fixture(transaction)
+            actor_id = _seed_actor(transaction)
             _seed_case_and_activities(transaction, actor_id)
             _seed_gates(transaction, actor_id)
             transaction.commit()
