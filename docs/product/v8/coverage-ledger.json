@@ -2018,8 +2018,8 @@
     {
       "catalog_id": "FPMS-V8-LEGACY-STATE-PREFLIGHT-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LEGACY-STATE-PREFLIGHT-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4473,6 +4473,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-FEE-DONE-NO-LEGAL-EFFECT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-FEE-DONE-NO-LEGAL-EFFECT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-LEGACY-STATE-PREFLIGHT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "71b219f6c90ee968aa16fcc0be0a320b78d1216b",
+        "1d219f5ad465ee45ce904c6adadcadf84ed02411"
+      ],
+      "paths": [
+        "backend/scripts/audit_v8_legacy_state.py",
+        "backend/tests/test_v8_legacy_state_preflight.py"
+      ],
+      "tree_sha256": "c1472baee38609663b399e6fd31115cfe0d61f7ae88f2287623bfbb4925338cd",
+      "tests": [
+        "real RED 18 failed on the missing module",
+        "focused GREEN 18 passed after one exact test-only AST correction",
+        "independent review correction added confirmed FEE activity exclusion; final focused 18 passed",
+        "scoped Ruff, format and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LEGACY-STATE-PREFLIGHT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LEGACY-STATE-PREFLIGHT-CURRENT-ADOPTION.md"
     }
   ]
 }
