@@ -486,13 +486,10 @@
     {
       "catalog_id": "FPMS-V8-DOCUMENT-SEMANTICS-EVENT-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "AUTHORITY_BLOCKED",
+      "disposition": "SUPERSEDED_BY_STORY",
       "story_id": null,
-      "successor_story_id": null,
-      "blocker": {
-        "kind": "LIFECYCLE_DISPATCH_AUTHORITY_CONFLICT",
-        "detail": "The frozen row requires ordinary document create to dispatch non-grant lifecycle events, while the preserved focused test requires zero activity and the current domain contract permits only reviewed evidence to trigger central lifecycle change. Actor, evidence, confirmation and idempotency lineage are not frozen for this create seam."
-      }
+      "successor_story_id": "V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CURRENT-ADOPTION",
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-20260712-01",
@@ -4352,6 +4349,40 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-REAL-TEMPLATE-SET-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-REAL-TEMPLATE-SET-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "ae26fc6db220a6f54dc85e8a7bfc7b16982131e5",
+        "d5ea31f2293f2497e854029e7a6015c23aa6ac07"
+      ],
+      "paths": [
+        "backend/app/modules/documents/api.py",
+        "backend/app/modules/documents/lifecycle_evidence_adapters.py",
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/app/modules/documents/semantics.py",
+        "backend/app/modules/documents/service.py",
+        "backend/tests/test_addgap_document_semantic_state_effect.py",
+        "backend/tests/test_b2_reply_chain.py",
+        "backend/tests/test_document_impact_preview_api.py",
+        "backend/tests/test_document_wizard_batch_create.py",
+        "backend/tests/test_spec_alignment_e2e.py",
+        "backend/tests/test_v8_acceptance_notice_evidence_adapter.py",
+        "backend/tests/test_v8_document_semantics_event_adapter.py",
+        "backend/tests/test_v8_oa_notice_evidence_api.py"
+      ],
+      "tree_sha256": "492b6901caf7650f49634007c16d79532c0c721fe29d12410b79aac9ebd1143e",
+      "tests": [
+        "current-tree decisive RED (153 failed, 2 passed) then focused GREEN (155 passed)",
+        "independent final decisive rerun after correction (159 passed)",
+        "exact 23-file affected tranche (585 passed; four causally attested pre-existing OA_OUT baseline failures)",
+        "scoped Ruff and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CURRENT-ADOPTION.md"
     }
   ]
 }
