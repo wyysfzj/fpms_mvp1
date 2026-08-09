@@ -4383,6 +4383,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "83d014fb825c76e90c53821c7db9ed7f3cd49436"
+      ],
+      "paths": [
+        "backend/app/modules/documents/grant_fee_lines.py",
+        "backend/tests/test_v8_grant_notice_fee_line_snapshot.py"
+      ],
+      "tree_sha256": "4d3505a0455cfe92303f14c65542d27c8412bcce8e02b68237ecc753dd22faba",
+      "tests": [
+        "exact focused current-tree snapshot suite (46 passed)",
+        "source and test blobs are byte-identical to accepted product anchor 83d014f",
+        "scoped Ruff and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-CURRENT-ADOPTION.md"
     }
   ]
 }
