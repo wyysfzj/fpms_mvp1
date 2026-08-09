@@ -710,8 +710,8 @@
     {
       "catalog_id": "FPMS-V8-FORMAT-LETTER-CONTEXT-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FORMAT-LETTER-CONTEXT-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4516,6 +4516,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-YEAR-ANNUITY-OBLIGATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-YEAR-ANNUITY-OBLIGATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FORMAT-LETTER-CONTEXT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "8f87c9f92ff69e4677d5ed00f2269f7d634dc378"
+      ],
+      "paths": [
+        "backend/app/modules/documents/letter_context.py",
+        "backend/tests/test_v8_format_letter_context.py"
+      ],
+      "tree_sha256": "4ecc32562627edc76d589b0d63338c82db497f98cc40ea438971f8572d94c822",
+      "tests": [
+        "real RED 45 failed on the missing module",
+        "focused format-letter context suite 45 passed",
+        "current inherited document evidence, template, mapping and handoff tranche 116 passed",
+        "scoped Ruff, format and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-CONTEXT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-CONTEXT-CURRENT-ADOPTION.md"
     }
   ]
 }
