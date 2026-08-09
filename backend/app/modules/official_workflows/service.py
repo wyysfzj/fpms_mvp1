@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
+import os
 import re
+import stat
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -13,7 +17,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import raise_business_error
+from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.models import GovPayment, PayList
 from app.modules.cases.enums import CaseStatus
 from app.modules.cases.lifecycle_activity_service import append_case_activity
@@ -40,6 +44,8 @@ from app.modules.documents.evidence_contracts import (
     EvidenceRole,
     EvidenceVersionResult,
     EvidenceVersionState,
+    RegisterEvidenceDerivationCommand,
+    RegisterEvidenceVersionCommand,
 )
 from app.modules.documents.evidence_policy import (
     _COPYABLE_OA_ATTACHMENT_ROLES,
@@ -49,6 +55,8 @@ from app.modules.documents.evidence_policy import (
 from app.modules.documents.evidence_service import (
     _capture_lifecycle_projection,
     _stored_activity_projection,
+    register_evidence_derivation,
+    register_evidence_version,
 )
 from app.modules.documents.evidence_workflow_service import (
     FinalizeExternalSubmissionCommand,
@@ -57,6 +65,8 @@ from app.modules.documents.evidence_workflow_service import (
     finalize_external_submission,
     prepare_oa_reply,
 )
+from app.modules.documents.letter_context import FormatLetterContextResult
+from app.modules.documents.letter_render_service import RenderedFormatLetter
 from app.modules.documents.models import (
     DocAttachment,
     DocTemplate,
@@ -147,6 +157,13 @@ class FinalizeOaExternalSubmissionResult:
     submitted_at: datetime
     idempotency_key: str
     reused: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PendingFormatLetterArchive:
+    evidence_version: EvidenceVersionResult
+    managed_file_path: Path
+    managed_file_identity: tuple[int, int]
 
 
 def _normalize_text(value: str | None) -> str | None:
@@ -2992,6 +3009,383 @@ def _get_letter_handoff(db: Session, handoff_id: str) -> LetterHandoff:
             status_code=404,
         )
     return handoff
+
+
+def _format_letter_storage_root() -> Path:
+    return (Path(__file__).resolve().parents[3] / "storage").resolve()
+
+
+def _format_letter_archive_conflict(message: str) -> None:
+    raise_business_error(
+        "FORMAT_LETTER_ARCHIVE_CONFLICT",
+        message,
+        status_code=409,
+    )
+
+
+def _format_letter_archive_lock_path(managed_file_path: Path) -> Path:
+    return managed_file_path.parent / f".{managed_file_path.name}.archive.lock"
+
+
+@contextmanager
+def _format_letter_archive_lock(managed_file_path: Path):
+    lock_path = _format_letter_archive_lock_path(managed_file_path)
+    with lock_path.open("a+b") as descriptor:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+
+
+def _remove_format_letter_archive_file_locked(
+    managed_file_path: Path,
+    *,
+    expected_identity: tuple[int, int],
+) -> None:
+    try:
+        current = managed_file_path.stat(follow_symlinks=False)
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or (current.st_dev, current.st_ino) != expected_identity
+        ):
+            raise BusinessError(
+                "FORMAT_LETTER_ARCHIVE_COMPENSATION_FAILED",
+                "Rendered format-letter archive identity changed before compensation",
+                status_code=500,
+            )
+        managed_file_path.unlink()
+    except FileNotFoundError:
+        return
+    except BusinessError:
+        raise
+    except Exception as cleanup_error:
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_COMPENSATION_FAILED",
+            "Rendered format-letter archive compensation failed",
+            status_code=500,
+        ) from cleanup_error
+
+
+def _remove_format_letter_archive_file(
+    managed_file_path: Path,
+    *,
+    expected_identity: tuple[int, int],
+    original_error: Exception,
+) -> None:
+    del original_error
+    try:
+        managed_file_path.parent.mkdir(parents=True, exist_ok=True)
+        with _format_letter_archive_lock(managed_file_path):
+            _remove_format_letter_archive_file_locked(
+                managed_file_path,
+                expected_identity=expected_identity,
+            )
+    except BusinessError:
+        raise
+    except Exception as cleanup_error:
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_COMPENSATION_FAILED",
+            "Rendered format-letter archive compensation failed",
+            status_code=500,
+        ) from cleanup_error
+
+
+def _create_format_letter_archive_file(
+    managed_file_path: Path,
+    content: bytes,
+) -> tuple[int, int]:
+    identity: tuple[int, int] | None = None
+    try:
+        managed_file_path.parent.mkdir(parents=True, exist_ok=True)
+        with _format_letter_archive_lock(managed_file_path):
+            try:
+                with managed_file_path.open("xb") as stream:
+                    created = os.fstat(stream.fileno())
+                    identity = (created.st_dev, created.st_ino)
+                    if stream.write(content) != len(content):
+                        raise OSError("short format-letter archive write")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            except FileExistsError as exc:
+                raise BusinessError(
+                    "FORMAT_LETTER_ARCHIVE_CONFLICT",
+                    "Generated Word archive path already exists",
+                    status_code=409,
+                ) from exc
+            except Exception as exc:
+                if identity is not None:
+                    _remove_format_letter_archive_file_locked(
+                        managed_file_path,
+                        expected_identity=identity,
+                    )
+                if isinstance(exc, BusinessError):
+                    raise
+                raise BusinessError(
+                    "FORMAT_LETTER_ARCHIVE_STORAGE_ERROR",
+                    "Rendered format letter could not be archived",
+                    status_code=500,
+                ) from exc
+    except Exception as exc:
+        if isinstance(exc, BusinessError):
+            raise
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_STORAGE_ERROR",
+            "Rendered format letter could not be archived",
+            status_code=500,
+        ) from exc
+    if identity is None:
+        raise BusinessError(
+            "FORMAT_LETTER_ARCHIVE_STORAGE_ERROR",
+            "Rendered format letter could not be archived",
+            status_code=500,
+        )
+    return identity
+
+
+def _format_letter_archive_path(
+    *,
+    handoff: LetterHandoff,
+    rendered: RenderedFormatLetter,
+) -> tuple[str, Path]:
+    relative_path = _normalize_text(handoff.generated_word_path)
+    if not relative_path:
+        _format_letter_archive_conflict("Letter handoff has no generated Word path")
+    candidate = Path(relative_path)
+    if candidate.is_absolute() or ".." in candidate.parts or candidate.name != rendered.file_name:
+        _format_letter_archive_conflict("Generated Word path is inconsistent")
+    storage_root = _format_letter_storage_root().resolve()
+    managed_path = (storage_root / candidate).resolve()
+    try:
+        managed_path.relative_to(storage_root)
+    except ValueError:
+        _format_letter_archive_conflict("Generated Word path is outside managed storage")
+    return relative_path, managed_path
+
+
+def _format_letter_handoff_attachment(
+    db: Session,
+    *,
+    handoff: LetterHandoff,
+    rendered: RenderedFormatLetter,
+    relative_path: str,
+) -> LetterHandoffAttachment:
+    rows = (
+        db.execute(
+            select(LetterHandoffAttachment).where(
+                LetterHandoffAttachment.handoff_id == handoff.id,
+                LetterHandoffAttachment.attachment_role == "FORMAT_LETTER_WORD",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(rows) != 1:
+        _format_letter_archive_conflict(
+            "Letter handoff must have exactly one generated Word attachment row"
+        )
+    row = rows[0]
+    if (
+        row.attachment_id is not None
+        or row.file_name != rendered.file_name
+        or row.file_path != relative_path
+        or row.required is not True
+        or row.included is not True
+    ):
+        _format_letter_archive_conflict("Generated Word handoff row is inconsistent")
+    return row
+
+
+def _latest_format_letter_source_version(
+    db: Session,
+    *,
+    context_result: FormatLetterContextResult,
+    handoff: LetterHandoff,
+) -> DocumentEvidenceVersion:
+    source = _get_document(db, handoff.source_document_id)
+    if (
+        context_result.case_id != source.case_id
+        or context_result.source_document_id != source.id
+        or source.direction != "IN"
+    ):
+        _format_letter_archive_conflict("Letter context is not the handoff IN source")
+
+    latest_document = db.scalar(
+        select(Document)
+        .where(
+            Document.case_id == source.case_id,
+            Document.direction == "IN",
+        )
+        .order_by(
+            Document.doc_date.desc(),
+            Document.created_at.desc(),
+            Document.id.desc(),
+        )
+        .limit(1)
+    )
+    if latest_document is None or latest_document.id != source.id:
+        _format_letter_archive_conflict("Letter handoff source is not the latest IN document")
+
+    versions = (
+        db.execute(
+            select(DocumentEvidenceVersion).where(
+                DocumentEvidenceVersion.case_id == source.case_id,
+                DocumentEvidenceVersion.document_id == latest_document.id,
+                DocumentEvidenceVersion.role == EvidenceRole.OFFICIAL_FINAL_PDF.value,
+                DocumentEvidenceVersion.state == EvidenceVersionState.FINAL.value,
+                DocumentEvidenceVersion.review_state == EvidenceReviewState.APPROVED.value,
+                DocumentEvidenceVersion.current_identity_key.is_not(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(versions) != 1:
+        _format_letter_archive_conflict(
+            "Latest IN document must have exactly one qualifying evidence version"
+        )
+    latest_version = versions[0]
+    if latest_version.id != context_result.source_evidence_version_id:
+        _format_letter_archive_conflict(
+            "Letter context is not bound to the latest IN evidence version"
+        )
+    return latest_version
+
+
+def archive_format_letter(
+    db: Session,
+    *,
+    handoff_id: str,
+    context_result: FormatLetterContextResult,
+    rendered: RenderedFormatLetter,
+    actor_id: str,
+) -> PendingFormatLetterArchive:
+    if type(context_result) is not FormatLetterContextResult:
+        _format_letter_archive_conflict("Format-letter context is invalid")
+    if type(rendered) is not RenderedFormatLetter:
+        _format_letter_archive_conflict("Rendered format letter is invalid")
+    if (
+        type(actor_id) is not str
+        or not actor_id
+        or actor_id != actor_id.strip()
+        or len(actor_id) > 36
+    ):
+        _format_letter_archive_conflict("Format-letter archive actor is invalid")
+    expected_hash = f"sha256:{hashlib.sha256(rendered.content).hexdigest()}"
+    if rendered.content_hash != expected_hash:
+        _format_letter_archive_conflict("Rendered format-letter hash is inconsistent")
+
+    handoff = _get_letter_handoff(db, handoff_id)
+    if handoff.generated_document_id is not None:
+        _format_letter_archive_conflict("Letter handoff is already linked to a generated document")
+    if (
+        handoff.format_letter_mapping_id != context_result.mapping_id
+        or handoff.format_letter_template_id != context_result.template_id
+        or handoff.client_contact_id != context_result.selected_contact_id
+        or handoff.contact_selection_source != context_result.contact_selection_source
+        or handoff.salutation_source != context_result.salutation_source
+        or handoff.salutation_text != context_result.context.get("salutation_text")
+    ):
+        _format_letter_archive_conflict(
+            "Letter context provenance differs from the persisted handoff"
+        )
+    source_version = _latest_format_letter_source_version(
+        db,
+        context_result=context_result,
+        handoff=handoff,
+    )
+    relative_path, managed_path = _format_letter_archive_path(
+        handoff=handoff,
+        rendered=rendered,
+    )
+    handoff_attachment = _format_letter_handoff_attachment(
+        db,
+        handoff=handoff,
+        rendered=rendered,
+        relative_path=relative_path,
+    )
+
+    generated_document = Document(
+        id=str(uuid4()),
+        case_id=context_result.case_id,
+        direction="OUT",
+        title=rendered.file_name,
+        reply_to_id=source_version.document_id,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(generated_document)
+    db.flush()
+    generated_attachment = DocAttachment(
+        id=str(uuid4()),
+        document_id=generated_document.id,
+        file_name=rendered.file_name,
+        file_path=relative_path,
+        mime_type=rendered.media_type,
+        file_size=len(rendered.content),
+        official_file_role=EvidenceRole.CLIENT_LETTER_WORD.value,
+        content_hash=rendered.content_hash,
+        is_archive_evidence=True,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(generated_attachment)
+    db.flush()
+
+    version = register_evidence_version(
+        RegisterEvidenceVersionCommand(
+            case_id=context_result.case_id,
+            document_id=generated_document.id,
+            attachment_id=generated_attachment.id,
+            lineage_key=f"format-letter:{handoff.id}",
+            role=EvidenceRole.CLIENT_LETTER_WORD,
+            state=EvidenceVersionState.DRAFT,
+            creator_id=actor_id,
+            content_hash=rendered.content_hash,
+        ),
+        db,
+    )
+    derived_at = datetime.now()
+    register_evidence_derivation(
+        RegisterEvidenceDerivationCommand(
+            case_id=context_result.case_id,
+            parent_evidence_version_id=source_version.id,
+            child_evidence_version_id=version.evidence_version_id,
+            derivation_type=EvidenceDerivationType.CUSTOMER_LETTER_RENDER,
+            actor_id=actor_id,
+            derived_at=derived_at,
+            source_snapshot=json.dumps(
+                {
+                    "handoff_id": handoff.id,
+                    "format_letter_mapping_id": context_result.mapping_id,
+                    "format_letter_template_id": context_result.template_id,
+                    "client_contact_id": context_result.selected_contact_id,
+                    "contact_selection_source": (context_result.contact_selection_source),
+                    "salutation_source": context_result.salutation_source,
+                    "salutation_text": context_result.context.get("salutation_text"),
+                    "rendered_content_hash": rendered.content_hash,
+                    "source_document_id": source_version.document_id,
+                    "source_evidence_version_id": source_version.id,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        ),
+        db,
+    )
+    handoff.generated_document_id = generated_document.id
+    handoff_attachment.attachment_id = generated_attachment.id
+
+    managed_file_identity = _create_format_letter_archive_file(
+        managed_path,
+        rendered.content,
+    )
+    return PendingFormatLetterArchive(
+        evidence_version=version,
+        managed_file_path=managed_path,
+        managed_file_identity=managed_file_identity,
+    )
 
 
 def record_letter_handoff_status(
