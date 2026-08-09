@@ -2552,7 +2552,9 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "f89d222861d6ebda88ead322cfd7254e8fb26e64",
-        "1975bb1027f201a9bc35201dcc0cafbdfc278729"
+        "1975bb1027f201a9bc35201dcc0cafbdfc278729",
+        "91bb156",
+        "f7bf2fc"
       ],
       "paths": [
         "backend/app/modules/fees/obligation_service.py",
@@ -2564,10 +2566,11 @@
         "backend/tests/test_v8_w1_f1_fee_obligation.py",
         "backend/tests/test_v8_w1_f2_fee_obligation_line.py"
       ],
-      "tree_sha256": "dfa3434cd647cc4d32a1b880c669e3e9597c46a042a7bed2ed5f06f866835da3",
+      "tree_sha256": "4964adb451b37902f5ca08c958ff887271600a00f620ad969fed6f3f100b5338",
       "tests": [
         "pytest -q tests/test_v8_fee_obligation_recognize.py tests/test_v8_fee_estimate_read_only.py tests/test_v8_fee_obligation_payment_evidence.py tests/test_v8_fee_obligation_contracts.py tests/test_v8_w1_f1_fee_obligation.py tests/test_v8_w1_f2_fee_obligation_line.py tests/test_v8_lifecycle_activity_append.py from backend cwd (170 passed)",
-        "independent compositional successor tranche with rows 110/113 from backend cwd (290 passed)"
+        "independent compositional successor tranche with rows 110/113 from backend cwd (290 passed)",
+        "independent recognition-link correction review confirmed core recognition/payment seams remain compatible"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md",
@@ -2786,7 +2789,9 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "1a886c4e40b0ee6e83882c42e6eb4da561feccc7",
-        "1975bb1027f201a9bc35201dcc0cafbdfc278729"
+        "1975bb1027f201a9bc35201dcc0cafbdfc278729",
+        "91bb156",
+        "f7bf2fc"
       ],
       "paths": [
         "backend/app/modules/fees/fee_reduction_approval_service.py",
@@ -2794,11 +2799,12 @@
         "backend/tests/test_v8_fee_obligation_instruction.py",
         "backend/tests/test_v8_fee_reduction_approval_record.py"
       ],
-      "tree_sha256": "6f043e166640684d34488448c9d2c7631e0fd72563008ae7071d2b3bd8c092f0",
+      "tree_sha256": "697705167da797fd032f12057f5d151265abc28197fdd5488ab1555df5f4d57a",
       "tests": [
         "pytest -q tests/test_v8_fee_reduction_approval_record.py plus its three inherited regressions from backend cwd (186 passed)",
         "pytest -q tests/test_v8_fee_obligation_instruction.py plus its three inherited regressions from backend cwd (135 passed)",
-        "independent compositional successor tranche with rows 110/113 from backend cwd (290 passed)"
+        "independent compositional successor tranche with rows 110/113 from backend cwd (290 passed)",
+        "independent recognition-link correction review passed focused instruction/replay suite (35 passed)"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md",
@@ -2935,16 +2941,19 @@
       "story_id": "V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "1975bb1027f201a9bc35201dcc0cafbdfc278729"
+        "1975bb1027f201a9bc35201dcc0cafbdfc278729",
+        "91bb156",
+        "f7bf2fc"
       ],
       "paths": [
         "backend/app/modules/fees/obligation_service.py",
         "backend/tests/test_v8_fee_obligation_detail_read.py",
         "backend/tests/test_v8_fee_obligation_prepare_draft.py"
       ],
-      "tree_sha256": "67daa76fb1973f991bdf3ec60cb35fc2ccc845fab0bb4b20eae9bf985c8bd8e3",
+      "tree_sha256": "f6d3c49c5780a63ff6900d08f94da51bba928dc4af99d3c8d17a6ebf80c49f9f",
       "tests": [
-        "pytest -q detail-read, prepare-draft and nine inherited fee-obligation/lifecycle files from backend cwd (290 passed)"
+        "pytest -q detail-read, prepare-draft and nine inherited fee-obligation/lifecycle files from backend cwd (290 passed)",
+        "independent recognition-link correction review confirmed strict selector and stored-chain compatibility"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FEE-OBLIGATION-READ-DRAFT-CURRENT-ADOPTION.md",
@@ -3300,16 +3309,19 @@
       "story_id": "V8-ANNUITY-PAYABLE-AMOUNT-RULE-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "def9414f585466c6c8907230a7f5d5b0fce24ed9"
+        "def9414f585466c6c8907230a7f5d5b0fce24ed9",
+        "91bb156",
+        "f7bf2fc"
       ],
       "paths": [
         "backend/app/modules/fees/obligation_service.py",
         "backend/tests/test_v8_annuity_payable_amount.py"
       ],
-      "tree_sha256": "6ac44d3db8583507822a4241ed947da984c82804d9f38d65feb8e145469a9b43",
+      "tree_sha256": "a6eb5113c3f6160a6b5177612d406c7d5c32b51e142603f59b9a14a632f4cfce",
       "tests": [
         "pytest -q exact annuity payable-amount test plus first-ten-year dependency regression from backend cwd (62 passed)",
-        "scoped Ruff, exact story-only diff-check and archive/current focused-test and rule-slice identity passed"
+        "scoped Ruff, exact story-only diff-check and archive/current focused-test and rule-slice identity passed",
+        "independent recognition-link correction review confirmed pure payable-amount slice remains compatible"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-ANNUITY-PAYABLE-AMOUNT-RULE-CURRENT-ADOPTION.md",
@@ -4073,6 +4085,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FILING-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FEE-CLIENT-INSTRUCTION-RECOGNITION-LINK-CORRECTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "91bb156",
+        "f7bf2fc"
+      ],
+      "paths": [
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/tests/test_v8_fee_obligation_instruction.py"
+      ],
+      "tree_sha256": "c958fdedfa31cf0146999fcdd1539a40fcda54a1087f39deb7da83e334c13cec",
+      "tests": [
+        "Task-133 first-write and exact replay RED isolated the predecessor mismatch (34 passed, 1 failed)",
+        "corrected focused instruction and replay suite (35 passed)",
+        "scoped Ruff and exact two-path diff checks passed",
+        "independent High re-review closed the prior P1 and approved P0/P1/P2 0/0/0",
+        "four CURRENT_VERIFIED obligation-service stories independently assessed compatible"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FEE-CLIENT-INSTRUCTION-RECOGNITION-LINK-CORRECTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FEE-CLIENT-INSTRUCTION-RECOGNITION-LINK-CORRECTION.md"
     }
   ]
 }
