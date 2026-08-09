@@ -390,6 +390,16 @@ def test_case_projection_latest_activity_granted_boundary_counts_and_hash_are_ex
             confirmation_status=ConfirmationStatus.NEEDS_REVIEW.value,
             payload={"oa_sequence": False},
         )
+        _add_activity(
+            transaction,
+            case=oa,
+            actor_id=actor_id,
+            value=63,
+            sequence=4,
+            lane=ActivityLane.FEE.value,
+            activity_type="IGNORED_FEE_ACTIVITY",
+            payload={"oa_sequence": False},
+        )
         transaction.commit()
 
         report = api.audit_v8_legacy_state(transaction=transaction, actor_id=actor_id)
