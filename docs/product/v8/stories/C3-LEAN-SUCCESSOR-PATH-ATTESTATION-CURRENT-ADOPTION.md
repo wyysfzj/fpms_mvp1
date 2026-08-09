@@ -5,7 +5,9 @@
   shared path against its unique latest accepted owner.
 - Contract:
   `docs/product/v8/stories/C3-LEAN-SUCCESSOR-PATH-ATTESTATION-CONTRACT.md`.
-- Product commit: `6e6b1e8dc4a61c5b65129d1fb55ae511968b8d4a`.
+- Product commits: `6e6b1e8dc4a61c5b65129d1fb55ae511968b8d4a` and exact
+  commit-reference canonicalization correction
+  `5965e1fb6533d75f2adb7d8af4a6042413abf0d3`.
 - Catalog IDs: none; this is a correction to the C3 stateless milestone checker.
 
 ## Observable contract
@@ -28,8 +30,11 @@ The minimum implementation made the full checker suite pass `11` tests. Scoped R
 format and exact diff checks passed.
 
 Independent High review inspected the exact algorithm, review/reachability preservation,
-unique maximal-owner rule, incomparable-owner failure and present boundedness. It reran all
-decisive checks and approved the exact candidate with `P0/P1/P2 = 0/0/0`.
+unique maximal-owner rule, incomparable-owner failure and present boundedness. A real-ledger
+probe then exposed full and abbreviated names of the same commit; the minimum correction
+canonicalizes both with Git before owner grouping and adds an exact regression. Independent
+re-review passed all `12` tests and approved the final candidate with
+`P0/P1/P2 = 0/0/0`.
 
 ## Non-goals and rollback
 
