@@ -950,8 +950,8 @@
     {
       "catalog_id": "FPMS-V8-GRANT-INSTRUCTION-OBLIGATION-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-INSTRUCTION-OBLIGATION-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4582,6 +4582,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-ARCHIVE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-ARCHIVE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-INSTRUCTION-OBLIGATION-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "95561455a797b0d7f261d9739be5ce23ebdd9cbb"
+      ],
+      "paths": [
+        "backend/app/modules/grant_fees/service.py",
+        "backend/tests/test_v8_grant_instruction_obligation_adapter.py"
+      ],
+      "tree_sha256": "634732ca0b991c215e386047865fb1ec55ecf1746e8f22df0902893b7760461a",
+      "tests": [
+        "contract-complete RED 41 failed on the missing typed adapter",
+        "focused grant instruction obligation adapter suite 41 passed",
+        "exact grant instruction, grant-year, generic instruction and lifecycle tranche 176 passed",
+        "scoped Ruff, format and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-INSTRUCTION-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-INSTRUCTION-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
