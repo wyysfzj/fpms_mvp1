@@ -1,10 +1,12 @@
 # Story V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION
 
-- Status: `REVIEW_CORRECTION_CONTRACT_FROZEN / IMPLEMENTATION_PENDING`.
+- Status: `READY_FOR_INDEPENDENT_REVIEW`.
 - Risk: `PROTECTED`.
 - Catalog ID: `FPMS-V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-20260712-01`
   (ordinal `74`).
-- Product/test commit: `997a6896b90deae18ecda7bde9db35e48513b242`.
+- Product/test commits:
+  `997a6896b90deae18ecda7bde9db35e48513b242` and
+  `06cd5882ac92a7ac3d6c7f102ccdecb67bb2c43b`.
 - Integration parent: `37beb56c66a2dc450a7cb9e0ba6acffee4b0ef51`.
 - Production-entry correction contract commit: `68bfd75`.
 - Authority: `DEC-V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-20260809`, the exact frozen Row74
@@ -109,13 +111,18 @@ as the source of detailed failure-matrix coverage.
 - real current-tree RED before product change: `45 failed`; every node stopped at the
   absent public dispatch seam;
 - focused GREEN after minimum implementation: `45 passed`;
+- dedicated API RED before the API product change: `18 failed`; the route was absent;
+- hash-boundary correction RED: `1 failed, 7 passed`; Pydantic's unanchored pattern
+  admitted a prefixed hash and delegated it to service validation instead of returning
+  the contracted HTTP 422;
+- final dedicated API plus dispatcher GREEN: `66 passed`;
 - current snapshot plus lifecycle-rule dependency tranche: `114 passed`;
 - Row61 semantics/acceptance/OA affected regression tranche: `159 passed`;
 - exact inherited 26-file backend tranche: `162 passed, 55 failed`;
-- scoped Ruff check and format check on the two changed paths: PASS;
+- scoped Ruff check and format check on all five exact current-tree paths: PASS;
 - exact diff check: PASS.
 
-The 55 inherited failures are current-tree baselines outside the two-path closure:
+The 55 inherited failures are current-tree baselines outside the five-path closure:
 47 legacy CaseCreate fixtures stop at HTTP 422 because they omit the now-required explicit
 `fee_reduction`; two older catalog-overlay expectations freeze the executable set before
 later accepted rows 031/034; six are the already known OA_OUT reply-date/filter baseline.
