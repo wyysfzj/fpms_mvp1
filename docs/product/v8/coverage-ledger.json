@@ -2118,8 +2118,8 @@
     {
       "catalog_id": "FPMS-V8-OVERLAY-HTTP-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-HTTP-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4879,6 +4879,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-KEYSET-REVISION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-KEYSET-REVISION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-HTTP-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "646d46021832b2971290d21ff3589c7afe16ad91"
+      ],
+      "paths": [
+        "backend/app/modules/cases/api.py",
+        "backend/tests/test_v8_lifecycle_overlay_api.py"
+      ],
+      "tree_sha256": "f067f252a2af376c498b12c750f8280fd5bdcb0cf08f96aab8fd3564680d61a6",
+      "tests": [
+        "focused RED failed 10 cases because the route and service seam were absent",
+        "focused API route, permissions, serialization and status suite 10 passed",
+        "scoped Ruff, format and exact commit diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-HTTP-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-HTTP-CURRENT-ADOPTION.md"
     }
   ]
 }
