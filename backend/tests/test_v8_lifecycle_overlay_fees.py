@@ -776,3 +776,95 @@ def test_pay_list_projects_multiple_obligations_in_id_order(
         OBLIGATION_ID,
         second_obligation_id,
     ]
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    (
+        "pay_list_declared_item",
+        "payment_declared_line",
+        "export_artifact_identity",
+        "ambiguous_persisted_relation",
+        "broken_draft_predecessor",
+        "cross_case_payment_graph",
+    ),
+)
+def test_fee_activity_relation_corruption_fails_closed(
+    session_factory: sessionmaker,
+    corruption: str,
+) -> None:
+    with session_factory() as transaction:
+        _seed(transaction)
+        pay_list_id, payment_id = _seed_full_fee_chain(transaction)
+        if corruption == "pay_list_declared_item":
+            activity = transaction.get(CaseActivityEvent, "activity-overlay-fees-pay-list")
+            assert activity is not None
+            payload = json.loads(activity.payload_json)
+            payload["fee_item_ids"] = ["unrelated-item"]
+            activity.payload_json = _canonical(payload)
+        elif corruption == "payment_declared_line":
+            activity = transaction.get(CaseActivityEvent, "activity-overlay-fees-payment")
+            assert activity is not None
+            payload = json.loads(activity.payload_json)
+            payload["obligation_line_ids"] = ["unrelated-line"]
+            activity.payload_json = _canonical(payload)
+        elif corruption == "export_artifact_identity":
+            activity = transaction.get(CaseActivityEvent, "activity-overlay-fees-export")
+            assert activity is not None
+            payload = json.loads(activity.payload_json)
+            payload["content_sha256"] = "b" * 64
+            activity.payload_json = _canonical(payload)
+        elif corruption == "ambiguous_persisted_relation":
+            extra_item = FeeItem(
+                id="item-overlay-fees-ambiguous",
+                draft_id=DRAFT_ID,
+                case_id=CASE_ID,
+                fee_code="APPLICATION",
+                fee_name="申请费重复项",
+                fee_type="GOV",
+                year_no=1,
+                amount=Decimal("135.00"),
+            )
+            transaction.add(extra_item)
+            transaction.flush()
+            transaction.add_all(
+                (
+                    FeeObligationDraftItemLink(
+                        id="link-overlay-fees-ambiguous",
+                        obligation_line_id=LINE_ID,
+                        fee_item_id=extra_item.id,
+                    ),
+                    GovPayment(
+                        pay_list_id=pay_list_id,
+                        case_id=CASE_ID,
+                        fee_item_id=extra_item.id,
+                        status="RECORDED",
+                        currency="CNY",
+                        paid_amount=Decimal("135.00"),
+                    ),
+                )
+            )
+        elif corruption == "broken_draft_predecessor":
+            activity = transaction.get(CaseActivityEvent, "activity-overlay-fees-draft")
+            assert activity is not None
+            activity.source_activity_id = RECOGNITION_ACTIVITY_ID
+        else:
+            other_case_id = "case-overlay-fees-other"
+            transaction.add(Case(id=other_case_id, case_no="OVERLAY-FEES-OTHER"))
+            transaction.flush()
+            payment = transaction.get(GovPayment, payment_id)
+            assert payment is not None
+            payment.case_id = other_case_id
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as raised:
+            read_lifecycle_overlay(
+                case_id=CASE_ID,
+                after_sequence=0,
+                limit=25,
+                as_of_revision=None,
+                transaction=transaction,
+            )
+
+    assert raised.value.code == "LIFECYCLE_OVERLAY_FEE_CONFLICT"
+    assert raised.value.status_code == 409
