@@ -7,7 +7,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from hashlib import sha256
 from re import fullmatch
 from uuid import uuid4
@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
+from app.modules.annuity.models import AnnuityTask, FutureAnnuityReductionLineage
 from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
 from app.modules.documents.application_fee_notice_contracts import (
     ApplicationFeeNotice,
@@ -28,12 +29,36 @@ from app.modules.documents.application_fee_notice_contracts import (
 from app.modules.documents.models import DocTemplate, Document, DocumentEvidenceVersion
 from app.modules.documents.schemas import DocumentWizardFeeFinalRowIn
 from app.modules.documents.semantics import resolve_document_semantics
+from app.modules.fees.annuity_reduction import (
+    AnnuityReductionScopeError,
+    validate_annuity_fee_reduction,
+)
+from app.modules.fees.cnipa_annuity_rate_candidate import (
+    CNIPA_ANNUITY_SOURCE_SNAPSHOT,
+    select_cnipa_annuity_amount,
+)
+from app.modules.fees.fee_reduction import (
+    FeeReductionApprovalContext,
+    FeeReductionApprovalScopeType,
+    FeeReductionEvaluationContext,
+    FeeReductionInput,
+    FeeReductionInputProvenance,
+    FeeReductionValidationError,
+)
 from app.modules.fees.fee_reduction_approval_service import (
     RecordFeeReductionApprovalCommand,
     RecordFeeReductionApprovalResult,
     record_fee_reduction_approval,
 )
-from app.modules.fees.models import FeeDraft, FeeItem
+from app.modules.fees.models import (
+    FeeDraft,
+    FeeItem,
+    FeeObligation,
+    FeeObligationLine,
+    FeeRate,
+    FeeReductionApproval,
+    OfficialRateBook,
+)
 from app.modules.fees.obligation_contracts import (
     FeeDifferenceReviewState,
     FeeDomain,
@@ -48,6 +73,7 @@ from app.modules.fees.obligation_contracts import (
 from app.modules.fees.obligation_service import recognize_obligation
 from app.modules.fees.official_rate_book import (
     CalculateCompensationPeriodAnnuityFeeCommand,
+    CalculateOpenLicenseAnnuityReductionCommand,
     GetLayoutBibliographicChangeFeeCommand,
     GetLayoutExtensionFeeCommand,
     GetLayoutNonvoluntaryLicenseFeeCommand,
@@ -57,6 +83,7 @@ from app.modules.fees.official_rate_book import (
     GetLayoutRestorationFeeCommand,
     GetPatentTermCompensationRequestFeeCommand,
     calculate_compensation_period_annuity_fee,
+    calculate_open_license_annuity_reduction,
     get_layout_bibliographic_change_fee,
     get_layout_extension_fee,
     get_layout_nonvoluntary_license_fee,
@@ -390,6 +417,53 @@ _TERM_COMPENSATION_GRANTED_SCHEMA = "FPMS_TERM_COMPENSATION_GRANTED_V1"
 
 _TERM_COMPENSATION_GRANTED_FIELD = "TermCompensationGrant"
 
+_OPEN_LICENSE_PERIOD_LINEAGE = "open-license-implementation-period"
+
+_OPEN_LICENSE_PERIOD_SCHEMA = "FPMS_OPEN_LICENSE_IMPLEMENTATION_PERIOD_V1"
+
+_OPEN_LICENSE_PERIOD_FIELD = "OpenLicenseImplementationPeriod"
+
+_ORDINARY_ANNUITY_FEE_CODES = frozenset(
+    {
+        "CN_ANNUITY_FEE_INV",
+        "CN_ANNUITY_FEE_UM",
+        "CN_ANNUITY_FEE_DES",
+    }
+)
+
+_OPEN_LICENSE_ANNUITY_FEE_CODE_BY_PATENT_CATEGORY = {
+    "DES": "CN_ANNUITY_FEE_DES",
+    "INV": "CN_ANNUITY_FEE_INV",
+    "UM": "CN_ANNUITY_FEE_UM",
+}
+
+_OPEN_LICENSE_ANNUITY_CALC_PARAMS = {
+    "CN_ANNUITY_FEE_DES": (
+        '{"schema":"CNIPA_ANNUITY_TIER_V1","tiers":['
+        '{"amount":"600.00","from":1,"to":3},'
+        '{"amount":"900.00","from":4,"to":5},'
+        '{"amount":"1200.00","from":6,"to":8},'
+        '{"amount":"2000.00","from":9,"to":10},'
+        '{"amount":"3000.00","from":11,"to":15}]}'
+    ),
+    "CN_ANNUITY_FEE_INV": (
+        '{"schema":"CNIPA_ANNUITY_TIER_V1","tiers":['
+        '{"amount":"900.00","from":1,"to":3},'
+        '{"amount":"1200.00","from":4,"to":6},'
+        '{"amount":"2000.00","from":7,"to":9},'
+        '{"amount":"4000.00","from":10,"to":12},'
+        '{"amount":"6000.00","from":13,"to":15},'
+        '{"amount":"8000.00","from":16,"to":20}]}'
+    ),
+    "CN_ANNUITY_FEE_UM": (
+        '{"schema":"CNIPA_ANNUITY_TIER_V1","tiers":['
+        '{"amount":"600.00","from":1,"to":3},'
+        '{"amount":"900.00","from":4,"to":5},'
+        '{"amount":"1200.00","from":6,"to":8},'
+        '{"amount":"2000.00","from":9,"to":10}]}'
+    ),
+}
+
 _IC_LAYOUT_REEXAM_SOURCE_ERRORS = frozenset(
     {
         "FEE_OBLIGATION_IDEMPOTENCY_CONFLICT",
@@ -515,6 +589,14 @@ class RecognizeCompensationPeriodAnnuityObligationCommand:
     case_id: str
     source_activity_id: str
     source_evidence_version_id: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RecognizeOpenLicenseAnnuityObligationCommand:
+    case_id: str
+    source_activity_id: str
+    source_evidence_version_id: str
+    existing_obligation_id: str
 
 
 def _exact_text(value: object) -> bool:
@@ -1142,6 +1224,24 @@ def _compensation_period_annuity_conflict(field: str) -> None:
     )
 
 
+def _open_license_annuity_invalid(field: str) -> None:
+    raise_business_error(
+        "OPEN_LICENSE_ANNUITY_INVALID",
+        "Invalid open-license annuity obligation input",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _open_license_annuity_conflict(field: str) -> None:
+    raise_business_error(
+        "OPEN_LICENSE_ANNUITY_SOURCE_CONFLICT",
+        "Open-license annuity source conflicts with the frozen contract",
+        details={"field": field},
+        status_code=409,
+    )
+
+
 def _compensation_strict_object(
     pairs: list[tuple[str, object]],
 ) -> dict[str, object]:
@@ -1244,6 +1344,69 @@ def _compensation_period_review_snapshot(
         "period_end": period_end.isoformat(),
         "period_start": period_start.isoformat(),
         "schema": _TERM_COMPENSATION_GRANTED_SCHEMA,
+        "source_document_id": document.id,
+    }
+    snapshot_hash = f"sha256:{sha256(_canonical_json(snapshot).encode()).hexdigest()}"
+    return snapshot, snapshot_hash
+
+
+def _open_license_review_snapshot(
+    evidence: DocumentEvidenceVersion,
+    document: Document,
+) -> tuple[dict[str, object], str]:
+    if (
+        type(evidence) is not DocumentEvidenceVersion
+        or type(document) is not Document
+        or evidence.document_id != document.id
+        or evidence.case_id != document.case_id
+        or document.direction != "IN"
+        or evidence.lineage_key != _OPEN_LICENSE_PERIOD_LINEAGE
+        or evidence.role != "OFFICIAL_FINAL_PDF"
+        or evidence.state != "FINAL"
+        or evidence.current_identity_key != f"{evidence.case_id}|{_OPEN_LICENSE_PERIOD_LINEAGE}"
+        or type(evidence.content_hash) is not str
+        or fullmatch(_CANONICAL_HASH_PATTERN, evidence.content_hash) is None
+    ):
+        _open_license_annuity_conflict("source_evidence")
+    try:
+        fields = json.loads(
+            document.extra_data,
+            object_pairs_hook=_compensation_strict_object,
+            parse_constant=_reject_compensation_json_constant,
+        )
+    except (RecursionError, TypeError, ValueError):
+        _open_license_annuity_conflict("period")
+    if (
+        type(fields) is not dict
+        or set(fields) != {_OPEN_LICENSE_PERIOD_FIELD}
+        or document.extra_data != _canonical_json(fields)
+    ):
+        _open_license_annuity_conflict("period")
+    period = fields.get(_OPEN_LICENSE_PERIOD_FIELD)
+    if (
+        type(period) is not dict
+        or set(period) != {"schema", "period_start", "period_end"}
+        or period.get("schema") != _OPEN_LICENSE_PERIOD_SCHEMA
+    ):
+        _open_license_annuity_conflict("period")
+    try:
+        period_start = date.fromisoformat(period["period_start"])
+        period_end = date.fromisoformat(period["period_end"])
+    except (TypeError, ValueError):
+        _open_license_annuity_conflict("period")
+    if (
+        period_start.isoformat() != period["period_start"]
+        or period_end.isoformat() != period["period_end"]
+        or period_start > period_end
+    ):
+        _open_license_annuity_conflict("period")
+    snapshot: dict[str, object] = {
+        "case_id": evidence.case_id,
+        "evidence_content_hash": evidence.content_hash,
+        "evidence_version_id": evidence.id,
+        "period_end": period_end.isoformat(),
+        "period_start": period_start.isoformat(),
+        "schema": _OPEN_LICENSE_PERIOD_SCHEMA,
         "source_document_id": document.id,
     }
     snapshot_hash = f"sha256:{sha256(_canonical_json(snapshot).encode()).hexdigest()}"
@@ -2296,3 +2459,473 @@ def recognize_compensation_period_annuity_obligation(
         if exc.code in _PATENT_TERM_COMPENSATION_REQUEST_SOURCE_ERRORS:
             _compensation_period_annuity_conflict("obligation_source")
         raise
+
+
+def _open_license_source(
+    command: RecognizeOpenLicenseAnnuityObligationCommand,
+    transaction: Session,
+) -> tuple[
+    CaseActivityEvent,
+    DocumentEvidenceVersion,
+    Document,
+    dict[str, object],
+]:
+    activity = transaction.get(CaseActivityEvent, command.source_activity_id)
+    evidence = transaction.get(
+        DocumentEvidenceVersion,
+        command.source_evidence_version_id,
+    )
+    if activity is None or evidence is None:
+        _open_license_annuity_conflict("source")
+    assert isinstance(activity, CaseActivityEvent)
+    assert isinstance(evidence, DocumentEvidenceVersion)
+    document = transaction.get(Document, evidence.document_id)
+    if document is None:
+        _open_license_annuity_conflict("source")
+    assert isinstance(document, Document)
+    if (
+        activity.case_id != command.case_id
+        or activity.activity_type != "DOCUMENT_EVIDENCE_REVIEW_DECIDED"
+        or activity.lane != "DOCUMENT"
+        or activity.confirmation_status != "CONFIRMED"
+        or activity.source_activity_id is not None
+        or activity.supersedes_event_id is not None
+        or activity.old_business_stage != activity.new_business_stage
+        or activity.old_official_procedure_stage != activity.new_official_procedure_stage
+        or activity.old_legal_status != activity.new_legal_status
+        or type(activity.effective_at) is not datetime
+        or activity.effective_at.tzinfo is not None
+        or activity.occurred_at != activity.effective_at
+        or not _exact_text(activity.actor_id)
+        or activity.actor_id != activity.reviewer_id
+    ):
+        _open_license_annuity_conflict("source")
+    if (
+        evidence.case_id != command.case_id
+        or document.case_id != command.case_id
+        or document.direction != "IN"
+        or evidence.lineage_key != _OPEN_LICENSE_PERIOD_LINEAGE
+        or evidence.role != "OFFICIAL_FINAL_PDF"
+        or evidence.state != "FINAL"
+        or evidence.review_state != "APPROVED"
+        or evidence.current_identity_key != f"{command.case_id}|{_OPEN_LICENSE_PERIOD_LINEAGE}"
+        or not _exact_text(evidence.creator_id)
+        or not _exact_text(evidence.reviewer_id)
+        or evidence.creator_id == evidence.reviewer_id
+        or evidence.reviewer_id != activity.reviewer_id
+        or evidence.reviewed_at != activity.effective_at
+    ):
+        _open_license_annuity_conflict("source_evidence")
+    try:
+        payload = json.loads(activity.payload_json)
+    except (RecursionError, TypeError, ValueError):
+        _open_license_annuity_conflict("source")
+    expected_review_payload = {
+        "creator_id": evidence.creator_id,
+        "decision": "APPROVE",
+        "evidence_version_id": evidence.id,
+        "previous_review_state": "PENDING",
+        "review_state": "APPROVED",
+        "reviewer_id": evidence.reviewer_id,
+    }
+    source_snapshot = payload.get("source_snapshot") if type(payload) is dict else None
+    source_snapshot_hash = payload.get("source_snapshot_hash") if type(payload) is dict else None
+    if (
+        type(source_snapshot) is not dict
+        or type(source_snapshot_hash) is not str
+        or fullmatch(_CANONICAL_HASH_PATTERN, source_snapshot_hash) is None
+        or source_snapshot_hash
+        != f"sha256:{sha256(_canonical_json(source_snapshot).encode()).hexdigest()}"
+        or payload
+        != {
+            **expected_review_payload,
+            "source_snapshot": source_snapshot,
+            "source_snapshot_hash": source_snapshot_hash,
+        }
+        or activity.payload_json != _canonical_json(payload)
+    ):
+        _open_license_annuity_conflict("source")
+    references = tuple(
+        transaction.scalars(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == activity.id
+            )
+        )
+    )
+    if len(references) != 1:
+        _open_license_annuity_conflict("source")
+    reference = references[0]
+    if (
+        reference.case_id != command.case_id
+        or reference.evidence_kind != "DOCUMENT_EVIDENCE_VERSION"
+        or reference.object_type != "DocumentEvidenceVersion"
+        or reference.object_id != evidence.id
+        or reference.content_hash != source_snapshot_hash
+        or reference.captured_at != activity.effective_at
+    ):
+        _open_license_annuity_conflict("source")
+    current_snapshot, current_hash = _open_license_review_snapshot(evidence, document)
+    if current_snapshot != source_snapshot or current_hash != source_snapshot_hash:
+        _open_license_annuity_conflict("source_snapshot")
+    return activity, evidence, document, source_snapshot
+
+
+def _existing_open_license_annuity(
+    command: RecognizeOpenLicenseAnnuityObligationCommand,
+    transaction: Session,
+    *,
+    period_start: date,
+    period_end: date,
+) -> tuple[FeeObligation, FeeObligationLine]:
+    obligation = transaction.get(FeeObligation, command.existing_obligation_id)
+    if obligation is None:
+        _open_license_annuity_conflict("existing_obligation")
+    assert isinstance(obligation, FeeObligation)
+    lines = tuple(
+        transaction.scalars(
+            select(FeeObligationLine).where(FeeObligationLine.obligation_id == obligation.id)
+        )
+    )
+    tasks = tuple(
+        transaction.scalars(
+            select(AnnuityTask).where(AnnuityTask.fee_obligation_id == obligation.id)
+        )
+    )
+    if (
+        obligation.case_id != command.case_id
+        or obligation.fee_domain != "GOV"
+        or obligation.obligation_type != "FUTURE_ANNUITY"
+        or obligation.obligation_status not in {"RECOGNIZED", "SUPERSEDED"}
+        or obligation.currency != "CNY"
+        or obligation.source_status != "VERIFIED"
+        or type(obligation.due_date) is not date
+        or len(lines) != 1
+        or len(tasks) != 1
+    ):
+        _open_license_annuity_conflict("existing_obligation")
+    if not period_start <= obligation.due_date <= period_end:
+        _open_license_annuity_conflict("period")
+    line = lines[0]
+    task = tasks[0]
+    case = transaction.get(Case, command.case_id)
+    source_activity = transaction.get(CaseActivityEvent, task.source_activity_id)
+    source_document = transaction.get(Document, task.source_document_id)
+    source_evidence = transaction.get(
+        DocumentEvidenceVersion,
+        task.source_evidence_version_id,
+    )
+    reduction_lineages = tuple(
+        transaction.scalars(
+            select(FutureAnnuityReductionLineage).where(
+                FutureAnnuityReductionLineage.annuity_task_id == task.id
+            )
+        )
+    )
+    if (
+        line.case_id != command.case_id
+        or line.source_activity_id != obligation.source_activity_id
+        or line.fee_code not in _ORDINARY_ANNUITY_FEE_CODES
+        or line.fee_year_key < 1
+        or type(line.official_full_amount) is not Decimal
+        or not line.official_full_amount.is_finite()
+        or line.official_full_amount < 0
+        or type(line.reduction_ratio) is not Decimal
+        or line.reduction_ratio not in {Decimal("0.0000"), Decimal("0.7000"), Decimal("0.8500")}
+        or type(line.payable_amount) is not Decimal
+        or not line.payable_amount.is_finite()
+        or line.payable_amount < 0
+        or line.source_date != obligation.due_date
+        or line.difference_review_state != "MATCHED"
+        or case is None
+        or line.fee_code
+        != _OPEN_LICENSE_ANNUITY_FEE_CODE_BY_PATENT_CATEGORY.get(case.patent_category)
+        or task.case_id != command.case_id
+        or task.client_id != case.client_id
+        or task.year_no != line.fee_year_key
+        or task.due_date != obligation.due_date
+        or task.source_activity_id != obligation.source_activity_id
+        or task.source_document_id != obligation.source_document_id
+        or task.fee_obligation_id != obligation.id
+        or task.grant_fee_year_key != line.fee_year_key
+        or len(reduction_lineages) != 1
+    ):
+        _open_license_annuity_conflict("existing_obligation")
+    reduction_lineage = reduction_lineages[0]
+    stored_ratio = line.reduction_ratio
+    stored_provenance = reduction_lineage.reduction_input_provenance
+    stored_approval_id = reduction_lineage.reduction_approval_id
+    stored_zero = (
+        type(stored_ratio) is Decimal
+        and stored_ratio == Decimal("0.0000")
+        and stored_ratio.as_tuple().exponent == -4
+        and stored_provenance == "EXPLICIT_ENTRY"
+        and stored_approval_id is None
+    )
+    stored_reduced = (
+        type(stored_ratio) is Decimal
+        and stored_ratio in {Decimal("0.7000"), Decimal("0.8500")}
+        and stored_ratio.as_tuple().exponent == -4
+        and stored_provenance in {"EXPLICIT_ENTRY", "CONFIRMED_MIGRATION"}
+        and stored_approval_id is not None
+    )
+    if (
+        reduction_lineage.fee_obligation_line_id != line.id
+        or not (stored_zero or stored_reduced)
+        or source_activity is None
+        or source_document is None
+        or source_evidence is None
+        or source_activity.case_id != command.case_id
+        or source_activity.activity_type != "GRANT_ANNOUNCEMENT_CONFIRMED"
+        or source_activity.lane != "LIFECYCLE"
+        or source_activity.confirmation_status != "CONFIRMED"
+        or type(source_activity.effective_at) is not datetime
+        or source_activity.effective_at.tzinfo is not None
+        or source_document.case_id != command.case_id
+        or source_document.direction != "IN"
+        or source_evidence.case_id != command.case_id
+        or source_evidence.document_id != source_document.id
+        or source_evidence.role != "OFFICIAL_FINAL_PDF"
+        or source_evidence.state != "FINAL"
+        or source_evidence.review_state != "APPROVED"
+        or type(source_evidence.reviewed_at) is not datetime
+        or source_evidence.reviewed_at.tzinfo is not None
+        or not _exact_text(source_evidence.creator_id)
+        or not _exact_text(source_evidence.reviewer_id)
+        or source_evidence.creator_id == source_evidence.reviewer_id
+        or source_evidence.id != task.source_evidence_version_id
+        or source_evidence.content_hash != task.source_evidence_content_hash
+        or source_evidence.current_identity_key
+        != f"{command.case_id}|{source_evidence.lineage_key}"
+    ):
+        _open_license_annuity_conflict("existing_obligation")
+    source_references = tuple(
+        transaction.scalars(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == source_activity.id
+            )
+        )
+    )
+    if len(source_references) != 1:
+        _open_license_annuity_conflict("existing_obligation")
+    source_reference = source_references[0]
+    if (
+        source_reference.case_id != command.case_id
+        or source_reference.evidence_kind != "DOCUMENT_EVIDENCE_VERSION"
+        or source_reference.object_type != "DocumentEvidenceVersion"
+        or source_reference.object_id != source_evidence.id
+        or source_reference.content_hash != source_evidence.content_hash
+        or source_reference.captured_at != source_activity.effective_at
+    ):
+        _open_license_annuity_conflict("existing_obligation")
+    if stored_reduced:
+        approval = transaction.get(FeeReductionApproval, stored_approval_id)
+        if approval is None:
+            _open_license_annuity_conflict("existing_obligation")
+        try:
+            fee_scope = json.loads(approval.fee_scope_snapshot)
+            canonical_fee_scope = json.dumps(
+                fee_scope,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            approval_scope_type = FeeReductionApprovalScopeType(approval.scope_type)
+            stored_provenance_value = FeeReductionInputProvenance(stored_provenance)
+        except (TypeError, ValueError):
+            _open_license_annuity_conflict("existing_obligation")
+        if (
+            type(fee_scope) is not dict
+            or set(fee_scope) != {"fee_codes", "schema"}
+            or fee_scope.get("schema") != "FPMS_FEE_REDUCTION_FEE_SCOPE_V1"
+            or type(fee_scope.get("fee_codes")) is not list
+            or not fee_scope["fee_codes"]
+            or fee_scope["fee_codes"] != sorted(set(fee_scope["fee_codes"]))
+            or any(not _exact_text(code) or len(code) > 64 for code in fee_scope["fee_codes"])
+            or canonical_fee_scope != approval.fee_scope_snapshot
+            or sha256(approval.fee_scope_snapshot.encode()).hexdigest() != approval.fee_scope_hash
+        ):
+            _open_license_annuity_conflict("existing_obligation")
+        approval_source = transaction.get(
+            DocumentEvidenceVersion,
+            approval.source_evidence_version_id,
+        )
+        approval_context = FeeReductionApprovalContext(
+            approval_id=approval.id,
+            scope_type=approval_scope_type,
+            case_id=approval.case_id,
+            applicant_set_key=approval.applicant_set_key,
+            reduction_ratio=approval.reduction_ratio,
+            fee_codes=frozenset(fee_scope["fee_codes"]),
+            fee_year_from=approval.fee_year_from,
+            fee_year_to=approval.fee_year_to,
+            effective_from=approval.effective_from,
+            effective_to=approval.effective_to,
+            source_evidence_version_id=approval.source_evidence_version_id,
+            confirmation_status=approval.confirmation_status,
+            is_current=bool(
+                approval_source is not None
+                and approval_source.case_id == command.case_id
+                and approval_source.current_identity_key
+                == f"{command.case_id}|{approval_source.lineage_key}"
+            ),
+        )
+        try:
+            validated_reduction = validate_annuity_fee_reduction(
+                reduction_input=FeeReductionInput(
+                    reduction_ratio=stored_ratio,
+                    provenance=stored_provenance_value,
+                ),
+                context=FeeReductionEvaluationContext(
+                    case_id=command.case_id,
+                    applicant_set_key=None,
+                    fee_code=line.fee_code,
+                    fee_year_key=line.fee_year_key,
+                    as_of_date=obligation.due_date,
+                ),
+                approval=approval_context,
+                grant_fee_year_key=line.fee_year_key,
+            )
+        except (AnnuityReductionScopeError, FeeReductionValidationError):
+            _open_license_annuity_conflict("existing_obligation")
+        if (
+            validated_reduction.reduction_ratio != stored_ratio
+            or validated_reduction.provenance.value != stored_provenance
+            or validated_reduction.approval_id != stored_approval_id
+        ):
+            _open_license_annuity_conflict("existing_obligation")
+    rate_books = tuple(
+        transaction.scalars(
+            select(OfficialRateBook).where(
+                OfficialRateBook.book_code == "CNIPA_PATENT_ANNUITY_20260330",
+                OfficialRateBook.activation_status == "ACTIVE",
+            )
+        )
+    )
+    if len(rate_books) != 1:
+        _open_license_annuity_conflict("existing_obligation")
+    rate_book = rate_books[0]
+    if (
+        rate_book.source_authority != "CNIPA"
+        or rate_book.approval_status != "APPROVED"
+        or rate_book.source_snapshot != CNIPA_ANNUITY_SOURCE_SNAPSHOT
+        or rate_book.source_snapshot_hash
+        != sha256(CNIPA_ANNUITY_SOURCE_SNAPSHOT.encode()).hexdigest()
+        or rate_book.current_identity_key != "CNIPA|CNIPA_PATENT_ANNUITY_20260330"
+        or rate_book.effective_from > obligation.due_date
+        or (rate_book.effective_to is not None and rate_book.effective_to < obligation.due_date)
+    ):
+        _open_license_annuity_conflict("existing_obligation")
+    rates = tuple(
+        transaction.scalars(
+            select(FeeRate).where(
+                FeeRate.official_rate_book_id == rate_book.id,
+                FeeRate.fee_code == line.fee_code,
+            )
+        )
+    )
+    if len(rates) != 1:
+        _open_license_annuity_conflict("existing_obligation")
+    rate = rates[0]
+    if (
+        rate.enabled is not True
+        or rate.fee_type != "GOV"
+        or rate.currency != "CNY"
+        or rate.calc_mode != "TIER"
+        or rate.allow_reduction is not True
+        or rate.calc_params is None
+        or rate.calc_params != _OPEN_LICENSE_ANNUITY_CALC_PARAMS.get(line.fee_code)
+        or rate.effective_from is None
+        or rate.effective_from > obligation.due_date
+        or (rate.effective_to is not None and rate.effective_to < obligation.due_date)
+    ):
+        _open_license_annuity_conflict("existing_obligation")
+    try:
+        official_amount = select_cnipa_annuity_amount(
+            line.fee_code,
+            rate.calc_params,
+            line.fee_year_key,
+        )
+    except BusinessError:
+        _open_license_annuity_conflict("existing_obligation")
+    if official_amount != line.official_full_amount:
+        _open_license_annuity_conflict("existing_obligation")
+    return obligation, line
+
+
+def recognize_open_license_annuity_obligation(
+    command: RecognizeOpenLicenseAnnuityObligationCommand,
+    transaction: Session,
+) -> RecognizeFeeObligationResult:
+    if type(command) is not RecognizeOpenLicenseAnnuityObligationCommand:
+        _open_license_annuity_invalid("command")
+    for field in (
+        "case_id",
+        "source_activity_id",
+        "source_evidence_version_id",
+        "existing_obligation_id",
+    ):
+        value = getattr(command, field)
+        if not _exact_text(value) or len(value) > 36:
+            _open_license_annuity_invalid(field)
+    if not isinstance(transaction, Session):
+        _open_license_annuity_invalid("transaction")
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _open_license_annuity_conflict("transaction")
+
+    with transaction.no_autoflush:
+        activity, evidence, document, snapshot = _open_license_source(
+            command,
+            transaction,
+        )
+        period_start = date.fromisoformat(snapshot["period_start"])
+        period_end = date.fromisoformat(snapshot["period_end"])
+        obligation, line = _existing_open_license_annuity(
+            command,
+            transaction,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        try:
+            reduction = calculate_open_license_annuity_reduction(
+                CalculateOpenLicenseAnnuityReductionCommand(
+                    existing_reduction_ratio=line.reduction_ratio,
+                )
+            )
+        except BusinessError:
+            _open_license_annuity_conflict("existing_obligation")
+        payable_amount = (line.official_full_amount * reduction.payable_ratio).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        replacement_line = FeeObligationLineInput(
+            fee_code=line.fee_code,
+            fee_name=line.fee_name,
+            fee_year_key=line.fee_year_key,
+            official_full_amount=line.official_full_amount,
+            reduction_ratio=reduction.applied_reduction_ratio,
+            payable_amount=payable_amount,
+            source_amount=line.source_amount,
+            source_date=line.source_date,
+            difference_review_state=FeeDifferenceReviewState(line.difference_review_state),
+        )
+    try:
+        return recognize_obligation(
+            RecognizeFeeObligationCommand(
+                case_id=command.case_id,
+                source_activity_id=activity.id,
+                source_document_id=document.id,
+                fee_domain=FeeDomain.GOV,
+                obligation_type=obligation.obligation_type,
+                due_date=obligation.due_date,
+                currency=obligation.currency,
+                source_status=FeeSourceStatus.VERIFIED,
+                lines=(replacement_line,),
+                actor_id=evidence.reviewer_id,
+                idempotency_key=(f"open-license-annuity:{activity.id}:{obligation.id}"),
+                supersedes_obligation_id=obligation.id,
+                supersede_reason="开放许可实施期间年费减缴",
+            ),
+            transaction,
+        )
+    except BusinessError:
+        _open_license_annuity_conflict("existing_obligation")

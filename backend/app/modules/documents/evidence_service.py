@@ -947,11 +947,14 @@ def _review_source_snapshot(
         return None
     from app.modules.documents.fee_linking_service import (
         _compensation_period_review_snapshot,
+        _open_license_review_snapshot,
     )
 
     document = transaction.get(Document, version.document_id)
     if version.lineage_key == "term-compensation-grant-decision":
         return _compensation_period_review_snapshot(version, document)
+    if version.lineage_key == "open-license-implementation-period":
+        return _open_license_review_snapshot(version, document)
     return None
 
 
