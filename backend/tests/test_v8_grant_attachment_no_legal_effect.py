@@ -11,7 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.modules.auth.models import T_User
-from app.modules.cases.models import Case
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    BusinessStage,
+    ConfirmationStatus,
+    LegalStatus,
+    OfficialProcedureStage,
+)
+from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.documents import service
 from app.modules.documents.models import (
     DocAttachment,
@@ -44,6 +51,11 @@ def test_grant_notice_attachment_is_lifecycle_neutral_and_creates_fee_task(
                     flow_dir="CN_DOMESTIC",
                     title_cn="授权通知书附件无授权法律效果测试",
                     status="GRANT_PENDING",
+                    business_stage=BusinessStage.GRANT_REGISTRATION_IN_PROGRESS.value,
+                    official_procedure_stage=OfficialProcedureStage.GRANT_REGISTRATION.value,
+                    legal_status=LegalStatus.APPLICATION_PENDING.value,
+                    lifecycle_verification_status=ConfirmationStatus.CONFIRMED.value,
+                    lifecycle_revision=0,
                     app_no="CN202610000075",
                     filing_date=date(2026, 3, 20),
                     issue_date=date(2026, 7, 20),
@@ -94,7 +106,46 @@ def test_grant_notice_attachment_is_lifecycle_neutral_and_creates_fee_task(
     with session_factory() as db:
         case = db.get(Case, case_id)
         assert case is not None
-        assert case.status == "GRANT_PENDING"
+        assert (
+            case.status,
+            case.business_stage,
+            case.official_procedure_stage,
+            case.legal_status,
+            case.lifecycle_verification_status,
+            case.lifecycle_revision,
+        ) == (
+            "GRANT_PENDING",
+            BusinessStage.GRANT_REGISTRATION_IN_PROGRESS.value,
+            OfficialProcedureStage.GRANT_REGISTRATION.value,
+            LegalStatus.APPLICATION_PENDING.value,
+            ConfirmationStatus.CONFIRMED.value,
+            1,
+        )
+        activities = db.scalars(
+            select(CaseActivityEvent).where(CaseActivityEvent.case_id == case_id)
+        ).all()
+        assert len(activities) == 1
+        activity = activities[0]
+        assert (activity.sequence, activity.lane, activity.activity_type) == (
+            1,
+            ActivityLane.DOCUMENT.value,
+            "DOCUMENT_EVIDENCE_VERSION_REGISTERED",
+        )
+        assert (
+            activity.old_business_stage,
+            activity.new_business_stage,
+            activity.old_official_procedure_stage,
+            activity.new_official_procedure_stage,
+            activity.old_legal_status,
+            activity.new_legal_status,
+        ) == (
+            BusinessStage.GRANT_REGISTRATION_IN_PROGRESS.value,
+            BusinessStage.GRANT_REGISTRATION_IN_PROGRESS.value,
+            OfficialProcedureStage.GRANT_REGISTRATION.value,
+            OfficialProcedureStage.GRANT_REGISTRATION.value,
+            LegalStatus.APPLICATION_PENDING.value,
+            LegalStatus.APPLICATION_PENDING.value,
+        )
 
         task = db.scalar(select(T_GrantFeeTask).where(T_GrantFeeTask.case_id == case_id))
         assert task is not None
