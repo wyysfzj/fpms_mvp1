@@ -2126,8 +2126,8 @@
     {
       "catalog_id": "FPMS-V8-OVERLAY-FE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-FE-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4900,6 +4900,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-HTTP-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-HTTP-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-FE-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "6678955108e9abf47adc15c691a5a20ae17c8b21"
+      ],
+      "paths": [
+        "frontend/src/api/lifecycleOverlay.types.ts",
+        "frontend/src/api/lifecycleOverlay.ts",
+        "frontend/src/api/contracts/v8_lifecycle_overlay.contract.ts"
+      ],
+      "tree_sha256": "33dd5f9a4474ef6b2fba95dd4760ad036bc6e9caf836db6da21d38be38509057",
+      "tests": [
+        "compile RED proved the lifecycle overlay frontend modules were absent",
+        "scoped ESLint and exact commit diff checks passed",
+        "typecheck emitted no Row266 diagnostic and retained exactly seven unrelated baseline diagnostics",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "NORMAL",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-FE-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-FE-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
