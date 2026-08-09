@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import TypeVar
+from decimal import Decimal
+from typing import TypeVar, cast
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError
+from app.modules.annuity.models import GovPayment, PayList
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
     BusinessStage,
@@ -22,6 +25,10 @@ from app.modules.cases.lifecycle_overlay_schemas import (
     OverlayCenterAxisChange,
     OverlayCenterSnapshot,
     OverlayDocumentEvidence,
+    OverlayFeeLine,
+    OverlayFeeObligation,
+    OverlayFeeRelatedFact,
+    OverlayFeeRelatedFactKind,
     OverlayMilestone,
     OverlayTask,
     OverlayWorkPackage,
@@ -42,6 +49,17 @@ from app.modules.documents.models import (
     DocumentEvidenceDerivation,
     DocumentEvidenceVersion,
 )
+from app.modules.fees.models import (
+    FeeDraft,
+    FeeItem,
+    FeeObligationDraftItemLink,
+    FeeObligationLine,
+    FeeObligationPaymentEvidenceLink,
+)
+from app.modules.fees.models import (
+    FeeObligation as FeeObligationModel,
+)
+from app.modules.fees.obligation_service import get_fee_obligation
 from app.modules.official_workflows.models import (
     OfficialWorkPackage,
     OfficialWorkPackageManifest,
@@ -144,6 +162,11 @@ def read_lifecycle_overlay(
         case_id=case_id,
         evidence_by_activity=evidence_by_activity,
     )
+    fee_facts = _read_fee_facts(
+        transaction,
+        case_id=case_id,
+        activities=tuple(item[0] for item in page),
+    )
     milestones = tuple(
         _milestone(
             activity,
@@ -151,6 +174,7 @@ def read_lifecycle_overlay(
             axes,
             evidence_by_activity.get(activity.id, ()),
             *document_facts.get(activity.id, ((), (), ())),
+            fee_facts.get(activity.id, ()),
         )
         for activity, lane, axes in page
     )
@@ -882,6 +906,7 @@ def _milestone(
     document_evidence: tuple[OverlayDocumentEvidence, ...],
     work_packages: tuple[OverlayWorkPackage, ...],
     tasks: tuple[OverlayTask, ...],
+    fee_obligations: tuple[OverlayFeeObligation, ...],
 ) -> OverlayMilestone:
     changes: dict[OverlayCenterAxis, OverlayCenterAxisChange] = {}
     if lane is ActivityLane.LIFECYCLE:
@@ -907,9 +932,462 @@ def _milestone(
         document_evidence=document_evidence,
         work_packages=work_packages,
         tasks=tasks,
-        fee_obligations=(),
+        fee_obligations=fee_obligations,
         evidence_summary=evidence,
         warnings=(),
+    )
+
+
+_FEE_ACTIVITY_SCHEMAS: dict[str, tuple[str | None, str, frozenset[str]]] = {
+    "FEE_OBLIGATION_RECOGNIZED": (
+        "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
+        "obligation_id",
+        frozenset({"schema", "obligation_id"}),
+    ),
+    "FEE_CLIENT_INSTRUCTION_RECORDED": (
+        "FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1",
+        "obligation_id",
+        frozenset(
+            {
+                "actor_id",
+                "instruction",
+                "obligation_id",
+                "previous_instruction_status",
+                "schema",
+            }
+        ),
+    ),
+    "FEE_DRAFT_CREATED": (
+        "FPMS_FEE_DRAFT_CREATED_V1",
+        "obligation_id",
+        frozenset({"actor_id", "center_changes", "draft_id", "links", "obligation_id", "schema"}),
+    ),
+    "PAY_LIST_CREATED": (
+        "FPMS_PAY_LIST_CREATED_V1",
+        "obligation_ids",
+        frozenset(
+            {
+                "actor_id",
+                "center_changes",
+                "fee_item_ids",
+                "obligation_ids",
+                "obligation_line_ids",
+                "pay_list_id",
+                "schema",
+            }
+        ),
+    ),
+    "PAY_LIST_INTERNAL_EXPORTED": (
+        None,
+        "pay_list_id",
+        frozenset({"artifact_id", "pay_list_id", "content_sha256", "managed_storage_path"}),
+    ),
+    "PAYMENT_RECORDED": (
+        "FPMS_GOV_PAYMENT_RECORDED_V1",
+        "obligation_id",
+        frozenset({"gov_payment_id", "obligation_id", "obligation_line_ids", "schema"}),
+    ),
+    "OFFICIAL_PAYMENT_EVIDENCE_VERIFIED": (
+        "FPMS_GOV_PAYMENT_OFFICIAL_EVIDENCE_VERIFIED_V1",
+        "obligation_id",
+        frozenset(
+            {
+                "gov_payment_id",
+                "invoice_no",
+                "obligation_id",
+                "obligation_line_ids",
+                "official_receipt_no",
+                "schema",
+                "voucher_no",
+            }
+        ),
+    ),
+}
+
+
+def _read_fee_facts(
+    transaction: Session,
+    *,
+    case_id: str,
+    activities: tuple[CaseActivityEvent, ...],
+) -> dict[str, tuple[OverlayFeeObligation, ...]]:
+    projected: dict[str, tuple[OverlayFeeObligation, ...]] = {}
+    obligation_cache: dict[str, object] = {}
+    for activity in activities:
+        if activity.lane != ActivityLane.FEE.value:
+            continue
+        spec = _FEE_ACTIVITY_SCHEMAS.get(activity.activity_type)
+        if spec is None:
+            projected[activity.id] = ()
+            continue
+        payload = _fee_payload(
+            case_id,
+            activity,
+            expected_schema=spec[0],
+            expected_keys=spec[2],
+        )
+        obligation_ids, related = _fee_activity_roots(
+            transaction,
+            case_id=case_id,
+            activity=activity,
+            payload=payload,
+            identity_field=spec[1],
+        )
+        obligations: list[OverlayFeeObligation] = []
+        for obligation_id in sorted(obligation_ids):
+            try:
+                obligation = obligation_cache.get(obligation_id)
+                if obligation is None:
+                    obligation = get_fee_obligation(obligation_id, transaction)
+                    obligation_cache[obligation_id] = obligation
+            except BusinessError:
+                _fee_conflict(case_id, "OBLIGATION_DETAIL_INVALID")
+            if obligation.case_id != case_id:
+                _fee_conflict(case_id, "OBLIGATION_CASE_MISMATCH")
+            _validate_fee_activity_lineage(
+                transaction,
+                case_id=case_id,
+                activity=activity,
+                obligation_id=obligation_id,
+                source_activity_id=obligation.source.source_activity_id,
+            )
+            obligations.append(
+                OverlayFeeObligation(
+                    obligation_id=obligation.id,
+                    source_activity_id=obligation.source.source_activity_id,
+                    source_document_id=obligation.source.source_document_id,
+                    source_status=obligation.source.status,
+                    fee_domain=obligation.fee_domain,
+                    obligation_type=obligation.obligation_type,
+                    due_date=obligation.due_date,
+                    currency=obligation.currency,
+                    statuses=obligation.statuses,
+                    lines=tuple(
+                        OverlayFeeLine(
+                            line_id=line.id,
+                            fee_code=line.fee_code,
+                            fee_name=line.fee_name,
+                            fee_year_key=line.fee_year_key,
+                            official_full_amount=_money(line.official_full_amount),
+                            reduction_ratio=format(line.reduction_ratio, ".4f"),
+                            payable_amount=cast(str, _money(line.payable_amount)),
+                            source_amount=_money(line.source_amount),
+                            source_date=line.source_date,
+                            difference_review_state=line.difference_review_state,
+                        )
+                        for line in obligation.lines
+                    ),
+                    related_facts=tuple(
+                        fact for owner_id, fact in related if owner_id == obligation.id
+                    ),
+                    supersedes_obligation_id=obligation.supersedes_obligation_id,
+                    supersede_reason=obligation.supersede_reason,
+                )
+            )
+        projected[activity.id] = tuple(obligations)
+    return projected
+
+
+def _fee_payload(
+    case_id: str,
+    activity: CaseActivityEvent,
+    *,
+    expected_schema: str | None,
+    expected_keys: frozenset[str] | None = None,
+) -> dict[str, object]:
+    try:
+        pairs = json.loads(
+            activity.payload_json,
+            object_pairs_hook=lambda values: _unique_json_object(case_id, values),
+            parse_constant=lambda _value: _fee_conflict(case_id, "PAYLOAD_CONSTANT_INVALID"),
+        )
+        canonical = json.dumps(
+            pairs,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        _fee_conflict(case_id, "PAYLOAD_INVALID")
+    if type(pairs) is not dict or canonical != activity.payload_json:
+        _fee_conflict(case_id, "PAYLOAD_NOT_CANONICAL")
+    payload = cast(dict[str, object], pairs)
+    if expected_schema is not None and payload.get("schema") != expected_schema:
+        _fee_conflict(case_id, "PAYLOAD_SCHEMA_INVALID")
+    allowed_keys = expected_keys
+    if activity.activity_type == "FEE_OBLIGATION_RECOGNIZED" and "obligation" in payload:
+        allowed_keys = frozenset({"schema", "obligation_id", "obligation"})
+    if allowed_keys is not None and frozenset(payload) != allowed_keys:
+        _fee_conflict(case_id, "PAYLOAD_SHAPE_INVALID")
+    return payload
+
+
+def _unique_json_object(
+    case_id: str,
+    values: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in values:
+        if key in result:
+            _fee_conflict(case_id, "PAYLOAD_DUPLICATE_KEY")
+        result[key] = value
+    return result
+
+
+def _fee_activity_roots(
+    transaction: Session,
+    *,
+    case_id: str,
+    activity: CaseActivityEvent,
+    payload: dict[str, object],
+    identity_field: str,
+) -> tuple[tuple[str, ...], tuple[tuple[str, OverlayFeeRelatedFact], ...]]:
+    if identity_field == "obligation_id":
+        value = payload.get(identity_field)
+        if type(value) is not str or not value or value.strip() != value:
+            _fee_conflict(case_id, "OBLIGATION_ID_INVALID")
+        obligation_ids = (value,)
+    elif identity_field == "obligation_ids":
+        values = payload.get(identity_field)
+        if (
+            type(values) is not list
+            or not values
+            or any(
+                type(value) is not str or not value or value.strip() != value for value in values
+            )
+            or len(set(values)) != len(values)
+        ):
+            _fee_conflict(case_id, "OBLIGATION_IDS_INVALID")
+        obligation_ids = tuple(cast(list[str], values))
+    else:
+        pay_list_id = payload.get("pay_list_id")
+        if type(pay_list_id) is not int or isinstance(pay_list_id, bool) or pay_list_id <= 0:
+            _fee_conflict(case_id, "PAY_LIST_ID_INVALID")
+        obligation_ids = _pay_list_obligation_ids(transaction, case_id, pay_list_id)
+
+    related: list[tuple[str, OverlayFeeRelatedFact]] = []
+    if activity.activity_type == "FEE_DRAFT_CREATED":
+        related.extend(
+            _draft_related_facts(transaction, case_id, payload.get("draft_id"), obligation_ids)
+        )
+    elif activity.activity_type in {"PAY_LIST_CREATED", "PAY_LIST_INTERNAL_EXPORTED"}:
+        related.extend(
+            _pay_list_related_facts(
+                transaction,
+                case_id,
+                payload.get("pay_list_id"),
+                obligation_ids,
+            )
+        )
+    elif activity.activity_type in {
+        "PAYMENT_RECORDED",
+        "OFFICIAL_PAYMENT_EVIDENCE_VERIFIED",
+    }:
+        related.extend(
+            _payment_related_facts(
+                transaction,
+                case_id,
+                payload.get("gov_payment_id"),
+                obligation_ids,
+                official=activity.activity_type == "OFFICIAL_PAYMENT_EVIDENCE_VERIFIED",
+            )
+        )
+    return tuple(sorted(obligation_ids)), tuple(
+        sorted(related, key=lambda item: (item[0], item[1].kind.value, item[1].object_id))
+    )
+
+
+def _draft_related_facts(
+    transaction: Session,
+    case_id: str,
+    draft_id: object,
+    obligation_ids: tuple[str, ...],
+) -> tuple[tuple[str, OverlayFeeRelatedFact], ...]:
+    if type(draft_id) is not str or not draft_id:
+        _fee_conflict(case_id, "DRAFT_ID_INVALID")
+    draft = transaction.get(FeeDraft, draft_id)
+    if draft is None or draft.case_id != case_id:
+        _fee_conflict(case_id, "DRAFT_CASE_MISMATCH")
+    owners = _draft_obligation_ids(transaction, draft_id)
+    if owners != set(obligation_ids):
+        _fee_conflict(case_id, "DRAFT_OBLIGATION_MISMATCH")
+    return tuple(
+        (
+            owner,
+            OverlayFeeRelatedFact(
+                kind=OverlayFeeRelatedFactKind.DRAFT,
+                object_id=draft.id,
+                status=draft.status,
+            ),
+        )
+        for owner in sorted(owners)
+    )
+
+
+def _pay_list_related_facts(
+    transaction: Session,
+    case_id: str,
+    pay_list_id: object,
+    obligation_ids: tuple[str, ...],
+) -> tuple[tuple[str, OverlayFeeRelatedFact], ...]:
+    if type(pay_list_id) is not int or isinstance(pay_list_id, bool) or pay_list_id <= 0:
+        _fee_conflict(case_id, "PAY_LIST_ID_INVALID")
+    pay_list = transaction.get(PayList, pay_list_id)
+    if pay_list is None:
+        _fee_conflict(case_id, "PAY_LIST_MISSING")
+    owners = set(_pay_list_obligation_ids(transaction, case_id, pay_list_id))
+    if owners != set(obligation_ids):
+        _fee_conflict(case_id, "PAY_LIST_OBLIGATION_MISMATCH")
+    return tuple(
+        (
+            owner,
+            OverlayFeeRelatedFact(
+                kind=OverlayFeeRelatedFactKind.PAY_LIST,
+                object_id=str(pay_list.id),
+                status=pay_list.status,
+            ),
+        )
+        for owner in sorted(owners)
+    )
+
+
+def _payment_related_facts(
+    transaction: Session,
+    case_id: str,
+    payment_id: object,
+    obligation_ids: tuple[str, ...],
+    *,
+    official: bool,
+) -> tuple[tuple[str, OverlayFeeRelatedFact], ...]:
+    if type(payment_id) is not int or isinstance(payment_id, bool) or payment_id <= 0:
+        _fee_conflict(case_id, "PAYMENT_ID_INVALID")
+    payment = transaction.get(GovPayment, payment_id)
+    if payment is None or payment.case_id != case_id:
+        _fee_conflict(case_id, "PAYMENT_CASE_MISMATCH")
+    owners = _payment_obligation_ids(transaction, payment_id)
+    if owners != set(obligation_ids):
+        _fee_conflict(case_id, "PAYMENT_OBLIGATION_MISMATCH")
+    kind = (
+        OverlayFeeRelatedFactKind.OFFICIAL_EVIDENCE
+        if official
+        else OverlayFeeRelatedFactKind.PAYMENT
+    )
+    return tuple(
+        (
+            owner,
+            OverlayFeeRelatedFact(
+                kind=kind,
+                object_id=str(payment.id),
+                status=(
+                    _obligation_official_status(transaction, owner) if official else payment.status
+                ),
+            ),
+        )
+        for owner in sorted(owners)
+    )
+
+
+def _draft_obligation_ids(transaction: Session, draft_id: str) -> set[str]:
+    rows = transaction.execute(
+        select(FeeObligationLine.obligation_id)
+        .join(
+            FeeObligationDraftItemLink,
+            FeeObligationDraftItemLink.obligation_line_id == FeeObligationLine.id,
+        )
+        .join(FeeItem, FeeItem.id == FeeObligationDraftItemLink.fee_item_id)
+        .where(FeeItem.draft_id == draft_id)
+    ).all()
+    return {row[0] for row in rows}
+
+
+def _pay_list_obligation_ids(
+    transaction: Session,
+    case_id: str,
+    pay_list_id: int,
+) -> tuple[str, ...]:
+    rows = transaction.execute(
+        select(FeeObligationLine.obligation_id, GovPayment.case_id)
+        .select_from(GovPayment)
+        .join(FeeItem, FeeItem.id == GovPayment.fee_item_id)
+        .join(
+            FeeObligationDraftItemLink,
+            FeeObligationDraftItemLink.fee_item_id == FeeItem.id,
+        )
+        .join(
+            FeeObligationLine,
+            FeeObligationLine.id == FeeObligationDraftItemLink.obligation_line_id,
+        )
+        .where(GovPayment.pay_list_id == pay_list_id)
+    ).all()
+    if not rows or any(row.case_id != case_id for row in rows):
+        _fee_conflict(case_id, "PAY_LIST_CASE_MISMATCH")
+    return tuple(sorted({row.obligation_id for row in rows}))
+
+
+def _payment_obligation_ids(transaction: Session, payment_id: int) -> set[str]:
+    rows = transaction.execute(
+        select(FeeObligationLine.obligation_id)
+        .join(
+            FeeObligationPaymentEvidenceLink,
+            FeeObligationPaymentEvidenceLink.obligation_line_id == FeeObligationLine.id,
+        )
+        .where(FeeObligationPaymentEvidenceLink.gov_payment_id == payment_id)
+    ).all()
+    return {row[0] for row in rows}
+
+
+def _obligation_official_status(transaction: Session, obligation_id: str) -> str:
+    status = transaction.scalar(
+        select(FeeObligationModel.official_evidence_status).where(
+            FeeObligationModel.id == obligation_id
+        )
+    )
+    if type(status) is not str or not status:
+        _fee_conflict(None, "OBLIGATION_DETAIL_INVALID")
+    return status
+
+
+def _validate_fee_activity_lineage(
+    transaction: Session,
+    *,
+    case_id: str,
+    activity: CaseActivityEvent,
+    obligation_id: str,
+    source_activity_id: str,
+) -> None:
+    if activity.activity_type == "FEE_OBLIGATION_RECOGNIZED":
+        if activity.source_activity_id != source_activity_id:
+            _fee_conflict(case_id, "RECOGNITION_SOURCE_MISMATCH")
+        return
+    if activity.activity_type in {"FEE_CLIENT_INSTRUCTION_RECORDED", "FEE_DRAFT_CREATED"}:
+        recognition = transaction.get(CaseActivityEvent, activity.source_activity_id)
+        if recognition is None or recognition.case_id != case_id:
+            _fee_conflict(case_id, "RECOGNITION_ACTIVITY_MISSING")
+        payload = _fee_payload(
+            case_id,
+            recognition,
+            expected_schema="FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
+            expected_keys=frozenset({"schema", "obligation_id"}),
+        )
+        if (
+            recognition.activity_type != "FEE_OBLIGATION_RECOGNIZED"
+            or payload.get("obligation_id") != obligation_id
+            or recognition.source_activity_id != source_activity_id
+        ):
+            _fee_conflict(case_id, "RECOGNITION_LINEAGE_MISMATCH")
+
+
+def _money(value: Decimal | None) -> str | None:
+    return None if value is None else format(value, ".2f")
+
+
+def _fee_conflict(case_id: str | None, reason: str) -> None:
+    _fail(
+        "LIFECYCLE_OVERLAY_FEE_CONFLICT",
+        "生命周期费用视图数据不一致",
+        details={"case_id": case_id, "reason": reason},
+        status_code=409,
     )
 
 
