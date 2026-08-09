@@ -598,8 +598,8 @@
     {
       "catalog_id": "FPMS-V8-GRANT-ATTACHMENT-NO-GRANTED-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-ATTACHMENT-NO-LEGAL-EFFECT-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4428,6 +4428,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-ATTACHMENT-NO-LEGAL-EFFECT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "541d25397bd285985b14b4b5c6a09feca15e5cbd",
+        "0b54fe9fc884fe22fc0e5deb5aeea2be923149b6"
+      ],
+      "paths": [
+        "backend/app/modules/documents/service.py",
+        "backend/tests/test_v8_grant_attachment_no_legal_effect.py"
+      ],
+      "tree_sha256": "942362f9954afe7829cf2dfee3f395aa096f95cfdeb2eb91bf66ba562e991588",
+      "tests": [
+        "real RED 1 failed then initial focused GREEN 1 passed",
+        "review correction proved full central lifecycle snapshot while preserving one evidence-registration activity and revision increment",
+        "final independent Row75 plus Row74 dependency tranche 74 passed",
+        "scoped Ruff and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-ATTACHMENT-NO-LEGAL-EFFECT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-ATTACHMENT-NO-LEGAL-EFFECT-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-GRANT-FEE-DONE-NO-LEGAL-EFFECT-CURRENT-ADOPTION",
