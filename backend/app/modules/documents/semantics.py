@@ -44,6 +44,14 @@ class ResolvedDocumentSemantics:
     deadline_source_policy: str | None
     fee_trigger: str | None
 
+    @property
+    def lifecycle_event_type(self) -> str | None:
+        return {
+            "ACCEPTANCE_NOTICE": "ACCEPTANCE_NOTICE_RECORDED",
+            "OA_REPLY": "OA_NOTICE_RECORDED",
+            "GRANT_NOTICE": "GRANT_REGISTRATION_NOTICE_RECORDED",
+        }.get(self.execution_behavior)
+
 
 @dataclass(frozen=True, slots=True)
 class _ExecutionContract:

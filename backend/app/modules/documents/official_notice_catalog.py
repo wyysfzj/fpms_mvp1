@@ -136,6 +136,21 @@ OFFICIAL_NOTICE_FEE_REDUCTION_APPROVAL_ACTIVATIONS = {
     ),
 }
 
+_OA_NOTICE_SEQUENCE_BY_TEMPLATE_CODE = {
+    "OA_IN": 1,
+    "OFFICIAL_NOTICE_003": 1,
+    "OFFICIAL_NOTICE_005": 2,
+    "OFFICIAL_NOTICE_021": 3,
+    "OFFICIAL_NOTICE_024": 4,
+    "OFFICIAL_NOTICE_029": 5,
+}
+
+
+def resolve_oa_notice_sequence(template_code: object) -> int | None:
+    if type(template_code) is not str:
+        return None
+    return _OA_NOTICE_SEQUENCE_BY_TEMPLATE_CODE.get(template_code)
+
 
 def _split_official_codes(code_text: str) -> list[str]:
     return [part.strip() for part in re.split(r"[,，;；]", code_text or "") if part.strip()]

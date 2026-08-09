@@ -52,6 +52,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": "Wizard Test Case",
+            "fee_reduction": "0",
             "applicants": [
                 {
                     "seq": 1,

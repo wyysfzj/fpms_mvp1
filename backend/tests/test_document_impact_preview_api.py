@@ -34,7 +34,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": "文件影响预览测试案件",
-            "status": "NOT_FILED",
+            "fee_reduction": "0",
             "applicants": [
                 {
                     "seq": 1,
@@ -132,8 +132,7 @@ def test_document_impact_preview_returns_template_impacts_without_mutating_case(
     assert payload["case_id"] == case_data["id"]
     assert payload["template_code"] == "OA_IN"
     assert payload["confirmation_required"] is True
-    assert payload["status_impacts"][0]["kind"] == "CASE_STATUS"
-    assert payload["status_impacts"][0]["effect"] == "OA1"
+    assert payload["status_impacts"] == []
     official_due_impact = next(
         impact for impact in payload["deadline_impacts"] if impact["kind"] == "OFFICIAL_DUE_DATE"
     )
@@ -143,7 +142,12 @@ def test_document_impact_preview_returns_template_impacts_without_mutating_case(
     assert payload["task_impacts"][0]["kind"] == "AUTO_TASK"
     assert payload["task_impacts"][0]["effect"] == "OA_REPLY"
     assert payload["fee_impacts"] == []
-    assert "案件状态将受模板影响" in payload["confirmation_items"]
+    assert "案件状态将受模板影响" not in payload["confirmation_items"]
+    assert (
+        "文书登记不会直接变更案件法律状态；"
+        "请通过已复核证据的生命周期入口确认状态变化"
+        in payload["risk_tips"]
+    )
 
     with session_factory() as db:
         case = db.query(Case).filter(Case.id == case_data["id"]).one()

@@ -96,10 +96,10 @@ def test_e2e_oa_workflow(client, auth_headers):
     doc_in_id = doc_in_resp.json()["id"]
     assert doc_in_resp.headers.get("X-Auto-Tasks-Created") == "1"
 
-    # Step 5: Verify case status changed to OA1
+    # Step 5: Verify ordinary document registration leaves case status unchanged.
     case_check = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
     assert case_check.status_code == 200
-    assert case_check.json()["status"] == "OA1"
+    assert case_check.json()["status"] == "NOT_FILED"
 
     # Step 6: Verify auto-created task with correct dates
     tasks_resp = client.get(f"/api/v1/tasks?case_id={case_id}", headers=auth_headers)
@@ -251,10 +251,10 @@ def test_e2e_billing_workflow(client, auth_headers, session_factory):
     assert drafts_before.status_code == 200
     assert drafts_before.json()["items"] == []
 
-    # Step 4: Verify case status changed to GRANT_PENDING
+    # Step 4: Verify ordinary grant-document registration leaves case status unchanged.
     case_check = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
     assert case_check.status_code == 200
-    assert case_check.json()["status"] == "GRANT_PENDING"
+    assert case_check.json()["status"] == "NOT_FILED"
 
     # Step 5: Explicitly create and verify the fee draft through the public API
     draft_create = client.post(

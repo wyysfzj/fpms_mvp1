@@ -13,8 +13,13 @@ Covers:
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
+
+from app.modules.cases.models import Case
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -438,7 +443,7 @@ def test_reply_to_template_mismatch_is_rejected(client: TestClient, auth_headers
 
 
 def test_doc_template_cascade_status_effect(client: TestClient, auth_headers: dict) -> None:
-    """Create doc with template that has status_effect → case status updated."""
+    """Create doc with template status metadata without changing case status."""
     case = _create_case(client, auth_headers)
     # Case starts with NOT_FILED status
     case_before = _get_case(client, auth_headers, case["id"])
@@ -459,35 +464,31 @@ def test_doc_template_cascade_status_effect(client: TestClient, auth_headers: di
         **OA_CONFIRMED_DUE,
     )
 
-    # Case status should now be OA1
+    # Template metadata remains readable but does not authorize a transition.
     case_after = _get_case(client, auth_headers, case["id"])
-    assert case_after["status"] == "OA1", (
-        f"Expected case status 'OA1' after status_effect cascade, got '{case_after['status']}'"
-    )
+    assert case_after["status"] == case_before["status"]
 
 
 def test_doc_template_cascade_rejects_illegal_status_regression(
-    client: TestClient, auth_headers: dict
+    client: TestClient,
+    auth_headers: dict,
+    session_factory: sessionmaker,
 ) -> None:
-    """Terminal case status must not be regressed by document status_effect."""
+    """Terminal case status remains unchanged by document status metadata."""
     case = _create_case(client, auth_headers)
 
-    promote_resp = client.put(
-        f"{CASE_BASE}/{case['id']}",
-        headers=auth_headers,
-        json={
-            "status": "GRANTED",
-            "app_no": "CN202510123456.7",
-            "filing_date": "2025-01-15",
-            "pub_no": "CN123456789A",
-            "pub_date": "2025-07-15",
-            "grant_no": "ZL202510123456.7",
-            "grant_date": "2026-01-15",
-            "first_annuity_year": 1,
-            "valid_until": "2045-01-15",
-        },
-    )
-    assert promote_resp.status_code == 200, promote_resp.text
+    with session_factory() as db:
+        case_model = db.execute(select(Case).where(Case.id == case["id"])).scalar_one()
+        case_model.status = "GRANTED"
+        case_model.app_no = "CN202510123456.7"
+        case_model.filing_date = date(2025, 1, 15)
+        case_model.pub_no = "CN123456789A"
+        case_model.pub_date = date(2025, 7, 15)
+        case_model.grant_no = "ZL202510123456.7"
+        case_model.grant_date = date(2026, 1, 15)
+        case_model.first_annuity_year = 1
+        case_model.valid_until = date(2045, 1, 15)
+        db.commit()
 
     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
     resp = client.post(
@@ -502,9 +503,7 @@ def test_doc_template_cascade_rejects_illegal_status_regression(
             **OA_CONFIRMED_DUE,
         },
     )
-    assert resp.status_code == 409, resp.text
-    payload = resp.json()["error"]
-    assert payload["code"] == "CASE_STATUS_TRANSITION_INVALID"
+    assert resp.status_code == 201, resp.text
 
     case_after = _get_case(client, auth_headers, case["id"])
     assert case_after["status"] == "GRANTED"
@@ -609,7 +608,7 @@ def test_document_update_reply_fields(client: TestClient, auth_headers: dict) ->
 def test_reply_document_applies_status_restore_when_template_configured(
     client: TestClient, auth_headers: dict
 ) -> None:
-    """Reply template status_restore should bring the case back to configured status."""
+    """Reply template status_restore remains metadata without transition authority."""
     case = _create_case(client, auth_headers)
     oa_in_tmpl = _get_doc_template_by_code(client, auth_headers, "OA_IN")
 
@@ -623,7 +622,7 @@ def test_reply_document_applies_status_restore_when_template_configured(
         **OA_CONFIRMED_DUE,
     )
     case_after_in = _get_case(client, auth_headers, case["id"])
-    assert case_after_in["status"] == "OA1"
+    assert case_after_in["status"] == "NOT_FILED"
 
     restore_tmpl = _create_doc_template(
         client,
@@ -647,7 +646,7 @@ def test_reply_document_applies_status_restore_when_template_configured(
     assert reply["case_no"] == case["case_no"]
 
     case_after_reply = _get_case(client, auth_headers, case["id"])
-    assert case_after_reply["status"] == "ACCEPTED"
+    assert case_after_reply["status"] == "NOT_FILED"
 
 
 # ---------------------------------------------------------------------------
@@ -827,11 +826,9 @@ def test_full_oa_lifecycle(client: TestClient, auth_headers: dict) -> None:
         **OA_CONFIRMED_DUE,
     )
 
-    # 4a. Verify case status changed to OA1 (status_effect cascade)
+    # 4a. Verify ordinary document registration does not change case status.
     case_updated = _get_case(client, auth_headers, case["id"])
-    assert case_updated["status"] == "OA1", (
-        f"Case status should be 'OA1', got '{case_updated['status']}'"
-    )
+    assert case_updated["status"] == case_detail["status"]
 
     # 4b. Verify document need_reply=True (need_reply cascade)
     assert oa_in_doc.get("need_reply") is True, (

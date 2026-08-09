@@ -16,6 +16,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": "文档语义状态副作用测试案件",
+            "fee_reduction": "0",
         },
     )
     assert response.status_code == 201, response.text
@@ -138,7 +139,12 @@ def test_declared_oa_alias_drives_preview_document_and_case_state(
         },
     )
     assert preview.status_code == 200, preview.text
-    assert preview.json()["status_impacts"][0]["effect"] == "OA1"
+    assert preview.json()["status_impacts"] == []
+    assert (
+        "文书登记不会直接变更案件法律状态；"
+        "请通过已复核证据的生命周期入口确认状态变化"
+        in preview.json()["risk_tips"]
+    )
     assert preview.json()["file_status_impacts"][0]["kind"] == "NEED_REPLY"
 
     created = client.post(
@@ -157,7 +163,7 @@ def test_declared_oa_alias_drives_preview_document_and_case_state(
     )
     assert created.status_code == 201, created.text
     assert created.json()["need_reply"] is True
-    assert _get_case(client, auth_headers, case["id"])["status"] == "OA1"
+    assert _get_case(client, auth_headers, case["id"])["status"] == "NOT_FILED"
 
 
 def test_document_update_uses_resolver_for_template_defaults(

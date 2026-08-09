@@ -388,19 +388,6 @@ def _apply_template_defaults(
     if not need_reply_overridden:
         document.need_reply = semantics.requires_reply
 
-    if semantics.case_status_effect and document.direction == DocumentDirection.IN:
-        validate_case_status_transition(case.status, semantics.case_status_effect)
-        case.status = semantics.case_status_effect
-
-    if (
-        getattr(template, "status_restore", None)
-        and document.direction == DocumentDirection.OUT
-        and document.reply_to_id
-        and not _is_oa_out_template(template)
-    ):
-        validate_case_status_transition(case.status, template.status_restore)
-        case.status = template.status_restore
-
 
 def _has_required_grant_fields(case: Case) -> bool:
     return has_required_granted_status_fields(case)
@@ -1116,32 +1103,11 @@ def preview_document_impact(
 
     if template:
         semantics = resolve_document_semantics(template)
-        if data.direction == DocumentDirection.IN and semantics.case_status_effect:
-            status_impacts.append(
-                DocumentImpactItemOut(
-                    kind="CASE_STATUS",
-                    title="案件状态影响",
-                    effect=semantics.case_status_effect,
-                    requires_confirmation=True,
-                    detail=f"登记后案件状态预计变更为 {semantics.case_status_effect}",
-                )
+        if semantics.case_status_effect or _normalize_text(template.status_restore):
+            risk_tips.append(
+                "文书登记不会直接变更案件法律状态；"
+                "请通过已复核证据的生命周期入口确认状态变化"
             )
-            confirmation_items.append("案件状态将受模板影响")
-        if (
-            data.direction == DocumentDirection.OUT
-            and data.reply_to_id
-            and _normalize_text(template.status_restore)
-        ):
-            status_impacts.append(
-                DocumentImpactItemOut(
-                    kind="CASE_STATUS_RESTORE",
-                    title="案件状态恢复",
-                    effect=template.status_restore,
-                    requires_confirmation=True,
-                    detail=f"答复登记后案件状态预计恢复为 {template.status_restore}",
-                )
-            )
-            confirmation_items.append("案件状态将受模板影响")
 
         if semantics.deadline_source_policy == "EXPLICIT_OFFICIAL_DUE_REQUIRED" and (
             deadline.official_due_date is None or deadline.official_due_date_status != "CONFIRMED"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -9,6 +10,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Path,
     Query,
     Response,
     UploadFile,
@@ -38,20 +40,26 @@ from app.modules.documents.export_excel import (
 from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.fee_linking_service import maybe_create_fee_draft
 from app.modules.documents.lifecycle_evidence_adapters import (
+    AcceptanceNoticeIn,
     ApplicationAbandonmentIn,
     ApplicationRejectionIn,
     ApplicationRestorationIn,
     ApplicationWithdrawalEvidenceResult,
     ApplicationWithdrawalIn,
+    OaNoticeIn,
     PassPreliminaryExaminationCommand,
     PassPreliminaryExaminationResult,
     PreliminaryExaminationPassIn,
     PreliminaryExaminationStartIn,
     PublicationNoticeIn,
+    RecordAcceptanceNoticeCommand,
+    RecordAcceptanceNoticeResult,
     RecordApplicationAbandonmentCommand,
     RecordApplicationRejectionCommand,
     RecordApplicationRestorationCommand,
     RecordApplicationWithdrawalCommand,
+    RecordOaNoticeCommand,
+    RecordOaNoticeResult,
     RecordPublicationNoticeCommand,
     RecordPublicationNoticeResult,
     RecordRectificationNoticeCommand,
@@ -67,10 +75,12 @@ from app.modules.documents.lifecycle_evidence_adapters import (
     SubstantiveExaminationStartIn,
     TerminalLifecycleEvidenceResult,
     pass_preliminary_examination_from_evidence,
+    record_acceptance_notice_from_evidence,
     record_application_abandonment_from_evidence,
     record_application_rejection_from_evidence,
     record_application_restoration_from_evidence,
     record_application_withdrawal_from_evidence,
+    record_oa_notice_from_evidence,
     record_publication_notice_from_evidence,
     record_rectification_notice_from_evidence,
     start_preliminary_examination_from_evidence,
@@ -322,6 +332,74 @@ def update_doc_template_endpoint(
 # ---------------------------------------------------------------------------
 # Document endpoints
 # ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/acceptance-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=RecordAcceptanceNoticeResult,
+)
+def record_document_acceptance_notice(
+    document_id: Annotated[
+        str,
+        Path(min_length=1, max_length=36, pattern=r"^\S(?:.*\S)?$"),
+    ],
+    payload: AcceptanceNoticeIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> RecordAcceptanceNoticeResult:
+    try:
+        result = record_acceptance_notice_from_evidence(
+            RecordAcceptanceNoticeCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
+
+
+@router.post(
+    "/documents/{document_id}/lifecycle/oa-notice",
+    status_code=status.HTTP_200_OK,
+    response_model=RecordOaNoticeResult,
+)
+def record_document_oa_notice(
+    document_id: Annotated[
+        str,
+        Path(min_length=1, max_length=36, pattern=r"^\S(?:.*\S)?$"),
+    ],
+    payload: OaNoticeIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> RecordOaNoticeResult:
+    try:
+        result = record_oa_notice_from_evidence(
+            RecordOaNoticeCommand(
+                document_id=document_id,
+                evidence_version_id=payload.evidence_version_id,
+                actor_id=current_user.id,
+                effective_at=payload.effective_at,
+                occurred_at=payload.occurred_at,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
 
 
 @router.post(
