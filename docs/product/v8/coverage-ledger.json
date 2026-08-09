@@ -4412,7 +4412,7 @@
         "backend/tests/test_v8_grant_notice_lifecycle_adapter.py",
         "backend/tests/test_v8_grant_notice_lifecycle_api.py"
       ],
-      "tree_sha256": "30897eb30f288f9e25b7c4f83339227779a1d8f66a2161983234d6f3a28080da",
+      "tree_sha256": "b3709aaabde17d8c72c7b88dd683c4f427478cf6842c4fb6292574ece6066ca7",
       "tests": [
         "dispatcher RED 45 failed then focused GREEN 45 passed",
         "dedicated API RED 18 failed then pre-review exact tranche 66 passed",
@@ -4436,7 +4436,7 @@
         "backend/app/modules/documents/service.py",
         "backend/tests/test_v8_grant_attachment_no_legal_effect.py"
       ],
-      "tree_sha256": "942362f9954afe7829cf2dfee3f395aa096f95cfdeb2eb91bf66ba562e991588",
+      "tree_sha256": "a965c22fff742a4fa2f463132e58be068a4e9278f8594a96968f7eec0f0c479b",
       "tests": [
         "real RED 1 failed then initial focused GREEN 1 passed",
         "review correction proved full central lifecycle snapshot while preserving one evidence-registration activity and revision increment",
@@ -4458,7 +4458,7 @@
         "backend/app/modules/grant_fees/service.py",
         "backend/tests/test_v8_grant_fee_done_no_legal_effect.py"
       ],
-      "tree_sha256": "1b08626ba493ad5d6cbc4ead7b0fd503ba44ae04e9022a5b8399701cba72bd51",
+      "tree_sha256": "0b32855ce5093c4eeface5e8aa27c676e17cdd4c3b3739b98f80aed3ae1cd455",
       "tests": [
         "real RED 3 failed then focused GREEN 3 passed",
         "independent Row76 plus Row74 dependency tranche 54 passed",
@@ -4527,7 +4527,7 @@
         "backend/app/modules/documents/letter_context.py",
         "backend/tests/test_v8_format_letter_context.py"
       ],
-      "tree_sha256": "4ecc32562627edc76d589b0d63338c82db497f98cc40ea438971f8572d94c822",
+      "tree_sha256": "38c1e4bb96ac35ac95505a1d4b2c7cf49ee74a7ec7aaa0169d0f9ebf56d1c42d",
       "tests": [
         "real RED 45 failed on the missing module",
         "focused format-letter context suite 45 passed",
@@ -4549,7 +4549,7 @@
         "backend/app/modules/documents/letter_render_service.py",
         "backend/tests/test_v8_format_letter_render.py"
       ],
-      "tree_sha256": "352dbbdeab9256856451aa2655c46a038939cdd54898463d3ae9cc9cf4cc8fcf",
+      "tree_sha256": "aed105f8b183d4e2ae78054de8eca4bf9cd509da382bc827b6e933a4c59c14a8",
       "tests": [
         "real RED 6 failed on the missing module",
         "focused format-letter render suite 6 passed",
@@ -4571,7 +4571,7 @@
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_format_letter_archive.py"
       ],
-      "tree_sha256": "869e85c4d39a133be02987ce7e790643b1f4ee42861ecaba826c402f94552efa",
+      "tree_sha256": "89a2d105c9a5b193864083b9bb9c4dc11382590712663de8750f5808da93eee6",
       "tests": [
         "real RED 20 failed on the missing archive API and helpers",
         "focused format-letter archive suite 20 passed",
@@ -4593,7 +4593,7 @@
         "backend/app/modules/grant_fees/service.py",
         "backend/tests/test_v8_grant_instruction_obligation_adapter.py"
       ],
-      "tree_sha256": "634732ca0b991c215e386047865fb1ec55ecf1746e8f22df0902893b7760461a",
+      "tree_sha256": "1adde3ccd5c5912ba75ce7130c0a6b350c3478d945d6ca5a810671afb152c315",
       "tests": [
         "contract-complete RED 41 failed on the missing typed adapter",
         "focused grant instruction obligation adapter suite 41 passed",
@@ -4659,6 +4659,48 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-PAYLIST-REAL-ROUTE-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-PAYLIST-REAL-ROUTE-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "C3-LEAN-SUCCESSOR-PATH-ATTESTATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "6e6b1e8dc4a61c5b65129d1fb55ae511968b8d4a",
+        "5965e1fb6533d75f2adb7d8af4a6042413abf0d3"
+      ],
+      "paths": [
+        "docs/product/v8/stories/C3-LEAN-SUCCESSOR-PATH-ATTESTATION-CONTRACT.md",
+        "scripts/v8_lean_coverage_check.py",
+        "scripts/tests/test_v8_lean_coverage_check.py"
+      ],
+      "tree_sha256": "12a73ee3d636abcc2f65812a51505ee0f1ce421498ad8161a5dd004c05fba159",
+      "tests": [
+        "focused RED rejected a valid reviewed successor and misclassified post-successor drift",
+        "full checker suite 12 passed after exact same-commit alias correction",
+        "scoped Ruff, format and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/C3-LEAN-SUCCESSOR-PATH-ATTESTATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/C3-LEAN-SUCCESSOR-PATH-ATTESTATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SOURCE-AUTHORITY-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "d754b8c265133459af19a2ceb48f99f20bb07985"
+      ],
+      "paths": [
+        "docs/product/v8/source-decision-registry.md"
+      ],
+      "tree_sha256": "709192acf37db4451f0b101004c16661776f85a58a3d171b15c02335e52e1344",
+      "tests": [
+        "exact user-source SHA-256 and decision text were verified",
+        "current source-registry Git blob matches the independently reviewed contract candidate",
+        "independent High contract review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CONTRACT.md",
+      "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CONTRACT.md"
     }
   ]
 }
