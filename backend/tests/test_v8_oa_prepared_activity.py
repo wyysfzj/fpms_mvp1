@@ -7,7 +7,12 @@ from hashlib import sha256
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
-from test_v8_oa_out_package_atomic_link import ACTOR_ID, _payload, _seed_fixture
+from test_v8_oa_out_package_atomic_link import (
+    ACTOR_ID,
+    _assert_failed_unit_is_absent,
+    _payload,
+    _seed_fixture,
+)
 
 from app.core.errors import BusinessError
 from app.modules.cases.lifecycle_activity_service import append_case_activity
@@ -332,6 +337,81 @@ def test_oa_prepared_activity_rejects_ambiguous_exact_derivation(
                     DocumentEvidenceDerivation.derivation_type
                     == EvidenceDerivationType.OA_REPLY_PREPARATION.value
                 )
+            )
+            == 0
+        )
+
+
+def test_oa_prepared_activity_rejects_wrong_case_exact_derivation(
+    session_factory: sessionmaker[Session],
+    monkeypatch,
+    tmp_path,
+) -> None:
+    fixture = _seed_fixture(session_factory, monkeypatch, tmp_path)
+    real_prepare = official_workflows_service.prepare_oa_reply
+
+    def prepare_with_wrong_case_lineage(command, transaction):
+        result = real_prepare(command, transaction)
+        preparations = transaction.scalars(
+            select(DocumentEvidenceDerivation).where(
+                DocumentEvidenceDerivation.parent_evidence_version_id
+                == result.source_evidence_version_id,
+                DocumentEvidenceDerivation.child_evidence_version_id
+                == result.reply_evidence_version_id,
+                DocumentEvidenceDerivation.derivation_type
+                == EvidenceDerivationType.OA_REPLY_PREPARATION.value,
+            )
+        ).all()
+        assert len(preparations) == 1
+        preparation = preparations[0]
+        wrong_case = Case(
+            id="wrong-case-oa-preparation",
+            case_no="OA-WRONG-DERIVATION",
+            status="OA1",
+            fee_reduction="0",
+        )
+        transaction.add(wrong_case)
+        transaction.flush()
+        transaction.add(
+            DocumentEvidenceDerivation(
+                id="wrong-case-oa-preparation-edge",
+                case_id=wrong_case.id,
+                parent_evidence_version_id=preparation.parent_evidence_version_id,
+                child_evidence_version_id=preparation.child_evidence_version_id,
+                derivation_type=preparation.derivation_type,
+                actor_id=preparation.actor_id,
+                derived_at=preparation.derived_at,
+                source_snapshot=preparation.source_snapshot,
+            )
+        )
+        transaction.flush()
+        return result
+
+    monkeypatch.setattr(
+        official_workflows_service,
+        "prepare_oa_reply",
+        prepare_with_wrong_case_lineage,
+    )
+
+    with session_factory() as transaction:
+        with pytest.raises(BusinessError) as raised:
+            documents_service.create_document_wizard_batch(
+                transaction,
+                _payload(fixture),
+                actor_id=ACTOR_ID,
+            )
+
+    assert (raised.value.code, raised.value.status_code) == (
+        "OA_REPLY_IDENTITY_CONFLICT",
+        409,
+    )
+    _assert_failed_unit_is_absent(session_factory, fixture)
+    with session_factory() as transaction:
+        assert (
+            transaction.scalar(
+                select(func.count())
+                .select_from(CaseActivityEvent)
+                .where(CaseActivityEvent.activity_type == "OA_REPLY_PREPARED")
             )
             == 0
         )

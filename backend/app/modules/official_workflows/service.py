@@ -1853,7 +1853,6 @@ def prepare_oa_out_package_link(
     preparations = list(
         db.scalars(
             select(DocumentEvidenceDerivation).where(
-                DocumentEvidenceDerivation.case_id == result.case_id,
                 DocumentEvidenceDerivation.parent_evidence_version_id
                 == result.source_evidence_version_id,
                 DocumentEvidenceDerivation.child_evidence_version_id
@@ -1866,6 +1865,8 @@ def prepare_oa_out_package_link(
     if len(preparations) != 1:
         _oa_atomic_link_conflict("OA preparation derivation identity is not unique")
     preparation = preparations[0]
+    if preparation.case_id != result.case_id:
+        _oa_atomic_link_conflict("OA preparation derivation case identity is invalid")
     case = _get_case(db, result.case_id)
     current_projection = _capture_lifecycle_projection(case)
     activity_key = f"oa-reply-prepared:{result.package_id}"
