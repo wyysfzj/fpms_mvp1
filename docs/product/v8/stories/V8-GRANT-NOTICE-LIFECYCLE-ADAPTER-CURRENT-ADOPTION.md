@@ -1,6 +1,6 @@
 # Story V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-CURRENT-ADOPTION
 
-- Status: `READY_FOR_REVIEW`.
+- Status: `REVIEW_CORRECTION_CONTRACT_FROZEN / IMPLEMENTATION_PENDING`.
 - Risk: `PROTECTED`.
 - Catalog ID: `FPMS-V8-GRANT-NOTICE-LIFECYCLE-ADAPTER-20260712-01`
   (ordinal `74`).
@@ -20,20 +20,71 @@ references are immutable. Exact replay is write-free; drift, invalid evidence/sn
 ambiguous/reversed replacement lineage fails closed. Caller transaction ownership is
 preserved.
 
-The accepted document service already owned the sole call site after attachment/evidence
-promotion; therefore this story did not change `documents/service.py`. Ordinary document
-creation remains lifecycle-neutral, and the generic path cannot append a second activity.
+Independent review proved the old frozen `documents/service.py` call-site assumption is
+not implementable on the current evidence workflow: attachment upload creates only a
+`RAW_ATTACHMENT / DRAFT` version and cannot itself confirm legal-state evidence. The
+approved lifecycle-neutral source decision forbids turning that ordinary upload into a
+transition trigger. The current-tree successor therefore replaces only that obsolete
+orchestration detail with the exact dedicated API below. Ordinary document creation,
+attachment upload and generic evidence review remain lifecycle-neutral and cannot append
+a grant-registration activity.
+
+## Exact production-entry successor
+
+Add exactly one route:
+
+```text
+POST /grant-fee-tasks/{grant_fee_task_id}/lifecycle/grant-notice
+```
+
+It requires `Doc.Edit`, derives `actor_id` from the authenticated user, owns one
+caller-level commit/rollback boundary and returns HTTP 200 with the direct
+`LifecycleTransitionResult`. Its strict request model has exactly these required fields
+and forbids extras:
+
+```text
+reviewed_evidence_version_id: str
+expected_content_hash: str
+recorded_at: naive datetime
+idempotency_key: str
+```
+
+The adapter does not resolve, create, promote, mutate or approve evidence. It requires the
+named version already to be the exact current `FINAL / APPROVED` version accepted by the
+frozen service, resolves `source_document_id` only from the named task, and passes all four
+body values plus server actor and the caller-owned Session to
+`dispatch_grant_registration_notice()`. Missing task preserves 404; all same-case,
+document, evidence, hash, deadline, snapshot, replay and replacement checks remain solely
+owned by that service. Exact replay returns the same activity with no new write. Client-
+supplied case, source document, reviewer, event type, evidence state or fee-line snapshot
+is forbidden.
+
+This route, rather than raw upload or generic review, is the sole production adapter for
+this grant event. Existing service-level evidence registration/import/promotion workflows
+remain responsible for producing a reviewed final version; creating a new grant-specific
+promotion protocol is a separate non-goal and is not required to make this exact adapter
+reachable for an existing valid version.
 
 ## Exact current-tree scope
 
 - `backend/app/modules/grant_fees/service.py`
+- `backend/app/modules/grant_fees/api.py`
+- `backend/app/modules/grant_fees/schemas.py`
 - `backend/tests/test_v8_grant_notice_lifecycle_adapter.py`
+- `backend/tests/test_v8_grant_notice_lifecycle_api.py`
 
 The test was recovered from archive input `6b2ef89` and adapted only to remove the old
 case-status-unchanged assertion owned by the separate pending Row75 contract. It retains
 the exact one-activity, one-revision, immutable payload/evidence, replay, correction,
 lineage-conflict, rollback and no-second-append assertions. No Row75/76/130 behavior is
 absorbed.
+
+The API correction RED must prove the route is absent. GREEN must prove exact route/method,
+strict body, `Doc.Edit`, server actor, direct service arguments/result, one commit on
+success, rollback on service or commit failure, and no client control over case/document/
+reviewer/event/evidence-state/snapshot fields. It must include one real-SQLite end-to-end
+valid call and exact replay through the route, while retaining the existing service test
+as the source of detailed failure-matrix coverage.
 
 ## TDD and verification
 
@@ -56,7 +107,8 @@ adoption.
 
 ## Non-goals and rollback
 
-No generic dispatcher, ordinary-document lifecycle write, grant attachment-status rule,
+No generic dispatcher, ordinary-document/evidence-review lifecycle write, grant evidence
+promotion protocol, grant attachment-status rule,
 grant-fee-done status rule, annuity obligation, fee/draft creation, schema/migration,
 second entrypoint, parser change, mutable source reread or adjacent cleanup. Rollback
 reverts exactly `997a6896b90deae18ecda7bde9db35e48513b242`; it must not rewrite existing
