@@ -38,6 +38,32 @@ Fresh independent verification:
 - `git diff --exit-code 036b121013d5a2154643560e584c9a92d38bad3a -- backend/app/modules/official_workflows/service.py backend/tests/test_v8_filing_receipt_lifecycle_adapter.py` — reviewed paths match the exact commit, exit `0`.
 - `git diff --name-only e76a388ca3f3c756e671f437adcfbf4be8375239 036b121013d5a2154643560e584c9a92d38bad3a` — exactly the two allowed product/test paths.
 
+## Shared-path successor attestation
+
+After receiving the serialized SQLite grant, the independent reviewer ran this exact
+shared-service successor tranche once:
+
+`cd backend && pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py tests/test_addgap_oa_receipt_archive_event.py tests/test_v8_oa_reply_date_receipt_projection.py tests/test_v8_work_package_manifest_evidence_version.py tests/test_v8_filing_preparation_started_adapter.py tests/test_v8_filing_full_word_gate.py tests/test_v8_filing_external_submission_adapter.py`
+
+The result was `33 passed`, exit `0`, with only three inherited dependency deprecation
+warnings. The row 66 focused `5` tests and inherited `11` tests were not rerun.
+
+Shared-path compatibility: `APPROVED`. Product commit `036b121` preserves the accepted
+behavior of all six CURRENT_VERIFIED stories that share
+`backend/app/modules/official_workflows/service.py`:
+
+- `V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION`, including its direct OA receipt
+  archive compatibility suite;
+- `V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION`;
+- `V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION`;
+- `V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION`;
+- `V8-FILING-FULL-WORD-READINESS-GATE-CURRENT-ADOPTION`; and
+- `V8-FILING-EXTERNAL-SUBMISSION-ADAPTER-CURRENT-ADOPTION`.
+
+No lifecycle, evidence lineage, archive/reply-date projection, manifest identity,
+filing-preparation, full-Word readiness, external-submission, replay, rollback, or
+fail-closed regression was observed in this successor tranche.
+
 The current story-card SHA-256 is
 `8eff7e82c4863184b02fc7c0a39c04e0bb9df95928973400811737f6f5358b12`.
 The exact product/test Git-tree fingerprint SHA-256 is
