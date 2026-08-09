@@ -17,6 +17,8 @@ from app.modules.cases.document_gate_service import (
     MaterialGateResult,
     evaluate_material_gate,
 )
+from app.modules.cases.lifecycle_overlay_schemas import LifecycleOverlay
+from app.modules.cases.lifecycle_overlay_service import read_lifecycle_overlay
 from app.modules.cases.models import (
     Case,
     T_BioDeposit,
@@ -588,6 +590,31 @@ def get_case_document_gate(
         flow_dir=case.flow_dir,
         gate=gate,
         file_events=_build_case_document_file_events(db, case.id),
+    )
+
+
+@router.get(
+    "/cases/{case_id}/lifecycle-overlay",
+    response_model=LifecycleOverlay,
+    summary="Get case lifecycle overlay",
+)
+def get_case_lifecycle_overlay(
+    case_id: str,
+    after_sequence: int = Query(...),
+    limit: int = Query(...),
+    as_of_revision: int | None = Query(default=None),
+    _case_read: None = Depends(require_perm("Case.Read")),
+    _document_read: None = Depends(require_perm("Doc.Read")),
+    _task_read: None = Depends(require_perm("Task.Read")),
+    _fee_read: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> LifecycleOverlay:
+    return read_lifecycle_overlay(
+        case_id=case_id,
+        after_sequence=after_sequence,
+        limit=limit,
+        as_of_revision=as_of_revision,
+        transaction=db,
     )
 
 
