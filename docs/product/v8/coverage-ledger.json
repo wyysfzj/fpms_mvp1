@@ -1038,14 +1038,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-YEAR-ANNUITY-OBLIGATION-20260712-01",
       "phase": "foundation",
-      "disposition": "WIP",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-YEAR-ANNUITY-OBLIGATION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "kind": "HISTORICAL_BLOCKED",
-        "historical_state": "BLOCKED",
-        "source": "artifacts/FPMS-V8-GRANT-YEAR-ANNUITY-OBLIGATION-20260712-01/state.json"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-ANNUITY-FIRST-TEN-YEAR-REDUCTION-SCOPE-20260712-01",
@@ -4496,6 +4492,30 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-STATE-PREFLIGHT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-STATE-PREFLIGHT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-YEAR-ANNUITY-OBLIGATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "ff0b5d5c2ce6c32c76f04be4915c1297279085f1",
+        "8cb0f37e0ecb8fb785d9e781e818fde49744135a",
+        "69032f394fa6da0fad12efee22671a5c71022176"
+      ],
+      "paths": [
+        "backend/app/modules/grant_fees/service.py",
+        "backend/tests/test_v8_grant_year_annuity_obligation.py"
+      ],
+      "tree_sha256": "d1122751ae30c208cc5791740e2e6ae9471e29644aa8a366242836b66c9c18e6",
+      "tests": [
+        "real RED 3 failed and 1 passed on the missing adapter",
+        "final focused grant-year annuity suite 49 passed",
+        "fee-line snapshot, grant lifecycle, generic recognition and adapter tranche 191 passed",
+        "scoped Ruff, format and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-YEAR-ANNUITY-OBLIGATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-YEAR-ANNUITY-OBLIGATION-CURRENT-ADOPTION.md"
     }
   ]
 }
