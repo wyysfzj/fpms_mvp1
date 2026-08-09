@@ -50,10 +50,11 @@ to today's case carriers. Revision zero is valid only with no activity and all f
 carriers `NULL`; its center snapshot is entirely `None`.
 
 For each milestone, only `LIFECYCLE` may change center axes. Its old/new pairs produce a
-mapping containing exactly the axes whose values differ. `DOCUMENT` and `FEE` rows must have
-all six old/new axis columns `NULL` and expose an empty mapping; any lane/projection violation
-fails closed. Evidence links are read in deterministic identity order and projected to the
-accepted `EvidenceReference` DTO. All downstream joins remain empty tuples.
+mapping containing exactly the axes whose values differ. The accepted append seam stores the
+then-current projection on `DOCUMENT` and `FEE` rows, so each of their three old/new pairs must
+be equal (including an equal `NULL` pair) and they expose an empty mapping; any lane/projection
+violation fails closed. Evidence links are read in deterministic identity order and projected
+to the accepted `EvidenceReference` DTO. All downstream joins remain empty tuples.
 
 Capture one timezone-naive UTC `generated_at` per invocation. The top-level decision gates,
 warnings and legacy conflicts remain empty in this story. Perform no add/delete/update,
