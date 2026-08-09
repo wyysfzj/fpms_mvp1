@@ -38,6 +38,10 @@ import LifecycleCenterLane from './LifecycleCenterLane.vue'
 const props = defineProps<{
   caseId: string
 }>()
+const emit = defineEmits<{
+  loaded: [overlay: LifecycleOverlay]
+  failed: [error: ApiError]
+}>()
 
 const overlay = ref<LifecycleOverlay | null>(null)
 const loading = ref(true)
@@ -53,8 +57,10 @@ async function loadOverlay(): Promise<void> {
       limit: 200,
       asOfRevision: null,
     })
+    emit('loaded', overlay.value)
   } catch (caught) {
     error.value = caught as ApiError
+    emit('failed', error.value)
   } finally {
     loading.value = false
   }

@@ -41,6 +41,7 @@ test('案件详情按文件、生命周期、费用顺序展示同一 overlay �
             ),
         )
         .toBe(true)
+    expect(overlayQueries).toHaveLength(1)
     await expect(overlay.getByText('快照修订：7', { exact: true })).toBeVisible()
 
     const laneOrder = await overlay.locator('[data-overlay-lane]').evaluateAll((nodes) =>

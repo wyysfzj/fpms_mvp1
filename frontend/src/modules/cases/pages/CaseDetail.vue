@@ -53,7 +53,11 @@
         </div>
       </div>
 
-      <CaseLifecycleOverlay :case-id="caseData.id" />
+      <CaseLifecycleOverlay
+        :case-id="caseData.id"
+        @loaded="handleLifecycleOverlayLoaded"
+        @failed="handleLifecycleOverlayFailed"
+      />
 
       <!-- Main content grid: left tabs + right panel -->
       <div class="case-detail-v3-grid">
@@ -443,7 +447,12 @@
             </el-tab-pane>
 
             <el-tab-pane :label="ZH.caseDetail.fees" name="fees">
-              <CaseFeesTab :case-id="caseData.id" />
+              <CaseFeesTab
+                :case-id="caseData.id"
+                :lifecycle-overlay="lifecycleOverlay"
+                :lifecycle-overlay-error="lifecycleOverlayError"
+                lifecycle-overlay-managed
+              />
             </el-tab-pane>
 
             <el-tab-pane :label="ZH.caseDetail.billing" name="billing">
@@ -516,6 +525,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getCase, getCaseByCaseNo } from '../../../api/cases'
 import type { Case } from '../../../api/cases.types'
+import type { LifecycleOverlay } from '../../../api/lifecycleOverlay.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
@@ -542,6 +552,8 @@ const loading = ref(false)
 const error = ref<ApiError | null>(null)
 const activeTab = ref('overview')
 const showLimitedEdit = ref(false)
+const lifecycleOverlay = ref<LifecycleOverlay | null>(null)
+const lifecycleOverlayError = ref<ApiError | null>(null)
 
 const statusTagClass = computed(() =>
   caseData.value?.status ? getStatusTagClass(caseData.value.status) : 'gray'
@@ -670,6 +682,16 @@ function handleEdit() {
 
 function handleLimitedEditSuccess() {
   fetchCase()
+}
+
+function handleLifecycleOverlayLoaded(value: LifecycleOverlay) {
+  lifecycleOverlay.value = value
+  lifecycleOverlayError.value = null
+}
+
+function handleLifecycleOverlayFailed(value: ApiError) {
+  lifecycleOverlay.value = null
+  lifecycleOverlayError.value = value
 }
 
 function formatUnknownCode(label: string) {
