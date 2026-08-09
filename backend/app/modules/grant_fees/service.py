@@ -51,6 +51,7 @@ from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
     FeeObligation,
+    FeeObligationLine,
     FeeRate,
     T_GrantFeeTask,
 )
@@ -58,6 +59,7 @@ from app.modules.fees.obligation_contracts import (
     FeeDifferenceReviewState,
     FeeDomain,
     FeeObligationLineInput,
+    FeeObligationStatus,
     FeeSourceStatus,
     RecognizeFeeObligationCommand,
     RecognizeFeeObligationResult,
@@ -113,7 +115,7 @@ _GRANT_NOTICE_PAYLOAD_KEYS = {
 }
 _GRANT_NOTICE_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 _GRANT_NOTICE_SNAPSHOT_HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
-_GRANT_NOTICE_CANONICAL_AMOUNT_PATTERN = re.compile(r"[0-9]+\.[0-9]{2}")
+_GRANT_NOTICE_CANONICAL_AMOUNT_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}")
 _GRANT_FEE_TASK_DONE_EVENT_TYPE = "GRANT_FEE_TASK_DONE"
 
 _STATE_ALLOWED_ACTIONS = {
@@ -248,6 +250,7 @@ def recognize_grant_year_annuity_obligation(
             task=task,
             activity=activity,
             payload=payload,
+            fee_code=fee_code,
         )
 
     return recognize_obligation(
@@ -491,6 +494,7 @@ def _grant_year_annuity_predecessor(
     task: T_GrantFeeTask,
     activity: CaseActivityEvent,
     payload: dict[str, object],
+    fee_code: str,
 ) -> tuple[str | None, str | None]:
     predecessors = tuple(
         transaction.scalars(
@@ -575,6 +579,14 @@ def _grant_year_annuity_predecessor(
     if len(obligations) != 1:
         _grant_year_annuity_predecessor_conflict("predecessor_obligation_multiplicity")
     prior = obligations[0]
+    expected_lines = _grant_year_annuity_lines(predecessor_payload, fee_code=fee_code)
+    stored_lines = tuple(
+        transaction.scalars(
+            select(FeeObligationLine)
+            .where(FeeObligationLine.obligation_id == prior.id)
+            .order_by(FeeObligationLine.fee_year_key, FeeObligationLine.id)
+        ).all()
+    )
     children = tuple(
         transaction.scalars(
             select(FeeObligation)
@@ -584,6 +596,47 @@ def _grant_year_annuity_predecessor(
     )
     if len(children) > 1 or (children and children[0].source_activity_id != activity.id):
         _grant_year_annuity_predecessor_conflict("predecessor_already_diverged")
+    expected_status = (
+        FeeObligationStatus.SUPERSEDED.value if children else FeeObligationStatus.RECOGNIZED.value
+    )
+    expected_by_year = {line.fee_year_key: line for line in expected_lines}
+    if (
+        prior.source_document_id != predecessor_task.source_document_id
+        or prior.fee_domain != FeeDomain.GOV.value
+        or prior.obligation_status != expected_status
+        or prior.due_date != predecessor_task.due_date
+        or prior.currency != "CNY"
+        or prior.source_status != FeeSourceStatus.VERIFIED.value
+        or len(stored_lines) != len(expected_lines)
+        or set(line.fee_year_key for line in stored_lines) != set(expected_by_year)
+    ):
+        _grant_year_annuity_predecessor_conflict("predecessor_obligation_source_mismatch")
+    for stored in stored_lines:
+        expected = expected_by_year[stored.fee_year_key]
+        if (
+            stored.case_id != task.case_id
+            or stored.source_activity_id != predecessor_activity.id
+            or stored.fee_code != expected.fee_code
+            or stored.fee_name != expected.fee_name
+            or stored.official_full_amount is not None
+            or stored.reduction_ratio != expected.reduction_ratio
+            or stored.payable_amount != expected.payable_amount
+            or stored.source_amount != expected.source_amount
+            or stored.source_date is not None
+            or stored.difference_review_state != expected.difference_review_state.value
+            or (children and stored.current_identity_key is not None)
+            or (
+                not children
+                and stored.current_identity_key
+                != hashlib.sha256(
+                    (
+                        f"{stored.case_id}|{stored.source_activity_id}|"
+                        f"{stored.fee_code}|{stored.fee_year_key}"
+                    ).encode("utf-8")
+                ).hexdigest()
+            )
+        ):
+            _grant_year_annuity_predecessor_conflict("predecessor_obligation_line_mismatch")
     return prior.id, "GRANT_REGISTRATION_NOTICE_CORRECTION"
 
 

@@ -313,6 +313,7 @@ def test_unsupported_patent_category_is_write_free(
         lambda snapshot: snapshot["lines"][0].update(amount="+900.00"),
         lambda snapshot: snapshot["lines"][0].update(amount="9e2"),
         lambda snapshot: snapshot["lines"][0].update(amount="900_00"),
+        lambda snapshot: snapshot["lines"][0].update(amount="0900.00"),
         lambda snapshot: snapshot["lines"][0].update(amount="0"),
         lambda snapshot: snapshot["lines"][0].update(amount="1.001"),
         lambda snapshot: snapshot["lines"][0].update(reduction_ratio=0.7),
@@ -614,6 +615,10 @@ def test_historical_original_can_be_recovered_and_replayed_after_correction_exis
         "evidence-hash-drift",
         "predecessor-task-type",
         "predecessor-activity-type",
+        "obligation-source-document-drift",
+        "obligation-due-date-drift",
+        "obligation-source-status-drift",
+        "obligation-line-drift",
         "partial-task-lineage",
         "ambiguous-task",
     ),
@@ -636,8 +641,9 @@ def test_correction_predecessor_conflicts_are_write_free(
             evidence=first_evidence,
             idempotency_key=f"correction-conflict-source-1-{corrupt}",
         )
+        first_result = None
         if corrupt != "missing-obligation":
-            service.recognize_grant_year_annuity_obligation(
+            first_result = service.recognize_grant_year_annuity_obligation(
                 _command(
                     service,
                     first_task,
@@ -672,6 +678,30 @@ def test_correction_predecessor_conflicts_are_write_free(
             )
             assert predecessor_activity is not None
             predecessor_activity.activity_type = "OTHER"
+        elif corrupt == "obligation-source-document-drift":
+            assert first_result is not None
+            prior = transaction.get(FeeObligation, first_result.obligation.id)
+            assert prior is not None
+            prior.source_document_id = second_document.id
+        elif corrupt == "obligation-due-date-drift":
+            assert first_result is not None
+            prior = transaction.get(FeeObligation, first_result.obligation.id)
+            assert prior is not None
+            prior.due_date = second_task.due_date
+        elif corrupt == "obligation-source-status-drift":
+            assert first_result is not None
+            prior = transaction.get(FeeObligation, first_result.obligation.id)
+            assert prior is not None
+            prior.source_status = FeeSourceStatus.LEGACY_UNVERIFIED.value
+        elif corrupt == "obligation-line-drift":
+            assert first_result is not None
+            prior_line = transaction.scalar(
+                select(FeeObligationLine).where(
+                    FeeObligationLine.obligation_id == first_result.obligation.id
+                )
+            )
+            assert prior_line is not None
+            prior_line.payable_amount = Decimal("901.00")
         elif corrupt == "partial-task-lineage":
             first_task.superseded_by_task_id = None
         elif corrupt == "ambiguous-task":
