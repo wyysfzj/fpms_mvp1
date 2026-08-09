@@ -24,11 +24,13 @@ from app.modules.cases.lifecycle_overlay_schemas import (
     OverlayCenterAxis,
     OverlayCenterAxisChange,
     OverlayCenterSnapshot,
+    OverlayDecisionGate,
     OverlayDocumentEvidence,
     OverlayFeeLine,
     OverlayFeeObligation,
     OverlayFeeRelatedFact,
     OverlayFeeRelatedFactKind,
+    OverlayGateResolutionStatus,
     OverlayMilestone,
     OverlayTask,
     OverlayWorkPackage,
@@ -71,12 +73,37 @@ from app.modules.official_workflows.schemas import (
     OFFICIAL_WORK_PACKAGE_STATUSES,
 )
 from app.modules.official_workflows.service import evaluate_official_work_package
+from app.modules.system.decision_gate_service import (
+    DecisionGateCode,
+    ResolveDecisionGateCommand,
+    resolve_decision_gate,
+)
 from app.modules.tasks.enums import TaskStatus
 from app.modules.tasks.models import Task
 
 __all__ = ("read_lifecycle_overlay",)
 
 _EnumT = TypeVar("_EnumT")
+_DECISION_GATE_UNRESOLVED_CODES = frozenset(
+    {
+        "DECISION_GATE_NOT_FOUND",
+        "DECISION_GATE_REVOKED",
+        "DECISION_GATE_NOT_EFFECTIVE",
+        "DECISION_GATE_CANDIDATE_MULTIPLICITY",
+        "DECISION_GATE_CURRENT_IDENTITY_CONFLICT",
+        "DECISION_GATE_CURRENT_ROW_CORRUPT",
+        "DECISION_GATE_LEGACY_MAP_CORRUPT",
+    }
+)
+_DECISION_GATE_CASE_CODES = (
+    DecisionGateCode.FEE_APPLICATION_DRAFT,
+    DecisionGateCode.FEE_GRANT_YEAR_DRAFT,
+    DecisionGateCode.FEE_FUTURE_ANNUITY,
+    DecisionGateCode.GRANT_EVIDENCE_SOURCE,
+    DecisionGateCode.GRANT_MANUAL_REVIEW,
+    DecisionGateCode.PAYMENT_WORKBOOK,
+    DecisionGateCode.SERVICE_RATE_VERSION,
+)
 
 
 def read_lifecycle_overlay(
@@ -178,13 +205,18 @@ def read_lifecycle_overlay(
         )
         for activity, lane, axes in page
     )
+    decision_gates = _read_decision_gates(
+        case_id=case_id,
+        generated_at=generated_at,
+        transaction=transaction,
+    )
     return LifecycleOverlay(
         case_id=case_id,
         lifecycle_revision=revision,
         generated_at=generated_at,
         center_snapshot=center_snapshot,
         milestones=milestones,
-        decision_gates=(),
+        decision_gates=decision_gates,
         warnings=(),
         legacy_conflicts=(),
         next_cursor=None,
@@ -194,6 +226,73 @@ def read_lifecycle_overlay(
 
 def _utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _read_decision_gates(
+    *,
+    case_id: str,
+    generated_at: datetime,
+    transaction: Session,
+) -> tuple[OverlayDecisionGate, ...]:
+    commands = tuple(
+        ResolveDecisionGateCommand(
+            gate_code=gate_code,
+            scope_key=scope_key,
+            as_of=generated_at,
+        )
+        for gate_code, scope_key in (
+            *((gate_code, f"case:{case_id}") for gate_code in _DECISION_GATE_CASE_CODES),
+            *(
+                (DecisionGateCode.LEGACY_FORM_CLASS, f"form-{number:03d}")
+                for number in range(1, 23)
+            ),
+        )
+    )
+    result = []
+    for command in commands:
+        try:
+            resolved = resolve_decision_gate(command, transaction)
+        except BusinessError as error:
+            if error.status_code == 409 and error.code in _DECISION_GATE_UNRESOLVED_CODES:
+                result.append(
+                    OverlayDecisionGate(
+                        gate_code=command.gate_code,
+                        requested_scope_key=command.scope_key,
+                        resolution_status=OverlayGateResolutionStatus.UNRESOLVED,
+                        gate_id=None,
+                        resolved_scope_key=None,
+                        decision_value=None,
+                        source_reference=None,
+                        source_version=None,
+                        confirmed_by=None,
+                        effective_at=None,
+                        unresolved_reason=error.code,
+                    )
+                )
+                continue
+            if error.status_code == 400 and error.code == "DECISION_GATE_INVALID":
+                _fail(
+                    "LIFECYCLE_OVERLAY_DECISION_GATE_CONTRACT_INVALID",
+                    "生命周期决策门禁连接契约无效",
+                    status_code=409,
+                )
+            raise
+        result.append(
+            OverlayDecisionGate(
+                gate_code=resolved.gate_code,
+                requested_scope_key=resolved.requested_scope_key,
+                resolution_status=OverlayGateResolutionStatus.RESOLVED,
+                gate_id=resolved.gate_id,
+                resolved_scope_key=resolved.resolved_scope_key,
+                decision_value=resolved.decision_value,
+                source_reference=resolved.source_reference,
+                source_version=resolved.source_version,
+                confirmed_by=resolved.confirmed_by,
+                effective_at=resolved.effective_at,
+                unresolved_reason=None,
+            )
+        )
+    return tuple(result)
 
 
 def _current_revision(case_state: object) -> int:

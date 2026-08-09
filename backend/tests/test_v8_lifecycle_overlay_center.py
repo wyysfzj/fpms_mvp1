@@ -224,7 +224,12 @@ def test_reads_current_center_mixed_lanes_and_evidence_without_writing(
         assert result.milestones[0].work_packages == ()
         assert result.milestones[0].tasks == ()
         assert result.milestones[0].fee_obligations == ()
-        assert result.decision_gates == ()
+        assert len(result.decision_gates) == 29
+        assert all(
+            gate.resolution_status.value == "UNRESOLVED"
+            and gate.unresolved_reason == "DECISION_GATE_NOT_FOUND"
+            for gate in result.decision_gates
+        )
         assert result.warnings == ()
         assert result.legacy_conflicts == ()
         assert result.has_more is False
