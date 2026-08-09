@@ -726,8 +726,8 @@
     {
       "catalog_id": "FPMS-V8-FORMAT-LETTER-ARCHIVE-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FORMAT-LETTER-ARCHIVE-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4560,6 +4560,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-RENDER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-RENDER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FORMAT-LETTER-ARCHIVE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "7607a03e422b5e38d87767cc53b303e0e0013518"
+      ],
+      "paths": [
+        "backend/app/modules/official_workflows/service.py",
+        "backend/tests/test_v8_format_letter_archive.py"
+      ],
+      "tree_sha256": "869e85c4d39a133be02987ce7e790643b1f4ee42861ecaba826c402f94552efa",
+      "tests": [
+        "real RED 20 failed on the missing archive API and helpers",
+        "focused format-letter archive suite 20 passed",
+        "expanded current context, render, evidence, handoff and workflow tranche 123 passed",
+        "scoped Ruff, format and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-ARCHIVE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FORMAT-LETTER-ARCHIVE-CURRENT-ADOPTION.md"
     }
   ]
 }
