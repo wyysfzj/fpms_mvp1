@@ -21,9 +21,11 @@ read_lifecycle_overlay(
 ) -> LifecycleOverlay
 ```
 
-Read the case first. Missing case is the existing 404 `CASE_NOT_FOUND`. Freeze revision `R`
-to the persisted non-negative `lifecycle_revision` when `as_of_revision is None`; otherwise
-require the requested revision to be non-negative and no greater than current. Require
+Read the case first. Missing case is the existing 404 `CASE_NOT_FOUND`. Treat a fully
+unmanaged legacy case whose revision and four projection carriers are all `NULL` as revision
+zero. Otherwise the current revision must be persisted and non-negative. Freeze revision `R`
+to that current revision when `as_of_revision is None`; otherwise require the requested
+revision to be non-negative and no greater than current. Require
 `after_sequence >= 0`, `after_sequence <= R`, and `limit > 0`. Invalid query shape is 400
 `LIFECYCLE_OVERLAY_QUERY_INVALID`; corrupt or unreconstructable stored state is 409
 `LIFECYCLE_OVERLAY_STATE_CONFLICT`.
