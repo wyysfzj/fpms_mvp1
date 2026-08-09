@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.documents.enums import DocumentDocType
 from app.modules.documents.extra_data import DeadlineSource, DeadlineWriteStatus
@@ -22,6 +22,33 @@ class GrantFeeTaskModuleOut(BaseModel):
 
 class GrantFeeTaskStateActionIn(BaseModel):
     action: str = Field(..., min_length=1, max_length=32)
+
+
+class GrantNoticeLifecycleIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reviewed_evidence_version_id: str = Field(..., strict=True, min_length=1, max_length=36)
+    expected_content_hash: str = Field(
+        ...,
+        strict=True,
+        pattern=r"^sha256:[0-9a-f]{64}$",
+    )
+    recorded_at: datetime
+    idempotency_key: str = Field(..., strict=True, min_length=1, max_length=102)
+
+    @field_validator("reviewed_evidence_version_id", "idempotency_key")
+    @classmethod
+    def require_exact_trimmed_text(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("must be trimmed")
+        return value
+
+    @field_validator("recorded_at")
+    @classmethod
+    def require_naive_recorded_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is not None:
+            raise ValueError("must be timezone-naive")
+        return value
 
 
 class GrantFeeReplacementDocumentIn(BaseModel):

@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
+from app.core.errors import raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
+from app.modules.cases.lifecycle_contracts import LifecycleTransitionResult
 from app.modules.cases.models import Case
 from app.modules.documents.enums import DocumentDirection
 from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.models import DocTemplate, Document
 from app.modules.documents.schemas import DocumentCreateIn, DocumentOut
+from app.modules.fees.models import T_GrantFeeTask
 from app.modules.grant_fees.schemas import (
     GrantFeeDraftGenerateOut,
     GrantFeeTaskBatchInstructionIn,
@@ -26,10 +30,12 @@ from app.modules.grant_fees.schemas import (
     GrantFeeTaskReplacementNoticeOut,
     GrantFeeTaskStateActionIn,
     GrantFeeTaskStateOut,
+    GrantNoticeLifecycleIn,
 )
 from app.modules.grant_fees.service import (
     apply_grant_fee_batch_instruction,
     apply_grant_fee_task_action,
+    dispatch_grant_registration_notice,
     generate_grant_fee_draft,
     generate_grant_fee_notice_documents,
     get_grant_fee_module_contract,
@@ -39,6 +45,11 @@ from app.modules.grant_fees.service import (
 )
 
 router = APIRouter()
+
+GrantFeeTaskPathId = Annotated[
+    str,
+    Path(min_length=1, max_length=36, pattern=r"^\S(?:.*\S)?$"),
+]
 
 
 def _project_replacement_document(db: Session, *, document: Document) -> DocumentOut:
@@ -154,6 +165,54 @@ def put_grant_fee_task_state_endpoint(
     return GrantFeeTaskStateOut.model_validate(
         apply_grant_fee_task_action(db, task_id=task_id, action=payload.action)
     )
+
+
+@router.post(
+    "/grant-fee-tasks/{grant_fee_task_id}/lifecycle/grant-notice",
+    status_code=status.HTTP_200_OK,
+)
+def post_grant_notice_lifecycle_endpoint(
+    grant_fee_task_id: GrantFeeTaskPathId,
+    payload: GrantNoticeLifecycleIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> LifecycleTransitionResult:
+    try:
+        task = db.get(T_GrantFeeTask, grant_fee_task_id)
+        if task is None:
+            raise_business_error(
+                "GRANT_FEE_TASK_NOT_FOUND",
+                "Grant fee task not found",
+                status_code=404,
+            )
+        source_document_id = task.source_document_id
+        if (
+            type(source_document_id) is not str
+            or not source_document_id
+            or source_document_id != source_document_id.strip()
+            or len(source_document_id) > 36
+        ):
+            raise_business_error(
+                "GRANT_NOTICE_LIFECYCLE_SOURCE_CONFLICT",
+                "Grant notice source document lineage is invalid",
+                status_code=409,
+            )
+        result = dispatch_grant_registration_notice(
+            grant_fee_task_id=grant_fee_task_id,
+            source_document_id=source_document_id,
+            reviewed_evidence_version_id=payload.reviewed_evidence_version_id,
+            expected_content_hash=payload.expected_content_hash,
+            actor_id=current_user.id,
+            recorded_at=payload.recorded_at,
+            idempotency_key=payload.idempotency_key,
+            transaction=db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
 
 
 @router.post(
