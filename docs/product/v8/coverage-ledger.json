@@ -2022,9 +2022,9 @@
     {
       "catalog_id": "FPMS-V8-LEGACY-LIFECYCLE-IMPORT-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
+      "disposition": "SUPERSEDED_BY_STORY",
       "story_id": null,
-      "successor_story_id": null,
+      "successor_story_id": "V8-LEGACY-LIFECYCLE-IMPORT-NONINFERENTIAL-CURRENT-ADOPTION",
       "blocker": null
     },
     {
@@ -4701,6 +4701,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CONTRACT.md",
       "verification_ref": "docs/product/v8/reviews/V8-DOCUMENT-CREATE-LIFECYCLE-NEUTRAL-SUCCESSOR-CONTRACT.md"
+    },
+    {
+      "story_id": "V8-LEGACY-LIFECYCLE-IMPORT-NONINFERENTIAL-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "e85f7a35d78d568bb1ef5a69ba920341150940f2",
+        "1c00de6c2449d7b4a147b3fb33d00b63f25a45c2",
+        "c8396aaddc439b6e1df9ac8a4c8ed09f0e636c9f"
+      ],
+      "paths": [
+        "backend/scripts/backfill_v8_lifecycle.py",
+        "backend/tests/test_v8_legacy_lifecycle_import.py"
+      ],
+      "tree_sha256": "e83aa513299b1dad0cffa868a99d9e2591a4db8126df634b8587921a1710eb4a",
+      "tests": [
+        "initial focused RED failed 27 cases because the public importer seam was absent",
+        "corrected focused plus lifecycle append and legacy preflight tranche 101 passed",
+        "scoped Ruff, format and exact-range diff checks passed",
+        "independent High review approved corrected exact range P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LEGACY-LIFECYCLE-IMPORT-NONINFERENTIAL-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LEGACY-LIFECYCLE-IMPORT-NONINFERENTIAL-CURRENT-ADOPTION.md"
     }
   ]
 }

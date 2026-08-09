@@ -7,8 +7,8 @@ coverage-ledger 绑定。C3 checker 的共享文件 successor 证明缺陷、同
 SHA 别名缺陷、七个旧 fingerprint 抄录值和 source-registry 当前 owner 也已完成
 最小修正与独立验收。
 
-当前 Foundation 为 `174/197`，剩余 `23` 行。依赖图中只有下面两个未完成根；其余
-21 行全部是它们的下游。没有第三条可安全执行的独立产品 lane。
+Row253 已依据不反推合同完成实现、回归和独立 High 复审。当前 Foundation 为
+`175/197`，剩余 `22` 行；Row253 下游从权限阻塞转为正常依赖链，可继续执行。
 
 ## 根一：Row120 授权费草单条件合同矛盾
 
@@ -34,32 +34,24 @@ REVIEW_REQUIRED 当 MATCHED、反推完整官费、绕过通用 writer 或伪造
 
 该根单独阻塞 Row120、Row279 和 Row280。
 
-## 根二：Row253 旧状态导入缺少反向映射权限
+## 已解除：Row253 不需要反向映射权限
 
 - Catalog ID：`FPMS-V8-LEGACY-LIFECYCLE-IMPORT-20260712-01`。
-- 设计只冻结了“已确认三轴 → 兼容 Case.status”的单向映射，并明确新业务不得从
-  旧 `Case.status` 反推法律事实。
-- 迁移章节允许一次性 `LEGACY_IMPORT/LEGACY_UNVERIFIED`，并明确旧 `GRANTED`
-  绝不能自动成为 `PATENT_IN_FORCE`，但没有冻结每一个旧状态到业务阶段、官方
-  阶段和法律状态的反向矩阵。
-- 现有 preflight 只能分类已有三轴与旧状态是否一致；它不能提供缺失的反向业务
-  权限。
+- 已冻结的最小合法解释不建立反向矩阵：保留每个已知旧 `Case.status`，业务阶段
+  和官方阶段均为空，法律状态仅为 `UNKNOWN`，核验状态为
+  `LEGACY_UNVERIFIED`。
+- `GRANTED` 与所有其他旧字符串一样，不形成已确认法律事实；部分投影、历史冲突、
+  evidence 漂移或非法载体均不写入并明确报告。
+- 产品范围 `61cd23c..c8396aa` 经独立 High 复审 P0/P1/P2 `0/0/0`，101 项 focused
+  与受影响回归通过。
 
-因此实现不能自行决定 `PENDING/OA1/OA2/GRANT_PENDING/REJECTED/...` 应导入哪些
-三轴，也不能把旧终局状态当作已确认法律事实。需要客户/业务负责人批准逐状态
-矩阵：可导入的三轴、必须保持 `UNKNOWN` 的字段、冲突分类，以及明确不导入的
-状态。推荐默认保持旧 `Case.status` 不变、法律状态为 `UNKNOWN`、核验状态为
-`LEGACY_UNVERIFIED`；任何更具体的程序/法律轴只按批准矩阵写入。
-
-该根阻塞 Row253、257、258、260–276、279 和 280，共 22 行；与根一在 279/280
-重叠。两根合并恰好覆盖全部剩余 23 行。
+因此 Row253 不再是权限根；Row257 及 overlay/UI 后续链可以按现有依赖继续。
 
 ## 恢复条件
 
-只需提供并批准两项最小权威输入：
+当前只剩一项最小权威输入：
 
-1. 授权通知年费行从 `REVIEW_REQUIRED` 到 `MATCHED` 的受控来源/动作合同；
-2. 旧 `Case.status` 到三轴 `LEGACY_UNVERIFIED` 导入的逐状态矩阵。
+1. 授权通知年费行从 `REVIEW_REQUIRED` 到 `MATCHED` 的受控来源/动作合同。
 
-收到后可继续 High：先分别实现 Row120、Row253，随后 Row253 下游 overlay/UI 可按
-依赖链持续推进；不需要重新分析已完成的 174 行，也不需要切换 Ultra。
+该输入只阻塞 Row120、279 和 280。Row257 起的其余依赖链继续由 High 执行；不
+需要重新分析已完成的 175 行，也不需要切换 Ultra。
