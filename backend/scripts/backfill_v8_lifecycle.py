@@ -19,7 +19,7 @@ from app.modules.cases.lifecycle_contracts import (
     LifecycleEventCommand,
     LifecycleProjection,
 )
-from app.modules.cases.models import Case, CaseActivityEvent
+from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
 
 __all__ = (
     "LegacyLifecycleImportRowResult",
@@ -139,7 +139,10 @@ def _payload(case_id: str, legacy_status: str) -> dict[str, str]:
     }
 
 
-def _activity_snapshot(activity: CaseActivityEvent) -> dict[str, object]:
+def _activity_snapshot(
+    transaction: Session,
+    activity: CaseActivityEvent,
+) -> dict[str, object]:
     return {
         "activity_type": activity.activity_type,
         "actor_id": activity.actor_id,
@@ -161,15 +164,32 @@ def _activity_snapshot(activity: CaseActivityEvent) -> dict[str, object]:
         "sequence": activity.sequence,
         "source_activity_id": activity.source_activity_id,
         "supersedes_event_id": activity.supersedes_event_id,
+        "evidence": [
+            {
+                "captured_at": evidence.captured_at.isoformat(timespec="microseconds"),
+                "case_id": evidence.case_id,
+                "content_hash": evidence.content_hash,
+                "evidence_kind": evidence.evidence_kind,
+                "id": evidence.id,
+                "object_id": evidence.object_id,
+                "object_type": evidence.object_type,
+            }
+            for evidence in transaction.scalars(
+                select(CaseActivityEventEvidence)
+                .where(CaseActivityEventEvidence.activity_id == activity.id)
+                .order_by(CaseActivityEventEvidence.id)
+            )
+        ],
     }
 
 
 def _case_snapshot(
+    transaction: Session,
     case: Case,
     activities: tuple[CaseActivityEvent, ...],
 ) -> dict[str, object]:
     return {
-        "activities": [_activity_snapshot(activity) for activity in activities],
+        "activities": [_activity_snapshot(transaction, activity) for activity in activities],
         "business_stage": case.business_stage,
         "case_id": case.id,
         "legal_status": case.legal_status,
@@ -201,6 +221,7 @@ def _valid_revision(case: Case, activities: tuple[CaseActivityEvent, ...]) -> bo
 
 
 def _exact_existing_import(
+    transaction: Session,
     case: Case,
     activities: tuple[CaseActivityEvent, ...],
     *,
@@ -233,12 +254,19 @@ def _exact_existing_import(
         or activity.source_activity_id is not None
         or activity.supersedes_event_id is not None
         or activity.payload_json != _canonical_json(_payload(case.id, case.status))
+        or transaction.scalar(
+            select(CaseActivityEventEvidence.id)
+            .where(CaseActivityEventEvidence.activity_id == activity.id)
+            .limit(1)
+        )
+        is not None
     ):
         return None
     return activity
 
 
 def _classify(
+    transaction: Session,
     case: Case,
     activities: tuple[CaseActivityEvent, ...],
     *,
@@ -256,6 +284,7 @@ def _classify(
         activity_id = None
     else:
         existing = _exact_existing_import(
+            transaction,
             case,
             activities,
             actor_id=actor_id,
@@ -303,12 +332,15 @@ def _build_plan(
         {
             "actor_id": actor_id,
             "recorded_at": recorded_at.isoformat(timespec="microseconds"),
-            "rows": [_case_snapshot(case, activity_by_case[case.id]) for case in cases],
+            "rows": [
+                _case_snapshot(transaction, case, activity_by_case[case.id]) for case in cases
+            ],
             "schema": "FPMS_V8_LEGACY_LIFECYCLE_INPUT_V1",
         }
     )
     rows = tuple(
         _classify(
+            transaction,
             case,
             activity_by_case[case.id],
             actor_id=actor_id,
@@ -361,7 +393,7 @@ def _output_sha256(transaction: Session, rows: tuple[_PlannedRow, ...]) -> str:
         if case is None:
             output.append({"case_id": row.case_id, "missing": True})
             continue
-        output.append(_case_snapshot(case, _activities(transaction, case.id)))
+        output.append(_case_snapshot(transaction, case, _activities(transaction, case.id)))
     return _digest({"rows": output, "schema": "FPMS_V8_LEGACY_LIFECYCLE_OUTPUT_V1"})
 
 

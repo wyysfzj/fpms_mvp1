@@ -18,7 +18,7 @@ from app.modules.cases.lifecycle_contracts import (
     ConfirmationStatus,
     LegalStatus,
 )
-from app.modules.cases.models import Case, CaseActivityEvent
+from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
 
 RECORDED_AT = datetime(2026, 8, 9, 16, 0)
 
@@ -361,6 +361,42 @@ def test_exact_existing_import_is_unchanged_and_idempotent(
             "UNKNOWN",
             "LEGACY_UNVERIFIED",
         )
+
+
+def test_existing_import_with_evidence_is_a_conflict(
+    session_factory: sessionmaker[Session],
+) -> None:
+    api = _api()
+    with session_factory() as transaction:
+        transaction.add(_case(25, status="GRANTED"))
+        transaction.commit()
+        plan = _run(api, transaction, dry_run=True)
+        imported = _run(
+            api,
+            transaction,
+            dry_run=False,
+            expected_plan_sha256=plan.plan_sha256,
+        )
+        activity_id = imported.rows[0].activity_id
+        assert activity_id is not None
+        transaction.add(
+            CaseActivityEventEvidence(
+                id=_id(9025),
+                case_id=_id(25),
+                activity_id=activity_id,
+                evidence_kind="DOCUMENT",
+                object_type="DocumentEvidenceVersion",
+                object_id=_id(8025),
+                content_hash="sha256:" + "a" * 64,
+                captured_at=RECORDED_AT,
+            )
+        )
+        transaction.commit()
+
+        report = _run(api, transaction, dry_run=True)
+
+        assert (report.conflicts, report.unchanged, report.planned_writes) == (1, 0, 0)
+        assert report.rows[0].classification == "CONFLICT"
 
 
 def test_apply_requires_exact_current_plan_and_rolls_back_nested_work(
