@@ -2134,8 +2134,8 @@
     {
       "catalog_id": "FPMS-V8-CASE-FEES-ESTIMATE-OBLIGATION-UI-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CASE-FEES-ESTIMATE-OBLIGATION-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2150,32 +2150,32 @@
     {
       "catalog_id": "FPMS-V8-OVERLAY-CENTER-LANE-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-CENTER-LANE-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OVERLAY-DOCUMENT-LANE-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-DOCUMENT-LANE-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OVERLAY-FEE-LANE-UI-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OVERLAY-FEE-LANE-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-CASEDETAIL-THREE-LANE-LAYOUT-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-CASEDETAIL-THREE-LANE-LAYOUT-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -4922,6 +4922,118 @@
       "review_class": "NORMAL",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-FE-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-FE-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CASE-FEES-ESTIMATE-OBLIGATION-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "62d43544b9dbcbbb3f530541b9d6c281bbcf6c1d",
+        "e102a9ec88dfc702d71e1a5a5012bf0085318ee5",
+        "be2795c5829be2ddd4f9734f2cd726f02962e742"
+      ],
+      "paths": [
+        "frontend/src/modules/cases/components/CaseFeesTab.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-fees-estimate-obligation.spec.ts"
+      ],
+      "tree_sha256": "2f8afb16871afe0a011459f5ecbc42f4a7961387f6ed6624cdc54ae1bb1ba5f6",
+      "tests": [
+        "focused RED exposed stale automatic preview and managed-snapshot duplication",
+        "final focused Playwright suite 5 passed",
+        "scoped ESLint and exact-path diff checks passed",
+        "typecheck retained only five unrelated baseline diagnostics",
+        "independent High review approved corrected exact closure P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-CASE-FEES-ESTIMATE-OBLIGATION-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-CASE-FEES-ESTIMATE-OBLIGATION-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-CENTER-LANE-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "13435c57ebbd42295464acd4d6f6cb20fe75ba83",
+        "d84eb4517cdedd82b475d9155464313afc690b37"
+      ],
+      "paths": [
+        "frontend/src/modules/cases/components/LifecycleCenterLane.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-center-lane.spec.ts"
+      ],
+      "tree_sha256": "47428548eca231fa61a35b1ac1d9d1809db165eb1d3685734a1d4820cf8e1b5d",
+      "tests": [
+        "unmounted RED proved the missing center lane",
+        "integrated serial Playwright tranche passed 9 tests",
+        "scoped ESLint and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-DOCUMENT-LANE-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "4eb32efa9271be1b2d27c0f1e94fc0e4383a8211"
+      ],
+      "paths": [
+        "frontend/src/modules/cases/components/DocumentEvidenceLane.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-document-lane.spec.ts"
+      ],
+      "tree_sha256": "8dcb9278194ce1509bc83d8bc8d20202e56235d3cdce471862d5fd467eee373a",
+      "tests": [
+        "unmounted RED proved the missing document lane",
+        "integrated serial Playwright tranche passed 9 tests",
+        "scoped ESLint and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OVERLAY-FEE-LANE-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "b4abb6687cb824f26adc1a6667cd28ff63faeba4"
+      ],
+      "paths": [
+        "frontend/src/modules/cases/components/FeeObligationLane.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-overlay-fee-lane.spec.ts"
+      ],
+      "tree_sha256": "405a0f85839ca04adaf212cd4979950ed05febfdf9fd9885df15701263bd7191",
+      "tests": [
+        "unmounted RED proved the missing fee lane",
+        "integrated serial Playwright tranche passed 9 tests",
+        "scoped ESLint and exact-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-CASEDETAIL-THREE-LANE-LAYOUT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "8667862718af327d8749da6255772befafa51846",
+        "b5d5fc004401f427d91a8f727efae453c182e28a"
+      ],
+      "paths": [
+        "frontend/src/modules/cases/components/CaseLifecycleOverlay.vue",
+        "frontend/src/modules/cases/pages/CaseDetail.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-detail-three-lane.spec.ts"
+      ],
+      "tree_sha256": "6fbf77929d0cdd6865e21df8bc1c11deb0ee65191ac773b9bcc8ed6d6500f680",
+      "tests": [
+        "focused RED proved the missing integrated three-lane page",
+        "corrected integrated serial Playwright tranche passed 9 tests and proved one overlay GET",
+        "scoped ESLint and exact-path diff checks passed",
+        "typecheck retained only five unrelated baseline diagnostics",
+        "independent High review approved corrected exact closure P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-THREE-LANE-UI-CURRENT-ADOPTION.md"
     }
   ]
 }
