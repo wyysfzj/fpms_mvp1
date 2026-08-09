@@ -22,6 +22,23 @@
         </div>
       </div>
 
+      <ApiErrorBanner
+        v-if="loadMoreError"
+        :error="loadMoreError"
+        :dismissable="false"
+      />
+      <div class="overlay-pagination">
+        <el-button
+          v-if="overlay.hasMore"
+          :loading="loadingMore"
+          :disabled="overlay.nextCursor === null"
+          @click="loadMoreOverlay"
+        >
+          加载更多生命周期记录
+        </el-button>
+        <span v-else>已加载全部生命周期记录</span>
+      </div>
+
       <section class="overlay-facts" data-testid="overlay-decision-gates">
         <h2>客户决策</h2>
         <article
@@ -117,6 +134,9 @@ const emit = defineEmits<{
 const overlay = ref<LifecycleOverlay | null>(null)
 const loading = ref(true)
 const error = ref<ApiError | null>(null)
+const traversalRevision = ref<number | null>(null)
+const loadingMore = ref(false)
+const loadMoreError = ref<ApiError | null>(null)
 
 const unresolvedReasonLabels: Readonly<Record<string, string>> = {
   DECISION_GATE_NOT_FOUND: '未找到适用的客户决策',
@@ -141,14 +161,20 @@ const milestonesWithWarnings = computed(() =>
 async function loadOverlay(): Promise<void> {
   loading.value = true
   error.value = null
+  loadMoreError.value = null
+  traversalRevision.value = null
   overlay.value = null
   try {
-    overlay.value = await getLifecycleOverlay(props.caseId, {
+    const firstPage = await getLifecycleOverlay(props.caseId, {
       afterSequence: 0,
       limit: 200,
       asOfRevision: null,
     })
-    emit('loaded', overlay.value)
+    const pageError = validateOverlayPage(firstPage, 0, null)
+    if (pageError) throw pageError
+    traversalRevision.value = firstPage.lifecycleRevision
+    overlay.value = firstPage
+    emit('loaded', firstPage)
   } catch (caught) {
     error.value = caught as ApiError
     emit('failed', error.value)
@@ -157,10 +183,88 @@ async function loadOverlay(): Promise<void> {
   }
 }
 
+async function loadMoreOverlay(): Promise<void> {
+  const current = overlay.value
+  const revision = traversalRevision.value
+  if (
+    !current ||
+    !current.hasMore ||
+    current.nextCursor === null ||
+    revision === null ||
+    loadingMore.value
+  ) {
+    return
+  }
+
+  loadingMore.value = true
+  loadMoreError.value = null
+  try {
+    const nextPage = await getLifecycleOverlay(props.caseId, {
+      afterSequence: current.nextCursor,
+      limit: 200,
+      asOfRevision: revision,
+    })
+    const pageError = validateOverlayPage(nextPage, current.nextCursor, revision)
+    if (pageError) {
+      loadMoreError.value = pageError
+      return
+    }
+    const seenSequences = new Set(current.milestones.map((milestone) => milestone.sequence))
+    const milestones = [...current.milestones]
+    for (const milestone of nextPage.milestones) {
+      if (!seenSequences.has(milestone.sequence)) {
+        seenSequences.add(milestone.sequence)
+        milestones.push(milestone)
+      }
+    }
+    const accumulated: LifecycleOverlay = {
+      ...nextPage,
+      lifecycleRevision: revision,
+      milestones,
+    }
+    overlay.value = accumulated
+    emit('loaded', accumulated)
+  } catch (caught) {
+    loadMoreError.value = caught as ApiError
+  } finally {
+    loadingMore.value = false
+  }
+}
+
 onMounted(loadOverlay)
 
 function displayValue(value: string | null): string {
   return value ?? '-'
+}
+
+function validateOverlayPage(
+  page: LifecycleOverlay,
+  afterSequence: number,
+  expectedRevision: number | null,
+): ApiError | null {
+  if (expectedRevision !== null && page.lifecycleRevision !== expectedRevision) {
+    return invalidPageError('分页响应修订与首次修订不一致')
+  }
+  for (let index = 1; index < page.milestones.length; index += 1) {
+    if (page.milestones[index].sequence <= page.milestones[index - 1].sequence) {
+      return invalidPageError('分页里程碑序列必须严格递增')
+    }
+  }
+  if (page.hasMore && page.nextCursor === null) {
+    return invalidPageError('分页响应缺少下一游标')
+  }
+  if (page.hasMore && page.nextCursor !== null && page.nextCursor <= afterSequence) {
+    return invalidPageError('分页响应下一游标未前进')
+  }
+  return null
+}
+
+function invalidPageError(message: string): ApiError {
+  return {
+    status: 0,
+    code: 'LIFECYCLE_OVERLAY_PAGE_INVALID',
+    message,
+  }
 }
 
 function unresolvedReasonText(reason: string | null): string {
@@ -202,6 +306,11 @@ function warningKindLabel(kind: OverlayWarningKind): string {
 .overlay-loading {
   padding: 28px;
   text-align: center;
+  color: var(--text-secondary);
+}
+
+.overlay-pagination {
+  margin-top: 14px;
   color: var(--text-secondary);
 }
 
