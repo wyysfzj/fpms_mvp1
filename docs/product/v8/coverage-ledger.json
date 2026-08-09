@@ -529,8 +529,8 @@
     {
       "catalog_id": "FPMS-V8-FILING-RECEIPT-LIFECYCLE-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "HISTORICAL_PASS_CANDIDATE",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FILING-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -3514,14 +3514,15 @@
         "749eb1d",
         "3e5e1d5",
         "f408aa9c07ab83d268cb46bf15f0c1ce251a942b",
-        "ce0d950"
+        "ce0d950",
+        "036b121"
       ],
       "paths": [
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_addgap_oa_receipt_archive_event.py",
         "backend/tests/test_v8_oa_receipt_lifecycle_adapter.py"
       ],
-      "tree_sha256": "7e65a4b857aa790e6bc9d2dc3d36523cbe3d850a78c628bdf558c0be213b76ca",
+      "tree_sha256": "8e161b4f0786de580fe991ed14683f6dbcd0f7a1ce92e7ddd71035fe1b3dbf06",
       "tests": [
         "pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py tests/test_addgap_oa_receipt_archive_event.py from backend cwd (12 passed)",
         "independent pytest -q tests/test_v8_oa_receipt_lifecycle_adapter.py from backend cwd (2 passed)",
@@ -3530,7 +3531,8 @@
         "independent row62 successor review confirmed lifecycle, evidence, atomicity and replay behavior remain intact",
         "independent row59 successor review confirmed OA receipt lifecycle and replay remain intact",
         "independent row63 successor attestation confirmed OA receipt lifecycle behavior remains intact",
-        "independent row65 successor suite confirmed OA receipt lifecycle behavior remains intact"
+        "independent row65 successor suite confirmed OA receipt lifecycle behavior remains intact",
+        "independent row66 successor suite confirmed OA receipt lifecycle behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
@@ -3566,14 +3568,15 @@
         "3e5e1d5",
         "f408aa9c07ab83d268cb46bf15f0c1ce251a942b",
         "ce0d950",
-        "f14d269"
+        "f14d269",
+        "036b121"
       ],
       "paths": [
         "backend/app/modules/documents/service.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_oa_reply_date_receipt_projection.py"
       ],
-      "tree_sha256": "8738c1c087e4a370da500bd809c51853d9ef5f11d4558dde94ab28416bde7b28",
+      "tree_sha256": "d3b12cea5295714b5474efea6839e3cf1506c05197a1c30e9be2777350cb40ed",
       "tests": [
         "pytest -q tests/test_v8_oa_reply_date_receipt_projection.py from backend cwd (2 passed)",
         "independent focused rerun from backend cwd (2 passed)",
@@ -3582,7 +3585,8 @@
         "independent row59 successor review confirmed receipt-derived reply-date behavior remains intact",
         "independent row63 successor attestation confirmed reply-date receipt projection remains intact",
         "independent row65 successor suite confirmed reply-date receipt projection remains intact",
-        "independent row128 correction successor tranche confirmed OA reply-date projection remains intact"
+        "independent row128 correction successor tranche confirmed OA reply-date projection remains intact",
+        "independent row66 successor suite confirmed OA reply-date projection remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OA-REPLY-DATE-RECEIPT-PROJECTION-CURRENT-ADOPTION.md",
@@ -3638,21 +3642,23 @@
         "749eb1d",
         "3e5e1d5",
         "f408aa9c07ab83d268cb46bf15f0c1ce251a942b",
-        "ce0d950"
+        "ce0d950",
+        "036b121"
       ],
       "paths": [
         "backend/app/modules/official_workflows/schemas.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_work_package_manifest_evidence_version.py"
       ],
-      "tree_sha256": "25cff5c5cb31cf1a0f5fbed3ff0b53bd9314611571099645dd5473880d7e3df0",
+      "tree_sha256": "605262d7fdfe842161c0f74edaaefb967313e6e47086aeb2c43e33d71d2aff0c",
       "tests": [
         "pytest -q tests/test_v8_work_package_manifest_evidence_version.py from backend cwd (1 passed)",
         "scoped Ruff and exact three-path diff check passed",
         "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row70/row71",
         "independent row59 successor review confirmed manifest evidence identity behavior remains intact",
         "independent row63 successor attestation confirmed manifest evidence-version behavior remains intact under the narrower full-Word rule",
-        "independent row65 successor suite confirmed manifest evidence-version behavior remains intact"
+        "independent row65 successor suite confirmed manifest evidence-version behavior remains intact",
+        "independent row66 successor suite confirmed manifest evidence-version behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-WORK-PACKAGE-MANIFEST-EVIDENCE-VERSION-CURRENT-ADOPTION.md",
@@ -3725,20 +3731,22 @@
       "commits": [
         "3e5e1d5",
         "f408aa9c07ab83d268cb46bf15f0c1ce251a942b",
-        "ce0d950"
+        "ce0d950",
+        "036b121"
       ],
       "paths": [
         "backend/app/modules/official_workflows/api.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_filing_preparation_started_adapter.py"
       ],
-      "tree_sha256": "51eb14ea3569e8b984e25614a484dc9f7eeac9ad442cc0134b2460bf6ceebe40",
+      "tree_sha256": "21cba5e963095230cc463bb9c801798db041561edcf3beb4db76908f9fcf109e",
       "tests": [
         "pytest -q tests/test_v8_filing_preparation_started_adapter.py from backend cwd (11 passed)",
         "scoped Ruff and exact three-path diff check passed",
         "independent corrected-candidate review approved P0/P1/P2 0/0/0 and successor-attested row62/row70/row71",
         "independent row63 successor attestation confirmed filing-preparation lifecycle behavior remains intact",
-        "independent row65 successor suite confirmed filing-preparation lifecycle behavior remains intact"
+        "independent row65 successor suite confirmed filing-preparation lifecycle behavior remains intact",
+        "independent row66 successor suite confirmed filing-preparation lifecycle behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-PREPARATION-STARTED-ADAPTER-CURRENT-ADOPTION.md",
@@ -3814,20 +3822,22 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "f408aa9c07ab83d268cb46bf15f0c1ce251a942b",
-        "ce0d950"
+        "ce0d950",
+        "036b121"
       ],
       "paths": [
         "backend/app/modules/documents/evidence_policy.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_filing_full_word_gate.py"
       ],
-      "tree_sha256": "1dce53d592c2076caa1a33e76b453aa4e7fe20a587694b5415487223d6629244",
+      "tree_sha256": "c1fbe5cce0956382a6fbad5529e005e1a2eaa103bfc0dc5d57dc6451b8f01909",
       "tests": [
         "pytest -q tests/test_v8_filing_full_word_gate.py from backend cwd (3 passed; 6 subtests)",
         "current dependency-aligned affected backend tranche (276 passed; 6 subtests)",
         "scoped Ruff and exact three-path diff check passed",
         "independent High review approved P0/P1/P2 0/0/0 and successor-attested six shared-path stories",
-        "independent row65 successor suite confirmed the full-Word readiness gate remains intact"
+        "independent row65 successor suite confirmed the full-Word readiness gate remains intact",
+        "independent row66 successor suite confirmed the full-Word readiness gate remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-FULL-WORD-READINESS-GATE-CURRENT-ADOPTION.md",
@@ -3859,20 +3869,22 @@
       "story_id": "V8-FILING-EXTERNAL-SUBMISSION-ADAPTER-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
-        "ce0d950"
+        "ce0d950",
+        "036b121"
       ],
       "paths": [
         "backend/app/modules/official_workflows/api.py",
         "backend/app/modules/official_workflows/service.py",
         "backend/tests/test_v8_filing_external_submission_adapter.py"
       ],
-      "tree_sha256": "7f531639a6f16619f317c0a8f7d69b6ceeebb629f9b39ce80251b2f4a354fe36",
+      "tree_sha256": "278cba3978c88a76b8e1632bcebeede32c7ba164332596ccfdc84ec1a61e3006",
       "tests": [
         "pytest -q tests/test_v8_filing_external_submission_adapter.py from backend cwd (4 passed)",
         "exact affected backend regression tranche (172 passed)",
         "independent five-story successor tranche (29 passed; 6 subtests)",
         "scoped Ruff and exact three-path diff/scope checks passed",
-        "independent High review approved P0/P1/P2 0/0/0"
+        "independent High review approved P0/P1/P2 0/0/0",
+        "independent row66 successor suite confirmed filing external-submission behavior remains intact"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FILING-EXTERNAL-SUBMISSION-ADAPTER-CURRENT-ADOPTION.md",
@@ -4039,6 +4051,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-OBLIGATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-OBLIGATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FILING-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "036b121"
+      ],
+      "paths": [
+        "backend/app/modules/official_workflows/service.py",
+        "backend/tests/test_v8_filing_receipt_lifecycle_adapter.py"
+      ],
+      "tree_sha256": "04ee86c154390256fa60f70ec14846144dae9386161e1eb47b50c1ca38dee529",
+      "tests": [
+        "focused archived filing-receipt lifecycle suite (5 passed)",
+        "Tasks 14-16 receipt regressions (11 passed)",
+        "six CURRENT_VERIFIED shared-service successor stories (33 passed)",
+        "scoped Ruff, format and exact two-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FILING-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FILING-RECEIPT-LIFECYCLE-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
