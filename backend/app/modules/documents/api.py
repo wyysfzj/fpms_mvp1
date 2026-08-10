@@ -44,11 +44,14 @@ from app.modules.documents.grant_evidence_ingestion_service import (
     GrantEvidenceConflict,
     GrantEvidenceFact,
     IngestGrantEvidenceCandidateCommand,
+    ListGrantEvidenceCandidatesCommand,
     ingest_grant_evidence_candidate,
+    list_grant_evidence_candidates,
 )
 from app.modules.documents.grant_evidence_schemas import (
     GrantEvidenceCandidateIn,
     GrantEvidenceCandidateOut,
+    GrantEvidenceCandidateReadOut,
 )
 from app.modules.documents.grant_official_copy_verification_schemas import (
     GrantOfficialCopyEventIn,
@@ -227,6 +230,27 @@ def create_grant_evidence_candidate(
         raise
     response.status_code = response_status
     return output
+
+
+@router.get(
+    "/documents/{document_id}/grant-evidence-candidates",
+    status_code=status.HTTP_200_OK,
+    response_model=list[GrantEvidenceCandidateReadOut],
+)
+def get_grant_evidence_candidates(
+    document_id: UUID,
+    _perm: None = Depends(require_perm("Doc.Read")),
+    db: Session = Depends(get_db),
+) -> list[GrantEvidenceCandidateReadOut]:
+    read_at = _utc_now()
+    results = list_grant_evidence_candidates(
+        ListGrantEvidenceCandidatesCommand(document_id=str(document_id), read_at=read_at),
+        db,
+    )
+    return [
+        GrantEvidenceCandidateReadOut.model_validate(result, from_attributes=True)
+        for result in results
+    ]
 
 
 @router.post(

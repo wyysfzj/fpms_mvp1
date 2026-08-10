@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -88,3 +89,45 @@ class GrantEvidenceCandidateOut(BaseModel):
     candidate_snapshot_hash: str
     review_status: str
     disposition: str
+
+
+class GrantEvidenceFactOut(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True, strict=True)
+
+    name: str
+    raw_value: str
+
+
+class GrantEvidenceConflictOut(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True, strict=True)
+
+    name: str
+    raw_values: tuple[str, ...]
+
+
+class GrantEvidenceCandidateReadOut(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True, strict=True)
+
+    candidate_id: str
+    case_id: str
+    document_id: str
+    evidence_version_id: str
+    terminal_event_id: str
+    source_config_id: str
+    source_record_id: str
+    source_version: str
+    original_reference: str
+    acquisition_method: str
+    acquired_at: datetime
+    evidence_scope: GrantEvidenceScope
+    proposal_role_config_id: str
+    proposed_by: str
+    proposed_at: datetime
+    review_status: str
+    reviewer_id: str | None
+    reviewed_at: datetime | None
+    review_reason: str | None
+    acquisition_snapshot_hash: str
+    candidate_snapshot_hash: str
+    facts: tuple[GrantEvidenceFactOut, ...]
+    conflicts: tuple[GrantEvidenceConflictOut, ...]
