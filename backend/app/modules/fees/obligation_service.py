@@ -657,6 +657,16 @@ def get_fee_obligation(
                     CaseActivityEvent.occurred_at.label("occurred_at"),
                     CaseActivityEvent.effective_at.label("effective_at"),
                     CaseActivityEvent.confirmation_status.label("confirmation_status"),
+                    CaseActivityEvent.old_business_stage.label("old_business_stage"),
+                    CaseActivityEvent.new_business_stage.label("new_business_stage"),
+                    CaseActivityEvent.old_official_procedure_stage.label(
+                        "old_official_procedure_stage"
+                    ),
+                    CaseActivityEvent.new_official_procedure_stage.label(
+                        "new_official_procedure_stage"
+                    ),
+                    CaseActivityEvent.old_legal_status.label("old_legal_status"),
+                    CaseActivityEvent.new_legal_status.label("new_legal_status"),
                     CaseActivityEvent.actor_id.label("actor_id"),
                     CaseActivityEvent.reviewer_id.label("reviewer_id"),
                     CaseActivityEvent.idempotency_key.label("idempotency_key"),
@@ -984,14 +994,6 @@ def _detail_recognition_lines(
     recognized_lines = obligation_payload.get("lines")
     if type(recognized_lines) is not list or len(recognized_lines) != len(lines):
         _stored_state_invalid()
-    if recognized_lines == [_detail_line_payload(line) for line in lines]:
-        return lines
-    if (
-        header["obligation_type"] != "GRANT_YEAR_ANNUITY"
-        or header["obligation_status"] != FeeObligationStatus.RECOGNIZED.value
-    ):
-        _stored_state_invalid()
-
     reviews: list[tuple[Mapping[str, object], dict[str, object]]] = []
     for row in rows:
         if (
@@ -1007,6 +1009,15 @@ def _detail_recognition_lines(
             _stored_state_invalid()
         if review_payload.get("obligation_id") == header["id"]:
             reviews.append((row, review_payload))
+    if recognized_lines == [_detail_line_payload(line) for line in lines]:
+        if reviews:
+            _stored_state_invalid()
+        return lines
+    if (
+        header["obligation_type"] != "GRANT_YEAR_ANNUITY"
+        or header["obligation_status"] != FeeObligationStatus.RECOGNIZED.value
+    ):
+        _stored_state_invalid()
     if len(reviews) != 1:
         _stored_state_invalid()
     review, review_payload = reviews[0]
@@ -1046,6 +1057,10 @@ def _detail_recognition_lines(
         or review["payload_json"] != canonical_review
         or review["source_activity_id"] != header["source_activity_id"]
         or review["confirmation_status"] != ConfirmationStatus.CONFIRMED.value
+        or review["old_business_stage"] != review["new_business_stage"]
+        or review["old_official_procedure_stage"]
+        != review["new_official_procedure_stage"]
+        or review["old_legal_status"] != review["new_legal_status"]
         or review["actor_id"] != review["reviewer_id"]
         or type(review["actor_id"]) is not str
         or not cast(str, review["actor_id"]).strip()
@@ -1143,9 +1158,31 @@ def _detail_recognition_lines(
             ).where(CaseActivityEventEvidence.activity_id == review["id"])
         ).mappings()
     )
+    source_evidence_rows = tuple(
+        transaction.execute(
+            select(
+                CaseActivityEventEvidence.case_id,
+                CaseActivityEventEvidence.evidence_kind,
+                CaseActivityEventEvidence.object_type,
+                CaseActivityEventEvidence.object_id,
+                CaseActivityEventEvidence.content_hash,
+                CaseActivityEventEvidence.captured_at,
+            ).where(CaseActivityEventEvidence.activity_id == header["source_activity_id"])
+        ).mappings()
+    )
     evidence_by_kind = {row["evidence_kind"]: row for row in evidence_rows}
+    evidence_identity = {
+        tuple(row[field] for field in row.keys())
+        for row in evidence_rows
+    }
+    source_evidence_identity = {
+        tuple(row[field] for field in row.keys())
+        for row in source_evidence_rows
+    }
     if (
         len(evidence_rows) != 2
+        or len(source_evidence_rows) != 2
+        or evidence_identity != source_evidence_identity
         or set(evidence_by_kind) != {"SOURCE_DOCUMENT", "DOCUMENT_EVIDENCE_VERSION"}
         or evidence_by_kind["SOURCE_DOCUMENT"]["case_id"] != header["case_id"]
         or evidence_by_kind["SOURCE_DOCUMENT"]["object_type"] != "Document"

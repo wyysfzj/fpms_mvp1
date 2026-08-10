@@ -23,6 +23,7 @@ exactly as frozen in
 - `backend/app/modules/grant_fees/api.py`
 - `backend/app/modules/fees/obligation_service.py`
 - `backend/tests/test_v8_grant_official_fee_manual_review.py`
+- `docs/product/v8/stories/V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-SUCCESSOR-CONTRACT.md`
 - this task file
 
 ## Non-closure
@@ -34,7 +35,7 @@ customer decision, UI, payment, PayList, service fee or unrelated refactor.
 
 - RED: `cd backend && python -m pytest -q tests/test_v8_grant_official_fee_manual_review.py`
 - GREEN: same exact focused command
-- Ruff check on the four allowlisted Python files
+- Ruff check on the five allowlisted Python files
 - exact-path `git diff --check`
 - independent PROTECTED review with P0/P1/P2 all zero
 
@@ -46,7 +47,7 @@ zero-finding approval. Adoption must bind the final product commits and exact tr
 ## Current verification
 
 - RED: focused test file failed `5` tests because the frozen public action did not exist.
-- GREEN: focused test file passes `10`; direct grant-year obligation/instruction and generic
-  detail/overlay regressions pass `163`.
+- GREEN: focused test file passes `11`; direct grant-year obligation/instruction, generic
+  detail/overlay and generic draft regressions pass `197` unique tests.
 - Scoped Ruff and exact diff check pass.
 - Independent implementation review and adoption remain pending.

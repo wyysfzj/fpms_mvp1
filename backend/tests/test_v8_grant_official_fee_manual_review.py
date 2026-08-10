@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 from dataclasses import fields, is_dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import get_type_hints
@@ -554,7 +554,7 @@ def test_missing_named_objects_use_exact_404_boundary(session_factory: sessionma
         )
 
 
-def test_corrupt_recognition_and_duplicate_obligation_review_block_replay_and_draft_seam(
+def test_corrupt_recognition_blocks_replay_and_draft_seam(
     session_factory: sessionmaker,
 ) -> None:
     with session_factory() as transaction:
@@ -589,6 +589,61 @@ def test_corrupt_recognition_and_duplicate_obligation_review_block_replay_and_dr
                 transaction,
                 grant_fee_task_id=seed[2].id,
             ),
+        )
+
+
+def test_partial_review_center_evidence_and_duplicate_review_are_fail_closed(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="PARTIAL-REVIEW")
+        grant_fee_service.confirm_grant_official_fees(_command(seed), transaction)
+        transaction.commit()
+        line = transaction.get(FeeObligationLine, seed[-1].id)
+        assert line is not None
+        line.official_full_amount = None
+        line.difference_review_state = "REVIEW_REQUIRED"
+        transaction.commit()
+        _expect(
+            "FEE_OBLIGATION_STORED_STATE_INVALID",
+            409,
+            lambda: get_fee_obligation(seed[-2].id, transaction),
+        )
+
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="CENTER-CHANGE")
+        command = _command(seed)
+        result = grant_fee_service.confirm_grant_official_fees(command, transaction)
+        transaction.commit()
+        review = transaction.get(CaseActivityEvent, result.review_activity_id)
+        assert review is not None
+        review.new_business_stage = BusinessStage.POST_GRANT_MAINTENANCE.value
+        transaction.commit()
+        _expect(
+            "GRANT_OFFICIAL_FEE_REVIEW_IDEMPOTENCY_CONFLICT",
+            409,
+            lambda: grant_fee_service.confirm_grant_official_fees(command, transaction),
+        )
+
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="EVIDENCE-DRIFT")
+        result = grant_fee_service.confirm_grant_official_fees(_command(seed), transaction)
+        transaction.commit()
+        review_evidence = tuple(
+            transaction.scalars(
+                select(CaseActivityEventEvidence).where(
+                    CaseActivityEventEvidence.activity_id == result.review_activity_id
+                )
+            )
+        )
+        assert len(review_evidence) == 2
+        for reference in review_evidence:
+            reference.captured_at += timedelta(seconds=1)
+        transaction.commit()
+        _expect(
+            "FEE_OBLIGATION_STORED_STATE_INVALID",
+            409,
+            lambda: get_fee_obligation(seed[-2].id, transaction),
         )
 
     with session_factory() as transaction:

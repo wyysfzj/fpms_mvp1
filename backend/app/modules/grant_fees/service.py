@@ -977,6 +977,9 @@ def _precheck_existing_grant_review(
         or existing.reviewer_id != command.actor_id
         or existing.occurred_at != command.confirmed_at
         or existing.effective_at != command.confirmed_at
+        or existing.old_business_stage != existing.new_business_stage
+        or existing.old_official_procedure_stage != existing.new_official_procedure_stage
+        or existing.old_legal_status != existing.new_legal_status
         or _canonical_review_payload(payload) != existing.payload_json
         or type(after_lines) is not list
         or len(after_lines) != len(command.lines)
