@@ -41,7 +41,7 @@ blocks only this lane and never creates a draft or payment fact.
 ## Exact ordered task files
 
 - Task file: `tasks/postdemo/v8/FPMS-V8-APPLICATION-DRAFT-MANIFEST-ACTIVATION-20260712-01.md`
-- Task file: `tasks/postdemo/v8/FPMS-V8-APPLICATION-AUTO-DRAFT-POLICY-20260712-01.md`
+- Task file: `tasks/postdemo/v8/FPMS-V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-20260810-01.md`
 
 ## Execution order
 
@@ -49,9 +49,10 @@ blocks only this lane and never creates a draft or payment fact.
    `SELF_PENDING` row. Its implementer cannot approve it.
 2. An independent High reviewer must approve the exact activation candidate with zero P0/P1/P2
    findings before the product row starts.
-3. The application auto-draft policy row then executes alone under its own task contract,
-   allowlist, targeted RED/GREEN evidence and independent review. Its shared
-   `fee_linking_service.py` ownership remains serialized.
+3. The application internal-draft / payment-separation successor row then executes alone under
+   its own task contract, allowlist, targeted RED/GREEN evidence and independent review. Its
+   shared `fee_linking_service.py`, `obligation_contracts.py`, `obligation_service.py` and
+   `annuity/service.py` ownership remains serialized.
 
 ## Explicit non-closure
 
