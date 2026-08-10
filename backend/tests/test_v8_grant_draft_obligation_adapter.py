@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import fields, is_dataclass, replace
+from decimal import Decimal
 from typing import get_type_hints
+from uuid import uuid4
 
 import pytest
 import test_v8_grant_official_fee_manual_review as manual
@@ -21,9 +23,33 @@ from app.modules.fees.models import (
 from app.modules.grant_fees import service as grant_fee_service
 
 
-def _seed_ready(transaction: Session, *, label: str):
-    seed = manual._seed(transaction, label=label)
-    grant_fee_service.confirm_grant_official_fees(manual._command(seed), transaction)
+def _seed_ready(transaction: Session, *, label: str, line_count: int = 1):
+    seed = manual._seed(transaction, label=label, line_count=line_count)
+    review_command = manual._command(seed)
+    if line_count > 1:
+        lines = tuple(
+            transaction.scalars(
+                select(manual.FeeObligationLine)
+                .where(manual.FeeObligationLine.obligation_id == seed[-2].id)
+                .order_by(
+                    manual.FeeObligationLine.fee_code.asc(),
+                    manual.FeeObligationLine.fee_year_key.asc(),
+                    manual.FeeObligationLine.id.asc(),
+                )
+            )
+        )
+        review_command = replace(
+            review_command,
+            lines=tuple(
+                grant_fee_service.GrantOfficialFeeReviewLineInput(
+                    obligation_line_id=line.id,
+                    official_full_amount=Decimal(1111 + index),
+                    confirmed_payable_amount=line.payable_amount,
+                )
+                for index, line in enumerate(lines)
+            ),
+        )
+    grant_fee_service.confirm_grant_official_fees(review_command, transaction)
     grant_fee_service.record_grant_fee_task_instruction(
         grant_fee_service.RecordGrantFeeTaskInstructionCommand(
             grant_fee_task_id=seed[2].id,
@@ -165,6 +191,22 @@ def test_missing_review_never_reaches_generic_writer(
         assert _counts(transaction) == (0, 0, 0, 0)
 
 
+def test_exact_multiline_draft_validates_as_a_set_not_uuid_order(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        seed = _seed_ready(transaction, label="MULTILINE", line_count=2)
+        result = grant_fee_service.prepare_grant_fee_task_draft(_command(seed), transaction)
+        assert len(result.links) == 2
+        assert {link.obligation_line_id for link in result.links} == set(
+            transaction.scalars(
+                select(manual.FeeObligationLine.id).where(
+                    manual.FeeObligationLine.obligation_id == seed[-2].id
+                )
+            )
+        )
+
+
 def test_post_delegation_mismatch_rolls_back_adapter_savepoint(
     session_factory: sessionmaker,
     monkeypatch: pytest.MonkeyPatch,
@@ -179,13 +221,77 @@ def test_post_delegation_mismatch_rolls_back_adapter_savepoint(
 
         monkeypatch.setattr(grant_fee_service, "prepare_draft", corrupt)
         _expect(
-            "GRANT_DRAFT_LINK_NOT_FOUND",
-            404,
+            "GRANT_DRAFT_LINEAGE_CONFLICT",
+            409,
             lambda: grant_fee_service.prepare_grant_fee_task_draft(_command(seed), transaction),
         )
         assert _counts(transaction) == (0, 0, 0, 0)
         obligation = transaction.get(FeeObligation, seed[-2].id)
         assert obligation is not None and obligation.draft_status == "NOT_CREATED"
+
+
+def test_extra_persisted_link_and_activity_key_drift_fail_closed(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with session_factory() as transaction:
+        seed = _seed_ready(transaction, label="EXTRA-LINK")
+        original = grant_fee_service.prepare_draft
+
+        def add_extra_link(command, db):
+            result = original(command, db)
+            original_item = db.get(FeeItem, result.links[0].fee_item_id)
+            assert original_item is not None
+            extra_item = FeeItem(
+                id=str(uuid4()),
+                draft_id=original_item.draft_id,
+                case_id=original_item.case_id,
+                rate_id=None,
+                fee_code=original_item.fee_code,
+                fee_name=original_item.fee_name,
+                fee_type=original_item.fee_type,
+                year_no=original_item.year_no,
+                amount=original_item.amount,
+            )
+            db.add(extra_item)
+            db.add(
+                FeeObligationDraftItemLink(
+                    id=str(uuid4()),
+                    obligation_line_id=result.links[0].obligation_line_id,
+                    fee_item_id=extra_item.id,
+                )
+            )
+            db.flush()
+            return result
+
+        monkeypatch.setattr(grant_fee_service, "prepare_draft", add_extra_link)
+        _expect(
+            "GRANT_DRAFT_LINEAGE_CONFLICT",
+            409,
+            lambda: grant_fee_service.prepare_grant_fee_task_draft(_command(seed), transaction),
+        )
+        assert _counts(transaction) == (0, 0, 0, 0)
+
+    monkeypatch.setattr(grant_fee_service, "prepare_draft", original)
+    with session_factory() as transaction:
+        seed = _seed_ready(transaction, label="ACTIVITY-KEY")
+        original = grant_fee_service.prepare_draft
+
+        def drift_activity_key(command, db):
+            result = original(command, db)
+            activity = db.get(CaseActivityEvent, result.activity_id)
+            assert activity is not None
+            activity.idempotency_key = "wrong-draft-key"
+            db.flush()
+            return result
+
+        monkeypatch.setattr(grant_fee_service, "prepare_draft", drift_activity_key)
+        _expect(
+            "GRANT_DRAFT_LINEAGE_CONFLICT",
+            409,
+            lambda: grant_fee_service.prepare_grant_fee_task_draft(_command(seed), transaction),
+        )
+        assert _counts(transaction) == (0, 0, 0, 0)
 
 
 def test_caller_rollback_removes_delegated_draft_without_legacy_task_mutation(

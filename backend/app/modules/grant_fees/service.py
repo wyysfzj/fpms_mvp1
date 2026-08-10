@@ -1571,19 +1571,18 @@ def _validate_grant_draft_result(
     case = transaction.get(Case, task.case_id)
     activity = transaction.get(CaseActivityEvent, result.activity_id)
     if draft is None or case is None or activity is None:
-        _grant_draft_link_not_found()
+        _grant_draft_lineage_conflict()
     persisted_links = tuple(
         transaction.scalars(
-            select(FeeObligationDraftItemLink)
-            .where(FeeObligationDraftItemLink.id.in_(tuple(link.id for link in result.links)))
-            .order_by(FeeObligationDraftItemLink.obligation_line_id.asc())
+            select(FeeObligationDraftItemLink).where(
+                FeeObligationDraftItemLink.obligation_line_id.in_(line_ids)
+            )
         )
     )
+    persisted_item_ids = tuple(link.fee_item_id for link in persisted_links)
     persisted_items = {
         item.id: item
-        for item in transaction.scalars(
-            select(FeeItem).where(FeeItem.id.in_(tuple(link.fee_item_id for link in result.links)))
-        )
+        for item in transaction.scalars(select(FeeItem).where(FeeItem.id.in_(persisted_item_ids)))
     }
     if (
         draft.case_id != task.case_id
@@ -1643,7 +1642,7 @@ def _validate_grant_draft_result(
     )
     instruction = transaction.get(CaseActivityEvent, activity.source_activity_id)
     if instruction is None:
-        _grant_draft_link_not_found()
+        _grant_draft_lineage_conflict()
     try:
         instruction_payload = json.loads(instruction.payload_json)
     except (TypeError, ValueError):
@@ -1656,6 +1655,7 @@ def _validate_grant_draft_result(
         or activity.activity_type != "FEE_DRAFT_CREATED"
         or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
         or activity.actor_id != command.actor_id
+        or activity.idempotency_key != command.idempotency_key
         or activity.reviewer_id is not None
         or activity.supersedes_event_id is not None
         or activity.occurred_at != activity.effective_at
@@ -1679,7 +1679,7 @@ def _validate_grant_draft_result(
     if (
         obligation_model is None
         or obligation_model.draft_status != "CREATED"
-        or tuple(link.obligation_line_id for link in persisted_links) != line_ids
+        or {link.obligation_line_id for link in persisted_links} != set(line_ids)
     ):
         _grant_draft_lineage_conflict()
     return result
