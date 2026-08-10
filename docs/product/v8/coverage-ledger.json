@@ -6336,6 +6336,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "667a96d55aa2fa2b86f256e37c1483bee3ce30a3"
+      ],
+      "paths": [
+        "backend/app/modules/system/grant_evidence_source_schemas.py",
+        "backend/app/modules/system/api.py",
+        "backend/tests/test_v8_grant_evidence_source_api.py"
+      ],
+      "tree_sha256": "7e4c38191861dbb4cd828b1393e7676971b316d720a1020dbcc77dcff6e49466",
+      "tests": [
+        "focused grant-source carrier API suite passed 26 tests",
+        "exact live decision-gate and config-readiness regressions passed 32 tests",
+        "scoped Ruff and exact three-path diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-CURRENT-ADOPTION.md"
     }
   ]
 }
