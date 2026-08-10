@@ -1,98 +1,117 @@
 # FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01
 
-Status: READY / NOT STARTED
-Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
-Wave: `14. Wave 6 — customer decision gates`
+Status: CONTRACT RE-FROZEN / READY FOR IMPLEMENTATION
+Risk class: `PROTECTED`
+Runbook: `P0-shared-router-story`
 Catalog ordinal: `201`
-Executor role: Backend Developer / worker
 
-## Design References
+## Authority and prerequisites
 
-- `AGENTS.md`
-- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
-- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
-- Source catalog line: `709`
-- Expected manifest phase: `deferred`
-- Customer gate requirement: `DG-GRANT-EVIDENCE-SOURCE[GLOBAL]`
+- Scheme A customer source SHA-256
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`.
+- Accepted ingestion service story
+  `V8-GRANT-EVIDENCE-INGESTION-SERVICE-CURRENT-ADOPTION` at implementation tip
+  `cada0a256b2170eab934b5a3a55711880abd1466`.
+- Accepted official-copy verification and institution role/source carriers remain authoritative.
 
-## Story Shape Classification
+The former API task predated the accepted terminal official-copy chain and allowed no exact route,
+actor/time injection or payload contract. This successor is only the transport adapter for the
+accepted ingestion service; it must not query or reproduce product rules.
 
-- `shared_file_density`: high
-- `prereq_dependency_density`: low
-- `be_fe_coupling`: low
-- `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+## Exact closure
 
-## Task Contract Profile
+Create `backend/app/modules/documents/grant_evidence_schemas.py` with strict Pydantic v2 models:
 
-Task Contract Profile: `TC-API`
+```python
+class GrantEvidenceFactIn(BaseModel):
+    name: str
+    raw_value: str
 
-- RED expectation: Exact API test fails with route/shape/permission/status mismatch.
-- GREEN expectation: Exact API test passes named 200/201/400/401/403/404/409/422 semantics and response envelope.
 
-## Exact Closure Slice
+class GrantEvidenceConflictIn(BaseModel):
+    name: str
+    raw_values: tuple[str, ...]
 
-One POST candidate endpoint using `Doc.Edit`; return 201 candidate, 409 unresolved gate/source conflict and no legal-state change.
 
-## Explicit Non-Closure
+class GrantEvidenceCandidateIn(BaseModel):
+    case_id: UUID
+    evidence_version_id: UUID
+    evidence_scope: GrantEvidenceScope
+    expected_terminal_event_id: UUID
+    facts: tuple[GrantEvidenceFactIn, ...]
+    conflicts: tuple[GrantEvidenceConflictIn, ...] = ()
 
-No second endpoint, router rewiring, business-rule duplication or frontend work. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
 
-## Dependencies
+class GrantEvidenceCandidateOut(BaseModel):
+    candidate_id: str
+    evidence_version_id: str
+    terminal_event_id: str
+    source_config_id: str
+    source_record_id: str
+    proposal_role_config_id: str
+    evidence_scope: GrantEvidenceScope
+    acquisition_snapshot_hash: str
+    candidate_snapshot_hash: str
+    review_status: str
+    disposition: str
+```
 
-### Canonical V8 task dependencies
+Every input model uses `ConfigDict(extra="forbid")`. Strings must be nonblank, trimmed, NUL-free
+and at most 4096 characters. Facts are nonempty, unique by name and already sorted by
+`(name, raw_value)`. Conflicts are unique and sorted by name; every conflict name exists in facts;
+each `raw_values` tuple has at least two distinct values already sorted lexically. Reject rather
+than reorder. UUID fields use Pydantic UUID validation and are passed to the service in canonical
+string form. Output is validated from the exact service result.
 
-- `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
-- `FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01`
-- `FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01`
+Add exactly one route:
 
-### External, gate and inherited prerequisites
+```text
+POST /documents/{document_id}/grant-evidence-candidates
+permission: Doc.Edit
+success: 201 CREATED, 200 REUSED
+```
 
-- `gate` — `DG-GRANT-EVIDENCE-SOURCE:GLOBAL`: Persisted, current, source-backed decision must be confirmed for this exact scope.
+The path `document_id` is a UUID and is the sole document identity. The body supplies case,
+evidence-version, exact terminal-event, scope and raw fact/conflict input. The route injects the
+authenticated actual user's ID as `proposed_by` and exactly one server UTC-naive timestamp as
+`proposed_at`; actor or time are never accepted from the client. It constructs one exact
+`IngestGrantEvidenceCandidateCommand`, delegates once to `ingest_grant_evidence_candidate`, and
+performs no direct product-table read/write or business-rule validation.
 
-- Approved source dependency cell (verbatim): ingestion service
+The route owns commit/rollback. `CREATED` maps to 201 and `REUSED` to 200. Preserve framework
+401/403/422 and service 400/409 semantics. Any service or commit exception rolls back and is
+re-raised unchanged. No response envelope is added beyond the exact response model.
 
-### Shared ownership serialization
+## Non-closure
 
-- `backend/app/modules/documents/api.py` order key `14`; project this order only across owners present in the active manifest.
-- `backend/app/modules/documents/grant_evidence_schemas.py` order key `1`; project this order only across owners present in the active manifest.
+No second endpoint, GET/list/read/review route, router rewiring, service/schema/migration change,
+source/role/default publication, official-copy event creation, candidate review, legal-state
+dispatch, lifecycle/deadline, document/evidence mutation, fee/payment behavior, frontend or UI.
+Creating or replaying a PENDING candidate never confirms grant.
 
-## Remaining Follow-Up Task IDs
+## Allowed files
 
-- None
+- this task file;
+- `backend/app/modules/documents/grant_evidence_schemas.py`;
+- `backend/app/modules/documents/api.py`;
+- `backend/tests/test_v8_grant_evidence_ingestion_api.py`.
 
-## Allowed Files
+## Frozen acceptance matrix
 
-- `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01.md`
-- `backend/app/modules/documents/grant_evidence_schemas.py`
-- `backend/app/modules/documents/api.py`
-- `backend/tests/test_v8_grant_evidence_ingestion_api.py`
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01/**`
+1. Exact strict schema/route/permission contract is present once and rejects extra actor/time or
+   malformed/unsorted/duplicate facts and conflicts with 422 before delegation.
+2. The route injects path document UUID, authenticated user and one server UTC-naive timestamp,
+   passes all remaining body fields exactly, delegates once and never queries product tables.
+3. CREATED/REUSED return exact response bodies with 201/200; commit occurs once only after service
+   success.
+4. Permission/validation failures do not delegate or open product writes; service 400/409 and
+   commit failures roll back without translation.
+5. No legal/lifecycle/document/evidence/deadline/fee/payment side effect or second route exists.
 
-No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
+## Verification
 
-## Runtime Contracts
-
-- Preserve AGENTS.md permission injection, response-envelope, FastAPI status/body, SQLite and Simplified Chinese UI rules applicable to this closure.
-- Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
-- All SQLite-writing tests and shared-file verification run through the global serialized queue.
-- Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
-
-## Verification Commands
-
-- RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_ingestion_api.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
-- GREEN and scoped checks:
-- `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_ingestion_api.py`
-- `cd backend && .venv/bin/ruff check --fix app/modules/documents/grant_evidence_schemas.py app/modules/documents/api.py tests/test_v8_grant_evidence_ingestion_api.py && .venv/bin/ruff format app/modules/documents/grant_evidence_schemas.py app/modules/documents/api.py tests/test_v8_grant_evidence_ingestion_api.py && .venv/bin/ruff check app/modules/documents/grant_evidence_schemas.py app/modules/documents/api.py tests/test_v8_grant_evidence_ingestion_api.py`
-- `git diff --check -- backend/app/modules/documents/grant_evidence_schemas.py backend/app/modules/documents/api.py backend/tests/test_v8_grant_evidence_ingestion_api.py tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
-
-## Evidence Path
-
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
-
-## Done Definition
-
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01` pass. Only then may this task be reported PASS.
+- Focused RED/GREEN pytest: `backend/tests/test_v8_grant_evidence_ingestion_api.py`.
+- Shared document-router and accepted ingestion-service regressions.
+- Scoped Ruff/format and exact three-path implementation diff-check.
+- One independent High reviewer reviews the exact implementation range and reruns decisive checks.
+- PASS requires `P0/P1/P2 = 0/0/0`; no Full or release gate belongs here.
