@@ -204,6 +204,17 @@ only the named lane; it never activates a default.
 | `DG-LEGACY-FORM-CLASS` | `PENDING` for each `form-001`–`form-022` | Every form remains reference-only until its own source-backed classification. |
 | `DG-APPLICATION-FEE-NOTICE-PREVIEW-SOURCE` | `PENDING` | Do not dispatch the application-fee notice or accept its official-fee obligation from guessed page/priority counts. |
 
+## 2026-08-10 grant-year official-fee manual review authority
+
+The customer approved a source-backed manual review prerequisite for grant-year official-fee
+drafting. An authorized operator must use the archived, approved grant-notice evidence version,
+enter and confirm every official full amount, and leave operator/time/source/evidence/hash,
+before/after amount and idempotency lineage before `REVIEW_REQUIRED` becomes `MATCHED`.
+
+This decision authorizes only the review mechanism frozen in
+`V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-SUCCESSOR-CONTRACT`. It does not activate
+`DG-FEE-GRANT-YEAR-DRAFT`, infer any amount, or bypass the explicit client `PAY` instruction.
+
 ### Application-fee notice preview source questions
 
 The pending record
