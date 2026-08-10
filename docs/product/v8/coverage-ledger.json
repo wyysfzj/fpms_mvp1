@@ -6202,6 +6202,30 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "35a72b5354cec8a1704a3550daddea9085af093f",
+        "14f495db34b537e52441b985c7ab1bae2e5b082c"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_grant_evidence_source_carrier.py",
+        "backend/app/models/__init__.py",
+        "backend/app/modules/documents/models.py",
+        "backend/app/modules/system/models.py",
+        "backend/tests/test_v8_grant_evidence_source_carrier_schema.py"
+      ],
+      "tree_sha256": "197a3cfb84f8450021a91c19a290921d3a7ef0edcea4cd248d1db8b550e6e19d",
+      "tests": [
+        "focused serialized source-carrier schema suite passed 3 tests",
+        "scoped Ruff, unique Alembic head and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-CURRENT-ADOPTION.md"
     }
   ]
 }
