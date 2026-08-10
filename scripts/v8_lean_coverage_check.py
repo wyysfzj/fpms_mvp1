@@ -33,6 +33,37 @@ DISPOSITIONS = {
 STORY_STATUSES = {"PENDING", "CURRENT_VERIFIED", "BLOCKED"}
 REVIEW_CLASSES = {"PROTECTED", "NORMAL", "MECHANICAL"}
 MILESTONES = {"inventory", "foundation", "full", "final", "release"}
+ROW278 = "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01"
+ROW281 = "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01"
+ROW282 = "FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01"
+ROW283 = "FPMS-V8-FINAL-CLOSE-20260712-01"
+FULL_TERMINAL_TASK_SHA256 = {
+    ROW278: "4c58ce034d28a0343b1320c202f293ac038489c164fb2284d0d09289064bd4c7",
+    ROW281: "bdc8302bfc474ed8877e7b32cd3b777e2c16cc1711a421e8a9099c2a636851f1",
+    ROW282: "edfd182c7d15944b68e41bb3d2c552c15e21b5b69c8f0479643e3d9b7dd50041",
+    ROW283: "b1f2f715d91a8702031da3300cde7a2645bd3753dd8500d5f12b9f5ded5d2c59",
+}
+FULL_TERMINAL_BASE_DEPENDENCY_SHA256 = {
+    ROW281: "5800da16f9408789bd14370c40fe03264890f0bd46f76ad2070ed3404351ee5d",
+    ROW282: "5800da16f9408789bd14370c40fe03264890f0bd46f76ad2070ed3404351ee5d",
+}
+FULL_TERMINAL_EFFECTIVE_DEPENDENCY_SHA256 = {
+    ROW281: "6b17123b63d5a862a5f702454e38d2bab1e5a41512a4ed177b79957946c362b7",
+    ROW282: "4369ee52400b52b368f66f2c447bf78b4d4c786834c1c74108c11ac13d70387b",
+}
+ROW283_DEPENDENCY_SHA256 = (
+    "bbba116012490f9117f9fb68c539b45d0d8666733a77febbd0197076fb328e82"
+)
+FULL_TERMINAL_DEPENDENCY_OVERLAYS = [
+    {"target_task_id": ROW281, "add": [ROW278]},
+    {"target_task_id": ROW282, "add": [ROW278, ROW281]},
+]
+FULL_TERMINAL_EFFECTIVE_ORDER = [ROW278, ROW281, ROW282, ROW283]
+FULL_TERMINAL_DEFERRED_COVERAGE = {
+    "deferred_kinds": ["gated_product", "legacy_form"],
+    "expected_catalog_rows": 53,
+    "target_task_ids": [ROW281, ROW282],
+}
 
 
 class ValidationError(RuntimeError):
@@ -51,6 +82,192 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _canonical_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _require_exact_keys(
+    value: Any,
+    expected_keys: set[str],
+    field: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != expected_keys:
+        raise ValidationError(f"{field} does not match the exact schema")
+    return value
+
+
+def _require_acyclic(dependencies: dict[str, list[str]]) -> None:
+    state: dict[str, int] = {}
+
+    def visit(task_id: str) -> None:
+        if state.get(task_id) == 1:
+            raise ValidationError("effective dependency graph must remain acyclic")
+        if state.get(task_id) == 2:
+            return
+        state[task_id] = 1
+        for dependency in dependencies[task_id]:
+            if dependency not in dependencies:
+                raise ValidationError(
+                    f"catalog dependency is not an exact catalog task: {dependency}"
+                )
+            visit(dependency)
+        state[task_id] = 2
+
+    for task_id in dependencies:
+        visit(task_id)
+
+
+def validate_full_terminal_dependency_successor(
+    *,
+    contract_path: Path,
+    catalog_path: Path,
+    repo_root: Path,
+) -> None:
+    """Validate the immutable additive Row278/281/282 terminal overlay."""
+
+    contract = _require_exact_keys(
+        _load_json(contract_path),
+        {
+            "schema_version",
+            "catalog_sha256",
+            "task_file_sha256",
+            "base_dependency_sha256",
+            "dependency_overlays",
+            "effective_dependency_sha256",
+            "row283_dependency_sha256",
+            "effective_order",
+            "deferred_coverage",
+        },
+        "full-terminal dependency contract",
+    )
+    if contract["schema_version"] != 1:
+        raise ValidationError("unsupported full-terminal dependency schema_version")
+
+    overlays = contract["dependency_overlays"]
+    if not isinstance(overlays, list):
+        raise ValidationError("dependency_overlays does not match the exact schema")
+    for index, overlay in enumerate(overlays):
+        _require_exact_keys(
+            overlay,
+            {"target_task_id", "add"},
+            f"dependency_overlays[{index}]",
+        )
+    if overlays != FULL_TERMINAL_DEPENDENCY_OVERLAYS:
+        raise ValidationError("full-terminal contract requires exact additive dependency edges")
+
+    actual_catalog_sha256 = _sha256(catalog_path)
+    if (
+        contract["catalog_sha256"] != EXPECTED_CATALOG_SHA256
+        or actual_catalog_sha256 != EXPECTED_CATALOG_SHA256
+    ):
+        raise ValidationError("full-terminal catalog SHA-256 mismatch")
+    if contract["task_file_sha256"] != FULL_TERMINAL_TASK_SHA256:
+        raise ValidationError("full-terminal task-file SHA-256 mismatch")
+    if (
+        contract["base_dependency_sha256"]
+        != FULL_TERMINAL_BASE_DEPENDENCY_SHA256
+    ):
+        raise ValidationError("full-terminal base dependency SHA-256 mismatch")
+    if (
+        contract["effective_dependency_sha256"]
+        != FULL_TERMINAL_EFFECTIVE_DEPENDENCY_SHA256
+    ):
+        raise ValidationError("full-terminal effective dependency SHA-256 mismatch")
+    if contract["row283_dependency_sha256"] != ROW283_DEPENDENCY_SHA256:
+        raise ValidationError("Row283 dependency SHA-256 mismatch")
+    if contract["effective_order"] != FULL_TERMINAL_EFFECTIVE_ORDER:
+        raise ValidationError("full-terminal effective order mismatch")
+    if contract["deferred_coverage"] != FULL_TERMINAL_DEFERRED_COVERAGE:
+        raise ValidationError("full-terminal deferred coverage contract mismatch")
+
+    catalog = _load_json(catalog_path)
+    tasks = catalog.get("tasks")
+    if not isinstance(tasks, list) or len(tasks) != 283:
+        raise ValidationError("full-terminal catalog must contain exactly 283 tasks")
+
+    catalog_by_id: dict[str, dict[str, Any]] = {}
+    for ordinal, task in enumerate(tasks, start=1):
+        if not isinstance(task, dict) or task.get("ordinal") != ordinal:
+            raise ValidationError("catalog ordinals must be exact and contiguous")
+        task_id = task.get("task_id")
+        if not isinstance(task_id, str) or task_id in catalog_by_id:
+            raise ValidationError("catalog task IDs must be exact and unique")
+        for field, expected_type in {
+            "gate_requirements": list,
+            "owner_role": str,
+            "serialization_groups": list,
+            "phase": str,
+            "task_path": str,
+        }.items():
+            if not isinstance(task.get(field), expected_type):
+                raise ValidationError(
+                    f"catalog remains authoritative for {field}: {task_id}"
+                )
+        catalog_by_id[task_id] = task
+
+    for ordinal, task_id in zip((278, 281, 282, 283), FULL_TERMINAL_EFFECTIVE_ORDER):
+        if tasks[ordinal - 1].get("task_id") != task_id:
+            raise ValidationError(f"catalog Row{ordinal} identity mismatch")
+
+    for task_id, expected_sha256 in FULL_TERMINAL_TASK_SHA256.items():
+        task_path = repo_root / catalog_by_id[task_id]["task_path"]
+        if _sha256(task_path) != expected_sha256:
+            raise ValidationError(f"task-file SHA-256 mismatch: {task_id}")
+
+    row283_dependencies = catalog_by_id[ROW283].get("depends_on")
+    exact_predecessors = [task["task_id"] for task in tasks[:282]]
+    if row283_dependencies != exact_predecessors:
+        raise ValidationError("Row283 must remain all exact 282 predecessors")
+    if _canonical_sha256(row283_dependencies) != ROW283_DEPENDENCY_SHA256:
+        raise ValidationError("Row283 dependency SHA-256 mismatch")
+
+    effective_dependencies: dict[str, list[str]] = {}
+    additions = {
+        overlay["target_task_id"]: overlay["add"] for overlay in overlays
+    }
+    for task_id, task in catalog_by_id.items():
+        dependencies = task.get("depends_on")
+        if not isinstance(dependencies, list) or any(
+            not isinstance(dependency, str) for dependency in dependencies
+        ):
+            raise ValidationError(f"catalog depends_on must be a string list: {task_id}")
+        if len(dependencies) != len(set(dependencies)):
+            raise ValidationError(f"catalog depends_on contains duplicates: {task_id}")
+        effective_dependencies[task_id] = dependencies + additions.get(task_id, [])
+
+    for task_id, expected_sha256 in FULL_TERMINAL_BASE_DEPENDENCY_SHA256.items():
+        if _canonical_sha256(catalog_by_id[task_id]["depends_on"]) != expected_sha256:
+            raise ValidationError(f"base dependency SHA-256 mismatch: {task_id}")
+    for task_id, expected_sha256 in FULL_TERMINAL_EFFECTIVE_DEPENDENCY_SHA256.items():
+        if _canonical_sha256(effective_dependencies[task_id]) != expected_sha256:
+            raise ValidationError(f"effective dependency SHA-256 mismatch: {task_id}")
+
+    deferred_ids = {
+        task["task_id"]
+        for task in tasks
+        if task.get("deferred_kind") in {"gated_product", "legacy_form"}
+    }
+    if len(deferred_ids) != 53:
+        raise ValidationError(
+            "full-terminal catalog must contain exactly 53 gated_product/legacy_form rows"
+        )
+    for task_id in (ROW281, ROW282):
+        if not deferred_ids.issubset(effective_dependencies[task_id]):
+            raise ValidationError(f"{task_id} does not cover all 53 deferred rows")
+    if ROW281 not in effective_dependencies[ROW282] or not set(
+        effective_dependencies[ROW281]
+    ).issubset(effective_dependencies[ROW282]):
+        raise ValidationError("Row282 effective dependencies must include Row281")
+
+    _require_acyclic(effective_dependencies)
 
 
 def _git(
@@ -425,6 +642,11 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("docs/product/v8/cutover-dirty-path-disposition.json"),
     )
+    parser.add_argument(
+        "--full-terminal-dependency-successor",
+        type=Path,
+        default=Path("docs/product/v8/full-terminal-dependency-successor.json"),
+    )
     parser.add_argument("--repo-root", type=Path, default=Path("."))
     parser.add_argument("--integration-sha")
     parser.add_argument("--milestone", choices=sorted(MILESTONES), required=True)
@@ -441,6 +663,11 @@ def main() -> int:
             args.dirty_path_disposition,
             expected_path_manifest_sha256=EXPECTED_DIRTY_PATH_MANIFEST_SHA256,
             expected_count=EXPECTED_DIRTY_PATH_COUNT,
+        )
+        validate_full_terminal_dependency_successor(
+            contract_path=args.full_terminal_dependency_successor,
+            catalog_path=args.catalog,
+            repo_root=args.repo_root.resolve(),
         )
         validate(
             catalog_path=args.catalog,

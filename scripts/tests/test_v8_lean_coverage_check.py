@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,14 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "v8_lean_coverage_check.py"
+CATALOG_PATH = REPO_ROOT / "docs" / "product" / "v8" / "catalog.frozen.json"
+TERMINAL_CONTRACT_PATH = (
+    REPO_ROOT
+    / "docs"
+    / "product"
+    / "v8"
+    / "full-terminal-dependency-successor.json"
+)
 
 
 def _load_checker():
@@ -545,4 +554,230 @@ def test_non_inventory_direct_validation_requires_integration_sha(
             milestone="foundation",
             repo_root=repo,
             integration_sha=None,
+        )
+
+
+def _terminal_contract() -> dict:
+    return json.loads(TERMINAL_CONTRACT_PATH.read_text())
+
+
+def _write_terminal_contract(tmp_path: Path, payload: dict) -> Path:
+    path = tmp_path / "full-terminal-dependency-successor.json"
+    _write_json(path, payload)
+    return path
+
+
+def test_full_terminal_dependency_successor_accepts_exact_overlay() -> None:
+    checker = _load_checker()
+
+    checker.validate_full_terminal_dependency_successor(
+        contract_path=TERMINAL_CONTRACT_PATH,
+        catalog_path=CATALOG_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+
+@pytest.mark.parametrize(
+    ("target_index", "edge_index"),
+    [(0, 0), (1, 0), (1, 1)],
+)
+def test_full_terminal_dependency_successor_rejects_each_missing_edge(
+    tmp_path: Path,
+    target_index: int,
+    edge_index: int,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+    del contract["dependency_overlays"][target_index]["add"][edge_index]
+
+    with pytest.raises(checker.ValidationError, match="exact additive dependency edges"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=CATALOG_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_full_terminal_dependency_successor_rejects_extra_edge(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+    contract["dependency_overlays"][0]["add"].append(
+        "FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01"
+    )
+
+    with pytest.raises(checker.ValidationError, match="exact additive dependency edges"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=CATALOG_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_full_terminal_dependency_successor_rejects_extra_target(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+    contract["dependency_overlays"].append(
+        {
+            "target_task_id": "FPMS-V8-FINAL-CLOSE-20260712-01",
+            "add": ["FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01"],
+        }
+    )
+
+    with pytest.raises(checker.ValidationError, match="exact additive dependency edges"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=CATALOG_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+
+@pytest.mark.parametrize("location", ["root", "overlay", "removal"])
+def test_full_terminal_dependency_successor_rejects_extra_fields_and_removals(
+    tmp_path: Path,
+    location: str,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+    if location == "root":
+        contract["unexpected"] = True
+    elif location == "overlay":
+        contract["dependency_overlays"][0]["unexpected"] = True
+    else:
+        contract["dependency_overlays"][0]["remove"] = [
+            "FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01"
+        ]
+
+    with pytest.raises(checker.ValidationError, match="exact schema"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=CATALOG_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+
+@pytest.mark.parametrize(
+    "hash_field",
+    [
+        "task_file_sha256",
+        "base_dependency_sha256",
+        "effective_dependency_sha256",
+    ],
+)
+def test_full_terminal_dependency_successor_rejects_row_hash_drift(
+    tmp_path: Path,
+    hash_field: str,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+    first_task_id = next(iter(contract[hash_field]))
+    contract[hash_field][first_task_id] = "0" * 64
+
+    with pytest.raises(checker.ValidationError, match="SHA-256"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=CATALOG_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_full_terminal_dependency_successor_rejects_catalog_hash_drift(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+    contract["catalog_sha256"] = "0" * 64
+
+    with pytest.raises(checker.ValidationError, match="catalog SHA-256"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=CATALOG_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_full_terminal_dependency_successor_requires_exact_53_row_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checker = _load_checker()
+    catalog = json.loads(CATALOG_PATH.read_text())
+    catalog["tasks"][0]["deferred_kind"] = "gated_product"
+    catalog_path = tmp_path / "catalog.json"
+    digest = _write_json(catalog_path, catalog)
+    contract = _terminal_contract()
+    contract["catalog_sha256"] = digest
+    monkeypatch.setattr(checker, "EXPECTED_CATALOG_SHA256", digest)
+
+    with pytest.raises(checker.ValidationError, match="exactly 53"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=catalog_path,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_full_terminal_dependency_successor_requires_row281_in_row282(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+    contract["dependency_overlays"][1]["add"].remove(
+        "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01"
+    )
+
+    with pytest.raises(checker.ValidationError, match="exact additive dependency edges"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=CATALOG_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_full_terminal_dependency_successor_rejects_cycle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checker = _load_checker()
+    catalog = json.loads(CATALOG_PATH.read_text())
+    catalog["tasks"][277]["depends_on"].append(
+        "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01"
+    )
+    catalog_path = tmp_path / "catalog.json"
+    digest = _write_json(catalog_path, catalog)
+    contract = _terminal_contract()
+    contract["catalog_sha256"] = digest
+    monkeypatch.setattr(checker, "EXPECTED_CATALOG_SHA256", digest)
+
+    with pytest.raises(checker.ValidationError, match="acyclic"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=catalog_path,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_full_terminal_dependency_successor_preserves_row283_sentinel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checker = _load_checker()
+    catalog = deepcopy(json.loads(CATALOG_PATH.read_text()))
+    catalog["tasks"][282]["depends_on"][0:2] = reversed(
+        catalog["tasks"][282]["depends_on"][0:2]
+    )
+    catalog_path = tmp_path / "catalog.json"
+    digest = _write_json(catalog_path, catalog)
+    contract = _terminal_contract()
+    contract["catalog_sha256"] = digest
+    monkeypatch.setattr(checker, "EXPECTED_CATALOG_SHA256", digest)
+
+    with pytest.raises(checker.ValidationError, match="all exact 282 predecessors"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=catalog_path,
+            repo_root=REPO_ROOT,
         )
