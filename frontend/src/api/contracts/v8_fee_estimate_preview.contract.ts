@@ -3,38 +3,6 @@
 import { previewOfficialFeeCandidates } from '../fees'
 import type { OfficialFeeEstimateContext, OfficialFeeEstimateResult } from '../fees.types'
 
-declare module 'axios' {
-    interface FeeEstimateContractResponse<T = unknown> {
-        data: T
-    }
-
-    interface FeeEstimateContractRequestConfig {
-        headers?: Record<string, string>
-    }
-
-    interface FeeEstimateContractInterceptor<V> {
-        use(
-            onFulfilled?: (value: V) => V | Promise<V>,
-            onRejected?: (error: unknown) => unknown,
-        ): number
-    }
-
-    interface FeeEstimateContractHttp {
-        interceptors: {
-            request: FeeEstimateContractInterceptor<FeeEstimateContractRequestConfig>
-            response: FeeEstimateContractInterceptor<FeeEstimateContractResponse>
-        }
-        get<T>(url: string, config?: unknown): Promise<FeeEstimateContractResponse<T>>
-        post<T>(url: string, data?: unknown, config?: unknown): Promise<FeeEstimateContractResponse<T>>
-        put<T>(url: string, data?: unknown, config?: unknown): Promise<FeeEstimateContractResponse<T>>
-        delete<T>(url: string, config?: unknown): Promise<FeeEstimateContractResponse<T>>
-    }
-
-    interface AxiosStatic {
-        create(config?: unknown): FeeEstimateContractHttp
-    }
-}
-
 const estimateContext: OfficialFeeEstimateContext = {
     case_id: 'case-1',
     trigger_context: {
