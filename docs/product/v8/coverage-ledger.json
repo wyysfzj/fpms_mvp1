@@ -1393,13 +1393,10 @@
     {
       "catalog_id": "FPMS-V8-FUTURE-ANNUITY-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FUTURE-ANNUITY-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-PAYMENT-WORKBOOK-MANIFEST-ACTIVATION-20260712-01",
@@ -5695,6 +5692,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-001-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-001-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FUTURE-ANNUITY-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "9a3d46fce12395e397b0eeba18b91e38c9599749"
+      ],
+      "paths": [
+        "tasks/batches/FPMS-POSTDEMO-V8-FUTURE-ANNUITY-GATE-20260712-01.md",
+        "backend/tests/test_v8_future_annuity_manifest_contract.py"
+      ],
+      "tree_sha256": "a5dfeddbb990b36cfc7043ddf69c79cf7a5db13d59918056c536f44e358d8246",
+      "tests": [
+        "focused activation manifest suite passed 3 tests",
+        "scoped Ruff and exact-commit diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0 after exact-source recheck"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
     }
   ]
 }
