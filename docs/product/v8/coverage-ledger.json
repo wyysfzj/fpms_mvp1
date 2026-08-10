@@ -1634,13 +1634,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01",
@@ -6569,6 +6566,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "89e632309619b56e890d632206f7e30d280a8d7d"
+      ],
+      "paths": [
+        "backend/app/modules/documents/grant_evidence_schemas.py",
+        "backend/app/modules/documents/api.py",
+        "backend/tests/test_v8_grant_evidence_candidate_list_api.py"
+      ],
+      "tree_sha256": "0c12e8948aaf629b8008edae50490b3213aa4b6565a9b560e0d46da399246e20",
+      "tests": [
+        "focused candidate-list API plus ingestion POST, candidate-read and shared-router regressions passed 32 tests",
+        "scoped Ruff, format check for owned new files and exact three-path diff check passed",
+        "existing ingestion POST bytes remained identical",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-GRANT-EVIDENCE-REVIEW-SERVICE-CURRENT-ADOPTION",
