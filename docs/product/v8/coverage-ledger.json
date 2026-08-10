@@ -6493,6 +6493,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-SERVICE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-SERVICE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-OFFICIAL-COPY-VERIFICATION-API-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "a4673b81dcc1ab64d258c16269bfa3c24f9e60f9"
+      ],
+      "paths": [
+        "backend/app/modules/documents/grant_official_copy_verification_schemas.py",
+        "backend/app/modules/documents/api.py",
+        "backend/tests/test_v8_grant_official_copy_verification_api.py"
+      ],
+      "tree_sha256": "88ce5fdcc93d2a1e93e82ff90536e12b06af80e95f47c36e8c5d6070985a9559",
+      "tests": [
+        "focused grant official-copy verification API suite passed 6 tests",
+        "API, service and shared document-route regressions passed 57 tests",
+        "scoped Ruff and exact three-path diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-API-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-API-CURRENT-ADOPTION.md"
     }
   ]
 }
