@@ -25,7 +25,7 @@ Task Contract Profile: `TC-QA`
 - Successor product contract:
   `tasks/postdemo/v8/FPMS-V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-20260810-01.md`
 - Frozen successor contract SHA-256:
-  `d20626f095a7f7ca7e9d2b309138feb3ab1c2b6a179964352747302ca3d51603`
+  `2a04bd220a0d1c96b61b5d7bb027add302cb55fc1ba69575b8724503215a9937`
 
 The rebind is authorized only while the accepted manifest preimage and successor task bytes match
 the hashes above. Any drift pauses this task for a new independent contract review; it must not be
@@ -183,7 +183,7 @@ Required PASS evidence:
 - RED log proving only the old second-row path, then final GREEN and scoped Ruff logs;
 - hash log proving the Scheme A source remains
   `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace` and the successor task
-  remains `d20626f095a7f7ca7e9d2b309138feb3ab1c2b6a179964352747302ca3d51603`;
+  remains `2a04bd220a0d1c96b61b5d7bb027add302cb55fc1ba69575b8724503215a9937`;
 - scope evidence proving only this task file, the one accepted lane manifest, the focused test and
   this evidence tree changed after dirty-baseline subtraction;
 - a manifest semantic diff proving exactly one product-row replacement plus only its directly
