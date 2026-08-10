@@ -116,7 +116,10 @@ function gateSnapshot(overlay: OverlayResponse): Array<readonly unknown[]> {
 }
 
 async function expectRealJson(response: Response): Promise<void> {
-  expect(response.status(), await response.text()).toBe(200);
+  const status = response.status();
+  const request = response.request();
+  const pathname = new URL(response.url()).pathname;
+  expect(status, `expected 200 for ${request.method()} ${pathname}, got ${status}`).toBe(200);
   expect(response.fromServiceWorker()).toBe(false);
   expect(response.headers()["content-type"]).toContain("application/json");
   const address = await response.serverAddr();
