@@ -1358,658 +1358,904 @@
     {
       "catalog_id": "FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-APPLICATION-DRAFT-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-YEAR-DRAFT-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-FUTURE-ANNUITY-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-PAYMENT-WORKBOOK-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-RATE-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-001-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-002-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-003-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-004-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-005-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-006-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-007-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-008-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-009-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-010-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-011-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-012-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-013-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-014-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-015-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-016-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-017-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-018-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-019-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-020-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-021-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-022-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-ANNOUNCEMENT-EVIDENCE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-PATENT-REGISTER-EVIDENCE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-ACCEPTED-DISPATCH-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-API-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-FE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-UI-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-APPLICATION-AUTO-DRAFT-POLICY-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-GENERATION-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-HTTP-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-FE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-UI-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-API-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-FE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-UI-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-CARRIER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-API-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-API-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-API-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-001-RECTIFICATION-REPLY-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-002-FIRST-OA-STATEMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-003-EARLY-PUBLICATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-004-EXAM-REQUEST-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-005-WITHDRAWAL-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-006-ABANDONMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-007-BIBLIOGRAPHIC-CHANGE-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-008-REEXAMINATION-REQUEST-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-009-VOLUNTARY-RECTIFICATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-010-RIGHT-RESTORATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-011-REEXAM-INVALIDATION-STATEMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-012-REEXAMINATION-RECTIFICATION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-013-PAPER-TO-ELECTRONIC-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-014-FEE-REDUCTION-REQUEST-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-015-TRANSLATION-CORRECTION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-016-PPH-REQUEST-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-017-INVENTION-VOLUNTARY-AMENDMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-018-TIME-EXTENSION-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-019-SECOND-OA-STATEMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-020-THIRD-OA-STATEMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-021-FOURTH-OA-STATEMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-OUT-022-FILE-COPY-REQUEST-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-STATE-PREFLIGHT-20260712-01",
@@ -2222,10 +2468,13 @@
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "CUSTOMER_BLOCKED",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CUSTOMER_DECISION_REQUIRED",
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-20260712-01",
@@ -2246,26 +2495,45 @@
     {
       "catalog_id": "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "PENDING",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CONTRACT_INCONSISTENCY",
+        "missing_dependencies": [
+          "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01"
+        ],
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "PENDING",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "CONTRACT_INCONSISTENCY",
+        "missing_dependencies": [
+          "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01",
+          "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01"
+        ],
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     },
     {
       "catalog_id": "FPMS-V8-FINAL-CLOSE-20260712-01",
       "phase": "deferred",
-      "disposition": "DEFERRED_FULL_ONLY",
+      "disposition": "PENDING",
       "story_id": null,
       "successor_story_id": null,
-      "blocker": null
+      "blocker": {
+        "code": "DEPENDENCY_BLOCKED",
+        "dependencies": [
+          "FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01"
+        ],
+        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+      }
     }
   ],
   "stories": [
