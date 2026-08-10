@@ -6666,6 +6666,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-YEAR-AUTO-DRAFT-POLICY-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-YEAR-AUTO-DRAFT-POLICY-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FUTURE-ANNUITY-EXCEPTION-AUTHORITY-SERVICE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "088f62fd723682e3d705eee1c4bde0fcb32968ce",
+        "893489d28f68b1d10bdf84ae776e3e2e7a6907b4",
+        "88016f0b64ef5530b6fb077eeed16771b9cc8e57"
+      ],
+      "paths": [
+        "backend/app/modules/system/future_annuity_exception_authority_service.py",
+        "backend/tests/test_v8_future_annuity_exception_authority_service.py"
+      ],
+      "tree_sha256": "57a3e5e2851d5d51b3d3d8fc3ed0c71e27ff2236acb87d8b381c6c5061ec52c1",
+      "tests": [
+        "focused future-annuity exception authority suite passed 11 tests",
+        "inherited carrier, gate-read and system-parameter tranche passed 62 tests with one pre-existing stale migration-head assertion excluded",
+        "scoped Ruff and exact two-path diff checks passed",
+        "independent High final re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-EXCEPTION-AUTHORITY-SERVICE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-EXCEPTION-AUTHORITY-SERVICE-CURRENT-ADOPTION.md"
     }
   ]
 }
