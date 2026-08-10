@@ -33,16 +33,27 @@ Add one authenticated endpoint:
 - line model also uses `extra="forbid"` and contains exactly
   `obligation_line_id: str`, `official_full_amount: Decimal`, and
   `confirmed_payable_amount: Decimal`; line IDs obey the same ID rule;
-- the exact response model contains only `grant_fee_task_id`, `fee_obligation_id`,
-  `source_activity_id`, `review_activity_id`, `reviewed_line_ids` in canonical order,
-  `confirmed_at`, `idempotency_key`, and `reused`;
+- the exact response model uses `extra="forbid"` and contains only
+  `grant_fee_task_id: str`, `fee_obligation_id: str`, `source_activity_id: str`,
+  `review_activity_id: str`, `reviewed_line_ids: list[str]` in canonical order,
+  `confirmed_at: datetime`, `idempotency_key: str`, and `reused: bool`; all response IDs and the
+  key preserve the validated request/stored values and the time is the exact naive request time;
 - success is HTTP 200 with that response as the direct JSON body, without an envelope.
 
 Pydantic request-shape, missing/extra field, type, ID/hash pattern, list cardinality, decimal range
 and timezone violations return the existing FastAPI HTTP 422 validation body. Service command-type,
 whitespace/NUL or other defensive shape violations return
 `GRANT_OFFICIAL_FEE_REVIEW_COMMAND_INVALID` HTTP 400 with the exact invalid field in details.
-All source, state, identity, ordering and equality semantics remain service HTTP 404/409 below.
+The service error contract is exact: missing named task is
+`GRANT_OFFICIAL_FEE_REVIEW_TASK_NOT_FOUND` HTTP 404; missing named source, evidence, obligation,
+line or recognition object is `GRANT_OFFICIAL_FEE_REVIEW_LINK_NOT_FOUND` HTTP 404; dirty caller
+transaction is `GRANT_OFFICIAL_FEE_REVIEW_TRANSACTION_CONFLICT` HTTP 409; source/evidence/
+obligation/lineage or immutable-fact mismatch is `GRANT_OFFICIAL_FEE_REVIEW_LINEAGE_CONFLICT`
+HTTP 409; already/partially reviewed state or a new key after review is
+`GRANT_OFFICIAL_FEE_REVIEW_STATE_CONFLICT` HTTP 409; same-key drift or corrupt replay is
+`GRANT_OFFICIAL_FEE_REVIEW_IDEMPOTENCY_CONFLICT` HTTP 409; failed CAS is
+`GRANT_OFFICIAL_FEE_REVIEW_CONCURRENCY_CONFLICT` HTTP 409. These errors carry no details except
+the HTTP 400 command-invalid field described above, and disclose no additional object existence.
 
 Money inputs are finite positive two-decimal `Decimal` values no greater than
 `9999999999999999.99` (`NUMERIC(18,2)`). The supplied payable amount must be exactly Decimal-equal
@@ -75,11 +86,27 @@ Append exactly one `FEE` activity of type
 to the grant-notice activity, `CONFIRMED` status, actor and reviewer equal to the authenticated
 operator, and the original two source/evidence references.
 
-Its canonical payload contains only the frozen schema/version, case/task/obligation/source and
-evidence identities, evidence hash, confirmation time, fixed review basis, and complete ordered
-before/after line snapshots. Before snapshots retain `official_full_amount=null` and
-`REVIEW_REQUIRED`; after snapshots contain the entered amount and `MATCHED`, with payable/source
-facts unchanged.
+Its payload is canonical JSON (`ensure_ascii=false`, sorted keys, compact separators, NaN denied)
+with exactly these top-level keys and JSON types:
+
+- `schema: "FPMS_GRANT_YEAR_OFFICIAL_FEE_REVIEW_CONFIRMED_V1"`;
+- `case_id`, `grant_fee_task_id`, `obligation_id`, `source_activity_id`,
+  `source_document_id`, `reviewed_evidence_version_id`, `reviewed_evidence_content_hash`: strings;
+- `confirmed_at`: the exact naive request time serialized by `datetime.isoformat()`;
+- `review_basis: "AUTHORIZED_OPERATOR_MANUAL_ENTRY"`;
+- `before_lines` and `after_lines`: non-empty arrays in ascending `(fee_year_key, fee_code,
+  obligation_line_id)` order.
+
+Every line snapshot contains exactly: `obligation_line_id: str`, `fee_code: str`,
+`fee_name: str`, `fee_year_key: int`, `official_full_amount: str|null`,
+`reduction_ratio: str`, `payable_amount: str`, `source_amount: str`,
+`source_date: str|null`, `difference_review_state: str`, and `current_identity_key: str`.
+Money strings use fixed two decimals; reduction-ratio strings use fixed four decimals; source dates
+use ISO `YYYY-MM-DD`. Before snapshots have `official_full_amount=null` and
+`difference_review_state="REVIEW_REQUIRED"`; after snapshots differ only in the manually entered
+two-decimal `official_full_amount` and `difference_review_state="MATCHED"`. Row120 and replay compare
+the decoded object for this exact key set, types, order and values and also require re-encoding to
+equal the stored canonical bytes.
 
 `confirmed_at` is used unchanged for activity `occurred_at`, activity `effective_at`, canonical
 payload confirmation time, and every updated line's `updated_at`. Activity actor and reviewer are
@@ -91,11 +118,12 @@ transaction; no service commit. A partial or concurrent update fails 409 so call
 the activity and every line change.
 
 Each line CAS predicate is exactly: line `id`, `obligation_id`, `case_id`, `source_activity_id`,
-`fee_code`, `fee_year_key`, `current_identity_key`, `payable_amount`, `source_amount`,
-`official_full_amount IS NULL`, and `difference_review_state = REVIEW_REQUIRED` equal their
-already validated pre-review values. Each update must report `rowcount == 1`; any other rowcount is
-`GRANT_OFFICIAL_FEE_REVIEW_CONCURRENCY_CONFLICT` HTTP 409. The endpoint wraps service invocation and
-`db.commit()` in one `try`; every exception calls `db.rollback()` and is re-raised.
+`fee_code`, `fee_name`, `fee_year_key`, `current_identity_key`, `reduction_ratio`, `payable_amount`,
+`source_amount`, `source_date`, the previously read `updated_at`, `official_full_amount IS NULL`, and
+`difference_review_state = REVIEW_REQUIRED` equal their already validated pre-review values. Each
+update must report `rowcount == 1`; any other rowcount is the exact concurrency error above. The
+endpoint wraps service invocation and `db.commit()` in one `try`; every exception calls
+`db.rollback()` and is re-raised.
 
 ## Idempotency and draft seam
 
