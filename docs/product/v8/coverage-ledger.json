@@ -2209,8 +2209,8 @@
     {
       "catalog_id": "FPMS-V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-CURRENT-ADOPTION",
       "successor_story_id": null,
       "blocker": null
     },
@@ -2254,8 +2254,6 @@
         "code": "DEPENDENCY_BLOCKED",
         "dependencies": [
           "FPMS-V8-GRANT-DRAFT-OBLIGATION-ADAPTER-20260712-01",
-          "FPMS-V8-LIVE-FIXTURE-20260712-01",
-          "FPMS-V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-20260712-01",
           "FPMS-V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-20260712-01"
         ],
         "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
@@ -5180,6 +5178,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OVERLAY-LIVE-FIXTURE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OVERLAY-LIVE-FIXTURE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "f7559cf1d30cbe8ab4a2c46fa96add72615a0d06",
+        "f5fca8920299551ca6aeeca0a4bbfaf7fdd51a09",
+        "d8960b214c06f5d1f87732b826401f7bf79da7c6"
+      ],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-lifecycle-overlay-live.spec.ts"
+      ],
+      "tree_sha256": "96f4932f0ecd4c54c13316f8c30ea0d3ecaeab466dd8c2833741fe3e7faa938e",
+      "tests": [
+        "exact RED proved the absent real-stack Playwright scenario",
+        "final isolated Vite/FastAPI/SQLite Playwright passed 1 test in 4.2 seconds",
+        "standalone TypeScript and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-CURRENT-ADOPTION.md"
     }
   ]
 }
