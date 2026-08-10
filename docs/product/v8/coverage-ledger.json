@@ -6308,6 +6308,34 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-API-VERIFICATION-PATH-COMPAT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-API-VERIFICATION-PATH-COMPAT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "f22bc481b968a1da540769c1cf823c603f5d0a08",
+        "3f34b3e96d6509c478a27ae5973a1c5323243a93"
+      ],
+      "paths": [
+        "backend/app/modules/documents/fee_linking_service.py",
+        "backend/app/modules/fees/obligation_contracts.py",
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/app/modules/annuity/service.py",
+        "backend/app/modules/cases/lifecycle_overlay_service.py",
+        "backend/tests/test_v8_application_auto_draft_policy.py",
+        "backend/tests/test_v8_fee_obligation_contracts.py",
+        "backend/tests/test_v8_lifecycle_overlay_fees.py"
+      ],
+      "tree_sha256": "038fe698309ef53823ffe8b462fa65874d5ebe90847d4bd511963857cb3230e4",
+      "tests": [
+        "canonical focused application internal-draft suite passed 53 tests",
+        "exact ten-file affected regression suite passed 198 tests",
+        "scoped Ruff check-only and exact eight-path diff checks passed",
+        "independent High re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-CURRENT-ADOPTION.md"
     }
   ]
 }
