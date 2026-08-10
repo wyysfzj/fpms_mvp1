@@ -1,6 +1,11 @@
 # FPMS-V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-20260810-01
 
 Status: CONTRACT RE-FROZEN / READY FOR INDEPENDENT HIGH REVIEW
+Risk-Tier: HIGH
+Closure-Tags: ["customer-decision", "governance", "lineage", "source-authority"]
+Task-Path: tasks/postdemo/v8/FPMS-V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-20260810-01.md
+Execution class: `CONTRACT FROZEN`
+Chosen runbook: `P0-prereq-heavy-story`
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Executor role: Team Lead / default
 Repository risk: `HIGH`
