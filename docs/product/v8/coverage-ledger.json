@@ -1718,13 +1718,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-YEAR-AUTO-DRAFT-POLICY-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01",
@@ -6643,6 +6640,32 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-SERVICE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-SERVICE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-YEAR-AUTO-DRAFT-POLICY-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "ebf0e988b1a25f574cde299b80eecb8cde98a990",
+        "cb2c67b2a580701e56661dda3ce7928a4b385ed3",
+        "77f2afe0503dddf565f0d7edd662fbec03042351"
+      ],
+      "paths": [
+        "backend/app/modules/fees/obligation_contracts.py",
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/app/modules/grant_fees/service.py",
+        "backend/tests/test_v8_grant_year_auto_draft_policy.py"
+      ],
+      "tree_sha256": "15e94f1b5a6c005bafed3939dddb5d4d743571de23c84758b12d1a6889534575",
+      "tests": [
+        "focused grant-year internal-draft policy suite passed 14 tests",
+        "specified grant/application regression tranche passed 37 tests",
+        "broader affected tranche passed 131 tests before narrow review hardening",
+        "scoped Ruff and exact four-path diff checks passed",
+        "independent High re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-YEAR-AUTO-DRAFT-POLICY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-YEAR-AUTO-DRAFT-POLICY-CURRENT-ADOPTION.md"
     }
   ]
 }
