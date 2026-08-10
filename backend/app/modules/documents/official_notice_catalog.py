@@ -304,6 +304,10 @@ OFFICIAL_LETTER_OUT_CATALOG: tuple[str, ...] = (
 OFFICIAL_LETTER_OUT_FORM_001_CLASSIFICATIONS = {
     "补正答复": ("form-001", "INTERNAL_ONLY"),
 }
+OFFICIAL_LETTER_OUT_FORM_002_CLASSIFICATIONS = {
+    **OFFICIAL_LETTER_OUT_FORM_001_CLASSIFICATIONS,
+    "一通意见陈述": ("form-002", "INTERNAL_ONLY"),
+}
 
 
 def _official_letter_out_input_fields(
@@ -374,4 +378,11 @@ def seed_official_letter_out_form_001_catalog(db: Session) -> int:
     return _seed_official_letter_out_catalog(
         db,
         OFFICIAL_LETTER_OUT_FORM_001_CLASSIFICATIONS,
+    )
+
+
+def seed_official_letter_out_form_002_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(
+        db,
+        OFFICIAL_LETTER_OUT_FORM_002_CLASSIFICATIONS,
     )
