@@ -169,6 +169,136 @@ class DocumentEvidenceVersion(UUIDPrimaryKeyMixin, Base):
     )
 
 
+class GrantOfficialCopyVerificationEvent(Base):
+    __tablename__ = "t_grant_official_copy_verification_event"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    evidence_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_config_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    role_config_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    evidence_scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    action_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    original_reference: Mapped[str] = mapped_column(String(512), nullable=False)
+    acquisition_method_snapshot: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_content_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_config_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    role_config_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    predecessor_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    event_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    event_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    current_identity_key: Mapped[str | None] = mapped_column(String(96), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "evidence_version_id",
+            "event_type",
+            name="uq_t_grant_official_copy_event_stage",
+        ),
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_t_grant_official_copy_event_idempotency_key",
+        ),
+        UniqueConstraint(
+            "current_identity_key",
+            name="uq_t_grant_official_copy_event_current_identity_key",
+        ),
+        ForeignKeyConstraint(
+            ["evidence_version_id"],
+            ["t_document_evidence_version.id"],
+            name="fk_t_grant_official_copy_event_evidence_version",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_config_id"],
+            ["t_grant_evidence_source_config.id"],
+            name="fk_t_grant_official_copy_event_source_config",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_record_id"],
+            ["t_grant_evidence_source_record.id"],
+            name="fk_t_grant_official_copy_event_source_record",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["role_config_id"],
+            ["t_grant_manual_review_role_config.id"],
+            name="fk_t_grant_official_copy_event_role_config",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["actor_id"],
+            ["t_user.id"],
+            name="fk_t_grant_official_copy_event_actor",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["predecessor_event_id"],
+            ["t_grant_official_copy_verification_event.id"],
+            name="fk_t_grant_official_copy_event_predecessor",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "evidence_scope IN ('GRANT_ANNOUNCEMENT', 'PATENT_REGISTER')",
+            name="ck_t_grant_official_copy_event_scope",
+        ),
+        CheckConstraint(
+            "event_type IN ('ACQUIRED', 'FIRST_VERIFIED', 'SECOND_VERIFIED')",
+            name="ck_t_grant_official_copy_event_type",
+        ),
+        CheckConstraint(
+            "(event_type = 'ACQUIRED' AND predecessor_event_id IS NULL) OR "
+            "(event_type IN ('FIRST_VERIFIED', 'SECOND_VERIFIED') "
+            "AND predecessor_event_id IS NOT NULL)",
+            name="ck_t_grant_official_copy_event_predecessor_shape",
+        ),
+        CheckConstraint(
+            "length(source_config_snapshot_hash) = 64 "
+            "AND source_config_snapshot_hash = lower(source_config_snapshot_hash) "
+            "AND source_config_snapshot_hash NOT GLOB '*[^0-9a-f]*' "
+            "AND length(source_snapshot_hash) = 64 "
+            "AND source_snapshot_hash = lower(source_snapshot_hash) "
+            "AND source_snapshot_hash NOT GLOB '*[^0-9a-f]*' "
+            "AND length(role_config_snapshot_hash) = 64 "
+            "AND role_config_snapshot_hash = lower(role_config_snapshot_hash) "
+            "AND role_config_snapshot_hash NOT GLOB '*[^0-9a-f]*' "
+            "AND length(event_snapshot_hash) = 64 "
+            "AND event_snapshot_hash = lower(event_snapshot_hash) "
+            "AND event_snapshot_hash NOT GLOB '*[^0-9a-f]*'",
+            name="ck_t_grant_official_copy_event_hashes",
+        ),
+        CheckConstraint(
+            "length(evidence_content_hash) BETWEEN 1 AND 128 "
+            "AND evidence_content_hash = trim(evidence_content_hash) "
+            "AND instr(evidence_content_hash, char(0)) = 0",
+            name="ck_t_grant_official_copy_event_content_hash",
+        ),
+        CheckConstraint(
+            "current_identity_key IS NULL OR "
+            "current_identity_key = 'GRANT_OFFICIAL_COPY|' || evidence_version_id",
+            name="ck_t_grant_official_copy_event_current_key",
+        ),
+        Index(
+            "ix_t_grant_official_copy_event_evidence_stage",
+            "evidence_version_id",
+            "event_type",
+            "action_at",
+        ),
+    )
+
+
 class GrantEvidenceCandidate(Base):
     __tablename__ = "t_grant_evidence_candidate"
 
