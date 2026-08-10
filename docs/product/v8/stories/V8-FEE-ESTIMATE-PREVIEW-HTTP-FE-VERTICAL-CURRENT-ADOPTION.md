@@ -65,9 +65,11 @@ object unchanged and returns `response.data` without mapping, number conversion,
 calculation, sorting, grouping, defaults, overloads or legacy compatibility.
 
 The dedicated contract probe proves the literals, nullable wire fields, decimal strings,
-nested provenance and prohibited persistence identities. Its current 32-line Axios
-module augmentation is a later isolated-contract successor and is retained unchanged
-without weakening the frozen row-106 assertions.
+nested provenance and prohibited persistence identities. Foundation typecheck found that
+its obsolete 32-line Axios module augmentation globally replaced the real Axios instance
+with a stale interface, causing unrelated valid `patch`, Blob and interceptor calls to
+fail compilation. Commit `b2da634` removes only that test-owned augmentation; all fee
+preview assertions, including all 20 negative probes, remain byte-identical.
 
 No page or `CaseFeesTab.vue` behavior is adopted. Supplying a user-selected context and
 effective date remains the separately owned UI successor.
@@ -125,6 +127,12 @@ already GREEN, no RED was manufactured and no product or test bytes changed.
 An independent High reviewer must review the exact commit and independently rerun the
 decisive checks under the serialized lane. The implementer does not approve this
 `PROTECTED` story.
+
+The Foundation correction passed full frontend lint, typecheck and production build.
+Independent High review approved `b2da634` with P0/P1/P2 `0/0/0`, confirming no runtime
+code, fee-preview assertion or type-safety boundary was changed. The current exact
+six-path fingerprint is
+`04eeb6928f6df356fcd897ece89745af198896d4c417a11a573dc7bc24f15bed`.
 
 ## Non-goals and rollback
 

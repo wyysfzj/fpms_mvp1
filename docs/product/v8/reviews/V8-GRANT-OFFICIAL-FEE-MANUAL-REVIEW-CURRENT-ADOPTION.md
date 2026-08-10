@@ -1,6 +1,7 @@
 # Independent Review — Grant Official Fee Manual Review Current Adoption
 
 - Review class: `PROTECTED`.
+- Contract commits: `9749fd1`, `1b70b57`, `922b6ff`.
 - Product commits: `2af34af026bb02a170583a9caad2433279c3a60c`,
   `5ac5568bb14a0dbfd145e86193a41c5efcaec689`,
   `92087a911d51214f483162b594123883e501466a`.
@@ -20,8 +21,8 @@ Exact fingerprints:
 
 - product patch SHA-256:
   `0c7b8dd06afaf2fa344e2ffa878b402044d926a6abec1b50ab8d6b725856c297`;
-- five-path Git tree SHA-256:
-  `c698c72b218ead5dc61186e91809d8eeb8d87d9a28be65be12c0c92c458bc2ca`;
+- seven-path Git tree SHA-256:
+  `cf763697850f833ba327b3a0a812416a3c07e845cf711b5774fc05c08d643c56`;
 - generic obligation service:
   `29676fbd68e47e17952cc1f1f2ebde0ae3aa40f45f58bdb355faf72b5ae7b8f0`;
 - grant service:
@@ -33,3 +34,6 @@ Exact fingerprints:
 - focused test:
   `de0d3c972caa6ef05a3a8ebcd7dcef6f5808ff15cefcb4f60fc88018b650f937`.
 
+The tree fingerprint includes the reviewed successor contract and its exact authoritative
+`source-decision-registry.md` entry, closing the former ledger omission without changing those
+bytes.

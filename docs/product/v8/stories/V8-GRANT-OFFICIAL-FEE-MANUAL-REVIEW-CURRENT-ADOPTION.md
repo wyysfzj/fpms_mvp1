@@ -1,6 +1,7 @@
 # Story V8 Grant Official Fee Manual Review Current Adoption
 
 - Risk: `PROTECTED`.
+- Contract commits: `9749fd1`, `1b70b57`, `922b6ff`.
 - Product commits: `2af34af`, `5ac5568`, `92087a9`.
 - Prerequisite owner: `REPO-V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-20260810-01`.
 - Downstream catalog owner: Row120
@@ -24,3 +25,6 @@ tests; the exact grant, obligation detail/overlay and generic draft tranche pass
 Scoped Ruff and diff checks passed. Two independent High reviewers approved the final correction
 with P0/P1/P2 all zero.
 
+The accepted path set includes the exact successor contract and its authoritative
+`source-decision-registry.md` entry. This records the reviewed source/decision bytes as the latest
+accepted owner instead of leaving their post-C3 amendment outside the coverage ledger.

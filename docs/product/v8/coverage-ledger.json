@@ -3215,7 +3215,8 @@
       "commits": [
         "20ac8b44495442861aae3acffbcbe9082769a3c3",
         "d494e95",
-        "1cb8be0"
+        "1cb8be0",
+        "b2da6342c3fb4516981b0e8014023bccba473a23"
       ],
       "paths": [
         "backend/app/modules/fees/api.py",
@@ -3225,11 +3226,13 @@
         "frontend/src/api/fees.ts",
         "frontend/src/api/fees.types.ts"
       ],
-      "tree_sha256": "c2a70876ffd8959993ee893a39545a785376d7ae2735f0da130b54bc0d0ab32d",
+      "tree_sha256": "04eeb6928f6df356fcd897ece89745af198896d4c417a11a573dc7bc24f15bed",
       "tests": [
         "pytest -q tests/test_v8_fee_estimate_preview_api.py from backend cwd (40 passed)",
         "pytest -q exact two-file row103/104 predecessor tranche from backend cwd (101 passed)",
         "isolated TypeScript contract, exact-file ESLint, scoped Ruff and exact diff-check passed",
+        "Foundation frontend lint, typecheck and production build passed after removing the stale Axios augmentation",
+        "independent High correction review approved P0/P1/P2 0/0/0 with all fee-preview assertions unchanged",
         "independent row116 successor attestation confirmed preview routes, schemas and frontend paths remain unchanged",
         "independent row117 successor attestation confirmed the fee-estimate preview contract remains intact"
       ],
@@ -5114,6 +5117,10 @@
       "story_id": "V8-OVERLAY-WARNING-CONFLICT-LINEAGE-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
+        "21509b172887339423ea3747165423678a86f25d",
+        "0b88da6505fe7f1f99d6e19b6e291991387c4854",
+        "98d741c1cdf1a8e9ae0b7e577eb942552d907f92",
+        "931983bceced5e28261ab51245a564576b17effd",
         "850422aaeaae3a2ae3317eb698b61288fac8f1aa",
         "afb7bd654e521299cf1a625fb663ab0db1f7aff5",
         "289686053d1de3ba212dbbfe2ce07f666737591a",
@@ -5132,9 +5139,11 @@
         "backend/tests/test_v8_lifecycle_overlay_pagination.py",
         "backend/tests/test_v8_lifecycle_register_status_conflict_service.py",
         "backend/tests/test_v8_overlay_warning_conflict_lineage.py",
-        "backend/tests/test_v8_overlay_warning_conflict_migration.py"
+        "backend/tests/test_v8_overlay_warning_conflict_migration.py",
+        "docs/product/v8/domain-contract.md",
+        "docs/product/v8/stories/V8-OVERLAY-WARNING-CONFLICT-LINEAGE-SUCCESSOR-CONTRACT.md"
       ],
-      "tree_sha256": "641a840834e05b40577ca44a1fbccb30f8573c488b9ea0eb3a77e67e3fec4060",
+      "tree_sha256": "61ffc0954f72f1932b43b39d9a15de9af8c175e8554e1afbf58bb7a65565c96a",
       "tests": [
         "focused RED proved the missing durable carrier and empty warning projection",
         "final focused and affected overlay tranche passed 92 tests",
@@ -5196,6 +5205,9 @@
       "story_id": "V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
       "commits": [
+        "9749fd128fa150e45caeebd3544f086ecb72572c",
+        "1b70b57b402a108acc51285a51535183e499c393",
+        "922b6ffa7d454291b8dcd6f3ebf2ea9699ad24a7",
         "2af34af026bb02a170583a9caad2433279c3a60c",
         "5ac5568bb14a0dbfd145e86193a41c5efcaec689",
         "92087a911d51214f483162b594123883e501466a"
@@ -5205,9 +5217,11 @@
         "backend/app/modules/grant_fees/service.py",
         "backend/app/modules/grant_fees/schemas.py",
         "backend/app/modules/grant_fees/api.py",
-        "backend/tests/test_v8_grant_official_fee_manual_review.py"
+        "backend/tests/test_v8_grant_official_fee_manual_review.py",
+        "docs/product/v8/source-decision-registry.md",
+        "docs/product/v8/stories/V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-SUCCESSOR-CONTRACT.md"
       ],
-      "tree_sha256": "c698c72b218ead5dc61186e91809d8eeb8d87d9a28be65be12c0c92c458bc2ca",
+      "tree_sha256": "cf763697850f833ba327b3a0a812416a3c07e845cf711b5774fc05c08d643c56",
       "tests": [
         "contract RED failed 5 tests on the absent public action",
         "focused manual review suite passed 11 tests",
@@ -5229,9 +5243,10 @@
       ],
       "paths": [
         "backend/app/modules/grant_fees/service.py",
-        "backend/tests/test_v8_grant_draft_obligation_adapter.py"
+        "backend/tests/test_v8_grant_draft_obligation_adapter.py",
+        "docs/product/v8/stories/V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-SUCCESSOR-CONTRACT.md"
       ],
-      "tree_sha256": "11c4d49e088736876487ab1fa547a5574b2458174159f6fb0dc9eaceb032a0d9",
+      "tree_sha256": "173680d68aa8758d6ee0390e2cb271d60f0496eb996c929cc196539007ebcec5",
       "tests": [
         "parent-tree interface absence and the first focused run established the inherited WIP gap",
         "final focused grant draft adapter suite passed 7 tests",

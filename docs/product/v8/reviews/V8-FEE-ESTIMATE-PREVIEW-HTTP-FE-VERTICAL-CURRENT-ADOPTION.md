@@ -31,3 +31,13 @@ The exact six-path Git tree fingerprint is
 `dc295f65a708cede08802d01c4ef0bb263cca057611726b4da5fbeccfe6231f6`.
 The exact binary story patch SHA-256 is
 `bfdbcf9e0167ce0261fab4037e6311145d6066a391c8f1eeb362e1732d541d90`.
+
+## Foundation type-contract correction
+
+Commit `b2da6342c3fb4516981b0e8014023bccba473a23` removes only the stale 32-line
+test-owned Axios module augmentation that globally shadowed the installed Axios types.
+Full frontend lint, typecheck and production build passed. Independent High review
+approved with P0/P1/P2 `0/0/0`: all official-fee preview assertions, including all 20
+negative probes, are byte-identical; no executable/runtime code or type-safety boundary
+changed. The current exact six-path Git tree fingerprint is
+`04eeb6928f6df356fcd897ece89745af198896d4c417a11a573dc7bc24f15bed`.

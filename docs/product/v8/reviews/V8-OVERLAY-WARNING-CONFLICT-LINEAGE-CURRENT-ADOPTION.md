@@ -1,6 +1,7 @@
 # Independent Review — V8 Overlay Warning Conflict Lineage
 
 - Review class: `PROTECTED`.
+- Contract commits: `21509b1`, `0b88da6`, `98d741c`, `931983b`.
 - Product commits: `850422a`, `afb7bd6`, `2896860`, `edf47dc`, `40ed8ed`.
 - Verdict: `APPROVED`.
 - P0/P1/P2: `0/0/0`.
@@ -19,4 +20,7 @@ never acquire legacy-conflict authority.
 
 Fresh independent focused runs passed 11 tests and 8 tests respectively. Scoped Ruff and full
 candidate diff checks passed. Exact final tree fingerprint:
-`641a840834e05b40577ca44a1fbccb30f8573c488b9ea0eb3a77e67e3fec4060`.
+`61ffc0954f72f1932b43b39d9a15de9af8c175e8554e1afbf58bb7a65565c96a`.
+
+The fingerprint includes the reviewed successor contract and its exact authoritative
+`domain-contract.md` clauses, closing the former ledger omission without changing those bytes.

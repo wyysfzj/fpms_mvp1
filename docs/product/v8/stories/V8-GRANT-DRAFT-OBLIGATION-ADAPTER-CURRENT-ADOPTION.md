@@ -21,3 +21,7 @@ Final focused verification passed 7 tests. The exact inherited grant, generic dr
 draft, obligation-detail and overlay tranche passed 198 tests. Scoped Ruff and diff checks passed.
 The first independent review found four P1 gaps; the correction review confirmed all four closed
 and approved the final commit with P0/P1/P2 all zero.
+
+The accepted path set also includes the reviewed grant-fee successor contract update that keeps
+the explicit client-instruction adapter order-independent after manual review. This makes the
+contract amendment at the prerequisite commit part of the latest accepted story ownership.

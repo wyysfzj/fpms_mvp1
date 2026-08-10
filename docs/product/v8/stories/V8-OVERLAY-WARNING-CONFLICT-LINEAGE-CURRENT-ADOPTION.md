@@ -1,6 +1,7 @@
 # Story V8 Overlay Warning Conflict Lineage Current Adoption
 
 - Risk: `PROTECTED`.
+- Contract commits: `21509b1`, `0b88da6`, `98d741c`, `931983b`.
 - Product commits: `850422a`, `afb7bd6`, `2896860`, `edf47dc`, `40ed8ed`.
 - Successor contract: `V8-OVERLAY-WARNING-CONFLICT-LINEAGE-SUCCESSOR-CONTRACT`.
 
@@ -21,3 +22,7 @@ Focused RED proved the absent carrier/projection. Final focused and affected ove
 passed 92 tests; lifecycle append/register/legacy regressions passed 188 tests. Scoped Ruff,
 Alembic single-head and diff checks passed. Two independent High review axes approved the final
 candidate with P0/P1/P2 all zero.
+
+The accepted path set includes the exact successor contract and its authoritative
+`domain-contract.md` clauses. This makes the contract bytes reviewed with the implementation the
+latest accepted owner instead of leaving their post-C3 amendment outside the coverage ledger.
