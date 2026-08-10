@@ -1710,13 +1710,10 @@
     {
       "catalog_id": "FPMS-V8-APPLICATION-AUTO-DRAFT-POLICY-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
+      "disposition": "SUPERSEDED_BY_STORY",
       "story_id": null,
-      "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "successor_story_id": "V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-CURRENT-ADOPTION",
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01",
