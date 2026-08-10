@@ -1,6 +1,7 @@
 # FPMS-V8-GRANT-ANNOUNCEMENT-EVIDENCE-ADAPTER-20260712-01
 
-Status: READY / NOT STARTED
+Status: CONTRACT RE-FROZEN / READY FOR IMPLEMENTATION
+Risk class: `PROTECTED`
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `14. Wave 6 — customer decision gates`
 Catalog ordinal: `205`
@@ -34,9 +35,36 @@ Task Contract Profile: `TC-ADAPTER`
 
 Map one already accepted controlled announcement candidate to the announcement lifecycle event exactly once; no review-state mutation or direct status write.
 
+The one adapter entrypoint accepts an exact persisted `GrantEvidenceCandidate`, the exact review
+role configuration identity/hash returned by the accepted review operation, and the caller-owned
+SQLAlchemy transaction. It accepts only `GRANT_ANNOUNCEMENT` with a coherent `APPROVED` review
+tuple, distinct proposer/reviewer, canonical hash-bound candidate/acquisition snapshots, exactly
+one unconflicted `announcement_date` fact, and current source/role authority resolved at
+`reviewed_at`. Resolved source/config/version/hash and proposal/review role configuration must
+match the persisted snapshots and supplied accepted-review identity exactly.
+
+It derives one immutable `GRANT_ANNOUNCEMENT_CONFIRMED` command:
+
+- `effective_at` is the canonical announcement date at UTC-naive midnight;
+- `occurred_at` is the accepted `reviewed_at`;
+- actor/reviewer are the persisted proposer/reviewer;
+- the only evidence reference binds the same case, document-evidence version and
+  `sha256:<raw evidence hash>` at `effective_at`;
+- source provenance is the candidate id and the canonical source snapshot binds the announcement
+  date, document id, evidence version id, evidence content hash and candidate id;
+- idempotency is `grant-announcement:<candidate id>`; predecessor/supersession fields are `None`.
+
+The adapter delegates once to `apply_lifecycle_event`. Exact replay is owned by that accepted
+lifecycle service. Invalid, conflicted, stale, unreviewed, unauthorized or mismatched input fails
+with `GRANT_ANNOUNCEMENT_EVIDENCE_CONFLICT` / 409 before lifecycle dispatch. The adapter performs
+no candidate query or mutation and no flush, commit, rollback or transaction close.
+
 ## Explicit Non-Closure
 
-No change to the underlying deep-module rule, no second entrypoint and no unrelated refactor. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
+No change to the underlying deep-module rule, review service/row/schema, register adapter,
+accepted-dispatch wiring, endpoint/UI, direct case-status write or unrelated refactor. No
+replacement-announcement/supersession inference; that requires separately frozen authority. Do
+not absorb another V8 catalog row, a second closure slice, unresolved customer policy or cleanup.
 
 ## Dependencies
 
@@ -79,6 +107,8 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 - Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
 - All SQLite-writing tests and shared-file verification run through the global serialized queue.
 - Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
+- Scheme A authorizes this development lane but supplies no production source or role default;
+  both exact runtime configurations remain mandatory and fail closed.
 
 ## Verification Commands
 
