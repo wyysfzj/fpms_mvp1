@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 
@@ -93,6 +93,7 @@ class FeeDraftAuthority(str, Enum):
     CLIENT_PAY_INSTRUCTION = "CLIENT_PAY_INSTRUCTION"
     REVIEWED_APPLICATION_FEE_NOTICE = "REVIEWED_APPLICATION_FEE_NOTICE"
     REVIEWED_GRANT_YEAR_NOTICE = "REVIEWED_GRANT_YEAR_NOTICE"
+    FUTURE_ANNUITY_EXCEPTION = "FUTURE_ANNUITY_EXCEPTION"
 
 
 class FeeSourceStatus(str, Enum):
@@ -275,6 +276,12 @@ class PrepareFeeObligationDraftCommand:
     actor_id: str
     idempotency_key: str
     authority: FeeDraftAuthority = FeeDraftAuthority.CLIENT_PAY_INSTRUCTION
+    exception_gate_id: str | None = None
+    exception_gate_source_reference: str | None = None
+    exception_gate_source_version: str | None = None
+    exception_publication_id: str | None = None
+    exception_publication_snapshot_hash: str | None = None
+    exception_attested_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -68,16 +68,20 @@ from app.modules.fees.obligation_contracts import (
     FeeClientInstructionStatus,
     FeeDifferenceReviewState,
     FeeDomain,
+    FeeDraftAuthority,
     FeeObligationLineInput,
     FeeOfficialEvidenceStatus,
     FeeSourceStatus,
     PrepareFeeObligationDraftCommand,
+    PrepareFeeObligationDraftResult,
     RecognizeFeeObligationCommand,
     RecordFeeObligationInstructionCommand,
     RecordFeePaymentEvidenceCommand,
 )
 from app.modules.fees.obligation_service import (
+    _future_annuity_exception_attestation_or_fail,
     calculate_annuity_payable_amount,
+    get_fee_obligation,
     prepare_draft,
     recognize_obligation,
     record_client_instruction,
@@ -88,6 +92,11 @@ from app.modules.fees.service import (
     fee_rate_source_enabled_condition,
 )
 from app.modules.masterdata.clients.models import Client
+from app.modules.system.future_annuity_exception_authority_service import (
+    FutureAnnuityExceptionUseAttestation,
+    ResolveFutureAnnuityExceptionCommand,
+    resolve_future_annuity_exception,
+)
 
 _ALLOWED_INSTRUCTIONS = ("PAY", "ABANDON", "DEFER")
 _ANNUITY_DRAFT_TYPE = "ANNUITY_FEE"
@@ -3090,12 +3099,43 @@ def _annuity_instruction_exact_string(value: object, limit: int = 36) -> bool:
     return type(value) is str and bool(value) and value == value.strip() and len(value) <= limit
 
 
+def _has_future_annuity_exception_draft(
+    transaction: Session,
+    *,
+    case_id: str,
+    obligation_id: str,
+) -> bool:
+    matches: list[dict[str, object]] = []
+    for activity in transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == case_id,
+            CaseActivityEvent.lane == ActivityLane.FEE.value,
+            CaseActivityEvent.activity_type == "FEE_DRAFT_CREATED",
+        )
+    ):
+        try:
+            payload = json.loads(activity.payload_json)
+        except (TypeError, ValueError):
+            continue
+        if type(payload) is dict and payload.get("obligation_id") == obligation_id:
+            matches.append(payload)
+    if not matches:
+        return False
+    if len(matches) != 1:
+        _annuity_instruction_conflict("年费任务费用义务草单活动不存在或不唯一")
+    return (
+        matches[0].get("schema")
+        == "FPMS_FEE_DRAFT_CREATED_FROM_FUTURE_ANNUITY_EXCEPTION_V1"
+    )
+
+
 def _validate_annuity_instruction_lineage(
     transaction: Session,
     *,
     task: AnnuityTask,
     obligation: FeeObligation,
     case: Case,
+    canonical_recognition: bool = False,
 ) -> None:
     lines = tuple(
         transaction.scalars(
@@ -3143,29 +3183,65 @@ def _validate_annuity_instruction_lineage(
     if len(evidence_links) != 1:
         _annuity_instruction_not_found("年费任务来源证据关联不存在或不唯一")
     evidence_link = evidence_links[0]
-    expected_recognition_payload = json.dumps(
-        {
-            "obligation_id": obligation.id,
-            "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    recognitions = tuple(
-        transaction.scalars(
+    detail = None
+    if canonical_recognition:
+        try:
+            detail = get_fee_obligation(obligation.id, transaction)
+        except BusinessError:
+            _annuity_instruction_conflict("年费任务费用义务识别活动无效")
+        recognitions: list[CaseActivityEvent] = []
+        for candidate in transaction.scalars(
             select(CaseActivityEvent).where(
                 CaseActivityEvent.case_id == task.case_id,
                 CaseActivityEvent.lane == ActivityLane.FEE.value,
                 CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
-                CaseActivityEvent.payload_json == expected_recognition_payload,
+            )
+        ):
+            try:
+                payload = json.loads(candidate.payload_json)
+            except (TypeError, ValueError):
+                _annuity_instruction_conflict("年费任务费用义务识别活动无效")
+            if (
+                type(payload) is not dict
+                or payload.get("schema") != "FPMS_FEE_OBLIGATION_RECOGNIZED_V1"
+            ):
+                _annuity_instruction_conflict("年费任务费用义务识别活动无效")
+            if payload.get("obligation_id") == obligation.id:
+                recognitions.append(candidate)
+    else:
+        expected_recognition_payload = json.dumps(
+            {
+                "obligation_id": obligation.id,
+                "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        recognitions = list(
+            transaction.scalars(
+                select(CaseActivityEvent).where(
+                    CaseActivityEvent.case_id == task.case_id,
+                    CaseActivityEvent.lane == ActivityLane.FEE.value,
+                    CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
+                    CaseActivityEvent.payload_json == expected_recognition_payload,
+                )
             )
         )
-    )
     if len(recognitions) != 1:
         _annuity_instruction_not_found("年费任务费用义务识别活动不存在或不唯一")
     recognition = recognitions[0]
     if (
-        source_activity.case_id != case.id
+        (
+            canonical_recognition
+            and (
+                detail is None
+                or detail.id != obligation.id
+                or detail.case_id != case.id
+                or detail.source.source_activity_id != task.source_activity_id
+                or detail.source.source_document_id != task.source_document_id
+            )
+        )
+        or source_activity.case_id != case.id
         or source_activity.lane != ActivityLane.LIFECYCLE.value
         or source_activity.activity_type != "GRANT_ANNOUNCEMENT_CONFIRMED"
         or source_activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
@@ -3235,6 +3311,11 @@ def record_annuity_task_instruction(
             task=task,
             obligation=obligation,
             case=case,
+            canonical_recognition=_has_future_annuity_exception_draft(
+                transaction,
+                case_id=case.id,
+                obligation_id=obligation.id,
+            ),
         )
     instruction = FeeClientInstruction(command.instruction)
     delegated = record_client_instruction(
@@ -3253,6 +3334,193 @@ def record_annuity_task_instruction(
         activity_id=delegated.activity_id,
         idempotency_key=delegated.idempotency_key,
         reused=delegated.reused,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class FutureAnnuityAutoDraftPolicyResult:
+    annuity_task_id: int
+    fee_obligation_id: str
+    exception_attestation: FutureAnnuityExceptionUseAttestation
+    draft: PrepareFeeObligationDraftResult
+
+
+def apply_future_annuity_auto_draft_policy(
+    *,
+    transaction: Session,
+    annuity_task_id: int,
+    actor_id: str,
+    as_of: datetime,
+) -> FutureAnnuityAutoDraftPolicyResult:
+    if type(annuity_task_id) is not int or annuity_task_id <= 0:
+        _future_annuity_invalid("annuity_task_id")
+    if not isinstance(transaction, Session):
+        _future_annuity_invalid("transaction")
+    if (
+        type(actor_id) is not str
+        or not actor_id
+        or actor_id != actor_id.strip()
+        or "\x00" in actor_id
+        or len(actor_id) > 36
+    ):
+        _future_annuity_invalid("actor_id")
+    if type(as_of) is not datetime or as_of.utcoffset() is not None:
+        _future_annuity_invalid("as_of")
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _future_annuity_fail(FutureAnnuityObligationErrorCode.TRANSACTION_DIRTY, 409)
+
+    with transaction.no_autoflush:
+        task = transaction.get(AnnuityTask, annuity_task_id)
+        if task is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.TASK_NOT_FOUND, 404)
+        case = transaction.get(Case, task.case_id)
+        if case is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.CASE_NOT_FOUND, 404)
+        carrier = (
+            task.source_activity_id,
+            task.source_document_id,
+            task.source_evidence_version_id,
+            task.source_evidence_content_hash,
+            task.fee_obligation_id,
+            task.grant_fee_year_key,
+        )
+        if (
+            any(value is None for value in carrier)
+            or not all(_annuity_instruction_exact_string(value) for value in carrier[:3])
+            or not _annuity_instruction_exact_string(carrier[3], 71)
+            or fullmatch(r"sha256:[0-9a-f]{64}", carrier[3]) is None
+            or not _annuity_instruction_exact_string(carrier[4])
+            or type(carrier[5]) is not int
+            or type(carrier[5]) is bool
+            or carrier[5] <= 0
+        ):
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+        obligation = transaction.get(FeeObligation, task.fee_obligation_id)
+        if obligation is None:
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+        try:
+            _validate_annuity_instruction_lineage(
+                transaction,
+                task=task,
+                obligation=obligation,
+                case=case,
+                canonical_recognition=True,
+            )
+        except BusinessError as exc:
+            status_code = 404 if exc.status_code == 404 else 409
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, status_code)
+        if (
+            obligation.fee_domain != FeeDomain.GOV.value
+            or obligation.obligation_type != "FUTURE_ANNUITY"
+            or obligation.source_status != FeeSourceStatus.VERIFIED.value
+            or obligation.obligation_status != "RECOGNIZED"
+            or obligation.payment_status != "UNPAID"
+            or obligation.official_evidence_status != FeeOfficialEvidenceStatus.PENDING.value
+            or obligation.currency != "CNY"
+        ):
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+
+        existing: list[tuple[CaseActivityEvent, dict[str, object]]] = []
+        for activity in transaction.scalars(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == case.id,
+                CaseActivityEvent.lane == ActivityLane.FEE.value,
+                CaseActivityEvent.activity_type == "FEE_DRAFT_CREATED",
+            )
+        ):
+            try:
+                payload = json.loads(activity.payload_json)
+            except (TypeError, ValueError):
+                _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+            if type(payload) is dict and payload.get("obligation_id") == obligation.id:
+                existing.append((activity, payload))
+
+        if existing:
+            if len(existing) != 1:
+                _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+            activity, payload = existing[0]
+            if (
+                payload.get("schema")
+                != "FPMS_FEE_DRAFT_CREATED_FROM_FUTURE_ANNUITY_EXCEPTION_V1"
+                or payload.get("actor_id") != actor_id
+                or type(payload.get("exception_publication_id")) is not str
+                or activity.idempotency_key
+                != (
+                    f"future-annuity-exception-auto-draft:{annuity_task_id}:"
+                    f"{payload['exception_publication_id']}"
+                )
+            ):
+                _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+            try:
+                attested_at = datetime.fromisoformat(
+                    str(payload.get("exception_attested_at"))
+                )
+            except ValueError:
+                _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+            if attested_at != as_of:
+                _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+            command = PrepareFeeObligationDraftCommand(
+                obligation_id=obligation.id,
+                actor_id=actor_id,
+                idempotency_key=activity.idempotency_key,
+                authority=FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION,
+                exception_gate_id=payload.get("exception_gate_id"),
+                exception_gate_source_reference=payload.get("exception_gate_source_reference"),
+                exception_gate_source_version=payload.get("exception_gate_source_version"),
+                exception_publication_id=payload.get("exception_publication_id"),
+                exception_publication_snapshot_hash=payload.get(
+                    "exception_publication_snapshot_hash"
+                ),
+                exception_attested_at=attested_at,
+            )
+            draft = prepare_draft(command, transaction)
+            attestation = _future_annuity_exception_attestation_or_fail(
+                transaction,
+                obligation,
+                command,
+                require_current=False,
+            )
+            return FutureAnnuityAutoDraftPolicyResult(
+                annuity_task_id=task.id,
+                fee_obligation_id=obligation.id,
+                exception_attestation=attestation,
+                draft=draft,
+            )
+
+        if (
+            obligation.client_instruction_status != FeeClientInstructionStatus.PENDING.value
+            or obligation.draft_status != "NOT_CREATED"
+        ):
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.OBLIGATION_CONFLICT, 409)
+        attestation = resolve_future_annuity_exception(
+            ResolveFutureAnnuityExceptionCommand(
+                client_id=case.client_id,
+                case_id=case.id,
+                as_of=as_of,
+            ),
+            transaction,
+        )
+        command = PrepareFeeObligationDraftCommand(
+            obligation_id=obligation.id,
+            actor_id=actor_id,
+            idempotency_key=(
+                f"future-annuity-exception-auto-draft:{annuity_task_id}:"
+                f"{attestation.publication_id}"
+            ),
+            authority=FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION,
+            exception_gate_id=attestation.gate_id,
+            exception_gate_source_reference=attestation.gate_source_reference,
+            exception_gate_source_version=attestation.gate_source_version,
+            exception_publication_id=attestation.publication_id,
+            exception_publication_snapshot_hash=attestation.publication_snapshot_hash,
+            exception_attested_at=attestation.as_of,
+        )
+    draft = prepare_draft(command, transaction)
+    return FutureAnnuityAutoDraftPolicyResult(
+        annuity_task_id=task.id,
+        fee_obligation_id=obligation.id,
+        exception_attestation=attestation,
+        draft=draft,
     )
 
 

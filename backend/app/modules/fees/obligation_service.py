@@ -83,6 +83,13 @@ from app.modules.fees.obligation_contracts import (
     RecordFeePaymentEvidenceCommand,
     RecordFeePaymentEvidenceResult,
 )
+from app.modules.system.future_annuity_exception_authority_service import (
+    FutureAnnuityExceptionScope,
+    FutureAnnuityExceptionUseAttestation,
+    ResolveFutureAnnuityExceptionCommand,
+    resolve_future_annuity_exception,
+)
+from app.modules.system.models import CustomerDecisionGate, FutureAnnuityDraftExceptionRecord
 
 __all__ = (
     "AnnuityPayableAmountResult",
@@ -137,6 +144,15 @@ _DRAFT_ACTIVITY_TYPE = "FEE_DRAFT_CREATED"
 _DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_V1"
 _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_APPLICATION_NOTICE_V1"
 _REVIEWED_GRANT_DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_GRANT_YEAR_NOTICE_V1"
+_FUTURE_ANNUITY_EXCEPTION_DRAFT_PAYLOAD_SCHEMA = (
+    "FPMS_FEE_DRAFT_CREATED_FROM_FUTURE_ANNUITY_EXCEPTION_V1"
+)
+_FUTURE_ANNUITY_GATE_SOURCE_REFERENCE = (
+    "docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt"
+)
+_FUTURE_ANNUITY_GATE_SOURCE_VERSION = (
+    "customer-decision:2026-08-10:v8-full-batch-scheme-a:v1"
+)
 _MAX_AMOUNT = Decimal("9999999999999999.99")
 _TWO_PLACES = Decimal("0.01")
 
@@ -1637,6 +1653,7 @@ def prepare_draft(
     reviewed_notice = command.authority in {
         FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
         FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
+        FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION,
     }
 
     with transaction.no_autoflush:
@@ -1668,6 +1685,7 @@ def prepare_draft(
                     }
                 )
                 if reviewed_notice
+                and command.authority is not FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION
                 else frozenset({FeeDifferenceReviewState.MATCHED.value})
             ),
         )
@@ -1682,6 +1700,7 @@ def prepare_draft(
                 instruction=instruction,
                 instruction_activity=instruction_activity,
                 lines=lines,
+                command=command,
             )
         else:
             _draft_eligible(
@@ -1754,6 +1773,21 @@ def prepare_draft(
     }
     if reviewed_notice:
         payload["authority"] = command.authority.value
+    if command.authority is FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION:
+        payload.update(
+            {
+                "exception_attested_at": cast(datetime, command.exception_attested_at).isoformat(
+                    timespec="microseconds"
+                ),
+                "exception_gate_id": command.exception_gate_id,
+                "exception_gate_source_reference": command.exception_gate_source_reference,
+                "exception_gate_source_version": command.exception_gate_source_version,
+                "exception_publication_id": command.exception_publication_id,
+                "exception_publication_snapshot_hash": (
+                    command.exception_publication_snapshot_hash
+                ),
+            }
+        )
     projection = _case_projection(case)
     activity_command = LifecycleEventCommand(
         case_id=header.case_id,
@@ -1960,6 +1994,50 @@ def _validate_prepare_draft_command(command: PrepareFeeObligationDraftCommand) -
     )
     if type(command.authority) is not FeeDraftAuthority:
         _draft_command_invalid("authority")
+    exception_fields = (
+        ("exception_gate_id", command.exception_gate_id),
+        ("exception_gate_source_reference", command.exception_gate_source_reference),
+        ("exception_gate_source_version", command.exception_gate_source_version),
+        ("exception_publication_id", command.exception_publication_id),
+        ("exception_publication_snapshot_hash", command.exception_publication_snapshot_hash),
+        ("exception_attested_at", command.exception_attested_at),
+    )
+    if command.authority is not FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION:
+        if any(value is not None for _field, value in exception_fields):
+            _draft_command_invalid("authority")
+        return
+    for field in ("exception_gate_id", "exception_publication_id"):
+        value = getattr(command, field)
+        if type(value) is not str:
+            _draft_command_invalid(field)
+        try:
+            parsed = UUID(value)
+        except (TypeError, ValueError, AttributeError):
+            _draft_command_invalid(field)
+        if str(parsed) != value:
+            _draft_command_invalid(field)
+    _required_string(
+        command.exception_gate_source_reference,
+        512,
+        "exception_gate_source_reference",
+        _draft_command_invalid,
+    )
+    _required_string(
+        command.exception_gate_source_version,
+        128,
+        "exception_gate_source_version",
+        _draft_command_invalid,
+    )
+    if (
+        type(command.exception_publication_snapshot_hash) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", command.exception_publication_snapshot_hash) is None
+    ):
+        _draft_command_invalid("exception_publication_snapshot_hash")
+    if (
+        type(command.exception_attested_at) is not datetime
+        or command.exception_attested_at.utcoffset() is not None
+    ):
+        _draft_command_invalid("exception_attested_at")
 
 
 def _reviewed_notice_draft_schema(authority: FeeDraftAuthority) -> str:
@@ -1967,7 +2045,302 @@ def _reviewed_notice_draft_schema(authority: FeeDraftAuthority) -> str:
         return _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA
     if authority is FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE:
         return _REVIEWED_GRANT_DRAFT_PAYLOAD_SCHEMA
+    if authority is FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION:
+        return _FUTURE_ANNUITY_EXCEPTION_DRAFT_PAYLOAD_SCHEMA
     _draft_command_invalid("authority")
+
+
+def _future_annuity_exception_record_or_fail(
+    row: FutureAnnuityDraftExceptionRecord,
+) -> None:
+    def exact_text(value: object, limit: int) -> bool:
+        return (
+            type(value) is str
+            and bool(value)
+            and value == value.strip()
+            and "\x00" not in value
+            and len(value) <= limit
+        )
+
+    def canonical_uuid(value: object) -> bool:
+        if type(value) is not str:
+            return False
+        try:
+            return str(UUID(value)) == value
+        except (TypeError, ValueError, AttributeError):
+            return False
+
+    if (
+        not canonical_uuid(row.id)
+        or not canonical_uuid(row.confirmed_by)
+        or not exact_text(row.record_version, 128)
+        or not exact_text(row.source_reference, 512)
+        or not exact_text(row.source_version, 128)
+        or not exact_text(row.reason, 4096)
+        or not exact_text(row.idempotency_key, 128)
+        or type(row.published_at) is not datetime
+        or row.published_at.utcoffset() is not None
+        or type(row.effective_at) is not datetime
+        or row.effective_at.utcoffset() is not None
+    ):
+        _draft_stored_state_invalid()
+    if row.record_type == "PUBLISHED":
+        scope_id = row.client_id if row.scope_type == "CLIENT" else row.case_id
+        if (
+            row.scope_type not in {"CLIENT", "CASE"}
+            or not canonical_uuid(scope_id)
+            or (row.scope_type == "CLIENT" and row.case_id is not None)
+            or (row.scope_type == "CASE" and row.client_id is not None)
+            or row.target_publication_id is not None
+            or type(row.effective_from) is not datetime
+            or row.effective_from.utcoffset() is not None
+            or type(row.effective_to) is not datetime
+            or row.effective_to.utcoffset() is not None
+            or row.effective_to <= row.effective_from
+            or max(row.effective_from, row.published_at, row.effective_at) >= row.effective_to
+        ):
+            _draft_stored_state_invalid()
+        payload = {
+            "schema": "FPMS_FUTURE_ANNUITY_DRAFT_EXCEPTION_V1",
+            "record_type": row.record_type,
+            "scope_type": row.scope_type,
+            "scope_id": scope_id,
+            "effective_from": row.effective_from.isoformat(timespec="microseconds"),
+            "effective_to": row.effective_to.isoformat(timespec="microseconds"),
+            "effective_at": row.effective_at.isoformat(timespec="microseconds"),
+            "record_version": row.record_version,
+            "source_reference": row.source_reference,
+            "source_version": row.source_version,
+            "reason": row.reason,
+            "confirmed_by": row.confirmed_by,
+            "published_at": row.published_at.isoformat(timespec="microseconds"),
+        }
+    elif row.record_type == "REVOKED":
+        if (
+            not canonical_uuid(row.target_publication_id)
+            or row.scope_type is not None
+            or row.client_id is not None
+            or row.case_id is not None
+            or row.effective_from is not None
+            or row.effective_to is not None
+        ):
+            _draft_stored_state_invalid()
+        payload = {
+            "schema": "FPMS_FUTURE_ANNUITY_DRAFT_EXCEPTION_V1",
+            "record_type": row.record_type,
+            "target_publication_id": row.target_publication_id,
+            "effective_at": row.effective_at.isoformat(timespec="microseconds"),
+            "record_version": row.record_version,
+            "source_reference": row.source_reference,
+            "source_version": row.source_version,
+            "reason": row.reason,
+            "confirmed_by": row.confirmed_by,
+            "published_at": row.published_at.isoformat(timespec="microseconds"),
+        }
+    else:
+        _draft_stored_state_invalid()
+    snapshot = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    if (
+        row.record_snapshot != snapshot
+        or row.record_snapshot_hash != hashlib.sha256(snapshot.encode("utf-8")).hexdigest()
+    ):
+        _draft_stored_state_invalid()
+
+
+def _future_annuity_exception_attestation_or_fail(
+    transaction: Session,
+    header: FeeObligationModel,
+    command: PrepareFeeObligationDraftCommand,
+    *,
+    require_current: bool,
+) -> FutureAnnuityExceptionUseAttestation:
+    case = transaction.get(Case, header.case_id)
+    publication = transaction.get(
+        FutureAnnuityDraftExceptionRecord,
+        command.exception_publication_id,
+    )
+    gate = transaction.get(CustomerDecisionGate, command.exception_gate_id)
+    if case is None or publication is None or gate is None or case.client_id is None:
+        _draft_stored_state_invalid()
+    _future_annuity_exception_record_or_fail(publication)
+    attested_at = cast(datetime, command.exception_attested_at)
+    scope_id = publication.client_id if publication.scope_type == "CLIENT" else publication.case_id
+    if (
+        publication.record_type != "PUBLISHED"
+        or publication.record_snapshot_hash != command.exception_publication_snapshot_hash
+        or publication.effective_from is None
+        or publication.effective_to is None
+        or not publication.effective_from <= attested_at < publication.effective_to
+        or publication.published_at > attested_at
+        or publication.effective_at > attested_at
+        or publication.scope_type not in {"CLIENT", "CASE"}
+        or scope_id is None
+        or (
+            publication.scope_type == "CLIENT"
+            and (publication.client_id != case.client_id or publication.case_id is not None)
+        )
+        or (
+            publication.scope_type == "CASE"
+            and (publication.case_id != case.id or publication.client_id is not None)
+        )
+    ):
+        _draft_stored_state_invalid()
+    revocations = tuple(
+        transaction.scalars(
+            select(FutureAnnuityDraftExceptionRecord).where(
+                FutureAnnuityDraftExceptionRecord.target_publication_id == publication.id
+            )
+        )
+    )
+    if len(revocations) > 1:
+        _draft_stored_state_invalid()
+    for revocation in revocations:
+        _future_annuity_exception_record_or_fail(revocation)
+        if (
+            revocation.source_reference != publication.source_reference
+            or revocation.source_version != publication.source_version
+        ):
+            _draft_stored_state_invalid()
+        if (
+            require_current
+            and revocation.published_at <= attested_at
+            and revocation.effective_at <= attested_at
+        ):
+            _draft_stored_state_invalid()
+    try:
+        gate_snapshot = json.loads(gate.decision_snapshot)
+        canonical_gate_snapshot = json.dumps(
+            gate_snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        _draft_stored_state_invalid()
+    if (
+        type(gate_snapshot) is not dict
+        or set(gate_snapshot)
+        != {
+            "confirmed_by",
+            "decision_status",
+            "decision_value",
+            "effective_at",
+            "expected_current_gate_id",
+            "gate_code",
+            "scope_key",
+            "source_reference",
+            "source_version",
+        }
+        or canonical_gate_snapshot != gate.decision_snapshot
+        or gate_snapshot.get("confirmed_by") != gate.confirmed_by
+        or gate_snapshot.get("decision_status") != gate.decision_status
+        or gate_snapshot.get("decision_value") != gate.decision_value
+        or gate_snapshot.get("effective_at")
+        != gate.effective_at.isoformat(timespec="microseconds")
+        or gate_snapshot.get("gate_code") != gate.gate_code
+        or gate_snapshot.get("scope_key") != gate.scope_key
+        or gate_snapshot.get("source_reference") != gate.source_reference
+        or gate_snapshot.get("source_version") != gate.source_version
+        or gate.gate_code != "DG-FEE-FUTURE-ANNUITY"
+        or gate.scope_key != "GLOBAL"
+        or gate.decision_status != "CONFIRMED"
+        or gate.decision_value != "APPROVED_POLICY"
+        or gate.source_reference != command.exception_gate_source_reference
+        or gate.source_version != command.exception_gate_source_version
+        or gate.source_reference != _FUTURE_ANNUITY_GATE_SOURCE_REFERENCE
+        or gate.source_version != _FUTURE_ANNUITY_GATE_SOURCE_VERSION
+        or gate.effective_at > attested_at
+    ):
+        _draft_stored_state_invalid()
+    attestation = FutureAnnuityExceptionUseAttestation(
+        gate_id=gate.id,
+        gate_source_reference=gate.source_reference,
+        gate_source_version=gate.source_version,
+        publication_id=publication.id,
+        publication_snapshot_hash=publication.record_snapshot_hash,
+        scope_type=FutureAnnuityExceptionScope(publication.scope_type),
+        scope_id=scope_id,
+        client_id=case.client_id,
+        case_id=case.id,
+        effective_from=publication.effective_from,
+        effective_to=publication.effective_to,
+        record_version=publication.record_version,
+        source_reference=publication.source_reference,
+        source_version=publication.source_version,
+        confirmed_by=publication.confirmed_by,
+        published_at=publication.published_at,
+        effective_at=publication.effective_at,
+        as_of=attested_at,
+    )
+    if require_current:
+        current = resolve_future_annuity_exception(
+            ResolveFutureAnnuityExceptionCommand(
+                client_id=case.client_id,
+                case_id=case.id,
+                as_of=attested_at,
+            ),
+            transaction,
+        )
+        if current != attestation:
+            _draft_stored_state_invalid()
+    return attestation
+
+
+def _future_annuity_exception_source_graph_or_fail(
+    transaction: Session,
+    header: FeeObligationModel,
+    *,
+    command: PrepareFeeObligationDraftCommand,
+    recognition: CaseActivityEvent,
+    lines: tuple[FeeObligationLineModel, ...],
+    allow_later_state: bool,
+) -> None:
+    instruction_states = {FeeClientInstructionStatus.PENDING.value}
+    draft_states = {FeeObligationDraftStatus.NOT_CREATED.value}
+    if allow_later_state:
+        instruction_states.add(FeeClientInstructionStatus.PAY.value)
+        draft_states.add(FeeObligationDraftStatus.CREATED.value)
+    try:
+        detail = get_fee_obligation(header.id, transaction)
+    except BusinessError:
+        _draft_stored_state_invalid()
+    if (
+        header.fee_domain != FeeDomain.GOV.value
+        or header.obligation_type != "FUTURE_ANNUITY"
+        or header.source_status != FeeSourceStatus.VERIFIED.value
+        or header.obligation_status != FeeObligationStatus.RECOGNIZED.value
+        or header.client_instruction_status not in instruction_states
+        or header.draft_status not in draft_states
+        or header.payment_status != FeePaymentStatus.UNPAID.value
+        or header.official_evidence_status != FeeOfficialEvidenceStatus.PENDING.value
+        or header.currency != "CNY"
+        or len(lines) != 1
+        or lines[0].difference_review_state != FeeDifferenceReviewState.MATCHED.value
+        or detail.id != header.id
+        or detail.case_id != header.case_id
+        or detail.source.source_activity_id != header.source_activity_id
+        or detail.source.source_document_id != header.source_document_id
+        or tuple(line.id for line in detail.lines) != tuple(line.id for line in lines)
+        or recognition.case_id != header.case_id
+        or recognition.lane != ActivityLane.FEE.value
+        or recognition.activity_type != _ACTIVITY_TYPE
+        or recognition.source_activity_id != header.source_activity_id
+        or recognition.confirmation_status != ConfirmationStatus.CONFIRMED.value
+    ):
+        _draft_stored_state_invalid()
+    _future_annuity_exception_attestation_or_fail(
+        transaction,
+        header,
+        command,
+        require_current=not allow_later_state,
+    )
 
 
 def _draft_lines_or_fail(
@@ -2098,6 +2471,7 @@ def _reviewed_notice_draft_eligible(
     instruction: FeeClientInstructionStatus,
     instruction_activity: CaseActivityEvent | None,
     lines: tuple[FeeObligationLineModel, ...],
+    command: PrepareFeeObligationDraftCommand | None = None,
 ) -> None:
     _reviewed_notice_source_graph_or_fail(
         transaction,
@@ -2108,6 +2482,7 @@ def _reviewed_notice_draft_eligible(
         recognition=recognition,
         lines=lines,
         allow_later_state=False,
+        command=command,
     )
     if instruction is not FeeClientInstructionStatus.PENDING or instruction_activity is not None:
         _draft_not_actionable(header)
@@ -2135,7 +2510,20 @@ def _reviewed_notice_source_graph_or_fail(
     recognition: CaseActivityEvent,
     lines: tuple[FeeObligationLineModel, ...],
     allow_later_state: bool,
+    command: PrepareFeeObligationDraftCommand | None = None,
 ) -> None:
+    if authority is FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION:
+        if command is None:
+            _draft_command_invalid("authority")
+        _future_annuity_exception_source_graph_or_fail(
+            transaction,
+            header,
+            command=command,
+            recognition=recognition,
+            lines=lines,
+            allow_later_state=allow_later_state,
+        )
+        return
     if authority is FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE:
         _reviewed_grant_year_source_graph_or_fail(
             transaction,
@@ -2584,6 +2972,7 @@ def _has_reviewed_notice_draft_candidate(
         if type(payload) is dict and payload.get("schema") in {
             _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA,
             _REVIEWED_GRANT_DRAFT_PAYLOAD_SCHEMA,
+            _FUTURE_ANNUITY_EXCEPTION_DRAFT_PAYLOAD_SCHEMA,
         }:
             return True
     return False
@@ -2598,6 +2987,7 @@ def _draft_replay_existing(
     reviewed_notice = command.authority in {
         FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
         FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
+        FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION,
     }
     recognition = _instruction_recognition(transaction, header)
     instruction, instruction_activity = _instruction_stored_chain(
@@ -2617,6 +3007,7 @@ def _draft_replay_existing(
                 }
             )
             if reviewed_notice
+            and command.authority is not FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION
             else frozenset({FeeDifferenceReviewState.MATCHED.value})
         ),
     )
@@ -2630,6 +3021,7 @@ def _draft_replay_existing(
             recognition=recognition,
             lines=lines,
             allow_later_state=True,
+            command=command,
         )
     try:
         payload = _strict_json_loads(activity.payload_json)
@@ -2639,6 +3031,23 @@ def _draft_replay_existing(
         type(payload) is not dict
         or set(payload)
         != (
+            {
+                "actor_id",
+                "authority",
+                "center_changes",
+                "draft_id",
+                "exception_attested_at",
+                "exception_gate_id",
+                "exception_gate_source_reference",
+                "exception_gate_source_version",
+                "exception_publication_id",
+                "exception_publication_snapshot_hash",
+                "links",
+                "obligation_id",
+                "schema",
+            }
+            if command.authority is FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION
+            else
             {
                 "actor_id",
                 "authority",
@@ -2665,6 +3074,23 @@ def _draft_replay_existing(
             else _DRAFT_PAYLOAD_SCHEMA
         )
         or (reviewed_notice and payload.get("authority") != command.authority.value)
+        or (
+            command.authority is FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION
+            and (
+                payload.get("exception_gate_id") != command.exception_gate_id
+                or payload.get("exception_gate_source_reference")
+                != command.exception_gate_source_reference
+                or payload.get("exception_gate_source_version")
+                != command.exception_gate_source_version
+                or payload.get("exception_publication_id") != command.exception_publication_id
+                or payload.get("exception_publication_snapshot_hash")
+                != command.exception_publication_snapshot_hash
+                or payload.get("exception_attested_at")
+                != cast(datetime, command.exception_attested_at).isoformat(
+                    timespec="microseconds"
+                )
+            )
+        )
         or payload.get("obligation_id") != command.obligation_id
         or payload.get("actor_id") != command.actor_id
         or payload.get("center_changes") != {}
@@ -2753,6 +3179,7 @@ def _reviewed_notice_draft_for_instruction(
     if authority not in {
         FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
         FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
+        FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION,
     }:
         _instruction_stored_state_invalid()
     try:
@@ -2762,6 +3189,21 @@ def _reviewed_notice_draft_for_instruction(
                 actor_id=activity.actor_id,
                 idempotency_key=activity.idempotency_key,
                 authority=authority,
+                exception_gate_id=payload.get("exception_gate_id"),
+                exception_gate_source_reference=payload.get(
+                    "exception_gate_source_reference"
+                ),
+                exception_gate_source_version=payload.get("exception_gate_source_version"),
+                exception_publication_id=payload.get("exception_publication_id"),
+                exception_publication_snapshot_hash=payload.get(
+                    "exception_publication_snapshot_hash"
+                ),
+                exception_attested_at=(
+                    datetime.fromisoformat(payload["exception_attested_at"])
+                    if authority is FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION
+                    and type(payload.get("exception_attested_at")) is str
+                    else None
+                ),
             ),
             transaction,
             header,

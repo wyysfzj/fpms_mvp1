@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 from dataclasses import MISSING, FrozenInstanceError, fields, is_dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import get_type_hints
@@ -275,26 +275,43 @@ def test_prepare_draft_authority_is_exact_and_defaults_to_pay_instruction() -> N
     assert tuple(member.name for member in authority) == (
         "CLIENT_PAY_INSTRUCTION",
         "REVIEWED_APPLICATION_FEE_NOTICE",
+        "REVIEWED_GRANT_YEAR_NOTICE",
+        "FUTURE_ANNUITY_EXCEPTION",
     )
     assert tuple(member.value for member in authority) == (
         "CLIENT_PAY_INSTRUCTION",
         "REVIEWED_APPLICATION_FEE_NOTICE",
+        "REVIEWED_GRANT_YEAR_NOTICE",
+        "FUTURE_ANNUITY_EXCEPTION",
     )
     assert tuple(field.name for field in fields(PrepareFeeObligationDraftCommand)) == (
         "obligation_id",
         "actor_id",
         "idempotency_key",
         "authority",
+        "exception_gate_id",
+        "exception_gate_source_reference",
+        "exception_gate_source_version",
+        "exception_publication_id",
+        "exception_publication_snapshot_hash",
+        "exception_attested_at",
     )
     assert get_type_hints(PrepareFeeObligationDraftCommand) == {
         "obligation_id": str,
         "actor_id": str,
         "idempotency_key": str,
         "authority": authority,
+        "exception_gate_id": str | None,
+        "exception_gate_source_reference": str | None,
+        "exception_gate_source_version": str | None,
+        "exception_publication_id": str | None,
+        "exception_publication_snapshot_hash": str | None,
+        "exception_attested_at": datetime | None,
     }
     command_fields = fields(PrepareFeeObligationDraftCommand)
     assert all(field.default is MISSING for field in command_fields[:3])
     assert command_fields[3].default is authority.CLIENT_PAY_INSTRUCTION
+    assert all(field.default is None for field in command_fields[4:])
     assert (
         PrepareFeeObligationDraftCommand(
             obligation_id="obligation",
