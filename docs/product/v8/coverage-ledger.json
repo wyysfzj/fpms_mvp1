@@ -1610,13 +1610,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-EVIDENCE-INGESTION-SERVICE-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01",
@@ -6515,6 +6512,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-API-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-API-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-INGESTION-SERVICE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "34329371306e1561526b0f9855eedb405bd6c510",
+        "cada0a256b2170eab934b5a3a55711880abd1466"
+      ],
+      "paths": [
+        "backend/app/modules/documents/grant_evidence_ingestion_service.py",
+        "backend/tests/test_v8_grant_evidence_ingestion_service.py"
+      ],
+      "tree_sha256": "e3765e5b3bf274bf15a4a8985981cb9b0634633a2939cd75447be639eb42c59e",
+      "tests": [
+        "focused grant evidence ingestion service suite passed 21 tests",
+        "affected official-copy, source, role and carrier regressions passed 93 tests",
+        "scoped Ruff, format and exact two-path diff check passed",
+        "independent High re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-INGESTION-SERVICE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-INGESTION-SERVICE-CURRENT-ADOPTION.md"
     }
   ]
 }
