@@ -94,8 +94,10 @@ Shared files remain serialized even when dependency waves otherwise permit concu
   - `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
   - `FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01`
 - Allowed files:
+  - `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01.md`
   - `backend/app/modules/documents/grant_evidence_ingestion_service.py`
   - `backend/tests/test_v8_grant_evidence_ingestion_service.py`
+  - `artifacts/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01/**`
 - Required verification:
   - `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_ingestion_service.py`
   - `cd backend && .venv/bin/ruff check app/modules/documents/grant_evidence_ingestion_service.py tests/test_v8_grant_evidence_ingestion_service.py`
@@ -116,9 +118,11 @@ Shared files remain serialized even when dependency waves otherwise permit concu
   - `FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01`
   - `FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01`
 - Allowed files:
+  - `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01.md`
   - `backend/app/modules/documents/grant_evidence_schemas.py`
   - `backend/app/modules/documents/api.py`
   - `backend/tests/test_v8_grant_evidence_ingestion_api.py`
+  - `artifacts/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01/**`
 - Required verification:
   - `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_ingestion_api.py`
   - `cd backend && .venv/bin/ruff check app/modules/documents/grant_evidence_schemas.py app/modules/documents/api.py tests/test_v8_grant_evidence_ingestion_api.py`
@@ -141,8 +145,10 @@ Shared files remain serialized even when dependency waves otherwise permit concu
   - `FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01`
   - `FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01`
 - Allowed files:
+  - `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01.md`
   - `backend/app/modules/documents/grant_evidence_ingestion_service.py`
   - `backend/tests/test_v8_grant_evidence_candidate_read_service.py`
+  - `artifacts/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01/**`
 - Required verification:
   - `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_candidate_read_service.py`
   - `cd backend && .venv/bin/ruff check app/modules/documents/grant_evidence_ingestion_service.py tests/test_v8_grant_evidence_candidate_read_service.py`
@@ -165,9 +171,11 @@ Shared files remain serialized even when dependency waves otherwise permit concu
   - `FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01`
   - `FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01`
 - Allowed files:
+  - `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01.md`
   - `backend/app/modules/documents/grant_evidence_schemas.py`
   - `backend/app/modules/documents/api.py`
   - `backend/tests/test_v8_grant_evidence_candidate_list_api.py`
+  - `artifacts/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01/**`
 - Required verification:
   - `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_candidate_list_api.py`
   - `cd backend && .venv/bin/ruff check app/modules/documents/grant_evidence_schemas.py app/modules/documents/api.py tests/test_v8_grant_evidence_candidate_list_api.py`

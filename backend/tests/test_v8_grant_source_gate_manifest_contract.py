@@ -78,25 +78,33 @@ def test_manifest_preserves_per_task_closure_dependencies_and_serialization() ->
             "archive it unverified and never change legal state",
             "No endpoint/UI/schema",
             "FPMS-V8-DE-REGISTER-VERSION-20260712-01",
+            "tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01.md",
             "backend/app/modules/documents/grant_evidence_ingestion_service.py",
+            "artifacts/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01/**",
         ),
         "FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01": (
             "return 201 candidate, 409 unresolved gate/source conflict and no legal-state change",
             "No second endpoint, router rewiring, business-rule duplication or frontend work",
             "FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01",
+            "tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01.md",
             "backend/app/modules/documents/api.py",
+            "artifacts/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01/**",
         ),
         "FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01": (
             "no legal-state inference or write",
             "No endpoint/UI/schema",
             "FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01",
+            "tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01.md",
             "backend/tests/test_v8_grant_evidence_candidate_read_service.py",
+            "artifacts/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01/**",
         ),
         "FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01": (
             "One bodyless GET `/documents/{document_id}/grant-evidence-candidates`",
             "No second endpoint, router rewiring, business-rule duplication or frontend work",
             "FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01",
+            "tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01.md",
             "backend/app/modules/documents/grant_evidence_schemas.py",
+            "artifacts/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01/**",
         ),
     }
 
