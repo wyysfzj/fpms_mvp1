@@ -51,6 +51,7 @@ PRIOR_EXECUTABLE_CODES = {
 }
 APPLICATION_FEE_NOTICE_CODE = "OFFICIAL_NOTICE_034"
 EXPECTED_EXECUTABLE_CODES = PRIOR_EXECUTABLE_CODES | {APPLICATION_FEE_NOTICE_CODE}
+CURRENT_SEED_EXECUTABLE_CODES = EXPECTED_EXECUTABLE_CODES | {"OFFICIAL_NOTICE_031"}
 
 
 def _seed_application_fee_catalog(db: Session) -> int:
@@ -73,14 +74,18 @@ def _catalog_rows(db: Session) -> list[DocTemplate]:
     )
 
 
-def _assert_application_fee_target_state(rows: list[DocTemplate]) -> None:
+def _assert_application_fee_target_state(
+    rows: list[DocTemplate],
+    *,
+    expected_executable_codes: set[str] = EXPECTED_EXECUTABLE_CODES,
+) -> None:
     assert len(rows) == len(official_notice_catalog.OFFICIAL_NOTICE_CATALOG) == 60
     executable_codes = {
         row.code
         for row in rows
         if json.loads(row.input_fields or "{}")["catalog_status"] == "EXECUTABLE"
     }
-    assert executable_codes == EXPECTED_EXECUTABLE_CODES
+    assert executable_codes == expected_executable_codes
 
     target = next(row for row in rows if row.code == APPLICATION_FEE_NOTICE_CODE)
     metadata = json.loads(target.input_fields or "{}")
@@ -97,7 +102,7 @@ def _assert_application_fee_target_state(rows: list[DocTemplate]) -> None:
     assert metadata["archive_status_restore"] is None
 
     for row in rows:
-        if row.code in EXPECTED_EXECUTABLE_CODES:
+        if row.code in expected_executable_codes:
             continue
         metadata = json.loads(row.input_fields or "{}")
         assert metadata["catalog_status"] == "REFERENCE_ONLY"
@@ -137,12 +142,18 @@ def test_seed_dev_uses_application_fee_target_state_idempotently(
     with session_factory() as db:
         seed_dev.seed_doc_templates(db)
         first_rows = _catalog_rows(db)
-        _assert_application_fee_target_state(first_rows)
+        _assert_application_fee_target_state(
+            first_rows,
+            expected_executable_codes=CURRENT_SEED_EXECUTABLE_CODES,
+        )
         first_snapshot = [(row.id, row.code, row.input_fields) for row in first_rows]
 
         seed_dev.seed_doc_templates(db)
         second_rows = _catalog_rows(db)
-        _assert_application_fee_target_state(second_rows)
+        _assert_application_fee_target_state(
+            second_rows,
+            expected_executable_codes=CURRENT_SEED_EXECUTABLE_CODES,
+        )
         assert [(row.id, row.code, row.input_fields) for row in second_rows] == first_snapshot
 
 

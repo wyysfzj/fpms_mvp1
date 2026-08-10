@@ -36,6 +36,7 @@ from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventE
 
 REVISION = "v8_d4_evidence_kind_capacity_01"
 DOWN_REVISION = "v8_d4_legacy_fee_provenance_01"
+CURRENT_HEAD = "v8_d31_overlay_conflict_01"
 TABLE = "t_case_activity_event_evidence"
 CASE_ID = "case-evidence-kind-capacity"
 EVIDENCE_KIND = "MANUAL_EXTERNAL_SUBMISSION_RECORD"
@@ -187,7 +188,10 @@ def test_clean_sqlite_head_widens_only_evidence_kind_and_preserves_constraints(
     engine = None
     try:
         script = ScriptDirectory.from_config(config)
-        assert tuple(script.get_heads()) == (REVISION,)
+        assert tuple(script.get_heads()) == (CURRENT_HEAD,)
+        assert REVISION in {
+            item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+        }
         migration = script.get_revision(REVISION)
         assert migration is not None
         assert migration.down_revision == DOWN_REVISION

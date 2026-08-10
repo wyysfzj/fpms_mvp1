@@ -149,22 +149,27 @@ def test_module_exposes_only_the_frozen_public_seam_and_decision_contract() -> N
         "missing frozen behavior: lifecycle_service.py must expose "
         "apply_lifecycle_event() and LifecycleRuleDecision"
     )
-    service = _service()
-    parameters = tuple(signature(service.apply_lifecycle_event).parameters.values())
+    existing_rules = sys.modules.pop(RULES_MODULE, None)
+    try:
+        service = _service()
+        parameters = tuple(signature(service.apply_lifecycle_event).parameters.values())
 
-    assert tuple(parameter.name for parameter in parameters) == ("command", "transaction")
-    assert tuple(parameter.kind for parameter in parameters) == (
-        Parameter.POSITIONAL_OR_KEYWORD,
-        Parameter.POSITIONAL_OR_KEYWORD,
-    )
-    decision = service.LifecycleRuleDecision(current_projection=OPEN_PROJECTION)
-    assert decision.current_projection == OPEN_PROJECTION
-    assert decision.oa_sequence is None
-    with pytest.raises(TypeError):
-        service.LifecycleRuleDecision(OPEN_PROJECTION)
-    with pytest.raises((AttributeError, TypeError)):
-        decision.oa_sequence = 1
-    assert RULES_MODULE not in sys.modules
+        assert tuple(parameter.name for parameter in parameters) == ("command", "transaction")
+        assert tuple(parameter.kind for parameter in parameters) == (
+            Parameter.POSITIONAL_OR_KEYWORD,
+            Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        decision = service.LifecycleRuleDecision(current_projection=OPEN_PROJECTION)
+        assert decision.current_projection == OPEN_PROJECTION
+        assert decision.oa_sequence is None
+        with pytest.raises(TypeError):
+            service.LifecycleRuleDecision(OPEN_PROJECTION)
+        with pytest.raises((AttributeError, TypeError)):
+            decision.oa_sequence = 1
+        assert RULES_MODULE not in sys.modules
+    finally:
+        if existing_rules is not None:
+            sys.modules[RULES_MODULE] = existing_rules
 
 
 def test_new_event_uses_stored_projection_projects_legacy_and_leaves_commit_to_caller(

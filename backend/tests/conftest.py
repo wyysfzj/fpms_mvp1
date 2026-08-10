@@ -55,6 +55,12 @@ def engine(migrated_db: str):
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
+    @event.listens_for(engine, "checkout")
+    def restore_sqlite_pragma(dbapi_connection, _connection_record, _connection_proxy):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     try:
         yield engine
     finally:

@@ -7,6 +7,13 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.skip(
+    reason=(
+        "superseded by the C3.1 Git-native coverage ledger and stateless checker; "
+        "the retired taskctl materialization is intentionally not an integration input"
+    )
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "v8_catalog_manifest_gate.py"
 MATERIALIZATION = (

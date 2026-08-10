@@ -28,6 +28,7 @@ from app.modules.annuity import models as annuity_models
 
 REVISION = "v8_d27_annuity_reduction_01"
 DOWN_REVISION = "v8_d4_evidence_kind_capacity_01"
+CURRENT_HEAD = "v8_d31_overlay_conflict_01"
 TABLE_NAME = "t_future_annuity_reduction_lineage"
 COLUMNS = (
     "annuity_task_id",
@@ -199,7 +200,10 @@ def test_clean_sqlite_head_has_exact_schema_and_single_revision(
     engine = None
     try:
         script = ScriptDirectory.from_config(config)
-        assert tuple(script.get_heads()) == (REVISION,)
+        assert tuple(script.get_heads()) == (CURRENT_HEAD,)
+        assert REVISION in {
+            item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+        }
         revision = script.get_revision(REVISION)
         assert revision is not None
         assert revision.down_revision == DOWN_REVISION

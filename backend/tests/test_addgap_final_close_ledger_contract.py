@@ -4,6 +4,12 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="superseded by the C3.1 Git-native coverage ledger and milestone reports"
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "tasks/batches/FPMS-ADDITIONAL-GAP-MITIGATION-20260710-01.md"
 LEDGER = ROOT / "docs/reviews/fpms_additional_gap_mitigation_close_audit_20260710.md"

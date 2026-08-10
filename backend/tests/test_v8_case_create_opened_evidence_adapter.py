@@ -35,6 +35,7 @@ def _case_payload(*, case_no: str, client_id: str | None) -> dict[str, object]:
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
+        "fee_reduction": "0",
         "client_id": client_id,
         "title_cn": "案件新建证据适配测试",
     }

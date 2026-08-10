@@ -4,6 +4,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="superseded by the C3.1 Git-native release gate; old taskctl manifests are retired"
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

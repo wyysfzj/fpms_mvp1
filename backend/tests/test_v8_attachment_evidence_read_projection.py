@@ -7,8 +7,8 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from app.main import app
 from app.modules.cases.models import Case
+from app.modules.documents.api import router as documents_router
 from app.modules.documents.evidence_contracts import (
     EvidenceReviewState,
     EvidenceRole,
@@ -113,9 +113,9 @@ def _assert_current_evidence_invalid(response) -> None:
 def test_document_detail_get_is_bodyless() -> None:
     routes = [
         route
-        for route in app.routes
+        for route in documents_router.routes
         if isinstance(route, APIRoute)
-        and route.path == "/api/v1/documents/{document_id}"
+        and route.path == "/documents/{document_id}"
         and route.methods == {"GET"}
     ]
 

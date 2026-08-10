@@ -52,6 +52,9 @@ COLUMN_SPECS = {
     "idempotency_key": (String, 128, False, None),
     "supersedes_event_id": (String, 36, True, None),
     "payload_json": (Text, None, False, None),
+    "conflict_lineage_version": (String, 32, True, None),
+    "conflict_code_count": (Integer, None, True, None),
+    "conflict_codes_sha256": (String, 64, True, None),
     "created_at": (DateTime, None, False, "CURRENT_TIMESTAMP"),
     "updated_at": (DateTime, None, False, "CURRENT_TIMESTAMP"),
 }
@@ -184,9 +187,11 @@ def test_case_activity_event_model_matches_frozen_physical_contract(tmp_path) ->
             None,
         ),
     }
-    assert not any(
-        isinstance(constraint, CheckConstraint) for constraint in model.__table__.constraints
-    )
+    assert {
+        constraint.name
+        for constraint in model.__table__.constraints
+        if isinstance(constraint, CheckConstraint)
+    } == {"ck_t_case_activity_event_conflict_lineage_shape"}
     assert not model.__table__.indexes
 
     engine = _sqlite_engine(tmp_path / "v8_w1_l2_model.db")
@@ -247,7 +252,9 @@ def test_clean_sqlite_upgrade_creates_exact_event_schema(tmp_path, monkeypatch) 
             ),
         }
         assert inspector.get_indexes(TABLE) == []
-        assert inspector.get_check_constraints(TABLE) == []
+        assert {item["name"] for item in inspector.get_check_constraints(TABLE)} == {
+            "ck_t_case_activity_event_conflict_lineage_shape"
+        }
     finally:
         if engine is not None:
             engine.dispose()
