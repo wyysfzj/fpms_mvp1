@@ -7,6 +7,7 @@ from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.masterdata.clients.models import Client, ClientAddress, ClientContact
 from app.modules.masterdata.countries.models import Country
+from app.modules.system.models import GrantEvidenceSourceConfig, GrantEvidenceSourceRecord
 from app.modules.tasks.models import Task, TaskLog, TaskTemplate
 from app.modules.templates.models import Template
 
@@ -30,6 +31,8 @@ __all__ = [
     "FeeItem",
     "FeeRate",
     "GovPayment",
+    "GrantEvidenceSourceConfig",
+    "GrantEvidenceSourceRecord",
     "Country",
     "LetterHead",
     "Offset",

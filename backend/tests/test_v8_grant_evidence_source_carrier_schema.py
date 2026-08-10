@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import UUID
@@ -658,6 +660,31 @@ def test_orm_metadata_matches_the_exact_three_carrier_contract() -> None:
         assert _model_fks(table) == fks
         assert _model_checks(table) == checks
         assert _model_indexes(table) == indexes
+
+
+def test_standard_model_bootstrap_registers_and_exports_source_carriers() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    command_text = """
+from app.db.base import Base
+from app.models import *
+
+names = {table.name for table in Base.metadata.sorted_tables}
+assert {
+    "t_grant_evidence_source_record",
+    "t_grant_evidence_source_config",
+    "t_grant_evidence_candidate",
+} <= names
+assert GrantEvidenceSourceRecord.__tablename__ == "t_grant_evidence_source_record"
+assert GrantEvidenceSourceConfig.__tablename__ == "t_grant_evidence_source_config"
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", command_text],
+        cwd=backend_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_clean_upgrade_and_sqlite_constraints_preserve_fail_closed_lineage(
