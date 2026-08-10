@@ -1467,6 +1467,11 @@ def _detail_pay_list_status(
             header["draft_status"] != FeeObligationDraftStatus.CREATED.value
             or header["payment_status"] != FeePaymentStatus.UNPAID.value
             or header["official_evidence_status"] == FeeOfficialEvidenceStatus.VERIFIED.value
+            or header["client_instruction_status"]
+            not in {
+                FeeClientInstructionStatus.PENDING.value,
+                FeeClientInstructionStatus.PAY.value,
+            }
         ):
             _stored_state_invalid()
         return FeePayListStatus.NOT_CREATED
