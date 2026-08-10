@@ -29,7 +29,7 @@ from app.modules.cases.lifecycle_contracts import (
     OfficialProcedureStage,
 )
 from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
-from app.modules.documents.models import Document
+from app.modules.documents.models import Document, DocumentEvidenceVersion
 from app.modules.fees.fee_reduction import (
     FeeReductionApprovalContext,
     FeeReductionEvaluationContext,
@@ -53,6 +53,7 @@ from app.modules.fees.obligation_contracts import (
     FeeClientInstructionStatus,
     FeeDifferenceReviewState,
     FeeDomain,
+    FeeDraftAuthority,
     FeeDraftItemLinkResult,
     FeeEstimate,
     FeeEstimateCandidate,
@@ -133,6 +134,7 @@ _GRANT_REVIEW_LINE_KEYS = {
 _INSTRUCTION_PAYLOAD_SCHEMA = "FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1"
 _DRAFT_ACTIVITY_TYPE = "FEE_DRAFT_CREATED"
 _DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_V1"
+_REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_APPLICATION_NOTICE_V1"
 _MAX_AMOUNT = Decimal("9999999999999999.99")
 _TWO_PLACES = Decimal("0.01")
 
@@ -947,9 +949,7 @@ def _detail_line_payload(line: Mapping[str, object]) -> dict[str, object]:
         "reduction_ratio": format(cast(Decimal, line["reduction_ratio"]), ".4f"),
         "source_amount": _amount_text(cast(Decimal | None, line["source_amount"])),
         "source_date": (
-            None
-            if line["source_date"] is None
-            else cast(date, line["source_date"]).isoformat()
+            None if line["source_date"] is None else cast(date, line["source_date"]).isoformat()
         ),
     }
 
@@ -970,9 +970,7 @@ def _detail_grant_review_snapshot(
         "payable_amount": _amount_text(cast(Decimal, line["payable_amount"])),
         "source_amount": _amount_text(cast(Decimal | None, line["source_amount"])),
         "source_date": (
-            None
-            if line["source_date"] is None
-            else cast(date, line["source_date"]).isoformat()
+            None if line["source_date"] is None else cast(date, line["source_date"]).isoformat()
         ),
         "difference_review_state": difference_review_state,
         "current_identity_key": line["current_identity_key"],
@@ -1058,8 +1056,7 @@ def _detail_recognition_lines(
         or review["source_activity_id"] != header["source_activity_id"]
         or review["confirmation_status"] != ConfirmationStatus.CONFIRMED.value
         or review["old_business_stage"] != review["new_business_stage"]
-        or review["old_official_procedure_stage"]
-        != review["new_official_procedure_stage"]
+        or review["old_official_procedure_stage"] != review["new_official_procedure_stage"]
         or review["old_legal_status"] != review["new_legal_status"]
         or review["actor_id"] != review["reviewer_id"]
         or type(review["actor_id"]) is not str
@@ -1086,8 +1083,12 @@ def _detail_recognition_lines(
         or type(after_lines) is not list
         or len(before_lines) != len(lines)
         or len(after_lines) != len(lines)
-        or any(type(item) is not dict or set(item) != _GRANT_REVIEW_LINE_KEYS for item in before_lines)
-        or any(type(item) is not dict or set(item) != _GRANT_REVIEW_LINE_KEYS for item in after_lines)
+        or any(
+            type(item) is not dict or set(item) != _GRANT_REVIEW_LINE_KEYS for item in before_lines
+        )
+        or any(
+            type(item) is not dict or set(item) != _GRANT_REVIEW_LINE_KEYS for item in after_lines
+        )
     ):
         _stored_state_invalid()
 
@@ -1171,13 +1172,9 @@ def _detail_recognition_lines(
         ).mappings()
     )
     evidence_by_kind = {row["evidence_kind"]: row for row in evidence_rows}
-    evidence_identity = {
-        tuple(row[field] for field in row.keys())
-        for row in evidence_rows
-    }
+    evidence_identity = {tuple(row[field] for field in row.keys()) for row in evidence_rows}
     source_evidence_identity = {
-        tuple(row[field] for field in row.keys())
-        for row in source_evidence_rows
+        tuple(row[field] for field in row.keys()) for row in source_evidence_rows
     }
     if (
         len(evidence_rows) != 2
@@ -1188,8 +1185,7 @@ def _detail_recognition_lines(
         or evidence_by_kind["SOURCE_DOCUMENT"]["object_type"] != "Document"
         or evidence_by_kind["SOURCE_DOCUMENT"]["object_id"] != header["source_document_id"]
         or evidence_by_kind["DOCUMENT_EVIDENCE_VERSION"]["case_id"] != header["case_id"]
-        or evidence_by_kind["DOCUMENT_EVIDENCE_VERSION"]["object_type"]
-        != "DocumentEvidenceVersion"
+        or evidence_by_kind["DOCUMENT_EVIDENCE_VERSION"]["object_type"] != "DocumentEvidenceVersion"
         or evidence_by_kind["DOCUMENT_EVIDENCE_VERSION"]["object_id"]
         != review_payload["reviewed_evidence_version_id"]
         or any(
@@ -1500,7 +1496,15 @@ def record_client_instruction(
             header,
             recognition,
         )
-        _instruction_eligible(header)
+        reviewed_notice_draft = (
+            command.instruction is FeeClientInstruction.PAY
+            and header.draft_status == FeeObligationDraftStatus.CREATED.value
+            and _has_reviewed_notice_draft_candidate(transaction, header)
+        )
+        if reviewed_notice_draft:
+            _reviewed_notice_draft_for_instruction(transaction, header)
+        else:
+            _instruction_eligible(header)
         if previous.value == command.instruction.value:
             _instruction_same_state()
 
@@ -1544,7 +1548,12 @@ def record_client_instruction(
                     FeeObligationModel.id == header.id,
                     FeeObligationModel.client_instruction_status == previous.value,
                     FeeObligationModel.obligation_status == FeeObligationStatus.RECOGNIZED.value,
-                    FeeObligationModel.draft_status == FeeObligationDraftStatus.NOT_CREATED.value,
+                    FeeObligationModel.draft_status
+                    == (
+                        FeeObligationDraftStatus.CREATED.value
+                        if reviewed_notice_draft
+                        else FeeObligationDraftStatus.NOT_CREATED.value
+                    ),
                     FeeObligationModel.payment_status == FeePaymentStatus.UNPAID.value,
                     FeeObligationModel.official_evidence_status
                     != FeeOfficialEvidenceStatus.VERIFIED.value,
@@ -1590,6 +1599,7 @@ def prepare_draft(
             status_code=409,
         )
     _validate_prepare_draft_command(command)
+    reviewed_notice = command.authority is FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE
 
     with transaction.no_autoflush:
         header = transaction.get(FeeObligationModel, command.obligation_id)
@@ -1609,14 +1619,37 @@ def prepare_draft(
             header,
             recognition,
         )
-        lines = _draft_lines_or_fail(transaction, header)
-        _draft_eligible(
+        lines = _draft_lines_or_fail(
             transaction,
             header,
-            instruction=instruction,
-            instruction_activity=instruction_activity,
-            lines=lines,
+            allowed_review_states=(
+                frozenset(
+                    {
+                        FeeDifferenceReviewState.MATCHED.value,
+                        FeeDifferenceReviewState.REVIEW_REQUIRED.value,
+                    }
+                )
+                if reviewed_notice
+                else frozenset({FeeDifferenceReviewState.MATCHED.value})
+            ),
         )
+        if reviewed_notice:
+            _reviewed_notice_draft_eligible(
+                transaction,
+                header,
+                recognition=recognition,
+                instruction=instruction,
+                instruction_activity=instruction_activity,
+                lines=lines,
+            )
+        else:
+            _draft_eligible(
+                transaction,
+                header,
+                instruction=instruction,
+                instruction_activity=instruction_activity,
+                lines=lines,
+            )
 
     occurred_at = datetime.now(UTC).replace(tzinfo=None)
     draft_id = str(uuid4())
@@ -1672,8 +1705,12 @@ def prepare_draft(
             for line, item, _link in created
         ],
         "obligation_id": command.obligation_id,
-        "schema": _DRAFT_PAYLOAD_SCHEMA,
+        "schema": (
+            _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA if reviewed_notice else _DRAFT_PAYLOAD_SCHEMA
+        ),
     }
+    if reviewed_notice:
+        payload["authority"] = FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE.value
     projection = _case_projection(case)
     activity_command = LifecycleEventCommand(
         case_id=header.case_id,
@@ -1685,7 +1722,9 @@ def prepare_draft(
         actor_id=command.actor_id,
         reviewer_id=None,
         idempotency_key=command.idempotency_key,
-        source_activity_id=cast(CaseActivityEvent, instruction_activity).id,
+        source_activity_id=(
+            recognition.id if reviewed_notice else cast(CaseActivityEvent, instruction_activity).id
+        ),
         supersedes_event_id=None,
         payload=payload,
         confirmation_status=ConfirmationStatus.CONFIRMED,
@@ -1713,7 +1752,11 @@ def prepare_draft(
                     FeeObligationModel.obligation_status == FeeObligationStatus.RECOGNIZED.value,
                     FeeObligationModel.source_status == FeeSourceStatus.VERIFIED.value,
                     FeeObligationModel.client_instruction_status
-                    == FeeClientInstructionStatus.PAY.value,
+                    == (
+                        FeeClientInstructionStatus.PENDING.value
+                        if reviewed_notice
+                        else FeeClientInstructionStatus.PAY.value
+                    ),
                     FeeObligationModel.draft_status == FeeObligationDraftStatus.NOT_CREATED.value,
                     FeeObligationModel.payment_status == FeePaymentStatus.UNPAID.value,
                     FeeObligationModel.official_evidence_status
@@ -1872,6 +1915,8 @@ def _validate_prepare_draft_command(command: PrepareFeeObligationDraftCommand) -
         "idempotency_key",
         _draft_command_invalid,
     )
+    if type(command.authority) is not FeeDraftAuthority:
+        _draft_command_invalid("authority")
 
 
 def _draft_lines_or_fail(
@@ -1879,6 +1924,7 @@ def _draft_lines_or_fail(
     header: FeeObligationModel,
     *,
     require_current: bool = True,
+    allowed_review_states: frozenset[str] = frozenset({FeeDifferenceReviewState.MATCHED.value}),
 ) -> tuple[FeeObligationLineModel, ...]:
     lines = tuple(
         transaction.scalars(
@@ -1908,7 +1954,7 @@ def _draft_lines_or_fail(
             or type(line.fee_year_key) is not int
             or line.fee_year_key < 0
             or not _valid_amount(line.payable_amount, optional=False)
-            or line.difference_review_state != FeeDifferenceReviewState.MATCHED.value
+            or line.difference_review_state not in allowed_review_states
             or identity in identities
             or (
                 require_current
@@ -1990,19 +2036,314 @@ def _draft_eligible(
         _draft_stored_state_invalid()
 
 
+def _reviewed_notice_draft_eligible(
+    transaction: Session,
+    header: FeeObligationModel,
+    *,
+    recognition: CaseActivityEvent,
+    instruction: FeeClientInstructionStatus,
+    instruction_activity: CaseActivityEvent | None,
+    lines: tuple[FeeObligationLineModel, ...],
+) -> None:
+    _reviewed_notice_source_graph_or_fail(
+        transaction,
+        header,
+        recognition=recognition,
+        lines=lines,
+        allow_later_state=False,
+    )
+    if instruction is not FeeClientInstructionStatus.PENDING or instruction_activity is not None:
+        _draft_not_actionable(header)
+    child_count = transaction.scalar(
+        select(func.count())
+        .select_from(FeeObligationModel)
+        .where(FeeObligationModel.supersedes_obligation_id == header.id)
+    )
+    relation_count = transaction.scalar(
+        select(func.count())
+        .select_from(FeeObligationDraftItemLink)
+        .where(FeeObligationDraftItemLink.obligation_line_id.in_(tuple(line.id for line in lines)))
+    )
+    if child_count or relation_count or _reviewed_notice_draft_activities(transaction, header):
+        _draft_stored_state_invalid()
+
+
+def _reviewed_notice_source_graph_or_fail(
+    transaction: Session,
+    header: FeeObligationModel,
+    *,
+    recognition: CaseActivityEvent,
+    lines: tuple[FeeObligationLineModel, ...],
+    allow_later_state: bool,
+) -> None:
+    try:
+        obligation_status = FeeObligationStatus(header.obligation_status)
+        instruction_status = FeeClientInstructionStatus(header.client_instruction_status)
+        draft_status = FeeObligationDraftStatus(header.draft_status)
+        payment_status = FeePaymentStatus(header.payment_status)
+        official_status = FeeOfficialEvidenceStatus(header.official_evidence_status)
+    except ValueError:
+        _draft_stored_state_invalid()
+    if (
+        header.fee_domain != FeeDomain.GOV.value
+        or header.obligation_type != "APPLICATION_FEE"
+        or header.source_status != FeeSourceStatus.VERIFIED.value
+        or obligation_status is not FeeObligationStatus.RECOGNIZED
+        or type(header.source_document_id) is not str
+        or not header.source_document_id
+        or type(header.currency) is not str
+        or re.fullmatch(r"[A-Z]{3}", header.currency, flags=re.ASCII) is None
+        or any(
+            line.difference_review_state
+            not in {
+                FeeDifferenceReviewState.MATCHED.value,
+                FeeDifferenceReviewState.REVIEW_REQUIRED.value,
+            }
+            for line in lines
+        )
+    ):
+        _draft_stored_state_invalid()
+    if not allow_later_state and (
+        instruction_status is not FeeClientInstructionStatus.PENDING
+        or draft_status is not FeeObligationDraftStatus.NOT_CREATED
+        or payment_status is not FeePaymentStatus.UNPAID
+        or official_status is not FeeOfficialEvidenceStatus.PENDING
+    ):
+        _draft_not_actionable(header)
+    if allow_later_state and draft_status is not FeeObligationDraftStatus.CREATED:
+        _draft_stored_state_invalid()
+
+    try:
+        recognition_payload = _strict_json_loads(recognition.payload_json)
+    except (TypeError, ValueError):
+        _draft_stored_state_invalid()
+    obligation_payload = (
+        recognition_payload.get("obligation") if type(recognition_payload) is dict else None
+    )
+    expected_payload_lines = [
+        {
+            "difference_review_state": line.difference_review_state,
+            "fee_code": line.fee_code,
+            "fee_name": line.fee_name,
+            "fee_year_key": line.fee_year_key,
+            "official_full_amount": _amount_text(line.official_full_amount),
+            "payable_amount": _amount_text(line.payable_amount),
+            "reduction_ratio": format(line.reduction_ratio, ".4f"),
+            "source_amount": _amount_text(line.source_amount),
+            "source_date": None if line.source_date is None else line.source_date.isoformat(),
+        }
+        for line in lines
+    ]
+    if (
+        type(recognition_payload) is not dict
+        or set(recognition_payload) != {"obligation", "obligation_id", "schema"}
+        or recognition_payload.get("schema") != _PAYLOAD_SCHEMA
+        or recognition_payload.get("obligation_id") != header.id
+        or type(obligation_payload) is not dict
+        or set(obligation_payload)
+        != {
+            "actor_id",
+            "case_id",
+            "currency",
+            "due_date",
+            "fee_domain",
+            "lines",
+            "obligation_type",
+            "source_activity_id",
+            "source_document_id",
+            "source_status",
+            "supersede_reason",
+            "supersedes_obligation_id",
+        }
+        or obligation_payload.get("case_id") != header.case_id
+        or obligation_payload.get("currency") != header.currency
+        or obligation_payload.get("due_date")
+        != (None if header.due_date is None else header.due_date.isoformat())
+        or obligation_payload.get("source_activity_id") != header.source_activity_id
+        or obligation_payload.get("source_document_id") != header.source_document_id
+        or obligation_payload.get("fee_domain") != FeeDomain.GOV.value
+        or obligation_payload.get("obligation_type") != "APPLICATION_FEE"
+        or obligation_payload.get("source_status") != FeeSourceStatus.VERIFIED.value
+        or obligation_payload.get("supersede_reason") is not None
+        or obligation_payload.get("supersedes_obligation_id") is not None
+        or obligation_payload.get("lines") != expected_payload_lines
+        or recognition.case_id != header.case_id
+        or recognition.lane != ActivityLane.FEE.value
+        or recognition.activity_type != _ACTIVITY_TYPE
+        or recognition.source_activity_id != header.source_activity_id
+        or recognition.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or recognition.supersedes_event_id is not None
+    ):
+        _draft_stored_state_invalid()
+
+    review = transaction.get(CaseActivityEvent, header.source_activity_id)
+    document = transaction.get(Document, header.source_document_id)
+    if review is None or document is None:
+        _draft_stored_state_invalid()
+    try:
+        review_payload = _strict_json_loads(review.payload_json)
+    except (TypeError, ValueError):
+        _draft_stored_state_invalid()
+    if (
+        type(review_payload) is not dict
+        or set(review_payload)
+        != {
+            "creator_id",
+            "decision",
+            "evidence_version_id",
+            "previous_review_state",
+            "review_state",
+            "reviewer_id",
+        }
+        or review_payload.get("decision") != "APPROVE"
+        or review_payload.get("previous_review_state") != "PENDING"
+        or review_payload.get("review_state") != "APPROVED"
+        or review_payload.get("reviewer_id") != review.reviewer_id
+        or review.case_id != header.case_id
+        or review.lane != ActivityLane.DOCUMENT.value
+        or review.activity_type != "DOCUMENT_EVIDENCE_REVIEW_DECIDED"
+        or review.source_activity_id is not None
+        or review.supersedes_event_id is not None
+        or review.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or review.actor_id != review.reviewer_id
+        or review.occurred_at != review.effective_at
+        or document.case_id != header.case_id
+        or document.direction != "IN"
+    ):
+        _draft_stored_state_invalid()
+
+    evidence_id = review_payload.get("evidence_version_id")
+    evidence = (
+        transaction.get(DocumentEvidenceVersion, evidence_id) if type(evidence_id) is str else None
+    )
+    if (
+        evidence is None
+        or evidence.case_id != header.case_id
+        or evidence.document_id != header.source_document_id
+        or evidence.role != "OFFICIAL_FINAL_PDF"
+        or evidence.state != "FINAL"
+        or evidence.review_state != "APPROVED"
+        or evidence.reviewer_id != review.reviewer_id
+        or evidence.creator_id != review_payload.get("creator_id")
+        or evidence.creator_id == evidence.reviewer_id
+        or evidence.reviewed_at != review.effective_at
+        or evidence.current_identity_key != f"{header.case_id}|{evidence.lineage_key}"
+        or type(evidence.content_hash) is not str
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", evidence.content_hash) is None
+    ):
+        _draft_stored_state_invalid()
+
+    review_refs = _activity_evidence_signatures(transaction, review.id)
+    recognition_refs = _activity_evidence_signatures(transaction, recognition.id)
+    expected_ref = (
+        header.case_id,
+        "DOCUMENT_EVIDENCE_VERSION",
+        "DocumentEvidenceVersion",
+        evidence.id,
+        evidence.content_hash,
+        review.effective_at,
+    )
+    if review_refs != (expected_ref,) or recognition_refs != (expected_ref,):
+        _draft_stored_state_invalid()
+
+
+def _activity_evidence_signatures(
+    transaction: Session,
+    activity_id: str,
+) -> tuple[tuple[object, ...], ...]:
+    rows = tuple(
+        transaction.scalars(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == activity_id
+            )
+        )
+    )
+    return tuple(
+        (
+            row.case_id,
+            row.evidence_kind,
+            row.object_type,
+            row.object_id,
+            row.content_hash,
+            row.captured_at,
+        )
+        for row in rows
+    )
+
+
+def _reviewed_notice_draft_activities(
+    transaction: Session,
+    header: FeeObligationModel,
+) -> tuple[CaseActivityEvent, ...]:
+    matches: list[CaseActivityEvent] = []
+    for activity in transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == header.case_id,
+            CaseActivityEvent.lane == ActivityLane.FEE.value,
+            CaseActivityEvent.activity_type == _DRAFT_ACTIVITY_TYPE,
+        )
+    ):
+        try:
+            payload = _strict_json_loads(activity.payload_json)
+        except (TypeError, ValueError):
+            _draft_stored_state_invalid()
+        if type(payload) is not dict:
+            _draft_stored_state_invalid()
+        if payload.get("obligation_id") == header.id:
+            matches.append(activity)
+    return tuple(matches)
+
+
+def _has_reviewed_notice_draft_candidate(
+    transaction: Session,
+    header: FeeObligationModel,
+) -> bool:
+    for activity in _reviewed_notice_draft_activities(transaction, header):
+        try:
+            payload = _strict_json_loads(activity.payload_json)
+        except (TypeError, ValueError):
+            continue
+        if type(payload) is dict and payload.get("schema") == _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA:
+            return True
+    return False
+
+
 def _draft_replay_existing(
     command: PrepareFeeObligationDraftCommand,
     transaction: Session,
     header: FeeObligationModel,
     activity: CaseActivityEvent,
 ) -> PrepareFeeObligationDraftResult:
+    reviewed_notice = command.authority is FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE
     recognition = _instruction_recognition(transaction, header)
     instruction, instruction_activity = _instruction_stored_chain(
         transaction,
         header,
         recognition,
     )
-    lines = _draft_lines_or_fail(transaction, header, require_current=False)
+    lines = _draft_lines_or_fail(
+        transaction,
+        header,
+        require_current=False,
+        allowed_review_states=(
+            frozenset(
+                {
+                    FeeDifferenceReviewState.MATCHED.value,
+                    FeeDifferenceReviewState.REVIEW_REQUIRED.value,
+                }
+            )
+            if reviewed_notice
+            else frozenset({FeeDifferenceReviewState.MATCHED.value})
+        ),
+    )
+    if reviewed_notice:
+        _reviewed_notice_source_graph_or_fail(
+            transaction,
+            header,
+            recognition=recognition,
+            lines=lines,
+            allow_later_state=True,
+        )
     try:
         payload = _strict_json_loads(activity.payload_json)
     except (TypeError, ValueError):
@@ -2010,15 +2351,32 @@ def _draft_replay_existing(
     if (
         type(payload) is not dict
         or set(payload)
-        != {
-            "actor_id",
-            "center_changes",
-            "draft_id",
-            "links",
-            "obligation_id",
-            "schema",
-        }
-        or payload.get("schema") != _DRAFT_PAYLOAD_SCHEMA
+        != (
+            {
+                "actor_id",
+                "authority",
+                "center_changes",
+                "draft_id",
+                "links",
+                "obligation_id",
+                "schema",
+            }
+            if reviewed_notice
+            else {
+                "actor_id",
+                "center_changes",
+                "draft_id",
+                "links",
+                "obligation_id",
+                "schema",
+            }
+        )
+        or payload.get("schema")
+        != (_REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA if reviewed_notice else _DRAFT_PAYLOAD_SCHEMA)
+        or (
+            reviewed_notice
+            and payload.get("authority") != FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE.value
+        )
         or payload.get("obligation_id") != command.obligation_id
         or payload.get("actor_id") != command.actor_id
         or payload.get("center_changes") != {}
@@ -2035,12 +2393,13 @@ def _draft_replay_existing(
     ):
         _draft_idempotency_conflict()
     if (
-        instruction is not FeeClientInstructionStatus.PAY
-        or instruction_activity is None
+        (not reviewed_notice and instruction is not FeeClientInstructionStatus.PAY)
+        or (not reviewed_notice and instruction_activity is None)
         or activity.case_id != header.case_id
         or activity.lane != ActivityLane.FEE.value
         or activity.activity_type != _DRAFT_ACTIVITY_TYPE
-        or activity.source_activity_id != instruction_activity.id
+        or activity.source_activity_id
+        != (recognition.id if reviewed_notice else cast(CaseActivityEvent, instruction_activity).id)
         or activity.occurred_at != activity.effective_at
         or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
         or activity.actor_id != command.actor_id
@@ -2088,6 +2447,30 @@ def _draft_replay_existing(
         activity_reused=True,
         idempotency_key=command.idempotency_key,
     )
+
+
+def _reviewed_notice_draft_for_instruction(
+    transaction: Session,
+    header: FeeObligationModel,
+) -> PrepareFeeObligationDraftResult:
+    activities = _reviewed_notice_draft_activities(transaction, header)
+    if len(activities) != 1:
+        _instruction_stored_state_invalid()
+    activity = activities[0]
+    try:
+        return _draft_replay_existing(
+            PrepareFeeObligationDraftCommand(
+                obligation_id=header.id,
+                actor_id=activity.actor_id,
+                idempotency_key=activity.idempotency_key,
+                authority=FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
+            ),
+            transaction,
+            header,
+            activity,
+        )
+    except BusinessError:
+        _instruction_stored_state_invalid()
 
 
 def _draft_relations_or_fail(
@@ -2804,7 +3187,14 @@ def _instruction_recover_cas(
     header = transaction.get(FeeObligationModel, command.obligation_id)
     if header is None:
         _instruction_concurrency_conflict()
-    _instruction_eligible(header)
+    if (
+        command.instruction is FeeClientInstruction.PAY
+        and header.draft_status == FeeObligationDraftStatus.CREATED.value
+        and _has_reviewed_notice_draft_candidate(transaction, header)
+    ):
+        _reviewed_notice_draft_for_instruction(transaction, header)
+    else:
+        _instruction_eligible(header)
     try:
         current = FeeClientInstructionStatus(header.client_instruction_status)
     except ValueError:

@@ -15,6 +15,7 @@ __all__ = (
     "FeePaymentStatus",
     "FeeOfficialEvidenceStatus",
     "FeeClientInstruction",
+    "FeeDraftAuthority",
     "FeeSourceStatus",
     "FeeDifferenceReviewState",
     "FeeEstimateContext",
@@ -86,6 +87,11 @@ class FeeClientInstruction(str, Enum):
     PAY = "PAY"
     HOLD = "HOLD"
     ABANDON = "ABANDON"
+
+
+class FeeDraftAuthority(str, Enum):
+    CLIENT_PAY_INSTRUCTION = "CLIENT_PAY_INSTRUCTION"
+    REVIEWED_APPLICATION_FEE_NOTICE = "REVIEWED_APPLICATION_FEE_NOTICE"
 
 
 class FeeSourceStatus(str, Enum):
@@ -267,6 +273,7 @@ class PrepareFeeObligationDraftCommand:
     obligation_id: str
     actor_id: str
     idempotency_key: str
+    authority: FeeDraftAuthority = FeeDraftAuthority.CLIENT_PAY_INSTRUCTION
 
 
 @dataclass(frozen=True, slots=True)

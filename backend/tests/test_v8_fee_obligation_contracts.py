@@ -55,6 +55,7 @@ EXPECTED_EXPORTS = (
     "FeePaymentStatus",
     "FeeOfficialEvidenceStatus",
     "FeeClientInstruction",
+    "FeeDraftAuthority",
     "FeeSourceStatus",
     "FeeDifferenceReviewState",
     "FeeEstimateContext",
@@ -224,11 +225,6 @@ EXPECTED_FIELDS = {
         ("idempotency_key", str),
         ("reused", bool),
     ),
-    PrepareFeeObligationDraftCommand: (
-        ("obligation_id", str),
-        ("actor_id", str),
-        ("idempotency_key", str),
-    ),
     PrepareFeeObligationDraftResult: (
         ("obligation_id", str),
         ("draft_id", str),
@@ -271,6 +267,42 @@ def test_value_command_and_result_shapes_are_exact_frozen_slots() -> None:
         assert all(field.default is MISSING for field in fields(contract_type))
         assert all(field.default_factory is MISSING for field in fields(contract_type))
         assert "__slots__" in contract_type.__dict__
+
+
+def test_prepare_draft_authority_is_exact_and_defaults_to_pay_instruction() -> None:
+    assert hasattr(contracts, "FeeDraftAuthority")
+    authority = contracts.FeeDraftAuthority
+    assert tuple(member.name for member in authority) == (
+        "CLIENT_PAY_INSTRUCTION",
+        "REVIEWED_APPLICATION_FEE_NOTICE",
+    )
+    assert tuple(member.value for member in authority) == (
+        "CLIENT_PAY_INSTRUCTION",
+        "REVIEWED_APPLICATION_FEE_NOTICE",
+    )
+    assert tuple(field.name for field in fields(PrepareFeeObligationDraftCommand)) == (
+        "obligation_id",
+        "actor_id",
+        "idempotency_key",
+        "authority",
+    )
+    assert get_type_hints(PrepareFeeObligationDraftCommand) == {
+        "obligation_id": str,
+        "actor_id": str,
+        "idempotency_key": str,
+        "authority": authority,
+    }
+    command_fields = fields(PrepareFeeObligationDraftCommand)
+    assert all(field.default is MISSING for field in command_fields[:3])
+    assert command_fields[3].default is authority.CLIENT_PAY_INSTRUCTION
+    assert (
+        PrepareFeeObligationDraftCommand(
+            obligation_id="obligation",
+            actor_id="actor",
+            idempotency_key="draft",
+        ).authority
+        is authority.CLIENT_PAY_INSTRUCTION
+    )
 
 
 def test_contract_values_preserve_independent_facts_and_source_activity_identity() -> None:

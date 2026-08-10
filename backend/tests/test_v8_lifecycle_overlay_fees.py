@@ -574,6 +574,94 @@ def test_declared_draft_links_must_equal_persisted_graph(
     assert raised.value.status_code == 409
 
 
+def test_reviewed_notice_draft_schema_projects_with_recognition_predecessor(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        _seed(transaction)
+        _seed_full_fee_chain(transaction)
+        activity = transaction.get(CaseActivityEvent, "activity-overlay-fees-draft")
+        assert activity is not None
+        activity.source_activity_id = RECOGNITION_ACTIVITY_ID
+        activity.payload_json = _canonical(
+            {
+                "actor_id": ACTOR_ID,
+                "authority": "REVIEWED_APPLICATION_FEE_NOTICE",
+                "center_changes": {},
+                "draft_id": DRAFT_ID,
+                "links": [{"fee_item_id": ITEM_ID, "obligation_line_id": LINE_ID}],
+                "obligation_id": OBLIGATION_ID,
+                "schema": "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_APPLICATION_NOTICE_V1",
+            }
+        )
+        transaction.commit()
+
+        result = read_lifecycle_overlay(
+            case_id=CASE_ID,
+            after_sequence=0,
+            limit=25,
+            as_of_revision=None,
+            transaction=transaction,
+        )
+
+    draft_fact = next(
+        milestone
+        for milestone in result.milestones
+        if milestone.activity_type == "FEE_DRAFT_CREATED"
+    )
+    assert [
+        (fact.object_id, fact.status) for fact in draft_fact.fee_obligations[0].related_facts
+    ] == [(DRAFT_ID, "OPEN")]
+
+
+@pytest.mark.parametrize(
+    ("schema", "source_activity_id", "authority"),
+    (
+        ("FPMS_FEE_DRAFT_CREATED_V1", RECOGNITION_ACTIVITY_ID, None),
+        (
+            "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_APPLICATION_NOTICE_V1",
+            "activity-overlay-fees-instruction",
+            "REVIEWED_APPLICATION_FEE_NOTICE",
+        ),
+        (
+            "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_APPLICATION_NOTICE_V1",
+            RECOGNITION_ACTIVITY_ID,
+            "CLIENT_PAY_INSTRUCTION",
+        ),
+    ),
+)
+def test_draft_schema_and_predecessor_branches_cannot_be_crossed(
+    session_factory: sessionmaker,
+    schema: str,
+    source_activity_id: str,
+    authority: str | None,
+) -> None:
+    with session_factory() as transaction:
+        _seed(transaction)
+        _seed_full_fee_chain(transaction)
+        activity = transaction.get(CaseActivityEvent, "activity-overlay-fees-draft")
+        assert activity is not None
+        payload = json.loads(activity.payload_json)
+        payload["schema"] = schema
+        if authority is not None:
+            payload["authority"] = authority
+        activity.source_activity_id = source_activity_id
+        activity.payload_json = _canonical(payload)
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as raised:
+            read_lifecycle_overlay(
+                case_id=CASE_ID,
+                after_sequence=0,
+                limit=25,
+                as_of_revision=None,
+                transaction=transaction,
+            )
+
+    assert raised.value.code == "LIFECYCLE_OVERLAY_FEE_CONFLICT"
+    assert raised.value.status_code == 409
+
+
 def test_pay_list_projects_multiple_obligations_in_id_order(
     session_factory: sessionmaker,
 ) -> None:

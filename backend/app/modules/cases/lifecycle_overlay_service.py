@@ -253,9 +253,9 @@ def read_lifecycle_overlay(
         transaction=transaction,
     )
     gate_warnings = _decision_gate_warnings(decision_gates)
-    warnings = tuple(
-        warning for milestone in milestones for warning in milestone.warnings
-    ) + gate_warnings
+    warnings = (
+        tuple(warning for milestone in milestones for warning in milestone.warnings) + gate_warnings
+    )
     legacy_conflicts = tuple(
         OverlayLegacyConflict(
             code=code,
@@ -1224,7 +1224,7 @@ def _decision_gate_warnings(
     return tuple(result)
 
 
-_FEE_ACTIVITY_SCHEMAS: dict[str, tuple[str | None, str, frozenset[str]]] = {
+_FEE_ACTIVITY_SCHEMAS: dict[str, tuple[str | None, str, frozenset[str] | None]] = {
     "FEE_OBLIGATION_RECOGNIZED": (
         "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
         "obligation_id",
@@ -1244,9 +1244,9 @@ _FEE_ACTIVITY_SCHEMAS: dict[str, tuple[str | None, str, frozenset[str]]] = {
         ),
     ),
     "FEE_DRAFT_CREATED": (
-        "FPMS_FEE_DRAFT_CREATED_V1",
+        None,
         "obligation_id",
-        frozenset({"actor_id", "center_changes", "draft_id", "links", "obligation_id", "schema"}),
+        None,
     ),
     "PAY_LIST_CREATED": (
         "FPMS_PAY_LIST_CREATED_V1",
@@ -1404,6 +1404,28 @@ def _fee_payload(
     allowed_keys = expected_keys
     if activity.activity_type == "FEE_OBLIGATION_RECOGNIZED" and "obligation" in payload:
         allowed_keys = frozenset({"schema", "obligation_id", "obligation"})
+    if activity.activity_type == "FEE_DRAFT_CREATED":
+        if payload.get("schema") == "FPMS_FEE_DRAFT_CREATED_V1":
+            allowed_keys = frozenset(
+                {"actor_id", "center_changes", "draft_id", "links", "obligation_id", "schema"}
+            )
+        elif (
+            payload.get("schema") == "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_APPLICATION_NOTICE_V1"
+            and payload.get("authority") == "REVIEWED_APPLICATION_FEE_NOTICE"
+        ):
+            allowed_keys = frozenset(
+                {
+                    "actor_id",
+                    "authority",
+                    "center_changes",
+                    "draft_id",
+                    "links",
+                    "obligation_id",
+                    "schema",
+                }
+            )
+        else:
+            _fee_conflict(case_id, "PAYLOAD_SCHEMA_INVALID")
     if allowed_keys is not None and frozenset(payload) != allowed_keys:
         _fee_conflict(case_id, "PAYLOAD_SHAPE_INVALID")
     return payload
@@ -1772,18 +1794,30 @@ def _validate_fee_activity_lineage(
         if predecessor is None or predecessor.case_id != case_id:
             _fee_conflict(case_id, "FEE_ACTIVITY_PREDECESSOR_MISSING")
         if activity.activity_type == "FEE_DRAFT_CREATED":
-            instruction_payload = _fee_payload(
+            draft_payload = _fee_payload(
                 case_id,
-                predecessor,
-                expected_schema="FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1",
-                expected_keys=_FEE_ACTIVITY_SCHEMAS["FEE_CLIENT_INSTRUCTION_RECORDED"][2],
+                activity,
+                expected_schema=None,
+                expected_keys=None,
             )
             if (
-                predecessor.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
-                or instruction_payload.get("obligation_id") != obligation_id
+                draft_payload.get("schema")
+                == "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_APPLICATION_NOTICE_V1"
             ):
-                _fee_conflict(case_id, "INSTRUCTION_LINEAGE_MISMATCH")
-            recognition = transaction.get(CaseActivityEvent, predecessor.source_activity_id)
+                recognition = predecessor
+            else:
+                instruction_payload = _fee_payload(
+                    case_id,
+                    predecessor,
+                    expected_schema="FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1",
+                    expected_keys=_FEE_ACTIVITY_SCHEMAS["FEE_CLIENT_INSTRUCTION_RECORDED"][2],
+                )
+                if (
+                    predecessor.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
+                    or instruction_payload.get("obligation_id") != obligation_id
+                ):
+                    _fee_conflict(case_id, "INSTRUCTION_LINEAGE_MISMATCH")
+                recognition = transaction.get(CaseActivityEvent, predecessor.source_activity_id)
         else:
             recognition = predecessor
         if recognition is None or recognition.case_id != case_id:

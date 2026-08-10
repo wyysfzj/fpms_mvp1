@@ -62,15 +62,18 @@ from app.modules.fees.models import (
 from app.modules.fees.obligation_contracts import (
     FeeDifferenceReviewState,
     FeeDomain,
+    FeeDraftAuthority,
     FeeEstimate,
     FeeEstimateCandidate,
     FeeEstimateStatus,
     FeeObligationLineInput,
     FeeSourceStatus,
+    PrepareFeeObligationDraftCommand,
+    PrepareFeeObligationDraftResult,
     RecognizeFeeObligationCommand,
     RecognizeFeeObligationResult,
 )
-from app.modules.fees.obligation_service import recognize_obligation
+from app.modules.fees.obligation_service import prepare_draft, recognize_obligation
 from app.modules.fees.official_rate_book import (
     CalculateCompensationPeriodAnnuityFeeCommand,
     CalculateOpenLicenseAnnuityReductionCommand,
@@ -99,6 +102,11 @@ from app.modules.fees.pct_policy import (
     PctFeePolicyError,
     evaluate_pct_national_stage_fee_policy,
     validate_confirmed_pct_evidence_set,
+)
+from app.modules.system.decision_gate_service import (
+    DecisionGateCode,
+    ResolveDecisionGateCommand,
+    resolve_decision_gate,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,6 +140,16 @@ _PCT_EVIDENCE_TYPES = _PCT_APPLICATION_EVIDENCE | {"CNIPA_IPRP"}
 _APPLICATION_FEE_DUE_DATE_SOURCES = frozenset(
     {"MANUAL_OFFICIAL_NOTICE", "IMPORTED_OFFICIAL_NOTICE"}
 )
+_APPLICATION_FEE_DRAFT_DECISION_SOURCE = (
+    "docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt"
+)
+_APPLICATION_FEE_DRAFT_DECISION_VERSION = "customer-decision:2026-08-10:v8-full-batch-scheme-a:v1"
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationFeeAutoDraftPolicyResult:
+    recognition: RecognizeFeeObligationResult
+    draft: PrepareFeeObligationDraftResult
 
 
 def _to_decimal(value) -> Decimal | None:
@@ -1039,6 +1057,86 @@ def recognize_application_fee_notice_obligation(
         ),
         transaction,
     )
+
+
+def apply_application_fee_auto_draft_policy(
+    *,
+    transaction: Session,
+    source: ApplicationFeeNoticeSource,
+    review_activity_id: str,
+    reviewed_evidence_version_id: str,
+    reviewer_id: str,
+    official_preview: FeeEstimate,
+    as_of: datetime,
+    confirmed_pct_evidence: tuple[ConfirmedPctEvidence, ...] = (),
+) -> ApplicationFeeAutoDraftPolicyResult:
+    source = _validated_application_fee_source(source)
+    if (
+        not _exact_text(review_activity_id)
+        or not _exact_text(reviewed_evidence_version_id)
+        or not _exact_text(reviewer_id)
+    ):
+        _application_fee_notice_invalid()
+    _validated_preview_by_code(source, official_preview)
+    _validated_pct_evidence(source, confirmed_pct_evidence)
+    if not isinstance(transaction, Session):
+        _application_fee_notice_conflict("transaction")
+    if transaction.new or transaction.dirty or transaction.deleted:
+        raise_business_error(
+            "FEE_OBLIGATION_TRANSACTION_DIRTY",
+            "调用方事务包含未刷新的变更",
+            status_code=409,
+        )
+
+    gate = resolve_decision_gate(
+        ResolveDecisionGateCommand(
+            gate_code=DecisionGateCode.FEE_APPLICATION_DRAFT,
+            scope_key="GLOBAL",
+            as_of=as_of,
+        ),
+        transaction,
+    )
+    if (
+        gate.resolved_scope_key != "GLOBAL"
+        or gate.decision_value != "APPROVED_POLICY"
+        or gate.source_reference != _APPLICATION_FEE_DRAFT_DECISION_SOURCE
+        or gate.source_version != _APPLICATION_FEE_DRAFT_DECISION_VERSION
+    ):
+        _application_fee_notice_conflict("decision_gate")
+
+    _ensure_application_policy_sqlite_outer_transaction(transaction)
+    with transaction.begin_nested():
+        recognition = recognize_application_fee_notice_obligation(
+            transaction=transaction,
+            source=source,
+            review_activity_id=review_activity_id,
+            reviewed_evidence_version_id=reviewed_evidence_version_id,
+            reviewer_id=reviewer_id,
+            official_preview=official_preview,
+            confirmed_pct_evidence=confirmed_pct_evidence,
+        )
+        draft = prepare_draft(
+            PrepareFeeObligationDraftCommand(
+                obligation_id=recognition.obligation.id,
+                actor_id=reviewer_id,
+                idempotency_key=(
+                    "application-fee-auto-draft:"
+                    f"{reviewed_evidence_version_id}:{source.due_date_source}"
+                ),
+                authority=FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
+            ),
+            transaction,
+        )
+    return ApplicationFeeAutoDraftPolicyResult(recognition=recognition, draft=draft)
+
+
+def _ensure_application_policy_sqlite_outer_transaction(transaction: Session) -> None:
+    connection = transaction.connection()
+    if connection.dialect.name != "sqlite":
+        return
+    driver_connection = connection.connection.driver_connection
+    if not driver_connection.in_transaction:
+        connection.exec_driver_sql("BEGIN")
 
 
 def maybe_record_fee_reduction_approval_notice(

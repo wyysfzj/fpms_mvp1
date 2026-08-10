@@ -1372,6 +1372,12 @@ def create_pay_list_from_fee_items(
                 "Fee item, draft, and obligation must belong to the same case",
                 status_code=409,
             )
+        if obligation.client_instruction_status != "PAY":
+            raise_business_error(
+                "PAY_LIST_CLIENT_INSTRUCTION_REQUIRED",
+                "创建缴费清单前必须记录客户缴费指示",
+                status_code=409,
+            )
         linked_activity_rows.append((item, draft, obligation, obligation_line_ids))
 
     activity_rows_by_case: dict[
@@ -3041,12 +3047,7 @@ def _annuity_instruction_command_invalid(field: str) -> None:
 
 
 def _annuity_instruction_required_string(value: object, limit: int, field: str) -> None:
-    if (
-        type(value) is not str
-        or not value
-        or value != value.strip()
-        or len(value) > limit
-    ):
+    if type(value) is not str or not value or value != value.strip() or len(value) > limit:
         _annuity_instruction_command_invalid(field)
 
 
@@ -3086,12 +3087,7 @@ def _annuity_instruction_conflict(message: str) -> None:
 
 
 def _annuity_instruction_exact_string(value: object, limit: int = 36) -> bool:
-    return (
-        type(value) is str
-        and bool(value)
-        and value == value.strip()
-        and len(value) <= limit
-    )
+    return type(value) is str and bool(value) and value == value.strip() and len(value) <= limit
 
 
 def _validate_annuity_instruction_lineage(
