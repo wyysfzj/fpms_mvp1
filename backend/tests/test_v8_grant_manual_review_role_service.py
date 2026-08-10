@@ -494,6 +494,40 @@ def test_membership_drift_disables_resolution(session_factory) -> None:
                 service.ResolveGrantManualReviewRoleConfigCommand(as_of=AS_OF), transaction
             )
         )
+        _assert_error(
+            lambda: service.publish_grant_manual_review_role_config(command, transaction)
+        )
+
+
+def test_publish_replay_revalidates_its_predecessor_chain(session_factory) -> None:
+    with session_factory() as transaction:
+        confirmer_id, role_ids = _ready_fixture(transaction)
+        first = service.publish_grant_manual_review_role_config(
+            _publish_command(confirmer_id, role_ids), transaction
+        )
+        successor_command = _publish_command(
+            confirmer_id,
+            role_ids,
+            expected_current_config_id=first.config_id,
+        )
+        successor = service.publish_grant_manual_review_role_config(
+            successor_command, transaction
+        )
+        transaction.commit()
+        predecessor = transaction.get(GrantManualReviewRoleConfig, first.config_id)
+        predecessor.config_snapshot_hash = "0" * 64
+        transaction.commit()
+        _assert_error(
+            lambda: service.publish_grant_manual_review_role_config(
+                successor_command, transaction
+            )
+        )
+        transaction.delete(
+            transaction.get(GrantManualReviewRoleConfig, successor.config_id)
+        )
+        transaction.flush()
+        transaction.delete(predecessor)
+        transaction.commit()
 
 
 def test_revocation_remains_available_after_memberships_become_unusable(session_factory) -> None:

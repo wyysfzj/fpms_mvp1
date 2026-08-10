@@ -473,7 +473,10 @@ def publish_grant_manual_review_role_config(
             )
         )
         if replay is not None:
-            return _replay(replay, snapshot)
+            result = _replay(replay, snapshot)
+            _validate_predecessor_chain(transaction, replay)
+            _validate_personnel_ready(transaction, _row_role_ids(replay))
+            return result
         _validate_personnel_ready(transaction, role_ids)
         current = _current(transaction)
         actual_current_id = current.id if current is not None else None
