@@ -73,14 +73,17 @@ Add exact `FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION`. Extend
 `PrepareFeeObligationDraftCommand` after `authority` with defaults:
 
 ```python
+exception_gate_id: str | None = None
+exception_gate_source_reference: str | None = None
+exception_gate_source_version: str | None = None
 exception_publication_id: str | None = None
 exception_publication_snapshot_hash: str | None = None
 exception_attested_at: datetime | None = None
 ```
 
-All three are required only for the new authority and forbidden for every existing authority, so
-existing payload bytes remain unchanged. The adapter supplies the exact resolved publication ID,
-snapshot hash and `as_of`. The enum is never authority by itself.
+All six are required only for the new authority and forbidden for every existing authority, so
+existing payload bytes remain unchanged. The adapter supplies the exact resolved gate ID/source/
+version, publication ID/snapshot hash and `as_of`. The enum is never authority by itself.
 
 The deep service independently validates the immutable canonical publication row and its exact
 client/case applicability at `exception_attested_at`, including source, scope, interval, actor,
@@ -91,7 +94,8 @@ time, relation, task or obligation.
 Use activity schema `FPMS_FEE_DRAFT_CREATED_FROM_FUTURE_ANNUITY_EXCEPTION_V1`. Its payload has
 exactly existing keys `actor_id`, `authority`, `center_changes`, `draft_id`, `links`,
 `obligation_id`, `schema`, plus `exception_publication_id`,
-`exception_publication_snapshot_hash`, `exception_attested_at`. `center_changes` is `{}`; the
+`exception_publication_snapshot_hash`, `exception_attested_at`, `exception_gate_id`,
+`exception_gate_source_reference`, `exception_gate_source_version`. `center_changes` is `{}`; the
 timestamp is microsecond UTC-naive ISO text; evidence refs are empty; source activity is the exact
 canonical `FEE_OBLIGATION_RECOGNIZED` activity. Creation leaves instruction `PENDING`, creates no
 PayList, GovPayment, payment or receipt, and uses one caller-owned nested savepoint.
@@ -99,9 +103,12 @@ PayList, GovPayment, payment or receipt, and uses one caller-owned nested savepo
 ## Replay and later instruction
 
 Exact existing draft-activity replay is validated before any fresh-current gate or exception
-lookup. Replay binds actor, task, obligation, key, publication ID/hash/attested time, canonical
-publication bytes, links and activity; it creates nothing. Later gate change, expiry or revocation
-does not rewrite or invalidate a previously valid draft. Changed input or corrupt history is 409.
+lookup. Replay binds actor, task, obligation, key, stored gate ID/source/version, publication
+ID/hash/attested time, canonical gate/publication bytes, links and activity; it creates nothing.
+Those persisted facts plus the exact case/client graph reconstruct the full original
+`FutureAnnuityExceptionUseAttestation`; current authority is never substituted. Later gate change,
+expiry or revocation does not rewrite or invalidate a previously valid draft. Changed input or
+corrupt history is 409.
 
 Extend the stored reviewed-authority instruction branch to recognize the new schema and revalidate
 its exact exception lineage. A later explicit `PAY` through accepted
