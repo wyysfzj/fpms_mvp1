@@ -5603,6 +5603,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
       "verification_ref": "docs/product/v8/reviews/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md"
+    },
+    {
+      "story_id": "V8-FULL-BATCH-CUSTOMER-DECISION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "e5a41c8d07f11d1b0dec68891ef7bef53312f883"
+      ],
+      "paths": [
+        "docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt",
+        "docs/postdemo/postdemo_v8_full_batch_decision_clarification_20260810.md",
+        "docs/product/v8/source-decision-registry.md",
+        "docs/product/v8/stories/V8-FULL-BATCH-CUSTOMER-DECISION-CURRENT-ADOPTION.md"
+      ],
+      "tree_sha256": "98ef3e7fb1ebc8de8a6f9d4964fb157560e70276e4c39d5dcb1365c419268424",
+      "tests": [
+        "exact customer source is 2167 bytes with SHA-256 e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace",
+        "exact decision check passed five global policies, 22 canonical INTERNAL_ONLY values and two pending non-activations",
+        "inventory and unchanged 197-row Foundation checks passed before the source-registry amendment",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FULL-BATCH-CUSTOMER-DECISION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FULL-BATCH-CUSTOMER-DECISION-CURRENT-ADOPTION.md"
     }
   ]
 }
