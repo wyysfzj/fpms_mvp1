@@ -2238,17 +2238,10 @@
     {
       "catalog_id": "FPMS-V8-FOUNDATION-CLOSE-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FOUNDATION-CLOSE-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "DEPENDENCY_BLOCKED",
-        "dependencies": [
-          "FPMS-V8-GRANT-DRAFT-OBLIGATION-ADAPTER-20260712-01",
-          "FPMS-V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-20260712-01"
-        ],
-        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01",
@@ -5293,6 +5286,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FOUNDATION-CLOSE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "fd23c84276dd646685bfb1837317161b8388aef0"
+      ],
+      "paths": [
+        "docs/product/v8/stories/V8-FOUNDATION-CLOSE-CURRENT-ADOPTION.md"
+      ],
+      "tree_sha256": "872e40626e5fa786a8372a4ee97073aef3d1d182311d3b8093854d1a2bc2917b",
+      "tests": [
+        "current backend V8 matrix passed 4643 tests and 114 subtests; 24 skips were only C3-superseded control-plane modules",
+        "clean SQLite unique-head migration and two idempotent seed runs passed",
+        "frontend lint, typecheck and production build passed",
+        "isolated real-stack lifecycle overlay Playwright passed 1 test; inherited UI matrix passed 22 tests",
+        "pre-adoption lean Foundation checker reached only the deliberate Row280 self-pending boundary",
+        "independent High Foundation close review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FOUNDATION-CLOSE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FOUNDATION-CLOSE-CURRENT-ADOPTION.md"
     }
   ]
 }
