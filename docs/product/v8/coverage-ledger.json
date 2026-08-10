@@ -5200,6 +5200,33 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LIFECYCLE-OVERLAY-REAL-UI-E2E-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "2af34af026bb02a170583a9caad2433279c3a60c",
+        "5ac5568bb14a0dbfd145e86193a41c5efcaec689",
+        "92087a911d51214f483162b594123883e501466a"
+      ],
+      "paths": [
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/app/modules/grant_fees/service.py",
+        "backend/app/modules/grant_fees/schemas.py",
+        "backend/app/modules/grant_fees/api.py",
+        "backend/tests/test_v8_grant_official_fee_manual_review.py"
+      ],
+      "tree_sha256": "c698c72b218ead5dc61186e91809d8eeb8d87d9a28be65be12c0c92c458bc2ca",
+      "tests": [
+        "contract RED failed 5 tests on the absent public action",
+        "focused manual review suite passed 11 tests",
+        "exact grant, detail/overlay and generic draft tranche passed 197 tests",
+        "scoped Ruff and exact diff checks passed",
+        "two independent High reviews approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-CURRENT-ADOPTION.md"
     }
   ]
 }

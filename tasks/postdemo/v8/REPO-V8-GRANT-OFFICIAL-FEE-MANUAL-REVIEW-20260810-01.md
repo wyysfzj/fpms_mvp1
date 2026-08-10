@@ -1,6 +1,6 @@
 # REPO-V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-20260810-01
 
-Status: IMPLEMENTED / AWAITING INDEPENDENT REVIEW 2026-08-10
+Status: TERMINAL PASS / ADOPTED 2026-08-10
 Phase: foundation prerequisite for catalog Row120
 Risk: PROTECTED
 Runbook: P0-prereq-heavy-story
@@ -50,4 +50,5 @@ zero-finding approval. Adoption must bind the final product commits and exact tr
 - GREEN: focused test file passes `11`; direct grant-year obligation/instruction, generic
   detail/overlay and generic draft regressions pass `197` unique tests.
 - Scoped Ruff and exact diff check pass.
-- Independent implementation review and adoption remain pending.
+- Two independent implementation reviews approved P0/P1/P2 `0/0/0`; current adoption is bound by
+  `V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-CURRENT-ADOPTION`.
