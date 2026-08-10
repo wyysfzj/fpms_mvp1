@@ -47,9 +47,12 @@ The entry point accepts only nonblank canonical identifiers, an exact SQLAlchemy
 a UTC-naive `as_of`. It rejects a caller session with pending new, dirty or deleted state before
 opening a connection, resolving the gate or calling a writer.
 
-After resolving exactly `DG-FEE-GRANT-YEAR-DRAFT:GLOBAL` at caller `as_of`, it delegates to the
-accepted `recognize_grant_year_annuity_obligation` contract and the generic `prepare_draft` deep
-module in one caller-owned transaction. The source activity must be the accepted, verified real
+After resolving exactly `DG-FEE-GRANT-YEAR-DRAFT:GLOBAL` at caller `as_of`, it validates and reuses
+the one accepted current grant-year recognition through the accepted obligation read contract,
+then delegates only draft creation to the generic `prepare_draft` deep module in one caller-owned
+transaction. The official-fee review necessarily follows recognition and legitimately changes its
+fee lines; the policy must not call the recognition writer again after that review or reconstruct
+a second recognition result. The source activity must be the accepted, verified real
 grant-registration notice already bound to the task. Its reviewed notice bytes remain the sole
 source of grant year, official amount, reduction and deadline truth.
 
@@ -79,8 +82,9 @@ requires a later explicit customer `PAY` instruction through the existing instru
 - Resolve the gate before either business writer.
 - Establish SQLite's outer transaction when necessary, then run recognition and draft preparation
   inside one nested savepoint.
-- Derive stable policy idempotency keys only from the accepted grant task/source activity; an exact
-  replay reuses the same obligation, draft, links and activity without duplicates.
+- Derive the draft policy idempotency key only from the accepted grant task/source activity; an
+  exact replay reuses the same recognition, obligation, draft, links and activity without
+  duplicates.
 - Any post-recognition failure rolls back the whole policy savepoint. Never commit, roll back or
   close the caller session.
 - Malformed input is 400 before query/write. Missing linked business state is 404. Unusable gate,
