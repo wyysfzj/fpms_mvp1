@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     Text,
@@ -161,6 +165,120 @@ class DocumentEvidenceVersion(UUIDPrimaryKeyMixin, Base):
         UniqueConstraint(
             "current_identity_key",
             name="uq_t_document_evidence_version_current_identity_key",
+        ),
+    )
+
+
+class GrantEvidenceCandidate(Base):
+    __tablename__ = "t_grant_evidence_candidate"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    case_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    document_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    evidence_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_config_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    evidence_scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_version_snapshot: Mapped[str] = mapped_column(String(128), nullable=False)
+    original_reference: Mapped[str] = mapped_column(String(512), nullable=False)
+    acquisition_method_snapshot: Mapped[str] = mapped_column(String(64), nullable=False)
+    acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    acquisition_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    acquisition_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    candidate_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    candidate_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    proposed_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    review_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'PENDING'")
+    )
+    reviewer_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conflict_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "evidence_version_id",
+            name="uq_t_grant_evidence_candidate_evidence_version_id",
+        ),
+        ForeignKeyConstraint(
+            ["case_id"],
+            ["t_case.id"],
+            name="fk_t_grant_evidence_candidate_case_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["document_id"],
+            ["t_document.id"],
+            name="fk_t_grant_evidence_candidate_document_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["evidence_version_id"],
+            ["t_document_evidence_version.id"],
+            name="fk_t_grant_evidence_candidate_evidence_version_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_config_id"],
+            ["t_grant_evidence_source_config.id"],
+            name="fk_t_grant_evidence_candidate_source_config_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_record_id"],
+            ["t_grant_evidence_source_record.id"],
+            name="fk_t_grant_evidence_candidate_source_record_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["proposed_by"],
+            ["t_user.id"],
+            name="fk_t_grant_evidence_candidate_proposed_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reviewer_id"],
+            ["t_user.id"],
+            name="fk_t_grant_evidence_candidate_reviewer_id",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "evidence_scope IN ('GRANT_ANNOUNCEMENT', 'PATENT_REGISTER')",
+            name="ck_t_grant_evidence_candidate_scope",
+        ),
+        CheckConstraint(
+            "length(acquisition_snapshot_hash) = 64",
+            name="ck_t_grant_evidence_candidate_acquisition_hash_length",
+        ),
+        CheckConstraint(
+            "length(candidate_snapshot_hash) = 64",
+            name="ck_t_grant_evidence_candidate_candidate_hash_length",
+        ),
+        CheckConstraint(
+            "review_status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="ck_t_grant_evidence_candidate_review_status",
+        ),
+        CheckConstraint(
+            "(review_status = 'PENDING' AND reviewer_id IS NULL "
+            "AND reviewed_at IS NULL AND review_reason IS NULL) OR "
+            "(review_status IN ('APPROVED', 'REJECTED') "
+            "AND reviewer_id IS NOT NULL AND reviewed_at IS NOT NULL "
+            "AND review_reason IS NOT NULL AND reviewer_id <> proposed_by)",
+            name="ck_t_grant_evidence_candidate_review_tuple",
+        ),
+        Index(
+            "ix_t_grant_evidence_candidate_document_review",
+            "document_id",
+            "review_status",
+            "proposed_at",
         ),
     )
 

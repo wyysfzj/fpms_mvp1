@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -82,5 +83,244 @@ class CustomerDecisionGate(Base):
         UniqueConstraint(
             "current_identity_key",
             name="uq_t_customer_decision_gate_current_identity_key",
+        ),
+    )
+
+
+class GrantEvidenceSourceRecord(Base):
+    __tablename__ = "t_grant_evidence_source_record"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_authority: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    evidence_scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_reference_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_reference_value: Mapped[str] = mapped_column(String(512), nullable=False)
+    acquisition_method: Mapped[str] = mapped_column(String(64), nullable=False)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    source_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    source_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'PENDING'")
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    activation_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'INACTIVE'")
+    )
+    activated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    supersedes_source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    current_identity_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_authority",
+            "evidence_scope",
+            "source_code",
+            "source_version",
+            name="uq_t_grant_evidence_source_record_series_version",
+        ),
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_t_grant_evidence_source_record_idempotency_key",
+        ),
+        UniqueConstraint(
+            "current_identity_key",
+            name="uq_t_grant_evidence_source_record_current_identity_key",
+        ),
+        ForeignKeyConstraint(
+            ["created_by"],
+            ["t_user.id"],
+            name="fk_t_grant_evidence_source_record_created_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by"],
+            ["t_user.id"],
+            name="fk_t_grant_evidence_source_record_updated_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reviewed_by"],
+            ["t_user.id"],
+            name="fk_t_grant_evidence_source_record_reviewed_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["activated_by"],
+            ["t_user.id"],
+            name="fk_t_grant_evidence_source_record_activated_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_source_id"],
+            ["t_grant_evidence_source_record.id"],
+            name="fk_t_grant_evidence_source_record_supersedes_source_id",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "source_authority = 'CNIPA'",
+            name="ck_t_grant_evidence_source_record_authority",
+        ),
+        CheckConstraint(
+            "evidence_scope IN ('GRANT_ANNOUNCEMENT', 'PATENT_REGISTER')",
+            name="ck_t_grant_evidence_source_record_scope",
+        ),
+        CheckConstraint(
+            "source_reference_kind IN ('DATA', 'QUERY_CHANNEL', 'FILE')",
+            name="ck_t_grant_evidence_source_record_reference_kind",
+        ),
+        CheckConstraint(
+            "length(source_snapshot_hash) = 64",
+            name="ck_t_grant_evidence_source_record_hash_length",
+        ),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to > effective_from",
+            name="ck_t_grant_evidence_source_record_interval",
+        ),
+        CheckConstraint(
+            "review_status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="ck_t_grant_evidence_source_record_review_status",
+        ),
+        CheckConstraint(
+            "(review_status = 'PENDING' AND reviewed_by IS NULL "
+            "AND reviewed_at IS NULL AND review_reason IS NULL) OR "
+            "(review_status IN ('APPROVED', 'REJECTED') "
+            "AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL "
+            "AND review_reason IS NOT NULL AND reviewed_by <> created_by)",
+            name="ck_t_grant_evidence_source_record_review_tuple",
+        ),
+        CheckConstraint(
+            "activation_status IN ('INACTIVE', 'ACTIVE', 'RETIRED')",
+            name="ck_t_grant_evidence_source_record_activation_status",
+        ),
+        CheckConstraint(
+            "(activation_status = 'INACTIVE' AND activated_by IS NULL "
+            "AND activated_at IS NULL AND current_identity_key IS NULL) OR "
+            "(activation_status = 'ACTIVE' AND review_status = 'APPROVED' "
+            "AND activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND current_identity_key = source_authority || '|' || evidence_scope "
+            "|| '|' || source_code) OR "
+            "(activation_status = 'RETIRED' AND review_status = 'APPROVED' "
+            "AND activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND current_identity_key IS NULL)",
+            name="ck_t_grant_evidence_source_record_activation_tuple",
+        ),
+        Index(
+            "ix_t_grant_evidence_source_record_scope_interval",
+            "evidence_scope",
+            "activation_status",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
+class GrantEvidenceSourceConfig(Base):
+    __tablename__ = "t_grant_evidence_source_config"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    gate_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_record_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    config_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    config_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    selected_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    selection_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    supersedes_config_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    config_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    config_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    current_identity_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "gate_code",
+            "scope_key",
+            "evidence_scope",
+            "config_version",
+            name="uq_t_grant_evidence_source_config_version",
+        ),
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_t_grant_evidence_source_config_idempotency_key",
+        ),
+        UniqueConstraint(
+            "current_identity_key",
+            name="uq_t_grant_evidence_source_config_current_identity_key",
+        ),
+        ForeignKeyConstraint(
+            ["source_record_id"],
+            ["t_grant_evidence_source_record.id"],
+            name="fk_t_grant_evidence_source_config_source_record_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["selected_by"],
+            ["t_user.id"],
+            name="fk_t_grant_evidence_source_config_selected_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_config_id"],
+            ["t_grant_evidence_source_config.id"],
+            name="fk_t_grant_evidence_source_config_supersedes_config_id",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "gate_code = 'DG-GRANT-EVIDENCE-SOURCE' AND scope_key = 'GLOBAL'",
+            name="ck_t_grant_evidence_source_config_gate",
+        ),
+        CheckConstraint(
+            "evidence_scope IN ('GRANT_ANNOUNCEMENT', 'PATENT_REGISTER')",
+            name="ck_t_grant_evidence_source_config_scope",
+        ),
+        CheckConstraint(
+            "config_status IN ('ACTIVE', 'REVOKED')",
+            name="ck_t_grant_evidence_source_config_status",
+        ),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to > effective_from",
+            name="ck_t_grant_evidence_source_config_interval",
+        ),
+        CheckConstraint(
+            "length(config_snapshot_hash) = 64",
+            name="ck_t_grant_evidence_source_config_hash_length",
+        ),
+        CheckConstraint(
+            "current_identity_key IS NULL OR current_identity_key = gate_code || '|' "
+            "|| scope_key || '|' || evidence_scope",
+            name="ck_t_grant_evidence_source_config_current_key",
+        ),
+        Index(
+            "ix_t_grant_evidence_source_config_scope_interval",
+            "scope_key",
+            "evidence_scope",
+            "config_status",
+            "effective_from",
+            "effective_to",
         ),
     )
