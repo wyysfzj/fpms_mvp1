@@ -965,6 +965,45 @@ def _validate_actionable_source(
         _conflict()
 
 
+def _validate_revoke_replay_lineage(
+    transaction: Session,
+    replay: GrantEvidenceSourceConfig,
+) -> GrantEvidenceSourceRecord:
+    _validate_config_canonical(replay)
+    if replay.config_status != "REVOKED" or replay.supersedes_config_id is None:
+        _conflict()
+    try:
+        replay_snapshot = json.loads(replay.config_snapshot)
+        bound_source_version = replay_snapshot["source_version"]
+        bound_source_hash = replay_snapshot["source_snapshot_hash"]
+    except (TypeError, ValueError, KeyError):
+        _conflict()
+    source = transaction.get(GrantEvidenceSourceRecord, replay.source_record_id)
+    predecessor = transaction.get(GrantEvidenceSourceConfig, replay.supersedes_config_id)
+    if source is None or predecessor is None:
+        _conflict()
+    _validate_source_canonical(source)
+    _validate_config_canonical(predecessor)
+    try:
+        predecessor_snapshot = json.loads(predecessor.config_snapshot)
+    except (TypeError, ValueError):
+        _conflict()
+    if (
+        replay.evidence_scope != source.evidence_scope
+        or replay.source_record_id != source.id
+        or replay.source_record_id != predecessor.source_record_id
+        or replay.evidence_scope != predecessor.evidence_scope
+        or predecessor.config_status != "ACTIVE"
+        or predecessor.current_identity_key is not None
+        or bound_source_version != source.source_version
+        or bound_source_hash != source.source_snapshot_hash
+        or predecessor_snapshot.get("source_version") != source.source_version
+        or predecessor_snapshot.get("source_snapshot_hash") != source.source_snapshot_hash
+    ):
+        _conflict()
+    return source
+
+
 def publish_grant_evidence_source_config(
     command: PublishGrantEvidenceSourceConfigCommand, transaction: Session
 ) -> GrantEvidenceSourceConfigResult:
@@ -1087,25 +1126,21 @@ def revoke_grant_evidence_source_config(
             )
         )
         if replay is not None:
-            _validate_config_canonical(replay)
-            try:
-                replay_snapshot = json.loads(replay.config_snapshot)
-                expected = _config_snapshot(
-                    evidence_scope=command.evidence_scope.value,
-                    source_record_id=replay.source_record_id,
-                    source_version=replay_snapshot["source_version"],
-                    source_snapshot_hash=replay_snapshot["source_snapshot_hash"],
-                    config_version=command.config_version,
-                    config_status="REVOKED",
-                    effective_from=command.effective_from,
-                    effective_to=None,
-                    selected_by=command.selected_by,
-                    published_at=command.published_at,
-                    selection_reason=command.selection_reason,
-                    expected_current_config_id=command.expected_current_config_id,
-                )
-            except (TypeError, KeyError):
-                _conflict()
+            source = _validate_revoke_replay_lineage(transaction, replay)
+            expected = _config_snapshot(
+                evidence_scope=command.evidence_scope.value,
+                source_record_id=replay.source_record_id,
+                source_version=source.source_version,
+                source_snapshot_hash=source.source_snapshot_hash,
+                config_version=command.config_version,
+                config_status="REVOKED",
+                effective_from=command.effective_from,
+                effective_to=None,
+                selected_by=command.selected_by,
+                published_at=command.published_at,
+                selection_reason=command.selection_reason,
+                expected_current_config_id=command.expected_current_config_id,
+            )
             return _config_replay(replay, expected)
         identity = f"{_GATE_CODE}|{_SCOPE_KEY}|{command.evidence_scope.value}"
         current = _current_config(transaction, identity)
