@@ -1358,13 +1358,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01",
@@ -5643,6 +5640,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-APPLICATION-DRAFT-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-DRAFT-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "38097fae52db25882fd0204f40892755d349912f",
+        "2887519ff8535eb10b5b349718a61ca6ad8f8c67"
+      ],
+      "paths": [
+        "tasks/batches/FPMS-POSTDEMO-V8-GRANT-SOURCE-GATE-20260712-01.md",
+        "backend/tests/test_v8_grant_source_gate_manifest_contract.py"
+      ],
+      "tree_sha256": "fa83779664df302592dd16d339b17ea4210933edb677f962ab4d1960c5268eb5",
+      "tests": [
+        "focused activation manifest suite passed 3 tests",
+        "scoped Ruff and final two-path diff checks passed",
+        "independent High correction review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
     }
   ]
 }
