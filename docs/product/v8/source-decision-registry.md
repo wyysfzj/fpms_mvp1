@@ -188,20 +188,72 @@ updates this index.
   returns row 61 and its dependent lanes to `AUTHORITY_BLOCKED`; no lifecycle event,
   status or historical record may be synthesized during rollback.
 
-The following statuses are the cutover snapshot. `PENDING` means no sufficient reviewed
-decision is present in the approved source record. Missing or conflicting input blocks
-only the named lane; it never activates a default.
+### `DEC-V8-FULL-BATCH-SCHEME-A-20260810`
+
+- Status: `APPROVED_POLICY`; current-owner adoption remains subject to independent High review.
+- Exact source/version: customer approval in Codex Goal thread
+  `019f4a1a-6f55-77a2-b558-b6555201415c`, preserved without normalization at
+  `docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt`, decision version
+  `customer-decision:2026-08-10:v8-full-batch-scheme-a:v1`, received on `2026-08-10` in timezone
+  `Asia/Shanghai`.
+- Exact source size: `2167` bytes.
+- Source SHA-256:
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`.
+- Actor and acceptance authority: the repository customer/user explicitly approved Scheme A.
+  Publication records its authenticated actor, publication/effective time, unique version and
+  content hash. Independent High review of these exact source and registry bytes remains required
+  before current-owner adoption.
+- Approved exact decisions:
+  - `DG-FEE-APPLICATION-DRAFT:GLOBAL`: after the real application-fee notice is reviewed, create
+    one internal draft pending review; actual payment still requires client instruction.
+  - `DG-FEE-GRANT-YEAR-DRAFT:GLOBAL`: after the real grant-year notice is reviewed, create one
+    internal draft pending review; actual payment still requires client instruction.
+  - `DG-FEE-FUTURE-ANNUITY:GLOBAL`: client instruction is required before draft creation; the
+    initial exception set is empty. Later exceptions require an authorized, audited customer/case
+    scope with explicit start and end.
+  - `DG-GRANT-EVIDENCE-SOURCE:GLOBAL`: an institution administrator may select only a currently
+    reviewed and activated CNIPA source record. A new source records its exact channel/data/file,
+    version, acquisition method, scope and effective time and requires independent review. Missing,
+    stale or unreviewed source configuration is `409`, no write and no legal-state change.
+  - `DG-GRANT-MANUAL-REVIEW:GLOBAL`: institution-configured roles control official-copy
+    acquisition, first and second verification, proposal and second review. First and second
+    verifiers must be different actual users; proposer and second reviewer must be different
+    actual users. Missing, stale or incomplete role bindings are `409`, no write and no
+    legal-state change. Original official evidence, acquisition facts, reason, actors and complete
+    audit history remain mandatory.
+  - `DG-LEGACY-FORM-CLASS:form-001` through `form-022`: every exact identity is
+    `INTERNAL_ONLY`; `form-009` and `form-017` remain distinct. The initial current-official-form
+    exception set is empty. A later exception requires its own reviewed official source, version
+    and effective interval and cannot silently reclassify an old file.
+- Canonical all-22 decision value:
+  `{"form-001":"INTERNAL_ONLY","form-002":"INTERNAL_ONLY","form-003":"INTERNAL_ONLY","form-004":"INTERNAL_ONLY","form-005":"INTERNAL_ONLY","form-006":"INTERNAL_ONLY","form-007":"INTERNAL_ONLY","form-008":"INTERNAL_ONLY","form-009":"INTERNAL_ONLY","form-010":"INTERNAL_ONLY","form-011":"INTERNAL_ONLY","form-012":"INTERNAL_ONLY","form-013":"INTERNAL_ONLY","form-014":"INTERNAL_ONLY","form-015":"INTERNAL_ONLY","form-016":"INTERNAL_ONLY","form-017":"INTERNAL_ONLY","form-018":"INTERNAL_ONLY","form-019":"INTERNAL_ONLY","form-020":"INTERNAL_ONLY","form-021":"INTERNAL_ONLY","form-022":"INTERNAL_ONLY"}`.
+- Non-activation decisions: `DG-PAYMENT-WORKBOOK:GLOBAL` remains `PENDING` until a clean current
+  workbook and controlled-upload proof are approved. `DG-SERVICE-RATE-VERSION:GLOBAL` remains
+  `PENDING` until a complete customer service-rate version is approved. Neither negative decision
+  may be persisted as a confirmed activation value.
+- Development/runtime boundary: the five approved global policy contracts and 22 classifications
+  may enter their exact independently accepted development lanes. Grant-source and manual-review
+  runtime remains disabled until complete source/role configuration is published. Test fixtures
+  may use explicit test-only source and role examples; they must never become production defaults
+  or production seed data.
+- Rollback impact: revocation stops later automated or manual actions and later draft generation,
+  but does not delete, synthesize or rewrite historical obligations, drafts, evidence, activities,
+  decisions or legal status. A form reclassification affects only later use of that exact form.
+
+The following statuses are the decision snapshot after the customer approval above. `PENDING`
+means no sufficient reviewed positive activation decision is present. Missing or conflicting input
+blocks only the named lane; it never activates a default.
 
 | Gate | Status | Fail-closed behavior |
 | --- | --- | --- |
-| `DG-FEE-APPLICATION-DRAFT` | `PENDING` | Application obligation may exist; wait for explicit `PAY`, no automatic draft. |
-| `DG-FEE-GRANT-YEAR-DRAFT` | `PENDING` | Grant-year obligation may exist; no automatic draft. |
-| `DG-FEE-FUTURE-ANNUITY` | `PENDING` | Each future annuity waits for explicit instruction. |
-| `DG-GRANT-EVIDENCE-SOURCE` | `PENDING` | Archive candidate evidence as unverified; do not enter patent in force. |
-| `DG-GRANT-MANUAL-REVIEW` | `PENDING` | Manual override remains disabled. |
+| `DG-FEE-APPLICATION-DRAFT` | `APPROVED_POLICY` | Runtime waits for the independently accepted notice-driven draft implementation; payment still requires client instruction. |
+| `DG-FEE-GRANT-YEAR-DRAFT` | `APPROVED_POLICY` | Runtime waits for the independently accepted notice-driven draft implementation; payment still requires client instruction. |
+| `DG-FEE-FUTURE-ANNUITY` | `APPROVED_POLICY` | Each future annuity waits for instruction; the initial exception set is empty. |
+| `DG-GRANT-EVIDENCE-SOURCE` | `APPROVED_POLICY / CONFIG_REQUIRED` | Archive candidate evidence as unverified; without published source configuration do not enter patent in force. |
+| `DG-GRANT-MANUAL-REVIEW` | `APPROVED_POLICY / CONFIG_REQUIRED` | Manual review remains disabled without complete published role bindings and actual-user separation. |
 | `DG-PAYMENT-WORKBOOK` | `PENDING` | Only internal workbook output is allowed; official adapter remains fail-closed. |
 | `DG-SERVICE-RATE-VERSION` | `PENDING` | No service quote/receivable activation; official obligations remain separate. |
-| `DG-LEGACY-FORM-CLASS` | `PENDING` for each `form-001`–`form-022` | Every form remains reference-only until its own source-backed classification. |
+| `DG-LEGACY-FORM-CLASS` | `APPROVED: INTERNAL_ONLY` for each `form-001`–`form-022` | Every form remains internal/reference-only; no official submission activation. |
 | `DG-APPLICATION-FEE-NOTICE-PREVIEW-SOURCE` | `PENDING` | Do not dispatch the application-fee notice or accept its official-fee obligation from guessed page/priority counts. |
 
 ## 2026-08-10 grant-year official-fee manual review authority
