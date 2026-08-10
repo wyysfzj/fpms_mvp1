@@ -113,6 +113,11 @@ backfill, data update, delete, source activation, role binding, seed or status c
 - `GrantEvidenceSourceRecord` and `GrantEvidenceSourceConfig` live in
   `backend/app/modules/system/models.py`.
 - `GrantEvidenceCandidate` lives in `backend/app/modules/documents/models.py`.
+- The standard registry `backend/app/models/__init__.py` imports
+  `GrantEvidenceSourceConfig` and `GrantEvidenceSourceRecord` from
+  `app.modules.system.models` and adds exactly those two names to its `__all__`. The existing
+  `app.modules.documents.models` import already registers `GrantEvidenceCandidate`; do not add a
+  second candidate import or export.
 - All three use explicit mapped columns, application UUIDs from `str(uuid4())`,
   `DateTime(timezone=False)` and explicit `CURRENT_TIMESTAMP` audit defaults. Do not add a
   relationship property, new enum module, repository abstraction or mixin.
@@ -362,13 +367,19 @@ without inserting a real source or role default:
     created.
 11. A clean isolated SQLite `upgrade head` creates zero rows in all three new tables and preserves
     all pre-existing table data unchanged.
+12. In a fresh interpreter with no prior direct system/document model import, the standard
+    bootstrap executes `from app.db.base import Base; from app.models import *`, then evaluates
+    `Base.metadata.sorted_tables` without `NoReferencedTableError`; the resulting metadata contains
+    all three new tables and every foreign-key target for those tables resolves. The two source
+    carrier names are exported by `app.models`, while candidate registration continues through its
+    existing documents import.
 
 ## Exact Closure Slice
 
-Add only the exact three-table ORM/migration carrier required to represent an independently
-reviewed and activated CNIPA source-directory version, one append-only global source selection per
-grant-evidence scope, and immutable candidate acquisition/review provenance linked to the existing
-document evidence version.
+Add only the exact three-table ORM/migration carrier and its two-name standard ORM-registry
+registration required to represent an independently reviewed and activated CNIPA source-directory
+version, one append-only global source selection per grant-evidence scope, and immutable candidate
+acquisition/review provenance linked to the existing document evidence version.
 
 ## Explicit Non-Closure
 
@@ -400,6 +411,7 @@ reinterpret Scheme A.
 - `GLOBAL_ALEMBIC_HEAD`: exclusive owner for the complete task; no concurrent migration task.
 - `backend/app/modules/system/models.py`: exclusive task owner while this task is active.
 - `backend/app/modules/documents/models.py`: exclusive task owner while this task is active.
+- `backend/app/models/__init__.py`: exclusive shared-registry owner while this task is active.
 - All schema tests and SQLite writes run through the global serialized queue.
 
 ## Remaining Follow-Up Task IDs
@@ -421,6 +433,7 @@ reinterpret Scheme A.
 
 - `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01.md`
 - `backend/alembic/versions/v8_grant_evidence_source_carrier.py`
+- `backend/app/models/__init__.py`
 - `backend/app/modules/system/models.py`
 - `backend/app/modules/documents/models.py`
 - `backend/tests/test_v8_grant_evidence_source_carrier_schema.py`
@@ -428,7 +441,8 @@ reinterpret Scheme A.
 
 No other source, test, task, manifest or shared-ownership file is authorized. Inherited regression
 inputs are read-only. Preserve the captured dirty baseline; baseline-subtracted scope must contain
-only this task's allowlisted paths.
+only this task's allowlisted paths, including the exact registry delta of one system-model import
+and two `__all__` names with no unrelated registry change.
 
 ## Runtime Contracts
 
@@ -448,10 +462,11 @@ only this task's allowlisted paths.
 - RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_source_carrier_schema.py`; run before implementation and preserve the expected missing-carrier failure.
 - GREEN and scoped checks:
 - `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_source_carrier_schema.py`
-- `cd backend && .venv/bin/ruff check --fix alembic/versions/v8_grant_evidence_source_carrier.py app/modules/system/models.py app/modules/documents/models.py tests/test_v8_grant_evidence_source_carrier_schema.py && .venv/bin/ruff format alembic/versions/v8_grant_evidence_source_carrier.py app/modules/system/models.py app/modules/documents/models.py tests/test_v8_grant_evidence_source_carrier_schema.py && .venv/bin/ruff check alembic/versions/v8_grant_evidence_source_carrier.py app/modules/system/models.py app/modules/documents/models.py tests/test_v8_grant_evidence_source_carrier_schema.py`
+- `cd backend && .venv/bin/python -c 'from app.db.base import Base; from app.models import *; names = {table.name for table in Base.metadata.sorted_tables}; assert {"t_grant_evidence_source_record", "t_grant_evidence_source_config", "t_grant_evidence_candidate"} <= names; assert GrantEvidenceSourceRecord.__tablename__ == "t_grant_evidence_source_record"; assert GrantEvidenceSourceConfig.__tablename__ == "t_grant_evidence_source_config"'`
+- `cd backend && .venv/bin/ruff check --fix alembic/versions/v8_grant_evidence_source_carrier.py app/models/__init__.py app/modules/system/models.py app/modules/documents/models.py tests/test_v8_grant_evidence_source_carrier_schema.py && .venv/bin/ruff format alembic/versions/v8_grant_evidence_source_carrier.py app/models/__init__.py app/modules/system/models.py app/modules/documents/models.py tests/test_v8_grant_evidence_source_carrier_schema.py && .venv/bin/ruff check alembic/versions/v8_grant_evidence_source_carrier.py app/models/__init__.py app/modules/system/models.py app/modules/documents/models.py tests/test_v8_grant_evidence_source_carrier_schema.py`
 - `cd backend && PYTHONPATH=. .venv/bin/alembic heads  # exact output after implementation: v8_grant_source_carrier_01 (head)`
 - `cd backend && tmp_dir="$(mktemp -d)" && DATABASE_URL="sqlite:///${tmp_dir}/grant-evidence-source-carrier.db" PYTHONPATH=. .venv/bin/alembic upgrade head && DATABASE_URL="sqlite:///${tmp_dir}/grant-evidence-source-carrier.db" PYTHONPATH=. .venv/bin/alembic current  # exact current: v8_grant_source_carrier_01 (head)`
-- `git diff --check -- backend/alembic/versions/v8_grant_evidence_source_carrier.py backend/app/modules/system/models.py backend/app/modules/documents/models.py backend/tests/test_v8_grant_evidence_source_carrier_schema.py tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01.md`
+- `git diff --check -- backend/alembic/versions/v8_grant_evidence_source_carrier.py backend/app/models/__init__.py backend/app/modules/system/models.py backend/app/modules/documents/models.py backend/tests/test_v8_grant_evidence_source_carrier_schema.py tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01.md`
 - `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01`
 - Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
 
@@ -468,8 +483,9 @@ only this task's allowlisted paths.
 2. The active grant-source manifest is explicitly revised/adopted to insert this schema task, then
    the source service and API follow-ups, before the blocked ingestion task. A previous terminal
    manifest receipt cannot silently absorb changed governance bytes.
-3. Execute this task under the global Alembic and two model-file locks. Preserve RED, implement the
-   exact migration/ORM/test only, and obtain independent task acceptance.
+3. Execute this task under the global Alembic, two model-file and standard-registry locks. Preserve
+   RED, implement the exact migration/ORM/registry/test only, and obtain independent task
+   acceptance.
 4. Only after this task is accepted may the source service execute; only after that service is
    accepted may its API execute.
 5. Only after accepted schema + service + API and explicit ingestion-task dependency re-freeze may
@@ -478,10 +494,11 @@ only this task's allowlisted paths.
 
 ## Done Definition
 
-The exact RED is preserved; the minimum allowlisted migration/ORM/test change makes the exact GREEN
-and clean SQLite upgrade pass; unique-head, task-scoped lint/format/scope and dirty-baseline checks
-pass; no row/default/source/role/legal-state side effect exists; an independent reviewer approves
-the exact closure and non-closure; atomic evidence validation and
+The exact RED is preserved; the minimum allowlisted migration/ORM/registry/test change makes the
+exact GREEN, fresh standard-bootstrap metadata/FK resolution and clean SQLite upgrade pass;
+unique-head, task-scoped lint/format/scope and dirty-baseline checks pass; no unrelated registry
+export and no row/default/source/role/legal-state side effect exists; an independent reviewer
+approves the exact closure and non-closure; atomic evidence validation and
 `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01` pass. Only then
 may the implementation task be reported PASS. This contract-materialization step alone is reported
 `TASK_CONTRACT_READY`, never schema PASS.
