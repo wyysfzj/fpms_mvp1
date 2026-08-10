@@ -47,6 +47,18 @@ from app.modules.system.grant_evidence_source_service import (
     review_grant_evidence_source,
     revoke_grant_evidence_source_config,
 )
+from app.modules.system.grant_manual_review_role_schemas import (
+    GrantManualReviewRoleConfigOut,
+    PublishGrantManualReviewRoleConfigIn,
+    RevokeGrantManualReviewRoleConfigIn,
+)
+from app.modules.system.grant_manual_review_role_service import (
+    GrantManualReviewRoleDisposition,
+    PublishGrantManualReviewRoleConfigCommand,
+    RevokeGrantManualReviewRoleConfigCommand,
+    publish_grant_manual_review_role_config,
+    revoke_grant_manual_review_role_config,
+)
 from app.modules.system.models import CustomerDecisionGate
 from app.modules.system.schemas import (
     ConfigReadinessOut,
@@ -483,3 +495,88 @@ def revoke_grant_evidence_source_configuration(
         else status.HTTP_200_OK
     )
     return GrantEvidenceSourceConfigOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/system/grant-manual-review-role-configurations",
+    response_model=GrantManualReviewRoleConfigOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_grant_manual_review_role_configuration(
+    payload: PublishGrantManualReviewRoleConfigIn,
+    response: Response,
+    _perm: None = Depends(require_perm("SystemParam.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantManualReviewRoleConfigOut:
+    now = _utc_now()
+    result = _commit_source_mutation(
+        db,
+        lambda: publish_grant_manual_review_role_config(
+            PublishGrantManualReviewRoleConfigCommand(
+                official_copy_acquirer_role_id=payload.official_copy_acquirer_role_id,
+                first_verifier_role_id=payload.first_verifier_role_id,
+                second_verifier_role_id=payload.second_verifier_role_id,
+                manual_review_proposer_role_id=payload.manual_review_proposer_role_id,
+                manual_review_second_reviewer_role_id=(
+                    payload.manual_review_second_reviewer_role_id
+                ),
+                config_version=payload.config_version,
+                effective_from=payload.effective_from,
+                effective_to=payload.effective_to,
+                confirmed_by=current_user.id,
+                published_at=now,
+                expected_current_config_id=payload.expected_current_config_id,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        ),
+    )
+    response.status_code = (
+        status.HTTP_201_CREATED
+        if result.disposition is GrantManualReviewRoleDisposition.CREATED
+        else status.HTTP_200_OK
+    )
+    return GrantManualReviewRoleConfigOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/system/grant-manual-review-role-configurations/{config_id}/revoke",
+    response_model=GrantManualReviewRoleConfigOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def revoke_grant_manual_review_role_configuration(
+    config_id: UUID,
+    payload: RevokeGrantManualReviewRoleConfigIn,
+    response: Response,
+    _perm: None = Depends(require_perm("SystemParam.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantManualReviewRoleConfigOut:
+    if payload.expected_current_config_id != str(config_id):
+        raise BusinessError(
+            code="VALIDATION_ERROR",
+            message="Path and body config IDs differ",
+            status_code=422,
+        )
+    now = _utc_now()
+    result = _commit_source_mutation(
+        db,
+        lambda: revoke_grant_manual_review_role_config(
+            RevokeGrantManualReviewRoleConfigCommand(
+                config_version=payload.config_version,
+                effective_from=payload.effective_from,
+                confirmed_by=current_user.id,
+                published_at=now,
+                expected_current_config_id=payload.expected_current_config_id,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        ),
+    )
+    response.status_code = (
+        status.HTTP_201_CREATED
+        if result.disposition is GrantManualReviewRoleDisposition.CREATED
+        else status.HTTP_200_OK
+    )
+    return GrantManualReviewRoleConfigOut.model_validate(result, from_attributes=True)
