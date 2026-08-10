@@ -571,7 +571,11 @@ def _registration_replay(
     snapshot: str,
 ) -> GrantEvidenceSourceRecordResult:
     _validate_source_canonical(row)
-    if row.source_snapshot != snapshot or row.supersedes_source_id != command.supersedes_source_id:
+    if (
+        row.source_snapshot != snapshot
+        or row.supersedes_source_id != command.supersedes_source_id
+        or row.created_by != command.actor_id
+    ):
         _conflict()
     return _source_result(row, GrantEvidenceSourceDisposition.REUSED)
 
@@ -583,6 +587,7 @@ def register_grant_evidence_source(
     transaction = _validate_transaction(transaction)
     snapshot = _source_snapshot(command)
     with transaction.no_autoflush:
+        _user_exists(transaction, command.actor_id)
         replay = _one_or_none(
             list(
                 transaction.scalars(
@@ -594,7 +599,6 @@ def register_grant_evidence_source(
         )
         if replay is not None:
             return _registration_replay(replay, command, snapshot)
-        _user_exists(transaction, command.actor_id)
         if command.supersedes_source_id is not None:
             predecessor = transaction.get(GrantEvidenceSourceRecord, command.supersedes_source_id)
             if (
@@ -665,6 +669,7 @@ def review_grant_evidence_source(
         if row is None:
             _conflict()
         _validate_source_canonical(row)
+        _user_exists(transaction, command.reviewer_id)
         if row.review_status in {"APPROVED", "REJECTED"}:
             if (
                 row.review_status == command.decision.value
@@ -683,7 +688,6 @@ def review_grant_evidence_source(
             or row.created_by == command.reviewer_id
         ):
             _conflict()
-        _user_exists(transaction, command.reviewer_id)
 
     _ensure_sqlite_outer_transaction(transaction)
     try:
@@ -768,6 +772,7 @@ def activate_grant_evidence_source(
         row = transaction.get(GrantEvidenceSourceRecord, command.source_record_id)
         if row is None:
             _conflict()
+        _user_exists(transaction, command.actor_id)
         if row.activation_status in {"ACTIVE", "RETIRED"}:
             return _activation_replay(row, command, transaction)
         _validate_source_canonical(row)
@@ -783,7 +788,6 @@ def activate_grant_evidence_source(
             or row.supersedes_source_id != command.expected_current_source_id
         ):
             _conflict()
-        _user_exists(transaction, command.actor_id)
         identity = _source_current_identity(row)
         current = _one_or_none(
             list(
@@ -936,6 +940,31 @@ def _current_config(transaction: Session, identity: str) -> GrantEvidenceSourceC
     )
 
 
+def _validate_actionable_source(
+    source: GrantEvidenceSourceRecord,
+    evidence_scope: GrantEvidenceScope,
+    as_of: datetime,
+) -> None:
+    _validate_source_canonical(source)
+    identity = _source_current_identity(source)
+    if (
+        source.evidence_scope != evidence_scope.value
+        or source.review_status != "APPROVED"
+        or source.reviewed_by is None
+        or source.reviewed_by == source.created_by
+        or type(source.reviewed_at) is not datetime
+        or source.reviewed_at.utcoffset() is not None
+        or not source.review_reason
+        or source.activation_status != "ACTIVE"
+        or source.activated_by is None
+        or type(source.activated_at) is not datetime
+        or source.activated_at.utcoffset() is not None
+        or source.current_identity_key != identity
+        or not _applicable(source.effective_from, source.effective_to, as_of)
+    ):
+        _conflict()
+
+
 def publish_grant_evidence_source_config(
     command: PublishGrantEvidenceSourceConfigCommand, transaction: Session
 ) -> GrantEvidenceSourceConfigResult:
@@ -943,6 +972,7 @@ def publish_grant_evidence_source_config(
     transaction = _validate_transaction(transaction)
     _gate(transaction, command.published_at)
     with transaction.no_autoflush:
+        _user_exists(transaction, command.selected_by)
         source = transaction.get(GrantEvidenceSourceRecord, command.source_record_id)
         if source is None:
             _conflict()
@@ -972,20 +1002,12 @@ def publish_grant_evidence_source_config(
         )
         if replay is not None:
             return _config_replay(replay, snapshot)
-        source_identity = _source_current_identity(source)
-        if (
-            source.evidence_scope != command.evidence_scope.value
-            or source.review_status != "APPROVED"
-            or source.activation_status != "ACTIVE"
-            or source.current_identity_key != source_identity
-            or source.effective_from > command.effective_from
-            or (
-                source.effective_to is not None
-                and (command.effective_to is None or source.effective_to < command.effective_to)
-            )
+        _validate_actionable_source(source, command.evidence_scope, command.effective_from)
+        if source.effective_from > command.effective_from or (
+            source.effective_to is not None
+            and (command.effective_to is None or source.effective_to < command.effective_to)
         ):
             _conflict()
-        _user_exists(transaction, command.selected_by)
         identity = f"{_GATE_CODE}|{_SCOPE_KEY}|{command.evidence_scope.value}"
         current = _current_config(transaction, identity)
         actual_current_id = current.id if current is not None else None
@@ -1054,6 +1076,7 @@ def revoke_grant_evidence_source_config(
     transaction = _validate_transaction(transaction)
     _gate(transaction, command.published_at)
     with transaction.no_autoflush:
+        _user_exists(transaction, command.selected_by)
         replay = _one_or_none(
             list(
                 transaction.scalars(
@@ -1084,7 +1107,6 @@ def revoke_grant_evidence_source_config(
             except (TypeError, KeyError):
                 _conflict()
             return _config_replay(replay, expected)
-        _user_exists(transaction, command.selected_by)
         identity = f"{_GATE_CODE}|{_SCOPE_KEY}|{command.evidence_scope.value}"
         current = _current_config(transaction, identity)
         if (
@@ -1104,7 +1126,7 @@ def revoke_grant_evidence_source_config(
         source = transaction.get(GrantEvidenceSourceRecord, current.source_record_id)
         if source is None:
             _conflict()
-        _validate_source_canonical(source)
+        _validate_actionable_source(source, command.evidence_scope, command.effective_from)
         if (
             source.source_version != source_version
             or source.source_snapshot_hash != source_snapshot_hash

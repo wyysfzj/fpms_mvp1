@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError
 from app.modules.auth.models import T_User
+from app.modules.documents.models import GrantEvidenceCandidate
 from app.modules.system import grant_evidence_source_service as service
 from app.modules.system.models import (
     CustomerDecisionGate,
@@ -157,6 +158,61 @@ def _publish(
     )
 
 
+def _active_source_and_gate(
+    transaction: Session,
+    *,
+    evidence_scope: service.GrantEvidenceScope = service.GrantEvidenceScope.GRANT_ANNOUNCEMENT,
+) -> tuple[str, str, str, service.GrantEvidenceSourceRecordResult]:
+    creator, reviewer, selector = _actors(transaction)
+    _install_gate(transaction, selector)
+    registered = service.register_grant_evidence_source(
+        _register_command(
+            creator,
+            source_code=f"CNIPA-{evidence_scope.value}",
+            evidence_scope=evidence_scope,
+        ),
+        transaction,
+    )
+    _review(transaction, registered.source_record_id, reviewer)
+    _activate(transaction, registered.source_record_id, selector, None)
+    return creator, reviewer, selector, registered
+
+
+def _expected_config_snapshot(
+    command: service.PublishGrantEvidenceSourceConfigCommand,
+    source: GrantEvidenceSourceRecord,
+    *,
+    config_status: str = "ACTIVE",
+) -> str:
+    return json.dumps(
+        {
+            "config_status": config_status,
+            "config_version": command.config_version,
+            "effective_from": command.effective_from.isoformat(timespec="microseconds"),
+            "effective_to": (
+                command.effective_to.isoformat(timespec="microseconds")
+                if command.effective_to is not None
+                else None
+            ),
+            "evidence_scope": command.evidence_scope.value,
+            "expected_current_config_id": command.expected_current_config_id,
+            "gate_code": "DG-GRANT-EVIDENCE-SOURCE",
+            "published_at": command.published_at.isoformat(timespec="microseconds"),
+            "schema_version": "CNIPA_GRANT_EVIDENCE_CONFIG_V1",
+            "scope_key": "GLOBAL",
+            "selected_by": command.selected_by,
+            "selection_reason": command.selection_reason,
+            "source_record_id": source.id,
+            "source_snapshot_hash": source.source_snapshot_hash,
+            "source_version": source.source_version,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
 def _assert_error(call, code: str, status_code: int, details: dict | None = None) -> BusinessError:
     with pytest.raises(BusinessError) as caught:
         call()
@@ -275,6 +331,95 @@ def test_public_contract_is_exact_frozen_keyword_only_and_synchronous() -> None:
             for parameter in inspect.signature(dto_type).parameters.values()
         )
 
+    assert get_type_hints(service.RegisterGrantEvidenceSourceCommand) == {
+        "source_code": str,
+        "source_version": str,
+        "evidence_scope": service.GrantEvidenceScope,
+        "source_reference_kind": service.GrantEvidenceSourceReferenceKind,
+        "source_reference_value": str,
+        "acquisition_method": str,
+        "effective_from": datetime,
+        "effective_to": datetime | None,
+        "supersedes_source_id": str | None,
+        "actor_id": str,
+        "idempotency_key": str,
+    }
+    assert get_type_hints(service.ReviewGrantEvidenceSourceCommand) == {
+        "source_record_id": str,
+        "decision": service.GrantEvidenceSourceReviewDecision,
+        "reviewer_id": str,
+        "reviewed_at": datetime,
+        "reason": str,
+    }
+    assert get_type_hints(service.ActivateGrantEvidenceSourceCommand) == {
+        "source_record_id": str,
+        "actor_id": str,
+        "activated_at": datetime,
+        "expected_current_source_id": str | None,
+    }
+    assert get_type_hints(service.RetireGrantEvidenceSourceCommand) == {
+        "source_record_id": str,
+        "actor_id": str,
+        "retired_at": datetime,
+        "expected_current_source_id": str,
+    }
+    assert get_type_hints(service.PublishGrantEvidenceSourceConfigCommand) == {
+        "evidence_scope": service.GrantEvidenceScope,
+        "source_record_id": str,
+        "config_version": str,
+        "effective_from": datetime,
+        "effective_to": datetime | None,
+        "selected_by": str,
+        "published_at": datetime,
+        "selection_reason": str,
+        "expected_current_config_id": str | None,
+        "idempotency_key": str,
+    }
+    assert get_type_hints(service.RevokeGrantEvidenceSourceConfigCommand) == {
+        "evidence_scope": service.GrantEvidenceScope,
+        "config_version": str,
+        "effective_from": datetime,
+        "selected_by": str,
+        "published_at": datetime,
+        "selection_reason": str,
+        "expected_current_config_id": str,
+        "idempotency_key": str,
+    }
+    assert get_type_hints(service.ResolveGrantEvidenceSourceCommand) == {
+        "evidence_scope": service.GrantEvidenceScope,
+        "as_of": datetime,
+    }
+    assert get_type_hints(service.GrantEvidenceSourceRecordResult) == {
+        "source_record_id": str,
+        "review_status": str,
+        "activation_status": str,
+        "source_snapshot_hash": str,
+        "current_identity_key": str | None,
+        "disposition": service.GrantEvidenceSourceDisposition,
+    }
+    assert get_type_hints(service.GrantEvidenceSourceConfigResult) == {
+        "config_id": str,
+        "config_status": str,
+        "config_snapshot_hash": str,
+        "current_identity_key": str | None,
+        "disposition": service.GrantEvidenceSourceDisposition,
+    }
+    assert get_type_hints(service.GrantEvidenceSourceResolution) == {
+        "gate_id": str,
+        "config_id": str,
+        "config_snapshot_hash": str,
+        "source_record_id": str,
+        "evidence_scope": service.GrantEvidenceScope,
+        "source_code": str,
+        "source_version": str,
+        "source_snapshot_hash": str,
+        "source_reference_kind": service.GrantEvidenceSourceReferenceKind,
+        "source_reference_value": str,
+        "acquisition_method": str,
+        "effective_from": datetime,
+        "effective_to": datetime | None,
+    }
+
     functions = (
         service.register_grant_evidence_source,
         service.review_grant_evidence_source,
@@ -298,7 +443,7 @@ def test_registration_builds_canonical_snapshot_replays_and_never_activates(
     session_factory,
 ) -> None:
     with session_factory() as transaction:
-        actor_id, reviewer_id, _ = _actors(transaction)
+        actor_id, reviewer_id, other_actor_id = _actors(transaction)
         key = f"register-{uuid4()}"
         command = _register_command(actor_id, idempotency_key=key)
         created = service.register_grant_evidence_source(command, transaction)
@@ -337,6 +482,19 @@ def test_registration_builds_canonical_snapshot_replays_and_never_activates(
         replay = service.register_grant_evidence_source(command, transaction)
         assert replay.review_status == "APPROVED"
         assert replay.disposition is service.GrantEvidenceSourceDisposition.REUSED
+        for replay_actor_id in (other_actor_id, str(uuid4())):
+            before = transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceRecord))
+            _assert_error(
+                lambda replay_actor_id=replay_actor_id: service.register_grant_evidence_source(
+                    replace(command, actor_id=replay_actor_id), transaction
+                ),
+                "GRANT_EVIDENCE_SOURCE_CONFLICT",
+                409,
+            )
+            assert (
+                transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceRecord))
+                == before
+            )
         changed = replace(command, source_version="changed")
         _assert_error(
             lambda: service.register_grant_evidence_source(changed, transaction),
@@ -351,6 +509,11 @@ def test_review_activation_replacement_replay_and_explicit_retirement_are_exact(
     with session_factory() as transaction:
         creator, reviewer, activator = _actors(transaction)
         first = service.register_grant_evidence_source(_register_command(creator), transaction)
+        _assert_error(
+            lambda: _review(transaction, first.source_record_id, creator),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
         reviewed = _review(transaction, first.source_record_id, reviewer)
         assert reviewed.disposition is service.GrantEvidenceSourceDisposition.CHANGED
         assert _review(transaction, first.source_record_id, reviewer).disposition is (
@@ -364,6 +527,54 @@ def test_review_activation_replacement_replay_and_explicit_retirement_are_exact(
         assert _activate(transaction, first.source_record_id, activator, None).disposition is (
             service.GrantEvidenceSourceDisposition.REUSED
         )
+        _assert_error(
+            lambda: service.activate_grant_evidence_source(
+                service.ActivateGrantEvidenceSourceCommand(
+                    source_record_id=first.source_record_id,
+                    actor_id=reviewer,
+                    activated_at=AS_OF - timedelta(days=1),
+                    expected_current_source_id=None,
+                ),
+                transaction,
+            ),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
+
+        rejected = service.register_grant_evidence_source(
+            _register_command(
+                creator,
+                source_code="CNIPA-REJECTED-TEST",
+                source_version="rejected-v1",
+            ),
+            transaction,
+        )
+        rejected_result = _review(
+            transaction,
+            rejected.source_record_id,
+            reviewer,
+            decision=service.GrantEvidenceSourceReviewDecision.REJECTED,
+        )
+        assert rejected_result.review_status == "REJECTED"
+        _assert_error(
+            lambda: _activate(transaction, rejected.source_record_id, activator, None),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
+        _assert_error(
+            lambda: service.review_grant_evidence_source(
+                service.ReviewGrantEvidenceSourceCommand(
+                    source_record_id=rejected.source_record_id,
+                    decision=service.GrantEvidenceSourceReviewDecision.APPROVED,
+                    reviewer_id=reviewer,
+                    reviewed_at=AS_OF - timedelta(days=2),
+                    reason="changed terminal review",
+                ),
+                transaction,
+            ),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
 
         second = service.register_grant_evidence_source(
             _register_command(
@@ -374,6 +585,19 @@ def test_review_activation_replacement_replay_and_explicit_retirement_are_exact(
             transaction,
         )
         _review(transaction, second.source_record_id, reviewer)
+        _assert_error(
+            lambda: _activate(transaction, second.source_record_id, activator, None),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
+        assert (
+            transaction.get(GrantEvidenceSourceRecord, first.source_record_id).activation_status
+            == "ACTIVE"
+        )
+        assert (
+            transaction.get(GrantEvidenceSourceRecord, second.source_record_id).activation_status
+            == "INACTIVE"
+        )
         _activate(transaction, second.source_record_id, activator, first.source_record_id)
         first_row = transaction.get(GrantEvidenceSourceRecord, first.source_record_id)
         second_row = transaction.get(GrantEvidenceSourceRecord, second.source_record_id)
@@ -406,27 +630,55 @@ def test_review_activation_replacement_replay_and_explicit_retirement_are_exact(
         )
 
 
-def test_publish_resolve_revoke_and_replay_are_fail_closed(session_factory) -> None:
+@pytest.mark.parametrize("evidence_scope", tuple(service.GrantEvidenceScope))
+def test_publish_resolve_revoke_and_replay_are_fail_closed(
+    session_factory, evidence_scope: service.GrantEvidenceScope
+) -> None:
     with session_factory() as transaction:
         creator, reviewer, selector = _actors(transaction)
         _install_gate(transaction, selector)
-        registered = service.register_grant_evidence_source(_register_command(creator), transaction)
+        source_code = f"CNIPA-{evidence_scope.value}"
+        registered = service.register_grant_evidence_source(
+            _register_command(
+                creator,
+                source_code=source_code,
+                evidence_scope=evidence_scope,
+            ),
+            transaction,
+        )
         _review(transaction, registered.source_record_id, reviewer)
         _activate(transaction, registered.source_record_id, selector, None)
         key = f"publish-{uuid4()}"
-        published = _publish(
-            transaction,
-            registered.source_record_id,
-            selector,
+        publish_command = service.PublishGrantEvidenceSourceConfigCommand(
+            evidence_scope=evidence_scope,
+            source_record_id=registered.source_record_id,
+            config_version="config-v1",
+            effective_from=AS_OF - timedelta(hours=1),
+            effective_to=None,
+            selected_by=selector,
+            published_at=AS_OF - timedelta(hours=2),
+            selection_reason="synthetic test publication",
+            expected_current_config_id=None,
             idempotency_key=key,
+        )
+        published = service.publish_grant_evidence_source_config(
+            publish_command,
+            transaction,
         )
         assert published.config_status == "ACTIVE"
         assert published.disposition is service.GrantEvidenceSourceDisposition.CREATED
-        replay = _publish(
+        source_row = transaction.get(GrantEvidenceSourceRecord, registered.source_record_id)
+        config_row = transaction.get(GrantEvidenceSourceConfig, published.config_id)
+        expected_snapshot = _expected_config_snapshot(publish_command, source_row)
+        assert config_row.config_snapshot == expected_snapshot
+        assert (
+            config_row.config_snapshot_hash
+            == hashlib.sha256(expected_snapshot.encode()).hexdigest()
+        )
+        assert config_row.supersedes_config_id is None
+        replay = service.publish_grant_evidence_source_config(
+            publish_command,
             transaction,
-            registered.source_record_id,
-            selector,
-            idempotency_key=key,
         )
         assert replay == service.GrantEvidenceSourceConfigResult(
             config_id=published.config_id,
@@ -442,7 +694,7 @@ def test_publish_resolve_revoke_and_replay_are_fail_closed(session_factory) -> N
         )
         resolved = service.resolve_grant_evidence_source(
             service.ResolveGrantEvidenceSourceCommand(
-                evidence_scope=service.GrantEvidenceScope.GRANT_ANNOUNCEMENT,
+                evidence_scope=evidence_scope,
                 as_of=AS_OF,
             ),
             transaction,
@@ -457,10 +709,64 @@ def test_publish_resolve_revoke_and_replay_are_fail_closed(session_factory) -> N
         assert resolved.source_snapshot_hash == registered.source_snapshot_hash
         assert resolved.config_snapshot_hash == published.config_snapshot_hash
 
+        revoke_command = service.RevokeGrantEvidenceSourceConfigCommand(
+            evidence_scope=evidence_scope,
+            config_version="config-v2-revoked",
+            effective_from=AS_OF,
+            selected_by=selector,
+            published_at=AS_OF,
+            selection_reason="synthetic test revocation",
+            expected_current_config_id=published.config_id,
+            idempotency_key=f"revoke-{uuid4()}",
+        )
+        revoked = service.revoke_grant_evidence_source_config(revoke_command, transaction)
+        assert revoked.config_status == "REVOKED"
+        revoked_row = transaction.get(GrantEvidenceSourceConfig, revoked.config_id)
+        revoke_snapshot_command = service.PublishGrantEvidenceSourceConfigCommand(
+            evidence_scope=evidence_scope,
+            source_record_id=registered.source_record_id,
+            config_version=revoke_command.config_version,
+            effective_from=revoke_command.effective_from,
+            effective_to=None,
+            selected_by=revoke_command.selected_by,
+            published_at=revoke_command.published_at,
+            selection_reason=revoke_command.selection_reason,
+            expected_current_config_id=published.config_id,
+            idempotency_key=revoke_command.idempotency_key,
+        )
+        expected_revoke_snapshot = _expected_config_snapshot(
+            revoke_snapshot_command,
+            source_row,
+            config_status="REVOKED",
+        )
+        assert revoked_row.config_snapshot == expected_revoke_snapshot
+        assert (
+            revoked_row.config_snapshot_hash
+            == hashlib.sha256(expected_revoke_snapshot.encode()).hexdigest()
+        )
+        assert revoked_row.supersedes_config_id == published.config_id
+        assert (
+            service.revoke_grant_evidence_source_config(revoke_command, transaction).disposition
+            is service.GrantEvidenceSourceDisposition.REUSED
+        )
+        _assert_error(
+            lambda: service.resolve_grant_evidence_source(
+                service.ResolveGrantEvidenceSourceCommand(
+                    evidence_scope=evidence_scope,
+                    as_of=AS_OF,
+                ),
+                transaction,
+            ),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
+
         successor = service.register_grant_evidence_source(
             _register_command(
                 creator,
+                source_code=source_code,
                 source_version="2026-08-v2",
+                evidence_scope=evidence_scope,
                 supersedes_source_id=registered.source_record_id,
             ),
             transaction,
@@ -471,25 +777,164 @@ def test_publish_resolve_revoke_and_replay_are_fail_closed(session_factory) -> N
             transaction,
             registered.source_record_id,
             selector,
+            evidence_scope=evidence_scope,
             idempotency_key=key,
         )
         assert historical_replay.config_id == published.config_id
         assert historical_replay.disposition is service.GrantEvidenceSourceDisposition.REUSED
 
-        revoked = service.revoke_grant_evidence_source_config(
-            service.RevokeGrantEvidenceSourceConfigCommand(
-                evidence_scope=service.GrantEvidenceScope.GRANT_ANNOUNCEMENT,
-                config_version="config-v2-revoked",
-                effective_from=AS_OF,
-                selected_by=selector,
-                published_at=AS_OF,
-                selection_reason="synthetic test revocation",
-                expected_current_config_id=published.config_id,
-                idempotency_key=f"revoke-{uuid4()}",
+
+def test_revoke_requires_linked_source_to_remain_reviewed_active_current_and_effective(
+    session_factory,
+) -> None:
+    with session_factory() as transaction:
+        creator, reviewer, selector, registered = _active_source_and_gate(transaction)
+        published = _publish(transaction, registered.source_record_id, selector)
+        successor = service.register_grant_evidence_source(
+            _register_command(
+                creator,
+                source_code="CNIPA-GRANT_ANNOUNCEMENT",
+                source_version="2026-08-v2",
+                supersedes_source_id=registered.source_record_id,
             ),
             transaction,
         )
-        assert revoked.config_status == "REVOKED"
+        _review(transaction, successor.source_record_id, reviewer)
+        _activate(transaction, successor.source_record_id, selector, registered.source_record_id)
+        before = transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceConfig))
+        _assert_error(
+            lambda: service.revoke_grant_evidence_source_config(
+                service.RevokeGrantEvidenceSourceConfigCommand(
+                    evidence_scope=service.GrantEvidenceScope.GRANT_ANNOUNCEMENT,
+                    config_version="revoke-after-retirement",
+                    effective_from=AS_OF,
+                    selected_by=selector,
+                    published_at=AS_OF,
+                    selection_reason="must fail closed",
+                    expected_current_config_id=published.config_id,
+                    idempotency_key=f"revoke-{uuid4()}",
+                ),
+                transaction,
+            ),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
+        assert (
+            transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceConfig))
+            == before
+        )
+        current = transaction.get(GrantEvidenceSourceConfig, published.config_id)
+        assert current.current_identity_key == (
+            "DG-GRANT-EVIDENCE-SOURCE|GLOBAL|GRANT_ANNOUNCEMENT"
+        )
+
+
+def test_publish_replay_binds_selected_actor_and_current_cas(session_factory) -> None:
+    with session_factory() as transaction:
+        _, _, selector, registered = _active_source_and_gate(transaction)
+        other_selector = _add_user(transaction, f"other-selector-{uuid4()}")
+        transaction.commit()
+        key = f"publish-{uuid4()}"
+        published = _publish(
+            transaction,
+            registered.source_record_id,
+            selector,
+            idempotency_key=key,
+        )
+        before = transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceConfig))
+        for replay_selector in (other_selector, str(uuid4())):
+            _assert_error(
+                lambda replay_selector=replay_selector: _publish(
+                    transaction,
+                    registered.source_record_id,
+                    replay_selector,
+                    idempotency_key=key,
+                ),
+                "GRANT_EVIDENCE_SOURCE_CONFLICT",
+                409,
+            )
+        _assert_error(
+            lambda: _publish(
+                transaction,
+                registered.source_record_id,
+                selector,
+                config_version="stale-cas",
+                expected_current_config_id=str(uuid4()),
+            ),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
+        assert (
+            transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceConfig))
+            == before
+        )
+        assert transaction.get(
+            GrantEvidenceSourceConfig, published.config_id
+        ).current_identity_key == ("DG-GRANT-EVIDENCE-SOURCE|GLOBAL|GRANT_ANNOUNCEMENT")
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    (
+        "gate_missing",
+        "gate_revoked",
+        "gate_future",
+        "gate_source",
+        "gate_version",
+        "config_snapshot",
+        "source_hash",
+    ),
+)
+def test_gate_and_canonical_corruption_fail_409_without_write(
+    session_factory, corruption: str
+) -> None:
+    with session_factory() as transaction:
+        _, _, selector, registered = _active_source_and_gate(transaction)
+        if corruption.startswith("gate_"):
+            gate = transaction.scalar(select(CustomerDecisionGate))
+            if corruption == "gate_missing":
+                transaction.delete(gate)
+            elif corruption == "gate_revoked":
+                gate.decision_status = "REVOKED"
+            elif corruption == "gate_future":
+                gate.effective_at = AS_OF + timedelta(days=1)
+            elif corruption == "gate_source":
+                gate.source_reference = "corrupt-source"
+            else:
+                gate.source_version = "corrupt-version"
+            transaction.commit()
+            before = transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceConfig))
+            with pytest.raises(BusinessError) as caught:
+                _publish(transaction, registered.source_record_id, selector)
+            assert caught.value.status_code == 409
+            assert caught.value.code in {
+                "DECISION_GATE_NOT_FOUND",
+                "DECISION_GATE_REVOKED",
+                "DECISION_GATE_NOT_EFFECTIVE",
+                "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            }
+            assert (
+                transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceConfig))
+                == before
+            )
+            return
+
+        published = _publish(transaction, registered.source_record_id, selector)
+        if corruption == "config_snapshot":
+            transaction.get(GrantEvidenceSourceConfig, published.config_id).config_snapshot = "{}"
+        else:
+            transaction.get(
+                GrantEvidenceSourceRecord, registered.source_record_id
+            ).source_snapshot_hash = "0" * 64
+        transaction.commit()
+        before = tuple(
+            transaction.scalar(select(func.count()).select_from(model))
+            for model in (
+                GrantEvidenceSourceRecord,
+                GrantEvidenceSourceConfig,
+                GrantEvidenceCandidate,
+            )
+        )
         _assert_error(
             lambda: service.resolve_grant_evidence_source(
                 service.ResolveGrantEvidenceSourceCommand(
@@ -501,6 +946,73 @@ def test_publish_resolve_revoke_and_replay_are_fail_closed(session_factory) -> N
             "GRANT_EVIDENCE_SOURCE_CONFLICT",
             409,
         )
+        after = tuple(
+            transaction.scalar(select(func.count()).select_from(model))
+            for model in (
+                GrantEvidenceSourceRecord,
+                GrantEvidenceSourceConfig,
+                GrantEvidenceCandidate,
+            )
+        )
+        assert after == before
+
+
+@pytest.mark.parametrize("config_state", ("missing", "future", "expired"))
+def test_resolution_requires_one_current_effective_config(
+    session_factory, config_state: str
+) -> None:
+    with session_factory() as transaction:
+        _, _, selector, registered = _active_source_and_gate(transaction)
+        if config_state != "missing":
+            if config_state == "future":
+                effective_from = AS_OF + timedelta(seconds=1)
+                effective_to = None
+            else:
+                effective_from = AS_OF - timedelta(hours=2)
+                effective_to = AS_OF - timedelta(seconds=1)
+            service.publish_grant_evidence_source_config(
+                service.PublishGrantEvidenceSourceConfigCommand(
+                    evidence_scope=service.GrantEvidenceScope.GRANT_ANNOUNCEMENT,
+                    source_record_id=registered.source_record_id,
+                    config_version=f"config-{config_state}",
+                    effective_from=effective_from,
+                    effective_to=effective_to,
+                    selected_by=selector,
+                    published_at=AS_OF - timedelta(hours=3),
+                    selection_reason=f"synthetic {config_state} config",
+                    expected_current_config_id=None,
+                    idempotency_key=f"publish-{uuid4()}",
+                ),
+                transaction,
+            )
+        before = tuple(
+            transaction.scalar(select(func.count()).select_from(model))
+            for model in (
+                GrantEvidenceSourceRecord,
+                GrantEvidenceSourceConfig,
+                GrantEvidenceCandidate,
+            )
+        )
+        _assert_error(
+            lambda: service.resolve_grant_evidence_source(
+                service.ResolveGrantEvidenceSourceCommand(
+                    evidence_scope=service.GrantEvidenceScope.GRANT_ANNOUNCEMENT,
+                    as_of=AS_OF,
+                ),
+                transaction,
+            ),
+            "GRANT_EVIDENCE_SOURCE_CONFLICT",
+            409,
+        )
+        after = tuple(
+            transaction.scalar(select(func.count()).select_from(model))
+            for model in (
+                GrantEvidenceSourceRecord,
+                GrantEvidenceSourceConfig,
+                GrantEvidenceCandidate,
+            )
+        )
+        assert after == before
 
 
 class _ScopeLookalike(str, Enum):
@@ -552,12 +1064,42 @@ def test_dirty_session_fails_before_gate_query_or_flush(session_factory) -> None
         assert transaction.new
 
 
-def test_caller_rollback_removes_complete_write(session_factory) -> None:
+def test_forced_flush_fault_and_caller_rollback_remove_complete_write(
+    session_factory, monkeypatch
+) -> None:
     actor_id: str
     with session_factory() as transaction:
         actor_id, _, _ = _actors(transaction)
+        original_flush = transaction.flush
+        flush_calls = 0
+
+        def fail_second_flush(objects=None) -> None:
+            nonlocal flush_calls
+            flush_calls += 1
+            if flush_calls == 2:
+                raise RuntimeError("forced test-only flush fault")
+            original_flush(objects)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(transaction, "flush", fail_second_flush)
+            with pytest.raises(RuntimeError, match="forced test-only flush fault"):
+                service.register_grant_evidence_source(_register_command(actor_id), transaction)
+        assert not transaction.new
+        assert not transaction.dirty
+        assert transaction.scalar(select(func.count()).select_from(GrantEvidenceSourceRecord)) == 0
+
         created = service.register_grant_evidence_source(_register_command(actor_id), transaction)
         source_id = created.source_record_id
         transaction.rollback()
     with session_factory() as transaction:
         assert transaction.get(GrantEvidenceSourceRecord, source_id) is None
+
+    with session_factory() as transaction:
+        _, _, selector, registered = _active_source_and_gate(transaction)
+        transaction.commit()
+        published = _publish(transaction, registered.source_record_id, selector)
+        config_id = published.config_id
+        transaction.rollback()
+    with session_factory() as transaction:
+        assert transaction.get(GrantEvidenceSourceConfig, config_id) is None
+        assert transaction.scalar(select(func.count()).select_from(GrantEvidenceCandidate)) == 0
