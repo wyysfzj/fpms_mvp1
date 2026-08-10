@@ -445,3 +445,122 @@ def _prevent_future_annuity_exception_mutation(
     **_kwargs: object,
 ) -> None:
     raise ValueError("future annuity draft exception record is append-only")
+
+
+class GrantManualReviewRoleConfig(Base):
+    __tablename__ = "t_grant_manual_review_role_config"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    gate_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    official_copy_acquirer_role_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    first_verifier_role_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    second_verifier_role_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    manual_review_proposer_role_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    manual_review_second_reviewer_role_id: Mapped[str] = mapped_column(
+        String(36), nullable=False
+    )
+    config_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    config_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    confirmed_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    supersedes_config_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    config_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    config_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    current_identity_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "config_version",
+            name="uq_t_grant_manual_review_role_config_version",
+        ),
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_t_grant_manual_review_role_config_idempotency_key",
+        ),
+        UniqueConstraint(
+            "current_identity_key",
+            name="uq_t_grant_manual_review_role_config_current_identity_key",
+        ),
+        ForeignKeyConstraint(
+            ["official_copy_acquirer_role_id"],
+            ["t_role.id"],
+            name="fk_t_grant_manual_role_config_acquirer_role",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["first_verifier_role_id"],
+            ["t_role.id"],
+            name="fk_t_grant_manual_role_config_first_verifier_role",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["second_verifier_role_id"],
+            ["t_role.id"],
+            name="fk_t_grant_manual_role_config_second_verifier_role",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["manual_review_proposer_role_id"],
+            ["t_role.id"],
+            name="fk_t_grant_manual_role_config_proposer_role",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["manual_review_second_reviewer_role_id"],
+            ["t_role.id"],
+            name="fk_t_grant_manual_role_config_second_reviewer_role",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["confirmed_by"],
+            ["t_user.id"],
+            name="fk_t_grant_manual_role_config_confirmed_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_config_id"],
+            ["t_grant_manual_review_role_config.id"],
+            name="fk_t_grant_manual_role_config_supersedes_config",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "gate_code = 'DG-GRANT-MANUAL-REVIEW' AND scope_key = 'GLOBAL'",
+            name="ck_t_grant_manual_review_role_config_gate",
+        ),
+        CheckConstraint(
+            "config_status IN ('ACTIVE', 'REVOKED')",
+            name="ck_t_grant_manual_review_role_config_status",
+        ),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to > effective_from",
+            name="ck_t_grant_manual_review_role_config_interval",
+        ),
+        CheckConstraint(
+            "length(config_snapshot_hash) = 64 "
+            "AND config_snapshot_hash = lower(config_snapshot_hash) "
+            "AND config_snapshot_hash NOT GLOB '*[^0-9a-f]*'",
+            name="ck_t_grant_manual_review_role_config_hash",
+        ),
+        CheckConstraint(
+            "current_identity_key IS NULL OR "
+            "current_identity_key = gate_code || '|' || scope_key",
+            name="ck_t_grant_manual_review_role_config_current_key",
+        ),
+        Index(
+            "ix_t_grant_manual_review_role_config_interval",
+            "scope_key",
+            "config_status",
+            "effective_from",
+            "effective_to",
+        ),
+    )
