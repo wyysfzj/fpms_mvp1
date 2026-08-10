@@ -330,3 +330,26 @@ def test_draft_only_read_rejects_non_pay_instruction_state(
             get_fee_obligation(obligation.id, transaction)
         assert corrupt.value.code == "FEE_OBLIGATION_STORED_STATE_INVALID"
         assert corrupt.value.status_code == 409
+
+
+def test_draft_only_read_requires_pending_official_evidence(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        seed, review = _seed_ready(transaction)
+        result = grant_fee_service.apply_grant_year_auto_draft_policy(
+            transaction=transaction,
+            grant_fee_task_id=seed[2].id,
+            source_activity_id=seed[4].activity_id,
+            actor_id=review.actor_id,
+            as_of=AS_OF,
+        )
+        obligation = transaction.get(FeeObligation, result.recognition.obligation.id)
+        assert obligation is not None
+        obligation.official_evidence_status = "NOT_APPLICABLE"
+        transaction.commit()
+
+        with pytest.raises(BusinessError) as corrupt:
+            get_fee_obligation(obligation.id, transaction)
+        assert corrupt.value.code == "FEE_OBLIGATION_STORED_STATE_INVALID"
+        assert corrupt.value.status_code == 409
