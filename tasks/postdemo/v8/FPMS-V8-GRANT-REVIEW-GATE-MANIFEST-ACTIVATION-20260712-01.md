@@ -115,9 +115,10 @@ schema or product code.
 - `tasks/postdemo/v8/FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01.md`
 - `tasks/batches/FPMS-POSTDEMO-V8-GRANT-REVIEW-GATE-20260712-01.md`
 - `backend/tests/test_v8_grant_review_gate_manifest_contract.py`
-- `artifacts/FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01/**`
 
-No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
+No artifact, source, test, task, manifest, catalog, coverage-ledger, adoption or shared ownership
+file outside these exact three paths is authorized. Inherited inputs are read-only. Preserve the
+initial dirty baseline, which is only untracked `backend/uv.lock`; do not stage, edit or absorb it.
 
 ## Runtime Contracts
 
@@ -131,15 +132,25 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 - GREEN and scoped checks:
 - `cd backend && .venv/bin/pytest -q tests/test_v8_grant_review_gate_manifest_contract.py`
 - `cd backend && .venv/bin/ruff check --fix tests/test_v8_grant_review_gate_manifest_contract.py && .venv/bin/ruff format tests/test_v8_grant_review_gate_manifest_contract.py && .venv/bin/ruff check tests/test_v8_grant_review_gate_manifest_contract.py`
-- `git diff --check -- tasks/batches/FPMS-POSTDEMO-V8-GRANT-REVIEW-GATE-20260712-01.md backend/tests/test_v8_grant_review_gate_manifest_contract.py artifacts/FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01/** tasks/postdemo/v8/FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- `git diff --check -- tasks/postdemo/v8/FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01.md tasks/batches/FPMS-POSTDEMO-V8-GRANT-REVIEW-GATE-20260712-01.md backend/tests/test_v8_grant_review_gate_manifest_contract.py`
 
-## Evidence Path
+Do not run repo-wide tests, broad frontend/backend builds, broad Playwright, milestone verification
+or release checks for this activation.
 
-- `artifacts/FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
+## Independent review boundary
+
+This `PROTECTED` activation requires an independent High reviewer of the exact implementation
+commit/range. The reviewer independently reruns the focused GREEN, scoped Ruff and exact diff
+check, verifies the manifest's eight current task hashes and reports one final
+`Verdict: APPROVED`, `P0: 0`, `P1: 0`, `P2: 0`. This implementer does not edit the coverage ledger
+or adoption record and does not self-approve.
 
 ## Done Definition
 
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01` pass. Only then may this task be reported PASS.
+The exact RED is preserved; the minimum three-path change creates one manifest containing this
+activation plus exactly catalog ordinals 204-210 in dependency/shared-file order; the focused
+GREEN, scoped Ruff and exact diff check pass; the `backend/uv.lock` baseline remains untouched;
+runtime source and role configuration remain required/fail-closed; no source, role, permission,
+default, seed, product behavior, ledger or adoption is changed; and an independent High reviewer
+approves the exact implementation commit/range with zero findings. Only then may the story be
+adopted by its separately owned current-adoption change.
