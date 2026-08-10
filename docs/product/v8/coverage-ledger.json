@@ -1366,13 +1366,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-APPLICATION-DRAFT-MANIFEST-ACTIVATION-20260712-01",
@@ -5553,6 +5550,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "6755c4457a323f73b970ff8f12038eddf21a9466"
+      ],
+      "paths": [
+        "tasks/batches/FPMS-POSTDEMO-V8-GRANT-REVIEW-GATE-20260712-01.md",
+        "backend/tests/test_v8_grant_review_gate_manifest_contract.py"
+      ],
+      "tree_sha256": "9118dcc9cb44e0fc716ea9634f3df1b2c31a19eabf8369121080c9d050851f74",
+      "tests": [
+        "focused activation manifest suite passed 3 tests",
+        "scoped Ruff and exact implementation/full-range diff checks passed",
+        "all eight ordered current task hashes and Scheme A authority matched",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
     },
     {
       "story_id": "V8-GRANT-YEAR-DRAFT-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
