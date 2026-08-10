@@ -6380,6 +6380,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-EXCEPTION-CARRIER-SCHEMA-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-EXCEPTION-CARRIER-SCHEMA-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-MANUAL-REVIEW-ROLE-CARRIER-SCHEMA-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "1a3f845b98514bf6be39c720f02f40f654e653c1"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_grant_manual_review_role_carrier.py",
+        "backend/app/modules/system/models.py",
+        "backend/app/models/__init__.py",
+        "backend/tests/test_v8_grant_manual_review_role_carrier_schema.py"
+      ],
+      "tree_sha256": "1dd9696e0609d8de56ec639e4270bdacc70ce89e8b95cebb2a9efeeb732349f6",
+      "tests": [
+        "focused grant manual-review role schema suite passed 4 tests",
+        "scoped Ruff, registry, unique Alembic head and clean SQLite upgrade/current passed",
+        "exact four-path diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-MANUAL-REVIEW-ROLE-CARRIER-SCHEMA-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-MANUAL-REVIEW-ROLE-CARRIER-SCHEMA-CURRENT-ADOPTION.md"
     }
   ]
 }
