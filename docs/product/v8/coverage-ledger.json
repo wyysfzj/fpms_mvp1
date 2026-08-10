@@ -6509,18 +6509,19 @@
       "status": "CURRENT_VERIFIED",
       "commits": [
         "34329371306e1561526b0f9855eedb405bd6c510",
-        "cada0a256b2170eab934b5a3a55711880abd1466"
+        "cada0a256b2170eab934b5a3a55711880abd1466",
+        "c686c19429ea79f82cbaadb6182d849c75c3133d"
       ],
       "paths": [
         "backend/app/modules/documents/grant_evidence_ingestion_service.py",
         "backend/tests/test_v8_grant_evidence_ingestion_service.py"
       ],
-      "tree_sha256": "e3765e5b3bf274bf15a4a8985981cb9b0634633a2939cd75447be639eb42c59e",
+      "tree_sha256": "2db66d3920284ddbd9d2e064a78c1fe30dc8ea2d59c12aaad46bf47624ba3956",
       "tests": [
-        "focused grant evidence ingestion service suite passed 21 tests",
+        "focused grant evidence ingestion service suite passed 22 tests, including concurrent IntegrityError race",
         "affected official-copy, source, role and carrier regressions passed 93 tests",
         "scoped Ruff, format and exact two-path diff check passed",
-        "independent High re-review approved P0/P1/P2 0/0/0"
+        "independent High successor review approved P0/P1/P2 0/0/0"
       ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-INGESTION-SERVICE-CURRENT-ADOPTION.md",
