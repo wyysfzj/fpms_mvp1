@@ -26,7 +26,7 @@ from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor  # no
 from app.modules.documents.models import DocTemplate  # noqa: E402
 from app.modules.documents.official_notice_catalog import (  # noqa: E402
     seed_fee_reduction_approval_official_notice_catalog,
-    seed_official_letter_out_form_001_catalog,
+    seed_official_letter_out_form_001_catalog as seed_official_letter_out_catalog,
 )
 from app.modules.fees.models import FeeRate  # noqa: E402
 from app.modules.masterdata.applicants.models import Applicant  # noqa: E402
@@ -1260,7 +1260,7 @@ def seed_doc_templates(db: Session) -> None:
             db.add(DocTemplate(id=str(uuid4()), **t))
             created += 1
     official_notice_catalog_changed = seed_fee_reduction_approval_official_notice_catalog(db)
-    official_letter_out_changed = seed_official_letter_out_form_001_catalog(db)
+    official_letter_out_changed = seed_official_letter_out_catalog(db)
     grant_fee_notice_changed = seed_grant_fee_notice_template_source(db)
     format_letter_mapping_changed = seed_format_letter_mappings(db)
     db.commit()
