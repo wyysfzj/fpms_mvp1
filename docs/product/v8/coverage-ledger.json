@@ -1956,13 +1956,10 @@
     {
       "catalog_id": "FPMS-V8-OUT-003-EARLY-PUBLICATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OUT-003-EARLY-PUBLICATION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OUT-004-EXAM-REQUEST-20260712-01",
@@ -6109,6 +6106,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-022-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-022-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OUT-003-EARLY-PUBLICATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "48c48413e1a9e68cc950dc03e1d6546821bd6885"
+      ],
+      "paths": [
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_out_003_activation.py"
+      ],
+      "tree_sha256": "1d741e8e22654f7d760a234313985187753a9a4974dd90be60724ab6f5805502",
+      "tests": [
+        "focused serialized OUT-003 suite passed 1 test",
+        "scoped Ruff, format and exact diff checks passed",
+        "independent High Standards and Spec reviews approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OUT-003-EARLY-PUBLICATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OUT-003-EARLY-PUBLICATION-CURRENT-ADOPTION.md"
     }
   ]
 }
