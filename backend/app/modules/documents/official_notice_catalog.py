@@ -320,6 +320,10 @@ OFFICIAL_LETTER_OUT_FORM_005_CLASSIFICATIONS = {
     **OFFICIAL_LETTER_OUT_FORM_004_CLASSIFICATIONS,
     "主动撤回": ("form-005", "INTERNAL_ONLY"),
 }
+OFFICIAL_LETTER_OUT_FORM_006_CLASSIFICATIONS = {
+    **OFFICIAL_LETTER_OUT_FORM_005_CLASSIFICATIONS,
+    "主动放弃": ("form-006", "INTERNAL_ONLY"),
+}
 
 
 def _official_letter_out_input_fields(
@@ -418,4 +422,11 @@ def seed_official_letter_out_form_005_catalog(db: Session) -> int:
     return _seed_official_letter_out_catalog(
         db,
         OFFICIAL_LETTER_OUT_FORM_005_CLASSIFICATIONS,
+    )
+
+
+def seed_official_letter_out_form_006_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(
+        db,
+        OFFICIAL_LETTER_OUT_FORM_006_CLASSIFICATIONS,
     )
