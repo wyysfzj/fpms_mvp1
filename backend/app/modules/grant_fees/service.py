@@ -61,6 +61,7 @@ from app.modules.fees.obligation_contracts import (
     FeeClientInstruction,
     FeeDifferenceReviewState,
     FeeDomain,
+    FeeDraftAuthority,
     FeeDraftItemLinkResult,
     FeeObligationLineInput,
     FeeObligationStatus,
@@ -81,6 +82,11 @@ from app.modules.fees.service import (
     fee_rate_effective_on_conditions,
     fee_rate_source_enabled_condition,
     recalc_fee_draft_totals,
+)
+from app.modules.system.decision_gate_service import (
+    DecisionGateCode,
+    ResolveDecisionGateCommand,
+    resolve_decision_gate,
 )
 from app.modules.templates.render import TemplateRenderer
 
@@ -146,6 +152,10 @@ _GRANT_OFFICIAL_FEE_REVIEW_PAYLOAD_KEYS = {
     "before_lines",
     "after_lines",
 }
+_GRANT_YEAR_DRAFT_DECISION_SOURCE = (
+    "docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt"
+)
+_GRANT_YEAR_DRAFT_DECISION_VERSION = "customer-decision:2026-08-10:v8-full-batch-scheme-a:v1"
 _GRANT_OFFICIAL_FEE_REVIEW_LINE_KEYS = {
     "obligation_line_id",
     "fee_code",
@@ -270,6 +280,12 @@ class PrepareGrantFeeTaskDraftResult:
     activity_id: str
     activity_reused: bool
     idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class GrantYearAutoDraftPolicyResult:
+    recognition: RecognizeFeeObligationResult
+    draft: PrepareGrantFeeTaskDraftResult
 
 
 def _grant_instruction_command_invalid(field: str) -> None:
@@ -1548,6 +1564,8 @@ def _validate_grant_draft_result(
     obligation: FeeObligation,
     obligation_lines: tuple[FeeObligationLine, ...],
     result: object,
+    authority: FeeDraftAuthority = FeeDraftAuthority.CLIENT_PAY_INSTRUCTION,
+    expected_source_activity_id: str | None = None,
 ) -> PrepareFeeObligationDraftResult:
     if type(result) is not PrepareFeeObligationDraftResult:
         _grant_draft_lineage_conflict()
@@ -1619,7 +1637,8 @@ def _validate_grant_draft_result(
         payload = json.loads(activity.payload_json)
     except (TypeError, ValueError):
         _grant_draft_lineage_conflict()
-    expected_payload = {
+    reviewed_grant = authority is FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE
+    expected_payload: dict[str, object] = {
         "actor_id": command.actor_id,
         "center_changes": {},
         "draft_id": draft.id,
@@ -1631,8 +1650,14 @@ def _validate_grant_draft_result(
             for link in result.links
         ],
         "obligation_id": obligation.id,
-        "schema": "FPMS_FEE_DRAFT_CREATED_V1",
+        "schema": (
+            "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_GRANT_YEAR_NOTICE_V1"
+            if reviewed_grant
+            else "FPMS_FEE_DRAFT_CREATED_V1"
+        ),
     }
+    if reviewed_grant:
+        expected_payload["authority"] = authority.value
     canonical = json.dumps(
         expected_payload,
         ensure_ascii=False,
@@ -1640,13 +1665,28 @@ def _validate_grant_draft_result(
         separators=(",", ":"),
         allow_nan=False,
     )
-    instruction = transaction.get(CaseActivityEvent, activity.source_activity_id)
-    if instruction is None:
-        _grant_draft_lineage_conflict()
-    try:
-        instruction_payload = json.loads(instruction.payload_json)
-    except (TypeError, ValueError):
-        _grant_draft_lineage_conflict()
+    instruction = (
+        None if reviewed_grant else transaction.get(CaseActivityEvent, activity.source_activity_id)
+    )
+    if reviewed_grant:
+        source_valid = (
+            _valid_review_text(expected_source_activity_id, limit=36)
+            and activity.source_activity_id == expected_source_activity_id
+        )
+    else:
+        if instruction is None:
+            _grant_draft_lineage_conflict()
+        try:
+            instruction_payload = json.loads(instruction.payload_json)
+        except (TypeError, ValueError):
+            _grant_draft_lineage_conflict()
+        source_valid = (
+            instruction.activity_type == "FEE_CLIENT_INSTRUCTION_RECORDED"
+            and instruction.case_id == task.case_id
+            and type(instruction_payload) is dict
+            and instruction_payload.get("obligation_id") == obligation.id
+            and instruction_payload.get("instruction") == "PAY"
+        )
     if (
         payload != expected_payload
         or activity.payload_json != canonical
@@ -1662,11 +1702,7 @@ def _validate_grant_draft_result(
         or activity.old_business_stage != activity.new_business_stage
         or activity.old_official_procedure_stage != activity.new_official_procedure_stage
         or activity.old_legal_status != activity.new_legal_status
-        or instruction.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
-        or instruction.case_id != task.case_id
-        or type(instruction_payload) is not dict
-        or instruction_payload.get("obligation_id") != obligation.id
-        or instruction_payload.get("instruction") != "PAY"
+        or not source_valid
         or transaction.scalar(
             select(func.count())
             .select_from(CaseActivityEventEvidence)
@@ -1768,6 +1804,174 @@ def prepare_grant_fee_task_draft(
         activity_reused=validated.activity_reused,
         idempotency_key=validated.idempotency_key,
     )
+
+
+def _grant_year_policy_recognition(
+    *,
+    transaction: Session,
+    grant_fee_task_id: str,
+    source_activity_id: str,
+) -> RecognizeFeeObligationResult:
+    obligation, _review = validated_grant_year_official_fee_review_for_draft(
+        transaction,
+        grant_fee_task_id=grant_fee_task_id,
+    )
+    matches: list[CaseActivityEvent] = []
+    for activity in transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == obligation.case_id,
+            CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
+        )
+    ):
+        try:
+            payload = json.loads(activity.payload_json)
+        except (TypeError, ValueError):
+            _grant_draft_lineage_conflict()
+        if type(payload) is dict and payload.get("obligation_id") == obligation.id:
+            matches.append(activity)
+    if len(matches) != 1:
+        _grant_draft_lineage_conflict()
+    recognition_activity = matches[0]
+    if (
+        recognition_activity.source_activity_id != source_activity_id
+        or not _valid_review_text(recognition_activity.actor_id, limit=36)
+        or not _valid_review_text(recognition_activity.idempotency_key, limit=128)
+    ):
+        _grant_draft_lineage_conflict()
+    try:
+        detail = get_fee_obligation(obligation.id, transaction)
+    except BusinessError:
+        _grant_draft_lineage_conflict()
+    if detail.id != obligation.id or detail.source.source_activity_id != source_activity_id:
+        _grant_draft_lineage_conflict()
+    return RecognizeFeeObligationResult(
+        obligation=detail,
+        activity_id=recognition_activity.id,
+        idempotency_key=recognition_activity.idempotency_key,
+        reused=True,
+        superseded_obligation_id=detail.supersedes_obligation_id,
+    )
+
+
+def _prepare_reviewed_grant_year_draft(
+    *,
+    transaction: Session,
+    grant_fee_task_id: str,
+    source_activity_id: str,
+    actor_id: str,
+    recognition: RecognizeFeeObligationResult,
+) -> PrepareGrantFeeTaskDraftResult:
+    task = transaction.get(T_GrantFeeTask, grant_fee_task_id)
+    if task is None:
+        _grant_draft_link_not_found()
+    obligation = transaction.get(FeeObligation, recognition.obligation.id)
+    if obligation is None:
+        _grant_draft_link_not_found()
+    obligation_lines = tuple(
+        transaction.scalars(
+            select(FeeObligationLine)
+            .where(FeeObligationLine.obligation_id == obligation.id)
+            .order_by(
+                FeeObligationLine.fee_code.asc(),
+                FeeObligationLine.fee_year_key.asc(),
+                FeeObligationLine.id.asc(),
+            )
+        )
+    )
+    command = PrepareGrantFeeTaskDraftCommand(
+        grant_fee_task_id=grant_fee_task_id,
+        source_activity_id=source_activity_id,
+        actor_id=actor_id,
+        idempotency_key=f"grant-year-auto-draft:{grant_fee_task_id}:{source_activity_id}",
+    )
+    deep_result = prepare_draft(
+        PrepareFeeObligationDraftCommand(
+            obligation_id=obligation.id,
+            actor_id=actor_id,
+            idempotency_key=command.idempotency_key,
+            authority=FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
+        ),
+        transaction,
+    )
+    validated = _validate_grant_draft_result(
+        command,
+        transaction,
+        task=task,
+        obligation=obligation,
+        obligation_lines=obligation_lines,
+        result=deep_result,
+        authority=FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
+        expected_source_activity_id=recognition.activity_id,
+    )
+    return PrepareGrantFeeTaskDraftResult(
+        grant_fee_task_id=task.id,
+        fee_obligation_id=obligation.id,
+        draft_id=validated.draft_id,
+        links=validated.links,
+        activity_id=validated.activity_id,
+        activity_reused=validated.activity_reused,
+        idempotency_key=validated.idempotency_key,
+    )
+
+
+def apply_grant_year_auto_draft_policy(
+    *,
+    transaction: Session,
+    grant_fee_task_id: str,
+    source_activity_id: str,
+    actor_id: str,
+    as_of: datetime,
+) -> GrantYearAutoDraftPolicyResult:
+    for field, value in (
+        ("grant_fee_task_id", grant_fee_task_id),
+        ("source_activity_id", source_activity_id),
+        ("actor_id", actor_id),
+    ):
+        if not _valid_review_text(value, limit=36):
+            _grant_draft_command_invalid(field)
+    if type(as_of) is not datetime or as_of.tzinfo is not None:
+        _grant_draft_command_invalid("as_of")
+    if not isinstance(transaction, Session):
+        _grant_draft_command_invalid("transaction")
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _grant_draft_lineage_conflict()
+
+    connection = transaction.connection()
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.driver_connection.in_transaction
+    ):
+        connection.exec_driver_sql("BEGIN")
+    gate = resolve_decision_gate(
+        ResolveDecisionGateCommand(
+            gate_code=DecisionGateCode.FEE_GRANT_YEAR_DRAFT,
+            scope_key="GLOBAL",
+            as_of=as_of,
+        ),
+        transaction,
+    )
+    if (
+        gate.resolved_scope_key != "GLOBAL"
+        or gate.decision_value != "APPROVED_POLICY"
+        or gate.source_reference != _GRANT_YEAR_DRAFT_DECISION_SOURCE
+        or gate.source_version != _GRANT_YEAR_DRAFT_DECISION_VERSION
+    ):
+        _grant_draft_lineage_conflict()
+
+    with transaction.begin_nested():
+        recognition = _grant_year_policy_recognition(
+            transaction=transaction,
+            grant_fee_task_id=grant_fee_task_id,
+            source_activity_id=source_activity_id,
+        )
+        draft = _prepare_reviewed_grant_year_draft(
+            transaction=transaction,
+            grant_fee_task_id=grant_fee_task_id,
+            source_activity_id=source_activity_id,
+            actor_id=actor_id,
+            recognition=recognition,
+        )
+    return GrantYearAutoDraftPolicyResult(recognition=recognition, draft=draft)
 
 
 def recognize_grant_year_annuity_obligation(

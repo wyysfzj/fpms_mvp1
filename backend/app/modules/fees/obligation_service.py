@@ -41,6 +41,7 @@ from app.modules.fees.models import (
     FeeItem,
     FeeObligationDraftItemLink,
     FeeObligationPaymentEvidenceLink,
+    T_GrantFeeTask,
 )
 from app.modules.fees.models import (
     FeeObligation as FeeObligationModel,
@@ -135,6 +136,7 @@ _INSTRUCTION_PAYLOAD_SCHEMA = "FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1"
 _DRAFT_ACTIVITY_TYPE = "FEE_DRAFT_CREATED"
 _DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_V1"
 _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_APPLICATION_NOTICE_V1"
+_REVIEWED_GRANT_DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_GRANT_YEAR_NOTICE_V1"
 _MAX_AMOUNT = Decimal("9999999999999999.99")
 _TWO_PLACES = Decimal("0.01")
 
@@ -1419,28 +1421,55 @@ def _detail_pay_list_status(
     if header["fee_domain"] != FeeDomain.GOV.value:
         _stored_state_invalid()
     line_by_id = {line["id"]: line for line in lines}
+    payment_states: set[bool] = set()
     for row in rows:
         line = line_by_id.get(row["obligation_line_id"])
         if (
             line is None
             or row["item_id"] is None
             or row["draft_id"] is None
-            or row["payment_id"] is None
-            or row["pay_list_id"] is None
             or row["item_draft_id"] != row["draft_id"]
-            or row["payment_fee_item_id"] != row["item_id"]
-            or row["payment_pay_list_id"] != row["pay_list_id"]
             or row["draft_case_id"] != header["case_id"]
             or row["draft_currency"] != header["currency"]
             or row["item_case_id"] != header["case_id"]
             or row["item_fee_type"] != FeeDomain.GOV.value
             or row["item_fee_code"] != line["fee_code"]
             or row["item_year_no"] != line["fee_year_key"]
+        ):
+            _stored_state_invalid()
+        payment_values = (
+            row["payment_id"],
+            row["pay_list_id"],
+            row["payment_fee_item_id"],
+            row["payment_pay_list_id"],
+            row["payment_case_id"],
+            row["payment_currency"],
+            row["pay_list_currency"],
+        )
+        if any(value is None for value in payment_values) and not all(
+            value is None for value in payment_values
+        ):
+            _stored_state_invalid()
+        has_payment = all(value is not None for value in payment_values)
+        payment_states.add(has_payment)
+        if has_payment and (
+            row["payment_fee_item_id"] != row["item_id"]
+            or row["payment_pay_list_id"] != row["pay_list_id"]
             or row["payment_case_id"] != header["case_id"]
             or row["payment_currency"] != header["currency"]
             or row["pay_list_currency"] != header["currency"]
         ):
             _stored_state_invalid()
+    if len(payment_states) != 1:
+        _stored_state_invalid()
+    if False in payment_states:
+        if (
+            header["draft_status"] != FeeObligationDraftStatus.CREATED.value
+            or header["payment_status"] != FeePaymentStatus.UNPAID.value
+            or header["official_evidence_status"] == FeeOfficialEvidenceStatus.VERIFIED.value
+        ):
+            _stored_state_invalid()
+        return FeePayListStatus.NOT_CREATED
     return FeePayListStatus.CREATED
 
 
@@ -1599,7 +1628,10 @@ def prepare_draft(
             status_code=409,
         )
     _validate_prepare_draft_command(command)
-    reviewed_notice = command.authority is FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE
+    reviewed_notice = command.authority in {
+        FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
+        FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
+    }
 
     with transaction.no_autoflush:
         header = transaction.get(FeeObligationModel, command.obligation_id)
@@ -1637,6 +1669,7 @@ def prepare_draft(
             _reviewed_notice_draft_eligible(
                 transaction,
                 header,
+                authority=command.authority,
                 expected_actor_id=command.actor_id,
                 expected_draft_idempotency_key=command.idempotency_key,
                 recognition=recognition,
@@ -1708,11 +1741,13 @@ def prepare_draft(
         ],
         "obligation_id": command.obligation_id,
         "schema": (
-            _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA if reviewed_notice else _DRAFT_PAYLOAD_SCHEMA
+            _reviewed_notice_draft_schema(command.authority)
+            if reviewed_notice
+            else _DRAFT_PAYLOAD_SCHEMA
         ),
     }
     if reviewed_notice:
-        payload["authority"] = FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE.value
+        payload["authority"] = command.authority.value
     projection = _case_projection(case)
     activity_command = LifecycleEventCommand(
         case_id=header.case_id,
@@ -1921,6 +1956,14 @@ def _validate_prepare_draft_command(command: PrepareFeeObligationDraftCommand) -
         _draft_command_invalid("authority")
 
 
+def _reviewed_notice_draft_schema(authority: FeeDraftAuthority) -> str:
+    if authority is FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE:
+        return _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA
+    if authority is FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE:
+        return _REVIEWED_GRANT_DRAFT_PAYLOAD_SCHEMA
+    _draft_command_invalid("authority")
+
+
 def _draft_lines_or_fail(
     transaction: Session,
     header: FeeObligationModel,
@@ -2042,6 +2085,7 @@ def _reviewed_notice_draft_eligible(
     transaction: Session,
     header: FeeObligationModel,
     *,
+    authority: FeeDraftAuthority,
     expected_actor_id: str,
     expected_draft_idempotency_key: str,
     recognition: CaseActivityEvent,
@@ -2052,6 +2096,7 @@ def _reviewed_notice_draft_eligible(
     _reviewed_notice_source_graph_or_fail(
         transaction,
         header,
+        authority=authority,
         expected_actor_id=expected_actor_id,
         expected_draft_idempotency_key=expected_draft_idempotency_key,
         recognition=recognition,
@@ -2078,12 +2123,26 @@ def _reviewed_notice_source_graph_or_fail(
     transaction: Session,
     header: FeeObligationModel,
     *,
+    authority: FeeDraftAuthority,
     expected_actor_id: str,
     expected_draft_idempotency_key: str,
     recognition: CaseActivityEvent,
     lines: tuple[FeeObligationLineModel, ...],
     allow_later_state: bool,
 ) -> None:
+    if authority is FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE:
+        _reviewed_grant_year_source_graph_or_fail(
+            transaction,
+            header,
+            expected_actor_id=expected_actor_id,
+            expected_draft_idempotency_key=expected_draft_idempotency_key,
+            recognition=recognition,
+            lines=lines,
+            allow_later_state=allow_later_state,
+        )
+        return
+    if authority is not FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE:
+        _draft_command_invalid("authority")
     try:
         obligation_status = FeeObligationStatus(header.obligation_status)
         instruction_status = FeeClientInstructionStatus(header.client_instruction_status)
@@ -2204,8 +2263,7 @@ def _reviewed_notice_source_graph_or_fail(
         or not _reviewed_notice_naive_datetime(recognition.effective_at)
         or recognition.occurred_at != recognition.effective_at
         or recognition.old_business_stage != recognition.new_business_stage
-        or recognition.old_official_procedure_stage
-        != recognition.new_official_procedure_stage
+        or recognition.old_official_procedure_stage != recognition.new_official_procedure_stage
         or recognition.old_legal_status != recognition.new_legal_status
         or recognition.payload_json
         != json.dumps(
@@ -2347,6 +2405,106 @@ def _reviewed_notice_source_graph_or_fail(
         _draft_stored_state_invalid()
 
 
+def _reviewed_grant_year_source_graph_or_fail(
+    transaction: Session,
+    header: FeeObligationModel,
+    *,
+    expected_actor_id: str,
+    expected_draft_idempotency_key: str,
+    recognition: CaseActivityEvent,
+    lines: tuple[FeeObligationLineModel, ...],
+    allow_later_state: bool,
+) -> None:
+    try:
+        obligation_status = FeeObligationStatus(header.obligation_status)
+        instruction_status = FeeClientInstructionStatus(header.client_instruction_status)
+        draft_status = FeeObligationDraftStatus(header.draft_status)
+        payment_status = FeePaymentStatus(header.payment_status)
+        official_status = FeeOfficialEvidenceStatus(header.official_evidence_status)
+        detail = get_fee_obligation(header.id, transaction)
+    except (BusinessError, ValueError):
+        _draft_stored_state_invalid()
+    if (
+        not _reviewed_notice_exact_text(expected_actor_id, 36)
+        or header.fee_domain != FeeDomain.GOV.value
+        or header.obligation_type != "GRANT_YEAR_ANNUITY"
+        or header.source_status != FeeSourceStatus.VERIFIED.value
+        or obligation_status is not FeeObligationStatus.RECOGNIZED
+        or payment_status is not FeePaymentStatus.UNPAID
+        or official_status is not FeeOfficialEvidenceStatus.PENDING
+        or detail.id != header.id
+        or detail.case_id != header.case_id
+        or detail.source.source_activity_id != header.source_activity_id
+        or detail.source.source_document_id != header.source_document_id
+        or detail.statuses.obligation_status is not FeeObligationStatus.RECOGNIZED
+        or tuple(line.id for line in detail.lines) != tuple(line.id for line in lines)
+        or any(
+            line.difference_review_state != FeeDifferenceReviewState.MATCHED.value
+            or not _valid_amount(line.official_full_amount, optional=False)
+            for line in lines
+        )
+        or recognition.case_id != header.case_id
+        or recognition.activity_type != _ACTIVITY_TYPE
+        or recognition.lane != ActivityLane.FEE.value
+        or recognition.source_activity_id != header.source_activity_id
+        or recognition.confirmation_status != ConfirmationStatus.CONFIRMED.value
+    ):
+        _draft_stored_state_invalid()
+    if not allow_later_state and (
+        instruction_status is not FeeClientInstructionStatus.PENDING
+        or draft_status is not FeeObligationDraftStatus.NOT_CREATED
+    ):
+        _draft_not_actionable(header)
+    if allow_later_state and (
+        draft_status is not FeeObligationDraftStatus.CREATED
+        or instruction_status
+        not in {FeeClientInstructionStatus.PENDING, FeeClientInstructionStatus.PAY}
+    ):
+        _draft_stored_state_invalid()
+
+    reviews: list[tuple[CaseActivityEvent, dict[str, object]]] = []
+    for activity in transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == header.case_id,
+            CaseActivityEvent.activity_type == _GRANT_REVIEW_ACTIVITY_TYPE,
+        )
+    ):
+        try:
+            payload = _strict_json_loads(activity.payload_json)
+        except (TypeError, ValueError):
+            _draft_stored_state_invalid()
+        if type(payload) is not dict:
+            _draft_stored_state_invalid()
+        if payload.get("obligation_id") == header.id:
+            reviews.append((activity, payload))
+    if len(reviews) != 1:
+        _draft_stored_state_invalid()
+    review, review_payload = reviews[0]
+    grant_fee_task_id = review_payload.get("grant_fee_task_id")
+    task = (
+        transaction.get(T_GrantFeeTask, grant_fee_task_id)
+        if type(grant_fee_task_id) is str
+        else None
+    )
+    if (
+        not _reviewed_notice_exact_text(grant_fee_task_id, 36)
+        or task is None
+        or task.type != "GRANT"
+        or task.case_id != header.case_id
+        or task.source_document_id != header.source_document_id
+        or task.due_date != header.due_date
+        or review_payload.get("schema") != _GRANT_REVIEW_PAYLOAD_SCHEMA
+        or review_payload.get("source_activity_id") != header.source_activity_id
+        or review_payload.get("source_document_id") != header.source_document_id
+        or review.source_activity_id != header.source_activity_id
+        or review.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or review.actor_id != review.reviewer_id
+        or expected_draft_idempotency_key
+        != f"grant-year-auto-draft:{grant_fee_task_id}:{header.source_activity_id}"
+    ):
+        _draft_stored_state_invalid()
+
+
 def _reviewed_notice_exact_text(value: object, limit: int) -> bool:
     return (
         type(value) is str
@@ -2417,7 +2575,10 @@ def _has_reviewed_notice_draft_candidate(
             payload = _strict_json_loads(activity.payload_json)
         except (TypeError, ValueError):
             continue
-        if type(payload) is dict and payload.get("schema") == _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA:
+        if type(payload) is dict and payload.get("schema") in {
+            _REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA,
+            _REVIEWED_GRANT_DRAFT_PAYLOAD_SCHEMA,
+        }:
             return True
     return False
 
@@ -2428,7 +2589,10 @@ def _draft_replay_existing(
     header: FeeObligationModel,
     activity: CaseActivityEvent,
 ) -> PrepareFeeObligationDraftResult:
-    reviewed_notice = command.authority is FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE
+    reviewed_notice = command.authority in {
+        FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
+        FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
+    }
     recognition = _instruction_recognition(transaction, header)
     instruction, instruction_activity = _instruction_stored_chain(
         transaction,
@@ -2454,6 +2618,7 @@ def _draft_replay_existing(
         _reviewed_notice_source_graph_or_fail(
             transaction,
             header,
+            authority=command.authority,
             expected_actor_id=command.actor_id,
             expected_draft_idempotency_key=command.idempotency_key,
             recognition=recognition,
@@ -2488,11 +2653,12 @@ def _draft_replay_existing(
             }
         )
         or payload.get("schema")
-        != (_REVIEWED_NOTICE_DRAFT_PAYLOAD_SCHEMA if reviewed_notice else _DRAFT_PAYLOAD_SCHEMA)
-        or (
-            reviewed_notice
-            and payload.get("authority") != FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE.value
+        != (
+            _reviewed_notice_draft_schema(command.authority)
+            if reviewed_notice
+            else _DRAFT_PAYLOAD_SCHEMA
         )
+        or (reviewed_notice and payload.get("authority") != command.authority.value)
         or payload.get("obligation_id") != command.obligation_id
         or payload.get("actor_id") != command.actor_id
         or payload.get("center_changes") != {}
@@ -2574,12 +2740,22 @@ def _reviewed_notice_draft_for_instruction(
         _instruction_stored_state_invalid()
     activity = activities[0]
     try:
+        payload = _strict_json_loads(activity.payload_json)
+        authority = FeeDraftAuthority(payload.get("authority")) if type(payload) is dict else None
+    except (TypeError, ValueError):
+        _instruction_stored_state_invalid()
+    if authority not in {
+        FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
+        FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
+    }:
+        _instruction_stored_state_invalid()
+    try:
         return _draft_replay_existing(
             PrepareFeeObligationDraftCommand(
                 obligation_id=header.id,
                 actor_id=activity.actor_id,
                 idempotency_key=activity.idempotency_key,
-                authority=FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
+                authority=authority,
             ),
             transaction,
             header,

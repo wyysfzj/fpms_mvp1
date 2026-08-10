@@ -92,6 +92,7 @@ class FeeClientInstruction(str, Enum):
 class FeeDraftAuthority(str, Enum):
     CLIENT_PAY_INSTRUCTION = "CLIENT_PAY_INSTRUCTION"
     REVIEWED_APPLICATION_FEE_NOTICE = "REVIEWED_APPLICATION_FEE_NOTICE"
+    REVIEWED_GRANT_YEAR_NOTICE = "REVIEWED_GRANT_YEAR_NOTICE"
 
 
 class FeeSourceStatus(str, Enum):
