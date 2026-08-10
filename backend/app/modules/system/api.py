@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Callable, TypeVar
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,6 +22,31 @@ from app.modules.system.decision_gate_service import (
     RecordDecisionGateCommand,
     record_decision_gate,
 )
+from app.modules.system.grant_evidence_source_schemas import (
+    ActivateGrantEvidenceSourceIn,
+    GrantEvidenceSourceConfigOut,
+    GrantEvidenceSourceRecordOut,
+    PublishGrantEvidenceSourceConfigIn,
+    RegisterGrantEvidenceSourceIn,
+    RetireGrantEvidenceSourceIn,
+    ReviewGrantEvidenceSourceIn,
+    RevokeGrantEvidenceSourceConfigIn,
+)
+from app.modules.system.grant_evidence_source_service import (
+    ActivateGrantEvidenceSourceCommand,
+    GrantEvidenceSourceDisposition,
+    PublishGrantEvidenceSourceConfigCommand,
+    RegisterGrantEvidenceSourceCommand,
+    RetireGrantEvidenceSourceCommand,
+    ReviewGrantEvidenceSourceCommand,
+    RevokeGrantEvidenceSourceConfigCommand,
+    activate_grant_evidence_source,
+    publish_grant_evidence_source_config,
+    register_grant_evidence_source,
+    retire_grant_evidence_source,
+    review_grant_evidence_source,
+    revoke_grant_evidence_source_config,
+)
 from app.modules.system.models import CustomerDecisionGate
 from app.modules.system.schemas import (
     ConfigReadinessOut,
@@ -35,6 +64,28 @@ from app.modules.system.service import (
 )
 
 router = APIRouter()
+_SourceMutationResult = TypeVar("_SourceMutationResult")
+
+
+def _utc_now() -> datetime:
+    return datetime.utcnow()
+
+
+def _commit_source_mutation(
+    db: Session,
+    operation: Callable[[], _SourceMutationResult],
+) -> _SourceMutationResult:
+    try:
+        result = operation()
+    except Exception:
+        db.rollback()
+        raise
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
 
 
 @router.get("/system/params", summary="List system parameters")
@@ -221,3 +272,214 @@ def create_decision_gate_record(
         else status.HTTP_200_OK
     )
     return DecisionGateRecordOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/system/grant-evidence-sources",
+    response_model=GrantEvidenceSourceRecordOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_grant_evidence_source(
+    payload: RegisterGrantEvidenceSourceIn,
+    response: Response,
+    _perm: None = Depends(require_perm("SystemParam.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceSourceRecordOut:
+    result = _commit_source_mutation(
+        db,
+        lambda: register_grant_evidence_source(
+            RegisterGrantEvidenceSourceCommand(
+                source_code=payload.source_code,
+                source_version=payload.source_version,
+                evidence_scope=payload.evidence_scope,
+                source_reference_kind=payload.source_reference_kind,
+                source_reference_value=payload.source_reference_value,
+                acquisition_method=payload.acquisition_method,
+                effective_from=payload.effective_from,
+                effective_to=payload.effective_to,
+                supersedes_source_id=payload.supersedes_source_id,
+                actor_id=current_user.id,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        ),
+    )
+    response.status_code = (
+        status.HTTP_201_CREATED
+        if result.disposition is GrantEvidenceSourceDisposition.CREATED
+        else status.HTTP_200_OK
+    )
+    return GrantEvidenceSourceRecordOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/system/grant-evidence-sources/{source_record_id}/review",
+    response_model=GrantEvidenceSourceRecordOut,
+)
+def review_grant_evidence_source_record(
+    source_record_id: UUID,
+    payload: ReviewGrantEvidenceSourceIn,
+    _perm: None = Depends(require_perm("SystemParam.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceSourceRecordOut:
+    now = _utc_now()
+    result = _commit_source_mutation(
+        db,
+        lambda: review_grant_evidence_source(
+            ReviewGrantEvidenceSourceCommand(
+                source_record_id=str(source_record_id),
+                decision=payload.decision,
+                reviewer_id=current_user.id,
+                reviewed_at=now,
+                reason=payload.reason,
+            ),
+            db,
+        ),
+    )
+    return GrantEvidenceSourceRecordOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/system/grant-evidence-sources/{source_record_id}/activate",
+    response_model=GrantEvidenceSourceRecordOut,
+)
+def activate_grant_evidence_source_record(
+    source_record_id: UUID,
+    payload: ActivateGrantEvidenceSourceIn,
+    _perm: None = Depends(require_perm("SystemParam.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceSourceRecordOut:
+    now = _utc_now()
+    result = _commit_source_mutation(
+        db,
+        lambda: activate_grant_evidence_source(
+            ActivateGrantEvidenceSourceCommand(
+                source_record_id=str(source_record_id),
+                actor_id=current_user.id,
+                activated_at=now,
+                expected_current_source_id=payload.expected_current_source_id,
+            ),
+            db,
+        ),
+    )
+    return GrantEvidenceSourceRecordOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/system/grant-evidence-sources/{source_record_id}/retire",
+    response_model=GrantEvidenceSourceRecordOut,
+)
+def retire_grant_evidence_source_record(
+    source_record_id: UUID,
+    payload: RetireGrantEvidenceSourceIn,
+    _perm: None = Depends(require_perm("SystemParam.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceSourceRecordOut:
+    source_id = str(source_record_id)
+    if payload.expected_current_source_id != source_id:
+        raise BusinessError(
+            code="VALIDATION_ERROR",
+            message="Path and body source IDs differ",
+            status_code=422,
+        )
+    now = _utc_now()
+    result = _commit_source_mutation(
+        db,
+        lambda: retire_grant_evidence_source(
+            RetireGrantEvidenceSourceCommand(
+                source_record_id=source_id,
+                actor_id=current_user.id,
+                retired_at=now,
+                expected_current_source_id=payload.expected_current_source_id,
+            ),
+            db,
+        ),
+    )
+    return GrantEvidenceSourceRecordOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/system/grant-evidence-source-configurations",
+    response_model=GrantEvidenceSourceConfigOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_grant_evidence_source_configuration(
+    payload: PublishGrantEvidenceSourceConfigIn,
+    response: Response,
+    _perm: None = Depends(require_perm("SystemParam.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceSourceConfigOut:
+    now = _utc_now()
+    result = _commit_source_mutation(
+        db,
+        lambda: publish_grant_evidence_source_config(
+            PublishGrantEvidenceSourceConfigCommand(
+                evidence_scope=payload.evidence_scope,
+                source_record_id=payload.source_record_id,
+                config_version=payload.config_version,
+                effective_from=payload.effective_from,
+                effective_to=payload.effective_to,
+                selected_by=current_user.id,
+                published_at=now,
+                selection_reason=payload.selection_reason,
+                expected_current_config_id=payload.expected_current_config_id,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        ),
+    )
+    response.status_code = (
+        status.HTTP_201_CREATED
+        if result.disposition is GrantEvidenceSourceDisposition.CREATED
+        else status.HTTP_200_OK
+    )
+    return GrantEvidenceSourceConfigOut.model_validate(result, from_attributes=True)
+
+
+@router.post(
+    "/system/grant-evidence-source-configurations/{config_id}/revoke",
+    response_model=GrantEvidenceSourceConfigOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def revoke_grant_evidence_source_configuration(
+    config_id: UUID,
+    payload: RevokeGrantEvidenceSourceConfigIn,
+    response: Response,
+    _perm: None = Depends(require_perm("SystemParam.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceSourceConfigOut:
+    if payload.expected_current_config_id != str(config_id):
+        raise BusinessError(
+            code="VALIDATION_ERROR",
+            message="Path and body config IDs differ",
+            status_code=422,
+        )
+    now = _utc_now()
+    result = _commit_source_mutation(
+        db,
+        lambda: revoke_grant_evidence_source_config(
+            RevokeGrantEvidenceSourceConfigCommand(
+                evidence_scope=payload.evidence_scope,
+                config_version=payload.config_version,
+                effective_from=payload.effective_from,
+                selected_by=current_user.id,
+                published_at=now,
+                selection_reason=payload.selection_reason,
+                expected_current_config_id=payload.expected_current_config_id,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        ),
+    )
+    response.status_code = (
+        status.HTTP_201_CREATED
+        if result.disposition is GrantEvidenceSourceDisposition.CREATED
+        else status.HTTP_200_OK
+    )
+    return GrantEvidenceSourceConfigOut.model_validate(result, from_attributes=True)
