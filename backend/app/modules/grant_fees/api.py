@@ -31,10 +31,15 @@ from app.modules.grant_fees.schemas import (
     GrantFeeTaskStateActionIn,
     GrantFeeTaskStateOut,
     GrantNoticeLifecycleIn,
+    GrantOfficialFeeReviewIn,
+    GrantOfficialFeeReviewOut,
 )
 from app.modules.grant_fees.service import (
+    ConfirmGrantOfficialFeesCommand,
+    GrantOfficialFeeReviewLineInput,
     apply_grant_fee_batch_instruction,
     apply_grant_fee_task_action,
+    confirm_grant_official_fees,
     dispatch_grant_registration_notice,
     generate_grant_fee_draft,
     generate_grant_fee_notice_documents,
@@ -213,6 +218,56 @@ def post_grant_notice_lifecycle_endpoint(
         db.rollback()
         raise
     return result
+
+
+@router.post(
+    "/grant-fee-tasks/{task_id}/official-fee-review",
+    status_code=status.HTTP_200_OK,
+    response_model=GrantOfficialFeeReviewOut,
+)
+def post_grant_official_fee_review_endpoint(
+    task_id: GrantFeeTaskPathId,
+    payload: GrantOfficialFeeReviewIn,
+    _perm: None = Depends(require_perm("GrantFeeTask.Write")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantOfficialFeeReviewOut:
+    try:
+        result = confirm_grant_official_fees(
+            ConfirmGrantOfficialFeesCommand(
+                grant_fee_task_id=task_id,
+                source_activity_id=payload.source_activity_id,
+                obligation_id=payload.obligation_id,
+                reviewed_evidence_version_id=payload.reviewed_evidence_version_id,
+                expected_content_hash=payload.expected_content_hash,
+                confirmed_at=payload.confirmed_at,
+                actor_id=current_user.id,
+                idempotency_key=payload.idempotency_key,
+                lines=tuple(
+                    GrantOfficialFeeReviewLineInput(
+                        obligation_line_id=line.obligation_line_id,
+                        official_full_amount=line.official_full_amount,
+                        confirmed_payable_amount=line.confirmed_payable_amount,
+                    )
+                    for line in payload.lines
+                ),
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return GrantOfficialFeeReviewOut(
+        grant_fee_task_id=result.grant_fee_task_id,
+        fee_obligation_id=result.fee_obligation_id,
+        source_activity_id=result.source_activity_id,
+        review_activity_id=result.review_activity_id,
+        reviewed_line_ids=list(result.reviewed_line_ids),
+        confirmed_at=result.confirmed_at,
+        idempotency_key=result.idempotency_key,
+        reused=result.reused,
+    )
 
 
 @router.post(

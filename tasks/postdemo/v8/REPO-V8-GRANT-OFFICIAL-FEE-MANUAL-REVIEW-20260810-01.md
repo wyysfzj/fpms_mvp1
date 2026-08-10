@@ -1,6 +1,6 @@
 # REPO-V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-20260810-01
 
-Status: READY / CONTRACT FROZEN 2026-08-10
+Status: IMPLEMENTED / AWAITING INDEPENDENT REVIEW 2026-08-10
 Phase: foundation prerequisite for catalog Row120
 Risk: PROTECTED
 Runbook: P0-prereq-heavy-story
@@ -41,3 +41,11 @@ customer decision, UI, payment, PayList, service fee or unrelated refactor.
 
 The exact contract is implemented with targeted RED/GREEN, current scoped checks and independent
 zero-finding approval. Adoption must bind the final product commits and exact tree fingerprint.
+
+## Current verification
+
+- RED: focused test file failed `5` tests because the frozen public action did not exist.
+- GREEN: focused test file passes `8`; direct grant-year obligation and instruction regressions
+  pass `90`.
+- Scoped Ruff and exact diff check pass.
+- Independent implementation review and adoption remain pending.

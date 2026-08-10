@@ -51,6 +51,79 @@ class GrantNoticeLifecycleIn(BaseModel):
         return value
 
 
+class GrantOfficialFeeReviewLineIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    obligation_line_id: str = Field(..., strict=True, min_length=1, max_length=36)
+    official_full_amount: Decimal = Field(
+        ...,
+        gt=0,
+        max_digits=18,
+        decimal_places=2,
+    )
+    confirmed_payable_amount: Decimal = Field(
+        ...,
+        gt=0,
+        max_digits=18,
+        decimal_places=2,
+    )
+
+    @field_validator("obligation_line_id")
+    @classmethod
+    def require_exact_line_id(cls, value: str) -> str:
+        if value != value.strip() or "\x00" in value:
+            raise ValueError("必须为无首尾空白的有效标识")
+        return value
+
+
+class GrantOfficialFeeReviewIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_activity_id: str = Field(..., strict=True, min_length=1, max_length=36)
+    obligation_id: str = Field(..., strict=True, min_length=1, max_length=36)
+    reviewed_evidence_version_id: str = Field(..., strict=True, min_length=1, max_length=36)
+    expected_content_hash: str = Field(
+        ...,
+        strict=True,
+        pattern=r"^sha256:[0-9a-f]{64}$",
+    )
+    confirmed_at: datetime
+    idempotency_key: str = Field(..., strict=True, min_length=1, max_length=128)
+    lines: list[GrantOfficialFeeReviewLineIn] = Field(..., min_length=1)
+
+    @field_validator(
+        "source_activity_id",
+        "obligation_id",
+        "reviewed_evidence_version_id",
+        "idempotency_key",
+    )
+    @classmethod
+    def require_exact_review_text(cls, value: str) -> str:
+        if value != value.strip() or "\x00" in value:
+            raise ValueError("必须为无首尾空白的有效文本")
+        return value
+
+    @field_validator("confirmed_at")
+    @classmethod
+    def require_naive_confirmation_time(cls, value: datetime) -> datetime:
+        if value.tzinfo is not None:
+            raise ValueError("必须为不带时区的日期时间")
+        return value
+
+
+class GrantOfficialFeeReviewOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    grant_fee_task_id: str
+    fee_obligation_id: str
+    source_activity_id: str
+    review_activity_id: str
+    reviewed_line_ids: list[str]
+    confirmed_at: datetime
+    idempotency_key: str
+    reused: bool
+
+
 class GrantFeeReplacementDocumentIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
