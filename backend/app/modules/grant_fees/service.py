@@ -10,11 +10,12 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import String, and_, cast, or_, select, update
+from sqlalchemy import String, and_, cast, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError, raise_business_error
+from app.modules.annuity.models import GovPayment
 from app.modules.billing.models import Bill, BillItem
 from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
@@ -51,6 +52,7 @@ from app.modules.fees.models import (
     FeeDraft,
     FeeItem,
     FeeObligation,
+    FeeObligationDraftItemLink,
     FeeObligationLine,
     FeeRate,
     T_GrantFeeTask,
@@ -59,15 +61,19 @@ from app.modules.fees.obligation_contracts import (
     FeeClientInstruction,
     FeeDifferenceReviewState,
     FeeDomain,
+    FeeDraftItemLinkResult,
     FeeObligationLineInput,
     FeeObligationStatus,
     FeeSourceStatus,
+    PrepareFeeObligationDraftCommand,
+    PrepareFeeObligationDraftResult,
     RecognizeFeeObligationCommand,
     RecognizeFeeObligationResult,
     RecordFeeObligationInstructionCommand,
 )
 from app.modules.fees.obligation_service import (
     get_fee_obligation,
+    prepare_draft,
     recognize_obligation,
     record_client_instruction,
 )
@@ -245,6 +251,25 @@ class ConfirmGrantOfficialFeesResult:
     confirmed_at: datetime
     idempotency_key: str
     reused: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PrepareGrantFeeTaskDraftCommand:
+    grant_fee_task_id: str
+    source_activity_id: str
+    actor_id: str
+    idempotency_key: str
+
+
+@dataclass(frozen=True, slots=True)
+class PrepareGrantFeeTaskDraftResult:
+    grant_fee_task_id: str
+    fee_obligation_id: str
+    draft_id: str
+    links: tuple[FeeDraftItemLinkResult, ...]
+    activity_id: str
+    activity_reused: bool
+    idempotency_key: str
 
 
 def _grant_instruction_command_invalid(field: str) -> None:
@@ -544,13 +569,26 @@ def record_grant_fee_task_instruction(
         if len(obligations) != 1:
             _grant_instruction_lineage_conflict()
         obligation_id = obligations[0].id
-        _validate_grant_instruction_obligation(
-            transaction,
-            task=task,
-            activity=activity,
-            expected_lines=expected_lines,
-            obligation_id=obligation_id,
-        )
+        try:
+            _validate_grant_instruction_obligation(
+                transaction,
+                task=task,
+                activity=activity,
+                expected_lines=expected_lines,
+                obligation_id=obligation_id,
+            )
+        except BusinessError as exc:
+            if exc.code != "GRANT_INSTRUCTION_LINEAGE_CONFLICT":
+                raise
+            try:
+                reviewed_obligation, _review = validated_grant_year_official_fee_review_for_draft(
+                    transaction,
+                    grant_fee_task_id=task.id,
+                )
+            except BusinessError:
+                _grant_instruction_lineage_conflict()
+            if reviewed_obligation.id != obligation_id:
+                _grant_instruction_lineage_conflict()
     instruction = FeeClientInstruction(command.instruction)
     delegated = record_client_instruction(
         RecordFeeObligationInstructionCommand(
@@ -741,9 +779,7 @@ def _grant_review_context(
         line_id
         for line_id in transaction.scalars(
             select(FeeObligationLine.id).where(
-                FeeObligationLine.id.in_(
-                    tuple(line.obligation_line_id for line in command.lines)
-                )
+                FeeObligationLine.id.in_(tuple(line.obligation_line_id for line in command.lines))
             )
         )
     }
@@ -846,12 +882,76 @@ def _grant_review_context(
     except BusinessError as exc:
         if exc.code in {"FEE_OBLIGATION_NOT_FOUND"}:
             _grant_review_link_not_found()
-        _grant_review_lineage_conflict()
-    if detail.id != obligation.id or tuple(line.id for line in detail.lines) != tuple(
-        line.id for line in lines
-    ):
-        _grant_review_lineage_conflict()
+        if exc.code != "FEE_OBLIGATION_STORED_STATE_INVALID" or not (
+            _grant_review_exact_unpaid_draft(
+                transaction, case=case, obligation=obligation, lines=lines
+            )
+        ):
+            _grant_review_lineage_conflict()
+    else:
+        if detail.id != obligation.id or tuple(line.id for line in detail.lines) != tuple(
+            line.id for line in lines
+        ):
+            _grant_review_lineage_conflict()
     return task, activity, case, obligation, lines, payload, evidence_refs
+
+
+def _grant_review_exact_unpaid_draft(
+    transaction: Session,
+    *,
+    case: Case,
+    obligation: FeeObligation,
+    lines: tuple[FeeObligationLine, ...],
+) -> bool:
+    if obligation.draft_status != "CREATED":
+        return False
+    line_by_id = {line.id: line for line in lines}
+    links = tuple(
+        transaction.scalars(
+            select(FeeObligationDraftItemLink).where(
+                FeeObligationDraftItemLink.obligation_line_id.in_(tuple(line_by_id))
+            )
+        )
+    )
+    if len(links) != len(lines) or {link.obligation_line_id for link in links} != set(line_by_id):
+        return False
+    item_ids = tuple(link.fee_item_id for link in links)
+    items = {
+        item.id: item
+        for item in transaction.scalars(select(FeeItem).where(FeeItem.id.in_(item_ids)))
+    }
+    if set(items) != set(item_ids):
+        return False
+    draft_ids = {item.draft_id for item in items.values()}
+    if len(draft_ids) != 1:
+        return False
+    draft = transaction.get(FeeDraft, next(iter(draft_ids)))
+    if (
+        draft is None
+        or draft.case_id != case.id
+        or draft.client_id != case.client_id
+        or draft.currency != obligation.currency
+        or draft.draft_type != "GENERIC"
+        or transaction.scalar(
+            select(func.count()).select_from(GovPayment).where(GovPayment.fee_item_id.in_(item_ids))
+        )
+        != 0
+    ):
+        return False
+    for link in links:
+        line = line_by_id[link.obligation_line_id]
+        item = items[link.fee_item_id]
+        if (
+            item.draft_id != draft.id
+            or item.case_id != case.id
+            or item.fee_code != line.fee_code
+            or item.fee_name != line.fee_name
+            or item.fee_type != FeeDomain.GOV.value
+            or item.year_no != line.fee_year_key
+            or item.amount != line.payable_amount
+        ):
+            return False
+    return True
 
 
 def _grant_review_line_snapshot(
@@ -966,8 +1066,7 @@ def _precheck_existing_grant_review(
         or payload.get("grant_fee_task_id") != command.grant_fee_task_id
         or payload.get("obligation_id") != command.obligation_id
         or payload.get("source_activity_id") != command.source_activity_id
-        or payload.get("reviewed_evidence_version_id")
-        != command.reviewed_evidence_version_id
+        or payload.get("reviewed_evidence_version_id") != command.reviewed_evidence_version_id
         or payload.get("reviewed_evidence_content_hash") != command.expected_content_hash
         or payload.get("confirmed_at") != command.confirmed_at.isoformat()
         or existing.activity_type != _GRANT_OFFICIAL_FEE_REVIEW_EVENT_TYPE
@@ -1085,7 +1184,9 @@ def _replay_grant_official_fee_review(
                 else OfficialProcedureStage(existing.old_official_procedure_stage)
             ),
             legal_status=(
-                None if existing.old_legal_status is None else LegalStatus(existing.old_legal_status)
+                None
+                if existing.old_legal_status is None
+                else LegalStatus(existing.old_legal_status)
             ),
             lifecycle_verification_status=None,
         )
@@ -1101,7 +1202,9 @@ def _replay_grant_official_fee_review(
                 else OfficialProcedureStage(existing.new_official_procedure_stage)
             ),
             legal_status=(
-                None if existing.new_legal_status is None else LegalStatus(existing.new_legal_status)
+                None
+                if existing.new_legal_status is None
+                else LegalStatus(existing.new_legal_status)
             ),
             lifecycle_verification_status=None,
         )
@@ -1252,8 +1355,7 @@ def confirm_grant_official_fees(
                 FeeObligationLine.source_date.is_(None)
                 if line.source_date is None
                 else FeeObligationLine.source_date == line.source_date,
-                cast(FeeObligationLine.updated_at, String)
-                == line.updated_at.isoformat(sep=" "),
+                cast(FeeObligationLine.updated_at, String) == line.updated_at.isoformat(sep=" "),
                 FeeObligationLine.official_full_amount.is_(None),
                 FeeObligationLine.difference_review_state
                 == FeeDifferenceReviewState.REVIEW_REQUIRED.value,
@@ -1398,6 +1500,274 @@ def _stored_review_targets_task(activity: CaseActivityEvent, task_id: str) -> bo
     if type(payload) is not dict:
         _grant_review_lineage_conflict()
     return payload.get("grant_fee_task_id") == task_id
+
+
+def _grant_draft_command_invalid(field: str) -> None:
+    raise_business_error(
+        "GRANT_DRAFT_COMMAND_INVALID",
+        "授权费用草单命令无效",
+        details={"field": field},
+        status_code=400,
+    )
+
+
+def _grant_draft_link_not_found() -> None:
+    raise_business_error(
+        "GRANT_DRAFT_LINK_NOT_FOUND",
+        "授权费用草单关联不存在",
+        status_code=404,
+    )
+
+
+def _grant_draft_lineage_conflict() -> None:
+    raise_business_error(
+        "GRANT_DRAFT_LINEAGE_CONFLICT",
+        "授权费用草单谱系不一致",
+        status_code=409,
+    )
+
+
+def _validate_grant_draft_command(command: object) -> None:
+    if type(command) is not PrepareGrantFeeTaskDraftCommand:
+        _grant_draft_command_invalid("command")
+    for field, limit in (
+        ("grant_fee_task_id", 36),
+        ("source_activity_id", 36),
+        ("actor_id", 36),
+        ("idempotency_key", 128),
+    ):
+        if not _valid_review_text(getattr(command, field), limit=limit):
+            _grant_draft_command_invalid(field)
+
+
+def _validate_grant_draft_result(
+    command: PrepareGrantFeeTaskDraftCommand,
+    transaction: Session,
+    *,
+    task: T_GrantFeeTask,
+    obligation: FeeObligation,
+    obligation_lines: tuple[FeeObligationLine, ...],
+    result: object,
+) -> PrepareFeeObligationDraftResult:
+    if type(result) is not PrepareFeeObligationDraftResult:
+        _grant_draft_lineage_conflict()
+    if (
+        result.obligation_id != obligation.id
+        or result.idempotency_key != command.idempotency_key
+        or type(result.links) is not tuple
+        or not result.links
+        or any(type(link) is not FeeDraftItemLinkResult for link in result.links)
+    ):
+        _grant_draft_lineage_conflict()
+    line_ids = tuple(line.id for line in obligation_lines)
+    if (
+        tuple(link.obligation_line_id for link in result.links) != line_ids
+        or len({link.id for link in result.links}) != len(result.links)
+        or len({link.fee_item_id for link in result.links}) != len(result.links)
+        or any(link.reused is not result.activity_reused for link in result.links)
+    ):
+        _grant_draft_lineage_conflict()
+    draft = transaction.get(FeeDraft, result.draft_id)
+    case = transaction.get(Case, task.case_id)
+    activity = transaction.get(CaseActivityEvent, result.activity_id)
+    if draft is None or case is None or activity is None:
+        _grant_draft_link_not_found()
+    persisted_links = tuple(
+        transaction.scalars(
+            select(FeeObligationDraftItemLink)
+            .where(FeeObligationDraftItemLink.id.in_(tuple(link.id for link in result.links)))
+            .order_by(FeeObligationDraftItemLink.obligation_line_id.asc())
+        )
+    )
+    persisted_items = {
+        item.id: item
+        for item in transaction.scalars(
+            select(FeeItem).where(FeeItem.id.in_(tuple(link.fee_item_id for link in result.links)))
+        )
+    }
+    if (
+        draft.case_id != task.case_id
+        or draft.client_id != case.client_id
+        or draft.currency != obligation.currency
+        or draft.draft_type != "GENERIC"
+        or len(persisted_links) != len(result.links)
+        or set(persisted_items) != {link.fee_item_id for link in result.links}
+    ):
+        _grant_draft_lineage_conflict()
+    expected_link_identity = {
+        (link.id, link.obligation_line_id, link.fee_item_id) for link in result.links
+    }
+    if {
+        (link.id, link.obligation_line_id, link.fee_item_id) for link in persisted_links
+    } != expected_link_identity:
+        _grant_draft_lineage_conflict()
+    line_by_id = {line.id: line for line in obligation_lines}
+    for link in result.links:
+        line = line_by_id.get(link.obligation_line_id)
+        item = persisted_items[link.fee_item_id]
+        if (
+            line is None
+            or item.draft_id != draft.id
+            or item.case_id != task.case_id
+            or item.fee_code != line.fee_code
+            or item.fee_name != line.fee_name
+            or item.fee_type != FeeDomain.GOV.value
+            or item.year_no != line.fee_year_key
+            or item.amount != line.payable_amount
+        ):
+            _grant_draft_lineage_conflict()
+    try:
+        payload = json.loads(activity.payload_json)
+    except (TypeError, ValueError):
+        _grant_draft_lineage_conflict()
+    expected_payload = {
+        "actor_id": command.actor_id,
+        "center_changes": {},
+        "draft_id": draft.id,
+        "links": [
+            {
+                "fee_item_id": link.fee_item_id,
+                "obligation_line_id": link.obligation_line_id,
+            }
+            for link in result.links
+        ],
+        "obligation_id": obligation.id,
+        "schema": "FPMS_FEE_DRAFT_CREATED_V1",
+    }
+    canonical = json.dumps(
+        expected_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    instruction = transaction.get(CaseActivityEvent, activity.source_activity_id)
+    if instruction is None:
+        _grant_draft_link_not_found()
+    try:
+        instruction_payload = json.loads(instruction.payload_json)
+    except (TypeError, ValueError):
+        _grant_draft_lineage_conflict()
+    if (
+        payload != expected_payload
+        or activity.payload_json != canonical
+        or activity.case_id != task.case_id
+        or activity.lane != ActivityLane.FEE.value
+        or activity.activity_type != "FEE_DRAFT_CREATED"
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or activity.actor_id != command.actor_id
+        or activity.reviewer_id is not None
+        or activity.supersedes_event_id is not None
+        or activity.occurred_at != activity.effective_at
+        or activity.old_business_stage != activity.new_business_stage
+        or activity.old_official_procedure_stage != activity.new_official_procedure_stage
+        or activity.old_legal_status != activity.new_legal_status
+        or instruction.activity_type != "FEE_CLIENT_INSTRUCTION_RECORDED"
+        or instruction.case_id != task.case_id
+        or type(instruction_payload) is not dict
+        or instruction_payload.get("obligation_id") != obligation.id
+        or instruction_payload.get("instruction") != "PAY"
+        or transaction.scalar(
+            select(func.count())
+            .select_from(CaseActivityEventEvidence)
+            .where(CaseActivityEventEvidence.activity_id == activity.id)
+        )
+        != 0
+    ):
+        _grant_draft_lineage_conflict()
+    obligation_model = transaction.get(FeeObligation, obligation.id)
+    if (
+        obligation_model is None
+        or obligation_model.draft_status != "CREATED"
+        or tuple(link.obligation_line_id for link in persisted_links) != line_ids
+    ):
+        _grant_draft_lineage_conflict()
+    return result
+
+
+def prepare_grant_fee_task_draft(
+    command: PrepareGrantFeeTaskDraftCommand,
+    transaction: Session,
+) -> PrepareGrantFeeTaskDraftResult:
+    _validate_grant_draft_command(command)
+    if not isinstance(transaction, Session):
+        _grant_draft_command_invalid("transaction")
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _grant_draft_lineage_conflict()
+    with transaction.no_autoflush:
+        task = transaction.get(T_GrantFeeTask, command.grant_fee_task_id)
+        if task is None:
+            raise_business_error(
+                "GRANT_DRAFT_TASK_NOT_FOUND",
+                "授权费用任务不存在",
+                status_code=404,
+            )
+        source_activity = transaction.get(CaseActivityEvent, command.source_activity_id)
+        if source_activity is None:
+            _grant_draft_link_not_found()
+        try:
+            _case, _expected_lines, _payload = _grant_instruction_expected_source(
+                transaction,
+                task=task,
+                activity=source_activity,
+            )
+            obligation, _review = validated_grant_year_official_fee_review_for_draft(
+                transaction,
+                grant_fee_task_id=task.id,
+            )
+        except BusinessError as exc:
+            if exc.status_code == 404:
+                _grant_draft_link_not_found()
+            _grant_draft_lineage_conflict()
+        obligation_lines = tuple(
+            transaction.scalars(
+                select(FeeObligationLine)
+                .where(FeeObligationLine.obligation_id == obligation.id)
+                .order_by(
+                    FeeObligationLine.fee_code.asc(),
+                    FeeObligationLine.fee_year_key.asc(),
+                    FeeObligationLine.id.asc(),
+                )
+            )
+        )
+        if obligation.source_activity_id != source_activity.id or not obligation_lines:
+            _grant_draft_lineage_conflict()
+    connection = transaction.connection()
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.driver_connection.in_transaction
+    ):
+        connection.exec_driver_sql("BEGIN")
+    try:
+        with transaction.begin_nested():
+            deep_result = prepare_draft(
+                PrepareFeeObligationDraftCommand(
+                    obligation_id=obligation.id,
+                    actor_id=command.actor_id,
+                    idempotency_key=command.idempotency_key,
+                ),
+                transaction,
+            )
+            validated = _validate_grant_draft_result(
+                command,
+                transaction,
+                task=task,
+                obligation=obligation,
+                obligation_lines=obligation_lines,
+                result=deep_result,
+            )
+    except Exception:
+        transaction.expire_all()
+        raise
+    return PrepareGrantFeeTaskDraftResult(
+        grant_fee_task_id=task.id,
+        fee_obligation_id=obligation.id,
+        draft_id=validated.draft_id,
+        links=validated.links,
+        activity_id=validated.activity_id,
+        activity_reused=validated.activity_reused,
+        idempotency_key=validated.idempotency_key,
+    )
 
 
 def recognize_grant_year_annuity_obligation(
