@@ -26,6 +26,8 @@ from app.modules.cases.models import Case, T_CaseApplicant, T_CaseInventor  # no
 from app.modules.documents.models import DocTemplate  # noqa: E402
 from app.modules.documents.official_notice_catalog import (  # noqa: E402
     seed_fee_reduction_approval_official_notice_catalog,
+)
+from app.modules.documents.official_notice_catalog import (  # noqa: E402
     seed_official_letter_out_form_001_catalog as seed_official_letter_out_catalog,
 )
 from app.modules.fees.models import FeeRate  # noqa: E402
