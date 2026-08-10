@@ -48,10 +48,26 @@ a UTC-naive `as_of`. It rejects a caller session with pending new, dirty or dele
 opening a connection, resolving the gate or calling a writer.
 
 After resolving exactly `DG-FEE-GRANT-YEAR-DRAFT:GLOBAL` at caller `as_of`, it delegates to the
-accepted `recognize_grant_year_annuity_obligation` and `prepare_grant_fee_task_draft` deep-module
-contracts in one caller-owned transaction. The source activity must be the accepted, verified real
+accepted `recognize_grant_year_annuity_obligation` contract and the generic `prepare_draft` deep
+module in one caller-owned transaction. The source activity must be the accepted, verified real
 grant-registration notice already bound to the task. Its reviewed notice bytes remain the sole
 source of grant year, official amount, reduction and deadline truth.
+
+The accepted public `prepare_grant_fee_task_draft` adapter remains the post-`PAY` path and must not
+be weakened or silently repurposed. Add only the minimum private grant-year bridge needed by this
+policy. Add `FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE` and make the generic deep module accept
+that authority only after independently validating the exact stored grant-year graph: one current
+`GRANT_YEAR_ANNUITY` obligation, its canonical recognition, the bound verified grant-registration
+notice/evidence, and exactly one canonical `GRANT_YEAR_OFFICIAL_FEE_REVIEW_CONFIRMED` activity whose
+task, obligation, notice, evidence hash, lines and confirmed values all match current persisted
+state. A caller-supplied enum is never authority by itself.
+
+The new draft activity uses the distinct canonical schema
+`FPMS_FEE_DRAFT_CREATED_FROM_REVIEWED_GRANT_YEAR_NOTICE_V1`, records authority
+`REVIEWED_GRANT_YEAR_NOTICE`, and points to the obligation-recognition activity. Existing client
+instruction and reviewed-application schemas, validation and replay remain byte-compatible. A
+later explicit `PAY` instruction may consume this exact reviewed-grant draft without rebuilding
+it; any other or ambiguous reviewed-draft graph fails closed.
 
 The policy creates or reuses exactly one internal draft for the recognized obligation. The
 obligation remains `client_instruction_status=PENDING` and `payment_status=UNPAID`; the draft is
@@ -80,6 +96,8 @@ entry point or adjacent refactor. Do not edit the catalog, coverage ledger or ad
 
 - `tasks/postdemo/v8/FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01.md`
 - `backend/app/modules/grant_fees/service.py`
+- `backend/app/modules/fees/obligation_contracts.py`
+- `backend/app/modules/fees/obligation_service.py`
 - `backend/tests/test_v8_grant_year_auto_draft_policy.py`
 
 No artifact or other file is authorized. Preserve untracked `backend/uv.lock`; do not stage, edit
@@ -101,12 +119,15 @@ verification remain serialized behind ordinal 211.
    without rebuilding the draft graph.
 6. The service never commits, rolls back or closes the caller session; caller rollback removes the
    whole new policy result.
+7. The ordinary post-`PAY` grant adapter and reviewed-application auto-draft/replay/instruction
+   paths retain their accepted behavior and schemas.
 
 ## Verification and review boundary
 
 - RED/GREEN: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_year_auto_draft_policy.py`
-- Scoped Ruff: `cd backend && .venv/bin/ruff check --fix app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py && .venv/bin/ruff format app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py && .venv/bin/ruff check app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py`
-- Scope: `git diff --check -- tasks/postdemo/v8/FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01.md backend/app/modules/grant_fees/service.py backend/tests/test_v8_grant_year_auto_draft_policy.py`
+- Affected regressions: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_draft_obligation_adapter.py tests/test_v8_application_auto_draft_policy.py`
+- Scoped Ruff: `cd backend && .venv/bin/ruff check --fix app/modules/grant_fees/service.py app/modules/fees/obligation_contracts.py app/modules/fees/obligation_service.py tests/test_v8_grant_year_auto_draft_policy.py && .venv/bin/ruff format app/modules/grant_fees/service.py app/modules/fees/obligation_contracts.py app/modules/fees/obligation_service.py tests/test_v8_grant_year_auto_draft_policy.py && .venv/bin/ruff check app/modules/grant_fees/service.py app/modules/fees/obligation_contracts.py app/modules/fees/obligation_service.py tests/test_v8_grant_year_auto_draft_policy.py`
+- Scope: `git diff --check -- tasks/postdemo/v8/FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01.md backend/app/modules/grant_fees/service.py backend/app/modules/fees/obligation_contracts.py backend/app/modules/fees/obligation_service.py backend/tests/test_v8_grant_year_auto_draft_policy.py`
 
 Do not run pytest or touch product code until the controller releases the serialized SQLite lane
 after ordinal 211. No repo-wide, broad Playwright, milestone or release checks belong here. An
