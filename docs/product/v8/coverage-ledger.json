@@ -1982,13 +1982,10 @@
     {
       "catalog_id": "FPMS-V8-OUT-001-RECTIFICATION-REPLY-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OUT-001-RECTIFICATION-REPLY-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OUT-002-FIRST-OA-STATEMENT-20260712-01",
@@ -5832,6 +5829,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-008-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-008-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OUT-001-RECTIFICATION-REPLY-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "a96ce7701503f81f53af19a0c9e9e0bb700a9d4e",
+        "9e65c6a807a7365991443a8b6af09565ef8ca4a3",
+        "ca7bf57de11e09f9759eb634bed3765737a21127"
+      ],
+      "paths": [
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_out_001_activation.py"
+      ],
+      "tree_sha256": "6450c9019ee08f4540be1bbffddf40ee3ed59f9d4674e4a57b102069afc027da",
+      "tests": [
+        "focused serialized OUT-001 suite passed 1 test",
+        "scoped Ruff and exact diff checks passed",
+        "independent High correction review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OUT-001-RECTIFICATION-REPLY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OUT-001-RECTIFICATION-REPLY-CURRENT-ADOPTION.md"
     }
   ]
 }
