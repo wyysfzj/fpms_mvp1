@@ -6472,6 +6472,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-CARRIER-SCHEMA-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-CARRIER-SCHEMA-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-OFFICIAL-COPY-VERIFICATION-SERVICE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "3338a6e4883cddbcc9e989c07211794d72bb003d"
+      ],
+      "paths": [
+        "backend/app/modules/documents/grant_official_copy_verification_service.py",
+        "backend/tests/test_v8_grant_official_copy_verification_service.py"
+      ],
+      "tree_sha256": "ab52d8537c70bd103e9676c6048b8281436227c152f9bbf661839dbf080fa912",
+      "tests": [
+        "focused grant official-copy verification service suite passed 20 tests",
+        "affected source resolver, role resolver and carrier schema regressions passed 73 tests",
+        "scoped Ruff and exact two-path diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-SERVICE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-COPY-VERIFICATION-SERVICE-CURRENT-ADOPTION.md"
     }
   ]
 }
