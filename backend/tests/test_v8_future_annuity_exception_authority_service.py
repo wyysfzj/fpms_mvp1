@@ -483,3 +483,50 @@ def test_concurrent_overlapping_publications_serialize_and_fail_closed(
             )
             == 1
         )
+
+
+def test_concurrent_gate_revocation_is_revalidated_after_write_lock(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as gate_transaction:
+        actor_id, client_id, _ = _seed(gate_transaction)
+        gate_transaction.execute(
+            update(CustomerDecisionGate)
+            .where(CustomerDecisionGate.gate_code == "DG-FEE-FUTURE-ANNUITY")
+            .values(decision_status="REVOKED")
+        )
+        started = Event()
+        outcome: list[object] = []
+
+        def publish_after_stale_read() -> None:
+            with session_factory() as publication_transaction:
+                started.set()
+                try:
+                    outcome.append(
+                        service.publish_future_annuity_exception(
+                            _publish(actor_id, client_id), publication_transaction
+                        )
+                    )
+                except Exception as error:  # captured for exact cross-thread assertion
+                    outcome.append(error)
+
+        contender = Thread(target=publish_after_stale_read)
+        contender.start()
+        assert started.wait(timeout=2)
+        sleep(0.1)
+        assert contender.is_alive()
+        gate_transaction.commit()
+        contender.join(timeout=5)
+        assert not contender.is_alive()
+
+    assert len(outcome) == 1
+    assert isinstance(outcome[0], BusinessError)
+    assert outcome[0].code == "DECISION_GATE_REVOKED"
+    assert outcome[0].status_code == 409
+    with session_factory() as transaction:
+        assert (
+            transaction.scalar(
+                select(func.count()).select_from(FutureAnnuityDraftExceptionRecord)
+            )
+            == 0
+        )

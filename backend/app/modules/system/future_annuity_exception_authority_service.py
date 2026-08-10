@@ -255,8 +255,9 @@ def _require_permission(user_id: str, transaction: Session) -> None:
         _conflict()
 
 
-def _serialize_mutation(
+def _serialize_and_revalidate_gate(
     gate: DecisionGateReadResult,
+    as_of: datetime,
     transaction: Session,
 ) -> None:
     connection = transaction.connection()
@@ -269,15 +270,17 @@ def _serialize_mutation(
                 connection.exec_driver_sql(
                     "UPDATE t_future_annuity_draft_exception_record SET id = id WHERE 0"
                 )
-            return
-        locked_gate_id = transaction.scalar(
-            select(CustomerDecisionGate.id)
-            .where(CustomerDecisionGate.id == gate.gate_id)
-            .with_for_update()
-        )
+        else:
+            locked_gate_id = transaction.scalar(
+                select(CustomerDecisionGate.id)
+                .where(CustomerDecisionGate.id == gate.gate_id)
+                .with_for_update()
+            )
+            if locked_gate_id != gate.gate_id:
+                _conflict()
     except OperationalError:
         _conflict()
-    if locked_gate_id != gate.gate_id:
+    if _resolve_gate(as_of, transaction) != gate:
         _conflict()
 
 
@@ -627,7 +630,7 @@ def publish_future_annuity_exception(
     command = _validate_publish(command)
     transaction = _validate_transaction(transaction)
     gate = _resolve_gate(command.published_at, transaction)
-    _serialize_mutation(gate, transaction)
+    _serialize_and_revalidate_gate(gate, command.published_at, transaction)
     _require_permission(command.confirmed_by, transaction)
     client_id, case_id, related_client_id = _scope_exists(command, transaction)
     payload = _published_payload(command)
@@ -670,7 +673,7 @@ def revoke_future_annuity_exception(
     command = _validate_revoke(command)
     transaction = _validate_transaction(transaction)
     gate = _resolve_gate(command.published_at, transaction)
-    _serialize_mutation(gate, transaction)
+    _serialize_and_revalidate_gate(gate, command.published_at, transaction)
     _require_permission(command.confirmed_by, transaction)
     target = transaction.get(FutureAnnuityDraftExceptionRecord, command.target_publication_id)
     if target is None:
