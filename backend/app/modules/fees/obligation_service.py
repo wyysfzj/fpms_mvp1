@@ -1637,6 +1637,8 @@ def prepare_draft(
             _reviewed_notice_draft_eligible(
                 transaction,
                 header,
+                expected_actor_id=command.actor_id,
+                expected_draft_idempotency_key=command.idempotency_key,
                 recognition=recognition,
                 instruction=instruction,
                 instruction_activity=instruction_activity,
@@ -2040,6 +2042,8 @@ def _reviewed_notice_draft_eligible(
     transaction: Session,
     header: FeeObligationModel,
     *,
+    expected_actor_id: str,
+    expected_draft_idempotency_key: str,
     recognition: CaseActivityEvent,
     instruction: FeeClientInstructionStatus,
     instruction_activity: CaseActivityEvent | None,
@@ -2048,6 +2052,8 @@ def _reviewed_notice_draft_eligible(
     _reviewed_notice_source_graph_or_fail(
         transaction,
         header,
+        expected_actor_id=expected_actor_id,
+        expected_draft_idempotency_key=expected_draft_idempotency_key,
         recognition=recognition,
         lines=lines,
         allow_later_state=False,
@@ -2072,6 +2078,8 @@ def _reviewed_notice_source_graph_or_fail(
     transaction: Session,
     header: FeeObligationModel,
     *,
+    expected_actor_id: str,
+    expected_draft_idempotency_key: str,
     recognition: CaseActivityEvent,
     lines: tuple[FeeObligationLineModel, ...],
     allow_later_state: bool,
@@ -2085,12 +2093,15 @@ def _reviewed_notice_source_graph_or_fail(
     except ValueError:
         _draft_stored_state_invalid()
     if (
-        header.fee_domain != FeeDomain.GOV.value
+        not _reviewed_notice_exact_text(expected_actor_id, 36)
+        or not _reviewed_notice_exact_text(header.id, 36)
+        or not _reviewed_notice_exact_text(header.case_id, 36)
+        or not _reviewed_notice_exact_text(header.source_activity_id, 36)
+        or not _reviewed_notice_exact_text(header.source_document_id, 36)
+        or header.fee_domain != FeeDomain.GOV.value
         or header.obligation_type != "APPLICATION_FEE"
         or header.source_status != FeeSourceStatus.VERIFIED.value
         or obligation_status is not FeeObligationStatus.RECOGNIZED
-        or type(header.source_document_id) is not str
-        or not header.source_document_id
         or type(header.currency) is not str
         or re.fullmatch(r"[A-Z]{3}", header.currency, flags=re.ASCII) is None
         or any(
@@ -2099,6 +2110,16 @@ def _reviewed_notice_source_graph_or_fail(
                 FeeDifferenceReviewState.MATCHED.value,
                 FeeDifferenceReviewState.REVIEW_REQUIRED.value,
             }
+            for line in lines
+        )
+        or any(
+            not _reviewed_notice_exact_text(line.id, 36)
+            or line.obligation_id != header.id
+            or not _valid_amount(line.official_full_amount, optional=False)
+            or not _valid_ratio(line.reduction_ratio)
+            or not _valid_amount(line.source_amount, optional=False)
+            or line.source_amount != line.payable_amount
+            or type(line.source_date) is not date
             for line in lines
         )
     ):
@@ -2156,6 +2177,7 @@ def _reviewed_notice_source_graph_or_fail(
             "supersedes_obligation_id",
         }
         or obligation_payload.get("case_id") != header.case_id
+        or obligation_payload.get("actor_id") != expected_actor_id
         or obligation_payload.get("currency") != header.currency
         or obligation_payload.get("due_date")
         != (None if header.due_date is None else header.due_date.isoformat())
@@ -2168,11 +2190,31 @@ def _reviewed_notice_source_graph_or_fail(
         or obligation_payload.get("supersedes_obligation_id") is not None
         or obligation_payload.get("lines") != expected_payload_lines
         or recognition.case_id != header.case_id
+        or not _reviewed_notice_exact_text(recognition.id, 36)
+        or not _reviewed_notice_exact_text(recognition.actor_id, 36)
+        or not _reviewed_notice_exact_text(recognition.reviewer_id, 36)
+        or not _reviewed_notice_exact_text(recognition.idempotency_key, 128)
+        or recognition.actor_id != expected_actor_id
         or recognition.lane != ActivityLane.FEE.value
         or recognition.activity_type != _ACTIVITY_TYPE
         or recognition.source_activity_id != header.source_activity_id
         or recognition.confirmation_status != ConfirmationStatus.CONFIRMED.value
         or recognition.supersedes_event_id is not None
+        or not _reviewed_notice_naive_datetime(recognition.occurred_at)
+        or not _reviewed_notice_naive_datetime(recognition.effective_at)
+        or recognition.occurred_at != recognition.effective_at
+        or recognition.old_business_stage != recognition.new_business_stage
+        or recognition.old_official_procedure_stage
+        != recognition.new_official_procedure_stage
+        or recognition.old_legal_status != recognition.new_legal_status
+        or recognition.payload_json
+        != json.dumps(
+            recognition_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
     ):
         _draft_stored_state_invalid()
 
@@ -2198,7 +2240,16 @@ def _reviewed_notice_source_graph_or_fail(
         or review_payload.get("decision") != "APPROVE"
         or review_payload.get("previous_review_state") != "PENDING"
         or review_payload.get("review_state") != "APPROVED"
+        or not _reviewed_notice_exact_text(review_payload.get("creator_id"), 36)
+        or not _reviewed_notice_exact_text(review_payload.get("evidence_version_id"), 36)
+        or not _reviewed_notice_exact_text(review_payload.get("reviewer_id"), 36)
         or review_payload.get("reviewer_id") != review.reviewer_id
+        or review_payload.get("reviewer_id") != expected_actor_id
+        or not _reviewed_notice_exact_text(review.id, 36)
+        or not _reviewed_notice_exact_text(review.actor_id, 36)
+        or not _reviewed_notice_exact_text(review.reviewer_id, 36)
+        or not _reviewed_notice_exact_text(review.idempotency_key, 128)
+        or review.id != header.source_activity_id
         or review.case_id != header.case_id
         or review.lane != ActivityLane.DOCUMENT.value
         or review.activity_type != "DOCUMENT_EVIDENCE_REVIEW_DECIDED"
@@ -2206,7 +2257,28 @@ def _reviewed_notice_source_graph_or_fail(
         or review.supersedes_event_id is not None
         or review.confirmation_status != ConfirmationStatus.CONFIRMED.value
         or review.actor_id != review.reviewer_id
+        or review.actor_id != expected_actor_id
+        or recognition.reviewer_id != review.reviewer_id
+        or recognition.occurred_at != review.occurred_at
+        or recognition.effective_at != review.effective_at
+        or not _reviewed_notice_naive_datetime(review.occurred_at)
+        or not _reviewed_notice_naive_datetime(review.effective_at)
         or review.occurred_at != review.effective_at
+        or review.old_business_stage != review.new_business_stage
+        or review.old_official_procedure_stage != review.new_official_procedure_stage
+        or review.old_legal_status != review.new_legal_status
+        or type(review.sequence) is not int
+        or type(recognition.sequence) is not int
+        or recognition.sequence <= review.sequence
+        or review.payload_json
+        != json.dumps(
+            review_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        or not _reviewed_notice_exact_text(document.id, 36)
         or document.case_id != header.case_id
         or document.direction != "IN"
     ):
@@ -2218,18 +2290,46 @@ def _reviewed_notice_source_graph_or_fail(
     )
     if (
         evidence is None
+        or not _reviewed_notice_exact_text(evidence.id, 36)
+        or not _reviewed_notice_exact_text(evidence.case_id, 36)
+        or not _reviewed_notice_exact_text(evidence.document_id, 36)
+        or not _reviewed_notice_exact_text(evidence.attachment_id, 36)
+        or not _reviewed_notice_exact_text(evidence.lineage_key, 128)
+        or not _reviewed_notice_exact_text(evidence.creator_id, 36)
+        or not _reviewed_notice_exact_text(evidence.reviewer_id, 36)
+        or type(evidence.version_number) is not int
+        or evidence.version_number <= 0
         or evidence.case_id != header.case_id
         or evidence.document_id != header.source_document_id
         or evidence.role != "OFFICIAL_FINAL_PDF"
         or evidence.state != "FINAL"
         or evidence.review_state != "APPROVED"
+        or review_payload.get("evidence_version_id") != evidence.id
+        or review_payload.get("creator_id") != evidence.creator_id
         or evidence.reviewer_id != review.reviewer_id
         or evidence.creator_id != review_payload.get("creator_id")
         or evidence.creator_id == evidence.reviewer_id
+        or evidence.reviewer_id != expected_actor_id
+        or not _reviewed_notice_naive_datetime(evidence.reviewed_at)
         or evidence.reviewed_at != review.effective_at
         or evidence.current_identity_key != f"{header.case_id}|{evidence.lineage_key}"
         or type(evidence.content_hash) is not str
         or re.fullmatch(r"sha256:[0-9a-f]{64}", evidence.content_hash) is None
+        or not expected_draft_idempotency_key.startswith(
+            f"application-fee-auto-draft:{evidence.id}:"
+        )
+        or not _reviewed_notice_exact_text(
+            expected_draft_idempotency_key.removeprefix(
+                f"application-fee-auto-draft:{evidence.id}:"
+            ),
+            64,
+        )
+        or recognition.idempotency_key
+        != expected_draft_idempotency_key.replace(
+            "application-fee-auto-draft:",
+            "application-fee-notice:",
+            1,
+        )
     ):
         _draft_stored_state_invalid()
 
@@ -2245,6 +2345,20 @@ def _reviewed_notice_source_graph_or_fail(
     )
     if review_refs != (expected_ref,) or recognition_refs != (expected_ref,):
         _draft_stored_state_invalid()
+
+
+def _reviewed_notice_exact_text(value: object, limit: int) -> bool:
+    return (
+        type(value) is str
+        and bool(value)
+        and value == value.strip()
+        and "\x00" not in value
+        and len(value) <= limit
+    )
+
+
+def _reviewed_notice_naive_datetime(value: object) -> bool:
+    return type(value) is datetime and value.tzinfo is None
 
 
 def _activity_evidence_signatures(
@@ -2324,7 +2438,7 @@ def _draft_replay_existing(
     lines = _draft_lines_or_fail(
         transaction,
         header,
-        require_current=False,
+        require_current=reviewed_notice,
         allowed_review_states=(
             frozenset(
                 {
@@ -2340,6 +2454,8 @@ def _draft_replay_existing(
         _reviewed_notice_source_graph_or_fail(
             transaction,
             header,
+            expected_actor_id=command.actor_id,
+            expected_draft_idempotency_key=command.idempotency_key,
             recognition=recognition,
             lines=lines,
             allow_later_state=True,

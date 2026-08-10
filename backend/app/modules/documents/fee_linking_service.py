@@ -1088,6 +1088,7 @@ def apply_application_fee_auto_draft_policy(
             status_code=409,
         )
 
+    _ensure_application_policy_sqlite_outer_transaction(transaction)
     gate = resolve_decision_gate(
         ResolveDecisionGateCommand(
             gate_code=DecisionGateCode.FEE_APPLICATION_DRAFT,
@@ -1104,7 +1105,6 @@ def apply_application_fee_auto_draft_policy(
     ):
         _application_fee_notice_conflict("decision_gate")
 
-    _ensure_application_policy_sqlite_outer_transaction(transaction)
     with transaction.begin_nested():
         recognition = recognize_application_fee_notice_obligation(
             transaction=transaction,
