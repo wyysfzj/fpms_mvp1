@@ -1,6 +1,7 @@
 # FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01
 
-Status: READY / NOT STARTED
+Status: CONTRACT RE-FROZEN / READY FOR IMPLEMENTATION
+Risk class: `PROTECTED`
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `14. Wave 6 — customer decision gates`
 Catalog ordinal: `171`
@@ -14,6 +15,24 @@ Executor role: Team Lead / default
 - Source catalog line: `665`
 - Expected manifest phase: `deferred`
 - Customer gate requirement: `DG-GRANT-EVIDENCE-SOURCE[GLOBAL], DG-GRANT-MANUAL-REVIEW[GLOBAL]`
+
+## Re-frozen authority and activation boundary
+
+- Scheme A customer source:
+  `docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt`.
+- Scheme A SHA-256:
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`.
+- Decision version: `customer-decision:2026-08-10:v8-full-batch-scheme-a:v1`.
+- Policy status: `APPROVED_POLICY / CONFIG_REQUIRED`.
+- Product development: `ELIGIBLE`.
+- Runtime source configuration: `REQUIRED / NOT PROVIDED BY THIS MANIFEST`.
+- Runtime role configuration: `REQUIRED / NOT PROVIDED BY THIS MANIFEST`.
+
+This activation creates no source record, role binding, default or seed. Missing, stale,
+unreviewed, revoked, inactive, future, expired, scope-mismatched, hash-mismatched or ambiguous
+source or role authority remains `409 / NO WRITE / NO LEGAL-STATE CHANGE`. A candidate remains
+unverified until the exact accepted review and dispatch chain runs; manifest membership never
+proves grant or authorizes a direct case-status write.
 
 ## Story Shape Classification
 
@@ -34,9 +53,31 @@ Task Contract Profile: `TC-QA`
 
 Create the grant-review lane manifest containing this activation plus exactly seven review/adapter/API/FE/UI tasks.
 
+The exact ordered membership is:
+
+1. `FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01`;
+2. `FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01`;
+3. `FPMS-V8-GRANT-ANNOUNCEMENT-EVIDENCE-ADAPTER-20260712-01`;
+4. `FPMS-V8-PATENT-REGISTER-EVIDENCE-ADAPTER-20260712-01`;
+5. `FPMS-V8-GRANT-EVIDENCE-ACCEPTED-DISPATCH-ADAPTER-20260712-01`;
+6. `FPMS-V8-GRANT-EVIDENCE-REVIEW-API-20260712-01`;
+7. `FPMS-V8-GRANT-EVIDENCE-REVIEW-FE-ADAPTER-20260712-01`;
+8. `FPMS-V8-GRANT-EVIDENCE-REVIEW-UI-20260712-01`.
+
+Execution order is activation, review service, announcement adapter, patent-register adapter,
+accepted dispatch, review API, FE adapter, then UI. The two `evidence_policy.py` adapters are
+serialized in that order; review service precedes accepted dispatch in
+`grant_evidence_review_service.py`; review API follows the ingestion API in `documents/api.py`
+and `grant_evidence_schemas.py`; the review FE adapter follows the accepted document-review FE
+adapter in `documents.ts` and `documents.types.ts`. All manifest/shared-file and SQLite-writing
+verification remains serialized.
+
 ## Explicit Non-Closure
 
-No product fix, schema change or test-assertion weakening. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
+No product fix, schema change, runtime source/role publication, default, seed or test-assertion
+weakening. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer
+policy or unrelated cleanup. Do not edit the catalog, coverage ledger, adoption records, router,
+schema or product code.
 
 ## Dependencies
 
