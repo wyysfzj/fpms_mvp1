@@ -1,97 +1,134 @@
 # FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01
 
-Status: READY / NOT STARTED
-Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
-Wave: `14. Wave 6 — customer decision gates`
+Status: CONTRACT RE-FROZEN / READY FOR IMPLEMENTATION
+Risk class: `PROTECTED`
+Runbook: `P0-prereq-heavy-story`
 Catalog ordinal: `204`
-Executor role: Backend Developer / worker
 
-## Design References
+## Authority and prerequisites
 
-- `AGENTS.md`
-- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
-- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
-- Source catalog line: `712`
-- Expected manifest phase: `deferred`
-- Customer gate requirement: `DG-GRANT-EVIDENCE-SOURCE[GLOBAL], DG-GRANT-MANUAL-REVIEW[GLOBAL]`
+- Scheme A customer source SHA-256
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`.
+- Accepted current grant-evidence ingestion service and adoption.
+- Accepted current grant manual-review role carrier/service and adoption.
 
-## Story Shape Classification
+The prior task text did not bind review to the accepted current second-reviewer role, did not
+freeze replay or concurrent-update behavior, and did not define how the raw candidate bytes remain
+authoritative. This successor closes those gaps without dispatching a legal-state transition.
 
-- `shared_file_density`: high
-- `prereq_dependency_density`: low
-- `be_fe_coupling`: low
-- `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+## Exact closure and public interface
 
-## Task Contract Profile
+Create `backend/app/modules/documents/grant_evidence_review_service.py` with exact frozen DTOs:
 
-Task Contract Profile: `TC-SERVICE`
+```python
+class GrantEvidenceReviewDecision(str, Enum):
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
 
-- RED expectation: Exact service/dataset test fails on missing behavior, data or prohibited side effect.
-- GREEN expectation: Exact service/dataset test and named inherited regressions pass with caller-owned transaction semantics where writes are transactional.
 
-## Exact Closure Slice
+class GrantEvidenceReviewDisposition(str, Enum):
+    CHANGED = "CHANGED"
+    REUSED = "REUSED"
 
-Accept/reject one candidate only when reviewer differs from proposer; preserve conflicting announcement/register facts and dispatch nothing before accepted review.
 
-## Explicit Non-Closure
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ReviewGrantEvidenceCandidateCommand:
+    candidate_id: str
+    decision: GrantEvidenceReviewDecision
+    reviewer_id: str
+    reviewed_at: datetime
+    reason: str
 
-No endpoint/UI/schema and no adjacent service rule or second dataset beyond the row's observable behavior. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
 
-## Dependencies
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ReviewGrantEvidenceCandidateResult:
+    candidate_id: str
+    evidence_version_id: str
+    review_status: str
+    reviewer_id: str
+    reviewed_at: datetime
+    candidate_snapshot_hash: str
+    review_role_config_id: str
+    review_role_config_snapshot_hash: str
+    disposition: GrantEvidenceReviewDisposition
 
-### Canonical V8 task dependencies
 
-- `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
-- `FPMS-V8-GRANT-REVIEW-GATE-MANIFEST-ACTIVATION-20260712-01`
-- `FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01`
+def review_grant_evidence_candidate(
+    command: ReviewGrantEvidenceCandidateCommand,
+    transaction: Session,
+) -> ReviewGrantEvidenceCandidateResult: ...
+```
 
-### External, gate and inherited prerequisites
+Raw strings/lookalike enums are rejected. IDs are canonical UUIDs; `reviewed_at` is UTC-naive;
+`reason` is nonblank, trimmed, NUL-free and at most 4096 characters. The caller session must have
+no pending new, dirty or deleted ORM state before service work begins.
 
-- `gate` — `DG-GRANT-EVIDENCE-SOURCE:GLOBAL`: Persisted, current, source-backed decision must be confirmed for this exact scope.
-- `gate` — `DG-GRANT-MANUAL-REVIEW:GLOBAL`: Persisted, current, source-backed decision must be confirmed for this exact scope.
+## Fail-closed candidate and reviewer authority
 
-- Approved source dependency cell (verbatim): manual-review gate, ingestion service
+Load exactly one `GrantEvidenceCandidate` by `candidate_id`. Its identifiers and timestamps must
+be canonical, its review tuple must be either exact PENDING or exact terminal, and `reviewed_at`
+must not precede `proposed_at`. The exact stored UTF-8 candidate JSON must be canonical
+(`ensure_ascii=False`, `sort_keys=True`, separators `(",", ":")`, `allow_nan=False`), have schema
+`CNIPA_GRANT_EVIDENCE_CANDIDATE_V1`, and contain only `schema_version`, `evidence_scope`, `facts`
+and `conflicts`. Reapply the ingestion contract's exact ordered, unique, nonblank raw fact/conflict
+rules; recompute the candidate SHA-256. `conflict_snapshot` must remain NULL when conflicts are
+empty and otherwise equal the exact canonical conflicts array. The acquisition snapshot/hash must
+also remain exact canonical JSON/SHA-256 and its case, document, evidence, source, scope, proposal,
+reference, method and acquisition-time bindings must equal the row. Any missing, ambiguous,
+noncanonical, corrupted or cross-bound state is 409/no write.
 
-### Shared ownership serialization
+Resolve the accepted GLOBAL manual-review role configuration at `reviewed_at` using
+`resolve_grant_manual_review_role_config`. The reviewer must be an active actual `T_User` currently
+bound to `manual_review_second_reviewer_role_id` and must differ from `proposed_by`. A missing,
+revoked, future, stale or invalid configuration or binding is 409/no write. Do not infer an
+administrator, document reviewer, proposer, acquirer or verifier as the second reviewer.
 
-- `backend/app/modules/documents/grant_evidence_review_service.py` order key `1`; project this order only across owners present in the active manifest.
+## Mutation, replay and concurrency
 
-## Remaining Follow-Up Task IDs
+For an exact PENDING row, perform one compare-and-swap update guarded by `id`,
+`review_status == PENDING` and all three review fields being NULL. Set only `review_status`, `reviewer_id`,
+`reviewed_at`, `review_reason` and `updated_at`; raw facts/conflicts, acquisition/source/evidence
+lineage, proposal fields and every other row remain byte-for-byte unchanged. Establish SQLite's
+outer transaction when necessary, execute the update inside exactly one nested savepoint, and
+never commit, roll back or close the caller session.
 
-- None
+An exact terminal replay returns `REUSED` only when decision, reviewer, reviewed time and reason
+all equal the command and the candidate and current reviewer authority still validate. Any changed
+repeat, inconsistent terminal tuple, lost compare-and-swap, integrity failure, duplicate or race is
+`GRANT_EVIDENCE_REVIEW_CONFLICT`/409 with no partial residue. Malformed input is
+`GRANT_EVIDENCE_REVIEW_INPUT_INVALID`/400. A successful first transition returns `CHANGED`.
 
-## Allowed Files
+## Explicit non-closure
 
-- `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01.md`
-- `backend/app/modules/documents/grant_evidence_review_service.py`
-- `backend/tests/test_v8_grant_evidence_review_service.py`
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01/**`
+No endpoint/UI/schema/migration, ingestion/source/role publication or mutation, current-source
+resolution, legal-state dispatch, grant confirmation, lifecycle/deadline, document/evidence/case
+mutation, activity/event/outbox creation, fee, payment or receivable behavior. Review records only
+the manual decision on the existing candidate; APPROVED is not itself a grant-state transition.
 
-No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
+## Allowed files
 
-## Runtime Contracts
+- this task file;
+- `backend/app/modules/documents/grant_evidence_review_service.py`;
+- `backend/tests/test_v8_grant_evidence_review_service.py`.
 
-- Preserve AGENTS.md permission injection, response-envelope, FastAPI status/body, SQLite and Simplified Chinese UI rules applicable to this closure.
-- Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
-- All SQLite-writing tests and shared-file verification run through the global serialized queue.
-- Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
+## Frozen acceptance matrix
 
-## Verification Commands
+1. A canonical PENDING candidate plus a distinct active current configured second reviewer makes
+   exactly one APPROVED or REJECTED transition while preserving all raw bytes and causing no legal
+   or adjacent side effect.
+2. Self-review, inactive/unbound reviewer and missing/revoked/future/stale role configuration fail
+   409/no write.
+3. Missing, corrupt, noncanonical, cross-bound or inconsistent candidate/acquisition/review state
+   fails 409/no write; malformed command input fails 400 before query or mutation.
+4. Exact terminal replay is REUSED after current authority validation; changed replay is 409.
+5. Lost compare-and-swap and injected write failure leave no partial residue.
+6. Caller rollback removes the review transition; service never commits, rolls back or closes the
+   transaction and never changes legal/lifecycle/document/evidence/case/fee/payment state.
 
-- RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_review_service.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
-- GREEN and scoped checks:
-- `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_review_service.py`
-- `cd backend && .venv/bin/ruff check --fix app/modules/documents/grant_evidence_review_service.py tests/test_v8_grant_evidence_review_service.py && .venv/bin/ruff format app/modules/documents/grant_evidence_review_service.py tests/test_v8_grant_evidence_review_service.py && .venv/bin/ruff check app/modules/documents/grant_evidence_review_service.py tests/test_v8_grant_evidence_review_service.py`
-- `git diff --check -- backend/app/modules/documents/grant_evidence_review_service.py backend/tests/test_v8_grant_evidence_review_service.py tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+## Verification
 
-## Evidence Path
-
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
-
-## Done Definition
-
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01` pass. Only then may this task be reported PASS.
+- Focused RED/GREEN pytest for the named review service test.
+- Scoped Ruff and exact three-path diff-check.
+- One independent PROTECTED reviewer reviews the exact implementation range and reruns decisive
+  checks.
+- PASS requires `P0/P1/P2 = 0/0/0`; no Full or release gate belongs here.
