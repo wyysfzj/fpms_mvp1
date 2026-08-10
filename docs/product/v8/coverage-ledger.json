@@ -6181,6 +6181,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-006-ABANDONMENT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-006-ABANDONMENT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "a599d1cdbc5c9c8d6a890456cf5f28d4cf0a3e0a",
+        "cb92b0ffec4dd5b9653dc19b39823d8d0b926985"
+      ],
+      "paths": [
+        "backend/tests/test_v8_grant_source_gate_manifest_contract.py",
+        "tasks/batches/FPMS-POSTDEMO-V8-GRANT-SOURCE-GATE-20260712-01.md"
+      ],
+      "tree_sha256": "a14e65e7929a6a3f74f1777e6cad479ae716d364d0f89b77bb868abc32e249c7",
+      "tests": [
+        "focused grant-source successor activation suite passed 4 tests",
+        "scoped Ruff, exact hash and diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION.md"
     }
   ]
 }
