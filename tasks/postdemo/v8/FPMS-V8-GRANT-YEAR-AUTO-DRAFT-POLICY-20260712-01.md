@@ -1,95 +1,114 @@
 # FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01
 
-Status: READY / NOT STARTED
+Status: CONTRACT RE-FROZEN / READY FOR RED
+Risk class: `PROTECTED`
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
-Wave: `14. Wave 6 — customer decision gates`
 Catalog ordinal: `212`
 Executor role: Backend Developer / worker
 
-## Design References
+## Authority and prerequisites
 
-- `AGENTS.md`
-- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
-- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
-- Source catalog line: `720`
-- Expected manifest phase: `deferred`
-- Customer gate requirement: `DG-FEE-GRANT-YEAR-DRAFT[GLOBAL]`
+- Accepted Scheme A SHA-256:
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`.
+- Runtime gate: `DG-FEE-GRANT-YEAR-DRAFT:GLOBAL`.
+- Required predecessors:
+  - `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`;
+  - `FPMS-V8-GRANT-YEAR-DRAFT-MANIFEST-ACTIVATION-20260712-01`;
+  - accepted current grant-notice lifecycle, grant-year annuity-obligation and
+    prepare-grant-draft behavior.
 
-## Story Shape Classification
+Scheme A authorizes product development for this policy but does not install runtime authority.
+The exact GLOBAL gate must still be persisted, current, confirmed and source-backed at runtime.
+A missing, revoked, future, stale, conflicting, corrupt or scope-mismatched gate fails closed with
+409 and no policy write.
 
-- `shared_file_density`: high
-- `prereq_dependency_density`: low
-- `be_fe_coupling`: low
-- `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+## Exact closure and interface
 
-## Task Contract Profile
+Add exactly this result and entry point to `backend/app/modules/grant_fees/service.py`:
 
-Task Contract Profile: `TC-ADAPTER`
+```python
+@dataclass(frozen=True, slots=True)
+class GrantYearAutoDraftPolicyResult:
+    recognition: RecognizeFeeObligationResult
+    draft: PrepareGrantFeeTaskDraftResult
 
-- RED expectation: Exact adapter test proves the old direct write/missing activity/premature state.
-- GREEN expectation: Exact adapter test plus listed inherited regressions pass; only the named entrypoint changes.
 
-## Exact Closure Slice
+def apply_grant_year_auto_draft_policy(
+    *,
+    transaction: Session,
+    grant_fee_task_id: str,
+    source_activity_id: str,
+    actor_id: str,
+    as_of: datetime,
+) -> GrantYearAutoDraftPolicyResult: ...
+```
 
-Only confirmed grant-year policy invokes draft.
+The entry point accepts only nonblank canonical identifiers, an exact SQLAlchemy `Session`, and
+a UTC-naive `as_of`. It rejects a caller session with pending new, dirty or deleted state before
+opening a connection, resolving the gate or calling a writer.
 
-## Explicit Non-Closure
+After resolving exactly `DG-FEE-GRANT-YEAR-DRAFT:GLOBAL` at caller `as_of`, it delegates to the
+accepted `recognize_grant_year_annuity_obligation` and `prepare_grant_fee_task_draft` deep-module
+contracts in one caller-owned transaction. The source activity must be the accepted, verified real
+grant-registration notice already bound to the task. Its reviewed notice bytes remain the sole
+source of grant year, official amount, reduction and deadline truth.
 
-No change to the underlying deep-module rule, no second entrypoint and no unrelated refactor. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
+The policy creates or reuses exactly one internal draft for the recognized obligation. The
+obligation remains `client_instruction_status=PENDING` and `payment_status=UNPAID`; the draft is
+not a payment instruction, pay list, government payment or legal-state change. Actual payment
+requires a later explicit customer `PAY` instruction through the existing instruction contract.
 
-## Dependencies
+## Atomicity, replay and failures
 
-### Canonical V8 task dependencies
+- Resolve the gate before either business writer.
+- Establish SQLite's outer transaction when necessary, then run recognition and draft preparation
+  inside one nested savepoint.
+- Derive stable policy idempotency keys only from the accepted grant task/source activity; an exact
+  replay reuses the same obligation, draft, links and activity without duplicates.
+- Any post-recognition failure rolls back the whole policy savepoint. Never commit, roll back or
+  close the caller session.
+- Malformed input is 400 before query/write. Missing linked business state is 404. Unusable gate,
+  corrupt notice/obligation/draft lineage, conflict or changed replay is 409 with no partial write.
 
-- `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
-- `FPMS-V8-GRANT-YEAR-DRAFT-MANIFEST-ACTIVATION-20260712-01`
+## Explicit non-closure
 
-### External, gate and inherited prerequisites
+No schema/migration, endpoint/UI, gate publication, default/seed, customer instruction, pay list,
+government payment, fee-rate invention, notice mutation, lifecycle/legal-state change, second
+entry point or adjacent refactor. Do not edit the catalog, coverage ledger or adoption record.
 
-- `gate` — `DG-FEE-GRANT-YEAR-DRAFT:GLOBAL`: Persisted, current, source-backed decision must be confirmed for this exact scope.
-
-- Approved source dependency cell (verbatim): grant-year gate
-
-### Shared ownership serialization
-
-- `backend/app/modules/grant_fees/service.py` order key `6`; project this order only across owners present in the active manifest.
-
-## Remaining Follow-Up Task IDs
-
-- None
-
-## Allowed Files
+## Exact allowlist
 
 - `tasks/postdemo/v8/FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01.md`
 - `backend/app/modules/grant_fees/service.py`
 - `backend/tests/test_v8_grant_year_auto_draft_policy.py`
-- `artifacts/FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01/**`
 
-No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
+No artifact or other file is authorized. Preserve untracked `backend/uv.lock`; do not stage, edit
+or absorb it. Shared `backend/app/modules/grant_fees/service.py` ownership and all SQLite-writing
+verification remain serialized behind ordinal 211.
 
-## Runtime Contracts
+## Focused acceptance
 
-- Preserve AGENTS.md permission injection, response-envelope, FastAPI status/body, SQLite and Simplified Chinese UI rules applicable to this closure.
-- Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
-- All SQLite-writing tests and shared-file verification run through the global serialized queue.
-- Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
+1. A canonical reviewed real grant notice plus the exact current GLOBAL gate creates one pending,
+   unpaid internal grant-year draft and exact replay creates nothing else.
+2. Missing/revoked/future/stale/wrong-source/wrong-version/corrupt/fallback-scope gate authority is
+   409 before recognition or draft writes.
+3. Dirty caller state and malformed input precede connection/gate/writer calls; injected failure
+   after recognition leaves no residue after caller rollback.
+4. The reviewed notice remains authoritative for grant year, amount, reduction and deadline; no
+   caller-supplied or default fee facts are accepted.
+5. Creating the draft does not create a pay list or government payment. Payment is rejected until
+   a later explicit customer `PAY` instruction, after which existing payment behavior may proceed
+   without rebuilding the draft graph.
+6. The service never commits, rolls back or closes the caller session; caller rollback removes the
+   whole new policy result.
 
-## Verification Commands
+## Verification and review boundary
 
-- RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_year_auto_draft_policy.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
-- GREEN and scoped checks:
-- `cd backend && .venv/bin/pytest -q tests/test_v8_grant_year_auto_draft_policy.py`
-- `cd backend && .venv/bin/ruff check --fix app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py && .venv/bin/ruff format app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py && .venv/bin/ruff check app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py`
-- `git diff --check -- backend/app/modules/grant_fees/service.py backend/tests/test_v8_grant_year_auto_draft_policy.py tasks/postdemo/v8/FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+- RED/GREEN: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_year_auto_draft_policy.py`
+- Scoped Ruff: `cd backend && .venv/bin/ruff check --fix app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py && .venv/bin/ruff format app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py && .venv/bin/ruff check app/modules/grant_fees/service.py tests/test_v8_grant_year_auto_draft_policy.py`
+- Scope: `git diff --check -- tasks/postdemo/v8/FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01.md backend/app/modules/grant_fees/service.py backend/tests/test_v8_grant_year_auto_draft_policy.py`
 
-## Evidence Path
-
-- `artifacts/FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
-
-## Done Definition
-
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-GRANT-YEAR-AUTO-DRAFT-POLICY-20260712-01` pass. Only then may this task be reported PASS.
+Do not run pytest or touch product code until the controller releases the serialized SQLite lane
+after ordinal 211. No repo-wide, broad Playwright, milestone or release checks belong here. An
+independent High reviewer must approve the exact implementation commit/range with
+`P0/P1/P2 = 0/0/0`; the implementer does not self-approve.
