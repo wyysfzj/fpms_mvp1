@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -39,6 +40,15 @@ from app.modules.documents.export_excel import (
 )
 from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.fee_linking_service import maybe_create_fee_draft
+from app.modules.documents.grant_official_copy_verification_schemas import (
+    GrantOfficialCopyEventIn,
+    GrantOfficialCopyEventOut,
+)
+from app.modules.documents.grant_official_copy_verification_service import (
+    GrantOfficialCopyDisposition,
+    RecordGrantOfficialCopyEventCommand,
+    record_grant_official_copy_event,
+)
 from app.modules.documents.lifecycle_evidence_adapters import (
     AcceptanceNoticeIn,
     ApplicationAbandonmentIn,
@@ -151,6 +161,50 @@ from app.modules.masterdata.clients.models import Client
 from app.modules.tasks.task_generation_service import TaskGenerationService
 
 router = APIRouter()
+
+
+def _utc_now() -> datetime:
+    return datetime.utcnow()
+
+
+@router.post(
+    "/documents/evidence-versions/{evidence_version_id}/grant-official-copy-events",
+    status_code=status.HTTP_201_CREATED,
+    response_model=GrantOfficialCopyEventOut,
+)
+def record_grant_official_copy_verification_event(
+    evidence_version_id: UUID,
+    payload: GrantOfficialCopyEventIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantOfficialCopyEventOut:
+    try:
+        result = record_grant_official_copy_event(
+            RecordGrantOfficialCopyEventCommand(
+                evidence_version_id=str(evidence_version_id),
+                evidence_scope=payload.evidence_scope,
+                event_type=payload.event_type,
+                actor_id=current_user.id,
+                action_at=_utc_now(),
+                reason=payload.reason,
+                original_reference=payload.original_reference,
+                expected_current_event_id=payload.expected_current_event_id,
+                idempotency_key=payload.idempotency_key,
+            ),
+            db,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    response.status_code = (
+        status.HTTP_201_CREATED
+        if result.disposition is GrantOfficialCopyDisposition.CREATED
+        else status.HTTP_200_OK
+    )
+    return GrantOfficialCopyEventOut.model_validate(result, from_attributes=True)
 
 
 @router.post(
