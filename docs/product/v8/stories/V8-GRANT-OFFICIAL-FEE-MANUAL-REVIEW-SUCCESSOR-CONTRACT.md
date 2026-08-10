@@ -152,6 +152,11 @@ Review replay uses the review activity's stored old/new lifecycle projection, no
 case projection. A legitimate later lifecycle event therefore cannot invalidate exact same-key
 review replay or the Row120 read validator.
 
+The existing explicit client-instruction adapter remains order-independent with this review: it
+accepts either the original exact `REVIEW_REQUIRED` projection or the exact validated review fact
+and current `MATCHED` projection. It still writes only the explicit `PAY`/`HOLD`/`ABANDON`
+instruction through the generic writer; no review may imply a client decision.
+
 ## Files and non-closure
 
 Implementation allowlist:
