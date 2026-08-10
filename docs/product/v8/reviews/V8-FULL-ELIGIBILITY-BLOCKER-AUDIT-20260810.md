@@ -5,8 +5,9 @@
 Foundation 已由 `V8-FOUNDATION-CLOSE-CURRENT-ADOPTION` terminally 关闭，197/197 行满足
 C3.1 Foundation。进入 Full 后，frozen catalog 的 86 个 deferred row 中没有一个当前
 dependency-ready 的合法产品 lane：83 行直接要求尚未确认的客户/source-backed decision
-gate；余下 3 行是这些 gated rows 全部完成后的累计 regression、Final ledger 和 Final
-close。不得把 `PENDING` 推断为同意、safe default、历史分类或自动激活。
+ gate；余下 3 行是 Full/Final 控制行，当前都依赖被阻塞的 Full activation。Rows281/282
+另有 frozen dependency 与自身 prose 不一致的缺口，必须独立 fail closed。不得把
+`PENDING` 推断为同意、safe default、历史分类或自动激活。
 
 ## 冻结输入
 
@@ -33,12 +34,18 @@ close。不得把 `PENDING` 推断为同意、safe default、历史分类或自�
   coverage。
 - Official workbook real UI E2E row 278 要求 payment-workbook gate，因此也在上述 83 个
   direct customer-blocked rows 内。
-- 只有 rows 281–283 没有直接 `gate_requirements`；它们依次是累计 inherited regression、
-  Final item-to-slice ledger 和 Final close，依赖 Full activation 及全部 gated product/form
-  rows，故为传递 dependency-blocked，而非可执行工作。
+- 只有 rows 281–283 没有直接 `gate_requirements`。三者当前都依赖 Full activation，故
+  现在均不可执行。Row283 依赖全部 53 个 gated-product/legacy-form rows；Rows281/282
+  各只覆盖 52/53，均漏掉 gated Row278
+  `FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01`，而 Row282 也未依赖 Row281。
+  这与两行 `raw_dependency` 所写的“all catalog product tasks/product-task gates”冲突。
+  因此 Rows281/282 不能只视为普通传递阻塞：即使未来 Full activation 解除，也必须先有
+  exact successor dependency contract，防止在 Row278（以及 Row282 相对 Row281）之前
+  过早执行。
 
-Catalog 审计得到：83 行至少一个 gate requirement，3 行没有 gate requirement但依赖
-deferred predecessors；不存在第四种情况。
+Catalog 审计得到：83 行至少一个 gate requirement，3 行没有 gate requirement；其中
+Row283 的 dependency closure 完整，Rows281/282 存在上述 frozen inconsistency。当前不存在
+可合法启动的第四类 lane。
 
 ## 未决权威
 
@@ -63,13 +70,17 @@ source/decision registry 当前明确记录以下状态均为 `PENDING`：
 - 所有带 `gate_requirements` 的 83 行：`CUSTOMER_BLOCKED`，blocker code
   `CUSTOMER_DECISION_REQUIRED`，引用本报告；gate identity 继续以 frozen catalog 为唯一
   精确映射。
-- Rows 281–283：`PENDING`，blocker code `DEPENDENCY_BLOCKED`，根依赖为
+- Rows 281–282：`PENDING`，blocker code `CONTRACT_INCONSISTENCY`，记录缺失的 Row278；
+  Row282 另记录缺失的 Row281，引用本报告。Full activation 即使未来通过，也不能越过
+  此 blocker。
+- Row283：`PENDING`，blocker code `DEPENDENCY_BLOCKED`，根依赖为
   `FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01`，引用本报告。
 - 不创建 story、不运行产品 RED/GREEN、不修改 product/source/contract、不把 blocker
   计作 PASS。
 
 该分类使当前状态可恢复、可审计，但 Full、Final 和 Release 均不得宣称完成。客户以后确认
 某一 exact gate 时，只重开该 gate 的 activation/product closure；其他 blocker 不受影响。
+Rows281/282 还需一次最小 successor dependency correction，不得修改 frozen catalog 原件。
 
 ## 非闭包与恢复条件
 
