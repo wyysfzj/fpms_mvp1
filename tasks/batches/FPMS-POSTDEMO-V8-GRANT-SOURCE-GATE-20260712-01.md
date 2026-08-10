@@ -3,7 +3,7 @@
 Status: FROZEN CANDIDATE / READY FOR INDEPENDENT HIGH REVIEW
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Manifest phase: `lane`
-Task count: 5
+Task count: 8
 Runbook: `P0-prereq-heavy-story`
 Activation task: `FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01`
 Gate requirement: `DG-GRANT-EVIDENCE-SOURCE:GLOBAL`
@@ -29,19 +29,27 @@ availability never proves a grant, changes patent legal state, or enters a paten
 
 Every task retains its own exact owner, allowlist, RED/GREEN evidence and independent protected
 review. The activation task cannot approve itself or any child. Product execution begins only
-after this activation receives independent approval and each child's named prerequisites pass.
-No task in this manifest changes a schema, catalog, coverage ledger, source registry, customer
-decision, production seed, or release state.
+after the successor activation receives independent approval and each child's named prerequisites
+pass. This manifest orders the accepted schema child but does not itself change schema, catalog,
+coverage ledger, source registry, customer decision, production seed, or release state.
 
 ## Execution waves and shared ownership
 
-1. Wave G0: independently review and accept the activation task only.
-2. Wave G1: execute the ingestion service.
-3. Wave G2: execute the ingestion API and candidate read service under separate owners.
-4. Wave G3: execute the candidate list API after both Wave G2 tasks pass.
+1. Wave G0: independently review and accept the successor activation only.
+2. Wave G1: accept the already implemented/reviewed source schema candidate without repeating
+   RED/GREEN, then execute the source service.
+3. Wave G2: execute the source API after the source service passes.
+4. Wave G3: execute the ingestion service.
+5. Wave G4: execute the ingestion API and candidate read service under separate owners.
+6. Wave G5: execute the candidate list API after both Wave G4 tasks pass.
 
 Shared files remain serialized even when dependency waves otherwise permit concurrency:
 
+- `GLOBAL_ALEMBIC_HEAD`, `backend/app/modules/system/models.py`,
+  `backend/app/modules/documents/models.py` and `backend/app/models/__init__.py`: source schema
+  acceptance remains serialized.
+- All source carrier service files complete before any importing consumer.
+- All source carrier API router/schema files complete before ingestion/list API shared edits.
 - `grant_evidence_ingestion_service.py`: ingestion service before candidate read service.
 - `documents/api.py` and `grant_evidence_schemas.py`: ingestion API before candidate list API.
 - All SQLite-writing verification remains serialized through the repository queue.
@@ -52,11 +60,11 @@ Shared files remain serialized even when dependency waves otherwise permit concu
 ## 001. FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01
 
 - Task file: `tasks/postdemo/v8/FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01.md`
+- Task SHA-256: `3236a8ae708ee5740c4e19a49fbeaa377de0354d3b880c249b8c8dacefbd51f7`
 - Owner role: Team Lead / default
 - Profile: `TC-QA`
-- Exact closure: Create only this five-row grant-source lane manifest containing the activation
-  plus the four candidate ingestion/read service/API tasks, while preserving unverified archive
-  status and zero legal-state effect.
+- Exact closure: Rebind this grant-source lane manifest from five rows to eight rows while
+  preserving unverified archive status and zero legal-state effect.
 - Non-closure: No product code, schema, catalog or coverage-ledger change; no source publication,
   customer-policy invention, test weakening, second lane, or release action.
 - Canonical dependencies:
@@ -80,9 +88,60 @@ Shared files remain serialized even when dependency waves otherwise permit concu
   - `git diff --check -- tasks/batches/FPMS-POSTDEMO-V8-GRANT-SOURCE-GATE-20260712-01.md backend/tests/test_v8_grant_source_gate_manifest_contract.py artifacts/FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01/** tasks/postdemo/v8/FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01.md`
 - Acceptance: exact RED/GREEN, scope/evidence checks and one independent High zero-finding review.
 
-## 002. FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01
+## 002. FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01
+
+- Task file: `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01.md`
+- Task SHA-256: `f3ec1e107fb8cba0f4c041d1949eb646c674a6609de78d9533d4784526874eb6`
+- Owner role: Backend Developer / worker
+- Profile: `TC-SCHEMA`
+- Exact closure: Persist the three fail-closed grant-source lineage carriers using
+  `v8_grant_evidence_source_carrier.py`: reviewed source version, active GLOBAL selection and
+  immutable evidence candidate provenance.
+- Non-closure: No source seed, service, API, role or legal-state behavior.
+- Canonical dependencies:
+  - `FPMS-V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-20260810-01`
+  - `FPMS-V8-DE-REGISTER-VERSION-20260712-01`
+- Shared owner: `GLOBAL_ALEMBIC_HEAD` and the exact ORM/model registry files named in the task.
+- Acceptance: use the already implemented and independently reviewed exact candidate; after this
+  activation passes, adopt it without repeating RED/GREEN.
+
+## 003. FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-20260810-01
+
+- Task file: `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-20260810-01.md`
+- Task SHA-256: `954960141ba75465176b01ab262a257d9b9128ab70303453173db7483429c502`
+- Owner role: Backend Developer / worker
+- Profile: `TC-SERVICE`
+- Exact closure: Register, independently review and activate CNIPA source versions; publish,
+  revoke and resolve exact GLOBAL source configurations with canonical audit lineage.
+- Non-closure: No API, role binding, candidate ingestion or legal-state behavior.
+- Canonical dependencies:
+  - `FPMS-V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-20260810-01`
+  - `FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01`
+- Allowed implementation: exact `grant_evidence_source_service.py` and focused task files only.
+- Runtime gate: unresolved or corrupt authority returns 409 with no write and no legal-state
+  change.
+- Acceptance: targeted TDD, scoped checks, exact allowlist evidence and independent High review.
+
+## 004. FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-20260810-01
+
+- Task file: `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-20260810-01.md`
+- Task SHA-256: `252b73f40e21deebeeb1e44f61c94f7a4dee4c9106fc4d82e1a518529c8a3d52`
+- Owner role: Backend Developer / worker
+- Profile: `TC-API`
+- Exact closure: Expose the six authenticated institution configuration endpoints over the
+  accepted source service using `SystemParam.Edit`.
+- Non-closure: No default source, business-rule duplication, candidate ingestion or UI.
+- Canonical dependencies:
+  - `FPMS-V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-20260810-01`
+  - `FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-20260810-01`
+- Allowed implementation: exact `grant_evidence_source_schemas.py`, system router and focused task
+  files only.
+- Acceptance: targeted TDD, scoped checks, exact allowlist evidence and independent High review.
+
+## 005. FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01
 
 - Task file: `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01.md`
+- Task SHA-256: `82f7fe3ac496716dfe315f6eb698457aebb7966e5d9de083998f11f0ce193230`
 - Owner role: Backend Developer / worker
 - Profile: `TC-SERVICE`
 - Exact closure: Ingest one announcement/register candidate only from the confirmed
@@ -92,7 +151,10 @@ Shared files remain serialized even when dependency waves otherwise permit concu
 - Canonical dependencies:
   - `FPMS-V8-DE-REGISTER-VERSION-20260712-01`
   - `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
-  - `FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01`
+  - `FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01`
+  - `FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-20260810-01`
+  - `FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-20260810-01`
+  - `FPMS-V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-20260810-01`
 - Allowed files:
   - `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01.md`
   - `backend/app/modules/documents/grant_evidence_ingestion_service.py`
@@ -106,9 +168,10 @@ Shared files remain serialized even when dependency waves otherwise permit concu
   scope-mismatched returns 409 with no write and no legal-state change.
 - Acceptance: targeted TDD, scoped checks, exact allowlist evidence and independent High review.
 
-## 003. FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01
+## 006. FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01
 
 - Task file: `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01.md`
+- Task SHA-256: `537f0defe2e8116af73fdc47fc040c454c32c7fb1871624b5698a4f67ce83445`
 - Owner role: Backend Developer / worker
 - Profile: `TC-API`
 - Exact closure: One POST candidate endpoint using `Doc.Edit`; return 201 candidate, 409 unresolved gate/source conflict and no legal-state change.
@@ -131,9 +194,10 @@ Shared files remain serialized even when dependency waves otherwise permit concu
   scope-mismatched returns 409 with no write and no legal-state change.
 - Acceptance: targeted TDD, scoped checks, exact allowlist evidence and independent High review.
 
-## 004. FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01
+## 007. FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01
 
 - Task file: `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01.md`
+- Task SHA-256: `daa6fddb220045e0d0ca4744be50bc5969eb20ae0db93c727106153e91d1e69d`
 - Owner role: Backend Developer / worker
 - Profile: `TC-SERVICE`
 - Exact closure: Read persisted candidates for one document with source/version/proposer/reviewer/
@@ -157,9 +221,10 @@ Shared files remain serialized even when dependency waves otherwise permit concu
   scope-mismatched returns 409 with no write and no legal-state change.
 - Acceptance: targeted TDD, scoped checks, exact allowlist evidence and independent High review.
 
-## 005. FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01
+## 008. FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01
 
 - Task file: `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01.md`
+- Task SHA-256: `6f0c8ff6299f5f36bbdf05c6d5b7719501c7f2b00df64b481945732d9f5d3890`
 - Owner role: Backend Developer / worker
 - Profile: `TC-API`
 - Exact closure: One bodyless GET `/documents/{document_id}/grant-evidence-candidates` using
