@@ -2230,16 +2230,10 @@
     {
       "catalog_id": "FPMS-V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-20260712-01",
       "phase": "foundation",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "DEPENDENCY_BLOCKED",
-        "dependencies": [
-          "FPMS-V8-GRANT-DRAFT-OBLIGATION-ADAPTER-20260712-01"
-        ],
-        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FOUNDATION-CLOSE-20260712-01",
@@ -5248,6 +5242,42 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-DRAFT-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-DRAFT-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "527f5179a5145d0749d659f005bc13f95097afa2",
+        "a0deb51b6556c881749dc2e7a6b0b206dafd6e5d",
+        "7439bcd18f13fb61887b784d39436147afc23a4b"
+      ],
+      "paths": [
+        "backend/tests/conftest.py",
+        "backend/tests/test_addgap_final_close_ledger_contract.py",
+        "backend/tests/test_addgap_manifest_release_gate.py",
+        "backend/tests/test_v8_application_fee_notice_activation.py",
+        "backend/tests/test_v8_attachment_evidence_read_projection.py",
+        "backend/tests/test_v8_case_create_opened_evidence_adapter.py",
+        "backend/tests/test_v8_catalog_manifest_coverage_gate.py",
+        "backend/tests/test_v8_foundation_inherited_regression_matrix_contract.py",
+        "backend/tests/test_v8_future_annuity_reduction_lineage_carrier.py",
+        "backend/tests/test_v8_lifecycle_apply_event.py",
+        "backend/tests/test_v8_lifecycle_evidence_kind_capacity.py",
+        "backend/tests/test_v8_manifest_release_gate.py",
+        "backend/tests/test_v8_official_rate_book_schema.py",
+        "backend/tests/test_v8_pay_list_export_artifact_schema.py",
+        "backend/tests/test_v8_w1_l2_case_activity_event.py"
+      ],
+      "tree_sha256": "5b056e16e92fe5ed7e6a33cc4b719cf404a9dde57a7e2e0863887dc2d34cbefc",
+      "tests": [
+        "current V8 backend matrix passed 4643 tests and 114 subtests; 24 skips were only four C3-superseded control-plane modules",
+        "inherited UI matrix passed 22 tests and current isolated real-stack overlay E2E passed 1 test",
+        "final exact authority contract passed 5 tests; scoped Ruff, format and diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION.md"
     }
   ]
 }
