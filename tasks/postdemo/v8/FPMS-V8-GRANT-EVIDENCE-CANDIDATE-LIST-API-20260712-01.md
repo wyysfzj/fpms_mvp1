@@ -1,99 +1,61 @@
 # FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01
 
-Status: READY / NOT STARTED
-Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
-Wave: `14. Wave 6 — customer decision gates`
+Status: CONTRACT RE-FROZEN / READY FOR IMPLEMENTATION
+Risk class: `PROTECTED`
+Runbook: `P0-shared-router-story`
 Catalog ordinal: `203`
-Executor role: Backend Developer / worker
 
-## Design References
+## Authority and prerequisites
 
-- `AGENTS.md`
-- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
-- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
-- Source catalog line: `711`
-- Expected manifest phase: `deferred`
-- Customer gate requirement: `DG-GRANT-EVIDENCE-SOURCE[GLOBAL]`
+- Scheme A SHA-256
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`.
+- Accepted candidate-read service implementation `72126838a8032863bc445a5dcb2612fbb6e42815`.
+- Accepted ingestion API owns the existing POST on the same resource collection.
 
-## Story Shape Classification
+## Exact closure
 
-- `shared_file_density`: high
-- `prereq_dependency_density`: high
-- `be_fe_coupling`: low
-- `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+Extend `grant_evidence_schemas.py` with output-only strict projection models matching every field of
+`GrantEvidenceCandidateRead`, including nested exact fact/conflict models, source/version,
+terminal/proposal-role identities, proposer/reviewer/review data, hashes and raw conflicts. Output
+models accept attributes and do not normalize, infer or choose a conflict value.
 
-## Task Contract Profile
+Add exactly one bodyless route:
 
-Task Contract Profile: `TC-API`
+```text
+GET /documents/{document_id}/grant-evidence-candidates
+permission: Doc.Read
+response: 200 list[GrantEvidenceCandidateReadOut]
+```
 
-- RED expectation: Exact API test fails with route/shape/permission/status mismatch.
-- GREEN expectation: Exact API test passes named 200/201/400/401/403/404/409/422 semantics and response envelope.
+The path is a UUID. The route injects exactly one server UTC-naive `read_at`, constructs one exact
+`ListGrantEvidenceCandidatesCommand`, delegates once to `list_grant_evidence_candidates`, and
+validates the exact ordered tuple into the response list. It performs no direct product query,
+flush, commit or rollback. Preserve 401/403/404/409/422 semantics. The GET has no body, query
+parameters or alternate route; an existing document with no candidates returns `[]`.
 
-## Exact Closure Slice
+## Non-closure
 
-One bodyless GET `/documents/{document_id}/grant-evidence-candidates` using `Doc.Read`; 200/401/403/404/409/422 and no request body.
+No POST/review endpoint change, service/schema/migration, current-source resolution, legal-state
+inference/dispatch, document/evidence mutation, lifecycle/deadline, fee/payment or frontend/UI.
 
-## Explicit Non-Closure
+## Allowed files
 
-No second endpoint, router rewiring, business-rule duplication or frontend work. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
+- this task file;
+- `backend/app/modules/documents/grant_evidence_schemas.py`;
+- `backend/app/modules/documents/api.py`;
+- `backend/tests/test_v8_grant_evidence_candidate_list_api.py`.
 
-## Dependencies
+## Frozen acceptance matrix
 
-### Canonical V8 task dependencies
+1. Exact GET exists once with `Doc.Read`, UUID path, no body/query and exact response model.
+2. Path plus one server time maps to one service command; no direct query/write/transaction close.
+3. Empty and ordered multiple projections return exact 200 JSON preserving raw conflicts/reviews.
+4. Auth/permission/path/service 401/403/422/404/409 semantics remain unchanged and no second route
+   or product side effect is introduced.
 
-- `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
-- `FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01`
-- `FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01`
-- `FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01`
+## Verification
 
-### External, gate and inherited prerequisites
-
-- `gate` — `DG-GRANT-EVIDENCE-SOURCE:GLOBAL`: Persisted, current, source-backed decision must be confirmed for this exact scope.
-
-- Approved source dependency cell (verbatim): candidate read service; serialized after ingestion API
-
-### Shared ownership serialization
-
-- `backend/app/modules/documents/api.py` order key `15`; project this order only across owners present in the active manifest.
-- `backend/app/modules/documents/grant_evidence_schemas.py` order key `2`; project this order only across owners present in the active manifest.
-
-## Remaining Follow-Up Task IDs
-
-- None
-
-## Allowed Files
-
-- `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01.md`
-- `backend/app/modules/documents/grant_evidence_schemas.py`
-- `backend/app/modules/documents/api.py`
-- `backend/tests/test_v8_grant_evidence_candidate_list_api.py`
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01/**`
-
-No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
-
-## Runtime Contracts
-
-- Preserve AGENTS.md permission injection, response-envelope, FastAPI status/body, SQLite and Simplified Chinese UI rules applicable to this closure.
-- Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
-- All SQLite-writing tests and shared-file verification run through the global serialized queue.
-- Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
-
-## Verification Commands
-
-- RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_candidate_list_api.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
-- GREEN and scoped checks:
-- `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_candidate_list_api.py`
-- `cd backend && .venv/bin/ruff check --fix app/modules/documents/grant_evidence_schemas.py app/modules/documents/api.py tests/test_v8_grant_evidence_candidate_list_api.py && .venv/bin/ruff format app/modules/documents/grant_evidence_schemas.py app/modules/documents/api.py tests/test_v8_grant_evidence_candidate_list_api.py && .venv/bin/ruff check app/modules/documents/grant_evidence_schemas.py app/modules/documents/api.py tests/test_v8_grant_evidence_candidate_list_api.py`
-- `git diff --check -- backend/app/modules/documents/grant_evidence_schemas.py backend/app/modules/documents/api.py backend/tests/test_v8_grant_evidence_candidate_list_api.py tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
-
-## Evidence Path
-
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
-
-## Done Definition
-
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-CANDIDATE-LIST-API-20260712-01` pass. Only then may this task be reported PASS.
+- Focused RED/GREEN candidate-list API pytest.
+- Ingestion POST, candidate-read service and shared document-router regressions.
+- Scoped Ruff and exact three-path diff-check; do not format unrelated shared-router bytes.
+- Independent High review; PASS requires P0/P1/P2 `0/0/0`.
