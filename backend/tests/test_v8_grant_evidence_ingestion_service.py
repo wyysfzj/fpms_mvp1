@@ -23,6 +23,8 @@ from app.modules.documents.models import (
     GrantEvidenceCandidate,
     GrantOfficialCopyVerificationEvent,
 )
+from app.modules.system import grant_evidence_source_service as source_authority
+from app.modules.system import grant_manual_review_role_service as role_authority
 from app.modules.system.grant_evidence_source_service import GrantEvidenceScope
 from app.modules.system.grant_manual_review_role_service import GrantManualReviewRoleResolution
 from app.modules.system.models import (
@@ -46,12 +48,12 @@ def _remove_committed_verification_chain(session_factory):
             )
         transaction.commit()
 
+
 ACQUIRED_AT = datetime(2026, 8, 10, 9, 0, 0, 123456)
 PROPOSED_AT = datetime(2026, 8, 10, 12, 0, 0, 123456)
 CONTENT_HASH = "raw-official-evidence-sha256"
 REFERENCE = "CNIPA-TEST-REFERENCE-NOT-A-LEGAL-CLAIM"
 METHOD = "CONTROLLED_DOWNLOAD"
-EMPTY_HASH = hashlib.sha256(b"{}").hexdigest()
 
 
 def _canonical(value: object) -> str:
@@ -147,35 +149,50 @@ def _ready(transaction: Session, monkeypatch: pytest.MonkeyPatch) -> dict[str, o
         )
     )
     transaction.flush()
-    transaction.add(
-        GrantEvidenceSourceRecord(
-            id=source_record_id,
-            source_authority="CNIPA",
-            source_code="TEST-SOURCE",
-            source_version="v1",
-            evidence_scope="GRANT_ANNOUNCEMENT",
-            source_reference_kind="DATA",
-            source_reference_value="TEST SOURCE",
-            acquisition_method=METHOD,
-            effective_from=ACQUIRED_AT - timedelta(days=1),
-            effective_to=None,
-            source_snapshot="{}",
-            source_snapshot_hash=EMPTY_HASH,
-            review_status="APPROVED",
-            reviewed_by=source_reviewer_id,
-            reviewed_at=ACQUIRED_AT - timedelta(days=1),
-            review_reason="TEST ONLY",
-            activation_status="ACTIVE",
-            activated_by=admin_id,
-            activated_at=ACQUIRED_AT - timedelta(hours=1),
-            supersedes_source_id=None,
-            current_identity_key="CNIPA|GRANT_ANNOUNCEMENT|TEST-SOURCE",
-            idempotency_key=f"source-{uuid4()}",
-            created_by=admin_id,
-            updated_by=admin_id,
-        )
+    source = GrantEvidenceSourceRecord(
+        id=source_record_id,
+        source_authority="CNIPA",
+        source_code="TEST-SOURCE",
+        source_version="v1",
+        evidence_scope="GRANT_ANNOUNCEMENT",
+        source_reference_kind="DATA",
+        source_reference_value="TEST SOURCE",
+        acquisition_method=METHOD,
+        effective_from=ACQUIRED_AT - timedelta(days=1),
+        effective_to=None,
+        source_snapshot="pending",
+        source_snapshot_hash="0" * 64,
+        review_status="APPROVED",
+        reviewed_by=source_reviewer_id,
+        reviewed_at=ACQUIRED_AT - timedelta(days=1),
+        review_reason="TEST ONLY",
+        activation_status="ACTIVE",
+        activated_by=admin_id,
+        activated_at=ACQUIRED_AT - timedelta(hours=1),
+        supersedes_source_id=None,
+        current_identity_key="CNIPA|GRANT_ANNOUNCEMENT|TEST-SOURCE",
+        idempotency_key=f"source-{uuid4()}",
+        created_by=admin_id,
+        updated_by=admin_id,
     )
+    source.source_snapshot = source_authority._expected_source_snapshot(source)
+    source.source_snapshot_hash = hashlib.sha256(source.source_snapshot.encode()).hexdigest()
+    transaction.add(source)
     transaction.flush()
+    source_config_snapshot = source_authority._config_snapshot(
+        evidence_scope="GRANT_ANNOUNCEMENT",
+        source_record_id=source_record_id,
+        source_version=source.source_version,
+        source_snapshot_hash=source.source_snapshot_hash,
+        config_version="v1",
+        config_status="ACTIVE",
+        effective_from=ACQUIRED_AT - timedelta(days=1),
+        effective_to=None,
+        selected_by=admin_id,
+        published_at=ACQUIRED_AT - timedelta(hours=1),
+        selection_reason="TEST ONLY",
+        expected_current_config_id=None,
+    )
     transaction.add(
         GrantEvidenceSourceConfig(
             id=source_config_id,
@@ -191,15 +208,23 @@ def _ready(transaction: Session, monkeypatch: pytest.MonkeyPatch) -> dict[str, o
             published_at=ACQUIRED_AT - timedelta(hours=1),
             selection_reason="TEST ONLY",
             supersedes_config_id=None,
-            config_snapshot="{}",
-            config_snapshot_hash=EMPTY_HASH,
+            config_snapshot=source_config_snapshot,
+            config_snapshot_hash=hashlib.sha256(source_config_snapshot.encode()).hexdigest(),
             idempotency_key=f"source-config-{uuid4()}",
-            current_identity_key=(
-                "DG-GRANT-EVIDENCE-SOURCE|GLOBAL|GRANT_ANNOUNCEMENT"
-            ),
+            current_identity_key=("DG-GRANT-EVIDENCE-SOURCE|GLOBAL|GRANT_ANNOUNCEMENT"),
         )
     )
     transaction.flush()
+    role_config_snapshot = role_authority._snapshot(
+        role_ids=role_ids,
+        config_version="v1",
+        config_status="ACTIVE",
+        effective_from=ACQUIRED_AT - timedelta(days=1),
+        effective_to=None,
+        confirmed_by=admin_id,
+        published_at=ACQUIRED_AT - timedelta(hours=1),
+        expected_current_config_id=None,
+    )
     transaction.add(
         GrantManualReviewRoleConfig(
             id=role_config_id,
@@ -217,8 +242,8 @@ def _ready(transaction: Session, monkeypatch: pytest.MonkeyPatch) -> dict[str, o
             confirmed_by=admin_id,
             published_at=ACQUIRED_AT - timedelta(hours=1),
             supersedes_config_id=None,
-            config_snapshot="{}",
-            config_snapshot_hash=EMPTY_HASH,
+            config_snapshot=role_config_snapshot,
+            config_snapshot_hash=hashlib.sha256(role_config_snapshot.encode()).hexdigest(),
             idempotency_key=f"role-config-{uuid4()}",
             current_identity_key="DG-GRANT-MANUAL-REVIEW|GLOBAL",
         )
@@ -246,11 +271,11 @@ def _ready(transaction: Session, monkeypatch: pytest.MonkeyPatch) -> dict[str, o
             predecessor_event_id=predecessor_id,
             reason=reason,
             role_config_id=role_config_id,
-            role_config_snapshot_hash=EMPTY_HASH,
+            role_config_snapshot_hash=hashlib.sha256(role_config_snapshot.encode()).hexdigest(),
             source_config_id=source_config_id,
-            source_config_snapshot_hash=EMPTY_HASH,
+            source_config_snapshot_hash=hashlib.sha256(source_config_snapshot.encode()).hexdigest(),
             source_record_id=source_record_id,
-            source_snapshot_hash=EMPTY_HASH,
+            source_snapshot_hash=source.source_snapshot_hash,
         )
         transaction.add(
             GrantOfficialCopyVerificationEvent(
@@ -267,16 +292,16 @@ def _ready(transaction: Session, monkeypatch: pytest.MonkeyPatch) -> dict[str, o
                 original_reference=REFERENCE,
                 acquisition_method_snapshot=METHOD,
                 evidence_content_hash=CONTENT_HASH,
-                source_config_snapshot_hash=EMPTY_HASH,
-                source_snapshot_hash=EMPTY_HASH,
-                role_config_snapshot_hash=EMPTY_HASH,
+                source_config_snapshot_hash=hashlib.sha256(
+                    source_config_snapshot.encode()
+                ).hexdigest(),
+                source_snapshot_hash=source.source_snapshot_hash,
+                role_config_snapshot_hash=hashlib.sha256(role_config_snapshot.encode()).hexdigest(),
                 predecessor_event_id=predecessor_id,
                 event_snapshot=snapshot,
                 event_snapshot_hash=hashlib.sha256(snapshot.encode()).hexdigest(),
                 idempotency_key=f"event-{index}-{uuid4()}",
-                current_identity_key=(
-                    f"GRANT_OFFICIAL_COPY|{evidence_id}" if index == 2 else None
-                ),
+                current_identity_key=(f"GRANT_OFFICIAL_COPY|{evidence_id}" if index == 2 else None),
             )
         )
         transaction.flush()
@@ -285,7 +310,7 @@ def _ready(transaction: Session, monkeypatch: pytest.MonkeyPatch) -> dict[str, o
     role_resolution = GrantManualReviewRoleResolution(
         gate_id=str(uuid4()),
         config_id=role_config_id,
-        config_snapshot_hash=EMPTY_HASH,
+        config_snapshot_hash=hashlib.sha256(role_config_snapshot.encode()).hexdigest(),
         official_copy_acquirer_role_id=role_ids[0],
         first_verifier_role_id=role_ids[1],
         second_verifier_role_id=role_ids[2],
@@ -406,12 +431,14 @@ def test_valid_terminal_chain_creates_canonical_pending_candidate_without_side_e
         assert acquisition["acquired_by"] != acquisition["proposed_by"]
         assert acquisition["first_verified_by"] != acquisition["second_verified_by"]
         assert acquisition["terminal_verification_event_id"] == ready["event_ids"][2]
-        assert row.acquisition_snapshot_hash == hashlib.sha256(
-            row.acquisition_snapshot.encode()
-        ).hexdigest()
-        assert row.candidate_snapshot_hash == hashlib.sha256(
-            row.candidate_snapshot.encode()
-        ).hexdigest()
+        assert (
+            row.acquisition_snapshot_hash
+            == hashlib.sha256(row.acquisition_snapshot.encode()).hexdigest()
+        )
+        assert (
+            row.candidate_snapshot_hash
+            == hashlib.sha256(row.candidate_snapshot.encode()).hexdigest()
+        )
         assert row.review_status == "PENDING"
         assert (row.reviewer_id, row.reviewed_at, row.review_reason) == (None, None, None)
         transaction.expire_all()
@@ -486,9 +513,7 @@ def test_nonterminal_wrong_current_corrupt_and_same_verifier_fail_closed(
                 code="GRANT_EVIDENCE_CANDIDATE_CONFLICT",
                 status=409,
             )
-        terminal = transaction.get(
-            GrantOfficialCopyVerificationEvent, ready["event_ids"][2]
-        )
+        terminal = transaction.get(GrantOfficialCopyVerificationEvent, ready["event_ids"][2])
         terminal.event_snapshot_hash = "d" * 64
         transaction.commit()
         _assert_error(
@@ -535,9 +560,7 @@ def test_unbound_inactive_proposer_and_role_resolver_failure_are_no_write(
         monkeypatch.setattr(
             service,
             "resolve_grant_manual_review_role_config",
-            lambda _c, _t: (_ for _ in ()).throw(
-                BusinessError("ROLE", "missing", status_code=409)
-            ),
+            lambda _c, _t: (_ for _ in ()).throw(BusinessError("ROLE", "missing", status_code=409)),
         )
         _assert_error(
             lambda: service.ingest_grant_evidence_candidate(_command(ready), transaction),
@@ -553,8 +576,11 @@ def test_unbound_inactive_proposer_and_role_resolver_failure_are_no_write(
         ("evidence", "state", "DRAFT"),
         ("evidence", "current_identity_key", None),
         ("source", "source_snapshot_hash", "d" * 64),
+        ("source", "source_version", "tampered-version"),
         ("source", "effective_from", ACQUIRED_AT + timedelta(days=1)),
+        ("source_config", "selection_reason", "TAMPERED"),
         ("source_config", "config_status", "REVOKED"),
+        ("role_config", "config_version", "tampered-version"),
         ("role_config", "config_snapshot_hash", "d" * 64),
     ),
 )
@@ -566,12 +592,8 @@ def test_invalid_evidence_or_historical_authority_fails_closed(
         rows = {
             "evidence": transaction.get(DocumentEvidenceVersion, ready["evidence_id"]),
             "source": transaction.get(GrantEvidenceSourceRecord, ready["source_record_id"]),
-            "source_config": transaction.get(
-                GrantEvidenceSourceConfig, ready["source_config_id"]
-            ),
-            "role_config": transaction.get(
-                GrantManualReviewRoleConfig, ready["role_config_id"]
-            ),
+            "source_config": transaction.get(GrantEvidenceSourceConfig, ready["source_config_id"]),
+            "role_config": transaction.get(GrantManualReviewRoleConfig, ready["role_config_id"]),
         }
         setattr(rows[target], field, value)
         transaction.commit()
@@ -583,9 +605,7 @@ def test_invalid_evidence_or_historical_authority_fails_closed(
         assert transaction.scalar(select(func.count()).select_from(GrantEvidenceCandidate)) == 0
 
 
-def test_caller_rollback_and_flush_failure_leave_no_candidate(
-    session_factory, monkeypatch
-) -> None:
+def test_caller_rollback_and_flush_failure_leave_no_candidate(session_factory, monkeypatch) -> None:
     with session_factory() as transaction:
         ready = _ready(transaction, monkeypatch)
         command = _command(ready)

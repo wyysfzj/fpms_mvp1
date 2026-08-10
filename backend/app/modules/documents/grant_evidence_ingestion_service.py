@@ -18,11 +18,20 @@ from app.modules.documents.models import (
     GrantEvidenceCandidate,
     GrantOfficialCopyVerificationEvent,
 )
-from app.modules.system.grant_evidence_source_service import GrantEvidenceScope
+from app.modules.system.grant_evidence_source_service import (
+    GrantEvidenceScope,
+    _validate_source_canonical,
+)
+from app.modules.system.grant_evidence_source_service import (
+    _validate_config_canonical as _validate_source_config_canonical,
+)
 from app.modules.system.grant_manual_review_role_service import (
     GrantManualReviewRoleResolution,
     ResolveGrantManualReviewRoleConfigCommand,
     resolve_grant_manual_review_role_config,
+)
+from app.modules.system.grant_manual_review_role_service import (
+    _validate_canonical as _validate_role_config_canonical,
 )
 from app.modules.system.models import (
     GrantEvidenceSourceConfig,
@@ -172,9 +181,8 @@ def _validate_command(command: object) -> IngestGrantEvidenceCandidateCommand:
                 _string(fact.raw_value, "facts.raw_value", 4096),
             )
         )
-    if (
-        len({name for name, _value in fact_pairs}) != len(fact_pairs)
-        or tuple(fact_pairs) != tuple(sorted(fact_pairs))
+    if len({name for name, _value in fact_pairs}) != len(fact_pairs) or tuple(fact_pairs) != tuple(
+        sorted(fact_pairs)
     ):
         _invalid("facts")
     fact_names = {name for name, _value in fact_pairs}
@@ -279,8 +287,7 @@ def _validate_event(row: GrantOfficialCopyVerificationEvent) -> None:
         or row.evidence_scope not in {item.value for item in GrantEvidenceScope}
         or type(row.action_at) is not datetime
         or row.action_at.utcoffset() is not None
-        or row.current_identity_key
-        not in {None, f"{_CURRENT_PREFIX}{row.evidence_version_id}"}
+        or row.current_identity_key not in {None, f"{_CURRENT_PREFIX}{row.evidence_version_id}"}
     ):
         _conflict()
     for value in (
@@ -308,11 +315,15 @@ def _role_config_at(
     event: GrantOfficialCopyVerificationEvent,
 ) -> None:
     row = transaction.get(GrantManualReviewRoleConfig, event.role_config_id)
+    if row is None:
+        _conflict()
+    try:
+        _validate_role_config_canonical(row)
+    except BusinessError:
+        _conflict()
     if (
-        row is None
-        or row.config_status != "ACTIVE"
+        row.config_status != "ACTIVE"
         or row.config_snapshot_hash != event.role_config_snapshot_hash
-        or _hash_text(row.config_snapshot) != row.config_snapshot_hash
         or row.published_at > event.action_at
         or row.effective_from > event.action_at
         or (row.effective_to is not None and event.action_at >= row.effective_to)
@@ -340,7 +351,10 @@ def _terminal_chain(
     if len(current) != 1:
         _conflict()
     terminal = current[0]
-    if terminal.id != command.expected_terminal_event_id or terminal.event_type != "SECOND_VERIFIED":
+    if (
+        terminal.id != command.expected_terminal_event_id
+        or terminal.event_type != "SECOND_VERIFIED"
+    ):
         _conflict()
     first = transaction.get(GrantOfficialCopyVerificationEvent, terminal.predecessor_event_id)
     acquired = (
@@ -383,23 +397,30 @@ def _source_authority(
 ) -> GrantEvidenceSourceRecord:
     config = transaction.get(GrantEvidenceSourceConfig, acquired.source_config_id)
     source = transaction.get(GrantEvidenceSourceRecord, acquired.source_record_id)
+    if config is None or source is None:
+        _conflict()
+    try:
+        _validate_source_config_canonical(config)
+        _validate_source_canonical(source)
+        config_snapshot = json.loads(config.config_snapshot)
+    except (BusinessError, TypeError, ValueError):
+        _conflict()
     if (
-        config is None
-        or source is None
-        or config.gate_code != "DG-GRANT-EVIDENCE-SOURCE"
+        config.gate_code != "DG-GRANT-EVIDENCE-SOURCE"
         or config.scope_key != "GLOBAL"
         or config.evidence_scope != command.evidence_scope.value
         or config.source_record_id != source.id
         or config.config_status != "ACTIVE"
         or config.config_snapshot_hash != acquired.source_config_snapshot_hash
-        or _hash_text(config.config_snapshot) != config.config_snapshot_hash
+        or config_snapshot.get("source_record_id") != source.id
+        or config_snapshot.get("source_version") != source.source_version
+        or config_snapshot.get("source_snapshot_hash") != source.source_snapshot_hash
         or config.published_at > acquired.action_at
         or config.effective_from > acquired.action_at
         or (config.effective_to is not None and acquired.action_at >= config.effective_to)
         or source.source_authority != "CNIPA"
         or source.evidence_scope != command.evidence_scope.value
         or source.source_snapshot_hash != acquired.source_snapshot_hash
-        or _hash_text(source.source_snapshot) != source.source_snapshot_hash
         or source.review_status != "APPROVED"
         or source.reviewed_by is None
         or source.reviewed_at is None
@@ -453,9 +474,7 @@ def _candidate_snapshot(command: IngestGrantEvidenceCandidateCommand) -> str:
                 for conflict in command.conflicts
             ],
             "evidence_scope": command.evidence_scope.value,
-            "facts": [
-                {"name": fact.name, "raw_value": fact.raw_value} for fact in command.facts
-            ],
+            "facts": [{"name": fact.name, "raw_value": fact.raw_value} for fact in command.facts],
             "schema_version": _CANDIDATE_SCHEMA,
         }
     )
