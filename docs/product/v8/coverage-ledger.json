@@ -1645,13 +1645,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-EVIDENCE-REVIEW-SERVICE-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-ANNOUNCEMENT-EVIDENCE-ADAPTER-20260712-01",
@@ -6571,6 +6568,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-REVIEW-SERVICE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "7b6754eb1b7bfb35128a1e3c15d30a8e9732aefa"
+      ],
+      "paths": [
+        "backend/app/modules/documents/grant_evidence_review_service.py",
+        "backend/tests/test_v8_grant_evidence_review_service.py"
+      ],
+      "tree_sha256": "76bc39346c07dae289d5074e2dfb3dc5cd3a95d411e4208ac9c1e5f73f7f3716",
+      "tests": [
+        "focused grant evidence review service suite passed 15 tests",
+        "ingestion and manual-review role regressions passed with 60 total tests",
+        "scoped Ruff and exact two-path diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-SERVICE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-SERVICE-CURRENT-ADOPTION.md"
     }
   ]
 }
