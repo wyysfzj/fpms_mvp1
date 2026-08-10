@@ -6358,6 +6358,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FUTURE-ANNUITY-EXCEPTION-CARRIER-SCHEMA-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "af6113df03e809475f22c05f36cf9c5b4ccf33e0"
+      ],
+      "paths": [
+        "backend/alembic/versions/v8_future_annuity_exception_carrier.py",
+        "backend/app/modules/system/models.py",
+        "backend/tests/test_v8_future_annuity_exception_carrier_schema.py"
+      ],
+      "tree_sha256": "e085c1154718aa666ed6b801e4ce9d7517ba86a2db6bf634ba3c3da1b8963fbd",
+      "tests": [
+        "focused future-annuity exception schema suite passed 4 tests",
+        "scoped Ruff, unique Alembic head and clean SQLite upgrade/current passed",
+        "exact three-path diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-EXCEPTION-CARRIER-SCHEMA-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-EXCEPTION-CARRIER-SCHEMA-CURRENT-ADOPTION.md"
     }
   ]
 }
