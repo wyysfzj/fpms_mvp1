@@ -1980,13 +1980,10 @@
     {
       "catalog_id": "FPMS-V8-OUT-006-ABANDONMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OUT-006-ABANDONMENT-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OUT-007-BIBLIOGRAPHIC-CHANGE-20260712-01",
@@ -6163,6 +6160,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-005-WITHDRAWAL-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-005-WITHDRAWAL-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OUT-006-ABANDONMENT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "6fc99d83facb44081f6123c23981aa48820e0c66"
+      ],
+      "paths": [
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_out_006_activation.py"
+      ],
+      "tree_sha256": "975f5006c72cb9cc09ea36254c23018d58e992cb10da324c497d5db5c8bc3302",
+      "tests": [
+        "focused serialized OUT-006 suite passed 1 test",
+        "scoped Ruff and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OUT-006-ABANDONMENT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OUT-006-ABANDONMENT-CURRENT-ADOPTION.md"
     }
   ]
 }
