@@ -227,6 +227,7 @@ class GrantEvidenceSourceConfigResult:
 class GrantEvidenceSourceResolution:
     gate_id: str
     config_id: str
+    config_snapshot_hash: str
     source_record_id: str
     evidence_scope: GrantEvidenceScope
     source_code: str
@@ -398,8 +399,8 @@ with synthetic, explicitly test-only source facts:
    interval coverage and expected-current config CAS; revoked current state blocks fallback.
 6. Config canonical bytes/hash, predecessor chain, exact idempotent replay after later successors
    and changed-key/payload conflicts.
-7. Successful resolution for each evidence scope returns the exact source/config lineage and makes
-   no write.
+7. Successful resolution for each evidence scope returns the exact source/config lineage,
+   including immutable `config_snapshot_hash` and `source_snapshot_hash`, and makes no write.
 8. Missing/future/expired/revoked config; missing/rejected/unreviewed/inactive/retired/non-current
    source; scope/version/hash/snapshot/lineage mismatch; corrupt multiplicity; and gate
    absence/revocation/future/source/version mismatch all fail `409` with zero write.
