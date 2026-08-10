@@ -206,14 +206,32 @@ only the named lane; it never activates a default.
 
 ## 2026-08-10 grant-year official-fee manual review authority
 
-The customer approved a source-backed manual review prerequisite for grant-year official-fee
-drafting. An authorized operator must use the archived, approved grant-notice evidence version,
-enter and confirm every official full amount, and leave operator/time/source/evidence/hash,
-before/after amount and idempotency lineage before `REVIEW_REQUIRED` becomes `MATCHED`.
+Status: `APPROVED`.
 
-This decision authorizes only the review mechanism frozen in
-`V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-SUCCESSOR-CONTRACT`. It does not activate
-`DG-FEE-GRANT-YEAR-DRAFT`, infer any amount, or bypass the explicit client `PAY` instruction.
+- Exact source/version: customer decision in Codex thread
+  `019f4a1a-6f55-77a2-b558-b6555201415c`, decision version
+  `customer-decision:2026-08-10:grant-fee-manual-review:v1`, exact UTF-8 approval text
+  `批准方案A`, received on `2026-08-10` in timezone `Asia/Shanghai`.
+- Source SHA-256:
+  `4d21111b0b915b1c506083636d36782a59c9238028c8503f56a98ddcfffc0f09`.
+- Decision value: only an authenticated operator with `GrantFeeTask.Write`, using the exact
+  archived and approved grant-notice evidence version, may manually enter and confirm every
+  official full amount. The system must durably record operator, confirmation time, source
+  document/activity, evidence version/hash, complete before/after line amounts and idempotency
+  identity before all exact lines move atomically from `REVIEW_REQUIRED` to `MATCHED`. No rate
+  book, reduction ratio, payable amount or other stored/calculated value may infer an official
+  full amount.
+- Actor and acceptance authority: the repository customer/user approved option A. One independent
+  High reviewer of the exact frozen successor contract and one independent High reviewer of its
+  exact implementation candidate remain required before ledger activation.
+- Effective scope/time: active from `2026-08-10` only for the manual review prerequisite frozen in
+  `V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-SUCCESSOR-CONTRACT`, after its independently approved
+  implementation is integrated. It does not itself activate `DG-FEE-GRANT-YEAR-DRAFT`, infer an
+  amount, bypass explicit client `PAY`, or alter historical records.
+- Rollback impact: reverting the successor adoption removes the controlled manual review action
+  and returns catalog Row120 and its dependent Foundation lanes to `AUTHORITY_BLOCKED`. Existing
+  review activities and matched amounts must not be deleted, synthesized or silently reclassified;
+  rollback requires fail-closed read handling for any already persisted review fact.
 
 ### Application-fee notice preview source questions
 
