@@ -1,79 +1,26 @@
 # FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01
 
-Status: CONTRACT RE-FROZEN / READY FOR INDEPENDENT HIGH REVIEW
-Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
-Wave: `14. Wave 6 — customer decision gates`
+Status: CONTRACT RE-FROZEN / READY FOR IMPLEMENTATION
+Risk class: `PROTECTED`
+Runbook: `P0-prereq-heavy-story`
 Catalog ordinal: `200`
-Executor role: Backend Developer / worker
 
-## Design References
+## Authority and prerequisites
 
-- `AGENTS.md`
-- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
-- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
-- Source catalog line: `708`
-- Expected manifest phase: `deferred`
-- Customer gate requirement: `DG-GRANT-EVIDENCE-SOURCE[GLOBAL]`
+- Scheme A customer source SHA-256
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`.
+- Accepted evidence-version, grant-source and institution duty-role carriers/services.
+- Accepted official-copy `ACQUIRED -> FIRST_VERIFIED -> SECOND_VERIFIED` carrier/service/API.
 
-## Story Shape Classification
+The prior contract incorrectly allowed `proposed_by` to stand in the acquisition snapshot without
+proving the separate official-copy acquirer and two-verifier chain. This successor removes all
+caller-supplied acquisition facts. A candidate may be created only from the exact current terminal
+verification event, while the candidate proposer is separately checked against the configured
+manual-review proposer role.
 
-- `shared_file_density`: high
-- `prereq_dependency_density`: high
-- `be_fe_coupling`: low
-- `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+## Exact closure and public interface
 
-## Task Contract Profile
-
-Task Contract Profile: `TC-SERVICE`
-
-- RED expectation: Exact service/dataset test fails on missing behavior, data or prohibited side effect.
-- GREEN expectation: Exact service/dataset test and named inherited regressions pass with caller-owned transaction semantics where writes are transactional.
-
-## Exact Closure Slice
-
-Resolve the exact current reviewed/active CNIPA source and `GLOBAL` configuration for one
-`GRANT_ANNOUNCEMENT` or `PATENT_REGISTER` acquisition before any write, then archive exactly one
-unverified `GrantEvidenceCandidate` linked to the immutable evidence version, source record and
-source configuration. Never infer or change legal state.
-
-## Explicit Non-Closure
-
-No endpoint/UI/schema/source publication/source review/role binding/legal-state dispatch and no
-adjacent service rule or second dataset. Do not duplicate the accepted resolver, seed a source,
-absorb another V8 row, or treat candidate availability as grant evidence approval.
-
-## Dependencies
-
-### Canonical V8 task dependencies
-
-- `FPMS-V8-DE-REGISTER-VERSION-20260712-01`
-- `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
-- `FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SCHEMA-20260810-01`
-- `FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-20260810-01`
-- `FPMS-V8-GRANT-EVIDENCE-SOURCE-CARRIER-API-20260810-01`
-- `FPMS-V8-GRANT-SOURCE-SUCCESSOR-ACTIVATION-20260810-01`
-
-### External, gate and inherited prerequisites
-
-- `gate` — `DG-GRANT-EVIDENCE-SOURCE:GLOBAL`: Persisted, current, source-backed decision must be confirmed for this exact scope.
-
-- Approved source dependency cell: accepted Scheme A gate; accepted source carrier schema,
-  resolver service and configuration API; evidence-version service; successor lane activation.
-
-### Shared ownership serialization
-
-- `backend/app/modules/documents/grant_evidence_ingestion_service.py` order key `1`; project this order only across owners present in the active manifest.
-
-## Remaining Follow-Up Task IDs
-
-- `FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01`
-- `FPMS-V8-GRANT-EVIDENCE-INGESTION-API-20260712-01`
-
-## Frozen Public Interface and Lineage Bytes
-
-Create exactly `backend/app/modules/documents/grant_evidence_ingestion_service.py`. It exposes
-these frozen, slotted, keyword-only DTOs and one synchronous callable:
+Create `backend/app/modules/documents/grant_evidence_ingestion_service.py` with exact frozen DTOs:
 
 ```python
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -94,12 +41,9 @@ class IngestGrantEvidenceCandidateCommand:
     document_id: str
     evidence_version_id: str
     evidence_scope: GrantEvidenceScope
-    original_reference: str
-    acquired_at: datetime
-    acquisition_reason: str
+    expected_terminal_event_id: str
     proposed_by: str
     proposed_at: datetime
-    as_of: datetime
     facts: tuple[GrantEvidenceFact, ...]
     conflicts: tuple[GrantEvidenceConflict, ...] = ()
 
@@ -108,8 +52,10 @@ class IngestGrantEvidenceCandidateCommand:
 class IngestGrantEvidenceCandidateResult:
     candidate_id: str
     evidence_version_id: str
+    terminal_event_id: str
     source_config_id: str
     source_record_id: str
+    proposal_role_config_id: str
     evidence_scope: GrantEvidenceScope
     acquisition_snapshot_hash: str
     candidate_snapshot_hash: str
@@ -123,117 +69,109 @@ def ingest_grant_evidence_candidate(
 ) -> IngestGrantEvidenceCandidateResult: ...
 ```
 
-Raw strings and lookalike enums are rejected. IDs, reference/reason/fact names and values are
-non-blank and bounded by their carrier columns; datetimes are UTC-naive. Fact names are unique.
-Conflict names are unique, must also exist in facts, and each conflict contains at least two
-distinct non-blank raw values. Facts must already be sorted by `(name, raw_value)`, conflicts by
-`name`, and each conflict's raw values lexically; the service rejects rather than silently
-reorders caller input.
+Raw strings/lookalike enums are rejected. IDs are canonical UUIDs; `proposed_at` is UTC-naive.
+Fact/conflict strings are nonblank, trimmed, NUL-free and at most 4096 characters. Facts are
+nonempty, names unique and sorted by `(name, raw_value)`. Conflicts are sorted by name, names are
+unique and present in facts, and each has at least two distinct nonblank raw values already sorted
+lexically. Reject rather than silently reorder.
 
-The command consumes one already persisted immutable `DocumentEvidenceVersion`; this service does
-not call `register_evidence_version` and never creates or mutates an evidence version. The version
-must be current for its lineage, belong to the exact case/document, have `role=RAW_ATTACHMENT`,
-`state=FINAL`, `review_state=PENDING`, no reviewer/final submission, and point to an existing
-attachment belonging to the same document. Its stored `content_hash` remains the official raw-file
-content identity.
+## Fail-closed official-copy and proposer authority
 
-Call `resolve_grant_evidence_source(ResolveGrantEvidenceSourceCommand(evidence_scope, as_of))`
-before any candidate write. The resolved result supplies the exact source-config ID and snapshot
-hash, source-record ID, source version and snapshot hash, and acquisition method; no caller value
-may replace them.
+The evidence version must be the exact current `RAW_ATTACHMENT`, `FINAL`, `PENDING` version for the
+command case/document; reviewer/review/final-submission fields are null, content hash is valid and
+the referenced attachment belongs to the same document with the same content hash.
 
-Canonical JSON uses UTF-8, `ensure_ascii=False`, `sort_keys=True`, separators `(",", ":")`, and
-`allow_nan=False`; hashes are lowercase SHA-256 of the exact stored text. Every datetime is
-serialized as UTC-naive `value.isoformat(timespec="microseconds")`; `evidence_scope` is serialized
-as its exact enum `.value`. No implicit `default=str`, timezone conversion or precision trimming
-is permitted.
+There must be exactly one current official-copy event with identity
+`GRANT_OFFICIAL_COPY|{evidence_version_id}`. It must equal `expected_terminal_event_id`, have stage
+`SECOND_VERIFIED`, same evidence/scope/content hash, and resolve a complete canonical
+`ACQUIRED -> FIRST_VERIFIED -> SECOND_VERIFIED` chain. Recompute each exact V1 event JSON/hash;
+require exact predecessor IDs, stable source record/config IDs and hashes, original reference,
+acquisition method and evidence content hash across the chain, plus distinct first/second actual
+users. Any missing, duplicate, corrupt or nonterminal lineage is 409/no write.
 
-- `acquisition_snapshot` has exactly: `schema_version` =
-  `CNIPA_GRANT_EVIDENCE_ACQUISITION_V1`, `case_id`, `document_id`, `attachment_id`,
-  `evidence_version_id`, `evidence_content_hash`, `evidence_scope`, `source_config_id`,
-  `config_snapshot_hash`, `source_record_id`, `source_version`, `source_snapshot_hash`, `original_reference`,
-  `acquisition_method`, `acquired_at`, `acquisition_reason`, `proposed_by`, `proposed_at`, `as_of`.
-- `candidate_snapshot` has exactly: `schema_version` =
-  `CNIPA_GRANT_EVIDENCE_CANDIDATE_V1`, `evidence_scope`, `facts` (ordered objects with exact keys
-  `name`, `raw_value`) and `conflicts` (ordered objects with exact keys `name`, `raw_values`).
-- `conflict_snapshot` is `NULL` when conflicts is empty; otherwise it is the canonical JSON text
-  of exactly the candidate snapshot's `conflicts` array. It is preserved evidence, never a
-  selected/normalized legal status.
+Each event's referenced duty-role configuration must still exist, match its stored snapshot hash,
+have been ACTIVE and effective at that event's action time, and have been published no later than
+the action. This is historical lineage validation only; do not apply the latest role configuration
+retroactively to acquisition or verifier events.
 
-The database unique `evidence_version_id` is the replay identity. Existing candidate replay returns
-`REUSED` only when every persisted foreign key, copied source/version/reference/method/time,
-proposer/time, both canonical texts/hashes and conflict text match the newly derived exact bytes.
-Any mismatch, duplicate/ambiguous row or corrupted hash is
-`GRANT_EVIDENCE_CANDIDATE_CONFLICT`/409 with no write. Creation returns `CREATED`, sets
-`review_status=PENDING` with no reviewer, and performs one flush but no commit/rollback.
+Resolve the exact GLOBAL duty-role configuration at `proposed_at` using
+`resolve_grant_manual_review_role_config`. The proposer must be an active actual user currently
+bound to `manual_review_proposer_role_id`. Missing/revoked/future/invalid configuration or binding
+is 409/no write. Do not infer the acquirer, a verifier or a generic document editor as proposer.
 
-## Allowed Files
+Read the source record/config referenced by the accepted event chain. They must still exist, match
+the stored scope and snapshot hashes, and represent reviewed activated CNIPA authority. The source
+must have been reviewed, activated and effective, and the configuration ACTIVE, published and
+effective, no later than the acquisition action. A durable source record may now be ACTIVE or
+RETIRED and its historical ACTIVE configuration may no longer own the current pointer; later
+retirement/revocation does not rewrite the already verified raw copy. No revoked configuration,
+current-source fallback or substitution is allowed.
 
-- `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01.md`
-- `backend/app/modules/documents/grant_evidence_ingestion_service.py`
-- `backend/tests/test_v8_grant_evidence_ingestion_service.py`
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01/**`
+## Exact canonical candidate bytes
 
-No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
+Canonical JSON uses UTF-8, `ensure_ascii=False`, `sort_keys=True`, separators `(",", ":")`,
+`allow_nan=False`; datetimes are UTC-naive `isoformat(timespec="microseconds")`; hashes are lowercase
+SHA-256 of exact stored text.
 
-## Runtime Contracts
+`acquisition_snapshot`, schema `CNIPA_GRANT_EVIDENCE_ACQUISITION_V2`, contains exactly:
 
-- Preserve AGENTS.md permission injection, response-envelope, FastAPI status/body, SQLite and Simplified Chinese UI rules applicable to this closure.
-- Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
-- All SQLite-writing tests and shared-file verification run through the global serialized queue.
-- Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
-- Call `resolve_grant_evidence_source` with the exact evidence scope and one captured naive `as_of`
-  before creating or mutating any `Document`, `DocAttachment`, `DocumentEvidenceVersion` or
-  `GrantEvidenceCandidate`. Missing, future, expired, revoked, rejected, unreviewed, inactive,
-  scope/version/hash-mismatched or ambiguous source/configuration is the accepted `409` and zero
-  write.
-- Persist the accepted `GrantEvidenceCandidate` carrier with exact case/document/existing
-  evidence-version,
-  resolved source-record/configuration IDs, immutable source/acquisition/candidate snapshots and
-  hashes, actual authenticated proposer, `PENDING` review and no reviewer. Caller owns the
-  transaction; replay is exact and cannot create a second candidate for one evidence version.
-- Archive extracted conflicts in the candidate snapshot/conflict field without selecting a legal
-  status. No candidate, attachment, review state or source activation changes `Case.status`, emits
-  a lifecycle event or confirms grant.
+- `schema_version`, `case_id`, `document_id`, `attachment_id`, `evidence_version_id`,
+  `evidence_content_hash`, `evidence_scope`;
+- `acquisition_event_id`, `acquisition_event_snapshot_hash`, `acquired_by`, `acquired_at`,
+  `acquisition_reason`;
+- `first_verification_event_id`, `first_verification_event_snapshot_hash`, `first_verified_by`,
+  `first_verified_at`, `first_verification_reason`;
+- `terminal_verification_event_id`, `terminal_verification_event_snapshot_hash`,
+  `second_verified_by`, `second_verified_at`, `second_verification_reason`;
+- `source_config_id`, `source_config_snapshot_hash`, `source_record_id`, `source_version`,
+  `source_snapshot_hash`, `original_reference`, `acquisition_method`;
+- `proposal_role_config_id`, `proposal_role_config_snapshot_hash`, `proposed_by`, `proposed_at`.
 
-## Frozen RED / GREEN Matrix
+`candidate_snapshot`, schema `CNIPA_GRANT_EVIDENCE_CANDIDATE_V1`, contains exactly
+`schema_version`, `evidence_scope`, `facts` (ordered exact `name/raw_value` objects) and `conflicts`
+(ordered exact `name/raw_values` objects). `conflict_snapshot` is NULL for no conflicts; otherwise
+it is canonical JSON of exactly the conflicts array. Conflicts remain raw evidence and never select
+or normalize legal status.
 
-1. A valid reviewed/active/effective source and exact GLOBAL configuration produce one PENDING
-   candidate linked to the immutable evidence version and resolved source/config IDs.
-2. Announcement and register scopes remain independent; cross-scope source/configuration fails.
-3. Missing/revoked/future/expired/unreviewed/inactive/hash/version/ambiguous resolver outcomes are
-   propagated as 409 before any business write.
-4. Cross-case document/evidence, non-current/unreviewed or non-RAW_ATTACHMENT/non-FINAL evidence,
-   malformed/unsorted fact-conflict input, malformed canonical snapshots,
-   synthetic/default proposer and duplicate evidence-version candidate fail closed.
-5. Same-command replay by the unique existing evidence-version ID returns the same candidate only
-   when all immutable inputs/derived bytes/hashes match;
-   changed replay and concurrent duplicate attempts return 409 without residue.
-6. Caller rollback removes the candidate only; a fault after resolver/read validation and before or
-   after candidate flush leaves no committed candidate and never changes the pre-existing evidence
-   version; service never commits or rolls back.
-7. No legal-state/lifecycle/fee/payment fact is created, including when candidate facts conflict.
+Persist exactly one `GrantEvidenceCandidate`: source/evidence/case/document IDs from validated
+lineage; source version/reference/method and `acquired_at` from acquisition authority; V2
+acquisition snapshot/hash; candidate snapshot/hash; authenticated proposer/time; `PENDING`, with no
+reviewer/review time/reason. The database unique evidence-version identity controls replay.
 
-## Verification Commands
+Exact replay returns `REUSED` only when every stored field and canonical byte/hash matches the newly
+derived command and still-valid authority. Changed replay, duplicate/ambiguous state, corruption or
+race is `GRANT_EVIDENCE_CANDIDATE_CONFLICT`/409. Malformed input is
+`GRANT_EVIDENCE_CANDIDATE_INPUT_INVALID`/400. Creation uses one nested savepoint and flush, never
+commit/rollback; caller owns the transaction.
 
-- RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_ingestion_service.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
-- GREEN and scoped checks:
-- `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_ingestion_service.py`
-- `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_source_carrier_schema.py tests/test_v8_grant_evidence_source_carrier_service.py`
-- `cd backend && .venv/bin/ruff check --fix app/modules/documents/grant_evidence_ingestion_service.py tests/test_v8_grant_evidence_ingestion_service.py && .venv/bin/ruff format app/modules/documents/grant_evidence_ingestion_service.py tests/test_v8_grant_evidence_ingestion_service.py && .venv/bin/ruff check app/modules/documents/grant_evidence_ingestion_service.py tests/test_v8_grant_evidence_ingestion_service.py`
-- `git diff --check -- backend/app/modules/documents/grant_evidence_ingestion_service.py backend/tests/test_v8_grant_evidence_ingestion_service.py tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+## Non-closure
 
-## Evidence Path
+No endpoint/UI/schema/migration, current-source resolution, source/role publication/default/seed,
+candidate read/review, legal-state dispatch, lifecycle/deadline, document/evidence mutation, fee or
+payment behavior. Candidate PENDING and terminal copy verification do not confirm grant.
 
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
+## Allowed files
 
-## Done Definition
+- this task file;
+- `backend/app/modules/documents/grant_evidence_ingestion_service.py`;
+- `backend/tests/test_v8_grant_evidence_ingestion_service.py`.
 
-The exact RED is preserved; the minimum allowlisted service/test change consumes the accepted
-resolver and candidate carrier, makes the exact GREEN and targeted source-carrier regressions
-pass, and proves zero legal-state effect; task-scoped lint/scope, serialized SQLite, dirty-baseline
-and evidence checks pass; one independent reviewer approves the current contract/implementation;
-atomic evidence and task gates pass. Only then may this task be reported PASS.
+## Frozen acceptance matrix
+
+1. Exact terminal verified chain plus configured active proposer creates one canonical PENDING
+   candidate bound to distinct acquisition/verifier/proposer facts, with zero legal-state effect.
+2. Nonterminal/wrong-current/cross-evidence/cross-scope/corrupt event chains, same first/second user,
+   missing historical authority rows or mismatched hashes fail 409/no write.
+3. Missing/revoked/future role configuration and inactive/unbound proposer fail 409/no write.
+4. Malformed/unsorted fact/conflict input and invalid evidence/attachment state fail closed.
+5. Exact replay is REUSED; changed replay and concurrent duplicate are 409 without residue.
+6. Caller rollback removes only the candidate; injected flush failure leaves no residue; service
+   never commits/rolls back and never changes legal/lifecycle/document/evidence/fee/payment facts.
+
+## Verification
+
+- Focused RED/GREEN pytest for the named ingestion service test.
+- Official-copy service/schema, role resolver and source carrier regressions.
+- Scoped Ruff and exact two-path diff-check.
+- One independent High reviewer reviews the exact implementation range and reruns decisive checks.
+- PASS requires `P0/P1/P2 = 0/0/0`; no Full or release gate belongs here.
