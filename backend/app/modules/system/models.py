@@ -11,6 +11,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -324,3 +325,123 @@ class GrantEvidenceSourceConfig(Base):
             "effective_to",
         ),
     )
+
+
+class FutureAnnuityDraftExceptionRecord(Base):
+    __tablename__ = "t_future_annuity_draft_exception_record"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    record_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    client_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    case_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    effective_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=False), nullable=True
+    )
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    target_publication_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    record_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(512), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    record_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    record_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmed_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "record_version",
+            name="uq_t_future_annuity_draft_exception_record_version",
+        ),
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_t_future_annuity_draft_exception_idempotency_key",
+        ),
+        UniqueConstraint(
+            "target_publication_id",
+            name="uq_t_future_annuity_draft_exception_target_publication_id",
+        ),
+        ForeignKeyConstraint(
+            ["client_id"],
+            ["t_client.id"],
+            name="fk_t_future_annuity_draft_exception_client_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["case_id"],
+            ["t_case.id"],
+            name="fk_t_future_annuity_draft_exception_case_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["target_publication_id"],
+            ["t_future_annuity_draft_exception_record.id"],
+            name="fk_t_future_annuity_draft_exception_target_id",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["confirmed_by"],
+            ["t_user.id"],
+            name="fk_t_future_annuity_draft_exception_confirmed_by",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "record_type IN ('PUBLISHED', 'REVOKED')",
+            name="ck_t_future_annuity_draft_exception_record_type",
+        ),
+        CheckConstraint(
+            "length(record_snapshot_hash) = 64 "
+            "AND record_snapshot_hash = lower(record_snapshot_hash) "
+            "AND record_snapshot_hash NOT GLOB '*[^0-9a-f]*'",
+            name="ck_t_future_annuity_draft_exception_hash",
+        ),
+        CheckConstraint(
+            "(record_type = 'PUBLISHED' AND target_publication_id IS NULL "
+            "AND scope_type IS NOT NULL AND scope_type IN ('CLIENT', 'CASE') "
+            "AND effective_from IS NOT NULL AND effective_to IS NOT NULL "
+            "AND effective_to > effective_from "
+            "AND ((scope_type = 'CLIENT' AND client_id IS NOT NULL AND case_id IS NULL) "
+            "OR (scope_type = 'CASE' AND client_id IS NULL AND case_id IS NOT NULL))) "
+            "OR (record_type = 'REVOKED' AND target_publication_id IS NOT NULL "
+            "AND scope_type IS NULL AND client_id IS NULL AND case_id IS NULL "
+            "AND effective_from IS NULL AND effective_to IS NULL)",
+            name="ck_t_future_annuity_draft_exception_shape",
+        ),
+        Index(
+            "ix_t_future_annuity_draft_exception_client_interval",
+            "client_id",
+            "record_type",
+            "effective_from",
+            "effective_to",
+            "effective_at",
+        ),
+        Index(
+            "ix_t_future_annuity_draft_exception_case_interval",
+            "case_id",
+            "record_type",
+            "effective_from",
+            "effective_to",
+            "effective_at",
+        ),
+        Index(
+            "ix_t_future_annuity_draft_exception_target",
+            "target_publication_id",
+            "record_type",
+            "effective_at",
+        ),
+    )
+
+
+@event.listens_for(FutureAnnuityDraftExceptionRecord, "before_update")
+@event.listens_for(FutureAnnuityDraftExceptionRecord, "before_delete")
+def _prevent_future_annuity_exception_mutation(
+    *_args: object,
+    **_kwargs: object,
+) -> None:
+    raise ValueError("future annuity draft exception record is append-only")
