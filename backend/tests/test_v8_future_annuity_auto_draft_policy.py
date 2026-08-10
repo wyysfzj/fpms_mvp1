@@ -14,9 +14,10 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.errors import BusinessError
 from app.modules.annuity import service as annuity_service
-from app.modules.annuity.models import GovPayment, PayList
+from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.auth.models import T_Role, T_RolePerm, T_UserRole
 from app.modules.cases.models import CaseActivityEvent
+from app.modules.fees import obligation_service as fee_obligation_service
 from app.modules.fees.models import FeeDraft, FeeItem, FeeObligation
 from app.modules.fees.obligation_contracts import (
     FeeDraftAuthority,
@@ -36,7 +37,7 @@ from app.modules.system.future_annuity_exception_authority_service import (
     publish_future_annuity_exception,
     revoke_future_annuity_exception,
 )
-from app.modules.system.models import FutureAnnuityDraftExceptionRecord
+from app.modules.system.models import CustomerDecisionGate, FutureAnnuityDraftExceptionRecord
 
 AS_OF = obligation_seed.datetime(2026, 8, 10, 12, 0, 0, 123456)
 DECISION_SOURCE = "docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt"
@@ -167,6 +168,33 @@ def _apply(ready: Ready, transaction, *, as_of=AS_OF):
     )
 
 
+def _direct_draft_command(
+    ready: Ready,
+    *,
+    task_id: int | None = None,
+    publication_hash: str | None = None,
+) -> PrepareFeeObligationDraftCommand:
+    assert ready.publication_id is not None
+    assert ready.publication_hash is not None
+    return PrepareFeeObligationDraftCommand(
+        obligation_id=ready.obligation_id,
+        actor_id=ready.actor_id,
+        idempotency_key=(
+            "future-annuity-exception-auto-draft:"
+            f"{ready.task_id if task_id is None else task_id}:{ready.publication_id}"
+        ),
+        authority=FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION,
+        exception_gate_id=ready.gate_id,
+        exception_gate_source_reference=DECISION_SOURCE,
+        exception_gate_source_version=DECISION_VERSION,
+        exception_publication_id=ready.publication_id,
+        exception_publication_snapshot_hash=(
+            ready.publication_hash if publication_hash is None else publication_hash
+        ),
+        exception_attested_at=AS_OF,
+    )
+
+
 def test_public_seam_is_exact_frozen_and_typed() -> None:
     result_type = annuity_service.FutureAnnuityAutoDraftPolicyResult
     assert tuple(field.name for field in fields(result_type)) == (
@@ -269,26 +297,26 @@ def test_deep_authority_rejects_forged_publication_hash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ready = _seed_ready(session_factory, monkeypatch)
-    assert ready.publication_id is not None
     with session_factory() as transaction:
-        command = PrepareFeeObligationDraftCommand(
-            obligation_id=ready.obligation_id,
-            actor_id=ready.actor_id,
-            idempotency_key=(
-                f"future-annuity-exception-auto-draft:{ready.task_id}:{ready.publication_id}"
-            ),
-            authority=FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION,
-            exception_gate_id=ready.gate_id,
-            exception_gate_source_reference=DECISION_SOURCE,
-            exception_gate_source_version=DECISION_VERSION,
-            exception_publication_id=ready.publication_id,
-            exception_publication_snapshot_hash="b" * 64,
-            exception_attested_at=AS_OF,
-        )
+        command = _direct_draft_command(ready, publication_hash="b" * 64)
         with pytest.raises(BusinessError) as forged:
             prepare_draft(command, transaction)
         assert forged.value.code == "FEE_OBLIGATION_DRAFT_STORED_STATE_INVALID"
         assert forged.value.status_code == 409
+        assert transaction.scalar(select(func.count()).select_from(FeeDraft)) == 0
+
+
+def test_deep_authority_rejects_fake_task_key(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready = _seed_ready(session_factory, monkeypatch)
+    with session_factory() as transaction:
+        command = _direct_draft_command(ready, task_id=ready.task_id + 100_000)
+        with pytest.raises(BusinessError) as fake_task:
+            prepare_draft(command, transaction)
+        assert fake_task.value.code == "FEE_OBLIGATION_DRAFT_STORED_STATE_INVALID"
+        assert fake_task.value.status_code == 409
         assert transaction.scalar(select(func.count()).select_from(FeeDraft)) == 0
 
 
@@ -303,6 +331,168 @@ def test_missing_exception_fails_without_draft(
         assert missing.value.code == "FUTURE_ANNUITY_EXCEPTION_NOT_FOUND"
         assert missing.value.status_code == 404
         assert transaction.scalar(select(func.count()).select_from(FeeDraft)) == 0
+
+
+def test_expired_exception_and_corrupt_gate_fail_without_draft(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready = _seed_ready(session_factory, monkeypatch)
+    with session_factory() as transaction:
+        with pytest.raises(BusinessError) as expired:
+            _apply(ready, transaction, as_of=AS_OF + timedelta(days=31))
+        assert expired.value.code == "FUTURE_ANNUITY_EXCEPTION_NOT_FOUND"
+        assert expired.value.status_code == 404
+        assert transaction.scalar(select(func.count()).select_from(FeeDraft)) == 0
+
+    with session_factory() as transaction:
+        gate = transaction.get(CustomerDecisionGate, ready.gate_id)
+        assert gate is not None
+        gate.source_version = "wrong-customer-decision-version"
+        transaction.commit()
+    with session_factory() as transaction:
+        with pytest.raises(BusinessError) as corrupt_gate:
+            _apply(ready, transaction)
+        assert corrupt_gate.value.status_code == 409
+        assert transaction.scalar(select(func.count()).select_from(FeeDraft)) == 0
+
+
+def test_revoked_exception_before_creation_fails_without_draft(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready = _seed_ready(session_factory, monkeypatch)
+    assert ready.publication_id is not None
+    with session_factory() as transaction:
+        revoke_future_annuity_exception(
+            RevokeFutureAnnuityExceptionCommand(
+                target_publication_id=ready.publication_id,
+                record_version=f"revoke-{uuid4()}",
+                reason="草单创建前终止例外授权",
+                confirmed_by=ready.actor_id,
+                published_at=AS_OF,
+                effective_at=AS_OF,
+                idempotency_key=f"revoke-{uuid4()}",
+            ),
+            transaction,
+        )
+        transaction.commit()
+    with session_factory() as transaction:
+        with pytest.raises(BusinessError) as revoked:
+            _apply(ready, transaction)
+        assert revoked.value.code == "FUTURE_ANNUITY_EXCEPTION_NOT_FOUND"
+        assert revoked.value.status_code == 404
+        assert transaction.scalar(select(func.count()).select_from(FeeDraft)) == 0
+        transaction.execute(
+            delete(FutureAnnuityDraftExceptionRecord).where(
+                FutureAnnuityDraftExceptionRecord.target_publication_id
+                == ready.publication_id
+            )
+        )
+        transaction.execute(
+            delete(FutureAnnuityDraftExceptionRecord).where(
+                FutureAnnuityDraftExceptionRecord.id == ready.publication_id
+            )
+        )
+        transaction.commit()
+
+
+def test_corrupt_task_lineage_and_injected_fault_leave_no_draft(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready = _seed_ready(session_factory, monkeypatch)
+    with session_factory() as transaction:
+        task = transaction.get(AnnuityTask, ready.task_id)
+        assert task is not None
+        original_hash = task.source_evidence_content_hash
+        task.source_evidence_content_hash = f"sha256:{'b' * 64}"
+        transaction.commit()
+    with session_factory() as transaction:
+        with pytest.raises(annuity_service.FutureAnnuityObligationError) as corrupt:
+            _apply(ready, transaction)
+        assert (
+            corrupt.value.code
+            is annuity_service.FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT
+        )
+        assert corrupt.value.status_code == 409
+        assert transaction.scalar(select(func.count()).select_from(FeeDraft)) == 0
+    with session_factory() as transaction:
+        task = transaction.get(AnnuityTask, ready.task_id)
+        assert task is not None
+        task.source_evidence_content_hash = original_hash
+        transaction.commit()
+
+    def fail_after_draft_flush(*_args, **_kwargs):
+        raise RuntimeError("injected draft activity failure")
+
+    monkeypatch.setattr(
+        fee_obligation_service,
+        "append_case_activity",
+        fail_after_draft_flush,
+    )
+    with session_factory() as transaction:
+        with pytest.raises(RuntimeError, match="injected draft activity failure"):
+            _apply(ready, transaction)
+        obligation = transaction.get(FeeObligation, ready.obligation_id)
+        assert obligation is not None
+        assert obligation.draft_status == "NOT_CREATED"
+        assert transaction.scalar(select(func.count()).select_from(FeeDraft)) == 0
+        assert transaction.scalar(select(func.count()).select_from(FeeItem)) == 0
+        transaction.rollback()
+
+
+def test_pre_pay_draft_cannot_create_pay_list(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready = _seed_ready(session_factory, monkeypatch)
+    with session_factory() as transaction:
+        _apply(ready, transaction)
+        item_id = transaction.scalar(select(FeeItem.id))
+        assert item_id is not None
+        with pytest.raises(BusinessError) as pre_pay:
+            annuity_service.create_pay_list_from_fee_items(
+                transaction,
+                fee_item_ids=[item_id],
+                actor_id=ready.actor_id,
+            )
+        assert pre_pay.value.code == "PAY_LIST_CLIENT_INSTRUCTION_REQUIRED"
+        assert pre_pay.value.status_code == 409
+        assert transaction.scalar(select(func.count()).select_from(PayList)) == 0
+        assert transaction.scalar(select(func.count()).select_from(GovPayment)) == 0
+        transaction.rollback()
+
+
+def test_corrupt_historical_attestation_is_controlled_409(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ready = _seed_ready(session_factory, monkeypatch)
+    with session_factory() as transaction:
+        created = _apply(ready, transaction)
+        activity = transaction.get(CaseActivityEvent, created.draft.activity_id)
+        assert activity is not None
+        payload = json.loads(activity.payload_json)
+        payload["exception_attested_at"] = "not-an-iso-datetime"
+        activity.payload_json = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        transaction.commit()
+    with session_factory() as transaction:
+        with pytest.raises(BusinessError) as corrupt:
+            annuity_service.record_annuity_task_instruction(
+                annuity_service.RecordAnnuityTaskInstructionCommand(
+                    annuity_task_id=ready.task_id,
+                    instruction="PAY",
+                    actor_id=ready.actor_id,
+                    idempotency_key=f"future-annuity-pay-{uuid4()}",
+                ),
+                transaction,
+            )
+        assert corrupt.value.code == "FEE_CLIENT_INSTRUCTION_STORED_STATE_INVALID"
+        assert corrupt.value.status_code == 409
+        obligation = transaction.get(FeeObligation, ready.obligation_id)
+        assert obligation is not None
+        assert obligation.client_instruction_status == "PENDING"
 
 
 def test_historical_replay_survives_revocation_and_later_pay_reuses_draft(

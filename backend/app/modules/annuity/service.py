@@ -3397,7 +3397,7 @@ def apply_future_annuity_auto_draft_policy(
             _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
         obligation = transaction.get(FeeObligation, task.fee_obligation_id)
         if obligation is None:
-            _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 409)
+            _future_annuity_fail(FutureAnnuityObligationErrorCode.LINEAGE_CONFLICT, 404)
         try:
             _validate_annuity_instruction_lineage(
                 transaction,

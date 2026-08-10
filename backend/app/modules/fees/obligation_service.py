@@ -12,11 +12,11 @@ from typing import Protocol, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session, aliased
 
 from app.core.errors import BusinessError
-from app.modules.annuity.models import GovPayment, PayList
+from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
 from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
@@ -153,6 +153,11 @@ _FUTURE_ANNUITY_GATE_SOURCE_REFERENCE = (
 _FUTURE_ANNUITY_GATE_SOURCE_VERSION = (
     "customer-decision:2026-08-10:v8-full-batch-scheme-a:v1"
 )
+_FUTURE_ANNUITY_FEE_CODE = {
+    "INV": "CN_ANNUITY_FEE_INV",
+    "UM": "CN_ANNUITY_FEE_UM",
+    "DES": "CN_ANNUITY_FEE_DES",
+}
 _MAX_AMOUNT = Decimal("9999999999999999.99")
 _TWO_PLACES = Decimal("0.01")
 
@@ -1650,6 +1655,8 @@ def prepare_draft(
             status_code=409,
         )
     _validate_prepare_draft_command(command)
+    if command.authority is FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION:
+        _serialize_future_annuity_exception_draft(transaction)
     reviewed_notice = command.authority in {
         FeeDraftAuthority.REVIEWED_APPLICATION_FEE_NOTICE,
         FeeDraftAuthority.REVIEWED_GRANT_YEAR_NOTICE,
@@ -2311,8 +2318,74 @@ def _future_annuity_exception_source_graph_or_fail(
         detail = get_fee_obligation(header.id, transaction)
     except BusinessError:
         _draft_stored_state_invalid()
+    key_parts = command.idempotency_key.split(":")
+    try:
+        task_id = int(key_parts[1])
+    except (IndexError, TypeError, ValueError):
+        _draft_stored_state_invalid()
+    case = transaction.get(Case, header.case_id)
+    task = transaction.get(AnnuityTask, task_id)
+    source_activity = transaction.get(CaseActivityEvent, header.source_activity_id)
+    source_document = transaction.get(Document, header.source_document_id)
+    source_evidence = (
+        transaction.get(DocumentEvidenceVersion, task.source_evidence_version_id)
+        if task is not None and task.source_evidence_version_id is not None
+        else None
+    )
+    evidence_links = (
+        tuple(
+            transaction.scalars(
+                select(CaseActivityEventEvidence).where(
+                    CaseActivityEventEvidence.activity_id == header.source_activity_id
+                )
+            )
+        )
+        if source_activity is not None
+        else ()
+    )
     if (
-        header.fee_domain != FeeDomain.GOV.value
+        len(key_parts) != 3
+        or key_parts[0] != "future-annuity-exception-auto-draft"
+        or task_id <= 0
+        or str(task_id) != key_parts[1]
+        or key_parts[2] != command.exception_publication_id
+        or case is None
+        or case.client_id is None
+        or task is None
+        or task.id != task_id
+        or task.case_id != header.case_id
+        or task.client_id != case.client_id
+        or task.fee_obligation_id != header.id
+        or task.source_activity_id != header.source_activity_id
+        or task.source_document_id != header.source_document_id
+        or task.source_evidence_version_id is None
+        or task.source_evidence_content_hash is None
+        or task.grant_fee_year_key is None
+        or task.grant_fee_year_key != task.year_no
+        or task.due_date != header.due_date
+        or source_activity is None
+        or source_activity.case_id != header.case_id
+        or source_activity.lane != ActivityLane.LIFECYCLE.value
+        or source_activity.activity_type != "GRANT_ANNOUNCEMENT_CONFIRMED"
+        or source_activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or source_document is None
+        or source_document.case_id != header.case_id
+        or source_evidence is None
+        or source_evidence.case_id != header.case_id
+        or source_evidence.document_id != header.source_document_id
+        or source_evidence.role != "OFFICIAL_FINAL_PDF"
+        or source_evidence.state != "FINAL"
+        or source_evidence.review_state != "APPROVED"
+        or source_evidence.content_hash != task.source_evidence_content_hash
+        or source_evidence.current_identity_key
+        != f"{header.case_id}|{source_evidence.lineage_key}"
+        or len(evidence_links) != 1
+        or evidence_links[0].case_id != header.case_id
+        or evidence_links[0].evidence_kind != "DOCUMENT_EVIDENCE_VERSION"
+        or evidence_links[0].object_type != "DocumentEvidenceVersion"
+        or evidence_links[0].object_id != source_evidence.id
+        or evidence_links[0].content_hash != task.source_evidence_content_hash
+        or header.fee_domain != FeeDomain.GOV.value
         or header.obligation_type != "FUTURE_ANNUITY"
         or header.source_status != FeeSourceStatus.VERIFIED.value
         or header.obligation_status != FeeObligationStatus.RECOGNIZED.value
@@ -2323,6 +2396,9 @@ def _future_annuity_exception_source_graph_or_fail(
         or header.currency != "CNY"
         or len(lines) != 1
         or lines[0].difference_review_state != FeeDifferenceReviewState.MATCHED.value
+        or lines[0].fee_year_key != task.grant_fee_year_key
+        or lines[0].source_date != task.due_date
+        or lines[0].fee_code != _FUTURE_ANNUITY_FEE_CODE.get(case.patent_category)
         or detail.id != header.id
         or detail.case_id != header.case_id
         or detail.source.source_activity_id != header.source_activity_id
@@ -3209,7 +3285,7 @@ def _reviewed_notice_draft_for_instruction(
             header,
             activity,
         )
-    except BusinessError:
+    except (BusinessError, ValueError):
         _instruction_stored_state_invalid()
 
 
@@ -3971,6 +4047,22 @@ def _ensure_sqlite_outer_transaction(transaction: Session) -> None:
     driver_connection = connection.connection.driver_connection
     if not driver_connection.in_transaction:
         connection.exec_driver_sql("BEGIN")
+
+
+def _serialize_future_annuity_exception_draft(transaction: Session) -> None:
+    connection = transaction.connection()
+    if connection.dialect.name != "sqlite":
+        return
+    driver_connection = connection.connection.driver_connection
+    try:
+        if not driver_connection.in_transaction:
+            connection.exec_driver_sql("BEGIN IMMEDIATE")
+        else:
+            connection.exec_driver_sql(
+                "UPDATE t_future_annuity_draft_exception_record SET id = id WHERE 0"
+            )
+    except OperationalError:
+        _draft_stored_state_invalid()
 
 
 def _validate_command(
