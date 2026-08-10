@@ -139,6 +139,19 @@ matched lines still equal its after snapshot. Row120 may call `prepare_draft` on
 validator succeeds. The review action never creates a draft, fee item, instruction, payment or
 second fee activity.
 
+The accepted generic obligation detail/overlay reader remains valid after review. Its recognition
+payload stays immutable at the original `null`/`REVIEW_REQUIRED` facts. Only for a current
+`GRANT_YEAR_ANNUITY` obligation may the reader reconcile different live line values, and only when
+one exact confirmed review activity proves that its `before_lines` equal the recognition facts and
+its `after_lines` equal every current line. The activity must retain the exact source activity,
+actor/reviewer, canonical payload and original two evidence references. Missing, multiple, corrupt,
+partial or unrelated review facts keep the existing `FEE_OBLIGATION_STORED_STATE_INVALID` boundary.
+No other obligation type or line transition is generalized.
+
+Review replay uses the review activity's stored old/new lifecycle projection, not the later current
+case projection. A legitimate later lifecycle event therefore cannot invalidate exact same-key
+review replay or the Row120 read validator.
+
 ## Files and non-closure
 
 Implementation allowlist:
@@ -146,6 +159,7 @@ Implementation allowlist:
 - `backend/app/modules/grant_fees/service.py`
 - `backend/app/modules/grant_fees/schemas.py`
 - `backend/app/modules/grant_fees/api.py`
+- `backend/app/modules/fees/obligation_service.py`
 - `backend/tests/test_v8_grant_official_fee_manual_review.py`
 
 No schema/migration, rate or reduction calculation, generic writer change, automatic draft,

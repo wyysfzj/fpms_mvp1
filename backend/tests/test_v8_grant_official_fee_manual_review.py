@@ -10,15 +10,26 @@ from typing import get_type_hints
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql.dml import Update
 from test_v8_grant_notice_lifecycle_adapter import _dispatch, _grant_fixture
 
 from app.core.errors import BusinessError
+from app.modules.cases.lifecycle_activity_service import append_case_activity
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    BusinessStage,
+    ConfirmationStatus,
+    LegalStatus,
+    LifecycleEventCommand,
+    LifecycleProjection,
+    OfficialProcedureStage,
+)
 from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
 from app.modules.fees.models import FeeObligationLine
+from app.modules.fees.obligation_service import get_fee_obligation
 from app.modules.grant_fees import api as grant_fee_api
 from app.modules.grant_fees import schemas as grant_fee_schemas
 from app.modules.grant_fees import service as grant_fee_service
@@ -184,6 +195,8 @@ def test_http_shape_rejects_extra_timezone_and_out_of_range_money() -> None:
     ):
         with pytest.raises(ValidationError):
             grant_fee_schemas.GrantOfficialFeeReviewIn.model_validate(changed)
+    with pytest.raises(ValidationError):
+        TypeAdapter(grant_fee_api.GrantFeeTaskPathId).validate_python("a\x00b")
 
 
 def test_http_adapter_injects_actor_commits_and_rolls_back(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -310,10 +323,51 @@ def test_manual_entry_is_durable_exact_and_replays_without_inference(
         assert payload["before_lines"][0]["difference_review_state"] == "REVIEW_REQUIRED"
         assert payload["after_lines"][0]["official_full_amount"] == "1111.00"
         assert payload["after_lines"][0]["difference_review_state"] == "MATCHED"
+        detail = get_fee_obligation(obligation.id, transaction)
+        assert detail.lines[0].official_full_amount == Decimal("1111.00")
+        assert detail.lines[0].difference_review_state.value == "MATCHED"
 
         replay = grant_fee_service.confirm_grant_official_fees(command, transaction)
         assert replay == replace(result, reused=True)
         assert len(_review_activities(transaction)) == 1
+        grant_fee_service.validated_grant_year_official_fee_review_for_draft(
+            transaction,
+            grant_fee_task_id=task.id,
+        )
+
+        transaction.commit()
+        case = transaction.get(Case, case.id)
+        assert case is not None
+        previous = LifecycleProjection(
+            business_stage=BusinessStage(case.business_stage),
+            official_procedure_stage=OfficialProcedureStage(case.official_procedure_stage),
+            legal_status=LegalStatus(case.legal_status),
+            lifecycle_verification_status=ConfirmationStatus(
+                case.lifecycle_verification_status
+            ),
+        )
+        current = replace(previous, business_stage=BusinessStage.GRANT_REGISTRATION_IN_PROGRESS)
+        append_case_activity(
+            LifecycleEventCommand(
+                case_id=case.id,
+                event_type="GRANT_REGISTRATION_STARTED",
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=datetime(2026, 8, 10, 12, 0),
+                occurred_at=datetime(2026, 8, 10, 12, 0),
+                evidence_refs=(),
+                actor_id="later-lifecycle-actor",
+                idempotency_key="later-lifecycle-after-grant-review",
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={"schema": "TEST_LATER_LIFECYCLE_V1"},
+            ),
+            transaction,
+            previous_projection=previous,
+            current_projection=current,
+            legacy_case_status=case.status,
+        )
+        transaction.commit()
+        later_replay = grant_fee_service.confirm_grant_official_fees(command, transaction)
+        assert later_replay == replace(result, reused=True)
         grant_fee_service.validated_grant_year_official_fee_review_for_draft(
             transaction,
             grant_fee_task_id=task.id,
@@ -441,6 +495,149 @@ def test_failed_line_cas_is_409_and_caller_rollback_is_atomic(
         assert line.official_full_amount is None
         assert line.difference_review_state == "REVIEW_REQUIRED"
         assert _review_activities(transaction) == ()
+
+
+def test_missing_named_objects_use_exact_404_boundary(session_factory: sessionmaker) -> None:
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="MISSING-EVIDENCE")
+        _expect(
+            "GRANT_OFFICIAL_FEE_REVIEW_LINK_NOT_FOUND",
+            404,
+            lambda: grant_fee_service.confirm_grant_official_fees(
+                replace(_command(seed), reviewed_evidence_version_id="missing-evidence"),
+                transaction,
+            ),
+        )
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="MISSING-OBLIGATION")
+        _expect(
+            "GRANT_OFFICIAL_FEE_REVIEW_LINK_NOT_FOUND",
+            404,
+            lambda: grant_fee_service.confirm_grant_official_fees(
+                replace(_command(seed), obligation_id="missing-obligation"),
+                transaction,
+            ),
+        )
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="MISSING-LINE")
+        _expect(
+            "GRANT_OFFICIAL_FEE_REVIEW_LINK_NOT_FOUND",
+            404,
+            lambda: grant_fee_service.confirm_grant_official_fees(
+                replace(
+                    _command(seed),
+                    lines=(
+                        replace(_command(seed).lines[0], obligation_line_id="missing-line"),
+                    ),
+                ),
+                transaction,
+            ),
+        )
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="MISSING-RECOGNITION")
+        recognition = next(
+            activity
+            for activity in transaction.scalars(
+                select(CaseActivityEvent).where(
+                    CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED"
+                )
+            )
+            if json.loads(activity.payload_json).get("obligation_id") == seed[-2].id
+        )
+        assert recognition is not None
+        recognition.activity_type = "REMOVED_RECOGNITION"
+        transaction.commit()
+        _expect(
+            "GRANT_OFFICIAL_FEE_REVIEW_LINK_NOT_FOUND",
+            404,
+            lambda: grant_fee_service.confirm_grant_official_fees(_command(seed), transaction),
+        )
+
+
+def test_corrupt_recognition_and_duplicate_obligation_review_block_replay_and_draft_seam(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="CORRUPT-RECOGNITION")
+        command = _command(seed)
+        grant_fee_service.confirm_grant_official_fees(command, transaction)
+        transaction.commit()
+        recognition = transaction.scalar(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED"
+            )
+        )
+        assert recognition is not None
+        recognition_payload = json.loads(recognition.payload_json)
+        recognition_payload["schema"] = "CORRUPT"
+        recognition.payload_json = json.dumps(
+            recognition_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        transaction.commit()
+        _expect(
+            "GRANT_OFFICIAL_FEE_REVIEW_LINEAGE_CONFLICT",
+            409,
+            lambda: grant_fee_service.confirm_grant_official_fees(command, transaction),
+        )
+        _expect(
+            "GRANT_OFFICIAL_FEE_REVIEW_LINEAGE_CONFLICT",
+            409,
+            lambda: grant_fee_service.validated_grant_year_official_fee_review_for_draft(
+                transaction,
+                grant_fee_task_id=seed[2].id,
+            ),
+        )
+
+    with session_factory() as transaction:
+        seed = _seed(transaction, label="DUPLICATE-REVIEW")
+        command = _command(seed)
+        result = grant_fee_service.confirm_grant_official_fees(command, transaction)
+        transaction.commit()
+        review = transaction.get(CaseActivityEvent, result.review_activity_id)
+        case = transaction.get(Case, seed[0].id)
+        assert review is not None and case is not None
+        duplicate_payload = json.loads(review.payload_json)
+        duplicate_payload["grant_fee_task_id"] = "different-task"
+        duplicate = CaseActivityEvent(
+            id=str(uuid4()),
+            case_id=case.id,
+            sequence=case.lifecycle_revision + 1,
+            lane=review.lane,
+            activity_type=review.activity_type,
+            source_activity_id=review.source_activity_id,
+            occurred_at=datetime(2026, 8, 10, 11, 31),
+            effective_at=datetime(2026, 8, 10, 11, 31),
+            confirmation_status=review.confirmation_status,
+            old_business_stage=review.old_business_stage,
+            new_business_stage=review.new_business_stage,
+            old_official_procedure_stage=review.old_official_procedure_stage,
+            new_official_procedure_stage=review.new_official_procedure_stage,
+            old_legal_status=review.old_legal_status,
+            new_legal_status=review.new_legal_status,
+            actor_id=review.actor_id,
+            reviewer_id=review.reviewer_id,
+            idempotency_key="duplicate-obligation-review",
+            payload_json=json.dumps(
+                duplicate_payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        )
+        case.lifecycle_revision += 1
+        transaction.add(duplicate)
+        transaction.commit()
+        _expect(
+            "GRANT_OFFICIAL_FEE_REVIEW_LINEAGE_CONFLICT",
+            409,
+            lambda: grant_fee_service.validated_grant_year_official_fee_review_for_draft(
+                transaction,
+                grant_fee_task_id=seed[2].id,
+            ),
+        )
 
 
 def test_caller_rollback_removes_activity_and_line_transition(

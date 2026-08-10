@@ -732,6 +732,27 @@ def _grant_review_context(
     activity = transaction.get(CaseActivityEvent, command.source_activity_id)
     if activity is None:
         _grant_review_link_not_found()
+    named_evidence = transaction.get(
+        DocumentEvidenceVersion,
+        command.reviewed_evidence_version_id,
+    )
+    named_obligation = transaction.get(FeeObligation, command.obligation_id)
+    named_line_ids = {
+        line_id
+        for line_id in transaction.scalars(
+            select(FeeObligationLine.id).where(
+                FeeObligationLine.id.in_(
+                    tuple(line.obligation_line_id for line in command.lines)
+                )
+            )
+        )
+    }
+    if (
+        named_evidence is None
+        or named_obligation is None
+        or len(named_line_ids) != len(command.lines)
+    ):
+        _grant_review_link_not_found()
     try:
         case, expected_lines, payload = _grant_instruction_expected_source(
             transaction,
@@ -750,6 +771,7 @@ def _grant_review_context(
     if (
         payload["reviewed_evidence_version_id"] != command.reviewed_evidence_version_id
         or payload["reviewed_evidence_content_hash"] != command.expected_content_hash
+        or named_evidence.id != payload["reviewed_evidence_version_id"]
     ):
         _grant_review_lineage_conflict()
     _grant_review_current_evidence(transaction, task=task, payload=payload)
@@ -767,11 +789,14 @@ def _grant_review_context(
     if len(obligations) != 1 or obligations[0].id != command.obligation_id:
         _grant_review_lineage_conflict()
     obligation = obligations[0]
-    if _grant_instruction_recognition_count(
+    recognition_count = _grant_instruction_recognition_count(
         transaction,
         case_id=task.case_id,
         obligation_id=obligation.id,
-    ) != 1:
+    )
+    if recognition_count == 0:
+        _grant_review_link_not_found()
+    if recognition_count != 1:
         _grant_review_lineage_conflict()
     lines = tuple(
         transaction.scalars(
@@ -816,6 +841,16 @@ def _grant_review_context(
             or line.current_identity_key != expected_identity
         ):
             _grant_review_lineage_conflict()
+    try:
+        detail = get_fee_obligation(obligation.id, transaction)
+    except BusinessError as exc:
+        if exc.code in {"FEE_OBLIGATION_NOT_FOUND"}:
+            _grant_review_link_not_found()
+        _grant_review_lineage_conflict()
+    if detail.id != obligation.id or tuple(line.id for line in detail.lines) != tuple(
+        line.id for line in lines
+    ):
+        _grant_review_lineage_conflict()
     return task, activity, case, obligation, lines, payload, evidence_refs
 
 
@@ -914,6 +949,50 @@ def _canonical_review_payload(payload: object) -> str:
         _grant_review_idempotency_conflict()
 
 
+def _precheck_existing_grant_review(
+    command: ConfirmGrantOfficialFeesCommand,
+    existing: CaseActivityEvent,
+) -> None:
+    try:
+        payload = json.loads(existing.payload_json)
+    except (TypeError, ValueError):
+        _grant_review_idempotency_conflict()
+    if type(payload) is not dict:
+        _grant_review_idempotency_conflict()
+    after_lines = payload.get("after_lines")
+    if (
+        set(payload) != _GRANT_OFFICIAL_FEE_REVIEW_PAYLOAD_KEYS
+        or payload.get("schema") != _GRANT_OFFICIAL_FEE_REVIEW_SCHEMA
+        or payload.get("grant_fee_task_id") != command.grant_fee_task_id
+        or payload.get("obligation_id") != command.obligation_id
+        or payload.get("source_activity_id") != command.source_activity_id
+        or payload.get("reviewed_evidence_version_id")
+        != command.reviewed_evidence_version_id
+        or payload.get("reviewed_evidence_content_hash") != command.expected_content_hash
+        or payload.get("confirmed_at") != command.confirmed_at.isoformat()
+        or existing.activity_type != _GRANT_OFFICIAL_FEE_REVIEW_EVENT_TYPE
+        or existing.lane != ActivityLane.FEE.value
+        or existing.source_activity_id != command.source_activity_id
+        or existing.actor_id != command.actor_id
+        or existing.reviewer_id != command.actor_id
+        or existing.occurred_at != command.confirmed_at
+        or existing.effective_at != command.confirmed_at
+        or _canonical_review_payload(payload) != existing.payload_json
+        or type(after_lines) is not list
+        or len(after_lines) != len(command.lines)
+    ):
+        _grant_review_idempotency_conflict()
+    for stored, supplied in zip(after_lines, command.lines, strict=True):
+        if (
+            type(stored) is not dict
+            or set(stored) != _GRANT_OFFICIAL_FEE_REVIEW_LINE_KEYS
+            or stored["obligation_line_id"] != supplied.obligation_line_id
+            or stored["official_full_amount"] != format(supplied.official_full_amount, ".2f")
+            or stored["payable_amount"] != format(supplied.confirmed_payable_amount, ".2f")
+        ):
+            _grant_review_idempotency_conflict()
+
+
 def _matching_grant_review_activities(
     transaction: Session,
     *,
@@ -990,27 +1069,64 @@ def _replay_grant_official_fee_review(
         or stored_payload != expected_payload
     ):
         _grant_review_idempotency_conflict()
-    projection = _grant_fee_task_done_projection(case)
-    replay = append_case_activity(
-        LifecycleEventCommand(
-            case_id=case.id,
-            event_type=_GRANT_OFFICIAL_FEE_REVIEW_EVENT_TYPE,
-            lane=ActivityLane.FEE,
-            effective_at=command.confirmed_at,
-            occurred_at=command.confirmed_at,
-            evidence_refs=evidence_refs,
-            actor_id=command.actor_id,
-            reviewer_id=command.actor_id,
-            idempotency_key=command.idempotency_key,
-            source_activity_id=command.source_activity_id,
-            confirmation_status=ConfirmationStatus.CONFIRMED,
-            payload=expected_payload,
-        ),
-        transaction,
-        previous_projection=projection,
-        current_projection=projection,
-        legacy_case_status=case.status,
-    )
+    try:
+        previous_projection = LifecycleProjection(
+            business_stage=(
+                None
+                if existing.old_business_stage is None
+                else BusinessStage(existing.old_business_stage)
+            ),
+            official_procedure_stage=(
+                None
+                if existing.old_official_procedure_stage is None
+                else OfficialProcedureStage(existing.old_official_procedure_stage)
+            ),
+            legal_status=(
+                None if existing.old_legal_status is None else LegalStatus(existing.old_legal_status)
+            ),
+            lifecycle_verification_status=None,
+        )
+        current_projection = LifecycleProjection(
+            business_stage=(
+                None
+                if existing.new_business_stage is None
+                else BusinessStage(existing.new_business_stage)
+            ),
+            official_procedure_stage=(
+                None
+                if existing.new_official_procedure_stage is None
+                else OfficialProcedureStage(existing.new_official_procedure_stage)
+            ),
+            legal_status=(
+                None if existing.new_legal_status is None else LegalStatus(existing.new_legal_status)
+            ),
+            lifecycle_verification_status=None,
+        )
+    except ValueError:
+        _grant_review_idempotency_conflict()
+    try:
+        replay = append_case_activity(
+            LifecycleEventCommand(
+                case_id=case.id,
+                event_type=_GRANT_OFFICIAL_FEE_REVIEW_EVENT_TYPE,
+                lane=ActivityLane.FEE,
+                effective_at=command.confirmed_at,
+                occurred_at=command.confirmed_at,
+                evidence_refs=evidence_refs,
+                actor_id=command.actor_id,
+                reviewer_id=command.actor_id,
+                idempotency_key=command.idempotency_key,
+                source_activity_id=command.source_activity_id,
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload=expected_payload,
+            ),
+            transaction,
+            previous_projection=previous_projection,
+            current_projection=current_projection,
+            legacy_case_status=case.status,
+        )
+    except BusinessError:
+        _grant_review_idempotency_conflict()
     if not replay.reused or replay.activity_id != existing.id:
         _grant_review_idempotency_conflict()
     return ConfirmGrantOfficialFeesResult(
@@ -1039,15 +1155,24 @@ def confirm_grant_official_fees(
             status_code=409,
         )
     with transaction.no_autoflush:
+        preloaded_task = transaction.get(T_GrantFeeTask, command.grant_fee_task_id)
+        if preloaded_task is None:
+            _grant_review_error(
+                "GRANT_OFFICIAL_FEE_REVIEW_TASK_NOT_FOUND",
+                "授权费用任务不存在",
+                status_code=404,
+            )
+        existing = transaction.scalar(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == preloaded_task.case_id,
+                CaseActivityEvent.idempotency_key == command.idempotency_key,
+            )
+        )
+        if existing is not None:
+            _precheck_existing_grant_review(command, existing)
         task, activity, case, obligation, lines, _payload, evidence_refs = _grant_review_context(
             command,
             transaction,
-        )
-        existing = transaction.scalar(
-            select(CaseActivityEvent).where(
-                CaseActivityEvent.case_id == task.case_id,
-                CaseActivityEvent.idempotency_key == command.idempotency_key,
-            )
         )
         if existing is not None:
             return _replay_grant_official_fee_review(
@@ -1200,6 +1325,14 @@ def validated_grant_year_official_fee_review_for_draft(
         or payload.get("grant_fee_task_id") != task.id
         or _canonical_review_payload(payload) != review.payload_json
     ):
+        _grant_review_lineage_conflict()
+    matching_reviews = _matching_grant_review_activities(
+        transaction,
+        case_id=task.case_id,
+        grant_fee_task_id=task.id,
+        obligation_id=payload["obligation_id"],
+    )
+    if len(matching_reviews) != 1 or matching_reviews[0].id != review.id:
         _grant_review_lineage_conflict()
     after_lines = payload.get("after_lines")
     if type(after_lines) is not list or not after_lines:

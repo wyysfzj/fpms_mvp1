@@ -21,6 +21,7 @@ exactly as frozen in
 - `backend/app/modules/grant_fees/service.py`
 - `backend/app/modules/grant_fees/schemas.py`
 - `backend/app/modules/grant_fees/api.py`
+- `backend/app/modules/fees/obligation_service.py`
 - `backend/tests/test_v8_grant_official_fee_manual_review.py`
 - this task file
 
@@ -45,7 +46,7 @@ zero-finding approval. Adoption must bind the final product commits and exact tr
 ## Current verification
 
 - RED: focused test file failed `5` tests because the frozen public action did not exist.
-- GREEN: focused test file passes `8`; direct grant-year obligation and instruction regressions
-  pass `90`.
+- GREEN: focused test file passes `10`; direct grant-year obligation/instruction and generic
+  detail/overlay regressions pass `163`.
 - Scoped Ruff and exact diff check pass.
 - Independent implementation review and adoption remain pending.

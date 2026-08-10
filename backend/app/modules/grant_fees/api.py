@@ -53,7 +53,7 @@ router = APIRouter()
 
 GrantFeeTaskPathId = Annotated[
     str,
-    Path(min_length=1, max_length=36, pattern=r"^\S(?:.*\S)?$"),
+    Path(min_length=1, max_length=36, pattern=r"^[^\s\x00](?:[^\x00]*[^\s\x00])?$"),
 ]
 
 

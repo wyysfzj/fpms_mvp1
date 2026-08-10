@@ -100,6 +100,36 @@ __all__ = (
 _ACTIVITY_TYPE = "FEE_OBLIGATION_RECOGNIZED"
 _PAYLOAD_SCHEMA = "FPMS_FEE_OBLIGATION_RECOGNIZED_V1"
 _INSTRUCTION_ACTIVITY_TYPE = "FEE_CLIENT_INSTRUCTION_RECORDED"
+_GRANT_REVIEW_ACTIVITY_TYPE = "GRANT_YEAR_OFFICIAL_FEE_REVIEW_CONFIRMED"
+_GRANT_REVIEW_PAYLOAD_SCHEMA = "FPMS_GRANT_YEAR_OFFICIAL_FEE_REVIEW_CONFIRMED_V1"
+_GRANT_REVIEW_BASIS = "AUTHORIZED_OPERATOR_MANUAL_ENTRY"
+_GRANT_REVIEW_PAYLOAD_KEYS = {
+    "schema",
+    "case_id",
+    "grant_fee_task_id",
+    "obligation_id",
+    "source_activity_id",
+    "source_document_id",
+    "reviewed_evidence_version_id",
+    "reviewed_evidence_content_hash",
+    "confirmed_at",
+    "review_basis",
+    "before_lines",
+    "after_lines",
+}
+_GRANT_REVIEW_LINE_KEYS = {
+    "obligation_line_id",
+    "fee_code",
+    "fee_name",
+    "fee_year_key",
+    "official_full_amount",
+    "reduction_ratio",
+    "payable_amount",
+    "source_amount",
+    "source_date",
+    "difference_review_state",
+    "current_identity_key",
+}
 _INSTRUCTION_PAYLOAD_SCHEMA = "FPMS_FEE_CLIENT_INSTRUCTION_RECORDED_V1"
 _DRAFT_ACTIVITY_TYPE = "FEE_DRAFT_CREATED"
 _DRAFT_PAYLOAD_SCHEMA = "FPMS_FEE_DRAFT_CREATED_V1"
@@ -638,14 +668,18 @@ def get_fee_obligation(
                     | (CaseActivityEvent.id == header["current_child_source_activity_id"])
                     | (
                         (CaseActivityEvent.lane == ActivityLane.FEE.value)
-                        & (CaseActivityEvent.activity_type == _ACTIVITY_TYPE)
+                        & (
+                            CaseActivityEvent.activity_type.in_(
+                                (_ACTIVITY_TYPE, _GRANT_REVIEW_ACTIVITY_TYPE)
+                            )
+                        )
                     ),
                 )
             )
             .mappings()
             .all()
         )
-        _validate_detail_activities(header, line_rows, activity_rows)
+        _validate_detail_activities(transaction, header, line_rows, activity_rows)
 
         relation_rows = tuple(
             transaction.execute(
@@ -892,7 +926,247 @@ def _detail_lines(
     return tuple(values)
 
 
+def _detail_line_payload(line: Mapping[str, object]) -> dict[str, object]:
+    return {
+        "difference_review_state": line["difference_review_state"],
+        "fee_code": line["fee_code"],
+        "fee_name": line["fee_name"],
+        "fee_year_key": line["fee_year_key"],
+        "official_full_amount": _amount_text(cast(Decimal | None, line["official_full_amount"])),
+        "payable_amount": _amount_text(cast(Decimal, line["payable_amount"])),
+        "reduction_ratio": format(cast(Decimal, line["reduction_ratio"]), ".4f"),
+        "source_amount": _amount_text(cast(Decimal | None, line["source_amount"])),
+        "source_date": (
+            None
+            if line["source_date"] is None
+            else cast(date, line["source_date"]).isoformat()
+        ),
+    }
+
+
+def _detail_grant_review_snapshot(
+    line: Mapping[str, object],
+    *,
+    official_full_amount: object,
+    difference_review_state: object,
+) -> dict[str, object]:
+    return {
+        "obligation_line_id": line["id"],
+        "fee_code": line["fee_code"],
+        "fee_name": line["fee_name"],
+        "fee_year_key": line["fee_year_key"],
+        "official_full_amount": official_full_amount,
+        "reduction_ratio": format(cast(Decimal, line["reduction_ratio"]), ".4f"),
+        "payable_amount": _amount_text(cast(Decimal, line["payable_amount"])),
+        "source_amount": _amount_text(cast(Decimal | None, line["source_amount"])),
+        "source_date": (
+            None
+            if line["source_date"] is None
+            else cast(date, line["source_date"]).isoformat()
+        ),
+        "difference_review_state": difference_review_state,
+        "current_identity_key": line["current_identity_key"],
+    }
+
+
+def _detail_recognition_lines(
+    transaction: Session,
+    header: Mapping[str, object],
+    lines: tuple[Mapping[str, object], ...],
+    rows: tuple[Mapping[str, object], ...],
+    *,
+    recognition: Mapping[str, object],
+    payload: dict[str, object],
+) -> tuple[Mapping[str, object], ...]:
+    obligation_payload = payload.get("obligation")
+    if type(obligation_payload) is not dict:
+        _stored_state_invalid()
+    recognized_lines = obligation_payload.get("lines")
+    if type(recognized_lines) is not list or len(recognized_lines) != len(lines):
+        _stored_state_invalid()
+    if recognized_lines == [_detail_line_payload(line) for line in lines]:
+        return lines
+    if (
+        header["obligation_type"] != "GRANT_YEAR_ANNUITY"
+        or header["obligation_status"] != FeeObligationStatus.RECOGNIZED.value
+    ):
+        _stored_state_invalid()
+
+    reviews: list[tuple[Mapping[str, object], dict[str, object]]] = []
+    for row in rows:
+        if (
+            row["lane"] != ActivityLane.FEE.value
+            or row["activity_type"] != _GRANT_REVIEW_ACTIVITY_TYPE
+        ):
+            continue
+        try:
+            review_payload = _strict_json_loads(cast(str, row["payload_json"]))
+        except (TypeError, ValueError):
+            _stored_state_invalid()
+        if type(review_payload) is not dict:
+            _stored_state_invalid()
+        if review_payload.get("obligation_id") == header["id"]:
+            reviews.append((row, review_payload))
+    if len(reviews) != 1:
+        _stored_state_invalid()
+    review, review_payload = reviews[0]
+    canonical_review = json.dumps(
+        review_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    try:
+        confirmed_at = datetime.fromisoformat(cast(str, review_payload.get("confirmed_at")))
+    except (TypeError, ValueError):
+        _stored_state_invalid()
+    if (
+        set(review_payload) != _GRANT_REVIEW_PAYLOAD_KEYS
+        or review_payload["schema"] != _GRANT_REVIEW_PAYLOAD_SCHEMA
+        or review_payload["review_basis"] != _GRANT_REVIEW_BASIS
+        or review_payload["case_id"] != header["case_id"]
+        or review_payload["obligation_id"] != header["id"]
+        or review_payload["source_activity_id"] != header["source_activity_id"]
+        or review_payload["source_document_id"] != header["source_document_id"]
+        or type(review_payload["grant_fee_task_id"]) is not str
+        or not cast(str, review_payload["grant_fee_task_id"]).strip()
+        or "\x00" in cast(str, review_payload["grant_fee_task_id"])
+        or len(cast(str, review_payload["grant_fee_task_id"])) > 36
+        or type(review_payload["reviewed_evidence_version_id"]) is not str
+        or not cast(str, review_payload["reviewed_evidence_version_id"]).strip()
+        or "\x00" in cast(str, review_payload["reviewed_evidence_version_id"])
+        or len(cast(str, review_payload["reviewed_evidence_version_id"])) > 36
+        or type(review_payload["reviewed_evidence_content_hash"]) is not str
+        or re.fullmatch(
+            r"sha256:[0-9a-f]{64}",
+            cast(str, review_payload["reviewed_evidence_content_hash"]),
+        )
+        is None
+        or review["payload_json"] != canonical_review
+        or review["source_activity_id"] != header["source_activity_id"]
+        or review["confirmation_status"] != ConfirmationStatus.CONFIRMED.value
+        or review["actor_id"] != review["reviewer_id"]
+        or type(review["actor_id"]) is not str
+        or not cast(str, review["actor_id"]).strip()
+        or "\x00" in cast(str, review["actor_id"])
+        or type(review["idempotency_key"]) is not str
+        or not cast(str, review["idempotency_key"]).strip()
+        or "\x00" in cast(str, review["idempotency_key"])
+        or review["supersedes_event_id"] is not None
+        or review["occurred_at"] != review["effective_at"]
+        or review["id"] == recognition["id"]
+        or type(review["sequence"]) is not int
+        or type(recognition["sequence"]) is not int
+        or cast(int, review["sequence"]) <= cast(int, recognition["sequence"])
+        or confirmed_at.tzinfo is not None
+        or confirmed_at != review["occurred_at"]
+        or review_payload["confirmed_at"] != cast(datetime, review["occurred_at"]).isoformat()
+    ):
+        _stored_state_invalid()
+    before_lines = review_payload["before_lines"]
+    after_lines = review_payload["after_lines"]
+    if (
+        type(before_lines) is not list
+        or type(after_lines) is not list
+        or len(before_lines) != len(lines)
+        or len(after_lines) != len(lines)
+        or any(type(item) is not dict or set(item) != _GRANT_REVIEW_LINE_KEYS for item in before_lines)
+        or any(type(item) is not dict or set(item) != _GRANT_REVIEW_LINE_KEYS for item in after_lines)
+    ):
+        _stored_state_invalid()
+
+    recognized_by_identity: dict[tuple[object, object], Mapping[str, object]] = {}
+    for recognized in recognized_lines:
+        if type(recognized) is not dict:
+            _stored_state_invalid()
+        identity = (recognized.get("fee_code"), recognized.get("fee_year_key"))
+        if identity in recognized_by_identity:
+            _stored_state_invalid()
+        recognized_by_identity[identity] = recognized
+    ordered_lines = tuple(
+        sorted(lines, key=lambda line: (line["fee_year_key"], line["fee_code"], line["id"]))
+    )
+    expected_before: list[dict[str, object]] = []
+    synthetic_recognition: list[Mapping[str, object]] = []
+    for line in ordered_lines:
+        recognized = recognized_by_identity.get((line["fee_code"], line["fee_year_key"]))
+        if recognized is None:
+            _stored_state_invalid()
+        if (
+            recognized.get("official_full_amount") is not None
+            or recognized.get("difference_review_state")
+            != FeeDifferenceReviewState.REVIEW_REQUIRED.value
+        ):
+            _stored_state_invalid()
+        synthetic = dict(line)
+        synthetic["official_full_amount"] = None
+        synthetic["difference_review_state"] = FeeDifferenceReviewState.REVIEW_REQUIRED.value
+        if recognized != _detail_line_payload(synthetic):
+            _stored_state_invalid()
+        synthetic_recognition.append(synthetic)
+        expected_before.append(
+            _detail_grant_review_snapshot(
+                line,
+                official_full_amount=None,
+                difference_review_state=FeeDifferenceReviewState.REVIEW_REQUIRED.value,
+            )
+        )
+    expected_after = [
+        _detail_grant_review_snapshot(
+            line,
+            official_full_amount=_amount_text(cast(Decimal, line["official_full_amount"])),
+            difference_review_state=FeeDifferenceReviewState.MATCHED.value,
+        )
+        for line in ordered_lines
+    ]
+    if (
+        before_lines != expected_before
+        or after_lines != expected_after
+        or any(
+            line["official_full_amount"] is None
+            or line["difference_review_state"] != FeeDifferenceReviewState.MATCHED.value
+            for line in ordered_lines
+        )
+    ):
+        _stored_state_invalid()
+
+    evidence_rows = tuple(
+        transaction.execute(
+            select(
+                CaseActivityEventEvidence.case_id,
+                CaseActivityEventEvidence.evidence_kind,
+                CaseActivityEventEvidence.object_type,
+                CaseActivityEventEvidence.object_id,
+                CaseActivityEventEvidence.content_hash,
+                CaseActivityEventEvidence.captured_at,
+            ).where(CaseActivityEventEvidence.activity_id == review["id"])
+        ).mappings()
+    )
+    evidence_by_kind = {row["evidence_kind"]: row for row in evidence_rows}
+    if (
+        len(evidence_rows) != 2
+        or set(evidence_by_kind) != {"SOURCE_DOCUMENT", "DOCUMENT_EVIDENCE_VERSION"}
+        or evidence_by_kind["SOURCE_DOCUMENT"]["case_id"] != header["case_id"]
+        or evidence_by_kind["SOURCE_DOCUMENT"]["object_type"] != "Document"
+        or evidence_by_kind["SOURCE_DOCUMENT"]["object_id"] != header["source_document_id"]
+        or evidence_by_kind["DOCUMENT_EVIDENCE_VERSION"]["case_id"] != header["case_id"]
+        or evidence_by_kind["DOCUMENT_EVIDENCE_VERSION"]["object_type"]
+        != "DocumentEvidenceVersion"
+        or evidence_by_kind["DOCUMENT_EVIDENCE_VERSION"]["object_id"]
+        != review_payload["reviewed_evidence_version_id"]
+        or any(
+            row["content_hash"] != review_payload["reviewed_evidence_content_hash"]
+            for row in evidence_rows
+        )
+        or evidence_rows[0]["captured_at"] != evidence_rows[1]["captured_at"]
+    ):
+        _stored_state_invalid()
+    return tuple(synthetic_recognition)
+
+
 def _validate_detail_activities(
+    transaction: Session,
     header: Mapping[str, object],
     lines: tuple[Mapping[str, object], ...],
     rows: tuple[Mapping[str, object], ...],
@@ -939,6 +1213,14 @@ def _validate_detail_activities(
     if len(matches) != 1:
         _stored_state_invalid()
     recognition, payload = matches[0]
+    recognition_lines = _detail_recognition_lines(
+        transaction,
+        header,
+        lines,
+        rows,
+        recognition=recognition,
+        payload=payload,
+    )
     expected_payload = {
         "schema": _PAYLOAD_SCHEMA,
         "obligation_id": header["id"],
@@ -971,7 +1253,7 @@ def _validate_detail_activities(
                         else cast(date, line["source_date"]).isoformat()
                     ),
                 }
-                for line in lines
+                for line in recognition_lines
             ],
             "obligation_type": header["obligation_type"],
             "source_activity_id": header["source_activity_id"],
