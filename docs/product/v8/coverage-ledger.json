@@ -6265,6 +6265,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-APPLICATION-DRAFT-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-DRAFT-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "e7ee5f042828f6a23c4dc8be4460956a1f03d7d0",
+        "78c133fc7ae1fd8e6acbaf115fb3ec4cf03ba05f",
+        "18e9e2ef6ede30f0436a83513458290fb867a074"
+      ],
+      "paths": [
+        "backend/app/modules/system/grant_evidence_source_service.py",
+        "backend/tests/test_v8_grant_evidence_source_carrier_service.py"
+      ],
+      "tree_sha256": "706ee61d41f9c627ae56993c66e812ab21dd377e454467b9a8bdc95d54e639b5",
+      "tests": [
+        "focused grant-source carrier service suite passed 45 tests",
+        "decision-gate regression suite passed 51 tests",
+        "scoped Ruff and exact two-path diff checks passed",
+        "independent High re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-CURRENT-ADOPTION.md"
     }
   ]
 }
