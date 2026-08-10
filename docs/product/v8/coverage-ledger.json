@@ -1442,13 +1442,10 @@
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-003-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-LEGACY-FORM-003-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-004-MANIFEST-ACTIVATION-20260712-01",
@@ -5712,6 +5709,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-LEGACY-FORM-003-MANIFEST-ACTIVATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "ba19be5576f7cd3f29308142e9fd66b1a67ec6f1"
+      ],
+      "paths": [
+        "tasks/batches/FPMS-POSTDEMO-V8-LEGACY-FORM-003-GATE-20260712-01.md",
+        "backend/tests/test_v8_legacy_form_003_manifest_contract.py"
+      ],
+      "tree_sha256": "fb973d82498324c075de947041012cf614fee11c86a390b25ee78ac9fc15870f",
+      "tests": [
+        "focused activation manifest suite passed 3 tests",
+        "scoped Ruff and exact-commit diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-003-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-003-MANIFEST-ACTIVATION-CURRENT-ADOPTION.md"
     }
   ]
 }
