@@ -268,6 +268,13 @@ def seed_fee_reduction_approval_official_notice_catalog(db: Session) -> int:
 
 
 OFFICIAL_LETTER_OUT_CATALOG_SOURCE = "相关流程操作-20260526.docx [P0102] TABLE 002"
+OFFICIAL_LETTER_OUT_DECISION_SOURCE = (
+    "docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt"
+)
+OFFICIAL_LETTER_OUT_DECISION_VERSION = "customer-decision:2026-08-10:v8-full-batch-scheme-a:v1"
+OFFICIAL_LETTER_OUT_DECISION_SHA256 = (
+    "e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace"
+)
 
 # 客户"致函官方文件清单"22 行（相关流程操作 TABLE 002），作为 OUT 方向文书目录。
 OFFICIAL_LETTER_OUT_CATALOG: tuple[str, ...] = (
@@ -294,21 +301,39 @@ OFFICIAL_LETTER_OUT_CATALOG: tuple[str, ...] = (
     "四通意见陈述",
     "办理文件副本请求书",
 )
+OFFICIAL_LETTER_OUT_FORM_001_CLASSIFICATIONS = {
+    "补正答复": ("form-001", "INTERNAL_ONLY"),
+}
 
 
-def _official_letter_out_input_fields(name: str) -> str:
-    return json.dumps(
-        {
-            "catalog_kind": "OFFICIAL_LETTER_OUT",
-            "official_letter_name": name,
-            "source": OFFICIAL_LETTER_OUT_CATALOG_SOURCE,
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-    )
+def _official_letter_out_input_fields(
+    name: str,
+    classification: tuple[str, str] | None = None,
+) -> str:
+    metadata = {
+        "catalog_kind": "OFFICIAL_LETTER_OUT",
+        "official_letter_name": name,
+        "source": OFFICIAL_LETTER_OUT_CATALOG_SOURCE,
+    }
+    if classification is not None:
+        scope, value = classification
+        metadata.update(
+            {
+                "catalog_status": "REFERENCE_ONLY",
+                "decision_source": OFFICIAL_LETTER_OUT_DECISION_SOURCE,
+                "decision_source_sha256": OFFICIAL_LETTER_OUT_DECISION_SHA256,
+                "decision_version": OFFICIAL_LETTER_OUT_DECISION_VERSION,
+                "legacy_form_classification": value,
+                "legacy_form_scope": scope,
+            }
+        )
+    return json.dumps(metadata, ensure_ascii=False, sort_keys=True)
 
 
-def seed_official_letter_out_catalog(db: Session) -> int:
+def _seed_official_letter_out_catalog(
+    db: Session,
+    classifications: dict[str, tuple[str, str]],
+) -> int:
     changed = 0
     for index, name in enumerate(OFFICIAL_LETTER_OUT_CATALOG, start=1):
         values = {
@@ -323,7 +348,10 @@ def seed_official_letter_out_catalog(db: Session) -> int:
             "fee_item_list": None,
             "need_reply": False,
             "reply_to_template_code": None,
-            "input_fields": _official_letter_out_input_fields(name),
+            "input_fields": _official_letter_out_input_fields(
+                name,
+                classifications.get(name),
+            ),
         }
         existing = db.query(DocTemplate).filter(DocTemplate.code == values["code"]).first()
         if existing is None:
@@ -336,3 +364,14 @@ def seed_official_letter_out_catalog(db: Session) -> int:
                 changed += 1
                 break
     return changed
+
+
+def seed_official_letter_out_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(db, {})
+
+
+def seed_official_letter_out_form_001_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(
+        db,
+        OFFICIAL_LETTER_OUT_FORM_001_CLASSIFICATIONS,
+    )
