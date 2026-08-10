@@ -6244,6 +6244,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-007-BIBLIOGRAPHIC-CHANGE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-007-BIBLIOGRAPHIC-CHANGE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-APPLICATION-DRAFT-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "4e8bca93eea2b4f1cb6b4b71c47116c66b97e7c2",
+        "e69afaca61ccfbbf5b44981743ecf492d33c7931"
+      ],
+      "paths": [
+        "backend/tests/test_v8_application_draft_manifest_contract.py",
+        "tasks/batches/FPMS-POSTDEMO-V8-APPLICATION-DRAFT-GATE-20260712-01.md"
+      ],
+      "tree_sha256": "272c992f00128d7a2df76b875f576e7f7b929da6fa5b8554d5f5269a9fd130e8",
+      "tests": [
+        "focused application-draft successor activation suite passed 3 tests",
+        "scoped Ruff, conflict-map and exact diff checks passed",
+        "independent High re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-APPLICATION-DRAFT-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-APPLICATION-DRAFT-SUCCESSOR-ACTIVATION-CURRENT-ADOPTION.md"
     }
   ]
 }
