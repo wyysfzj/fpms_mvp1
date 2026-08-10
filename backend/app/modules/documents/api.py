@@ -40,6 +40,16 @@ from app.modules.documents.export_excel import (
 )
 from app.modules.documents.extra_data import parse_document_extra_data
 from app.modules.documents.fee_linking_service import maybe_create_fee_draft
+from app.modules.documents.grant_evidence_ingestion_service import (
+    GrantEvidenceConflict,
+    GrantEvidenceFact,
+    IngestGrantEvidenceCandidateCommand,
+    ingest_grant_evidence_candidate,
+)
+from app.modules.documents.grant_evidence_schemas import (
+    GrantEvidenceCandidateIn,
+    GrantEvidenceCandidateOut,
+)
 from app.modules.documents.grant_official_copy_verification_schemas import (
     GrantOfficialCopyEventIn,
     GrantOfficialCopyEventOut,
@@ -165,6 +175,58 @@ router = APIRouter()
 
 def _utc_now() -> datetime:
     return datetime.utcnow()
+
+
+@router.post(
+    "/documents/{document_id}/grant-evidence-candidates",
+    status_code=status.HTTP_201_CREATED,
+    response_model=GrantEvidenceCandidateOut,
+)
+def create_grant_evidence_candidate(
+    document_id: UUID,
+    payload: GrantEvidenceCandidateIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceCandidateOut:
+    try:
+        result = ingest_grant_evidence_candidate(
+            IngestGrantEvidenceCandidateCommand(
+                case_id=str(payload.case_id),
+                document_id=str(document_id),
+                evidence_version_id=str(payload.evidence_version_id),
+                evidence_scope=payload.evidence_scope,
+                expected_terminal_event_id=str(payload.expected_terminal_event_id),
+                proposed_by=current_user.id,
+                proposed_at=_utc_now(),
+                facts=tuple(
+                    GrantEvidenceFact(name=fact.name, raw_value=fact.raw_value)
+                    for fact in payload.facts
+                ),
+                conflicts=tuple(
+                    GrantEvidenceConflict(
+                        name=conflict.name,
+                        raw_values=conflict.raw_values,
+                    )
+                    for conflict in payload.conflicts
+                ),
+            ),
+            db,
+        )
+        response_status = {
+            "CREATED": status.HTTP_201_CREATED,
+            "REUSED": status.HTTP_200_OK,
+        }.get(result.disposition)
+        if response_status is None:
+            raise RuntimeError("unexpected grant evidence ingestion disposition")
+        output = GrantEvidenceCandidateOut.model_validate(result, from_attributes=True)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    response.status_code = response_status
+    return output
 
 
 @router.post(
