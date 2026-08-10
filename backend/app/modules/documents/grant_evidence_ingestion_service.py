@@ -14,6 +14,7 @@ from app.core.errors import BusinessError, raise_business_error
 from app.modules.auth.models import T_User, T_UserRole
 from app.modules.documents.models import (
     DocAttachment,
+    Document,
     DocumentEvidenceVersion,
     GrantEvidenceCandidate,
     GrantOfficialCopyVerificationEvent,
@@ -21,6 +22,9 @@ from app.modules.documents.models import (
 from app.modules.system.grant_evidence_source_service import (
     GrantEvidenceScope,
     _validate_source_canonical,
+)
+from app.modules.system.grant_evidence_source_service import (
+    _gate as _require_source_decision_gate,
 )
 from app.modules.system.grant_evidence_source_service import (
     _validate_config_canonical as _validate_source_config_canonical,
@@ -78,6 +82,39 @@ class IngestGrantEvidenceCandidateResult:
     candidate_snapshot_hash: str
     review_status: str
     disposition: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListGrantEvidenceCandidatesCommand:
+    document_id: str
+    read_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GrantEvidenceCandidateRead:
+    candidate_id: str
+    case_id: str
+    document_id: str
+    evidence_version_id: str
+    terminal_event_id: str
+    source_config_id: str
+    source_record_id: str
+    source_version: str
+    original_reference: str
+    acquisition_method: str
+    acquired_at: datetime
+    evidence_scope: GrantEvidenceScope
+    proposal_role_config_id: str
+    proposed_by: str
+    proposed_at: datetime
+    review_status: str
+    reviewer_id: str | None
+    reviewed_at: datetime | None
+    review_reason: str | None
+    acquisition_snapshot_hash: str
+    candidate_snapshot_hash: str
+    facts: tuple[GrantEvidenceFact, ...]
+    conflicts: tuple[GrantEvidenceConflict, ...]
 
 
 _EVENT_SCHEMA = "CNIPA_GRANT_OFFICIAL_COPY_VERIFICATION_EVENT_V1"
@@ -708,3 +745,256 @@ def ingest_grant_evidence_candidate(
         proposal_role_config_id=roles.config_id,
         disposition="CREATED",
     )
+
+
+_ACQUISITION_KEYS = {
+    "schema_version",
+    "case_id",
+    "document_id",
+    "attachment_id",
+    "evidence_version_id",
+    "evidence_content_hash",
+    "evidence_scope",
+    "acquisition_event_id",
+    "acquisition_event_snapshot_hash",
+    "acquired_by",
+    "acquired_at",
+    "acquisition_reason",
+    "first_verification_event_id",
+    "first_verification_event_snapshot_hash",
+    "first_verified_by",
+    "first_verified_at",
+    "first_verification_reason",
+    "terminal_verification_event_id",
+    "terminal_verification_event_snapshot_hash",
+    "second_verified_by",
+    "second_verified_at",
+    "second_verification_reason",
+    "source_config_id",
+    "source_config_snapshot_hash",
+    "source_record_id",
+    "source_version",
+    "source_snapshot_hash",
+    "original_reference",
+    "acquisition_method",
+    "proposal_role_config_id",
+    "proposal_role_config_snapshot_hash",
+    "proposed_by",
+    "proposed_at",
+}
+_CANDIDATE_KEYS = {"schema_version", "evidence_scope", "facts", "conflicts"}
+
+
+def _read_conflict() -> None:
+    _conflict()
+
+
+def _read_datetime(value: object) -> datetime:
+    if type(value) is not datetime or value.utcoffset() is not None:
+        _read_conflict()
+    return value
+
+
+def _parse_candidate_snapshot(
+    row: GrantEvidenceCandidate,
+) -> tuple[tuple[GrantEvidenceFact, ...], tuple[GrantEvidenceConflict, ...]]:
+    if row.candidate_snapshot_hash != _hash_text(row.candidate_snapshot):
+        _read_conflict()
+    try:
+        payload = json.loads(row.candidate_snapshot)
+    except (TypeError, ValueError):
+        _read_conflict()
+    if (
+        type(payload) is not dict
+        or set(payload) != _CANDIDATE_KEYS
+        or payload.get("schema_version") != _CANDIDATE_SCHEMA
+        or payload.get("evidence_scope") != row.evidence_scope
+        or type(payload.get("facts")) is not list
+        or not payload["facts"]
+        or type(payload.get("conflicts")) is not list
+        or row.candidate_snapshot != _canonical(payload)
+    ):
+        _read_conflict()
+    facts: list[GrantEvidenceFact] = []
+    for item in payload["facts"]:
+        if type(item) is not dict or set(item) != {"name", "raw_value"}:
+            _read_conflict()
+        facts.append(
+            GrantEvidenceFact(
+                name=_string(item["name"], "facts.name", 4096, input_error=False),
+                raw_value=_string(
+                    item["raw_value"], "facts.raw_value", 4096, input_error=False
+                ),
+            )
+        )
+    fact_pairs = tuple((item.name, item.raw_value) for item in facts)
+    if len({name for name, _value in fact_pairs}) != len(fact_pairs) or fact_pairs != tuple(
+        sorted(fact_pairs)
+    ):
+        _read_conflict()
+    fact_names = {name for name, _value in fact_pairs}
+    conflicts: list[GrantEvidenceConflict] = []
+    for item in payload["conflicts"]:
+        if type(item) is not dict or set(item) != {"name", "raw_values"}:
+            _read_conflict()
+        name = _string(item["name"], "conflicts.name", 4096, input_error=False)
+        values = item["raw_values"]
+        if type(values) is not list or len(values) < 2:
+            _read_conflict()
+        raw_values = tuple(
+            _string(value, "conflicts.raw_values", 4096, input_error=False)
+            for value in values
+        )
+        if (
+            len(set(raw_values)) != len(raw_values)
+            or raw_values != tuple(sorted(raw_values))
+            or name not in fact_names
+        ):
+            _read_conflict()
+        conflicts.append(GrantEvidenceConflict(name=name, raw_values=raw_values))
+    names = tuple(item.name for item in conflicts)
+    if len(set(names)) != len(names) or names != tuple(sorted(names)):
+        _read_conflict()
+    expected_conflict = _canonical(payload["conflicts"]) if conflicts else None
+    if row.conflict_snapshot != expected_conflict:
+        _read_conflict()
+    return tuple(facts), tuple(conflicts)
+
+
+def _candidate_read(row: GrantEvidenceCandidate) -> GrantEvidenceCandidateRead:
+    for value in (
+        row.id,
+        row.case_id,
+        row.document_id,
+        row.evidence_version_id,
+        row.source_config_id,
+        row.source_record_id,
+        row.proposed_by,
+    ):
+        _uuid(value, "candidate.id", input_error=False)
+    _hash64(row.acquisition_snapshot_hash)
+    _hash64(row.candidate_snapshot_hash)
+    for value, field, limit in (
+        (row.source_version_snapshot, "source_version", 128),
+        (row.original_reference, "original_reference", 512),
+        (row.acquisition_method_snapshot, "acquisition_method", 64),
+    ):
+        _string(value, field, limit, input_error=False)
+    _read_datetime(row.acquired_at)
+    _read_datetime(row.proposed_at)
+    if row.evidence_scope not in {item.value for item in GrantEvidenceScope}:
+        _read_conflict()
+    if row.review_status == "PENDING":
+        if any(value is not None for value in (row.reviewer_id, row.reviewed_at, row.review_reason)):
+            _read_conflict()
+    elif row.review_status in {"APPROVED", "REJECTED"}:
+        if row.reviewer_id is None or row.reviewed_at is None or row.review_reason is None:
+            _read_conflict()
+        _uuid(row.reviewer_id, "reviewer_id", input_error=False)
+        _read_datetime(row.reviewed_at)
+        _string(row.review_reason, "review_reason", 4096, input_error=False)
+        if row.reviewer_id == row.proposed_by:
+            _read_conflict()
+    else:
+        _read_conflict()
+    if row.acquisition_snapshot_hash != _hash_text(row.acquisition_snapshot):
+        _read_conflict()
+    try:
+        acquisition = json.loads(row.acquisition_snapshot)
+    except (TypeError, ValueError):
+        _read_conflict()
+    if (
+        type(acquisition) is not dict
+        or set(acquisition) != _ACQUISITION_KEYS
+        or acquisition.get("schema_version") != _ACQUISITION_SCHEMA
+        or row.acquisition_snapshot != _canonical(acquisition)
+        or acquisition.get("case_id") != row.case_id
+        or acquisition.get("document_id") != row.document_id
+        or acquisition.get("evidence_version_id") != row.evidence_version_id
+        or acquisition.get("source_config_id") != row.source_config_id
+        or acquisition.get("source_record_id") != row.source_record_id
+        or acquisition.get("source_version") != row.source_version_snapshot
+        or acquisition.get("original_reference") != row.original_reference
+        or acquisition.get("acquisition_method") != row.acquisition_method_snapshot
+        or acquisition.get("acquired_at") != row.acquired_at.isoformat(timespec="microseconds")
+        or acquisition.get("evidence_scope") != row.evidence_scope
+        or acquisition.get("proposed_by") != row.proposed_by
+        or acquisition.get("proposed_at") != row.proposed_at.isoformat(timespec="microseconds")
+    ):
+        _read_conflict()
+    terminal_id = _uuid(
+        acquisition.get("terminal_verification_event_id"),
+        "terminal_event_id",
+        input_error=False,
+    )
+    role_config_id = _uuid(
+        acquisition.get("proposal_role_config_id"),
+        "proposal_role_config_id",
+        input_error=False,
+    )
+    for key in (
+        "acquisition_event_snapshot_hash",
+        "first_verification_event_snapshot_hash",
+        "terminal_verification_event_snapshot_hash",
+        "source_config_snapshot_hash",
+        "source_snapshot_hash",
+        "proposal_role_config_snapshot_hash",
+    ):
+        _hash64(acquisition.get(key))
+    facts, conflicts = _parse_candidate_snapshot(row)
+    return GrantEvidenceCandidateRead(
+        candidate_id=row.id,
+        case_id=row.case_id,
+        document_id=row.document_id,
+        evidence_version_id=row.evidence_version_id,
+        terminal_event_id=terminal_id,
+        source_config_id=row.source_config_id,
+        source_record_id=row.source_record_id,
+        source_version=row.source_version_snapshot,
+        original_reference=row.original_reference,
+        acquisition_method=row.acquisition_method_snapshot,
+        acquired_at=row.acquired_at,
+        evidence_scope=GrantEvidenceScope(row.evidence_scope),
+        proposal_role_config_id=role_config_id,
+        proposed_by=row.proposed_by,
+        proposed_at=row.proposed_at,
+        review_status=row.review_status,
+        reviewer_id=row.reviewer_id,
+        reviewed_at=row.reviewed_at,
+        review_reason=row.review_reason,
+        acquisition_snapshot_hash=row.acquisition_snapshot_hash,
+        candidate_snapshot_hash=row.candidate_snapshot_hash,
+        facts=facts,
+        conflicts=conflicts,
+    )
+
+
+def list_grant_evidence_candidates(
+    command: ListGrantEvidenceCandidatesCommand,
+    transaction: Session,
+) -> tuple[GrantEvidenceCandidateRead, ...]:
+    if type(command) is not ListGrantEvidenceCandidatesCommand:
+        _invalid("command")
+    _uuid(command.document_id, "document_id")
+    if type(command.read_at) is not datetime or command.read_at.utcoffset() is not None:
+        _invalid("read_at")
+    transaction = _validate_transaction(transaction)
+    try:
+        _require_source_decision_gate(transaction, command.read_at)
+    except BusinessError:
+        _conflict()
+    with transaction.no_autoflush:
+        if transaction.get(Document, command.document_id) is None:
+            raise_business_error(
+                "GRANT_EVIDENCE_DOCUMENT_NOT_FOUND",
+                "Grant evidence document not found",
+                status_code=404,
+            )
+        rows = list(
+            transaction.scalars(
+                select(GrantEvidenceCandidate)
+                .where(GrantEvidenceCandidate.document_id == command.document_id)
+                .order_by(GrantEvidenceCandidate.proposed_at, GrantEvidenceCandidate.id)
+            )
+        )
+        return tuple(_candidate_read(row) for row in rows)
