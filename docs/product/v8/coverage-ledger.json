@@ -6425,6 +6425,30 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-MANUAL-REVIEW-ROLE-CARRIER-SERVICE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-MANUAL-REVIEW-ROLE-CARRIER-SERVICE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-MANUAL-REVIEW-ROLE-CARRIER-API-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "c1b1682b32a9edfd29adea90cc8aa760a1469fe8",
+        "543d1a8e5c6e9a062ab15fe8b532853f9b92ae11"
+      ],
+      "paths": [
+        "backend/app/modules/system/grant_manual_review_role_schemas.py",
+        "backend/app/modules/system/api.py",
+        "backend/tests/test_v8_grant_manual_review_role_api.py"
+      ],
+      "tree_sha256": "6215434c1ea6227f1e36c4511f842b1643cb4d7f1bae57e3f4d20968b389f2f2",
+      "tests": [
+        "focused grant manual-review role API suite passed 7 tests",
+        "shared system-router regressions passed 34 tests",
+        "grant manual-review role service regressions passed 24 tests",
+        "scoped Ruff and exact three-path range diff-check passed",
+        "independent High re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-MANUAL-REVIEW-ROLE-CARRIER-API-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-MANUAL-REVIEW-ROLE-CARRIER-API-CURRENT-ADOPTION.md"
     }
   ]
 }
