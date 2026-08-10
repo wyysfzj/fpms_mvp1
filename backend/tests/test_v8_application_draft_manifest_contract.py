@@ -9,6 +9,13 @@ SUCCESSOR_TASK = (
     "tasks/postdemo/v8/FPMS-V8-APPLICATION-INTERNAL-DRAFT-PAYMENT-SEPARATION-20260810-01.md"
 )
 SUPERSEDED_TASK = "tasks/postdemo/v8/FPMS-V8-APPLICATION-AUTO-DRAFT-POLICY-20260712-01.md"
+SUCCESSOR_SHARED_FILES = [
+    "fee_linking_service.py",
+    "obligation_contracts.py",
+    "obligation_service.py",
+    "annuity/service.py",
+    "cases/lifecycle_overlay_service.py",
+]
 
 GATE_SOURCE_COMMIT = "e5a41c8d07f11d1b0dec68891ef7bef53312f883"
 GATE_ADOPTION_COMMIT = "72877386974cd57c720b7c622e6b00ca49c03d7d"
@@ -57,6 +64,13 @@ def test_manifest_binds_the_accepted_application_draft_policy() -> None:
 
 def test_manifest_binds_current_prerequisites_and_serial_activation_order() -> None:
     text = _manifest_text()
+    execution_order = re.search(
+        r"^## Execution order\n\n(?P<body>.*?)(?=^## )",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert execution_order is not None
+    shared_files = re.findall(r"`([^`]+\.py)`", execution_order.group("body"))
     prerequisite_rows = re.findall(
         r"^\| `([^`]+)` \| `([^`]+)` \| `CURRENT_VERIFIED` \|$",
         text,
@@ -77,6 +91,7 @@ def test_manifest_binds_current_prerequisites_and_serial_activation_order() -> N
             "V8-APPLICATION-FEE-NOTICE-OBLIGATION-CURRENT-ADOPTION",
         ),
     ]
+    assert shared_files == SUCCESSOR_SHARED_FILES
     assert _metadata(text, "Activation review") == "independent-high-zero-finding-required"
     assert _metadata(text, "Product start") == "after-activation-pass-only"
     assert _metadata(text, "SQLite verification") == "globally-serialized"

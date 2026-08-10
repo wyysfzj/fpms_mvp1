@@ -52,7 +52,7 @@ blocks only this lane and never creates a draft or payment fact.
 3. The application internal-draft / payment-separation successor row then executes alone under
    its own task contract, allowlist, targeted RED/GREEN evidence and independent review. Its
    shared `fee_linking_service.py`, `obligation_contracts.py`, `obligation_service.py` and
-   `annuity/service.py` ownership remains serialized.
+   `annuity/service.py`, and `cases/lifecycle_overlay_service.py` ownership remains serialized.
 
 ## Explicit non-closure
 
