@@ -1,10 +1,27 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, time
 from enum import Enum
+from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.errors import BusinessError, raise_business_error
+from app.modules.auth.models import T_User, T_UserRole
+from app.modules.cases.lifecycle_contracts import (
+    ActivityLane,
+    ConfirmationStatus,
+    EvidenceReference,
+    LifecycleEventCommand,
+    LifecycleTransitionResult,
+)
+from app.modules.cases.lifecycle_service import apply_lifecycle_event
+from app.modules.documents import grant_evidence_review_service as grant_review
 from app.modules.documents.evidence_contracts import (
     EvidenceDerivationType,
     EvidenceReviewState,
@@ -16,10 +33,22 @@ from app.modules.documents.models import (
     DocAttachment,
     DocumentEvidenceDerivation,
     DocumentEvidenceVersion,
+    GrantEvidenceCandidate,
 )
 from app.modules.official_workflows.models import (
     OfficialWorkPackage,
     OfficialWorkPackageManifest,
+)
+from app.modules.system.grant_evidence_source_service import (
+    GrantEvidenceScope,
+    GrantEvidenceSourceResolution,
+    ResolveGrantEvidenceSourceCommand,
+    resolve_grant_evidence_source,
+)
+from app.modules.system.grant_manual_review_role_service import (
+    GrantManualReviewRoleResolution,
+    ResolveGrantManualReviewRoleConfigCommand,
+    resolve_grant_manual_review_role_config,
 )
 
 __all__ = (
@@ -30,6 +59,7 @@ __all__ = (
     "FilingXmlDerivationPolicyError",
     "NoncopyableOaAppendixErrorCode",
     "NoncopyableOaAppendixPolicyError",
+    "apply_grant_announcement_evidence",
     "is_filing_full_word_ready",
     "require_copyable_oa_attachment_combination",
     "require_filing_xml_reviewed_word_source",
@@ -50,6 +80,249 @@ _COPYABLE_OA_ATTACHMENT_ROLES = frozenset(
         "OA_ADDITIONAL_FILE",
     }
 )
+
+
+def _grant_announcement_conflict() -> None:
+    raise_business_error(
+        "GRANT_ANNOUNCEMENT_EVIDENCE_CONFLICT",
+        "Grant announcement evidence conflict",
+        status_code=409,
+    )
+
+
+def _grant_uuid(value: object) -> str:
+    if type(value) is not str:
+        _grant_announcement_conflict()
+    try:
+        parsed = UUID(value)
+    except (AttributeError, TypeError, ValueError):
+        _grant_announcement_conflict()
+    if str(parsed) != value:
+        _grant_announcement_conflict()
+    return value
+
+
+def _grant_hash(value: object) -> str:
+    if (
+        type(value) is not str
+        or len(value) != 64
+        or value != value.lower()
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        _grant_announcement_conflict()
+    return value
+
+
+def _grant_payload(snapshot: object, digest: object) -> dict[str, object]:
+    if type(snapshot) is not str or hashlib.sha256(snapshot.encode()).hexdigest() != digest:
+        _grant_announcement_conflict()
+    try:
+        payload = json.loads(snapshot)
+        canonical = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        _grant_announcement_conflict()
+    if type(payload) is not dict or canonical != snapshot:
+        _grant_announcement_conflict()
+    return payload
+
+
+def _active_role_member(
+    transaction: Session,
+    user_id: str,
+    role_id: str,
+) -> bool:
+    return (
+        transaction.scalar(
+            select(T_UserRole.user_id)
+            .join(T_User, T_User.id == T_UserRole.user_id)
+            .where(
+                T_UserRole.user_id == user_id,
+                T_UserRole.role_id == role_id,
+                T_User.is_active.is_(True),
+            )
+        )
+        == user_id
+    )
+
+
+def _grant_authority(
+    candidate: GrantEvidenceCandidate,
+    acquisition: dict[str, object],
+    review_role_config_id: str,
+    review_role_config_snapshot_hash: str,
+    transaction: Session,
+) -> None:
+    try:
+        source = resolve_grant_evidence_source(
+            ResolveGrantEvidenceSourceCommand(
+                evidence_scope=GrantEvidenceScope.GRANT_ANNOUNCEMENT,
+                as_of=candidate.reviewed_at,
+            ),
+            transaction,
+        )
+        proposal_roles = resolve_grant_manual_review_role_config(
+            ResolveGrantManualReviewRoleConfigCommand(as_of=candidate.proposed_at),
+            transaction,
+        )
+        review_roles = resolve_grant_manual_review_role_config(
+            ResolveGrantManualReviewRoleConfigCommand(as_of=candidate.reviewed_at),
+            transaction,
+        )
+    except BusinessError:
+        _grant_announcement_conflict()
+    if (
+        type(source) is not GrantEvidenceSourceResolution
+        or source.config_id != candidate.source_config_id
+        or source.config_snapshot_hash != acquisition["source_config_snapshot_hash"]
+        or source.source_record_id != candidate.source_record_id
+        or source.evidence_scope is not GrantEvidenceScope.GRANT_ANNOUNCEMENT
+        or source.source_version != candidate.source_version_snapshot
+        or source.source_snapshot_hash != acquisition["source_snapshot_hash"]
+        or source.source_reference_value != candidate.original_reference
+        or source.acquisition_method != candidate.acquisition_method_snapshot
+        or type(proposal_roles) is not GrantManualReviewRoleResolution
+        or proposal_roles.config_id != acquisition["proposal_role_config_id"]
+        or proposal_roles.config_snapshot_hash != acquisition["proposal_role_config_snapshot_hash"]
+        or type(review_roles) is not GrantManualReviewRoleResolution
+        or review_roles.config_id != review_role_config_id
+        or review_roles.config_snapshot_hash != review_role_config_snapshot_hash
+        or not _active_role_member(
+            transaction,
+            candidate.proposed_by,
+            proposal_roles.manual_review_proposer_role_id,
+        )
+        or not _active_role_member(
+            transaction,
+            candidate.reviewer_id,
+            review_roles.manual_review_second_reviewer_role_id,
+        )
+    ):
+        _grant_announcement_conflict()
+
+
+def apply_grant_announcement_evidence(
+    candidate: GrantEvidenceCandidate,
+    *,
+    review_role_config_id: str,
+    review_role_config_snapshot_hash: str,
+    transaction: Session,
+) -> LifecycleTransitionResult:
+    if type(candidate) is not GrantEvidenceCandidate or not isinstance(transaction, Session):
+        _grant_announcement_conflict()
+    _grant_uuid(review_role_config_id)
+    _grant_hash(review_role_config_snapshot_hash)
+    try:
+        grant_review._validate_candidate(candidate)
+    except BusinessError:
+        _grant_announcement_conflict()
+    if (
+        candidate.evidence_scope != GrantEvidenceScope.GRANT_ANNOUNCEMENT.value
+        or candidate.review_status != "APPROVED"
+        or candidate.reviewer_id == candidate.proposed_by
+        or type(candidate.reviewed_at) is not datetime
+        or candidate.reviewed_at.utcoffset() is not None
+        or candidate.conflict_snapshot is not None
+    ):
+        _grant_announcement_conflict()
+    candidate_payload = _grant_payload(
+        candidate.candidate_snapshot,
+        candidate.candidate_snapshot_hash,
+    )
+    acquisition = _grant_payload(
+        candidate.acquisition_snapshot,
+        candidate.acquisition_snapshot_hash,
+    )
+    facts = candidate_payload.get("facts")
+    if (
+        type(facts) is not list
+        or len(facts) != 1
+        or type(facts[0]) is not dict
+        or set(facts[0]) != {"name", "raw_value"}
+        or facts[0]["name"] != "announcement_date"
+        or candidate_payload.get("conflicts") != []
+    ):
+        _grant_announcement_conflict()
+    announcement_date = facts[0]["raw_value"]
+    if type(announcement_date) is not str:
+        _grant_announcement_conflict()
+    try:
+        parsed_date = date.fromisoformat(announcement_date)
+    except ValueError:
+        _grant_announcement_conflict()
+    if parsed_date.isoformat() != announcement_date:
+        _grant_announcement_conflict()
+    evidence_hash = acquisition.get("evidence_content_hash")
+    if (
+        type(evidence_hash) is not str
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", evidence_hash) is None
+    ):
+        _grant_announcement_conflict()
+    _grant_authority(
+        candidate,
+        acquisition,
+        review_role_config_id,
+        review_role_config_snapshot_hash,
+        transaction,
+    )
+    effective_at = datetime.combine(parsed_date, time())
+    source_snapshot = json.dumps(
+        {
+            "schema": "FPMS_GRANT_ANNOUNCEMENT_SOURCE_V1",
+            "announcement_date": announcement_date,
+            "source_document_id": candidate.document_id,
+            "source_evidence_version_id": candidate.evidence_version_id,
+            "source_evidence_content_hash": evidence_hash,
+            "source_provenance_id": candidate.id,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return apply_lifecycle_event(
+        LifecycleEventCommand(
+            case_id=candidate.case_id,
+            event_type="GRANT_ANNOUNCEMENT_CONFIRMED",
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=effective_at,
+            occurred_at=candidate.reviewed_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=candidate.case_id,
+                    evidence_kind="DOCUMENT_EVIDENCE_VERSION",
+                    object_type="DocumentEvidenceVersion",
+                    object_id=candidate.evidence_version_id,
+                    content_hash=evidence_hash,
+                    captured_at=effective_at,
+                ),
+            ),
+            actor_id=candidate.proposed_by,
+            reviewer_id=candidate.reviewer_id,
+            idempotency_key=f"grant-announcement:{candidate.id}",
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={
+                "schema": "FPMS_GRANT_ANNOUNCEMENT_CONFIRMED_V1",
+                "case_id": candidate.case_id,
+                "announcement_date": announcement_date,
+                "source_document_id": candidate.document_id,
+                "source_evidence_version_id": candidate.evidence_version_id,
+                "source_evidence_content_hash": evidence_hash,
+                "source_provenance_id": candidate.id,
+                "source_snapshot_schema": "FPMS_GRANT_ANNOUNCEMENT_SOURCE_V1",
+                "source_snapshot": source_snapshot,
+                "source_snapshot_hash": hashlib.sha256(source_snapshot.encode()).hexdigest(),
+                "predecessor_source_snapshot_hash": None,
+                "supersedes_activity_id": None,
+            },
+        ),
+        transaction,
+    )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
