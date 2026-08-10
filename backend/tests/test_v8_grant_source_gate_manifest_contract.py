@@ -106,7 +106,7 @@ def test_manifest_preserves_per_task_closure_dependencies_and_serialization() ->
     sections = _task_sections(text)
     expected = {
         ACTIVATION_ID: (
-            "Rebind this grant-source lane manifest from five rows to eight rows",
+            "Create only this five-row grant-source lane manifest",
             "No product code, schema, catalog or coverage-ledger change",
             "FPMS-V8-CATALOG-MANIFEST-COVERAGE-GATE-20260712-01",
             "backend/tests/test_v8_grant_source_gate_manifest_contract.py",

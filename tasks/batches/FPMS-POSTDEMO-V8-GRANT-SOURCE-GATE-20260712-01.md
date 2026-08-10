@@ -63,8 +63,9 @@ Shared files remain serialized even when dependency waves otherwise permit concu
 - Task SHA-256: `3236a8ae708ee5740c4e19a49fbeaa377de0354d3b880c249b8c8dacefbd51f7`
 - Owner role: Team Lead / default
 - Profile: `TC-QA`
-- Exact closure: Rebind this grant-source lane manifest from five rows to eight rows while
-  preserving unverified archive status and zero legal-state effect.
+- Exact closure: Create only this five-row grant-source lane manifest containing the activation
+  plus the four candidate ingestion/read service/API tasks, while preserving unverified archive
+  status and zero legal-state effect.
 - Non-closure: No product code, schema, catalog or coverage-ledger change; no source publication,
   customer-policy invention, test weakening, second lane, or release action.
 - Canonical dependencies:
