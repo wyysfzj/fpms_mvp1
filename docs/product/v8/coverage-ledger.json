@@ -2499,11 +2499,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CONTRACT_INCONSISTENCY",
-        "missing_dependencies": [
+        "code": "DEPENDENCY_BLOCKED",
+        "dependencies": [
+          "FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01",
           "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01"
         ],
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "ref": "docs/product/v8/reviews/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
+        "audit_ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
       }
     },
     {
@@ -2513,12 +2515,14 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CONTRACT_INCONSISTENCY",
-        "missing_dependencies": [
+        "code": "DEPENDENCY_BLOCKED",
+        "dependencies": [
+          "FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01",
           "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01",
           "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01"
         ],
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "ref": "docs/product/v8/reviews/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
+        "audit_ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
       }
     },
     {
@@ -5576,6 +5580,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FOUNDATION-CLOSE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FOUNDATION-CLOSE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "8988d04a17cd9be5b4fa01ccf3767e0b51d52bc5"
+      ],
+      "paths": [
+        "docs/product/v8/stories/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
+        "docs/product/v8/full-terminal-dependency-successor.json",
+        "scripts/v8_lean_coverage_check.py",
+        "scripts/tests/test_v8_lean_coverage_check.py"
+      ],
+      "tree_sha256": "37eae539b4b2644bca66a39abe75fb2a8533bbe0a20b77666d449158c5d09a9a",
+      "tests": [
+        "focused RED proved the missing successor validator",
+        "exact successor tranche passed 17 tests and the complete checker file passed 29 tests",
+        "scoped Ruff, inventory validation and exact-path diff checks passed",
+        "two independent High review axes approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md"
     }
   ]
 }
