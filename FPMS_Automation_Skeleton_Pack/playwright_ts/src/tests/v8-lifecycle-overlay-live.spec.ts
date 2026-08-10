@@ -177,6 +177,10 @@ test("real UI traverses stable three-page lifecycle overlay without fulfilled ro
   ]);
   await expectRealJson(caseResponse);
   await expectRealJson(firstResponse);
+  const firstUrl = new URL(firstResponse.url());
+  expect(firstUrl.searchParams.get("after_sequence")).toBe("0");
+  expect(firstUrl.searchParams.get("limit")).toBe("200");
+  expect(firstUrl.searchParams.get("as_of_revision")).toBeNull();
   const first = (await firstResponse.json()) as OverlayResponse;
 
   const expectedIdentities = expectedGateIdentities(fixture.caseId);
