@@ -6288,6 +6288,26 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-CARRIER-SERVICE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-SOURCE-API-VERIFICATION-PATH-COMPAT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "d7833f02430b764a5c9bb35f412af311b5e6dd8c"
+      ],
+      "paths": [
+        "docs/product/v8/stories/V8-GRANT-EVIDENCE-SOURCE-API-VERIFICATION-PATH-COMPAT.md"
+      ],
+      "tree_sha256": "fc25beb960d4f9ebc6d55514b5e2d2f9d562ff395a6aca07f460b12d5f45a05c",
+      "tests": [
+        "obsolete regression paths are absent from candidate, ancestry and local refs",
+        "exact live decision-gate and config-readiness regression owners verified",
+        "exact diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-API-VERIFICATION-PATH-COMPAT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-SOURCE-API-VERIFICATION-PATH-COMPAT-CURRENT-ADOPTION.md"
     }
   ]
 }
