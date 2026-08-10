@@ -958,13 +958,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-DRAFT-OBLIGATION-ADAPTER-20260712-01",
       "phase": "foundation",
-      "disposition": "AUTHORITY_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-DRAFT-OBLIGATION-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "GRANT_YEAR_REVIEW_REQUIRED_MATCH_AUTHORITY_MISSING",
-        "ref": "docs/product/v8/reviews/V8-FOUNDATION-EXECUTABLE-BOUNDARY-AUDIT-20260809.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-ANNUITY-INSTRUCTION-OBLIGATION-ADAPTER-20260712-01",
@@ -5227,6 +5224,30 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-OFFICIAL-FEE-MANUAL-REVIEW-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-DRAFT-OBLIGATION-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "6f17cae10ad67a648dbf32e975a4cadfe0dcdf20",
+        "5d84f8a0bb5f4d60867a74e508f484527ebf1ac1",
+        "b91f37faf17c5bec341620bc795a41040c07bca9"
+      ],
+      "paths": [
+        "backend/app/modules/grant_fees/service.py",
+        "backend/tests/test_v8_grant_draft_obligation_adapter.py"
+      ],
+      "tree_sha256": "11c4d49e088736876487ab1fa547a5574b2458174159f6fb0dc9eaceb032a0d9",
+      "tests": [
+        "parent-tree interface absence and the first focused run established the inherited WIP gap",
+        "final focused grant draft adapter suite passed 7 tests",
+        "grant, generic draft, annuity draft, obligation detail and overlay tranche passed 198 tests",
+        "scoped Ruff and exact diff checks passed",
+        "independent High review found four P1 lineage gaps; correction review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-DRAFT-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-DRAFT-OBLIGATION-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
