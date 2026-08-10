@@ -4,6 +4,8 @@ import hashlib
 import json
 from dataclasses import fields, is_dataclass, replace
 from datetime import datetime, timedelta, timezone
+from threading import Event, Thread
+from time import sleep
 from uuid import uuid4
 
 import pytest
@@ -435,4 +437,49 @@ def test_input_and_dirty_transaction_are_rejected_without_write(
             ),
             "FUTURE_ANNUITY_EXCEPTION_TRANSACTION_DIRTY",
             409,
+        )
+
+
+def test_concurrent_overlapping_publications_serialize_and_fail_closed(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as first:
+        actor_id, client_id, _ = _seed(first)
+        service.publish_future_annuity_exception(
+            _publish(actor_id, client_id), first
+        )
+        started = Event()
+        outcome: list[object] = []
+
+        def publish_overlap() -> None:
+            with session_factory() as second:
+                started.set()
+                try:
+                    outcome.append(
+                        service.publish_future_annuity_exception(
+                            _publish(actor_id, client_id), second
+                        )
+                    )
+                except Exception as error:  # captured for exact cross-thread assertion
+                    outcome.append(error)
+
+        contender = Thread(target=publish_overlap)
+        contender.start()
+        assert started.wait(timeout=2)
+        sleep(0.1)
+        assert contender.is_alive()
+        first.commit()
+        contender.join(timeout=5)
+        assert not contender.is_alive()
+
+    assert len(outcome) == 1
+    assert isinstance(outcome[0], BusinessError)
+    assert outcome[0].code == "FUTURE_ANNUITY_EXCEPTION_CONFLICT"
+    assert outcome[0].status_code == 409
+    with session_factory() as transaction:
+        assert (
+            transaction.scalar(
+                select(func.count()).select_from(FutureAnnuityDraftExceptionRecord)
+            )
+            == 1
         )

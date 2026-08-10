@@ -8,7 +8,7 @@ from enum import Enum
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -22,7 +22,7 @@ from app.modules.system.decision_gate_service import (
     ResolveDecisionGateCommand,
     resolve_decision_gate,
 )
-from app.modules.system.models import FutureAnnuityDraftExceptionRecord
+from app.modules.system.models import CustomerDecisionGate, FutureAnnuityDraftExceptionRecord
 
 
 class FutureAnnuityExceptionScope(str, Enum):
@@ -117,7 +117,7 @@ _PERMISSION = "SystemParam.Edit"
 def _invalid(field: str) -> None:
     raise_business_error(
         "FUTURE_ANNUITY_EXCEPTION_INPUT_INVALID",
-        "Invalid future annuity exception input",
+        "后续年费例外输入无效",
         details={"field": field},
         status_code=400,
     )
@@ -126,7 +126,7 @@ def _invalid(field: str) -> None:
 def _not_found() -> None:
     raise_business_error(
         "FUTURE_ANNUITY_EXCEPTION_NOT_FOUND",
-        "Future annuity exception not found",
+        "未找到后续年费例外",
         status_code=404,
     )
 
@@ -134,7 +134,7 @@ def _not_found() -> None:
 def _conflict() -> None:
     raise_business_error(
         "FUTURE_ANNUITY_EXCEPTION_CONFLICT",
-        "Future annuity exception conflict",
+        "后续年费例外冲突",
         status_code=409,
     )
 
@@ -175,7 +175,7 @@ def _validate_transaction(transaction: object) -> Session:
     if transaction.new or transaction.dirty or transaction.deleted:
         raise_business_error(
             "FUTURE_ANNUITY_EXCEPTION_TRANSACTION_DIRTY",
-            "Future annuity exception transaction is dirty",
+            "后续年费例外事务包含未处理改动",
             status_code=409,
         )
     return transaction
@@ -252,6 +252,32 @@ def _require_permission(user_id: str, transaction: Session) -> None:
     if user is None:
         _not_found()
     if user.is_active is not True or _PERMISSION not in get_user_permissions(transaction, user_id):
+        _conflict()
+
+
+def _serialize_mutation(
+    gate: DecisionGateReadResult,
+    transaction: Session,
+) -> None:
+    connection = transaction.connection()
+    try:
+        if connection.dialect.name == "sqlite":
+            driver = connection.connection.driver_connection
+            if not driver.in_transaction:
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+            else:
+                connection.exec_driver_sql(
+                    "UPDATE t_future_annuity_draft_exception_record SET id = id WHERE 0"
+                )
+            return
+        locked_gate_id = transaction.scalar(
+            select(CustomerDecisionGate.id)
+            .where(CustomerDecisionGate.id == gate.gate_id)
+            .with_for_update()
+        )
+    except OperationalError:
+        _conflict()
+    if locked_gate_id != gate.gate_id:
         _conflict()
 
 
@@ -600,7 +626,8 @@ def publish_future_annuity_exception(
 ) -> FutureAnnuityExceptionRecordResult:
     command = _validate_publish(command)
     transaction = _validate_transaction(transaction)
-    _resolve_gate(command.published_at, transaction)
+    gate = _resolve_gate(command.published_at, transaction)
+    _serialize_mutation(gate, transaction)
     _require_permission(command.confirmed_by, transaction)
     client_id, case_id, related_client_id = _scope_exists(command, transaction)
     payload = _published_payload(command)
@@ -642,7 +669,8 @@ def revoke_future_annuity_exception(
 ) -> FutureAnnuityExceptionRecordResult:
     command = _validate_revoke(command)
     transaction = _validate_transaction(transaction)
-    _resolve_gate(command.published_at, transaction)
+    gate = _resolve_gate(command.published_at, transaction)
+    _serialize_mutation(gate, transaction)
     _require_permission(command.confirmed_by, transaction)
     target = transaction.get(FutureAnnuityDraftExceptionRecord, command.target_publication_id)
     if target is None:
