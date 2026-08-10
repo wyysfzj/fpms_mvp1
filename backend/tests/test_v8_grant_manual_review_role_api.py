@@ -170,6 +170,10 @@ def test_request_and_response_schemas_are_strict_and_exact() -> None:
         assert schema.model_config["extra"] == "forbid"
         assert all(field.is_required() for field in schema.model_fields.values())
     PublishGrantManualReviewRoleConfigIn.model_validate(_publish_body())
+    open_ended = PublishGrantManualReviewRoleConfigIn.model_validate(
+        _publish_body() | {"effective_to": None}
+    )
+    assert open_ended.effective_to is None
     for change in (
         {"confirmed_by": ACTOR_ID},
         {"official_copy_acquirer_role_id": "not-a-uuid"},

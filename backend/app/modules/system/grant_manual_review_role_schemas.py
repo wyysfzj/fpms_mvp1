@@ -31,8 +31,8 @@ def _canonical_uuid(value: str | None) -> str | None:
     return value
 
 
-def _naive_datetime(value: datetime) -> datetime:
-    if value.utcoffset() is not None:
+def _naive_datetime(value: datetime | None) -> datetime | None:
+    if value is not None and value.utcoffset() is not None:
         raise ValueError("timestamp must be timezone-naive UTC")
     return value
 
