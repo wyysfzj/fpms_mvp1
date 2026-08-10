@@ -1,95 +1,147 @@
 # FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01
 
-Status: READY / NOT STARTED
-Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
-Wave: `14. Wave 6 — customer decision gates`
+Status: FROZEN / PRODUCT NOT STARTED
+Risk: `PROTECTED`
 Catalog ordinal: `213`
-Executor role: Backend Developer / worker
+Outcome: generate one pending internal future-annuity draft only from an exact usable Scheme A
+exception; preserve instruction-first as the default and preserve explicit `PAY` before payment.
 
-## Design References
+## Authority and dependencies
 
 - `AGENTS.md`
-- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
-- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
-- Source catalog line: `721`
-- Expected manifest phase: `deferred`
-- Customer gate requirement: `DG-FEE-FUTURE-ANNUITY[GLOBAL]`
+- `docs/product/v8/domain-contract.md`
+- `docs/product/v8/source-decision-registry.md`,
+  `DEC-V8-FULL-BATCH-SCHEME-A-20260810`
+- `docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt`, SHA-256
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`
+- `V8-FULL-BATCH-CUSTOMER-DECISION-CURRENT-ADOPTION`
+- `V8-FUTURE-ANNUITY-GATE-MANIFEST-ACTIVATION-CURRENT-ADOPTION`
+- `V8-FUTURE-ANNUITY-EXCEPTION-CARRIER-SCHEMA-CURRENT-ADOPTION`
+- `V8-FUTURE-ANNUITY-EXCEPTION-AUTHORITY-SERVICE-CURRENT-ADOPTION`
+- `V8-FUTURE-ANNUITY-OBLIGATION-CURRENT-ADOPTION`
+- accepted fee-obligation draft and annuity-instruction services
 
-## Story Shape Classification
+The exact GLOBAL decision remains `APPROVED_POLICY`, source path as above and source version
+`customer-decision:2026-08-10:v8-full-batch-scheme-a:v1`. The default exception set is empty.
+No missing, historical, expired, revoked, corrupt or ambiguous record is authority.
 
-- `shared_file_density`: high
-- `prereq_dependency_density`: low
-- `be_fe_coupling`: low
-- `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+## Exact public seam
 
-## Task Contract Profile
+Add to `backend/app/modules/annuity/service.py`:
 
-Task Contract Profile: `TC-ADAPTER`
+```python
+@dataclass(frozen=True, slots=True)
+class FutureAnnuityAutoDraftPolicyResult:
+    annuity_task_id: int
+    fee_obligation_id: str
+    exception_attestation: FutureAnnuityExceptionUseAttestation
+    draft: PrepareFeeObligationDraftResult
 
-- RED expectation: Exact adapter test proves the old direct write/missing activity/premature state.
-- GREEN expectation: Exact adapter test plus listed inherited regressions pass; only the named entrypoint changes.
+def apply_future_annuity_auto_draft_policy(
+    *, transaction: Session, annuity_task_id: int, actor_id: str, as_of: datetime
+) -> FutureAnnuityAutoDraftPolicyResult: ...
+```
 
-## Exact Closure Slice
+Require a positive exact non-boolean task ID, exact Session, nonblank untrimmed/NUL-free actor ID
+of at most 36 characters and UTC-naive exact datetime. Invalid input uses the accepted future-
+annuity invalid-command error before connection or query. Dirty caller state uses its accepted 409.
 
-Only confirmed exception policy invokes draft.
+The function names the exact task; it never selects the latest task. Validate the task's complete
+six-field carrier and accepted future-annuity recognition graph: same case/client, exact
+`FUTURE_ANNUITY` CNY obligation, one current matched line, task/year/due/fee code, source activity,
+document, approved current evidence/hash and canonical recognition activity. Require obligation
+states `RECOGNIZED`, `VERIFIED`, `PENDING`, `NOT_CREATED`, `UNPAID`, with official evidence
+`PENDING`. Missing nodes preserve accepted 404; incoherent or partial graphs preserve accepted 409.
 
-## Explicit Non-Closure
+Resolve the exact exception with the persisted case relationship and caller time:
 
-No change to the underlying deep-module rule, no second entrypoint and no unrelated refactor. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
+```python
+ResolveFutureAnnuityExceptionCommand(
+    client_id=case.client_id,
+    case_id=case.id,
+    as_of=as_of,
+)
+```
 
-## Dependencies
+Propagate the accepted authority service's exact 404/409 failures. Derive the draft key exactly as
+`future-annuity-exception-auto-draft:{annuity_task_id}:{publication_id}`. No caller key, fallback,
+clock, environment authority or inferred exception is accepted.
 
-### Canonical V8 task dependencies
+## Deep draft authority and lineage
 
-- `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
-- `FPMS-V8-FUTURE-ANNUITY-MANIFEST-ACTIVATION-20260712-01`
+Add exact `FeeDraftAuthority.FUTURE_ANNUITY_EXCEPTION`. Extend
+`PrepareFeeObligationDraftCommand` after `authority` with defaults:
 
-### External, gate and inherited prerequisites
+```python
+exception_publication_id: str | None = None
+exception_publication_snapshot_hash: str | None = None
+exception_attested_at: datetime | None = None
+```
 
-- `gate` — `DG-FEE-FUTURE-ANNUITY:GLOBAL`: Persisted, current, source-backed decision must be confirmed for this exact scope.
+All three are required only for the new authority and forbidden for every existing authority, so
+existing payload bytes remain unchanged. The adapter supplies the exact resolved publication ID,
+snapshot hash and `as_of`. The enum is never authority by itself.
 
-- Approved source dependency cell (verbatim): future-annuity gate
+The deep service independently validates the immutable canonical publication row and its exact
+client/case applicability at `exception_attested_at`, including source, scope, interval, actor,
+snapshot bytes/hash and relationship. It must not depend only on the adapter result. Fresh creation
+requires the complete recognized annuity graph and must fail closed for a fake publication, hash,
+time, relation, task or obligation.
 
-### Shared ownership serialization
+Use activity schema `FPMS_FEE_DRAFT_CREATED_FROM_FUTURE_ANNUITY_EXCEPTION_V1`. Its payload has
+exactly existing keys `actor_id`, `authority`, `center_changes`, `draft_id`, `links`,
+`obligation_id`, `schema`, plus `exception_publication_id`,
+`exception_publication_snapshot_hash`, `exception_attested_at`. `center_changes` is `{}`; the
+timestamp is microsecond UTC-naive ISO text; evidence refs are empty; source activity is the exact
+canonical `FEE_OBLIGATION_RECOGNIZED` activity. Creation leaves instruction `PENDING`, creates no
+PayList, GovPayment, payment or receipt, and uses one caller-owned nested savepoint.
 
-- `backend/app/modules/annuity/service.py` order key `10`; project this order only across owners present in the active manifest.
+## Replay and later instruction
 
-## Remaining Follow-Up Task IDs
+Exact existing draft-activity replay is validated before any fresh-current gate or exception
+lookup. Replay binds actor, task, obligation, key, publication ID/hash/attested time, canonical
+publication bytes, links and activity; it creates nothing. Later gate change, expiry or revocation
+does not rewrite or invalidate a previously valid draft. Changed input or corrupt history is 409.
 
-- None
+Extend the stored reviewed-authority instruction branch to recognize the new schema and revalidate
+its exact exception lineage. A later explicit `PAY` through accepted
+`record_annuity_task_instruction` / `record_client_instruction` updates only instruction state and
+the existing instruction activity chain; it reuses the same draft/items/links and creates no second
+draft activity. `HOLD` and `ABANDON` after an exception draft fail closed. Payment remains forbidden
+until stored instruction is exact `PAY`.
 
-## Allowed Files
+## Non-goals
 
-- `tasks/postdemo/v8/FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01.md`
-- `backend/app/modules/annuity/service.py`
-- `backend/tests/test_v8_future_annuity_auto_draft_policy.py`
-- `artifacts/FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01/**`
+No API/UI, model/migration, decision gate, permission, exception publication, rate, reduction,
+amount, deadline, lifecycle/legal state, PayList, payment, workbook or service-rate behavior. Do
+not change other draft-authority payloads or re-run future-annuity recognition.
 
-No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
+## Paths and verification
 
-## Runtime Contracts
+Implementation allowlist:
 
-- Preserve AGENTS.md permission injection, response-envelope, FastAPI status/body, SQLite and Simplified Chinese UI rules applicable to this closure.
-- Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
-- All SQLite-writing tests and shared-file verification run through the global serialized queue.
-- Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
+- this task file;
+- `backend/app/modules/annuity/service.py`;
+- `backend/app/modules/fees/obligation_contracts.py`;
+- `backend/app/modules/fees/obligation_service.py`;
+- `backend/tests/test_v8_future_annuity_auto_draft_policy.py`;
+- `backend/tests/test_v8_fee_obligation_contracts.py`.
 
-## Verification Commands
+All authority-service, carrier/model/migration, API, gate, rate, reduction, PayList, payment,
+manifest and ledger paths are read-only during implementation. SQLite-writing checks are serial.
 
-- RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_future_annuity_auto_draft_policy.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
-- GREEN and scoped checks:
-- `cd backend && .venv/bin/pytest -q tests/test_v8_future_annuity_auto_draft_policy.py`
-- `cd backend && .venv/bin/ruff check --fix app/modules/annuity/service.py tests/test_v8_future_annuity_auto_draft_policy.py && .venv/bin/ruff format app/modules/annuity/service.py tests/test_v8_future_annuity_auto_draft_policy.py && .venv/bin/ruff check app/modules/annuity/service.py tests/test_v8_future_annuity_auto_draft_policy.py`
-- `git diff --check -- backend/app/modules/annuity/service.py backend/tests/test_v8_future_annuity_auto_draft_policy.py tasks/postdemo/v8/FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
+Verification:
 
-## Evidence Path
+- RED/GREEN: `cd backend && .venv/bin/pytest -q tests/test_v8_future_annuity_auto_draft_policy.py tests/test_v8_fee_obligation_contracts.py`
+- affected regressions: `cd backend && .venv/bin/pytest -q tests/test_v8_future_annuity_exception_authority_service.py tests/test_v8_future_annuity_obligation.py tests/test_v8_fee_obligation_prepare_draft.py tests/test_v8_annuity_instruction_obligation_adapter.py tests/test_v8_application_auto_draft_policy.py tests/test_v8_grant_year_auto_draft_policy.py`
+- scoped Ruff: `cd backend && .venv/bin/ruff check app/modules/annuity/service.py app/modules/fees/obligation_contracts.py app/modules/fees/obligation_service.py tests/test_v8_future_annuity_auto_draft_policy.py tests/test_v8_fee_obligation_contracts.py`
+- exact allowlist diff and `git diff --check`.
 
-- `artifacts/FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
+Focused tests prove exact DTO/signature, CLIENT/CASE success, exact payload/replay, absent/expired/
+revoked/ambiguous/wrong gate, malformed/dirty call order, incomplete/cross-case/corrupt lineage,
+deep enum-only rejection, fault rollback, pre-PAY payment rejection, later PAY without a second
+draft, HOLD/ABANDON rejection and historical replay after revocation.
 
-## Done Definition
-
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01` pass. Only then may this task be reported PASS.
+Acceptance requires the exact implementation commit/range, focused and affected checks, scoped
+lint/diff, one independent High zero-finding review, integration and controller adoption as
+`V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-CURRENT-ADOPTION`. A byte-changing rewrite invalidates review.
