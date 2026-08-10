@@ -1,96 +1,111 @@
 # FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01
 
-Status: READY / NOT STARTED
-Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
-Wave: `14. Wave 6 — customer decision gates`
+Status: CONTRACT RE-FROZEN / READY FOR IMPLEMENTATION
+Risk class: `PROTECTED`
+Runbook: `P0-shared-service-story`
 Catalog ordinal: `202`
-Executor role: Backend Developer / worker
 
-## Design References
+## Authority and prerequisites
 
-- `AGENTS.md`
-- `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
-- `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
-- Source catalog line: `710`
-- Expected manifest phase: `deferred`
-- Customer gate requirement: `DG-GRANT-EVIDENCE-SOURCE[GLOBAL]`
+- Scheme A SHA-256
+  `e6cfd648f1d366e27bde3f74310f00033a6db60ce55d850d2e668764745faace`.
+- Accepted ingestion service implementation tip
+  `cada0a256b2170eab934b5a3a55711880abd1466` and its current adoption.
 
-## Story Shape Classification
+This story is a read-only projection of persisted candidate truth. It never resolves legal status,
+chooses among conflicts or substitutes a current source for the historical source lineage.
 
-- `shared_file_density`: high
-- `prereq_dependency_density`: low
-- `be_fe_coupling`: low
-- `evidence_cost`: medium
-- `chosen_runbook`: `P0-single-lane-story`
+## Exact closure and public interface
 
-## Task Contract Profile
+Extend `backend/app/modules/documents/grant_evidence_ingestion_service.py` with exact frozen DTOs:
 
-Task Contract Profile: `TC-SERVICE`
+```python
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ListGrantEvidenceCandidatesCommand:
+    document_id: str
+    read_at: datetime
 
-- RED expectation: Exact service/dataset test fails on missing behavior, data or prohibited side effect.
-- GREEN expectation: Exact service/dataset test and named inherited regressions pass with caller-owned transaction semantics where writes are transactional.
 
-## Exact Closure Slice
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GrantEvidenceCandidateRead:
+    candidate_id: str
+    case_id: str
+    document_id: str
+    evidence_version_id: str
+    terminal_event_id: str
+    source_config_id: str
+    source_record_id: str
+    source_version: str
+    original_reference: str
+    acquisition_method: str
+    acquired_at: datetime
+    evidence_scope: GrantEvidenceScope
+    proposal_role_config_id: str
+    proposed_by: str
+    proposed_at: datetime
+    review_status: str
+    reviewer_id: str | None
+    reviewed_at: datetime | None
+    review_reason: str | None
+    acquisition_snapshot_hash: str
+    candidate_snapshot_hash: str
+    facts: tuple[GrantEvidenceFact, ...]
+    conflicts: tuple[GrantEvidenceConflict, ...]
 
-Read persisted candidates for one document with source/version/proposer/reviewer/review/conflict data; no legal-state inference or write.
 
-## Explicit Non-Closure
+def list_grant_evidence_candidates(
+    command: ListGrantEvidenceCandidatesCommand,
+    transaction: Session,
+) -> tuple[GrantEvidenceCandidateRead, ...]: ...
+```
 
-No endpoint/UI/schema and no adjacent service rule or second dataset beyond the row's observable behavior. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
+`document_id` is a canonical UUID and `read_at` is UTC-naive. Require a clean caller-owned Session
+and use `no_autoflush`; never flush, commit or rollback. Resolve the exact confirmed
+`DG-GRANT-EVIDENCE-SOURCE:GLOBAL` decision at `read_at`; missing/revoked/future/corrupt authority is
+409. A missing document is `GRANT_EVIDENCE_DOCUMENT_NOT_FOUND`/404. An existing document with no
+candidates returns an empty tuple.
 
-## Dependencies
+Read candidates only for that document, ordered by `(proposed_at, id)`. Every row must have
+canonical UUIDs, UTC-naive datetimes, a valid scope and exact review tuple: PENDING has no reviewer,
+time or reason; APPROVED/REJECTED has all three and reviewer differs from proposer. Required text is
+nonblank, trimmed and NUL-free; stored hashes are lowercase SHA-256.
 
-### Canonical V8 task dependencies
+Recompute and require the exact stored acquisition/candidate snapshot hashes. Both JSON objects
+must have exactly the accepted V2/V1 key sets. Bind acquisition snapshot case/document/evidence,
+source record/config/version, original reference, acquisition method/time, scope, proposer/time and
+stored hashes back to the candidate columns. Extract only the terminal verification event ID and
+proposal role-config ID after canonical UUID validation. Bind candidate snapshot scope and exact
+ordered facts/conflicts; apply the ingestion input invariants again. `conflict_snapshot` must be
+NULL for no conflicts or exact canonical JSON of the conflicts array otherwise. Any malformed,
+ambiguous or divergent persisted state is `GRANT_EVIDENCE_CANDIDATE_CONFLICT`/409; do not skip it.
 
-- `FPMS-V8-DECISION-GATE-READ-SERVICE-20260712-01`
-- `FPMS-V8-GRANT-SOURCE-GATE-MANIFEST-ACTIVATION-20260712-01`
-- `FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01`
+The result exposes raw facts/conflicts and review facts only. It does not infer a legal result,
+normalize conflict values, query the current source, or require an old historical source/config to
+remain current.
 
-### External, gate and inherited prerequisites
+## Non-closure
 
-- `gate` — `DG-GRANT-EVIDENCE-SOURCE:GLOBAL`: Persisted, current, source-backed decision must be confirmed for this exact scope.
+No endpoint/schema/UI/migration, candidate create/review, source/role publication, official-copy
+write, legal-state/lifecycle/deadline dispatch, document/evidence mutation, fee or payment behavior.
 
-- Approved source dependency cell (verbatim): ingestion service; serialized
+## Allowed files
 
-### Shared ownership serialization
+- this task file;
+- `backend/app/modules/documents/grant_evidence_ingestion_service.py`;
+- `backend/tests/test_v8_grant_evidence_candidate_read_service.py`.
 
-- `backend/app/modules/documents/grant_evidence_ingestion_service.py` order key `2`; project this order only across owners present in the active manifest.
+## Frozen acceptance matrix
 
-## Remaining Follow-Up Task IDs
+1. Existing document plus zero/one/multiple valid candidates returns a deterministic exact tuple
+   with historical source, proposer/reviewer/review and raw conflict facts.
+2. Missing document is 404; malformed input/current gate failure is 400/409; all are no-write.
+3. Corrupt hash/JSON/key set, snapshot-column divergence, invalid review tuple, invalid ordering or
+   conflict data is 409 and the entire read fails closed.
+4. Read never flushes/commits/rolls back and changes no legal/lifecycle/document/evidence/fee fact.
 
-- None
+## Verification
 
-## Allowed Files
-
-- `tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01.md`
-- `backend/app/modules/documents/grant_evidence_ingestion_service.py`
-- `backend/tests/test_v8_grant_evidence_candidate_read_service.py`
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01/**`
-
-No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
-
-## Runtime Contracts
-
-- Preserve AGENTS.md permission injection, response-envelope, FastAPI status/body, SQLite and Simplified Chinese UI rules applicable to this closure.
-- Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
-- All SQLite-writing tests and shared-file verification run through the global serialized queue.
-- Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
-
-## Verification Commands
-
-- RED command: `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_candidate_read_service.py`; run it before implementation and preserve the expected failure proving the named missing behavior.
-- GREEN and scoped checks:
-- `cd backend && .venv/bin/pytest -q tests/test_v8_grant_evidence_candidate_read_service.py`
-- `cd backend && .venv/bin/ruff check --fix app/modules/documents/grant_evidence_ingestion_service.py tests/test_v8_grant_evidence_candidate_read_service.py && .venv/bin/ruff format app/modules/documents/grant_evidence_ingestion_service.py tests/test_v8_grant_evidence_candidate_read_service.py && .venv/bin/ruff check app/modules/documents/grant_evidence_ingestion_service.py tests/test_v8_grant_evidence_candidate_read_service.py`
-- `git diff --check -- backend/app/modules/documents/grant_evidence_ingestion_service.py backend/tests/test_v8_grant_evidence_candidate_read_service.py tasks/postdemo/v8/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
-
-## Evidence Path
-
-- `artifacts/FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
-
-## Done Definition
-
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-GRANT-EVIDENCE-CANDIDATE-READ-SERVICE-20260712-01` pass. Only then may this task be reported PASS.
+- Focused RED/GREEN pytest for the named read-service test.
+- Ingestion service and source decision-gate regressions.
+- Scoped Ruff and exact two-path implementation diff-check.
+- Independent High review of the exact implementation range; PASS requires P0/P1/P2 `0/0/0`.
