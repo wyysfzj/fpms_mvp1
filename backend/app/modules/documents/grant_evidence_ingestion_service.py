@@ -717,27 +717,6 @@ def ingest_grant_evidence_candidate(
             transaction.add(row)
             transaction.flush([row])
     except IntegrityError:
-        transaction.expire_all()
-        with transaction.no_autoflush:
-            rows = list(
-                transaction.scalars(
-                    select(GrantEvidenceCandidate).where(
-                        GrantEvidenceCandidate.evidence_version_id == evidence.id
-                    )
-                )
-            )
-            if len(rows) == 1:
-                return _replay(
-                    rows[0],
-                    command=command,
-                    acquired=acquired,
-                    terminal=terminal,
-                    source=source,
-                    roles=roles,
-                    acquisition_snapshot=acquisition_snapshot,
-                    candidate_snapshot=candidate_snapshot,
-                    conflict_snapshot=conflict_snapshot,
-                )
         _conflict()
     return _result(
         row,

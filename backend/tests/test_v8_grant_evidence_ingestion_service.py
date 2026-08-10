@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessError
@@ -621,5 +622,25 @@ def test_caller_rollback_and_flush_failure_leave_no_candidate(session_factory, m
         monkeypatch.setattr(transaction, "flush", fail_flush)
         with pytest.raises(RuntimeError, match="injected flush failure"):
             service.ingest_grant_evidence_candidate(command, transaction)
+        monkeypatch.setattr(transaction, "flush", original_flush)
+        assert transaction.scalar(select(func.count()).select_from(GrantEvidenceCandidate)) == 0
+
+
+def test_concurrent_insert_race_fails_closed_without_candidate(
+    session_factory, monkeypatch
+) -> None:
+    with session_factory() as transaction:
+        ready = _ready(transaction, monkeypatch)
+        original_flush = transaction.flush
+
+        def fail_with_integrity_error(*_args, **_kwargs):
+            raise IntegrityError("INSERT", {}, Exception("injected concurrent race"))
+
+        monkeypatch.setattr(transaction, "flush", fail_with_integrity_error)
+        _assert_error(
+            lambda: service.ingest_grant_evidence_candidate(_command(ready), transaction),
+            code="GRANT_EVIDENCE_CANDIDATE_CONFLICT",
+            status=409,
+        )
         monkeypatch.setattr(transaction, "flush", original_flush)
         assert transaction.scalar(select(func.count()).select_from(GrantEvidenceCandidate)) == 0
