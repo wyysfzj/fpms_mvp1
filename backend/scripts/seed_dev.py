@@ -28,7 +28,7 @@ from app.modules.documents.official_notice_catalog import (  # noqa: E402
     seed_fee_reduction_approval_official_notice_catalog,
 )
 from app.modules.documents.official_notice_catalog import (  # noqa: E402
-    seed_official_letter_out_form_017_catalog as seed_official_letter_out_catalog,
+    seed_official_letter_out_form_018_catalog as seed_official_letter_out_catalog,
 )
 from app.modules.fees.models import FeeRate  # noqa: E402
 from app.modules.masterdata.applicants.models import Applicant  # noqa: E402

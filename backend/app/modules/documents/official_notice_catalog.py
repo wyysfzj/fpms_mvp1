@@ -369,6 +369,11 @@ OFFICIAL_LETTER_OUT_FORM_017_CLASSIFICATIONS = {
     "发明主动修改": ("form-017", "INTERNAL_ONLY"),
 }
 
+OFFICIAL_LETTER_OUT_FORM_018_CLASSIFICATIONS = {
+    **OFFICIAL_LETTER_OUT_FORM_017_CLASSIFICATIONS,
+    "延长期限请求": ("form-018", "INTERNAL_ONLY"),
+}
+
 
 def _official_letter_out_input_fields(
     name: str,
@@ -550,4 +555,11 @@ def seed_official_letter_out_form_017_catalog(db: Session) -> int:
     return _seed_official_letter_out_catalog(
         db,
         OFFICIAL_LETTER_OUT_FORM_017_CLASSIFICATIONS,
+    )
+
+
+def seed_official_letter_out_form_018_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(
+        db,
+        OFFICIAL_LETTER_OUT_FORM_018_CLASSIFICATIONS,
     )
