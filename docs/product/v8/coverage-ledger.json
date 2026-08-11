@@ -1663,13 +1663,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-ACCEPTED-DISPATCH-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-EVIDENCE-ACCEPTED-DISPATCH-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-API-20260712-01",
@@ -6876,6 +6873,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-015-TRANSLATION-CORRECTION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-015-TRANSLATION-CORRECTION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-ACCEPTED-DISPATCH-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "93148c88ed7b077806d468feae5b124dc1975b9a",
+        "d35f5f1b8698c8c6ba9d5c9519998f03da4076f7"
+      ],
+      "paths": [
+        "backend/app/modules/documents/grant_evidence_review_service.py",
+        "backend/tests/test_v8_grant_evidence_accepted_dispatch.py"
+      ],
+      "tree_sha256": "d576a43b46e0f587722765cb123bf8b60cabe59875c75da6ab354dfd01cf6142",
+      "tests": [
+        "focused accepted-dispatch and affected review-service suites passed 21 tests",
+        "adapter failure rollback remains atomic while caller-owned outer work survives",
+        "scoped Ruff and exact cumulative two-path diff checks passed",
+        "independent High final re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-ACCEPTED-DISPATCH-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-ACCEPTED-DISPATCH-CURRENT-ADOPTION.md"
     }
   ]
 }
