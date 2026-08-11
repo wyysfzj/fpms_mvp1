@@ -1679,13 +1679,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-FE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-EVIDENCE-REVIEW-FE-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-UI-20260712-01",
@@ -7032,6 +7029,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-021-FOURTH-OA-STATEMENT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-021-FOURTH-OA-STATEMENT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-REVIEW-FE-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "eabb08a954cb24200e800ba8090f4d157281d550"
+      ],
+      "paths": [
+        "frontend/src/api/documents.ts",
+        "frontend/src/api/documents.types.ts",
+        "frontend/src/api/contracts/v8_grant_evidence_review.contract.ts"
+      ],
+      "tree_sha256": "aad7acb21bd789a3013f5d5ce80281e4e2f014062479dd29c7eb5bb8af60de21",
+      "tests": [
+        "serialized frontend typecheck passed with no diagnostics",
+        "exact-file ESLint passed with zero warnings",
+        "exact diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-FE-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-FE-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
