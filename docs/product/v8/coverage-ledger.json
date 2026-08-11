@@ -2048,13 +2048,10 @@
     {
       "catalog_id": "FPMS-V8-OUT-019-SECOND-OA-STATEMENT-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OUT-019-SECOND-OA-STATEMENT-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OUT-020-THIRD-OA-STATEMENT-20260712-01",
@@ -6951,6 +6948,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-018-TIME-EXTENSION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-018-TIME-EXTENSION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OUT-019-SECOND-OA-STATEMENT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "155ef3acdf5a5dd090b6312eae47fcaf87e7a503"
+      ],
+      "paths": [
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_out_019_activation.py"
+      ],
+      "tree_sha256": "173359fff952ef88a5579fcd8944cbe4f9ea2a17220ba91b50f7c139542a83ff",
+      "tests": [
+        "focused serialized OUT-019 suite passed 1 test",
+        "forms 001-018 remain classified and forms 020-022 remain raw",
+        "scoped Ruff and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OUT-019-SECOND-OA-STATEMENT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OUT-019-SECOND-OA-STATEMENT-CURRENT-ADOPTION.md"
     }
   ]
 }
