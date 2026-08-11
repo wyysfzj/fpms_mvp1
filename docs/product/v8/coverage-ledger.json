@@ -7226,6 +7226,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-UI-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-UI-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "e7c60955b22b2621a51442aceb529b32d0ef122c"
+      ],
+      "paths": [
+        "docs/product/v8/coverage-ledger.json",
+        "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
+      ],
+      "tree_sha256": "6d39cfcc9f49630a25e377e5b9601ff90d812394ce68e91f796f6cee697930cd",
+      "tests": [
+        "exact residual blocker audit passed 20 = 11 payment + 8 service + 1 full",
+        "JSON, inventory and Foundation checks passed",
+        "exact diff check passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION-CURRENT-ADOPTION.md"
     }
   ]
 }
