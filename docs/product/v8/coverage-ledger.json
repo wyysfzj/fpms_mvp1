@@ -1687,13 +1687,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-UI-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-EVIDENCE-REVIEW-UI-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-APPLICATION-AUTO-DRAFT-POLICY-20260712-01",
@@ -7111,6 +7108,28 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-STAGED-TEST-SEEDER-SUCCESSOR-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-LEGACY-FORM-STAGED-TEST-SEEDER-SUCCESSOR-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-REVIEW-UI-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "926a0b181355cde0c926938c1e7d0457fe0fff0e"
+      ],
+      "paths": [
+        "frontend/src/modules/documents/components/GrantEvidenceReviewPanel.vue",
+        "frontend/src/modules/documents/pages/DocumentDetail.vue",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-grant-evidence-review-ui.spec.ts"
+      ],
+      "tree_sha256": "4b9170f41df8dac868ac02eb3144b00cd05b105d64bb9005a176fe8890439d9c",
+      "tests": [
+        "targeted Playwright grant review UI passed 1 test with one worker",
+        "serialized frontend typecheck passed with no diagnostics",
+        "exact-file ESLint and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-UI-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-UI-CURRENT-ADOPTION.md"
     }
   ]
 }
