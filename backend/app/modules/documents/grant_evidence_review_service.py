@@ -508,20 +508,23 @@ def review_grant_evidence_candidate(
             )
             if changed.rowcount != 1:
                 _conflict()
+            if (
+                command.decision is GrantEvidenceReviewDecision.APPROVED
+                and row.conflict_snapshot is None
+            ):
+                from app.modules.documents import evidence_policy
+
+                adapter = (
+                    evidence_policy.apply_grant_announcement_evidence
+                    if row.evidence_scope == "GRANT_ANNOUNCEMENT"
+                    else evidence_policy.apply_patent_register_evidence
+                )
+                adapter(
+                    row,
+                    review_role_config_id=roles.config_id,
+                    review_role_config_snapshot_hash=roles.config_snapshot_hash,
+                    transaction=transaction,
+                )
     except IntegrityError:
         _conflict()
-    if command.decision is GrantEvidenceReviewDecision.APPROVED and row.conflict_snapshot is None:
-        from app.modules.documents import evidence_policy
-
-        adapter = (
-            evidence_policy.apply_grant_announcement_evidence
-            if row.evidence_scope == "GRANT_ANNOUNCEMENT"
-            else evidence_policy.apply_patent_register_evidence
-        )
-        adapter(
-            row,
-            review_role_config_id=roles.config_id,
-            review_role_config_snapshot_hash=roles.config_snapshot_hash,
-            transaction=transaction,
-        )
     return _result(row, command, roles, GrantEvidenceReviewDisposition.CHANGED)

@@ -5,12 +5,21 @@ import json
 from datetime import datetime
 
 import pytest
+from sqlalchemy import func, select
 
 from app.core.errors import BusinessError
+from app.modules.auth.models import T_User
+from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.documents import evidence_policy
 from app.modules.documents import grant_evidence_review_service as service
-from app.modules.documents.models import GrantEvidenceCandidate
+from app.modules.documents.models import (
+    DocAttachment,
+    Document,
+    DocumentEvidenceVersion,
+    GrantEvidenceCandidate,
+)
 from app.modules.system.grant_manual_review_role_service import GrantManualReviewRoleResolution
+from app.modules.system.models import GrantEvidenceSourceConfig, GrantEvidenceSourceRecord
 
 IDS = {
     "candidate": "00000000-0000-0000-0000-000000000001",
@@ -159,6 +168,117 @@ def _arrange_review(transaction, monkeypatch, row, command, updates) -> None:
     monkeypatch.setattr(transaction, "execute", execute)
 
 
+def _persist_candidate(transaction, row: GrantEvidenceCandidate) -> None:
+    transaction.add_all(
+        (
+            T_User(
+                id=IDS["proposer"],
+                username="dispatch-proposer",
+                display_name="dispatch proposer",
+                password_hash="test-only",
+                is_active=True,
+            ),
+            T_User(
+                id=IDS["reviewer"],
+                username="dispatch-reviewer",
+                display_name="dispatch reviewer",
+                password_hash="test-only",
+                is_active=True,
+            ),
+        )
+    )
+    transaction.flush()
+    transaction.add(Case(id=IDS["case"], case_no="DISPATCH-ATOMICITY"))
+    transaction.flush()
+    transaction.add(Document(id=IDS["document"], case_id=IDS["case"]))
+    transaction.flush()
+    transaction.add(
+        DocAttachment(
+            id="00000000-0000-0000-0000-000000000017",
+            document_id=IDS["document"],
+            file_name="official.pdf",
+            file_path="/test/official.pdf",
+            content_hash="official-copy-hash",
+        )
+    )
+    transaction.flush()
+    transaction.add(
+        DocumentEvidenceVersion(
+            id=IDS["evidence"],
+            case_id=IDS["case"],
+            document_id=IDS["document"],
+            attachment_id="00000000-0000-0000-0000-000000000017",
+            lineage_key="grant-official-copy",
+            role="RAW_ATTACHMENT",
+            version_number=1,
+            state="FINAL",
+            creator_id=IDS["proposer"],
+            review_state="PENDING",
+            reviewer_id=None,
+            reviewed_at=None,
+            final_submitted_at=None,
+            content_hash="official-copy-hash",
+            current_identity_key=f"{IDS['case']}|grant-official-copy",
+        )
+    )
+    transaction.flush()
+    source_snapshot = _canonical({"source": "controlled"})
+    transaction.add(
+        GrantEvidenceSourceRecord(
+            id=IDS["source_record"],
+            source_authority="CNIPA",
+            source_code="DISPATCH-ATOMICITY",
+            source_version="v1",
+            evidence_scope=row.evidence_scope,
+            source_reference_kind="DATA",
+            source_reference_value="CNIPA controlled source",
+            acquisition_method="CONTROLLED_DOWNLOAD",
+            effective_from=ACQUIRED_AT,
+            effective_to=None,
+            source_snapshot=source_snapshot,
+            source_snapshot_hash=hashlib.sha256(source_snapshot.encode()).hexdigest(),
+            review_status="PENDING",
+            reviewed_by=None,
+            reviewed_at=None,
+            review_reason=None,
+            activation_status="INACTIVE",
+            activated_by=None,
+            activated_at=None,
+            supersedes_source_id=None,
+            current_identity_key=None,
+            idempotency_key="dispatch-source",
+            created_by=IDS["proposer"],
+            updated_by=IDS["proposer"],
+        )
+    )
+    transaction.flush()
+    config_snapshot = _canonical({"config": "controlled"})
+    transaction.add(
+        GrantEvidenceSourceConfig(
+            id=IDS["source_config"],
+            gate_code="DG-GRANT-EVIDENCE-SOURCE",
+            scope_key="GLOBAL",
+            evidence_scope=row.evidence_scope,
+            source_record_id=IDS["source_record"],
+            config_version="v1",
+            config_status="ACTIVE",
+            effective_from=ACQUIRED_AT,
+            effective_to=None,
+            selected_by=IDS["proposer"],
+            published_at=ACQUIRED_AT,
+            selection_reason="controlled test source",
+            supersedes_config_id=None,
+            config_snapshot=config_snapshot,
+            config_snapshot_hash=hashlib.sha256(config_snapshot.encode()).hexdigest(),
+            idempotency_key="dispatch-config",
+            current_identity_key=None,
+        )
+    )
+    transaction.flush()
+    transaction.add(row)
+    transaction.commit()
+
+
 @pytest.mark.parametrize(
     ("evidence_scope", "expected_adapter"),
     (
@@ -297,3 +417,70 @@ def test_review_conflict_fails_before_update_or_dispatch(session_factory, monkey
     )
     assert updates == []
     assert calls == []
+
+
+def test_adapter_conflict_rolls_back_review_savepoint_but_not_outer_transaction(
+    session_factory, monkeypatch
+) -> None:
+    row = _candidate("GRANT_ANNOUNCEMENT")
+    controlled_error = BusinessError(
+        "GRANT_ANNOUNCEMENT_EVIDENCE_CONFLICT",
+        "source unavailable",
+        status_code=409,
+    )
+    adapter_transactions: list[object] = []
+    outer_calls: list[str] = []
+    marker_id = "00000000-0000-0000-0000-000000000024"
+
+    def fail_adapter(_candidate, *, transaction, **_kwargs):
+        adapter_transactions.append(transaction)
+        raise controlled_error
+
+    monkeypatch.setattr(evidence_policy, "apply_grant_announcement_evidence", fail_adapter)
+    monkeypatch.setattr(service, "_review_authority", lambda *_args: ROLES)
+    with session_factory() as transaction:
+        _persist_candidate(transaction, row)
+        transaction.add(
+            T_User(
+                id=marker_id,
+                username="outer-marker",
+                display_name="outer marker",
+                password_hash="test-only",
+                is_active=True,
+            )
+        )
+        transaction.flush()
+        original_commit = transaction.commit
+        original_rollback = transaction.rollback
+
+        def commit() -> None:
+            outer_calls.append("commit")
+            original_commit()
+
+        def rollback() -> None:
+            outer_calls.append("rollback")
+            original_rollback()
+
+        monkeypatch.setattr(transaction, "commit", commit)
+        monkeypatch.setattr(transaction, "rollback", rollback)
+        with pytest.raises(BusinessError) as caught:
+            service.review_grant_evidence_candidate(
+                _command(decision=service.GrantEvidenceReviewDecision.APPROVED),
+                transaction,
+            )
+        assert caught.value is controlled_error
+        assert adapter_transactions == [transaction]
+        assert outer_calls == []
+        transaction.commit()
+        assert outer_calls == ["commit"]
+
+    with session_factory() as transaction:
+        persisted = transaction.get(GrantEvidenceCandidate, IDS["candidate"])
+        assert (
+            persisted.review_status,
+            persisted.reviewer_id,
+            persisted.reviewed_at,
+            persisted.review_reason,
+        ) == ("PENDING", None, None, None)
+        assert transaction.get(T_User, marker_id) is not None
+        assert transaction.scalar(select(func.count()).select_from(CaseActivityEvent)) == 0
