@@ -970,7 +970,8 @@ def require_noncopyable_oa_appendix_derivation(
         or full_reply_pdf.document_id == extracted_appendix.document_id
         or derivation.parent_evidence_version_id != full_reply_pdf.id
         or derivation.child_evidence_version_id != extracted_appendix.id
-        or derivation.derivation_type != EvidenceDerivationType.COMPONENT_EXTRACTION.value
+        or derivation.derivation_type
+        != EvidenceDerivationType.COMPONENT_EXTRACTION.value
         or derivation.source_snapshot != _OA_APPENDIX_SOURCE_SNAPSHOT
     ):
         _raise_noncopyable(NoncopyableOaAppendixErrorCode.DERIVATION_MISMATCH)
