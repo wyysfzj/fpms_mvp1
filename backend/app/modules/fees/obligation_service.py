@@ -2360,6 +2360,8 @@ def _future_annuity_exception_source_graph_or_fail(
         or task.source_document_id != header.source_document_id
         or task.source_evidence_version_id is None
         or task.source_evidence_content_hash is None
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", task.source_evidence_content_hash)
+        is None
         or task.grant_fee_year_key is None
         or task.grant_fee_year_key != task.year_no
         or task.due_date != header.due_date

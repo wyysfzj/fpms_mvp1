@@ -3185,10 +3185,6 @@ def _validate_annuity_instruction_lineage(
     evidence_link = evidence_links[0]
     detail = None
     if canonical_recognition:
-        try:
-            detail = get_fee_obligation(obligation.id, transaction)
-        except BusinessError:
-            _annuity_instruction_conflict("年费任务费用义务识别活动无效")
         recognitions: list[CaseActivityEvent] = []
         for candidate in transaction.scalars(
             select(CaseActivityEvent).where(
@@ -3208,6 +3204,14 @@ def _validate_annuity_instruction_lineage(
                 _annuity_instruction_conflict("年费任务费用义务识别活动无效")
             if payload.get("obligation_id") == obligation.id:
                 recognitions.append(candidate)
+        if not recognitions:
+            _annuity_instruction_not_found("年费任务费用义务识别活动不存在")
+        if len(recognitions) != 1:
+            _annuity_instruction_conflict("年费任务费用义务识别活动不唯一")
+        try:
+            detail = get_fee_obligation(obligation.id, transaction)
+        except BusinessError:
+            _annuity_instruction_conflict("年费任务费用义务识别活动无效")
     else:
         expected_recognition_payload = json.dumps(
             {
@@ -3227,8 +3231,8 @@ def _validate_annuity_instruction_lineage(
                 )
             )
         )
-    if len(recognitions) != 1:
-        _annuity_instruction_not_found("年费任务费用义务识别活动不存在或不唯一")
+        if len(recognitions) != 1:
+            _annuity_instruction_not_found("年费任务费用义务识别活动不存在或不唯一")
     recognition = recognitions[0]
     if (
         (
