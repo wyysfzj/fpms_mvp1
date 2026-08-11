@@ -299,7 +299,7 @@ def test_unknown_candidate_uses_real_service_not_found_envelope(session_factory)
         assert response.json() == {
             "error": {
                 "code": "GRANT_EVIDENCE_REVIEW_NOT_FOUND",
-                "message": "Grant evidence review candidate not found",
+                "message": "未找到授权证据复核候选记录",
                 "details": None,
             }
         }

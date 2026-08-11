@@ -113,7 +113,7 @@ def _conflict() -> None:
 def _not_found() -> None:
     raise_business_error(
         "GRANT_EVIDENCE_REVIEW_NOT_FOUND",
-        "Grant evidence review candidate not found",
+        "未找到授权证据复核候选记录",
         status_code=404,
     )
 
