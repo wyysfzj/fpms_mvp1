@@ -6,8 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from app.modules.documents.models import DocTemplate
+from app.modules.documents.official_notice_catalog import (
+    seed_official_letter_out_form_019_catalog as seed_doc_templates,
+)
 from app.modules.documents.semantics import resolve_document_semantics
-from scripts.seed_dev import seed_doc_templates
 
 DECISION_SOURCE = "docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt"
 DECISION_VERSION = "customer-decision:2026-08-10:v8-full-batch-scheme-a:v1"
@@ -32,6 +34,7 @@ def test_seed_classifies_only_form_019_as_internal_reference_material(
 ) -> None:
     with session_factory() as transaction:
         seed_doc_templates(transaction)
+        transaction.flush()
         rows = _rows(transaction)
         assert len(rows) == 22
 
@@ -71,4 +74,5 @@ def test_seed_classifies_only_form_019_as_internal_reference_material(
 
         before = tuple(item.input_fields for item in rows)
         seed_doc_templates(transaction)
+        transaction.flush()
         assert tuple(item.input_fields for item in _rows(transaction)) == before

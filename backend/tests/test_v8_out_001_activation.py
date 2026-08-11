@@ -6,8 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from app.modules.documents.models import DocTemplate
+from app.modules.documents.official_notice_catalog import (
+    seed_official_letter_out_form_001_catalog as seed_doc_templates,
+)
 from app.modules.documents.semantics import resolve_document_semantics
-from scripts.seed_dev import seed_doc_templates
 
 FORM_001_DECISION_SOURCE = (
     "docs/product/v8/customer-decisions/2026-08-10-v8-full-batch-scheme-a.txt"
@@ -21,6 +23,7 @@ def test_seed_applies_only_form_001_internal_only_classification(
 ) -> None:
     with session_factory() as transaction:
         seed_doc_templates(transaction)
+        transaction.flush()
 
         rows = (
             transaction.execute(
@@ -63,6 +66,7 @@ def test_seed_applies_only_form_001_internal_only_classification(
 
         first_payload = form_001.input_fields
         seed_doc_templates(transaction)
+        transaction.flush()
         rerun = transaction.execute(
             select(DocTemplate).where(DocTemplate.code == "OFFICIAL_LETTER_OUT_001")
         ).scalar_one()
