@@ -427,6 +427,25 @@ def test_exact_terminal_replay_reuses_but_changed_repeat_conflicts(
         )
 
 
+def test_missing_candidate_is_typed_not_found_without_write(session_factory) -> None:
+    with session_factory() as transaction:
+        command = service.ReviewGrantEvidenceCandidateCommand(
+            candidate_id=str(uuid4()),
+            decision=service.GrantEvidenceReviewDecision.REJECTED,
+            reviewer_id=str(uuid4()),
+            reviewed_at=REVIEWED_AT,
+            reason="missing candidate",
+        )
+        _assert_error(
+            lambda: service.review_grant_evidence_candidate(command, transaction),
+            code="GRANT_EVIDENCE_REVIEW_NOT_FOUND",
+            status=404,
+        )
+        assert not transaction.new
+        assert not transaction.dirty
+        assert not transaction.deleted
+
+
 def test_self_unbound_and_inactive_reviewers_fail_without_write(
     session_factory, monkeypatch
 ) -> None:

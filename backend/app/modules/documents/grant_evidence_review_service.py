@@ -110,6 +110,14 @@ def _conflict() -> None:
     )
 
 
+def _not_found() -> None:
+    raise_business_error(
+        "GRANT_EVIDENCE_REVIEW_NOT_FOUND",
+        "Grant evidence review candidate not found",
+        status_code=404,
+    )
+
+
 def _uuid(value: object, field: str, *, input_error: bool = True) -> str:
     if type(value) is not str:
         _invalid(field) if input_error else _conflict()
@@ -471,7 +479,7 @@ def review_grant_evidence_candidate(
     with transaction.no_autoflush:
         row = transaction.get(GrantEvidenceCandidate, command.candidate_id)
         if row is None:
-            _conflict()
+            _not_found()
         _validate_candidate(row)
         if command.reviewed_at < row.proposed_at or command.reviewer_id == row.proposed_by:
             _conflict()

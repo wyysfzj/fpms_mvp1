@@ -285,6 +285,26 @@ def test_service_errors_preserve_status_envelope_and_rollback(
     assert (session.commit_calls, session.rollback_calls) == (0, 1)
 
 
+def test_unknown_candidate_uses_real_service_not_found_envelope(session_factory) -> None:
+    with session_factory() as transaction:
+        app = create_app()
+        app.dependency_overrides[get_db] = lambda: transaction
+        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=REVIEWER_ID)
+        app.dependency_overrides[_permission_dependency()] = lambda: None
+        response = TestClient(app).post(
+            f"/api/v1/documents/grant-evidence-candidates/{CANDIDATE_ID}/review",
+            json=_body(),
+        )
+        assert response.status_code == 404
+        assert response.json() == {
+            "error": {
+                "code": "GRANT_EVIDENCE_REVIEW_NOT_FOUND",
+                "message": "Grant evidence review candidate not found",
+                "details": None,
+            }
+        }
+
+
 def test_auth_permission_and_commit_failures_are_fail_closed(monkeypatch) -> None:
     calls: list[object] = []
 
