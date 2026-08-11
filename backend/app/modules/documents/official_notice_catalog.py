@@ -352,6 +352,10 @@ OFFICIAL_LETTER_OUT_FORM_013_CLASSIFICATIONS = {
     **OFFICIAL_LETTER_OUT_FORM_012_CLASSIFICATIONS,
     "纸件申请转电子申请请求书": ("form-013", "INTERNAL_ONLY"),
 }
+OFFICIAL_LETTER_OUT_FORM_014_CLASSIFICATIONS = {
+    **OFFICIAL_LETTER_OUT_FORM_013_CLASSIFICATIONS,
+    "费用减缓请求书": ("form-014", "INTERNAL_ONLY"),
+}
 
 
 def _official_letter_out_input_fields(
@@ -506,4 +510,11 @@ def seed_official_letter_out_form_013_catalog(db: Session) -> int:
     return _seed_official_letter_out_catalog(
         db,
         OFFICIAL_LETTER_OUT_FORM_013_CLASSIFICATIONS,
+    )
+
+
+def seed_official_letter_out_form_014_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(
+        db,
+        OFFICIAL_LETTER_OUT_FORM_014_CLASSIFICATIONS,
     )
