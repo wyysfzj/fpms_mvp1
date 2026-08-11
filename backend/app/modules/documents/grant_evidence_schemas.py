@@ -5,6 +5,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.modules.documents.grant_evidence_review_service import (
+    GrantEvidenceReviewDecision,
+    GrantEvidenceReviewDisposition,
+)
 from app.modules.system.grant_evidence_source_service import GrantEvidenceScope
 
 
@@ -89,6 +93,32 @@ class GrantEvidenceCandidateOut(BaseModel):
     candidate_snapshot_hash: str
     review_status: str
     disposition: str
+
+
+class GrantEvidenceReviewIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: GrantEvidenceReviewDecision
+    reason: str = Field(max_length=4096)
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        return _exact_text(value)
+
+
+class GrantEvidenceReviewOut(BaseModel):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    candidate_id: str
+    evidence_version_id: str
+    review_status: str
+    reviewer_id: str
+    reviewed_at: datetime
+    candidate_snapshot_hash: str
+    review_role_config_id: str
+    review_role_config_snapshot_hash: str
+    disposition: GrantEvidenceReviewDisposition
 
 
 class GrantEvidenceFactOut(BaseModel):

@@ -48,10 +48,16 @@ from app.modules.documents.grant_evidence_ingestion_service import (
     ingest_grant_evidence_candidate,
     list_grant_evidence_candidates,
 )
+from app.modules.documents.grant_evidence_review_service import (
+    ReviewGrantEvidenceCandidateCommand,
+    review_grant_evidence_candidate,
+)
 from app.modules.documents.grant_evidence_schemas import (
     GrantEvidenceCandidateIn,
     GrantEvidenceCandidateOut,
     GrantEvidenceCandidateReadOut,
+    GrantEvidenceReviewIn,
+    GrantEvidenceReviewOut,
 )
 from app.modules.documents.grant_official_copy_verification_schemas import (
     GrantOfficialCopyEventIn,
@@ -251,6 +257,37 @@ def get_grant_evidence_candidates(
         GrantEvidenceCandidateReadOut.model_validate(result, from_attributes=True)
         for result in results
     ]
+
+
+@router.post(
+    "/documents/grant-evidence-candidates/{candidate_id}/review",
+    status_code=status.HTTP_200_OK,
+    response_model=GrantEvidenceReviewOut,
+)
+def review_grant_evidence_candidate_endpoint(
+    candidate_id: UUID,
+    payload: GrantEvidenceReviewIn,
+    _perm: None = Depends(require_perm("Doc.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> GrantEvidenceReviewOut:
+    try:
+        result = review_grant_evidence_candidate(
+            ReviewGrantEvidenceCandidateCommand(
+                candidate_id=str(candidate_id),
+                decision=payload.decision,
+                reviewer_id=current_user.id,
+                reviewed_at=_utc_now(),
+                reason=payload.reason,
+            ),
+            db,
+        )
+        output = GrantEvidenceReviewOut.model_validate(result, from_attributes=True)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return output
 
 
 @router.post(
