@@ -1726,13 +1726,10 @@
     {
       "catalog_id": "FPMS-V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-ADAPTER-20260712-01",
@@ -6689,6 +6686,32 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-EXCEPTION-AUTHORITY-SERVICE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-EXCEPTION-AUTHORITY-SERVICE-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "4d71dbf232b2ef26a8a967582778a0e2849cc0c4",
+        "3133d602059f2d0a9225c69af7b493b73abd44f5",
+        "77e32f559486e09e371d31cee1a8ff4453246c50"
+      ],
+      "paths": [
+        "backend/app/modules/annuity/service.py",
+        "backend/app/modules/fees/obligation_contracts.py",
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/tests/test_v8_future_annuity_auto_draft_policy.py",
+        "backend/tests/test_v8_fee_obligation_contracts.py"
+      ],
+      "tree_sha256": "96619820fdce09d753796bb0a47295b90bc2c89dcef27c16426bc2a9a7179da6",
+      "tests": [
+        "focused future-annuity policy and contract suites passed 27 tests",
+        "specified affected regression tranche passed 150 tests",
+        "scoped Ruff and both exact range diff checks passed",
+        "independent High final review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FUTURE-ANNUITY-AUTO-DRAFT-POLICY-CURRENT-ADOPTION.md"
     }
   ]
 }
