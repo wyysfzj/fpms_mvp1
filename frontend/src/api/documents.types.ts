@@ -231,6 +231,59 @@ export interface DocumentEvidenceReviewPayload {
     idempotency_key: string
 }
 
+export interface GrantEvidenceFact {
+    name: string
+    raw_value: string
+}
+
+export interface GrantEvidenceConflict {
+    name: string
+    raw_values: string[]
+}
+
+export interface GrantEvidenceCandidate {
+    candidate_id: string
+    case_id: string
+    document_id: string
+    evidence_version_id: string
+    terminal_event_id: string
+    source_config_id: string
+    source_record_id: string
+    source_version: string
+    original_reference: string
+    acquisition_method: string
+    acquired_at: string
+    evidence_scope: 'GRANT_ANNOUNCEMENT' | 'PATENT_REGISTER'
+    proposal_role_config_id: string
+    proposed_by: string
+    proposed_at: string
+    review_status: 'PENDING' | 'APPROVED' | 'REJECTED'
+    reviewer_id: string | null
+    reviewed_at: string | null
+    review_reason: string | null
+    acquisition_snapshot_hash: string
+    candidate_snapshot_hash: string
+    facts: GrantEvidenceFact[]
+    conflicts: GrantEvidenceConflict[]
+}
+
+export interface GrantEvidenceReviewPayload {
+    decision: 'APPROVE' | 'REJECT'
+    reason: string
+}
+
+export interface GrantEvidenceReviewResult {
+    candidate_id: string
+    evidence_version_id: string
+    review_status: 'APPROVED' | 'REJECTED'
+    reviewer_id: string
+    reviewed_at: string
+    candidate_snapshot_hash: string
+    review_role_config_id: string
+    review_role_config_snapshot_hash: string
+    disposition: 'CHANGED' | 'REUSED'
+}
+
 export interface AttachmentUploadMetadata {
     official_file_role?: string | null
     source_role_alias?: string | null

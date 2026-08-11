@@ -30,6 +30,9 @@ import type {
     DocumentWizardTaskPreviewResult,
     DocumentWizardStep1State,
     DocumentWizardState,
+    GrantEvidenceCandidate,
+    GrantEvidenceReviewPayload,
+    GrantEvidenceReviewResult,
 } from './documents.types'
 
 interface BackendAttachment {
@@ -447,6 +450,29 @@ export async function reviewDocumentEvidence(
         is_current: attachment.is_current,
         is_final: attachment.is_final,
     }
+}
+
+export async function listGrantEvidenceCandidates(
+    documentId: string
+): Promise<GrantEvidenceCandidate[]> {
+    const response = await http.get<GrantEvidenceCandidate[]>(
+        `/documents/${documentId}/grant-evidence-candidates`
+    )
+    return response.data
+}
+
+export async function reviewGrantEvidence(
+    candidateId: string,
+    payload: GrantEvidenceReviewPayload
+): Promise<GrantEvidenceReviewResult> {
+    const response = await http.post<GrantEvidenceReviewResult>(
+        `/documents/grant-evidence-candidates/${candidateId}/review`,
+        {
+            decision: payload.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+            reason: payload.reason,
+        }
+    )
+    return response.data
 }
 
 /**
