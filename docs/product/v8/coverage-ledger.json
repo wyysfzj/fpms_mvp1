@@ -1974,13 +1974,10 @@
     {
       "catalog_id": "FPMS-V8-OUT-009-VOLUNTARY-RECTIFICATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OUT-009-VOLUNTARY-RECTIFICATION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OUT-010-RIGHT-RESTORATION-20260712-01",
@@ -6730,6 +6727,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-008-REEXAMINATION-REQUEST-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-008-REEXAMINATION-REQUEST-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OUT-009-VOLUNTARY-RECTIFICATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "2b50e66c7be52767d0b492ccd14432e66eae2cad"
+      ],
+      "paths": [
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_out_009_activation.py"
+      ],
+      "tree_sha256": "bc95055139f939b03d7ac323ea41ec2b9302b9664b7303d09e40da93845d506a",
+      "tests": [
+        "focused serialized OUT-009 suite passed 1 test",
+        "scoped Ruff and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OUT-009-VOLUNTARY-RECTIFICATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OUT-009-VOLUNTARY-RECTIFICATION-CURRENT-ADOPTION.md"
     }
   ]
 }
