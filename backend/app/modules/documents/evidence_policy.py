@@ -415,6 +415,45 @@ def apply_patent_register_evidence(
         )
     except BusinessError:
         _patent_register_conflict()
+    if register_status == "PATENT_INVALIDATED":
+        _patent_register_conflict()
+    specific_event = {
+        "PATENT_TERMINATED": (
+            "PATENT_TERMINATION_CONFIRMED",
+            "patent-termination:",
+        ),
+        "PATENT_EXPIRED": (
+            "PATENT_EXPIRY_CONFIRMED",
+            "patent-expiry:",
+        ),
+    }.get(register_status)
+    if specific_event is not None:
+        event_type, idempotency_prefix = specific_event
+        return apply_lifecycle_event(
+            LifecycleEventCommand(
+                case_id=candidate.case_id,
+                event_type=event_type,
+                lane=ActivityLane.LIFECYCLE,
+                effective_at=effective_at,
+                occurred_at=candidate.reviewed_at,
+                evidence_refs=(
+                    EvidenceReference(
+                        case_id=candidate.case_id,
+                        evidence_kind="PATENT_REGISTER_STATUS_EVIDENCE",
+                        object_type="DocumentEvidenceVersion",
+                        object_id=candidate.evidence_version_id,
+                        content_hash=evidence_hash,
+                        captured_at=effective_at,
+                    ),
+                ),
+                actor_id=candidate.proposed_by,
+                reviewer_id=candidate.reviewer_id,
+                idempotency_key=f"{idempotency_prefix}{candidate.id}",
+                confirmation_status=ConfirmationStatus.CONFIRMED,
+                payload={},
+            ),
+            transaction,
+        )
     status_snapshot = json.dumps(
         {
             "schema": "FPMS_PATENT_REGISTER_STATUS_SOURCE_V1",

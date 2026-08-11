@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -183,15 +184,16 @@ def _assert_conflict(call) -> None:
     )
 
 
-@pytest.mark.parametrize("register_status", ("PATENT_IN_FORCE", "PATENT_TERMINATED"))
-def test_approved_register_candidate_maps_once_to_generic_register_event(
-    session_factory, monkeypatch, register_status
+def test_in_force_register_candidate_maps_once_to_generic_register_event(
+    session_factory, monkeypatch
 ) -> None:
     captured: list[object] = []
     _arrange(monkeypatch, captured)
+    row = _candidate()
+    review_state = (row.review_status, row.reviewer_id, row.reviewed_at)
     with session_factory() as transaction:
         result = adapter.apply_patent_register_evidence(
-            _candidate(register_status=register_status),
+            row,
             review_role_config_id=IDS["review_role_config"],
             review_role_config_snapshot_hash=HASHES[7],
             transaction=transaction,
@@ -210,7 +212,8 @@ def test_approved_register_candidate_maps_once_to_generic_register_event(
     assert command.supersedes_event_id is None
     assert command.evidence_refs[0].object_id == IDS["evidence"]
     assert command.evidence_refs[0].content_hash == EVIDENCE_HASH
-    assert command.payload["register_status"] == register_status
+    assert command.evidence_refs[0].evidence_kind == "DOCUMENT_EVIDENCE_VERSION"
+    assert command.payload["register_status"] == "PATENT_IN_FORCE"
     assert command.payload["source_provenance_id"] == IDS["candidate"]
     assert command.payload["predecessor_status_snapshot_hash"] is None
     assert command.payload["supersedes_activity_id"] is None
@@ -218,6 +221,66 @@ def test_approved_register_candidate_maps_once_to_generic_register_event(
         command.payload["status_snapshot_hash"]
         == hashlib.sha256(command.payload["status_snapshot"].encode()).hexdigest()
     )
+    assert (row.review_status, row.reviewer_id, row.reviewed_at) == review_state
+
+
+@pytest.mark.parametrize(
+    ("register_status", "event_type", "idempotency_prefix"),
+    (
+        ("PATENT_TERMINATED", "PATENT_TERMINATION_CONFIRMED", "patent-termination:"),
+        ("PATENT_EXPIRED", "PATENT_EXPIRY_CONFIRMED", "patent-expiry:"),
+    ),
+)
+def test_terminal_register_candidate_maps_once_to_specific_status_change_event(
+    session_factory,
+    monkeypatch,
+    register_status,
+    event_type,
+    idempotency_prefix,
+) -> None:
+    captured: list[object] = []
+    _arrange(monkeypatch, captured)
+    with session_factory() as transaction:
+        result = adapter.apply_patent_register_evidence(
+            _candidate(register_status=register_status),
+            review_role_config_id=IDS["review_role_config"],
+            review_role_config_snapshot_hash=HASHES[7],
+            transaction=transaction,
+        )
+    assert result == "transition"
+    assert len(captured) == 1
+    command = captured[0]
+    assert command.event_type == event_type
+    assert command.lane is ActivityLane.LIFECYCLE
+    assert command.confirmation_status is ConfirmationStatus.CONFIRMED
+    assert command.effective_at == OBSERVED_AT
+    assert command.occurred_at == REVIEWED_AT
+    assert command.actor_id == IDS["proposer"]
+    assert command.reviewer_id == IDS["reviewer"]
+    assert command.idempotency_key == f"{idempotency_prefix}{IDS['candidate']}"
+    assert command.payload == {}
+    assert command.supersedes_event_id is None
+    assert len(command.evidence_refs) == 1
+    assert command.evidence_refs[0].evidence_kind == "PATENT_REGISTER_STATUS_EVIDENCE"
+    assert command.evidence_refs[0].object_id == IDS["evidence"]
+    assert command.evidence_refs[0].content_hash == EVIDENCE_HASH
+
+
+def test_invalidated_register_candidate_without_effective_decision_fails_before_dispatch(
+    session_factory, monkeypatch
+) -> None:
+    captured: list[object] = []
+    _arrange(monkeypatch, captured)
+    with session_factory() as transaction:
+        _assert_conflict(
+            lambda: adapter.apply_patent_register_evidence(
+                _candidate(register_status="PATENT_INVALIDATED"),
+                review_role_config_id=IDS["review_role_config"],
+                review_role_config_snapshot_hash=HASHES[7],
+                transaction=transaction,
+            )
+        )
+    assert captured == []
 
 
 @pytest.mark.parametrize(
@@ -240,6 +303,52 @@ def test_invalid_or_unaccepted_candidate_fails_before_dispatch(
         _assert_conflict(
             lambda: adapter.apply_patent_register_evidence(
                 row,
+                review_role_config_id=IDS["review_role_config"],
+                review_role_config_snapshot_hash=HASHES[7],
+                transaction=transaction,
+            )
+        )
+    assert captured == []
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        "source_absent",
+        "source_revoked",
+        "source_future",
+        "source_scope_mismatch",
+        "role_absent",
+        "role_revoked",
+        "role_future",
+    ),
+)
+def test_unavailable_or_mismatched_authority_fails_before_dispatch(
+    session_factory, monkeypatch, failure
+) -> None:
+    captured: list[object] = []
+    _arrange(monkeypatch, captured)
+
+    def unavailable(*_args):
+        raise BusinessError(failure.upper(), "authority unavailable", status_code=409)
+
+    if failure == "source_scope_mismatch":
+        monkeypatch.setattr(
+            adapter,
+            "resolve_grant_evidence_source",
+            lambda *_args: replace(
+                _source_resolution(),
+                evidence_scope=GrantEvidenceScope.GRANT_ANNOUNCEMENT,
+            ),
+        )
+    elif failure.startswith("source_"):
+        monkeypatch.setattr(adapter, "resolve_grant_evidence_source", unavailable)
+    else:
+        monkeypatch.setattr(adapter, "resolve_grant_manual_review_role_config", unavailable)
+    with session_factory() as transaction:
+        _assert_conflict(
+            lambda: adapter.apply_patent_register_evidence(
+                _candidate(),
                 review_role_config_id=IDS["review_role_config"],
                 review_role_config_snapshot_hash=HASHES[7],
                 transaction=transaction,
