@@ -1655,13 +1655,10 @@
     {
       "catalog_id": "FPMS-V8-PATENT-REGISTER-EVIDENCE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-PATENT-REGISTER-EVIDENCE-ADAPTER-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-ACCEPTED-DISPATCH-ADAPTER-20260712-01",
@@ -6766,6 +6763,29 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-010-RIGHT-RESTORATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-010-RIGHT-RESTORATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-PATENT-REGISTER-EVIDENCE-ADAPTER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "5cc1127c047e182845e941c02eae2483c05a0184",
+        "ae2869851184b98c711de4fe44f73947c9cb9bcb",
+        "69b61a0a72d8109da2ed5b6f042f5a4d0ac3fb8b"
+      ],
+      "paths": [
+        "backend/app/modules/documents/evidence_policy.py",
+        "backend/tests/test_v8_patent_register_evidence_adapter.py"
+      ],
+      "tree_sha256": "5aa899afddfd5f464635998e851517337a4aacb29170d36f69d2c3c17ee03f75",
+      "tests": [
+        "focused patent-register adapter and direct-status regression suites passed 18 tests",
+        "source and role authority absence, revocation, future activation and scope mismatch fail 409 with zero dispatch",
+        "scoped Ruff and exact cumulative two-path diff checks passed",
+        "independent High final re-review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-PATENT-REGISTER-EVIDENCE-ADAPTER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-PATENT-REGISTER-EVIDENCE-ADAPTER-CURRENT-ADOPTION.md"
     }
   ]
 }
