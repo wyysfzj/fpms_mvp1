@@ -1402,8 +1402,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1413,8 +1418,12 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
+        "missing": [
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1600,8 +1609,17 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identities": [
+          "DG-PAYMENT-WORKBOOK:GLOBAL",
+          "DG-SERVICE-RATE-VERSION:GLOBAL"
+        ],
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF",
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1723,8 +1741,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1734,8 +1757,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1745,8 +1773,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1756,8 +1789,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1767,8 +1805,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1778,8 +1821,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1789,8 +1837,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1800,8 +1853,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1811,8 +1869,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1822,8 +1885,12 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
+        "missing": [
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1833,8 +1900,12 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
+        "missing": [
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1844,8 +1915,12 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
+        "missing": [
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1855,8 +1930,12 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
+        "missing": [
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1866,8 +1945,12 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
+        "missing": [
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1877,8 +1960,12 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
+        "missing": [
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -1888,8 +1975,12 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
+        "missing": [
+          "APPROVED_COMPLETE_PRICE_VERSION"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
@@ -2283,8 +2374,13 @@
       "story_id": null,
       "successor_story_id": null,
       "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
+        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
+        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
+        "missing": [
+          "CLEAN_CURRENT_WORKBOOK",
+          "CONTROLLED_UPLOAD_PROOF"
+        ],
+        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
       }
     },
     {
