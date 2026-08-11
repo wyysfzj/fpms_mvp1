@@ -336,6 +336,10 @@ OFFICIAL_LETTER_OUT_FORM_009_CLASSIFICATIONS = {
     **OFFICIAL_LETTER_OUT_FORM_008_CLASSIFICATIONS,
     "主动补正": ("form-009", "INTERNAL_ONLY"),
 }
+OFFICIAL_LETTER_OUT_FORM_010_CLASSIFICATIONS = {
+    **OFFICIAL_LETTER_OUT_FORM_009_CLASSIFICATIONS,
+    "恢复权利请求": ("form-010", "INTERNAL_ONLY"),
+}
 
 
 def _official_letter_out_input_fields(
@@ -462,4 +466,11 @@ def seed_official_letter_out_form_009_catalog(db: Session) -> int:
     return _seed_official_letter_out_catalog(
         db,
         OFFICIAL_LETTER_OUT_FORM_009_CLASSIFICATIONS,
+    )
+
+
+def seed_official_letter_out_form_010_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(
+        db,
+        OFFICIAL_LETTER_OUT_FORM_010_CLASSIFICATIONS,
     )
