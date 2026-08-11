@@ -389,6 +389,11 @@ OFFICIAL_LETTER_OUT_FORM_021_CLASSIFICATIONS = {
     "四通意见陈述": ("form-021", "INTERNAL_ONLY"),
 }
 
+OFFICIAL_LETTER_OUT_FORM_022_CLASSIFICATIONS = {
+    **OFFICIAL_LETTER_OUT_FORM_021_CLASSIFICATIONS,
+    "办理文件副本请求书": ("form-022", "INTERNAL_ONLY"),
+}
+
 
 def _official_letter_out_input_fields(
     name: str,
@@ -598,4 +603,11 @@ def seed_official_letter_out_form_021_catalog(db: Session) -> int:
     return _seed_official_letter_out_catalog(
         db,
         OFFICIAL_LETTER_OUT_FORM_021_CLASSIFICATIONS,
+    )
+
+
+def seed_official_letter_out_form_022_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(
+        db,
+        OFFICIAL_LETTER_OUT_FORM_022_CLASSIFICATIONS,
     )
