@@ -60,6 +60,7 @@ __all__ = (
     "NoncopyableOaAppendixErrorCode",
     "NoncopyableOaAppendixPolicyError",
     "apply_grant_announcement_evidence",
+    "apply_patent_register_evidence",
     "is_filing_full_word_ready",
     "require_copyable_oa_attachment_combination",
     "require_filing_xml_reviewed_word_source",
@@ -86,6 +87,14 @@ def _grant_announcement_conflict() -> None:
     raise_business_error(
         "GRANT_ANNOUNCEMENT_EVIDENCE_CONFLICT",
         "Grant announcement evidence conflict",
+        status_code=409,
+    )
+
+
+def _patent_register_conflict() -> None:
+    raise_business_error(
+        "PATENT_REGISTER_EVIDENCE_CONFLICT",
+        "Patent register evidence conflict",
         status_code=409,
     )
 
@@ -157,11 +166,13 @@ def _grant_authority(
     review_role_config_id: str,
     review_role_config_snapshot_hash: str,
     transaction: Session,
+    *,
+    evidence_scope: GrantEvidenceScope = GrantEvidenceScope.GRANT_ANNOUNCEMENT,
 ) -> None:
     try:
         source = resolve_grant_evidence_source(
             ResolveGrantEvidenceSourceCommand(
-                evidence_scope=GrantEvidenceScope.GRANT_ANNOUNCEMENT,
+                evidence_scope=evidence_scope,
                 as_of=candidate.reviewed_at,
             ),
             transaction,
@@ -181,7 +192,7 @@ def _grant_authority(
         or source.config_id != candidate.source_config_id
         or source.config_snapshot_hash != acquisition["source_config_snapshot_hash"]
         or source.source_record_id != candidate.source_record_id
-        or source.evidence_scope is not GrantEvidenceScope.GRANT_ANNOUNCEMENT
+        or source.evidence_scope is not evidence_scope
         or source.source_version != candidate.source_version_snapshot
         or source.source_snapshot_hash != acquisition["source_snapshot_hash"]
         or source.source_reference_value != candidate.original_reference
@@ -318,6 +329,139 @@ def apply_grant_announcement_evidence(
                 "source_snapshot": source_snapshot,
                 "source_snapshot_hash": hashlib.sha256(source_snapshot.encode()).hexdigest(),
                 "predecessor_source_snapshot_hash": None,
+                "supersedes_activity_id": None,
+            },
+        ),
+        transaction,
+    )
+
+
+def apply_patent_register_evidence(
+    candidate: GrantEvidenceCandidate,
+    *,
+    review_role_config_id: str,
+    review_role_config_snapshot_hash: str,
+    transaction: Session,
+) -> LifecycleTransitionResult:
+    if type(candidate) is not GrantEvidenceCandidate or not isinstance(transaction, Session):
+        _patent_register_conflict()
+    try:
+        _grant_uuid(review_role_config_id)
+        _grant_hash(review_role_config_snapshot_hash)
+        grant_review._validate_candidate(candidate)
+        candidate_payload = _grant_payload(
+            candidate.candidate_snapshot,
+            candidate.candidate_snapshot_hash,
+        )
+        acquisition = _grant_payload(
+            candidate.acquisition_snapshot,
+            candidate.acquisition_snapshot_hash,
+        )
+    except BusinessError:
+        _patent_register_conflict()
+    if (
+        candidate.evidence_scope != GrantEvidenceScope.PATENT_REGISTER.value
+        or candidate.review_status != "APPROVED"
+        or candidate.reviewer_id == candidate.proposed_by
+        or type(candidate.reviewed_at) is not datetime
+        or candidate.reviewed_at.utcoffset() is not None
+        or candidate.conflict_snapshot is not None
+    ):
+        _patent_register_conflict()
+    facts = candidate_payload.get("facts")
+    if (
+        type(facts) is not list
+        or len(facts) != 2
+        or any(type(fact) is not dict for fact in facts)
+        or any(set(fact) != {"name", "raw_value"} for fact in facts)
+        or [fact["name"] for fact in facts] != ["observed_at", "register_status"]
+        or candidate_payload.get("conflicts") != []
+    ):
+        _patent_register_conflict()
+    observed_at = facts[0]["raw_value"]
+    register_status = facts[1]["raw_value"]
+    if type(observed_at) is not str or type(register_status) is not str:
+        _patent_register_conflict()
+    try:
+        effective_at = datetime.fromisoformat(observed_at)
+    except ValueError:
+        _patent_register_conflict()
+    if (
+        effective_at.utcoffset() is not None
+        or effective_at.isoformat(timespec="microseconds") != observed_at
+        or register_status
+        not in {
+            "PATENT_IN_FORCE",
+            "PATENT_TERMINATED",
+            "PATENT_EXPIRED",
+            "PATENT_INVALIDATED",
+        }
+    ):
+        _patent_register_conflict()
+    evidence_hash = acquisition.get("evidence_content_hash")
+    if (
+        type(evidence_hash) is not str
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", evidence_hash) is None
+    ):
+        _patent_register_conflict()
+    try:
+        _grant_authority(
+            candidate,
+            acquisition,
+            review_role_config_id,
+            review_role_config_snapshot_hash,
+            transaction,
+            evidence_scope=GrantEvidenceScope.PATENT_REGISTER,
+        )
+    except BusinessError:
+        _patent_register_conflict()
+    status_snapshot = json.dumps(
+        {
+            "schema": "FPMS_PATENT_REGISTER_STATUS_SOURCE_V1",
+            "register_status": register_status,
+            "source_document_id": candidate.document_id,
+            "source_evidence_version_id": candidate.evidence_version_id,
+            "source_evidence_content_hash": evidence_hash,
+            "source_provenance_id": candidate.id,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return apply_lifecycle_event(
+        LifecycleEventCommand(
+            case_id=candidate.case_id,
+            event_type="PATENT_REGISTER_STATUS_CONFIRMED",
+            lane=ActivityLane.LIFECYCLE,
+            effective_at=effective_at,
+            occurred_at=candidate.reviewed_at,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=candidate.case_id,
+                    evidence_kind="DOCUMENT_EVIDENCE_VERSION",
+                    object_type="DocumentEvidenceVersion",
+                    object_id=candidate.evidence_version_id,
+                    content_hash=evidence_hash,
+                    captured_at=effective_at,
+                ),
+            ),
+            actor_id=candidate.proposed_by,
+            reviewer_id=candidate.reviewer_id,
+            idempotency_key=f"patent-register-status:{candidate.id}",
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+            payload={
+                "schema": "FPMS_PATENT_REGISTER_STATUS_CONFIRMED_V1",
+                "case_id": candidate.case_id,
+                "register_status": register_status,
+                "source_document_id": candidate.document_id,
+                "source_evidence_version_id": candidate.evidence_version_id,
+                "source_evidence_content_hash": evidence_hash,
+                "source_provenance_id": candidate.id,
+                "status_snapshot_schema": "FPMS_PATENT_REGISTER_STATUS_SOURCE_V1",
+                "status_snapshot": status_snapshot,
+                "status_snapshot_hash": hashlib.sha256(status_snapshot.encode()).hexdigest(),
+                "predecessor_status_snapshot_hash": None,
                 "supersedes_activity_id": None,
             },
         ),
@@ -787,8 +931,7 @@ def require_noncopyable_oa_appendix_derivation(
         or full_reply_pdf.document_id == extracted_appendix.document_id
         or derivation.parent_evidence_version_id != full_reply_pdf.id
         or derivation.child_evidence_version_id != extracted_appendix.id
-        or derivation.derivation_type
-        != EvidenceDerivationType.COMPONENT_EXTRACTION.value
+        or derivation.derivation_type != EvidenceDerivationType.COMPONENT_EXTRACTION.value
         or derivation.source_snapshot != _OA_APPENDIX_SOURCE_SNAPSHOT
     ):
         _raise_noncopyable(NoncopyableOaAppendixErrorCode.DERIVATION_MISMATCH)
