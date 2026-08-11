@@ -1995,13 +1995,10 @@
     {
       "catalog_id": "FPMS-V8-OUT-012-REEXAMINATION-RECTIFICATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-OUT-012-REEXAMINATION-RECTIFICATION-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OUT-013-PAPER-TO-ELECTRONIC-20260712-01",
@@ -6804,6 +6801,27 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-011-REEXAM-INVALIDATION-STATEMENT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-011-REEXAM-INVALIDATION-STATEMENT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-OUT-012-REEXAMINATION-RECTIFICATION-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "ab29c1106b186daadd39eedb602ec4876b0c8f01"
+      ],
+      "paths": [
+        "backend/app/modules/documents/official_notice_catalog.py",
+        "backend/scripts/seed_dev.py",
+        "backend/tests/test_v8_out_012_activation.py"
+      ],
+      "tree_sha256": "46cfc7ec94a5cc5314f7d50931dd4fd02690ceef72e8248d315e0f7f90c9efdd",
+      "tests": [
+        "focused serialized OUT-012 suite passed 1 test",
+        "scoped Ruff and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-OUT-012-REEXAMINATION-RECTIFICATION-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-OUT-012-REEXAMINATION-RECTIFICATION-CURRENT-ADOPTION.md"
     }
   ]
 }
