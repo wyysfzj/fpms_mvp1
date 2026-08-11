@@ -360,6 +360,10 @@ OFFICIAL_LETTER_OUT_FORM_015_CLASSIFICATIONS = {
     **OFFICIAL_LETTER_OUT_FORM_014_CLASSIFICATIONS,
     "改正译文错误请求书": ("form-015", "INTERNAL_ONLY"),
 }
+OFFICIAL_LETTER_OUT_FORM_016_CLASSIFICATIONS = {
+    **OFFICIAL_LETTER_OUT_FORM_015_CLASSIFICATIONS,
+    "PPH请求": ("form-016", "INTERNAL_ONLY"),
+}
 
 
 def _official_letter_out_input_fields(
@@ -528,4 +532,11 @@ def seed_official_letter_out_form_015_catalog(db: Session) -> int:
     return _seed_official_letter_out_catalog(
         db,
         OFFICIAL_LETTER_OUT_FORM_015_CLASSIFICATIONS,
+    )
+
+
+def seed_official_letter_out_form_016_catalog(db: Session) -> int:
+    return _seed_official_letter_out_catalog(
+        db,
+        OFFICIAL_LETTER_OUT_FORM_016_CLASSIFICATIONS,
     )
