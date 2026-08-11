@@ -68,6 +68,7 @@
               <p>{{ ZH.docDetail.noContent }}</p>
             </div>
           </div>
+          <GrantEvidenceReviewPanel :document-id="doc.id" />
           <LetterHandoffPanel
             v-if="showLetterHandoffAction"
             class="letter-handoff-section"
@@ -191,6 +192,7 @@ import type { Attachment, DocTemplate, Document } from '../../../api/documents.t
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import AttachmentList from '../components/AttachmentList.vue'
+import GrantEvidenceReviewPanel from '../components/GrantEvidenceReviewPanel.vue'
 import RelationChainCard from '../../../components/relations/RelationChainCard.vue'
 import LetterHandoffPanel from '../../officialWorkflows/components/LetterHandoffPanel.vue'
 import { usePageContext } from '../../../stores/pageContext'
