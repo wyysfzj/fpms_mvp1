@@ -1671,13 +1671,10 @@
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-API-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-GRANT-EVIDENCE-REVIEW-API-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "CUSTOMER_DECISION_REQUIRED",
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-REVIEW-FE-ADAPTER-20260712-01",
@@ -6970,6 +6967,33 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-OUT-019-SECOND-OA-STATEMENT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-OUT-019-SECOND-OA-STATEMENT-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-GRANT-EVIDENCE-REVIEW-API-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "9da9f082ace6b471c87581269d92be2a498a3cf9",
+        "db885f28ff814e6b2e49cd413448248123f15dbe",
+        "771b5eeb210cefb6cefb6f0d716c6475dbc43555"
+      ],
+      "paths": [
+        "backend/app/modules/documents/grant_evidence_schemas.py",
+        "backend/app/modules/documents/api.py",
+        "backend/tests/test_v8_grant_evidence_review_api.py",
+        "backend/app/modules/documents/grant_evidence_review_service.py",
+        "backend/tests/test_v8_grant_evidence_review_service.py",
+        "docs/product/v8/stories/V8-GRANT-EVIDENCE-REVIEW-NOT-FOUND-SUCCESSOR-CONTRACT.md"
+      ],
+      "tree_sha256": "0318378dd263b73837aa81de664ca0d0c01f9ea5ca26c08900acf5e0dddc1e83",
+      "tests": [
+        "focused serialized grant review service/API suites passed 33 tests",
+        "real missing-candidate service/API path returns typed Chinese 404 without duplicate lookup",
+        "scoped Ruff and exact cumulative diff checks passed",
+        "independent High final review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-API-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-GRANT-EVIDENCE-REVIEW-API-CURRENT-ADOPTION.md"
     }
   ]
 }
