@@ -129,3 +129,23 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   isolated `TEST_ONLY` development path and does not resolve a production gate.
 - Validation is fail-fast 400; missing PayList/artifact is 404; same-key/payload, artifact,
   activity, lineage, case multiplicity or concurrent-write conflicts are 409.
+
+## Independent Review Amendment — 2026-08-13
+
+- Before any read, establish the SQLite outer transaction. Lock the exact artifact row with
+  `SELECT ... FOR UPDATE` on non-SQLite databases; SQLite uses an exact conditional update.
+- Resolve the exact effective `OfficialPaymentWorkbookInputVersion` for `accepted_at` and the
+  requested runtime profile. The persisted generation activity/evidence is the artifact's
+  durable input-lineage carrier and must bind the same artifact/PayList/content/path,
+  `workbook_input_version_id`, template version and template content hash.
+- Production additionally requires the exact current `DG-PAYMENT-WORKBOOK:GLOBAL` result:
+  requested and resolved scope `GLOBAL`, source reference equal to the resolved controlled-upload
+  proof path, source version equal to its template version, and decision value equal to the
+  canonical input gate snapshot. Any mismatch is 409/no write.
+- Test execution resolves one effective approved `TEST_ONLY` input and requires the generated
+  artifact lineage to bind that exact test-only version and hashes. Switching a production or
+  unclassified artifact to `runtime_profile="test"` is 409/no write.
+- A new acceptance performs one exact `GENERATED` plus empty-tuple to
+  `OFFICIAL_SITE_ACCEPTED` conditional update and appends the activity in one nested unit. Zero or
+  multiple affected rows, database lock/race, activity collision or integrity failure is the
+  contracted 409. Caller-owned commit/rollback semantics remain unchanged.

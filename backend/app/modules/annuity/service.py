@@ -15,8 +15,8 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -2819,6 +2819,8 @@ def _official_workbook_acceptance_activity_command(
     *,
     command: RecordOfficialWorkbookAcceptanceCommand,
     case_id: str,
+    generation_activity_id: str,
+    workbook_input: WorkbookInputResult,
 ) -> LifecycleEventCommand:
     activity_idempotency_key = (
         f"official-workbook-acceptance:{command.artifact_id}:{command.idempotency_key}:{case_id}"
@@ -2848,7 +2850,7 @@ def _official_workbook_acceptance_activity_command(
         actor_id=command.actor_id,
         reviewer_id=None,
         idempotency_key=activity_idempotency_key,
-        source_activity_id=None,
+        source_activity_id=generation_activity_id,
         supersedes_event_id=None,
         payload={
             "accepted": True,
@@ -2860,9 +2862,98 @@ def _official_workbook_acceptance_activity_command(
             "paid": False,
             "pay_list_id": command.pay_list_id,
             "ticket_verified": False,
+            "template_content_hash": workbook_input.template_content_hash,
+            "template_version": workbook_input.template_version,
+            "workbook_input_version_id": workbook_input.version_id,
         },
         confirmation_status=ConfirmationStatus.CONFIRMED,
     )
+
+
+def _ensure_sqlite_outer_transaction(transaction: Session) -> None:
+    connection = transaction.connection()
+    if connection.dialect.name != "sqlite":
+        return
+    driver_connection = connection.connection.driver_connection
+    if not driver_connection.in_transaction:
+        connection.exec_driver_sql("BEGIN")
+
+
+def _official_workbook_acceptance_conflict() -> None:
+    _fail_official_workbook_acceptance(
+        "OFFICIAL_WORKBOOK_ACCEPTANCE_CONFLICT",
+        "Official workbook acceptance conflicts",
+        status_code=409,
+    )
+
+
+def _official_workbook_generation_lineage(
+    transaction: Session,
+    *,
+    artifact: PayListExportArtifact,
+    case_id: str,
+    workbook_input: WorkbookInputResult,
+) -> CaseActivityEvent:
+    activities = transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == case_id,
+            CaseActivityEvent.activity_type == "OFFICIAL_PAYMENT_WORKBOOK_GENERATED",
+            CaseActivityEvent.idempotency_key
+            == f"official-payment-workbook:{artifact.id}:{case_id}",
+        )
+    ).all()
+    if len(activities) != 1:
+        _official_workbook_acceptance_conflict()
+    activity = activities[0]
+    try:
+        payload = json.loads(activity.payload_json)
+    except (TypeError, ValueError):
+        _official_workbook_acceptance_conflict()
+    if (
+        type(payload) is not dict
+        or payload.get("accepted") is not False
+        or payload.get("artifact_id") != artifact.id
+        or payload.get("content_sha256") != artifact.content_sha256
+        or payload.get("generated_status") != "GENERATED"
+        or payload.get("managed_storage_path") != artifact.managed_storage_path
+        or payload.get("paid") is not False
+        or payload.get("pay_list_id") != artifact.pay_list_id
+        or fullmatch(r"[0-9a-f]{64}", payload.get("rows_snapshot_hash", "")) is None
+        or payload.get("template_content_hash") != workbook_input.template_content_hash
+        or payload.get("template_version") != workbook_input.template_version
+        or payload.get("ticket_verified") is not False
+        or payload.get("workbook_input_version_id") != workbook_input.version_id
+        or activity.lane != ActivityLane.FEE.value
+        or activity.effective_at != artifact.generated_at
+        or activity.occurred_at != artifact.generated_at
+        or activity.confirmation_status != ConfirmationStatus.CONFIRMED.value
+        or activity.actor_id != artifact.generated_by
+        or activity.reviewer_id is not None
+        or activity.source_activity_id is not None
+        or activity.supersedes_event_id is not None
+    ):
+        _official_workbook_acceptance_conflict()
+    evidence = transaction.scalars(
+        select(CaseActivityEventEvidence).where(
+            CaseActivityEventEvidence.case_id == case_id,
+            CaseActivityEventEvidence.activity_id == activity.id,
+        )
+    ).all()
+    if len(evidence) != 1 or (
+        evidence[0].evidence_kind,
+        evidence[0].object_type,
+        evidence[0].object_id,
+        evidence[0].content_hash,
+        evidence[0].captured_at,
+    ) != (
+        "OFFICIAL_PAYMENT_WORKBOOK_ARTIFACT",
+        "PayListExportArtifact",
+        artifact.id,
+        artifact.content_sha256,
+        artifact.generated_at,
+    ):
+        _official_workbook_acceptance_conflict()
+    return activity
 
 
 def _official_workbook_acceptance_result(
@@ -2892,6 +2983,7 @@ def record_official_workbook_acceptance(
     transaction: Session,
 ) -> OfficialWorkbookAcceptanceResult:
     _validate_official_workbook_acceptance_command(command)
+    _ensure_sqlite_outer_transaction(transaction)
     pay_list = transaction.execute(
         select(PayList).where(PayList.id == command.pay_list_id)
     ).scalar_one_or_none()
@@ -2901,17 +2993,41 @@ def record_official_workbook_acceptance(
             "Pay list not found",
             status_code=404,
         )
-    artifact = transaction.execute(
-        select(PayListExportArtifact).where(
-            PayListExportArtifact.id == command.artifact_id,
-            PayListExportArtifact.pay_list_id == command.pay_list_id,
-        )
-    ).scalar_one_or_none()
+    artifact_statement = select(PayListExportArtifact).where(
+        PayListExportArtifact.id == command.artifact_id,
+        PayListExportArtifact.pay_list_id == command.pay_list_id,
+    )
+    if transaction.connection().dialect.name != "sqlite":
+        artifact_statement = artifact_statement.with_for_update()
+    artifact = transaction.execute(artifact_statement).scalar_one_or_none()
     if artifact is None:
         _fail_official_workbook_acceptance(
             "OFFICIAL_WORKBOOK_ARTIFACT_NOT_FOUND",
             "Official workbook artifact not found",
             status_code=404,
+        )
+    try:
+        workbook_input = resolve_workbook_input(
+            transaction,
+            ResolveWorkbookInputCommand(
+                at=command.accepted_at,
+                runtime_profile=command.runtime_profile,
+            ),
+        )
+    except BusinessError as exc:
+        raise BusinessError(
+            "PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED",
+            "Official payment workbook input configuration is required",
+            status_code=409,
+        ) from exc
+    expected_source_classification = (
+        "TEST_ONLY" if command.runtime_profile == "test" else "PRODUCTION"
+    )
+    if workbook_input.source_classification != expected_source_classification:
+        _fail_official_workbook_acceptance(
+            "PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED",
+            "Official payment workbook input configuration is required",
+            status_code=409,
         )
     payments = (
         transaction.execute(
@@ -2929,12 +3045,23 @@ def record_official_workbook_acceptance(
             "Pay list must resolve to exactly one payment case",
             status_code=409,
         )
-    if artifact.kind != "OFFICIAL_XLSM" or artifact.template_version is None:
+    case_id = case_ids[0]
+    if (
+        artifact.kind != "OFFICIAL_XLSM"
+        or artifact.template_version is None
+        or artifact.template_version != workbook_input.template_version
+    ):
         _fail_official_workbook_acceptance(
             "OFFICIAL_WORKBOOK_ACCEPTANCE_CONFLICT",
             "Artifact is not a generated official workbook",
             status_code=409,
         )
+    generation_activity = _official_workbook_generation_lineage(
+        transaction,
+        artifact=artifact,
+        case_id=case_id,
+        workbook_input=workbook_input,
+    )
     if command.runtime_profile == "production":
         try:
             gate = resolve_decision_gate(
@@ -2945,13 +3072,19 @@ def record_official_workbook_acceptance(
                 ),
                 transaction,
             )
-        except BusinessError:
-            _fail_official_workbook_acceptance(
+        except BusinessError as exc:
+            raise BusinessError(
                 "PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED",
                 "Official payment workbook input configuration is required",
                 status_code=409,
-            )
-        if gate.resolved_scope_key != "GLOBAL" or gate.source_version != artifact.template_version:
+            ) from exc
+        if (
+            gate.requested_scope_key != "GLOBAL"
+            or gate.resolved_scope_key != "GLOBAL"
+            or gate.source_reference != workbook_input.upload_proof_storage_path
+            or gate.source_version != workbook_input.template_version
+            or gate.decision_value != _official_workbook_input_gate_snapshot(workbook_input)
+        ):
             _fail_official_workbook_acceptance(
                 "PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED",
                 "Official payment workbook input configuration is required",
@@ -2960,7 +3093,9 @@ def record_official_workbook_acceptance(
 
     activity_command = _official_workbook_acceptance_activity_command(
         command=command,
-        case_id=case_ids[0],
+        case_id=case_id,
+        generation_activity_id=generation_activity.id,
+        workbook_input=workbook_input,
     )
     is_replay = artifact.status == "OFFICIAL_SITE_ACCEPTED"
     expected_tuple = (
@@ -2982,7 +3117,7 @@ def record_official_workbook_acceptance(
             )
         stored_activity_id = transaction.execute(
             select(CaseActivityEvent.id).where(
-                CaseActivityEvent.case_id == case_ids[0],
+                CaseActivityEvent.case_id == case_id,
                 CaseActivityEvent.idempotency_key == activity_command.idempotency_key,
             )
         ).scalar_one_or_none()
@@ -2999,17 +3134,45 @@ def record_official_workbook_acceptance(
             status_code=409,
         )
 
-    projection, legacy_status = _activity_projection(transaction, case_ids[0])
+    projection, legacy_status = _activity_projection(transaction, case_id)
     try:
-        activity = append_case_activity(
-            activity_command,
-            transaction,
-            previous_projection=projection,
-            current_projection=projection,
-            legacy_case_status=legacy_status,
-            conflict_codes=(),
-        )
-    except (BusinessError, IntegrityError) as exc:
+        with transaction.begin_nested():
+            if not is_replay:
+                changed = transaction.execute(
+                    update(PayListExportArtifact)
+                    .where(
+                        PayListExportArtifact.id == artifact.id,
+                        PayListExportArtifact.pay_list_id == command.pay_list_id,
+                        PayListExportArtifact.kind == "OFFICIAL_XLSM",
+                        PayListExportArtifact.status == "GENERATED",
+                        PayListExportArtifact.content_sha256 == artifact.content_sha256,
+                        PayListExportArtifact.managed_storage_path == artifact.managed_storage_path,
+                        PayListExportArtifact.template_version == workbook_input.template_version,
+                        PayListExportArtifact.generated_by == artifact.generated_by,
+                        PayListExportArtifact.generated_at == artifact.generated_at,
+                        PayListExportArtifact.official_acceptance_evidence_ref.is_(None),
+                        PayListExportArtifact.official_acceptance_evidence_hash.is_(None),
+                        PayListExportArtifact.official_accepted_at.is_(None),
+                    )
+                    .values(
+                        status="OFFICIAL_SITE_ACCEPTED",
+                        official_acceptance_evidence_ref=command.evidence_ref,
+                        official_acceptance_evidence_hash=command.evidence_sha256,
+                        official_accepted_at=command.accepted_at,
+                        updated_at=command.accepted_at,
+                    )
+                )
+                if changed.rowcount != 1:
+                    _official_workbook_acceptance_conflict()
+            activity = append_case_activity(
+                activity_command,
+                transaction,
+                previous_projection=projection,
+                current_projection=projection,
+                legacy_case_status=legacy_status,
+                conflict_codes=(),
+            )
+    except (BusinessError, IntegrityError, OperationalError) as exc:
         raise BusinessError(
             "OFFICIAL_WORKBOOK_ACCEPTANCE_CONFLICT",
             "Official workbook acceptance activity conflicts",
@@ -3033,11 +3196,6 @@ def record_official_workbook_acceptance(
             "Official workbook acceptance activity conflicts",
             status_code=409,
         )
-    artifact.status = "OFFICIAL_SITE_ACCEPTED"
-    artifact.official_acceptance_evidence_ref = command.evidence_ref
-    artifact.official_acceptance_evidence_hash = command.evidence_sha256
-    artifact.official_accepted_at = command.accepted_at
-    artifact.updated_at = command.accepted_at
     return _official_workbook_acceptance_result(
         command,
         activity_id=activity.activity_id,
