@@ -1,6 +1,6 @@
 # FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-GENERATION-SERVICE-20260712-01
 
-Status: READY / NOT STARTED
+Status: IMPLEMENTED / AWAITING INDEPENDENT REVIEW
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `14. Wave 6 — customer decision gates`
 Catalog ordinal: `215`
@@ -102,3 +102,19 @@ Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+## C3 Lean Current Verification
+
+- RED: the exact focused test failed `4` tests because the row215 generation service and
+  resolver/adapter bindings were absent.
+- GREEN: the exact focused test passed `4` tests; the focused dependency regression tranche
+  passed `41` tests.
+- The service resolves the current workbook input for the supplied runtime profile before any
+  product write. Non-test runtime accepts only a resolved `PRODUCTION` input; missing or
+  `TEST_ONLY` production input returns `409` with no artifact or managed output.
+- One `OFFICIAL_XLSM` artifact with server-computed hash and resolved template version is added to
+  the caller-owned transaction. Its FEE activity records the exact input-version lineage and
+  explicit `generated`/not-accepted/not-paid/not-ticket-verified boundary. Adapter or activity
+  failure compensates the newly written managed file.
+- Scoped Ruff and whitespace checks are required again on the exact commit before independent
+  review. No endpoint, UI, schema, payment/acceptance mutation or production input was added.
