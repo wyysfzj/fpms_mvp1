@@ -101,3 +101,23 @@ Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+## Frozen Service Receivable Contract (2026-08-13)
+
+- Entry point `create_service_receivable_obligation(command, transaction)` accepts exact
+  `price_book_version_id`, `item_code`, `case_id`, server actor/time and idempotency key. It never
+  commits or rolls back.
+- Resolve exactly the named sole current `GLOBAL` `PRODUCTION/ACTIVE` service-price book effective
+  at server time, validate its complete canonical stored snapshot, and resolve the current effective
+  `DG-SERVICE-RATE-VERSION:GLOBAL` tuple exactly as activation does. Missing/inactive/non-current,
+  malformed, interval, gate/source/hash or item mismatch is `SERVICE_RECEIVABLE_CONFLICT / 409`
+  before any write.
+- Select exactly one canonical item. Append/reuse a confirmed FEE source activity whose payload and
+  evidence bind price-book ID/version/source hash/item-snapshot hash, exact item code/unit price,
+  currency/tax/discount and recognition time. Then call the frozen generic recognition seam with
+  `fee_domain=SERVICE`, `obligation_type=SERVICE_FEE`, no source document, no official amount, zero
+  reduction, payable/source amount equal to the approved service unit price and official evidence
+  `NOT_APPLICABLE` through existing domain behavior.
+- Exact replay reuses both source activity and obligation; a differing book/item/case/actor or stored
+  source tuple conflicts. No official rate, CNIPA amount, GovPayment, PayList, draft, client
+  instruction, payment or official-evidence fact is created or inferred.

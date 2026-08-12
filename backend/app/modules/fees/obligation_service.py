@@ -41,6 +41,7 @@ from app.modules.fees.models import (
     FeeItem,
     FeeObligationDraftItemLink,
     FeeObligationPaymentEvidenceLink,
+    ServicePriceBook,
     T_GrantFeeTask,
 )
 from app.modules.fees.models import (
@@ -83,6 +84,12 @@ from app.modules.fees.obligation_contracts import (
     RecordFeePaymentEvidenceCommand,
     RecordFeePaymentEvidenceResult,
 )
+from app.modules.fees.service_price_book import _activation_snapshot
+from app.modules.system.decision_gate_service import (
+    DecisionGateCode,
+    ResolveDecisionGateCommand,
+    resolve_decision_gate,
+)
 from app.modules.system.future_annuity_exception_authority_service import (
     FutureAnnuityExceptionScope,
     FutureAnnuityExceptionUseAttestation,
@@ -104,10 +111,34 @@ __all__ = (
     "recognize_obligation",
     "record_client_instruction",
     "record_payment_evidence",
+    "create_service_receivable_obligation",
 )
 
 _ACTIVITY_TYPE = "FEE_OBLIGATION_RECOGNIZED"
 _PAYLOAD_SCHEMA = "FPMS_FEE_OBLIGATION_RECOGNIZED_V1"
+_SERVICE_SOURCE_SCHEMA = "FPMS_SERVICE_PRICE_ITEM_SELECTED_V1"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CreateServiceReceivableObligationCommand:
+    price_book_version_id: str
+    item_code: str
+    case_id: str
+    actor_id: str
+    idempotency_key: str
+    recognized_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class CreateServiceReceivableObligationResult:
+    recognition: RecognizeFeeObligationResult
+    price_book_version_id: str
+    item_code: str
+    unit_price: Decimal
+    source_activity_id: str
+    reused: bool
+
+
 _INSTRUCTION_ACTIVITY_TYPE = "FEE_CLIENT_INSTRUCTION_RECORDED"
 _GRANT_REVIEW_ACTIVITY_TYPE = "GRANT_YEAR_OFFICIAL_FEE_REVIEW_CONFIRMED"
 _GRANT_REVIEW_PAYLOAD_SCHEMA = "FPMS_GRANT_YEAR_OFFICIAL_FEE_REVIEW_CONFIRMED_V1"
@@ -551,6 +582,193 @@ def recognize_obligation(
         idempotency_key=command.idempotency_key,
         reused=False,
         superseded_obligation_id=(None if prior is None else prior.header.id),
+    )
+
+
+def create_service_receivable_obligation(
+    command: CreateServiceReceivableObligationCommand,
+    transaction: Session,
+) -> CreateServiceReceivableObligationResult:
+    if type(command) is not CreateServiceReceivableObligationCommand:
+        _fail("SERVICE_RECEIVABLE_INVALID", "服务费应收输入无效", status_code=400)
+    for field, value, limit in (
+        ("price_book_version_id", command.price_book_version_id, 36),
+        ("item_code", command.item_code, 64),
+        ("case_id", command.case_id, 36),
+        ("actor_id", command.actor_id, 36),
+        ("idempotency_key", command.idempotency_key, 96),
+    ):
+        if (
+            type(value) is not str
+            or not value
+            or value != value.strip()
+            or "\x00" in value
+            or len(value) > limit
+        ):
+            _fail(
+                "SERVICE_RECEIVABLE_INVALID",
+                "服务费应收输入无效",
+                details={"field": field},
+                status_code=400,
+            )
+    if type(command.recognized_at) is not datetime or command.recognized_at.utcoffset() is not None:
+        _fail(
+            "SERVICE_RECEIVABLE_INVALID",
+            "服务费应收输入无效",
+            details={"field": "recognized_at"},
+            status_code=400,
+        )
+    if transaction.new or transaction.dirty or transaction.deleted:
+        _fail("SERVICE_RECEIVABLE_CONFLICT", "服务费应收事务状态冲突", status_code=409)
+
+    with transaction.no_autoflush:
+        case = transaction.scalar(select(Case).where(Case.id == command.case_id))
+        book = transaction.scalar(
+            select(ServicePriceBook).where(ServicePriceBook.id == command.price_book_version_id)
+        )
+    if case is None:
+        _fail("CASE_NOT_FOUND", "案件不存在", status_code=404)
+    if (
+        book is None
+        or book.source_classification != "PRODUCTION"
+        or book.status != "ACTIVE"
+        or book.scope_key != "GLOBAL"
+        or book.current_identity_key != "GLOBAL"
+        or book.effective_from > command.recognized_at
+        or (book.effective_to is not None and command.recognized_at >= book.effective_to)
+    ):
+        _fail("SERVICE_RECEIVABLE_CONFLICT", "服务价格版本不可用", status_code=409)
+    try:
+        decision_value = _activation_snapshot(book)
+        gate = resolve_decision_gate(
+            ResolveDecisionGateCommand(
+                gate_code=DecisionGateCode.SERVICE_RATE_VERSION,
+                scope_key="GLOBAL",
+                as_of=command.recognized_at,
+            ),
+            transaction,
+        )
+        snapshot = json.loads(book.item_snapshot)
+    except (BusinessError, TypeError, ValueError) as exc:
+        raise BusinessError(
+            "SERVICE_RECEIVABLE_CONFLICT",
+            "服务价格版本或决策门不可用",
+            status_code=409,
+        ) from exc
+    if (
+        gate.resolved_scope_key != "GLOBAL"
+        or gate.source_reference != book.source_reference
+        or gate.source_version != book.book_version
+        or gate.decision_value != decision_value
+        or type(snapshot) is not dict
+        or type(snapshot.get("items")) is not list
+    ):
+        _fail("SERVICE_RECEIVABLE_CONFLICT", "服务价格版本或决策门不匹配", status_code=409)
+    matches = [item for item in snapshot["items"] if item.get("item_code") == command.item_code]
+    if len(matches) != 1:
+        _fail("SERVICE_RECEIVABLE_CONFLICT", "服务价格项目不存在或不唯一", status_code=409)
+    try:
+        unit_price = Decimal(matches[0]["unit_price"])
+    except (KeyError, TypeError, InvalidOperation) as exc:
+        raise BusinessError(
+            "SERVICE_RECEIVABLE_CONFLICT",
+            "服务价格项目金额无效",
+            status_code=409,
+        ) from exc
+    if not _valid_amount(unit_price, optional=False):
+        _fail("SERVICE_RECEIVABLE_CONFLICT", "服务价格项目金额无效", status_code=409)
+
+    source_key = f"service-receivable-source:{command.idempotency_key}"
+    with transaction.no_autoflush:
+        existing_source = transaction.scalar(
+            select(CaseActivityEvent).where(
+                CaseActivityEvent.case_id == command.case_id,
+                CaseActivityEvent.idempotency_key == source_key,
+            )
+        )
+    source_time = command.recognized_at if existing_source is None else existing_source.effective_at
+    projection = _case_projection(case)
+    source_result = append_case_activity(
+        LifecycleEventCommand(
+            case_id=command.case_id,
+            event_type="SERVICE_PRICE_ITEM_SELECTED",
+            lane=ActivityLane.FEE,
+            effective_at=source_time,
+            occurred_at=source_time,
+            evidence_refs=(
+                EvidenceReference(
+                    case_id=command.case_id,
+                    evidence_kind="SERVICE_PRICE_BOOK_ITEM",
+                    object_type="ServicePriceBook",
+                    object_id=book.id,
+                    content_hash=book.item_snapshot_hash,
+                    captured_at=source_time,
+                ),
+            ),
+            actor_id=command.actor_id,
+            reviewer_id=None,
+            idempotency_key=source_key,
+            source_activity_id=None,
+            supersedes_event_id=None,
+            payload={
+                "schema": _SERVICE_SOURCE_SCHEMA,
+                "price_book_version_id": book.id,
+                "book_version": book.book_version,
+                "source_content_hash": book.source_content_hash,
+                "item_snapshot_hash": book.item_snapshot_hash,
+                "item_code": command.item_code,
+                "unit_price": format(unit_price, "f"),
+                "currency": book.currency,
+                "tax_policy": book.tax_policy,
+                "discount_policy": book.discount_policy,
+            },
+            confirmation_status=ConfirmationStatus.CONFIRMED,
+        ),
+        transaction,
+        previous_projection=projection,
+        current_projection=projection,
+        legacy_case_status=case.status,
+        conflict_codes=(),
+    )
+    recognition = recognize_obligation(
+        RecognizeFeeObligationCommand(
+            case_id=command.case_id,
+            source_activity_id=source_result.activity_id,
+            source_document_id=None,
+            fee_domain=FeeDomain.SERVICE,
+            obligation_type="SERVICE_FEE",
+            due_date=None,
+            currency=book.currency,
+            source_status=FeeSourceStatus.VERIFIED,
+            lines=(
+                FeeObligationLineInput(
+                    fee_code=command.item_code,
+                    fee_name=command.item_code,
+                    fee_year_key=0,
+                    official_full_amount=None,
+                    reduction_ratio=Decimal("0.0000"),
+                    payable_amount=unit_price,
+                    source_amount=unit_price,
+                    source_date=source_time.date(),
+                    difference_review_state=FeeDifferenceReviewState.MATCHED,
+                ),
+            ),
+            actor_id=command.actor_id,
+            idempotency_key=f"service-receivable:{command.idempotency_key}",
+            supersedes_obligation_id=None,
+            supersede_reason=None,
+        ),
+        transaction,
+    )
+    if source_result.reused != recognition.reused:
+        _fail("SERVICE_RECEIVABLE_CONFLICT", "服务费应收重放状态冲突", status_code=409)
+    return CreateServiceReceivableObligationResult(
+        recognition=recognition,
+        price_book_version_id=book.id,
+        item_code=command.item_code,
+        unit_price=unit_price,
+        source_activity_id=source_result.activity_id,
+        reused=recognition.reused,
     )
 
 
