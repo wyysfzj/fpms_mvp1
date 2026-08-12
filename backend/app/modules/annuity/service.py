@@ -31,6 +31,7 @@ from app.modules.annuity.models import (
 )
 from app.modules.annuity.official_payment_workbook_input_service import (
     ResolveWorkbookInputCommand,
+    WorkbookInputResult,
     resolve_workbook_input,
 )
 from app.modules.annuity.verified_official_payment_workbook import (
@@ -105,6 +106,11 @@ from app.modules.fees.service import (
     fee_rate_source_enabled_condition,
 )
 from app.modules.masterdata.clients.models import Client
+from app.modules.system.decision_gate_service import (
+    DecisionGateCode,
+    ResolveDecisionGateCommand,
+    resolve_decision_gate,
+)
 from app.modules.system.future_annuity_exception_authority_service import (
     FutureAnnuityExceptionUseAttestation,
     ResolveFutureAnnuityExceptionCommand,
@@ -2101,6 +2107,7 @@ class GenerateOfficialPaymentWorkbookResult:
     content_sha256: str
     managed_storage_path: str
     template_version: str
+    template_content_hash: str
     workbook_input_version_id: str
     activity_ids: tuple[str, ...]
     generated_at: datetime
@@ -2339,6 +2346,137 @@ def _render_resolved_official_payment_workbook(
         ) from exc
 
 
+def _official_workbook_input_gate_snapshot(workbook_input: WorkbookInputResult) -> str:
+    return json.dumps(
+        {
+            "effective_from": workbook_input.effective_from.isoformat(timespec="microseconds"),
+            "effective_to": (
+                None
+                if workbook_input.effective_to is None
+                else workbook_input.effective_to.isoformat(timespec="microseconds")
+            ),
+            "scope_key": workbook_input.scope_key,
+            "structure_snapshot_hash": workbook_input.structure_snapshot_hash,
+            "template_content_hash": workbook_input.template_content_hash,
+            "template_version": workbook_input.template_version,
+            "upload_proof_content_hash": workbook_input.upload_proof_content_hash,
+            "workbook_input_version_id": workbook_input.version_id,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def _official_workbook_rows_hash(rows: tuple[OfficialPaymentRow, ...]) -> str:
+    try:
+        snapshot = json.dumps(
+            [row.as_cells() for row in rows],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        encoded = snapshot.encode("utf-8")
+    except (TypeError, ValueError, UnicodeEncodeError):
+        _fail_official_workbook_generation(
+            "OFFICIAL_PAYMENT_WORKBOOK_INPUT_INVALID",
+            "Official payment workbook rows are invalid",
+            status_code=400,
+        )
+    return sha256(encoded).hexdigest()
+
+
+def _official_workbook_activity_command(
+    *,
+    command: GenerateOfficialPaymentWorkbookCommand,
+    case_id: str,
+    artifact: PayListExportArtifact,
+    content_hash: str,
+    workbook_input: WorkbookInputResult,
+    rows_snapshot_hash: str,
+) -> LifecycleEventCommand:
+    return LifecycleEventCommand(
+        case_id=case_id,
+        event_type="OFFICIAL_PAYMENT_WORKBOOK_GENERATED",
+        lane=ActivityLane.FEE,
+        effective_at=command.generated_at,
+        occurred_at=command.generated_at,
+        evidence_refs=(
+            EvidenceReference(
+                case_id=case_id,
+                evidence_kind="OFFICIAL_PAYMENT_WORKBOOK_ARTIFACT",
+                object_type="PayListExportArtifact",
+                object_id=artifact.id,
+                content_hash=content_hash,
+                captured_at=command.generated_at,
+            ),
+        ),
+        actor_id=command.actor_id,
+        reviewer_id=None,
+        idempotency_key=f"official-payment-workbook:{artifact.id}:{case_id}",
+        source_activity_id=None,
+        supersedes_event_id=None,
+        payload={
+            "accepted": False,
+            "artifact_id": artifact.id,
+            "content_sha256": content_hash,
+            "generated_status": "GENERATED",
+            "managed_storage_path": artifact.managed_storage_path,
+            "paid": False,
+            "pay_list_id": command.pay_list_id,
+            "rows_snapshot_hash": rows_snapshot_hash,
+            "template_content_hash": workbook_input.template_content_hash,
+            "template_version": workbook_input.template_version,
+            "ticket_verified": False,
+            "workbook_input_version_id": workbook_input.version_id,
+        },
+        confirmation_status=ConfirmationStatus.CONFIRMED,
+    )
+
+
+def _read_replay_official_payment_workbook(
+    artifact: PayListExportArtifact,
+) -> bytes:
+    target = _resolve_official_workbook_path(
+        pay_list_id=artifact.pay_list_id,
+        artifact_id=artifact.id,
+        managed_storage_path=artifact.managed_storage_path,
+        storage_dir=get_settings().storage_dir,
+    )
+    try:
+        with target.open("rb") as source:
+            before = fstat(source.fileno())
+            if not S_ISREG(before.st_mode):
+                raise OSError("managed workbook is not a regular file")
+            content = source.read()
+            after = fstat(source.fileno())
+        path_after = target.stat()
+    except OSError as exc:
+        raise BusinessError(
+            "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT",
+            "Official payment workbook replay content is unavailable",
+            status_code=409,
+        ) from exc
+    if (
+        len(
+            {
+                (item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns)
+                for item in (before, after, path_after)
+            }
+        )
+        != 1
+        or sha256(content).hexdigest() != artifact.content_sha256
+    ):
+        _fail_official_workbook_generation(
+            "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT",
+            "Official payment workbook replay content conflicts",
+            status_code=409,
+        )
+    return content
+
+
 def generate_official_payment_workbook(
     command: GenerateOfficialPaymentWorkbookCommand,
     transaction: Session,
@@ -2360,6 +2498,33 @@ def generate_official_payment_workbook(
             "Official payment workbook input configuration is required",
             status_code=409,
         )
+    if command.runtime_profile != "test":
+        try:
+            gate = resolve_decision_gate(
+                ResolveDecisionGateCommand(
+                    gate_code=DecisionGateCode.PAYMENT_WORKBOOK,
+                    scope_key="GLOBAL",
+                    as_of=command.generated_at,
+                ),
+                transaction,
+            )
+        except BusinessError:
+            _fail_official_workbook_generation(
+                "PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED",
+                "Official payment workbook input configuration is required",
+                status_code=409,
+            )
+        if (
+            gate.resolved_scope_key != "GLOBAL"
+            or gate.source_reference != workbook_input.upload_proof_storage_path
+            or gate.source_version != workbook_input.template_version
+            or gate.decision_value != _official_workbook_input_gate_snapshot(workbook_input)
+        ):
+            _fail_official_workbook_generation(
+                "PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED",
+                "Official payment workbook input configuration is required",
+                status_code=409,
+            )
 
     artifact = transaction.execute(
         select(PayListExportArtifact).where(
@@ -2367,12 +2532,6 @@ def generate_official_payment_workbook(
             PayListExportArtifact.idempotency_key == command.idempotency_key,
         )
     ).scalar_one_or_none()
-    if artifact is not None:
-        _fail_official_workbook_generation(
-            "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT",
-            "Official payment workbook idempotency key already exists",
-            status_code=409,
-        )
     pay_list = transaction.execute(
         select(PayList).where(PayList.id == command.pay_list_id)
     ).scalar_one_or_none()
@@ -2392,11 +2551,75 @@ def generate_official_payment_workbook(
         .all()
     )
     case_ids = sorted({payment.case_id for payment in payments}, key=str.encode)
-    if not payments or not case_ids:
+    if not payments or len(case_ids) != 1:
         _fail_official_workbook_generation(
             "OFFICIAL_PAYMENT_WORKBOOK_NO_CASES",
-            "Pay list has no payment cases",
+            "Pay list must resolve to exactly one payment case",
             status_code=409,
+        )
+    case_id = case_ids[0]
+    rows_snapshot_hash = _official_workbook_rows_hash(command.rows)
+    filename = f"{pay_list.pay_list_no or f'PL-{pay_list.id:06d}'}-official.xlsm"
+
+    if artifact is not None:
+        if (
+            artifact.kind != "OFFICIAL_XLSM"
+            or artifact.status != "GENERATED"
+            or artifact.pay_list_id != command.pay_list_id
+            or artifact.template_version != workbook_input.template_version
+            or artifact.generated_by != command.actor_id
+            or artifact.generated_at != command.generated_at
+            or artifact.official_acceptance_evidence_ref is not None
+            or artifact.official_acceptance_evidence_hash is not None
+            or artifact.official_accepted_at is not None
+        ):
+            _fail_official_workbook_generation(
+                "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT",
+                "Official payment workbook idempotency key conflicts",
+                status_code=409,
+            )
+        stored_content = _read_replay_official_payment_workbook(artifact)
+        replay_command = _official_workbook_activity_command(
+            command=command,
+            case_id=case_id,
+            artifact=artifact,
+            content_hash=artifact.content_sha256,
+            workbook_input=workbook_input,
+            rows_snapshot_hash=rows_snapshot_hash,
+        )
+        projection, legacy_status = _activity_projection(transaction, case_id)
+        try:
+            activity = append_case_activity(
+                replay_command,
+                transaction,
+                previous_projection=projection,
+                current_projection=projection,
+                legacy_case_status=legacy_status,
+                conflict_codes=(),
+            )
+        except BusinessError as exc:
+            raise BusinessError(
+                "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT",
+                "Official payment workbook replay conflicts",
+                status_code=409,
+            ) from exc
+        return GenerateOfficialPaymentWorkbookResult(
+            artifact_id=artifact.id,
+            pay_list_id=command.pay_list_id,
+            filename=filename,
+            content_type=_OFFICIAL_PAYMENT_WORKBOOK_CONTENT_TYPE,
+            content=stored_content,
+            content_sha256=artifact.content_sha256,
+            managed_storage_path=artifact.managed_storage_path,
+            template_version=workbook_input.template_version,
+            template_content_hash=workbook_input.template_content_hash,
+            workbook_input_version_id=workbook_input.version_id,
+            activity_ids=(activity.activity_id,),
+            generated_at=command.generated_at,
+            generated_status="GENERATED",
+            accepted=False,
+            paid=False,
+            ticket_verified=False,
         )
 
     content = _render_resolved_official_payment_workbook(
@@ -2426,73 +2649,50 @@ def generate_official_payment_workbook(
         official_acceptance_evidence_hash=None,
         official_accepted_at=None,
     )
-    activity_ids: list[str] = []
     try:
         transaction.add(carrier)
         transaction.flush()
-        for case_id in case_ids:
-            projection, legacy_status = _activity_projection(transaction, case_id)
-            activity = append_case_activity(
-                LifecycleEventCommand(
-                    case_id=case_id,
-                    event_type="OFFICIAL_PAYMENT_WORKBOOK_GENERATED",
-                    lane=ActivityLane.FEE,
-                    effective_at=command.generated_at,
-                    occurred_at=command.generated_at,
-                    evidence_refs=(
-                        EvidenceReference(
-                            case_id=case_id,
-                            evidence_kind="OFFICIAL_PAYMENT_WORKBOOK_ARTIFACT",
-                            object_type="PayListExportArtifact",
-                            object_id=artifact_id,
-                            content_hash=content_hash,
-                            captured_at=command.generated_at,
-                        ),
-                    ),
-                    actor_id=command.actor_id,
-                    reviewer_id=None,
-                    idempotency_key=f"official-payment-workbook:{artifact_id}:{case_id}",
-                    source_activity_id=None,
-                    supersedes_event_id=None,
-                    payload={
-                        "accepted": False,
-                        "artifact_id": artifact_id,
-                        "content_sha256": content_hash,
-                        "generated_status": "GENERATED",
-                        "managed_storage_path": managed_storage_path,
-                        "paid": False,
-                        "pay_list_id": command.pay_list_id,
-                        "template_version": workbook_input.template_version,
-                        "ticket_verified": False,
-                        "workbook_input_version_id": workbook_input.version_id,
-                    },
-                    confirmation_status=ConfirmationStatus.CONFIRMED,
-                ),
-                transaction,
-                previous_projection=projection,
-                current_projection=projection,
-                legacy_case_status=legacy_status,
-                conflict_codes=(),
-            )
-            activity_ids.append(activity.activity_id)
+        projection, legacy_status = _activity_projection(transaction, case_id)
+        activity = append_case_activity(
+            _official_workbook_activity_command(
+                command=command,
+                case_id=case_id,
+                artifact=carrier,
+                content_hash=content_hash,
+                workbook_input=workbook_input,
+                rows_snapshot_hash=rows_snapshot_hash,
+            ),
+            transaction,
+            previous_projection=projection,
+            current_projection=projection,
+            legacy_case_status=legacy_status,
+            conflict_codes=(),
+        )
     except Exception as exc:
         try:
             compensate_official_payment_workbook(managed_storage_path)
         except BusinessError as cleanup_exc:
             raise cleanup_exc from exc
+        if isinstance(exc, IntegrityError):
+            raise BusinessError(
+                "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT",
+                "Official payment workbook write conflicts",
+                status_code=409,
+            ) from exc
         raise
 
     return GenerateOfficialPaymentWorkbookResult(
         artifact_id=artifact_id,
         pay_list_id=command.pay_list_id,
-        filename=f"{pay_list.pay_list_no or f'PL-{pay_list.id:06d}'}-official.xlsm",
+        filename=filename,
         content_type=_OFFICIAL_PAYMENT_WORKBOOK_CONTENT_TYPE,
         content=stored_content,
         content_sha256=content_hash,
         managed_storage_path=managed_storage_path,
         template_version=workbook_input.template_version,
+        template_content_hash=workbook_input.template_content_hash,
         workbook_input_version_id=workbook_input.version_id,
-        activity_ids=tuple(activity_ids),
+        activity_ids=(activity.activity_id,),
         generated_at=command.generated_at,
         generated_status="GENERATED",
         accepted=False,

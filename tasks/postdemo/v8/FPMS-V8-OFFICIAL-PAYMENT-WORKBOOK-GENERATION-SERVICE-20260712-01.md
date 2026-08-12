@@ -107,8 +107,9 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
 
 - RED: the exact focused test failed `4` tests because the row215 generation service and
   resolver/adapter bindings were absent.
-- GREEN: the exact focused test passed `4` tests; the focused dependency regression tranche
-  passed `41` tests.
+- GREEN before independent review: the exact focused test passed `5` tests; the focused dependency
+  regression tranche passed `42` tests. Independent review then required the successor corrections
+  frozen below; final counts must be recorded from the amended candidate.
 - The service resolves the current workbook input for the supplied runtime profile before any
   product write. Non-test runtime accepts only a resolved `PRODUCTION` input; missing or
   `TEST_ONLY` production input returns `409` with no artifact or managed output.
@@ -118,3 +119,31 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   failure compensates the newly written managed file.
 - Scoped Ruff and whitespace checks are required again on the exact commit before independent
   review. No endpoint, UI, schema, payment/acceptance mutation or production input was added.
+- Amended candidate GREEN: the exact focused test passes `9` tests. The immediately preceding
+  generation/adapter/input-governance/internal-export tranche passed `45` tests before the final
+  focused conflict regression was added; it is historical support, not a claim over the amended
+  bytes. These are implementation evidence only until independent review accepts the closure.
+
+## Frozen Generation Successor Contract (2026-08-13)
+
+- Production generation requires both the resolved current `PRODUCTION` workbook-input version and
+  the current effective `DG-PAYMENT-WORKBOOK:GLOBAL` decision. The gate source reference is the
+  resolved upload-proof managed path, its source version is the resolved template version, and its
+  canonical decision value binds the exact workbook-input version ID, scope, template version/hash,
+  upload-proof hash, structure-snapshot hash and effective interval. Missing, revoked, future,
+  mismatched or corrupt authority is `PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED` / `409` / no write.
+  The isolated `test` runtime continues to use only an explicitly resolved `TEST_ONLY` input and
+  cannot activate or stand in for production authority.
+- This row owns exactly one FEE activity. Therefore its atomic closure accepts only a PayList whose
+  persisted GovPayment rows resolve to exactly one case. Empty or multi-case input is `409` with no
+  artifact or managed output; a later separately contracted owner may define multi-case lineage.
+- The durable FEE activity is linked to the artifact evidence and carries the resolved input-version
+  ID, template version, template source hash, generated output hash and canonical requested-row
+  snapshot hash. Generated status remains distinct from official acceptance, payment and ticket
+  verification.
+- The `(pay_list_id, idempotency_key)` identity supports exact replay only. Replay revalidates the
+  current gate/input binding, artifact tuple, managed bytes/hash and the exact lifecycle activity
+  command, then returns the same artifact, bytes and activity identity without rerendering or a new
+  write. Any differing actor, time, rows, input version/hash, artifact/activity tuple or managed
+  bytes is `OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT` / `409`. A concurrent unique-write loss
+  maps to the same conflict family; caller-owned commit/rollback remains unchanged.
