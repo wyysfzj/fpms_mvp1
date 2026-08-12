@@ -593,7 +593,7 @@ def create_service_receivable_obligation(
         _fail("SERVICE_RECEIVABLE_INVALID", "服务费应收输入无效", status_code=400)
     for field, value, limit in (
         ("price_book_version_id", command.price_book_version_id, 36),
-        ("item_code", command.item_code, 64),
+        ("item_code", command.item_code, 128),
         ("case_id", command.case_id, 36),
         ("actor_id", command.actor_id, 36),
         ("idempotency_key", command.idempotency_key, 96),
@@ -679,13 +679,46 @@ def create_service_receivable_obligation(
         _fail("SERVICE_RECEIVABLE_CONFLICT", "服务价格项目金额无效", status_code=409)
 
     source_key = f"service-receivable-source:{command.idempotency_key}"
+    recognition_key = f"service-receivable:{command.idempotency_key}"
     with transaction.no_autoflush:
-        existing_source = transaction.scalar(
-            select(CaseActivityEvent).where(
-                CaseActivityEvent.case_id == command.case_id,
-                CaseActivityEvent.idempotency_key == source_key,
+        source_owners = tuple(
+            transaction.scalars(
+                select(CaseActivityEvent).where(CaseActivityEvent.idempotency_key == source_key)
             )
         )
+        recognition_owners = tuple(
+            transaction.scalars(
+                select(CaseActivityEvent).where(
+                    CaseActivityEvent.idempotency_key == recognition_key
+                )
+            )
+        )
+    if (
+        len(source_owners) > 1
+        or len(recognition_owners) > 1
+        or bool(source_owners) != bool(recognition_owners)
+        or any(owner.case_id != command.case_id for owner in (*source_owners, *recognition_owners))
+    ):
+        _fail(
+            "SERVICE_RECEIVABLE_CONFLICT",
+            "服务费应收幂等键已由其他案件或不完整事实占用",
+            status_code=409,
+        )
+    existing_source = source_owners[0] if source_owners else None
+    if existing_source is not None:
+        existing_recognition = recognition_owners[0]
+        if (
+            existing_source.activity_type != "SERVICE_PRICE_ITEM_SELECTED"
+            or existing_source.lane != ActivityLane.FEE.value
+            or existing_recognition.activity_type != _ACTIVITY_TYPE
+            or existing_recognition.lane != ActivityLane.FEE.value
+            or existing_recognition.source_activity_id != existing_source.id
+        ):
+            _fail(
+                "SERVICE_RECEIVABLE_CONFLICT",
+                "服务费应收幂等事实不匹配",
+                status_code=409,
+            )
     source_time = command.recognized_at if existing_source is None else existing_source.effective_at
     projection = _case_projection(case)
     source_result = append_case_activity(
@@ -742,7 +775,7 @@ def create_service_receivable_obligation(
             source_status=FeeSourceStatus.VERIFIED,
             lines=(
                 FeeObligationLineInput(
-                    fee_code=command.item_code,
+                    fee_code=_service_receivable_fee_code(command.item_code),
                     fee_name=command.item_code,
                     fee_year_key=0,
                     official_full_amount=None,
@@ -754,7 +787,7 @@ def create_service_receivable_obligation(
                 ),
             ),
             actor_id=command.actor_id,
-            idempotency_key=f"service-receivable:{command.idempotency_key}",
+            idempotency_key=recognition_key,
             supersedes_obligation_id=None,
             supersede_reason=None,
         ),
@@ -770,6 +803,12 @@ def create_service_receivable_obligation(
         source_activity_id=source_result.activity_id,
         reused=recognition.reused,
     )
+
+
+def _service_receivable_fee_code(item_code: str) -> str:
+    if len(item_code) <= 64:
+        return item_code
+    return hashlib.sha256(item_code.encode("utf-8")).hexdigest()
 
 
 def get_fee_obligation(

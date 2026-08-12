@@ -118,6 +118,16 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   `fee_domain=SERVICE`, `obligation_type=SERVICE_FEE`, no source document, no official amount, zero
   reduction, payable/source amount equal to the approved service unit price and official evidence
   `NOT_APPLICABLE` through existing domain behavior.
+- The source activity and result durably preserve the exact approved item code up to the
+  price-book carrier's 128-character limit. Because the inherited obligation-line `fee_code`
+  carrier is limited to 64 characters and schema change is outside this closure, codes of at most
+  64 characters are stored unchanged; longer codes use the complete lowercase SHA-256 hex digest
+  of the exact UTF-8 item code as the deterministic line identity. The exact item code is never
+  truncated and remains recoverable from the source activity linked by `source_activity_id`.
+- The external idempotency key has one global durable owner across all cases. Both derived source
+  and recognition activity keys must be absent together or form one complete same-case linked
+  tuple; cross-case ownership, multiplicity, partial tuples or mismatched activity types/lineage
+  return `SERVICE_RECEIVABLE_CONFLICT / 409` before any write.
 - Exact replay reuses both source activity and obligation; a differing book/item/case/actor or stored
   source tuple conflicts. No official rate, CNIPA amount, GovPayment, PayList, draft, client
   instruction, payment or official-evidence fact is created or inferred.
