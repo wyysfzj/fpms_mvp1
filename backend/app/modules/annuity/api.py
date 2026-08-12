@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import current_user_dep, require_perm
 from app.core.config import get_settings
 from app.core.errors import raise_business_error
-from app.core.storage import ensure_dir, save_upload_file
+from app.core.storage import ensure_dir
 from app.db.session import get_db
 from app.modules.annuity.models import PayList
 from app.modules.annuity.official_payment_workbook_input_schemas import (
@@ -223,6 +223,47 @@ def _managed_file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _save_upload_no_follow(
+    upload: UploadFile,
+    directory: Path,
+    name: str,
+    identity: tuple[int, int],
+) -> None:
+    directory_descriptor: int | None = None
+    file_descriptor: int | None = None
+    try:
+        directory_descriptor = os.open(
+            directory,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        opened_directory = os.fstat(directory_descriptor)
+        if (opened_directory.st_dev, opened_directory.st_ino) != identity:
+            raise OSError("managed directory changed")
+        file_descriptor = os.open(
+            name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=directory_descriptor,
+        )
+        with os.fdopen(file_descriptor, "wb") as target:
+            file_descriptor = None
+            upload.file.seek(0)
+            while chunk := upload.file.read(1024 * 1024):
+                target.write(chunk)
+            upload.file.seek(0)
+    except OSError:
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+            "Official payment workbook managed file conflict",
+            status_code=409,
+        )
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+        if directory_descriptor is not None:
+            os.close(directory_descriptor)
+
+
 def _directory_identity(directory: Path) -> tuple[int, int]:
     try:
         current = directory.lstat()
@@ -297,10 +338,20 @@ def _store_workbook_uploads(
     try:
         directory.mkdir(exist_ok=False)
         created_identity = _directory_identity(directory)
-        save_upload_file(template_file, str(template_path))
+        _save_upload_no_follow(
+            template_file,
+            directory,
+            template_path.name,
+            created_identity,
+        )
         if _directory_identity(directory) != created_identity:
             raise OSError("managed directory changed")
-        save_upload_file(upload_proof_file, str(proof_path))
+        _save_upload_no_follow(
+            upload_proof_file,
+            directory,
+            proof_path.name,
+            created_identity,
+        )
         if _directory_identity(directory) != created_identity:
             raise OSError("managed directory changed")
     except FileExistsError:

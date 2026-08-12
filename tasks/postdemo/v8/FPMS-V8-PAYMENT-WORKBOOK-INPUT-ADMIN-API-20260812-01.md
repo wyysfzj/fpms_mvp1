@@ -53,8 +53,8 @@ router tests. Prove production refuses `TEST_ONLY` and performs no business writ
   limited to the same resource, permission, service and task closure.
 - `POST /payment-workbook-inputs/{version_id}/activate` accepts only `idempotency_key`.
 - `POST /payment-workbook-inputs/{version_id}/retire` accepts only `reason` and
-  `idempotency_key`. These three transitions return 200.
-- All four routes require `Fee.Edit`. Actor comes from authenticated server context;
+  `idempotency_key`. These four transitions return 200.
+- All five routes require `Fee.Edit`. Actor comes from authenticated server context;
   validation/review time comes from WB-I2 and activation/retirement time plus
   `runtime_profile` come from server configuration. No request schema exposes actor, time, managed
   path, current identity override, or runtime profile.

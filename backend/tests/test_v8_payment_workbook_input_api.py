@@ -367,6 +367,35 @@ def test_keyed_directory_symlink_is_409_without_write(
     assert list(target.iterdir()) == []
 
 
+def test_managed_file_symlink_is_rejected_before_external_write(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.bin"
+    outside.write_bytes(b"must remain unchanged")
+    original = annuity_api._save_upload_no_follow
+    injected = False
+
+    def inject_symlink(upload, directory, name, identity) -> None:
+        nonlocal injected
+        if not injected:
+            injected = True
+            (directory / name).symlink_to(outside)
+        original(upload, directory, name, identity)
+
+    monkeypatch.setattr(annuity_api, "_save_upload_no_follow", inject_symlink)
+    client, transaction = _client(monkeypatch, tmp_path)
+    response = client.post(
+        "/api/v1/payment-workbook-inputs",
+        data=_register_data(idempotency_key="file-symlink"),
+        files=_files(),
+    )
+    assert response.status_code == 409
+    assert transaction.commit_calls == 0
+    assert transaction.rollback_calls == 1
+    assert outside.read_bytes() == b"must remain unchanged"
+
+
 @pytest.mark.parametrize(
     ("path", "payload", "service_name", "command_type"),
     [
