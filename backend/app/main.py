@@ -14,6 +14,16 @@ from app.core.middleware import CorrelationIdMiddleware, RequestLoggingMiddlewar
 
 configure_logging()
 
+_OFFICIAL_WORKBOOK_RESPONSE_HEADERS = [
+    "Content-Disposition",
+    "X-FPMS-Artifact-Id",
+    "X-FPMS-Content-SHA256",
+    "X-FPMS-Template-Version",
+    "X-FPMS-Template-Content-SHA256",
+    "X-FPMS-Workbook-Input-Version-Id",
+    "X-FPMS-Workbook-Disposition",
+]
+
 
 def _expand_dev_cors_origins(origins: list[str]) -> list[str]:
     expanded: list[str] = []
@@ -44,6 +54,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=_OFFICIAL_WORKBOOK_RESPONSE_HEADERS,
     )
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
