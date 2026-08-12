@@ -1,6 +1,6 @@
 # FPMS-V8-INPUT-ACTIVATION-CAPABILITY-CLOSE-20260813-01
 
-Status: READY / NOT STARTED
+Status: REVIEW REQUIRED / CAPABILITY EVIDENCE GREEN
 Risk: PROTECTED
 Task Contract Profile: `TC-QA`
 Execution role: QA-only
@@ -57,3 +57,22 @@ do not reverse any accepted lane task or change configuration. Leave accepted pr
 Independent High review binds exact current bytes and decisive logs with zero findings.
 `CONFIG_REQUIRED` is acceptable only with verified negative-path evidence. This QA-only close
 may establish `CAPABILITY_READY` but never claims production activation.
+
+## C3 Git-native capability close
+
+- QA-only closure: `CAPABILITY_READY + CONFIG_REQUIRED`; it never claims production activation.
+- Current production gates remain `DG-PAYMENT-WORKBOOK:GLOBAL` and
+  `DG-SERVICE-RATE-VERSION:GLOBAL`; missing configuration is `409 / NO WRITE`.
+- `TEST_ONLY` workbook and service-price inputs remain isolated from production resolution.
+- Accepted successor review chain: `090b4b7 -> d2810c3 -> 2280839`.
+- Row 278 current cumulative bytes: `6a17a18 + 97771c2`; Independent row 278 review:
+  APPROVED, P0/P1/P2 `0/0/0`; amended Playwright result `1 passed` in `8.0s`.
+- Focused RED:
+  `.venv/bin/pytest -q tests/test_v8_input_activation_capability_close.py` ->
+  `3 failed, 1 passed`; only the missing receipt and unclosed card failed.
+- Focused GREEN: `4 passed` in `1.65s`; decisive inherited ten-node negative-path tranche:
+  `15 passed` in `4.38s` after parametrization expansion. Both emitted only two pre-existing
+  dependency deprecation warnings.
+- No product fix, source input, configuration mutation, or positive gate decision was made.
+- Independent High review of this task's exact commit remains required; the implementer does not
+  approve this QA receipt.
