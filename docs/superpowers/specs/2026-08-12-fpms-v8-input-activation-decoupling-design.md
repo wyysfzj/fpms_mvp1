@@ -58,7 +58,8 @@
 
 依据既有 rows 214–222 和 278 的闭包，开发并验收：
 
-- `.xlsm` 输入载体、受控上传、原始文件与上传证明保存；
+- `.xlsm` 模板处理、正式生成与官方接收证据链；真实输入的受控上传、原始文件、上传
+  证明和生产激活由 4.4 节新增的精确 successor owners 承担；
 - 工作表、列、数据验证、隐藏内容和 VBA 结构的只读检查与保留；
 - 模板版本、内容哈希、来源、适用范围、生效区间和审批状态；
 - 经激活真实模板的填充、正式生成、下载、API、前端适配和 UI；
@@ -67,9 +68,9 @@
 - 缺失、过期、撤销、哈希/结构/范围不符时的 `409 / NO WRITE`；
 - 宏保留但服务端从不执行。
 
-本设计不额外发明 catalog 未要求的第二套页面或接口。受控上传/审批所需的精确载体和
-管理入口由后续实施计划复用现有配置/证据模块，或在发现真实缺口时物化最小 successor
-任务。
+本设计不把真实输入治理职责塞进 rows 214–222。现有 `t_document_evidence_version` 是
+案件内文书证据载体，不能承载 `GLOBAL` 工作簿配置；`t_customer_decision_gate` 只保存客户
+决策，不能保存工作簿、上传证明或独立复核。因此 4.4 节明确增加三个最小 successor owners。
 
 ### 4.2 测试输入与真实输入
 
@@ -92,6 +93,61 @@ row 214 的测试 fixture 是合同完整的合成 `.xlsm`，只证明处理引�
 - 管理员可以上传、查看校验结果和发起审批；
 - 正式工作簿生成与后续真实接收证据链不得使用测试模板；
 - 生产生成请求返回 409，并且不得创建 artifact、FEE activity 或改变 PayList 状态。
+
+### 4.4 真实工作簿输入的最小 successor owners
+
+以下三个任务是本设计冻结的必要前置，不属于 rows 214–222 的隐含职责。实施计划必须按
+`WB-I1 → WB-I2 → row 214 → WB-I3 → rows 215–222 → row 278` 排序，并把 migration、
+`annuity/models.py`、`annuity/api.py` 和 SQLite 写测试串行化。
+
+#### WB-I1 — `FPMS-V8-PAYMENT-WORKBOOK-INPUT-VERSION-CARRIER-20260812-01`
+
+- 精确 closure：增加一个 `GLOBAL` 工作簿输入版本载体，持久保存不可变
+  `source_classification (PRODUCTION|TEST_ONLY)`、模板版本、原始文件 managed-storage path/hash、
+  受控上传证明 path/hash、结构校验 snapshot/hash、有效区间、`DRAFT|VALIDATED|APPROVED|REJECTED`
+  review tuple、`INACTIVE|ACTIVE|RETIRED` activation tuple、supersedes、idempotency、current identity
+  和真实 actor/server time；数据库约束确保 reviewer 与 uploader 不是同一实际用户，且 active
+  只能来自 `PRODUCTION + APPROVED + VALIDATED`。
+- 权限：本任务没有 endpoint；不扩大权限。
+- allowlist：
+  `backend/alembic/versions/v8_payment_workbook_input_version.py`、
+  `backend/app/modules/annuity/models.py`、`backend/app/models/__init__.py`、
+  `backend/tests/test_v8_payment_workbook_input_version.py`、精确任务卡和 evidence 目录。
+- non-closure：不上传文件、不校验 `.xlsm`、不审批/激活、不生成工作簿、不修改 PayList。
+
+#### WB-I2 — `FPMS-V8-PAYMENT-WORKBOOK-INPUT-GOVERNANCE-SERVICE-20260812-01`
+
+- 精确 closure：一个深服务接收已经写入受控 managed storage 的真实模板与证明身份，重算两者
+  SHA-256，创建/幂等复用 DRAFT，并提供独立 review 与 activate/retire 状态转换；在 row 214
+  完成后，通过其同一只读 `.xlsm` 结构检查入口把 DRAFT 转为 VALIDATED。任何文件缺失、哈希、
+  结构、范围、有效期、审批、身份分离或 predecessor 冲突均 409/rollback。`TEST_ONLY` 只能在
+  测试环境的显式命令上下文中创建，服务对生产激活一律拒绝。宏只读取/保留，永不执行。
+- 依赖分段：register/review carrier 行为依赖 WB-I1；VALIDATED/activate 行为还依赖 row 214。
+  row 214 的 fixture 通过显式测试上下文直接调用 adapter，不依赖生产 active input，因而无环。
+- 权限：纯服务没有 endpoint；调用者必须提供服务器认证 actor，服务不接受客户端 reviewer/time。
+- allowlist：`backend/app/modules/annuity/official_payment_workbook_input_service.py`、
+  `backend/tests/test_v8_payment_workbook_input_service.py`、精确任务卡和 evidence 目录；row 214
+  adapter 为只读依赖，不在本任务修改。
+- non-closure：不接收 HTTP multipart、不修改 router/adapter、不给出 UI、不生成正式工作簿、
+  不记录官方接收/缴费/票据事实。
+
+#### WB-I3 — `FPMS-V8-PAYMENT-WORKBOOK-INPUT-ADMIN-API-20260812-01`
+
+- 精确 closure：在既有 annuity router 中提供一组同资源管理动作：multipart register
+  （真实 `.xlsm` + 上传证明 + 版本/范围/有效期）、review 和 activate/retire；统一调用 WB-I2。
+  register 使用现有 `app.core.storage` 写入受控目录，失败时清理本请求新建文件；返回 201 new /
+  200 replay，review/activate/retire 返回 200，业务冲突 409，认证/授权/校验保持 401/403/422。
+- 权限：所有动作精确使用 `Fee.Edit`；review/activate 的 actor 和 server time 只从服务端上下文
+  取得，不能由 payload 指定。
+- allowlist：`backend/app/modules/annuity/api.py`、
+  `backend/app/modules/annuity/official_payment_workbook_input_schemas.py`、
+  `backend/tests/test_v8_payment_workbook_input_api.py`、精确任务卡和 evidence 目录；
+  `app/core/storage.py` 只读复用。
+- non-closure：不增加管理 UI、不修改通用上传服务、不激活服务价格、不生成工作簿、不改变
+  PayList、payment 或 ticket 状态。
+
+三个任务合起来形成唯一明确的用户输入路径，但不增加未经批准的 UI。管理员可以通过受保护
+API 提供输入；若未来客户明确要求页面，再单独冻结 UI 任务，不能在本 successor 中推断。
 
 ## 5. 服务价格能力
 
@@ -118,7 +174,7 @@ row 214 的测试 fixture 是合同完整的合成 `.xlsm`，只证明处理引�
 因名称看似“测试”就获得特殊信任。
 
 真实生产输入必须由机构上传完整价格版本，保留原始来源和内容哈希，并经过授权审批。
-只有精确版本在适用范围和生效区间内处于 active，才允许报价或创建服务费应收。未满足时
+只有精确版本在适用范围和生效区间内处于 active，才允许创建服务费应收。未满足时
 生产请求返回 409 且不创建 obligation、line、activity 或其他应收状态。
 
 ## 6. Catalog successor 映射
@@ -186,14 +242,16 @@ Full/Final 验收关注软件是否完整、安全地支持这两类用户输入
 
 ## 10. 实施顺序
 
-1. 物化一个 successor authority/adoption 任务，精确绑定本设计并修正 rows 175、176、
+1. 物化一个 successor authority/adoption 任务，精确绑定本设计、WB-I1/I2/I3，并修正 rows 175、176、
    214–229、278 与 Full/Final 的依赖解释；不改 frozen catalog。
-2. 更新两条 lane manifest，使能力任务在 `CONFIG_REQUIRED` 下可执行，同时保留生产 gate。
-3. 先做 carrier/import/validation，再做 activation，最后做正式输出/应收与 UI/E2E；共享 schema、
+2. 先物化并完成 WB-I1，再允许 row 214 与 WB-I2 的无环分段；WB-I3 在 row 214 和 WB-I2
+   完成后提供受保护的真实输入路径。
+3. 更新两条 lane manifest，使能力任务在 `CONFIG_REQUIRED` 下可执行，同时保留生产 gate。
+4. 先做 carrier/import/validation，再做 activation，最后做正式输出/应收与 UI/E2E；共享 schema、
    router、SQLite 写测试串行。
-4. 每项使用既有原子任务 closure、targeted TDD、独立 HIGH review 和 fast close；不得重做已
+5. 每项使用既有原子任务 closure、targeted TDD、独立 HIGH review 和 fast close；不得重做已
    完成证据。
-5. 两条 lane 终态 PASS 后执行 row 281、282、283；release 永远最后，并记录真实配置状态。
+6. 两条 lane 终态 PASS 后执行 row 281、282、283；release 永远最后，并记录真实配置状态。
 
 ## 11. 非目标
 

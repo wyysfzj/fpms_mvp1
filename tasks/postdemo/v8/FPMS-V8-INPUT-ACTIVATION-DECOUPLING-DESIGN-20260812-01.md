@@ -42,7 +42,8 @@ Task Contract Profile: `TC-DOCS`
 Freeze one successor design for rows 175, 176, 214–229 and 278 that permits development and
 independent acceptance with isolated test-only inputs while requiring real reviewed user inputs
 before production activation, formal workbook generation or service receivable creation. Freeze
-the corresponding Full/Final/Release interpretation without changing the frozen catalog here.
+the corresponding Full/Final/Release interpretation and the three exact workbook-input successor
+owner contracts without changing the frozen catalog here.
 
 ## Explicit Non-Closure
 
@@ -61,6 +62,9 @@ workbook or price version.
 ## Remaining Follow-Up Task IDs
 
 - `FPMS-V8-INPUT-ACTIVATION-DECOUPLING-IMPLEMENTATION-PLAN-20260812-01`
+- `FPMS-V8-PAYMENT-WORKBOOK-INPUT-VERSION-CARRIER-20260812-01`
+- `FPMS-V8-PAYMENT-WORKBOOK-INPUT-GOVERNANCE-SERVICE-20260812-01`
+- `FPMS-V8-PAYMENT-WORKBOOK-INPUT-ADMIN-API-20260812-01`
 - Exact successor materialization tasks identified by that plan.
 
 ## Allowed Files
