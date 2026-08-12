@@ -7,7 +7,7 @@ Task Contract Profile: `TC-API`
 
 ## Exact Closure Slice
 
-Add protected same-resource multipart register, review, activate, and retire actions to the
+Add protected same-resource multipart register, validate, review, activate, and retire actions to the
 annuity router through WB-I2. Register stores the real `.xlsm` and upload proof through existing
 managed storage and cleans only new request files on failure. Preserve 201 new/200 replay,
 200 state transitions, 409 conflicts, and 401/403/422 authentication, permission, and validation
@@ -47,6 +47,10 @@ router tests. Prove production refuses `TEST_ONLY` and performs no business writ
   independently re-hashes managed files; hashes are not client fields. New registration returns
   201; exact replay returns 200.
 - `POST /payment-workbook-inputs/{version_id}/review` accepts only `decision` and `reason`.
+- `POST /payment-workbook-inputs/{version_id}/validate` has no request body and provides the
+  required DRAFT → VALIDATED bridge through WB-I2 before independent review. Its omission from
+  the earlier four-action wording was an internal reachability defect; this exact correction is
+  limited to the same resource, permission, service and task closure.
 - `POST /payment-workbook-inputs/{version_id}/activate` accepts only `idempotency_key`.
 - `POST /payment-workbook-inputs/{version_id}/retire` accepts only `reason` and
   `idempotency_key`. These three transitions return 200.
@@ -59,6 +63,10 @@ router tests. Prove production refuses `TEST_ONLY` and performs no business writ
   creation is exclusive. An exact retry reuses both existing files only when both request hashes
   agree; partial or differing files conflict. On failure, the API removes only files and directory
   created by that request, never a replay's pre-existing files.
+- Registration holds an exclusive cross-process lock on the managed storage parent through file
+  publication, WB-I2 registration, transaction completion and any request-owned cleanup. This
+  prevents an uncommitted directory from becoming a concurrent replay. Lexical digest paths and
+  no-follow checks reject keyed-directory or managed-file symlinks as 409 conflicts.
 - Responses expose version, source/version hashes, workflow/activation/effective/lineage/current
   state and server actors/times, but never managed storage paths or derived official acceptance,
   payment, ticket, PayList, or legal facts. The caller commits on success and rolls back on every

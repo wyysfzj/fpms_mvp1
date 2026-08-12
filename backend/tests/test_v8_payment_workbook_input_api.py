@@ -4,6 +4,7 @@ import inspect
 from datetime import datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
+from threading import Event, Thread
 from types import SimpleNamespace
 
 import pytest
@@ -26,6 +27,7 @@ from app.modules.annuity.official_payment_workbook_input_service import (
     RegisterWorkbookInputCommand,
     RetireWorkbookInputCommand,
     ReviewWorkbookInputCommand,
+    ValidateWorkbookInputCommand,
     WorkbookInputResult,
 )
 
@@ -117,6 +119,7 @@ def _client(
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=ACTOR_ID)
     for path in (
         "/payment-workbook-inputs",
+        "/payment-workbook-inputs/{version_id}/validate",
         "/payment-workbook-inputs/{version_id}/review",
         "/payment-workbook-inputs/{version_id}/activate",
         "/payment-workbook-inputs/{version_id}/retire",
@@ -157,6 +160,7 @@ def test_strict_schemas_and_routes_freeze_server_owned_fields() -> None:
     assert "runtime_profile" not in WorkbookInputOut.model_fields
     for path in (
         "/payment-workbook-inputs",
+        "/payment-workbook-inputs/{version_id}/validate",
         "/payment-workbook-inputs/{version_id}/review",
         "/payment-workbook-inputs/{version_id}/activate",
         "/payment-workbook-inputs/{version_id}/retire",
@@ -280,9 +284,98 @@ def test_register_failure_never_removes_exact_replay_files(
     assert proof.read_bytes() == b'{"controlled_upload":true}'
 
 
+def test_register_serializes_publication_through_transaction_and_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    first_entered = Event()
+    release_first = Event()
+    second_entered = Event()
+    responses: dict[str, object] = {}
+    calls = 0
+
+    def register(_transaction, _command) -> WorkbookInputResult:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_entered.set()
+            assert release_first.wait(5)
+            raise_business_error(
+                "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+                "owner failed",
+                status_code=409,
+            )
+        second_entered.set()
+        return _result("CREATED")
+
+    monkeypatch.setattr(annuity_api, "register_workbook_input", register)
+    client, transaction = _client(monkeypatch, tmp_path)
+
+    def request(name: str) -> None:
+        responses[name] = client.post(
+            "/api/v1/payment-workbook-inputs",
+            data=_register_data(idempotency_key="concurrent-publish"),
+            files=_files(),
+        )
+
+    owner = Thread(target=request, args=("owner",))
+    replay = Thread(target=request, args=("replay",))
+    owner.start()
+    assert first_entered.wait(5)
+    replay.start()
+    assert not second_entered.wait(0.2)
+    release_first.set()
+    owner.join(5)
+    replay.join(5)
+    assert not owner.is_alive() and not replay.is_alive()
+    assert responses["owner"].status_code == 409
+    assert responses["replay"].status_code == 201
+    directory = tmp_path / sha256(b"concurrent-publish").hexdigest()
+    assert (directory / "template.xlsm").is_file()
+    assert (directory / "upload-proof.bin").is_file()
+    assert transaction.rollback_calls == 1
+    assert transaction.commit_calls == 1
+
+
+def test_keyed_directory_symlink_is_409_without_write(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    key = "symlink-replay"
+    target = tmp_path / "other-directory"
+    target.mkdir()
+    directory = tmp_path / sha256(key.encode()).hexdigest()
+    directory.symlink_to(target, target_is_directory=True)
+    called = False
+
+    def register(_transaction, _command) -> WorkbookInputResult:
+        nonlocal called
+        called = True
+        return _result()
+
+    monkeypatch.setattr(annuity_api, "register_workbook_input", register)
+    client, transaction = _client(monkeypatch, tmp_path)
+    response = client.post(
+        "/api/v1/payment-workbook-inputs",
+        data=_register_data(idempotency_key=key),
+        files=_files(),
+    )
+    assert response.status_code == 409
+    assert called is False
+    assert transaction.commit_calls == 0
+    assert transaction.rollback_calls == 1
+    assert list(target.iterdir()) == []
+
+
 @pytest.mark.parametrize(
     ("path", "payload", "service_name", "command_type"),
     [
+        (
+            f"/api/v1/payment-workbook-inputs/{VERSION_ID}/validate",
+            None,
+            "validate_workbook_input",
+            ValidateWorkbookInputCommand,
+        ),
         (
             f"/api/v1/payment-workbook-inputs/{VERSION_ID}/review",
             {"decision": "APPROVE", "reason": "独立复核通过"},
@@ -307,7 +400,7 @@ def test_transition_routes_use_server_actor_time_and_caller_transaction(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     path: str,
-    payload: dict[str, str],
+    payload: dict[str, str] | None,
     service_name: str,
     command_type: type,
 ) -> None:
@@ -320,7 +413,7 @@ def test_transition_routes_use_server_actor_time_and_caller_transaction(
 
     monkeypatch.setattr(annuity_api, service_name, service)
     client, transaction = _client(monkeypatch, tmp_path)
-    response = client.post(path, json=payload)
+    response = client.post(path, json=payload) if payload is not None else client.post(path)
     assert response.status_code == 200
     assert isinstance(seen[0], command_type)
     assert seen[0].actor_id == ACTOR_ID

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import fcntl
 import os
+import stat
+from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from hashlib import sha256
@@ -15,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import current_user_dep, require_perm
 from app.core.config import get_settings
 from app.core.errors import raise_business_error
-from app.core.storage import ensure_dir, safe_join, save_upload_file
+from app.core.storage import ensure_dir, save_upload_file
 from app.db.session import get_db
 from app.modules.annuity.models import PayList
 from app.modules.annuity.official_payment_workbook_input_schemas import (
@@ -29,10 +32,12 @@ from app.modules.annuity.official_payment_workbook_input_service import (
     RegisterWorkbookInputCommand,
     RetireWorkbookInputCommand,
     ReviewWorkbookInputCommand,
+    ValidateWorkbookInputCommand,
     activate_workbook_input,
     register_workbook_input,
     retire_workbook_input,
     review_workbook_input,
+    validate_workbook_input,
 )
 from app.modules.annuity.schemas import AnnuityTaskListResponse
 from app.modules.annuity.service import (
@@ -140,6 +145,36 @@ def _payment_workbook_storage_root() -> Path:
     return Path(get_settings().storage_dir).resolve() / "payment-workbook-inputs"
 
 
+@contextmanager
+def _payment_workbook_registration_lock(root: Path):
+    ensure_dir(str(root.parent))
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(root.parent, flags)
+    except OSError:
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+            "Official payment workbook storage is unavailable",
+            status_code=409,
+        )
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+    except OSError:
+        os.close(descriptor)
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+            "Official payment workbook storage lock is unavailable",
+            status_code=409,
+        )
+    try:
+        yield
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+
+
 def _upload_hash(upload: UploadFile, field: str) -> str:
     digest = sha256()
     size = 0
@@ -169,11 +204,11 @@ def _upload_hash(upload: UploadFile, field: str) -> str:
 def _managed_file_hash(path: Path) -> str:
     digest = sha256()
     try:
-        with path.open("rb") as stream:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(descriptor, "rb") as stream:
             stat_result = os.fstat(stream.fileno())
             if (
-                not path.is_file()
-                or path.is_symlink()
+                not stat.S_ISREG(stat_result.st_mode)
                 or stat_result.st_size > _PAYMENT_WORKBOOK_UPLOAD_LIMIT
             ):
                 raise OSError("invalid managed file")
@@ -188,21 +223,54 @@ def _managed_file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _remove_created_workbook_files(root: Path, directory: Path) -> None:
-    for name in ("template.xlsm", "upload-proof.bin"):
-        try:
-            Path(safe_join(str(directory), name)).unlink()
-        except FileNotFoundError:
-            pass
-        except OSError:
-            pass
+def _directory_identity(directory: Path) -> tuple[int, int]:
     try:
+        current = directory.lstat()
+    except OSError:
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+            "Official payment workbook managed directory conflict",
+            status_code=409,
+        )
+    if not stat.S_ISDIR(current.st_mode) or stat.S_ISLNK(current.st_mode):
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+            "Official payment workbook managed directory conflict",
+            status_code=409,
+        )
+    return current.st_dev, current.st_ino
+
+
+def _remove_created_workbook_files(
+    root: Path,
+    directory: Path,
+    identity: tuple[int, int],
+) -> None:
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            directory,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != identity:
+            return
+        for name in ("template.xlsm", "upload-proof.bin"):
+            try:
+                os.unlink(name, dir_fd=descriptor)
+            except FileNotFoundError:
+                pass
+    except OSError:
+        return
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    try:
+        if _directory_identity(directory) != identity:
+            return
         directory.rmdir()
-    except OSError:
-        pass
-    try:
         root.rmdir()
-    except OSError:
+    except Exception:
         pass
 
 
@@ -210,7 +278,7 @@ def _store_workbook_uploads(
     template_file: UploadFile,
     upload_proof_file: UploadFile,
     idempotency_key: str,
-) -> tuple[Path, Path, str, str, bool]:
+) -> tuple[Path, Path, str, str, tuple[int, int] | None]:
     if Path(template_file.filename or "").suffix.lower() != ".xlsm":
         raise_business_error(
             "PAYMENT_WORKBOOK_INPUT_INVALID",
@@ -222,38 +290,46 @@ def _store_workbook_uploads(
     proof_hash = _upload_hash(upload_proof_file, "upload_proof_file")
     root = _payment_workbook_storage_root()
     ensure_dir(str(root))
-    directory = Path(safe_join(str(root), sha256(idempotency_key.encode()).hexdigest()))
-    template_path = Path(safe_join(str(directory), "template.xlsm"))
-    proof_path = Path(safe_join(str(directory), "upload-proof.bin"))
-    created = False
+    directory = root / sha256(idempotency_key.encode()).hexdigest()
+    template_path = directory / "template.xlsm"
+    proof_path = directory / "upload-proof.bin"
+    created_identity: tuple[int, int] | None = None
     try:
         directory.mkdir(exist_ok=False)
-        created = True
+        created_identity = _directory_identity(directory)
         save_upload_file(template_file, str(template_path))
+        if _directory_identity(directory) != created_identity:
+            raise OSError("managed directory changed")
         save_upload_file(upload_proof_file, str(proof_path))
+        if _directory_identity(directory) != created_identity:
+            raise OSError("managed directory changed")
     except FileExistsError:
-        if directory.is_symlink() or not directory.is_dir():
+        try:
+            directory_mode = directory.lstat().st_mode
+        except OSError:
+            directory_mode = 0
+        if not stat.S_ISDIR(directory_mode) or stat.S_ISLNK(directory_mode):
             raise_business_error(
                 "PAYMENT_WORKBOOK_INPUT_CONFLICT",
                 "Official payment workbook managed directory conflict",
                 status_code=409,
             )
     except Exception:
-        if created:
-            _remove_created_workbook_files(root, directory)
+        if created_identity is not None:
+            _remove_created_workbook_files(root, directory, created_identity)
         raise
     if (
         _managed_file_hash(template_path) != template_hash
         or _managed_file_hash(proof_path) != proof_hash
     ):
-        if created:
-            _remove_created_workbook_files(root, directory)
+        if created_identity is not None:
+            _remove_created_workbook_files(root, directory, created_identity)
         raise_business_error(
             "PAYMENT_WORKBOOK_INPUT_CONFLICT",
             "Official payment workbook replay content conflict",
             status_code=409,
         )
-    return template_path, proof_path, template_hash, proof_hash, created
+    return template_path, proof_path, template_hash, proof_hash, created_identity
 
 
 @router.post(
@@ -277,39 +353,68 @@ def post_payment_workbook_input(
 ) -> WorkbookInputOut:
     root = _payment_workbook_storage_root()
     directory: Path | None = None
-    created = False
+    created_identity: tuple[int, int] | None = None
+    with _payment_workbook_registration_lock(root):
+        try:
+            template_path, proof_path, template_hash, proof_hash, created_identity = (
+                _store_workbook_uploads(
+                    template_file,
+                    upload_proof_file,
+                    idempotency_key,
+                )
+            )
+            directory = template_path.parent
+            result = register_workbook_input(
+                db,
+                RegisterWorkbookInputCommand(
+                    template_version=template_version,
+                    template_storage_path=str(template_path),
+                    expected_template_hash=template_hash,
+                    upload_proof_storage_path=str(proof_path),
+                    expected_upload_proof_hash=proof_hash,
+                    effective_from=effective_from,
+                    effective_to=effective_to,
+                    source_classification=source_classification,
+                    actor_id=str(current_user.id),
+                    idempotency_key=idempotency_key,
+                    runtime_profile=_runtime_profile(),
+                ),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            if created_identity is not None and directory is not None:
+                _remove_created_workbook_files(root, directory, created_identity)
+            raise
+    response.status_code = (
+        status.HTTP_201_CREATED if result.disposition == "CREATED" else status.HTTP_200_OK
+    )
+    return WorkbookInputOut.model_validate(result)
+
+
+@router.post(
+    "/payment-workbook-inputs/{version_id}/validate",
+    response_model=WorkbookInputOut,
+    summary="Validate official payment workbook input",
+)
+def post_payment_workbook_input_validate(
+    version_id: str,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> WorkbookInputOut:
     try:
-        template_path, proof_path, template_hash, proof_hash, created = _store_workbook_uploads(
-            template_file,
-            upload_proof_file,
-            idempotency_key,
-        )
-        directory = template_path.parent
-        result = register_workbook_input(
+        result = validate_workbook_input(
             db,
-            RegisterWorkbookInputCommand(
-                template_version=template_version,
-                template_storage_path=str(template_path),
-                expected_template_hash=template_hash,
-                upload_proof_storage_path=str(proof_path),
-                expected_upload_proof_hash=proof_hash,
-                effective_from=effective_from,
-                effective_to=effective_to,
-                source_classification=source_classification,
+            ValidateWorkbookInputCommand(
+                version_id=version_id,
                 actor_id=str(current_user.id),
-                idempotency_key=idempotency_key,
-                runtime_profile=_runtime_profile(),
             ),
         )
         db.commit()
     except Exception:
         db.rollback()
-        if created and directory is not None:
-            _remove_created_workbook_files(root, directory)
         raise
-    response.status_code = (
-        status.HTTP_201_CREATED if result.disposition == "CREATED" else status.HTTP_200_OK
-    )
     return WorkbookInputOut.model_validate(result)
 
 
