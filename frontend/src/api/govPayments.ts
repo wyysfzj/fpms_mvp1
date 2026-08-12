@@ -7,6 +7,8 @@ import type {
     HistoricalPayListCreateResult,
     ManualGovPaymentCreatePayload,
     ManualGovPaymentCreateResult,
+    OfficialPaymentWorkbookGeneratePayload,
+    OfficialWorkbookArtifact,
     PayListDetailResult,
     PayListListResult,
     PayListMarkPaidPayload,
@@ -389,6 +391,29 @@ export async function exportPayList(payListId: number): Promise<Blob> {
         responseType: 'blob',
     })
     return response.data
+}
+
+export async function generateOfficialPaymentWorkbook(
+    payListId: number,
+    payload: OfficialPaymentWorkbookGeneratePayload,
+): Promise<OfficialWorkbookArtifact> {
+    const response = await http.post<Blob>(
+        `/pay-lists/${payListId}/official-workbook`,
+        payload,
+        { responseType: 'blob' },
+    )
+
+    return {
+        artifact_id: decodeURIComponent(response.headers['x-fpms-artifact-id'] as string),
+        content_sha256: decodeURIComponent(
+            response.headers['x-fpms-content-sha256'] as string,
+        ),
+        template_version: decodeURIComponent(
+            response.headers['x-fpms-template-version'] as string,
+        ),
+        generated_status: 'GENERATED',
+        blob: response.data,
+    }
 }
 
 export async function markPayListPaid(

@@ -143,6 +143,31 @@ export interface PayListOfficialWorkbookInfo {
     official_pay_list_boundary_note: string | null
 }
 
+export interface OfficialPaymentWorkbookRow {
+    sequence_number: number
+    application_number: string
+    business_type: string
+    invoice_title: string
+    unified_social_credit_code: string
+    fee_type: string
+    foreign_currency_amount: number | null
+    amount_cny: number
+    remark: string | null
+}
+
+export interface OfficialPaymentWorkbookGeneratePayload {
+    idempotency_key: string
+    rows: OfficialPaymentWorkbookRow[]
+}
+
+export interface OfficialWorkbookArtifact {
+    artifact_id: string
+    content_sha256: string
+    template_version: string
+    generated_status: 'GENERATED'
+    blob: Blob
+}
+
 export interface PayListDetailResult {
     pay_list: PayListInfo & {
         remark: string | null
