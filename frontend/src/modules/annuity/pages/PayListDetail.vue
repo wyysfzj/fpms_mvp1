@@ -115,7 +115,11 @@
             </el-table>
           </el-card>
 
-          <el-card shadow="never" class="rows-card">
+          <el-card
+            shadow="never"
+            class="rows-card"
+            data-testid="official-workbook-panel"
+          >
             <template #header>
               <div class="card-header">
                 <span class="form-card-title">官方工作簿</span>
@@ -136,6 +140,128 @@
                 {{ detail.official_workbook.official_pay_list_boundary_note || '—' }}
               </el-descriptions-item>
             </el-descriptions>
+
+            <template v-if="detail.official_workbook">
+              <el-alert
+                class="official-workbook-note"
+                title="生成不代表官方接受、已缴费或票据已核验"
+                type="warning"
+                :closable="false"
+                description="页面仅展示服务端返回的生成结果；官方接受、实际支付和票据核验仍是独立事实。"
+              />
+
+              <el-alert
+                v-if="!canGenerateOfficialWorkbook"
+                class="official-workbook-note"
+                title="缺少生成官方工作簿权限"
+                type="error"
+                :closable="false"
+              />
+
+              <el-form
+                class="official-workbook-form"
+                :model="officialWorkbookForm"
+                label-position="top"
+              >
+                <el-row :gutter="12">
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="申请号/专利号">
+                      <el-input
+                        v-model="officialWorkbookForm.application_number"
+                        data-testid="official-workbook-application-number"
+                        placeholder="请输入申请号或专利号"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="业务类型">
+                      <el-input
+                        v-model="officialWorkbookForm.business_type"
+                        data-testid="official-workbook-business-type"
+                        placeholder="请输入业务类型"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="票据抬头">
+                      <el-input
+                        v-model="officialWorkbookForm.invoice_title"
+                        data-testid="official-workbook-invoice-title"
+                        placeholder="请输入票据抬头"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="统一社会信用代码">
+                      <el-input
+                        v-model="officialWorkbookForm.unified_social_credit_code"
+                        data-testid="official-workbook-credit-code"
+                        placeholder="请输入统一社会信用代码"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="费用种类">
+                      <el-input
+                        v-model="officialWorkbookForm.fee_type"
+                        data-testid="official-workbook-fee-type"
+                        placeholder="请输入费用种类"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :xs="24" :sm="12">
+                    <el-form-item label="费用金额（人民币）">
+                      <el-input
+                        v-model.number="officialWorkbookForm.amount_cny"
+                        data-testid="official-workbook-amount-cny"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="请输入人民币金额"
+                      />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="24">
+                    <el-form-item label="备注">
+                      <el-input
+                        v-model="officialWorkbookForm.remark"
+                        data-testid="official-workbook-remark"
+                        placeholder="选填"
+                      />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+
+                <el-button
+                  type="primary"
+                  :disabled="!officialWorkbookCanSubmit"
+                  :loading="generatingOfficialWorkbook"
+                  @click="handleGenerateOfficialWorkbook"
+                >
+                  生成并下载官方工作簿
+                </el-button>
+              </el-form>
+
+              <el-descriptions
+                v-if="generatedOfficialWorkbook"
+                class="official-workbook-result"
+                :column="1"
+                border
+              >
+                <el-descriptions-item label="产物编号">
+                  产物编号：{{ generatedOfficialWorkbook.artifact_id }}
+                </el-descriptions-item>
+                <el-descriptions-item label="服务端生成状态">
+                  服务端生成状态：{{ generatedOfficialWorkbook.generated_status === 'GENERATED' ? '已生成' : '未返回' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="模板版本">
+                  {{ generatedOfficialWorkbook.template_version }}
+                </el-descriptions-item>
+                <el-descriptions-item label="内容摘要">
+                  {{ generatedOfficialWorkbook.content_sha256 }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </template>
 
             <el-alert
               v-else
@@ -370,6 +496,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
   exportPayList,
+  generateOfficialPaymentWorkbook,
   getPayListDetail,
   mapGovPaymentsError,
   markPayListPaid,
@@ -377,29 +504,55 @@ import {
 import type {
   GovPaymentInfo,
   GovPaymentsApiError,
+  OfficialWorkbookArtifact,
   PayListDetailResult,
 } from '../../../api/govPayments.types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import ManualGovPaymentDialog from '../components/ManualGovPaymentDialog.vue'
 import FeeLinkagePanel from '../../officialWorkflows/components/FeeLinkagePanel.vue'
+import { useAuthStore } from '../../../stores/auth'
 
 interface MarkPaidForm {
   paid_date: string
 }
 
+interface OfficialWorkbookForm {
+  application_number: string
+  business_type: string
+  invoice_title: string
+  unified_social_credit_code: string
+  fee_type: string
+  amount_cny: number | null
+  remark: string
+}
+
 const route = useRoute()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const exporting = ref(false)
+const generatingOfficialWorkbook = ref(false)
 const markingPaid = ref(false)
 const manualDialogVisible = ref(false)
 const error = ref<GovPaymentsApiError | null>(null)
 const detail = ref<PayListDetailResult | null>(null)
+const generatedOfficialWorkbook = ref<OfficialWorkbookArtifact | null>(null)
 const markPaidFormRef = ref<FormInstance>()
+const officialWorkbookIdempotencyKey = ref(crypto.randomUUID())
 
 const markPaidForm = reactive<MarkPaidForm>({
   paid_date: dayjs().format('YYYY-MM-DD'),
+})
+
+const officialWorkbookForm = reactive<OfficialWorkbookForm>({
+  application_number: '',
+  business_type: '',
+  invoice_title: '',
+  unified_social_credit_code: '',
+  fee_type: '',
+  amount_cny: null,
+  remark: '',
 })
 
 const markPaidRules: FormRules<MarkPaidForm> = {
@@ -420,6 +573,20 @@ const payListTitle = computed(() => {
 })
 
 const canExport = computed(() => (payList.value?.status || '').toUpperCase() === 'DRAFT')
+const canGenerateOfficialWorkbook = computed(() => authStore.hasPermission('PayList.Export'))
+const officialWorkbookCanSubmit = computed(() => (
+  canGenerateOfficialWorkbook.value
+  && Boolean(detail.value?.official_workbook)
+  && !generatingOfficialWorkbook.value
+  && Boolean(officialWorkbookForm.application_number.trim())
+  && Boolean(officialWorkbookForm.business_type.trim())
+  && Boolean(officialWorkbookForm.invoice_title.trim())
+  && Boolean(officialWorkbookForm.unified_social_credit_code.trim())
+  && Boolean(officialWorkbookForm.fee_type.trim())
+  && officialWorkbookForm.amount_cny !== null
+  && Number.isFinite(officialWorkbookForm.amount_cny)
+  && officialWorkbookForm.amount_cny > 0
+))
 const canMarkPaid = computed(() => (payList.value?.status || '').toUpperCase() === 'EXPORTED')
 const canAddManualRow = computed(() => {
   if (!payList.value) return false
@@ -616,6 +783,40 @@ async function handleExport() {
   }
 }
 
+async function handleGenerateOfficialWorkbook() {
+  if (!payList.value || !officialWorkbookCanSubmit.value || officialWorkbookForm.amount_cny === null) {
+    return
+  }
+
+  generatingOfficialWorkbook.value = true
+  error.value = null
+  try {
+    const artifact = await generateOfficialPaymentWorkbook(payList.value.id, {
+      idempotency_key: officialWorkbookIdempotencyKey.value,
+      rows: [{
+        sequence_number: 1,
+        application_number: officialWorkbookForm.application_number.trim(),
+        business_type: officialWorkbookForm.business_type.trim(),
+        invoice_title: officialWorkbookForm.invoice_title.trim(),
+        unified_social_credit_code: officialWorkbookForm.unified_social_credit_code.trim(),
+        fee_type: officialWorkbookForm.fee_type.trim(),
+        foreign_currency_amount: null,
+        amount_cny: officialWorkbookForm.amount_cny,
+        remark: officialWorkbookForm.remark.trim() || null,
+      }],
+    })
+    generatedOfficialWorkbook.value = artifact
+    downloadBlob(artifact.blob, artifact.filename)
+    ElMessage.success('官方工作簿已生成并开始下载。')
+    officialWorkbookIdempotencyKey.value = crypto.randomUUID()
+    await loadDetail()
+  } catch (err) {
+    error.value = mapGovPaymentsError(err)
+  } finally {
+    generatingOfficialWorkbook.value = false
+  }
+}
+
 async function handleMarkPaid() {
   if (!payList.value || !canMarkPaid.value) {
     ElMessage.warning('当前状态不允许标记清单已缴费。')
@@ -658,6 +859,12 @@ watch(payListId, () => {
 
 .fee-linkage-side-panel {
   margin-bottom: 16px;
+}
+
+.official-workbook-note,
+.official-workbook-form,
+.official-workbook-result {
+  margin-top: 16px;
 }
 
 .loading-state {
