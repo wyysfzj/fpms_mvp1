@@ -49,6 +49,7 @@ actions remain `409 / NO WRITE`, and TEST_ONLY remains isolated.
 - `tasks/postdemo/v8/FPMS-V8-FULL-CAPABILITY-MANIFEST-CLOSE-20260813-01.md`
 - `docs/product/v8/stories/V8-FULL-CAPABILITY-MANIFEST-CLOSE.md`
 - `scripts/tests/test_v8_full_capability_manifest_close.py`
+- `scripts/tests/test_v8_full_config_required_successor.py`
 - `docs/product/v8/reviews/V8-FULL-CAPABILITY-MANIFEST-CURRENT-ADOPTION.md`
 - `docs/product/v8/coverage-ledger.json`
 
@@ -58,7 +59,6 @@ them:
 - `tasks/postdemo/v8/FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01.md`
 - `tasks/postdemo/v8/FPMS-V8-FULL-CONFIG-REQUIRED-SUCCESSOR-20260813-01.md`
 - `docs/product/v8/stories/V8-FULL-CONFIG-REQUIRED-SUCCESSOR.md`
-- `scripts/tests/test_v8_full_config_required_successor.py`
 
 `backend/uv.lock` remains unrelated and untouched.
 

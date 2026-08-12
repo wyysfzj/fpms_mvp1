@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -18,6 +19,7 @@ SUCCESSOR_PATH = ROOT / "docs/product/v8/stories/V8-FULL-CONFIG-REQUIRED-SUCCESS
 CATALOG_SHA256 = "72c849825c9cbd39cb25f743d448b67a2a31bfccf7cfb68a3d2557c7bda178bf"
 CAPABILITY_CLOSE_SHA = "a8219b7a39047b819100cc69dd4cffadfc3e170c"
 CAPABILITY_ADOPTION_SHA = "03138fbd5b1089634b84d353bf2abffd70777e41"
+CONFIG_SUCCESSOR_SHA = "99316d6c83fe9c1c0e93b9703a5ea28509ea1ac6"
 CAPABILITY_STORY = "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION"
 GLOBAL_IDENTITIES = [
     "DG-GRANT-EVIDENCE-SOURCE:GLOBAL",
@@ -41,6 +43,17 @@ def _json_fence(text: str) -> dict[str, object]:
     match = re.search(r"```json\n(.*?)\n```", text, flags=re.DOTALL)
     assert match is not None, "successor must contain one machine-readable contract"
     return json.loads(match.group(1))
+
+
+def _ledger_at(commit: str) -> dict[str, object]:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:docs/product/v8/coverage-ledger.json"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(result.stdout)
 
 
 def test_row199_identity_and_all_29_requested_gate_identities_remain_frozen() -> None:
@@ -131,8 +144,9 @@ def test_gate_rows_are_current_but_full_and_terminal_rows_remain_unadopted() -> 
         for ordinal in range(170, 199)
         if rows[ordinal - 1]["story_id"] == CAPABILITY_STORY
     ] == [175, 176]
+    successor_rows = _ledger_at(CONFIG_SUCCESSOR_SHA)["rows"]
     for ordinal, task_id in zip((199, 281, 282, 283), TERMINAL_IDS, strict=True):
-        row = rows[ordinal - 1]
+        row = successor_rows[ordinal - 1]
         assert row["catalog_id"] == task_id
         assert row["disposition"] != "CURRENT_VERIFIED"
         assert row["story_id"] is None
