@@ -324,6 +324,126 @@ async function decodeOfficialWorkbookApiError(
     }
 }
 
+export function normalizeOfficialPaymentWorkbookRequestError(error: unknown): ApiError {
+    if (isApiError(error)) return error
+    return officialWorkbookAdapterError(0, 'request', 'unexpected_error')
+}
+
+export async function parseOfficialPaymentWorkbookResponse(response: {
+    status: number
+    data: Blob
+    headers: unknown
+}): Promise<OfficialWorkbookArtifact> {
+    if ([400, 404, 409, 422].includes(response.status)) {
+        throw await decodeOfficialWorkbookApiError(
+            response.status,
+            response.data,
+            response.headers,
+        )
+    }
+    if (response.status !== 200 && response.status !== 201) {
+        throw officialWorkbookAdapterError(response.status, 'status', 'unexpected_status')
+    }
+    if (!(response.data instanceof Blob)) {
+        throw officialWorkbookAdapterError(response.status, 'body', 'not_a_blob')
+    }
+
+    const artifactId = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-artifact-id',
+        response.status,
+    )
+    const contentSha256 = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-content-sha256',
+        response.status,
+    )
+    const templateVersion = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-template-version',
+        response.status,
+    )
+    const templateContentSha256 = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-template-content-sha256',
+        response.status,
+    )
+    const workbookInputVersionId = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-workbook-input-version-id',
+        response.status,
+    )
+    const disposition = decodeOfficialWorkbookHeader(
+        response.headers,
+        'x-fpms-workbook-disposition',
+        response.status,
+    )
+    if (!officialWorkbookUuidPattern.test(artifactId)) {
+        throw officialWorkbookAdapterError(response.status, 'x-fpms-artifact-id', 'invalid_uuid')
+    }
+    if (!/^[0-9a-f]{64}$/i.test(contentSha256)) {
+        throw officialWorkbookAdapterError(
+            response.status,
+            'x-fpms-content-sha256',
+            'invalid_sha256',
+        )
+    }
+    if (!/^[0-9a-f]{64}$/i.test(templateContentSha256)) {
+        throw officialWorkbookAdapterError(
+            response.status,
+            'x-fpms-template-content-sha256',
+            'invalid_sha256',
+        )
+    }
+    if (!officialWorkbookUuidPattern.test(workbookInputVersionId)) {
+        throw officialWorkbookAdapterError(
+            response.status,
+            'x-fpms-workbook-input-version-id',
+            'invalid_uuid',
+        )
+    }
+    if (
+        (disposition !== 'CREATED' || response.status !== 201)
+        && (disposition !== 'REUSED' || response.status !== 200)
+    ) {
+        throw officialWorkbookAdapterError(
+            response.status,
+            'x-fpms-workbook-disposition',
+            'invalid_status_disposition',
+        )
+    }
+
+    const rawGeneratedStatus = rawResponseHeader(response.headers, 'x-fpms-generated-status')
+    let generatedStatus: 'GENERATED' | undefined
+    if (rawGeneratedStatus !== undefined) {
+        const decodedGeneratedStatus = decodeOfficialWorkbookHeader(
+            response.headers,
+            'x-fpms-generated-status',
+            response.status,
+        )
+        if (decodedGeneratedStatus !== 'GENERATED') {
+            throw officialWorkbookAdapterError(
+                response.status,
+                'x-fpms-generated-status',
+                'invalid_generated_status',
+            )
+        }
+        generatedStatus = decodedGeneratedStatus
+    }
+
+    return {
+        filename: decodeOfficialWorkbookFilename(response.headers, response.status),
+        artifact_id: artifactId,
+        content_sha256: contentSha256,
+        template_version: templateVersion,
+        template_content_sha256: templateContentSha256,
+        workbook_input_version_id: workbookInputVersionId,
+        disposition,
+        ...(generatedStatus === undefined ? {} : { generated_status: generatedStatus }),
+        blob: response.data,
+    }
+}
+
 function resolveGovPaymentsErrorCategory(status: number): GovPaymentsErrorCategory {
     if (status === 401) return 'unauthenticated'
     if (status === 403) return 'permission_denied'
@@ -518,120 +638,19 @@ export async function generateOfficialPaymentWorkbook(
     payListId: number,
     payload: OfficialPaymentWorkbookGeneratePayload,
 ): Promise<OfficialWorkbookArtifact> {
-    const response = await http.post<Blob>(
-        `/pay-lists/${payListId}/official-workbook`,
-        payload,
-        {
-            responseType: 'blob',
-            validateStatus: (status) =>
-                (status >= 200 && status < 300) || [400, 404, 409, 422].includes(status),
-        },
-    )
-
-    if ([400, 404, 409, 422].includes(response.status)) {
-        throw await decodeOfficialWorkbookApiError(
-            response.status,
-            response.data,
-            response.headers,
+    try {
+        const response = await http.post<Blob>(
+            `/pay-lists/${payListId}/official-workbook`,
+            payload,
+            {
+                responseType: 'blob',
+                validateStatus: (status) =>
+                    (status >= 200 && status < 300) || [400, 404, 409, 422].includes(status),
+            },
         )
-    }
-    if (!(response.data instanceof Blob)) {
-        throw officialWorkbookAdapterError(response.status, 'body', 'not_a_blob')
-    }
-
-    const artifactId = decodeOfficialWorkbookHeader(
-        response.headers,
-        'x-fpms-artifact-id',
-        response.status,
-    )
-    const contentSha256 = decodeOfficialWorkbookHeader(
-        response.headers,
-        'x-fpms-content-sha256',
-        response.status,
-    )
-    const templateVersion = decodeOfficialWorkbookHeader(
-        response.headers,
-        'x-fpms-template-version',
-        response.status,
-    )
-    const templateContentSha256 = decodeOfficialWorkbookHeader(
-        response.headers,
-        'x-fpms-template-content-sha256',
-        response.status,
-    )
-    const workbookInputVersionId = decodeOfficialWorkbookHeader(
-        response.headers,
-        'x-fpms-workbook-input-version-id',
-        response.status,
-    )
-    const disposition = decodeOfficialWorkbookHeader(
-        response.headers,
-        'x-fpms-workbook-disposition',
-        response.status,
-    )
-    if (!officialWorkbookUuidPattern.test(artifactId)) {
-        throw officialWorkbookAdapterError(response.status, 'x-fpms-artifact-id', 'invalid_uuid')
-    }
-    if (!/^[0-9a-f]{64}$/i.test(contentSha256)) {
-        throw officialWorkbookAdapterError(
-            response.status,
-            'x-fpms-content-sha256',
-            'invalid_sha256',
-        )
-    }
-    if (!/^[0-9a-f]{64}$/i.test(templateContentSha256)) {
-        throw officialWorkbookAdapterError(
-            response.status,
-            'x-fpms-template-content-sha256',
-            'invalid_sha256',
-        )
-    }
-    if (!officialWorkbookUuidPattern.test(workbookInputVersionId)) {
-        throw officialWorkbookAdapterError(
-            response.status,
-            'x-fpms-workbook-input-version-id',
-            'invalid_uuid',
-        )
-    }
-    if (
-        (disposition !== 'CREATED' || response.status !== 201)
-        && (disposition !== 'REUSED' || response.status !== 200)
-    ) {
-        throw officialWorkbookAdapterError(
-            response.status,
-            'x-fpms-workbook-disposition',
-            'invalid_status_disposition',
-        )
-    }
-
-    const rawGeneratedStatus = rawResponseHeader(response.headers, 'x-fpms-generated-status')
-    let generatedStatus: 'GENERATED' | undefined
-    if (rawGeneratedStatus !== undefined) {
-        const decodedGeneratedStatus = decodeOfficialWorkbookHeader(
-            response.headers,
-            'x-fpms-generated-status',
-            response.status,
-        )
-        if (decodedGeneratedStatus !== 'GENERATED') {
-            throw officialWorkbookAdapterError(
-                response.status,
-                'x-fpms-generated-status',
-                'invalid_generated_status',
-            )
-        }
-        generatedStatus = decodedGeneratedStatus
-    }
-
-    return {
-        filename: decodeOfficialWorkbookFilename(response.headers, response.status),
-        artifact_id: artifactId,
-        content_sha256: contentSha256,
-        template_version: templateVersion,
-        template_content_sha256: templateContentSha256,
-        workbook_input_version_id: workbookInputVersionId,
-        disposition,
-        ...(generatedStatus === undefined ? {} : { generated_status: generatedStatus }),
-        blob: response.data,
+        return await parseOfficialPaymentWorkbookResponse(response)
+    } catch (error) {
+        throw normalizeOfficialPaymentWorkbookRequestError(error)
     }
 }
 
