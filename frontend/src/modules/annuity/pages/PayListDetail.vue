@@ -151,7 +151,15 @@
               />
 
               <el-alert
-                v-if="!canGenerateOfficialWorkbook"
+                v-if="!officialWorkbookStatusActive"
+                class="official-workbook-note"
+                :title="officialWorkbookUnavailableMessage"
+                type="warning"
+                :closable="false"
+              />
+
+              <el-alert
+                v-else-if="!hasOfficialWorkbookGeneratePermission"
                 class="official-workbook-note"
                 title="缺少生成官方工作簿权限"
                 type="error"
@@ -159,6 +167,7 @@
               />
 
               <el-form
+                v-if="canGenerateOfficialWorkbook"
                 class="official-workbook-form"
                 :model="officialWorkbookForm"
                 label-position="top"
@@ -243,7 +252,7 @@
               </el-form>
 
               <el-descriptions
-                v-if="generatedOfficialWorkbook"
+                v-if="canGenerateOfficialWorkbook && generatedOfficialWorkbook"
                 class="official-workbook-result"
                 :column="1"
                 border
@@ -573,7 +582,19 @@ const payListTitle = computed(() => {
 })
 
 const canExport = computed(() => (payList.value?.status || '').toUpperCase() === 'DRAFT')
-const canGenerateOfficialWorkbook = computed(() => authStore.hasPermission('PayList.Export'))
+const officialWorkbookServerStatus = computed(() => (
+  detail.value?.official_workbook?.official_upload_template_status ?? null
+))
+const officialWorkbookStatusActive = computed(() => officialWorkbookServerStatus.value === 'ACTIVE')
+const hasOfficialWorkbookGeneratePermission = computed(() => (
+  authStore.hasPermission('PayList.Export')
+))
+const canGenerateOfficialWorkbook = computed(() => (
+  officialWorkbookStatusActive.value && hasOfficialWorkbookGeneratePermission.value
+))
+const officialWorkbookUnavailableMessage = computed(() => (
+  `服务端模板状态为 ${officialWorkbookServerStatus.value || '未返回'}，只有 ACTIVE 状态可生成官方工作簿。`
+))
 const officialWorkbookCanSubmit = computed(() => (
   canGenerateOfficialWorkbook.value
   && Boolean(detail.value?.official_workbook)

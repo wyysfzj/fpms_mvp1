@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Page, Request, Route } from "@playwright/test";
+import type { Locator, Page, Request, Route } from "@playwright/test";
 
 const payListId = 218;
 const artifactId = "11111111-1111-4111-8111-111111111218";
@@ -12,40 +12,13 @@ test("official workbook generation downloads only the server-returned artifact",
 
   await mockPayListApi(page, {
     permissions: ["PayList.Read", "PayList.Export"],
-    officialWorkbookAvailable: true,
+    officialWorkbookStatus: "ACTIVE",
     onDetailRead: () => {
       detailReads += 1;
     },
     onGenerate: async (route) => {
       generationRequest = route.request();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/vnd.ms-excel.sheet.macroEnabled.12",
-        headers: {
-          "access-control-allow-origin": "*",
-          "access-control-expose-headers": [
-            "Content-Disposition",
-            "X-FPMS-Artifact-ID",
-            "X-FPMS-Content-SHA256",
-            "X-FPMS-Template-Version",
-            "X-FPMS-Template-Content-SHA256",
-            "X-FPMS-Workbook-Input-Version-ID",
-            "X-FPMS-Workbook-Disposition",
-            "X-FPMS-Generated-Status",
-          ].join(", "),
-          "content-disposition":
-            "attachment; filename*=UTF-8''%E5%AE%98%E6%96%B9%E7%BC%B4%E8%B4%B9%E5%B7%A5%E4%BD%9C%E7%B0%BF-218.xlsm",
-          "x-fpms-artifact-id": artifactId,
-          "x-fpms-content-sha256": "a".repeat(64),
-          "x-fpms-template-version": "2026.08",
-          "x-fpms-template-content-sha256": "b".repeat(64),
-          "x-fpms-workbook-input-version-id":
-            "22222222-2222-4222-8222-222222222218",
-          "x-fpms-workbook-disposition": "CREATED",
-          "x-fpms-generated-status": "GENERATED",
-        },
-        body: Buffer.from("official-workbook-row218"),
-      });
+      await fulfillOfficialWorkbook(route);
     },
   });
 
@@ -54,15 +27,7 @@ test("official workbook generation downloads only the server-returned artifact",
   const panel = page.getByTestId("official-workbook-panel");
   await expect(panel.getByText("生成不代表官方接受、已缴费或票据已核验")).toBeVisible();
 
-  await panel.getByTestId("official-workbook-application-number").fill("CN2026000218");
-  await panel.getByTestId("official-workbook-business-type").fill("发明专利");
-  await panel.getByTestId("official-workbook-invoice-title").fill("测试申请人有限公司");
-  await panel
-    .getByTestId("official-workbook-credit-code")
-    .fill("91110000TEST000218");
-  await panel.getByTestId("official-workbook-fee-type").fill("申请费");
-  await panel.getByTestId("official-workbook-amount-cny").fill("900");
-  await panel.getByTestId("official-workbook-remark").fill("仅供第218行界面验证");
+  await fillOfficialWorkbookForm(panel);
 
   const downloadPromise = page.waitForEvent("download");
   await panel.getByRole("button", { name: "生成并下载官方工作簿" }).click();
@@ -97,7 +62,7 @@ test("official workbook generation fails closed without PayList.Export", async (
   let generationCalls = 0;
   await mockPayListApi(page, {
     permissions: ["PayList.Read"],
-    officialWorkbookAvailable: true,
+    officialWorkbookStatus: "ACTIVE",
     onGenerate: async (route) => {
       generationCalls += 1;
       await fulfillJson(route, { detail: "不应生成工作簿" }, 500);
@@ -110,8 +75,94 @@ test("official workbook generation fails closed without PayList.Export", async (
   await expect(panel.getByText("缺少生成官方工作簿权限")).toBeVisible();
   await expect(
     panel.getByRole("button", { name: "生成并下载官方工作簿" }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   expect(generationCalls).toBe(0);
+});
+
+for (const status of ["PENDING", "INACTIVE", "RETIRED"]) {
+  test(`official workbook generation fails closed for present ${status} server state`, async ({
+    page,
+  }) => {
+    let generationCalls = 0;
+    await mockPayListApi(page, {
+      permissions: ["PayList.Read", "PayList.Export"],
+      officialWorkbookStatus: status,
+      onGenerate: async (route) => {
+        generationCalls += 1;
+        await fulfillJson(route, { detail: "不应生成工作簿" }, 500);
+      },
+    });
+
+    await openPayList(page);
+
+    const panel = page.getByTestId("official-workbook-panel");
+    await expect(
+      panel.getByText(`服务端模板状态为 ${status}，只有 ACTIVE 状态可生成官方工作簿。`),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "生成并下载官方工作簿" }),
+    ).toHaveCount(0);
+    expect(generationCalls).toBe(0);
+  });
+}
+
+test("official workbook 409 stays download-free and supports a successful retry", async ({
+  page,
+}) => {
+  const generationRequests: Request[] = [];
+  const downloads: string[] = [];
+  await mockPayListApi(page, {
+    permissions: ["PayList.Read", "PayList.Export"],
+    officialWorkbookStatus: "ACTIVE",
+    onGenerate: async (route) => {
+      generationRequests.push(route.request());
+      if (generationRequests.length === 1) {
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          headers: {
+            "access-control-allow-origin": "*",
+            "access-control-expose-headers": "X-Request-ID",
+            "x-request-id": "request-row218-conflict",
+          },
+          body: JSON.stringify({
+            error: {
+              code: "PAYMENT_WORKBOOK_GATE_NOT_ACTIVE",
+              message: "Payment workbook gate is not active",
+              details: { gate_code: "DG-PAYMENT-WORKBOOK" },
+            },
+          }),
+        });
+        return;
+      }
+      await fulfillOfficialWorkbook(route);
+    },
+  });
+  page.on("download", (download) => downloads.push(download.suggestedFilename()));
+
+  await openPayList(page);
+  const panel = page.getByTestId("official-workbook-panel");
+  await fillOfficialWorkbookForm(panel);
+  const generateButton = panel.getByRole("button", {
+    name: "生成并下载官方工作簿",
+  });
+
+  await generateButton.click();
+
+  await expect(page.getByText("数据冲突，当前请求无法完成。")).toBeVisible();
+  await expect(page.getByText("Payment workbook gate is not active")).toHaveCount(0);
+  await expect(panel.getByText("服务端生成状态：已生成")).toHaveCount(0);
+  await expect(generateButton).toBeEnabled();
+  expect(downloads).toEqual([]);
+
+  const retryDownload = page.waitForEvent("download");
+  await generateButton.click();
+  expect((await retryDownload).suggestedFilename()).toBe("官方缴费工作簿-218.xlsm");
+  await expect(panel.getByText("服务端生成状态：已生成")).toBeVisible();
+  expect(generationRequests).toHaveLength(2);
+  expect(generationRequests[0].postDataJSON().idempotency_key).toBe(
+    generationRequests[1].postDataJSON().idempotency_key,
+  );
 });
 
 test("official workbook generation stays unavailable when server gate state is absent", async ({
@@ -119,7 +170,6 @@ test("official workbook generation stays unavailable when server gate state is a
 }) => {
   await mockPayListApi(page, {
     permissions: ["PayList.Read", "PayList.Export"],
-    officialWorkbookAvailable: false,
   });
 
   await openPayList(page);
@@ -133,7 +183,7 @@ test("official workbook generation stays unavailable when server gate state is a
 
 interface MockPayListApiOptions {
   permissions: string[];
-  officialWorkbookAvailable: boolean;
+  officialWorkbookStatus?: string | null;
   onDetailRead?: () => void;
   onGenerate?: (route: Route) => Promise<void>;
 }
@@ -148,7 +198,7 @@ async function mockPayListApi(page: Page, options: MockPayListApiOptions): Promi
     }
     if (request.method() === "GET" && apiPath === `/pay-lists/${payListId}`) {
       options.onDetailRead?.();
-      return fulfillJson(route, payListDetail(options.officialWorkbookAvailable));
+      return fulfillJson(route, payListDetail(options.officialWorkbookStatus));
     }
     if (
       request.method() === "POST" &&
@@ -180,7 +230,50 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
   });
 }
 
-function payListDetail(officialWorkbookAvailable: boolean): Record<string, unknown> {
+async function fulfillOfficialWorkbook(route: Route): Promise<void> {
+  await route.fulfill({
+    status: 201,
+    contentType: "application/vnd.ms-excel.sheet.macroEnabled.12",
+    headers: {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": [
+        "Content-Disposition",
+        "X-FPMS-Artifact-ID",
+        "X-FPMS-Content-SHA256",
+        "X-FPMS-Template-Version",
+        "X-FPMS-Template-Content-SHA256",
+        "X-FPMS-Workbook-Input-Version-ID",
+        "X-FPMS-Workbook-Disposition",
+        "X-FPMS-Generated-Status",
+      ].join(", "),
+      "content-disposition":
+        "attachment; filename*=UTF-8''%E5%AE%98%E6%96%B9%E7%BC%B4%E8%B4%B9%E5%B7%A5%E4%BD%9C%E7%B0%BF-218.xlsm",
+      "x-fpms-artifact-id": artifactId,
+      "x-fpms-content-sha256": "a".repeat(64),
+      "x-fpms-template-version": "2026.08",
+      "x-fpms-template-content-sha256": "b".repeat(64),
+      "x-fpms-workbook-input-version-id":
+        "22222222-2222-4222-8222-222222222218",
+      "x-fpms-workbook-disposition": "CREATED",
+      "x-fpms-generated-status": "GENERATED",
+    },
+    body: Buffer.from("official-workbook-row218"),
+  });
+}
+
+async function fillOfficialWorkbookForm(panel: Locator): Promise<void> {
+  await panel.getByTestId("official-workbook-application-number").fill("CN2026000218");
+  await panel.getByTestId("official-workbook-business-type").fill("发明专利");
+  await panel.getByTestId("official-workbook-invoice-title").fill("测试申请人有限公司");
+  await panel
+    .getByTestId("official-workbook-credit-code")
+    .fill("91110000TEST000218");
+  await panel.getByTestId("official-workbook-fee-type").fill("申请费");
+  await panel.getByTestId("official-workbook-amount-cny").fill("900");
+  await panel.getByTestId("official-workbook-remark").fill("仅供第218行界面验证");
+}
+
+function payListDetail(officialWorkbookStatus?: string | null): Record<string, unknown> {
   return {
     pay_list: {
       id: payListId,
@@ -213,10 +306,10 @@ function payListDetail(officialWorkbookAvailable: boolean): Record<string, unkno
       },
     ],
     export_artifacts: [],
-    ...(officialWorkbookAvailable
+    ...(officialWorkbookStatus !== undefined
       ? {
           official_workbook: {
-            official_upload_template_status: "ACTIVE",
+            official_upload_template_status: officialWorkbookStatus,
             official_upload_template_name: "官方缴费模板.xlsm",
             official_upload_batch_limit: 500,
             official_pay_list_boundary_note: "仅生成，不代表接受、支付或票据核验",
