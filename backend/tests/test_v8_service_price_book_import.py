@@ -163,6 +163,49 @@ def test_import_stores_delimiter_safe_snapshots_and_reuses_exact_draft(
     assert _count(transaction) == 1
 
 
+def test_canonical_price_scale_and_item_order_reuse_one_snapshot(
+    service: ModuleType,
+    transaction: Session,
+) -> None:
+    command = _command(
+        service,
+        items=(
+            service.ServicePriceBookItemInput(
+                item_code="SEARCH|STANDARD",
+                unit_price=Decimal("1200"),
+            ),
+            service.ServicePriceBookItemInput(
+                item_code="FILING:STANDARD",
+                unit_price=Decimal("5000.5"),
+            ),
+        ),
+    )
+    created = service.import_service_price_book(transaction, command)
+    replay = service.import_service_price_book(
+        transaction,
+        replace(
+            command,
+            items=(
+                service.ServicePriceBookItemInput(
+                    item_code="FILING:STANDARD",
+                    unit_price=Decimal("5000.50"),
+                ),
+                service.ServicePriceBookItemInput(
+                    item_code="SEARCH|STANDARD",
+                    unit_price=Decimal("1200.00"),
+                ),
+            ),
+        ),
+    )
+    row = transaction.get(ServicePriceBook, created.price_book_id)
+    assert row is not None
+    assert replay.disposition == "REUSED"
+    assert replay.item_snapshot_hash == created.item_snapshot_hash == row.item_snapshot_hash
+    assert '"unit_price":"1200.00"' in row.item_snapshot
+    assert '"unit_price":"5000.50"' in row.item_snapshot
+    assert _count(transaction) == 1
+
+
 @pytest.mark.parametrize(
     ("changes", "field"),
     [
@@ -239,6 +282,53 @@ def test_invalid_item_input_is_400_without_write(
         ),
     )
     assert error.details == {"field": field}
+    assert _count(transaction) == 0
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"source_content": "bad\ud800text"}, "source_content"),
+        ({"source_reference": "bad\ud800reference"}, "source_reference"),
+        ({"tax_policy": "bad\ud800policy"}, "tax_policy"),
+    ],
+)
+def test_non_utf8_header_text_is_400_without_write(
+    service: ModuleType,
+    transaction: Session,
+    changes: dict[str, object],
+    field: str,
+) -> None:
+    error = _expect_error(
+        "SERVICE_PRICE_BOOK_IMPORT_INVALID",
+        400,
+        lambda: service.import_service_price_book(transaction, _command(service, **changes)),
+    )
+    assert error.details == {"field": field}
+    assert _count(transaction) == 0
+
+
+def test_non_utf8_item_code_is_400_without_write(
+    service: ModuleType,
+    transaction: Session,
+) -> None:
+    error = _expect_error(
+        "SERVICE_PRICE_BOOK_IMPORT_INVALID",
+        400,
+        lambda: service.import_service_price_book(
+            transaction,
+            _command(
+                service,
+                items=(
+                    service.ServicePriceBookItemInput(
+                        item_code="bad\ud800item",
+                        unit_price=Decimal("1.00"),
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert error.details == {"field": "items.item_code"}
     assert _count(transaction) == 0
 
 

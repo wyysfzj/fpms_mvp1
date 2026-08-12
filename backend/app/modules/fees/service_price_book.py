@@ -90,6 +90,10 @@ def _text(value: object, field: str, limit: int | None = None) -> str:
         or (limit is not None and len(value) > limit)
     ):
         _invalid(field)
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        _invalid(field)
     return value
 
 
@@ -143,7 +147,12 @@ def _item_snapshot(
             or unit_price.as_tuple().exponent < -2
         ):
             _invalid("items.unit_price")
-        canonical_items.append({"item_code": item_code, "unit_price": format(unit_price, "f")})
+        canonical_items.append(
+            {
+                "item_code": item_code,
+                "unit_price": format(unit_price.quantize(Decimal("0.01")), "f"),
+            }
+        )
     canonical_items.sort(key=lambda item: item["item_code"])
     snapshot = _canonical_json(
         {
