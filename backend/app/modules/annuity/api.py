@@ -9,10 +9,11 @@ from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
@@ -113,9 +114,33 @@ class OfficialPaymentWorkbookRowIn(BaseModel):
     invoice_title: str = Field(..., min_length=1, max_length=256)
     unified_social_credit_code: str = Field(..., min_length=1, max_length=64)
     fee_type: str = Field(..., min_length=1, max_length=128)
-    foreign_currency_amount: int | float | None = Field(default=None, ge=0)
-    amount_cny: int | float = Field(..., ge=0)
+    foreign_currency_amount: int | float | None = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    amount_cny: int | float = Field(..., ge=0, allow_inf_nan=False)
     remark: str | None = Field(default=None, max_length=512)
+
+    @field_validator(
+        "application_number",
+        "business_type",
+        "invoice_title",
+        "unified_social_credit_code",
+        "fee_type",
+        "remark",
+    )
+    @classmethod
+    def reject_spreadsheet_control_characters(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ValueError("text must be valid UTF-8") from exc
+        if any(ord(character) < 32 for character in value):
+            raise ValueError("text must not contain control characters")
+        return value
 
 
 class OfficialPaymentWorkbookGenerateIn(BaseModel):
@@ -941,6 +966,28 @@ def post_official_payment_workbook(
             ),
             db,
         )
+        response = Response(
+            status_code=201 if result.disposition == "CREATED" else 200,
+            content=result.content,
+            media_type=result.content_type,
+            headers={
+                "Content-Disposition": (
+                    "attachment; filename*=UTF-8''" + quote(result.filename, safe="")
+                ),
+                "X-FPMS-Artifact-Id": quote(result.artifact_id, safe=""),
+                "X-FPMS-Content-SHA256": quote(result.content_sha256, safe=""),
+                "X-FPMS-Template-Version": quote(result.template_version, safe=""),
+                "X-FPMS-Template-Content-SHA256": quote(
+                    result.template_content_hash,
+                    safe="",
+                ),
+                "X-FPMS-Workbook-Input-Version-Id": quote(
+                    result.workbook_input_version_id,
+                    safe="",
+                ),
+                "X-FPMS-Workbook-Disposition": quote(result.disposition, safe=""),
+            },
+        )
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -950,20 +997,7 @@ def post_official_payment_workbook(
             except Exception as compensation_error:
                 raise compensation_error from exc
         raise
-    return Response(
-        status_code=201 if result.disposition == "CREATED" else 200,
-        content=result.content,
-        media_type=result.content_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="{result.filename}"',
-            "X-FPMS-Artifact-Id": result.artifact_id,
-            "X-FPMS-Content-SHA256": result.content_sha256,
-            "X-FPMS-Template-Version": result.template_version,
-            "X-FPMS-Template-Content-SHA256": result.template_content_hash,
-            "X-FPMS-Workbook-Input-Version-Id": result.workbook_input_version_id,
-            "X-FPMS-Workbook-Disposition": result.disposition,
-        },
-    )
+    return response
 
 
 @router.post("/pay-lists/{pay_list_id}/mark-paid", summary="Mark pay list paid")

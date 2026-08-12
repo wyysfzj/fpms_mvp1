@@ -73,11 +73,11 @@ def _payload(**changes: object) -> dict[str, object]:
 def _result(disposition: str = "CREATED") -> object:
     return SimpleNamespace(
         artifact_id="11111111-1111-4111-8111-111111111216",
-        filename="PL-000007-official.xlsm",
+        filename="缴费清单-版本2026\r\n.xlsm",
         content_type="application/vnd.ms-excel.sheet.macroEnabled.12",
         content=b"official-xlsm",
         content_sha256="a" * 64,
-        template_version="2026.08",
+        template_version="版本2026\r\n",
         template_content_hash="b" * 64,
         workbook_input_version_id="22222222-2222-4222-8222-222222222216",
         managed_storage_path="official-payment-workbooks/7/artifact.xlsm",
@@ -121,6 +121,10 @@ def test_exact_route_permission_server_command_and_created_download(
     assert response.headers["x-fpms-workbook-disposition"] == "CREATED"
     assert response.headers["x-fpms-artifact-id"] == _result().artifact_id
     assert response.headers["x-fpms-template-content-sha256"] == "b" * 64
+    assert response.headers["x-fpms-template-version"] == "%E7%89%88%E6%9C%AC2026%0D%0A"
+    assert "\r" not in response.headers["content-disposition"]
+    assert "\n" not in response.headers["content-disposition"]
+    assert "filename*=UTF-8''" in response.headers["content-disposition"]
     command, supplied_transaction = commands[0]
     assert supplied_transaction is transaction
     assert command.pay_list_id == 7
@@ -178,7 +182,13 @@ def test_service_errors_and_request_or_auth_failures_are_fail_closed(
     assert response.json()["error"]["code"] == "PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED"
     assert transaction.commits == 0 and transaction.rollbacks == 1
 
-    for payload in ({}, _payload(actor_id=ACTOR_ID), _payload(rows=[])):
+    for payload in (
+        {},
+        _payload(actor_id=ACTOR_ID),
+        _payload(rows=[]),
+        _payload(rows=[{**_payload()["rows"][0], "amount_cny": "Infinity"}]),
+        _payload(rows=[{**_payload()["rows"][0], "fee_type": "申请费\x00"}]),
+    ):
         client, transaction = _client(monkeypatch)
         assert client.post("/api/v1/pay-lists/7/official-workbook", json=payload).status_code == 422
         assert transaction.commits == transaction.rollbacks == 0

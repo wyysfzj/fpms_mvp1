@@ -117,3 +117,7 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   compensates that newly managed file; a `REUSED` result's durable file is never deleted. A
   compensation failure remains the service-owned 500 error. Service-owned 400/404/409 errors,
   framework 401/403/422 and standard error envelopes are preserved.
+- Request rows reject non-finite numeric values, invalid UTF-8 and spreadsheet control characters
+  before calling the service. Every result-derived response header is percent-encoded as ASCII;
+  attachment names use RFC 5987 `filename*`. The complete Response is constructed before commit so
+  header/render failures still roll back and compensate only a `CREATED` managed file.
