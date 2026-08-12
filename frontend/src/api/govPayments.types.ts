@@ -161,10 +161,14 @@ export interface OfficialPaymentWorkbookGeneratePayload {
 }
 
 export interface OfficialWorkbookArtifact {
+    filename: string
     artifact_id: string
     content_sha256: string
     template_version: string
-    generated_status: 'GENERATED'
+    template_content_sha256: string
+    workbook_input_version_id: string
+    disposition: 'CREATED' | 'REUSED'
+    generated_status?: 'GENERATED'
     blob: Blob
 }
 
