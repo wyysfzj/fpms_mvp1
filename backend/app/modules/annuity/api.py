@@ -1,18 +1,39 @@
 from __future__ import annotations
 
-from datetime import date
+import os
+from datetime import date, datetime
 from decimal import Decimal
+from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
+from app.core.config import get_settings
 from app.core.errors import raise_business_error
+from app.core.storage import ensure_dir, safe_join, save_upload_file
 from app.db.session import get_db
 from app.modules.annuity.models import PayList
+from app.modules.annuity.official_payment_workbook_input_schemas import (
+    ActivateWorkbookInputIn,
+    RetireWorkbookInputIn,
+    ReviewWorkbookInputIn,
+    WorkbookInputOut,
+)
+from app.modules.annuity.official_payment_workbook_input_service import (
+    ActivateWorkbookInputCommand,
+    RegisterWorkbookInputCommand,
+    RetireWorkbookInputCommand,
+    ReviewWorkbookInputCommand,
+    activate_workbook_input,
+    register_workbook_input,
+    retire_workbook_input,
+    review_workbook_input,
+)
 from app.modules.annuity.schemas import AnnuityTaskListResponse
 from app.modules.annuity.service import (
     ExportInternalPayListCommand,
@@ -33,6 +54,8 @@ from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 
 router = APIRouter()
+
+_PAYMENT_WORKBOOK_UPLOAD_LIMIT = 25 * 1024 * 1024
 
 _ANNUITY_TRIGGER_RULE = "年费节点到期"
 _ANNUITY_DEADLINE_RULE = (
@@ -103,6 +126,280 @@ class ManualGovPaymentCreateIn(BaseModel):
 
 class PayListMarkPaidIn(BaseModel):
     paid_date: date
+
+
+def _utcnow() -> datetime:
+    return datetime.utcnow()
+
+
+def _runtime_profile() -> str:
+    return get_settings().fpms_env
+
+
+def _payment_workbook_storage_root() -> Path:
+    return Path(get_settings().storage_dir).resolve() / "payment-workbook-inputs"
+
+
+def _upload_hash(upload: UploadFile, field: str) -> str:
+    digest = sha256()
+    size = 0
+    try:
+        upload.file.seek(0)
+        while chunk := upload.file.read(1024 * 1024):
+            size += len(chunk)
+            if size > _PAYMENT_WORKBOOK_UPLOAD_LIMIT:
+                raise_business_error(
+                    "PAYMENT_WORKBOOK_INPUT_INVALID",
+                    "Official payment workbook input is too large",
+                    details={"field": field},
+                    status_code=400,
+                )
+            digest.update(chunk)
+        upload.file.seek(0)
+    except OSError:
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_INVALID",
+            "Official payment workbook input cannot be read",
+            details={"field": field},
+            status_code=400,
+        )
+    return digest.hexdigest()
+
+
+def _managed_file_hash(path: Path) -> str:
+    digest = sha256()
+    try:
+        with path.open("rb") as stream:
+            stat_result = os.fstat(stream.fileno())
+            if (
+                not path.is_file()
+                or path.is_symlink()
+                or stat_result.st_size > _PAYMENT_WORKBOOK_UPLOAD_LIMIT
+            ):
+                raise OSError("invalid managed file")
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError:
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+            "Official payment workbook managed file conflict",
+            status_code=409,
+        )
+    return digest.hexdigest()
+
+
+def _remove_created_workbook_files(root: Path, directory: Path) -> None:
+    for name in ("template.xlsm", "upload-proof.bin"):
+        try:
+            Path(safe_join(str(directory), name)).unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+    try:
+        directory.rmdir()
+    except OSError:
+        pass
+    try:
+        root.rmdir()
+    except OSError:
+        pass
+
+
+def _store_workbook_uploads(
+    template_file: UploadFile,
+    upload_proof_file: UploadFile,
+    idempotency_key: str,
+) -> tuple[Path, Path, str, str, bool]:
+    if Path(template_file.filename or "").suffix.lower() != ".xlsm":
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_INVALID",
+            "Official payment workbook must be an .xlsm file",
+            details={"field": "template_file"},
+            status_code=400,
+        )
+    template_hash = _upload_hash(template_file, "template_file")
+    proof_hash = _upload_hash(upload_proof_file, "upload_proof_file")
+    root = _payment_workbook_storage_root()
+    ensure_dir(str(root))
+    directory = Path(safe_join(str(root), sha256(idempotency_key.encode()).hexdigest()))
+    template_path = Path(safe_join(str(directory), "template.xlsm"))
+    proof_path = Path(safe_join(str(directory), "upload-proof.bin"))
+    created = False
+    try:
+        directory.mkdir(exist_ok=False)
+        created = True
+        save_upload_file(template_file, str(template_path))
+        save_upload_file(upload_proof_file, str(proof_path))
+    except FileExistsError:
+        if directory.is_symlink() or not directory.is_dir():
+            raise_business_error(
+                "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+                "Official payment workbook managed directory conflict",
+                status_code=409,
+            )
+    except Exception:
+        if created:
+            _remove_created_workbook_files(root, directory)
+        raise
+    if (
+        _managed_file_hash(template_path) != template_hash
+        or _managed_file_hash(proof_path) != proof_hash
+    ):
+        if created:
+            _remove_created_workbook_files(root, directory)
+        raise_business_error(
+            "PAYMENT_WORKBOOK_INPUT_CONFLICT",
+            "Official payment workbook replay content conflict",
+            status_code=409,
+        )
+    return template_path, proof_path, template_hash, proof_hash, created
+
+
+@router.post(
+    "/payment-workbook-inputs",
+    response_model=WorkbookInputOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register official payment workbook input",
+)
+def post_payment_workbook_input(
+    response: Response,
+    template_file: UploadFile = File(...),
+    upload_proof_file: UploadFile = File(...),
+    template_version: str = Form(..., min_length=1, max_length=128),
+    effective_from: datetime = Form(...),
+    effective_to: datetime | None = Form(default=None),
+    source_classification: str = Form(..., min_length=1, max_length=16),
+    idempotency_key: str = Form(..., min_length=1, max_length=128),
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> WorkbookInputOut:
+    root = _payment_workbook_storage_root()
+    directory: Path | None = None
+    created = False
+    try:
+        template_path, proof_path, template_hash, proof_hash, created = _store_workbook_uploads(
+            template_file,
+            upload_proof_file,
+            idempotency_key,
+        )
+        directory = template_path.parent
+        result = register_workbook_input(
+            db,
+            RegisterWorkbookInputCommand(
+                template_version=template_version,
+                template_storage_path=str(template_path),
+                expected_template_hash=template_hash,
+                upload_proof_storage_path=str(proof_path),
+                expected_upload_proof_hash=proof_hash,
+                effective_from=effective_from,
+                effective_to=effective_to,
+                source_classification=source_classification,
+                actor_id=str(current_user.id),
+                idempotency_key=idempotency_key,
+                runtime_profile=_runtime_profile(),
+            ),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        if created and directory is not None:
+            _remove_created_workbook_files(root, directory)
+        raise
+    response.status_code = (
+        status.HTTP_201_CREATED if result.disposition == "CREATED" else status.HTTP_200_OK
+    )
+    return WorkbookInputOut.model_validate(result)
+
+
+@router.post(
+    "/payment-workbook-inputs/{version_id}/review",
+    response_model=WorkbookInputOut,
+    summary="Review official payment workbook input",
+)
+def post_payment_workbook_input_review(
+    version_id: str,
+    payload: ReviewWorkbookInputIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> WorkbookInputOut:
+    try:
+        result = review_workbook_input(
+            db,
+            ReviewWorkbookInputCommand(
+                version_id=version_id,
+                decision=payload.decision,
+                reason=payload.reason,
+                actor_id=str(current_user.id),
+            ),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return WorkbookInputOut.model_validate(result)
+
+
+@router.post(
+    "/payment-workbook-inputs/{version_id}/activate",
+    response_model=WorkbookInputOut,
+    summary="Activate official payment workbook input",
+)
+def post_payment_workbook_input_activate(
+    version_id: str,
+    payload: ActivateWorkbookInputIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> WorkbookInputOut:
+    try:
+        result = activate_workbook_input(
+            db,
+            ActivateWorkbookInputCommand(
+                version_id=version_id,
+                actor_id=str(current_user.id),
+                at=_utcnow(),
+                idempotency_key=payload.idempotency_key,
+                runtime_profile=_runtime_profile(),
+            ),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return WorkbookInputOut.model_validate(result)
+
+
+@router.post(
+    "/payment-workbook-inputs/{version_id}/retire",
+    response_model=WorkbookInputOut,
+    summary="Retire official payment workbook input",
+)
+def post_payment_workbook_input_retire(
+    version_id: str,
+    payload: RetireWorkbookInputIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> WorkbookInputOut:
+    try:
+        result = retire_workbook_input(
+            db,
+            RetireWorkbookInputCommand(
+                version_id=version_id,
+                reason=payload.reason,
+                actor_id=str(current_user.id),
+                at=_utcnow(),
+                idempotency_key=payload.idempotency_key,
+            ),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return WorkbookInputOut.model_validate(result)
 
 
 def _annuity_deadline_preview_fields(year_no: int) -> dict[str, str]:
