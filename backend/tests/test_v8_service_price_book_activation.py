@@ -8,6 +8,7 @@ from types import ModuleType
 
 import pytest
 from sqlalchemy import create_engine, event, select
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -179,6 +180,25 @@ def test_activate_valid_gate_and_exact_replay(service: ModuleType, transaction: 
     assert activated.status == "ACTIVE"
     assert activated.current_identity_key == "GLOBAL"
     assert activated.approved_by == activated.activated_by == ACTOR_ID
+    _error(
+        lambda: service.activate_service_price_book(
+            transaction,
+            replace(command, expected_current_price_book_id=row.id),
+        )
+    )
+
+
+def test_replay_requires_active_independent_actor(
+    service: ModuleType, transaction: Session
+) -> None:
+    row = _draft(transaction)
+    _gate(transaction, row)
+    command = _command(service, row)
+    service.activate_service_price_book(transaction, command)
+    actor = transaction.get(T_User, ACTOR_ID)
+    actor.is_active = False
+    transaction.flush()
+    _error(lambda: service.activate_service_price_book(transaction, command))
 
 
 @pytest.mark.parametrize(
@@ -187,6 +207,16 @@ def test_activate_valid_gate_and_exact_replay(service: ModuleType, transaction: 
         lambda row: setattr(row, "item_snapshot", "{}"),
         lambda row: setattr(row, "item_count", 0),
         lambda row: setattr(row, "source_classification", "TEST_ONLY"),
+        lambda row: setattr(
+            row,
+            "item_snapshot",
+            row.item_snapshot.replace('"5000.00"', '"NaN"'),
+        ),
+        lambda row: setattr(
+            row,
+            "item_snapshot",
+            row.item_snapshot.replace('"item_code":"FILING"', '"item_code":" FILING"'),
+        ),
     ],
 )
 def test_malformed_or_test_only_candidate_is_409_without_mutation(
@@ -211,6 +241,24 @@ def test_missing_or_mismatched_gate_is_409(service: ModuleType, transaction: Ses
     gate.decision_value = "{}"
     transaction.flush()
     _error(lambda: service.activate_service_price_book(transaction, _command(service, row)))
+    assert row.status == "DRAFT"
+
+
+def test_test_runtime_and_same_creator_are_409(service: ModuleType, transaction: Session) -> None:
+    row = _draft(transaction)
+    _gate(transaction, row)
+    _error(
+        lambda: service.activate_service_price_book(
+            transaction,
+            _command(service, row, runtime_profile="test"),
+        )
+    )
+    _error(
+        lambda: service.activate_service_price_book(
+            transaction,
+            _command(service, row, actor_id=CREATOR_ID),
+        )
+    )
     assert row.status == "DRAFT"
 
 
@@ -241,6 +289,8 @@ def test_non_overlapping_predecessor_is_atomically_replaced(
     assert result.supersedes_price_book_id == predecessor.id
     assert predecessor.status == "RETIRED"
     assert predecessor.current_identity_key is None
+    assert predecessor.retired_by == ACTOR_ID and predecessor.retired_at == NOW
+    assert predecessor.retirement_reason == f"由服务价格版本 {row.id} 替代"
 
 
 def test_overlap_or_wrong_cas_is_409_without_mutation(
@@ -265,3 +315,40 @@ def test_overlap_or_wrong_cas_is_409_without_mutation(
         )
     )
     assert predecessor.status == "ACTIVE" and row.status == "DRAFT"
+
+
+@pytest.mark.parametrize("failure", ["integrity", "locked"])
+def test_activation_write_conflicts_use_activation_code(
+    service: ModuleType,
+    transaction: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    row = _draft(transaction)
+    _gate(transaction, row)
+
+    def fail(*_args, **_kwargs) -> None:
+        if failure == "integrity":
+            raise IntegrityError("write", {}, Exception())
+        raise OperationalError("write", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(transaction, "flush", fail)
+    error = _error(lambda: service.activate_service_price_book(transaction, _command(service, row)))
+    assert (
+        error.details["reason"]
+        == f"database_write_{'conflict' if failure == 'integrity' else 'locked'}"
+    )
+
+
+def test_service_never_completes_caller_transaction(
+    service: ModuleType,
+    transaction: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = _draft(transaction)
+    _gate(transaction, row)
+    monkeypatch.setattr(transaction, "commit", lambda: pytest.fail("unexpected commit"))
+    monkeypatch.setattr(transaction, "rollback", lambda: pytest.fail("unexpected rollback"))
+    assert (
+        service.activate_service_price_book(transaction, _command(service, row)).status == "ACTIVE"
+    )

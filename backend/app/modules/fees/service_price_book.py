@@ -274,6 +274,17 @@ def _flush(transaction: Session, row: ServicePriceBook) -> None:
         raise
 
 
+def _activation_flush(transaction: Session, *rows: ServicePriceBook) -> None:
+    try:
+        transaction.flush(list(rows) or None)
+    except IntegrityError:
+        _activation_conflict("database_write_conflict")
+    except OperationalError as exc:
+        if "database is locked" in str(exc.orig).lower():
+            _activation_conflict("database_write_locked")
+        raise
+
+
 def import_service_price_book(
     transaction: Session,
     command: ImportServicePriceBookCommand,
@@ -469,8 +480,16 @@ def _activation_snapshot(row: ServicePriceBook) -> str:
         or not row.book_version
         or type(row.scope_key) is not str
         or type(row.currency) is not str
+        or len(row.currency) != 3
+        or not row.currency.isascii()
+        or not row.currency.isalpha()
+        or not row.currency.isupper()
         or type(row.tax_policy) is not str
+        or not row.tax_policy
+        or row.tax_policy != row.tax_policy.strip()
         or type(row.discount_policy) is not str
+        or not row.discount_policy
+        or row.discount_policy != row.discount_policy.strip()
         or type(row.source_reference) is not str
         or not row.source_reference
         or type(row.source_content_hash) is not str
@@ -483,6 +502,7 @@ def _activation_snapshot(row: ServicePriceBook) -> str:
             row.effective_to is not None
             and (type(row.effective_to) is not datetime or row.effective_to.utcoffset() is not None)
         )
+        or (row.effective_to is not None and row.effective_to <= row.effective_from)
     ):
         _activation_conflict("persisted_candidate_invalid", price_book_id=row.id)
     try:
@@ -497,6 +517,41 @@ def _activation_snapshot(row: ServicePriceBook) -> str:
         "scope_key",
         "tax_policy",
     }
+    items = parsed.get("items") if type(parsed) is dict else None
+    valid_items = type(items) is list and len(items) == row.item_count and row.item_count > 0
+    previous_code: str | None = None
+    if valid_items:
+        for item in items:
+            if type(item) is not dict or set(item) != {"item_code", "unit_price"}:
+                valid_items = False
+                break
+            code = item["item_code"]
+            price_text = item["unit_price"]
+            if (
+                type(code) is not str
+                or not code
+                or code != code.strip()
+                or "\x00" in code
+                or len(code) > 128
+                or (previous_code is not None and code <= previous_code)
+                or type(price_text) is not str
+            ):
+                valid_items = False
+                break
+            try:
+                price = Decimal(price_text)
+            except Exception:
+                valid_items = False
+                break
+            if (
+                not price.is_finite()
+                or price <= 0
+                or price.as_tuple().exponent != -2
+                or _fixed_two_decimal_places(price) != price_text
+            ):
+                valid_items = False
+                break
+            previous_code = code
     if (
         type(parsed) is not dict
         or set(parsed) != expected_keys
@@ -505,9 +560,7 @@ def _activation_snapshot(row: ServicePriceBook) -> str:
         or parsed["discount_policy"] != row.discount_policy
         or parsed["scope_key"] != row.scope_key
         or parsed["tax_policy"] != row.tax_policy
-        or type(parsed["items"]) is not list
-        or len(parsed["items"]) != row.item_count
-        or row.item_count <= 0
+        or not valid_items
         or sha256(canonical.encode("utf-8")).hexdigest() != row.item_snapshot_hash
         or len(row.source_content_hash) != 64
         or any(character not in _HASH_HEX for character in row.source_content_hash)
@@ -594,6 +647,20 @@ def activate_service_price_book(
         and row.activated_by == actor_id
         and row.activated_at == at
     ):
+        with transaction.no_autoflush:
+            replay_actor = transaction.get(T_User, actor_id)
+        if (
+            replay_actor is None
+            or not replay_actor.is_active
+            or row.created_by == actor_id
+            or expected_current != row.supersedes_price_book_id
+            or row.source_classification != "PRODUCTION"
+            or row.scope_key != "GLOBAL"
+            or row.retired_by is not None
+            or row.retired_at is not None
+            or row.retirement_reason is not None
+        ):
+            _activation_conflict("activation_replay_conflict", price_book_id=row.id)
         return _activation_result(row, "REUSED")
     if (
         row.status != "DRAFT"
@@ -656,7 +723,7 @@ def activate_service_price_book(
         predecessor.updated_by = actor_id
         predecessor.updated_at = at
         row.supersedes_price_book_id = predecessor.id
-        _flush(transaction, predecessor)
+        _activation_flush(transaction, predecessor)
     row.approved_by = actor_id
     row.approved_at = at
     row.approval_reason = approval_reason
@@ -666,5 +733,5 @@ def activate_service_price_book(
     row.current_identity_key = "GLOBAL"
     row.updated_by = actor_id
     row.updated_at = at
-    _flush(transaction, row)
+    _activation_flush(transaction, row)
     return _activation_result(row, "ACTIVATED")
