@@ -75,9 +75,11 @@ python3 -m pytest -q scripts/tests/test_v8_lean_coverage_check.py -k full_termin
 17 passed, 12 deselected in 0.07s
 ```
 
-The focused tranche covers the exact pass case; each missing edge; extra edge, target, field and
-removal; catalog, task-file, base and effective hash drift; exact 53/53 deferred coverage;
-Row281 inclusion; cycle rejection; and the unchanged Row283 sentinel.
+The original focused tranche covered the exact pass case; each missing edge; extra edge, target,
+field and removal; catalog, base and effective hash drift; exact 53/53 deferred coverage; Row281
+inclusion; cycle rejection; and the unchanged Row283 sentinel. The Git-native successor adds a
+regression proving that an unreviewed change to a terminal task card is rejected by its accepted
+story owner fingerprint.
 
 Fresh implementation verification before the protected commit also recorded:
 
