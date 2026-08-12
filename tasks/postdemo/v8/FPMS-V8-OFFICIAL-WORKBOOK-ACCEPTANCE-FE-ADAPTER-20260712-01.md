@@ -105,3 +105,16 @@ Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+## Frozen FE Adapter Contract (2026-08-13)
+
+- Export exactly one `recordOfficialWorkbookAcceptance(payListId, payload)` adapter. POST only to
+  `/pay-lists/{pay_list_id}/official-workbook/acceptance`; the body contains only `artifact_id`,
+  `evidence_ref`, lowercase `evidence_sha256`, naive `accepted_at` and `idempotency_key`.
+- Return the server JSON unchanged and type its exact acceptance facts separately: status
+  `OFFICIAL_SITE_ACCEPTED`, `accepted: true`, `paid: false`, `ticket_verified: false` and
+  disposition `CREATED | REUSED`. Do not add generated status, workbook bytes, amount, payment or
+  ticket inference.
+- Do not catch or remap transport errors. Preserve the shared HTTP adapter's standard
+  `400/401/403/404/409/422` error-envelope behavior. The executable contract uses the existing
+  esbuild-to-`/tmp` pattern and must pass in addition to FE typecheck.

@@ -8,6 +8,8 @@ import type {
     ManualGovPaymentCreatePayload,
     ManualGovPaymentCreateResult,
     OfficialPaymentWorkbookGeneratePayload,
+    OfficialWorkbookAcceptancePayload,
+    OfficialWorkbookAcceptanceResult,
     OfficialWorkbookArtifact,
     PayListDetailResult,
     PayListListResult,
@@ -652,6 +654,17 @@ export async function generateOfficialPaymentWorkbook(
     } catch (error) {
         throw normalizeOfficialPaymentWorkbookRequestError(error)
     }
+}
+
+export async function recordOfficialWorkbookAcceptance(
+    payListId: number,
+    payload: OfficialWorkbookAcceptancePayload,
+): Promise<OfficialWorkbookAcceptanceResult> {
+    const response = await http.post<OfficialWorkbookAcceptanceResult>(
+        `/pay-lists/${payListId}/official-workbook/acceptance`,
+        payload,
+    )
+    return response.data
 }
 
 export async function markPayListPaid(

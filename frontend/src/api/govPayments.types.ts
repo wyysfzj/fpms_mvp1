@@ -172,6 +172,29 @@ export interface OfficialWorkbookArtifact {
     blob: Blob
 }
 
+export interface OfficialWorkbookAcceptancePayload {
+    artifact_id: string
+    evidence_ref: string
+    evidence_sha256: string
+    accepted_at: string
+    idempotency_key: string
+}
+
+export interface OfficialWorkbookAcceptanceResult {
+    artifact_id: string
+    pay_list_id: number
+    evidence_ref: string
+    evidence_sha256: string
+    accepted_at: string
+    activity_id: string
+    status: 'OFFICIAL_SITE_ACCEPTED'
+    accepted: true
+    paid: false
+    ticket_verified: false
+    idempotency_key: string
+    disposition: 'CREATED' | 'REUSED'
+}
+
 export interface PayListDetailResult {
     pay_list: PayListInfo & {
         remark: string | null
