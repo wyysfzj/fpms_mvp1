@@ -314,6 +314,36 @@ def test_integrated_owner_allows_only_ledger_metadata_to_advance(
         )
 
 
+def test_integrated_owner_rejects_unreviewed_terminal_task_card_drift(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    repo, _initial_sha = _git_repo(tmp_path)
+    task_path = repo / "tasks" / "postdemo" / "v8" / "terminal.md"
+    task_path.parent.mkdir(parents=True)
+    task_path.write_text("reviewed terminal contract\n")
+    _git(repo, "add", "tasks/postdemo/v8/terminal.md")
+    _git(repo, "commit", "-q", "-m", "review terminal task")
+    reviewed_sha = _git(repo, "rev-parse", "HEAD")
+    story = {
+        "story_id": "TERMINAL-TASK-OWNER",
+        "commits": [reviewed_sha],
+        "paths": ["tasks/postdemo/v8/terminal.md"],
+    }
+
+    task_path.write_text("unreviewed terminal contract drift\n")
+    _git(repo, "add", "tasks/postdemo/v8/terminal.md")
+    _git(repo, "commit", "-q", "-m", "drift terminal task")
+    integration_sha = _git(repo, "rev-parse", "HEAD")
+
+    with pytest.raises(checker.ValidationError, match="integrated bytes changed"):
+        checker._validate_integrated_path_owners(
+            [story],
+            repo_root=repo,
+            integration_sha=integration_sha,
+        )
+
+
 def test_current_verified_accepts_linear_reviewed_successor_on_shared_path(
     tmp_path: Path,
 ) -> None:

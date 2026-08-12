@@ -30,7 +30,9 @@ The story records `CAPABILITY_READY`, keeps
 
 1. Remove mutable task-file byte pins from the Full-terminal dependency successor. Preserve
    the frozen catalog hash, exact additive edges, dependency hashes, order and 53-row coverage.
-   Current task bytes remain governed by reachable reviewed story fingerprints.
+   Current task bytes remain governed by reachable reviewed story fingerprints. The adoption
+   fingerprint must include the exact catalog task paths for Rows 278, 281, 282 and 283 so none
+   loses byte-drift protection before its own later successor is reviewed.
 2. Exclude only `docs/product/v8/coverage-ledger.json` from integrated latest-owner byte
    comparison, because later ledger metadata adoption necessarily changes it. Historical
    candidate fingerprints, schema, row/story references and product owned-path drift checks

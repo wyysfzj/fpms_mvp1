@@ -79,6 +79,10 @@ FINGERPRINT_PATHS = {
     "tasks/batches/FPMS-POSTDEMO-V8-PAYMENT-WORKBOOK-GATE-20260712-01.md",
     "tasks/batches/FPMS-POSTDEMO-V8-SERVICE-RATE-GATE-20260712-01.md",
     "tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-CLOSE-20260813-01.md",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01.md",
+    "tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01.md",
+    "tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md",
+    "tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md",
     "docs/product/v8/full-terminal-dependency-successor.json",
     "docs/product/v8/stories/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
     "docs/product/v8/stories/V8-INPUT-ACTIVATION-CAPABILITY-LEDGER-ADOPTION.md",
@@ -138,7 +142,7 @@ def test_story_separates_ready_capability_from_unconfigured_production() -> None
     assert story["production_failure"] == "409 / NO WRITE"
     assert story["production_activation_claimed"] is False
     assert set(story["paths"]) == FINGERPRINT_PATHS
-    assert len(story["paths"]) == 54
+    assert len(story["paths"]) == 58
 
 
 def test_story_fingerprint_binds_candidate_and_current_product_bytes() -> None:

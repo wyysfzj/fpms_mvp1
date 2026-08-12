@@ -33,7 +33,8 @@ The Full-terminal dependency overlay pins immutable catalog identity, exact addi
 base/effective dependency hashes, Row283's predecessor sentinel, order and deferred coverage.
 It must not pin mutable task-card bytes that legitimately receive reviewed latest-wins
 appendices; current task/product bytes are instead bound by reachable story commits and exact
-tree fingerprints.
+tree fingerprints. This story owns the exact catalog task paths for Rows 278, 281, 282 and 283
+until a later independently reviewed successor becomes their latest accepted owner.
 
 The integrated-owner check excludes only `docs/product/v8/coverage-ledger.json`. Historical
 stories that listed the ledger still validate their recorded candidate fingerprint, while the
