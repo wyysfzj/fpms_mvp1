@@ -47,7 +47,9 @@ Hard boundaries:
 
 | File or ownership group | Responsibility | Serialized owner order |
 | --- | --- | --- |
-| successor task cards and two lane manifests | capability-vs-production dependency authority | Task 1 only |
+| successor adoption, appendices and four successor task cards | capability-vs-production dependency authority | Task 1 only |
+| `tasks/batches/FPMS-POSTDEMO-V8-PAYMENT-WORKBOOK-GATE-20260712-01.md` | frozen 11-member payment lane manifest | row 175 only |
+| `tasks/batches/FPMS-POSTDEMO-V8-SERVICE-RATE-GATE-20260712-01.md` | frozen 8-member service-rate lane manifest | row 176 only |
 | `backend/alembic/versions/v8_payment_workbook_input_version.py` | workbook input carrier migration | WB-I1 before row 223 |
 | `backend/app/modules/annuity/models.py` | workbook input ORM | WB-I1 only, serialized |
 | `backend/app/modules/annuity/verified_official_payment_workbook.py` | safe `.xlsm` validation/fill; never execute macros | row 214 only |
@@ -187,7 +189,36 @@ manifest; those files do not exist at the parent and remain owned by rows 175 an
   ```bash
   cd backend && .venv/bin/pytest -q tests/test_v8_input_activation_decoupling_contract.py
   cd backend && .venv/bin/ruff check tests/test_v8_input_activation_decoupling_contract.py
-  git diff --check -- <exact Task-1 allowlist>
+  git diff --check -- \
+    docs/product/v8/reviews/V8-INPUT-ACTIVATION-DECOUPLING-CURRENT-ADOPTION.md \
+    backend/tests/test_v8_input_activation_decoupling_contract.py \
+    tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-DECOUPLING-ADOPTION-20260813-01.md \
+    tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-VERSION-CARRIER-20260812-01.md \
+    tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-GOVERNANCE-SERVICE-20260812-01.md \
+    tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-ADMIN-API-20260812-01.md \
+    tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-CLOSE-20260813-01.md \
+    tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-MANIFEST-ACTIVATION-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-SERVICE-RATE-MANIFEST-ACTIVATION-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-ADAPTER-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-GENERATION-SERVICE-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-HTTP-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-FE-ADAPTER-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-UI-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-SERVICE-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-API-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-FE-ADAPTER-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-UI-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-CARRIER-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-API-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-API-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-API-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md \
+    tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md
   ```
 
   Expected: PASS; the frozen catalog hash is unchanged.
@@ -454,7 +485,7 @@ and source hash; no success path may infer official acceptance, payment or ticke
 
 ## 12. Tasks 16–22 — Existing service-price product rows
 
-### Task 14 / row 223 — Service price-book carrier
+### Task 16 / row 223 — Service price-book carrier
 
 **Files:** use the existing row-223 allowlist.
 
@@ -472,7 +503,7 @@ and source hash; no success path may infer official acceptance, payment or ticke
 - [ ] **Step 5: Run focused GREEN, Ruff, unique-head and clean SQLite upgrade.**
 - [ ] **Step 6: Independently close and commit `feat(v8): add service price book carrier`.**
 
-### Tasks 15–20 / rows 224–229
+### Tasks 17–22 / rows 224–229
 
 | Row | Exact behavior to prove | Focused test |
 | --- | --- | --- |
@@ -597,7 +628,7 @@ an independent reviewer.
 - [ ] Mark the existing Goal complete only after the final release gate returns zero and no required
   work remains.
 
-## 15. Failure and recovery rules
+## 16. Failure and recovery rules
 
 - A transport failure first reconciles HEAD, task status, diff, evidence ordinal, running process and
   locks; resume from the first incomplete durable step.
@@ -607,9 +638,9 @@ an independent reviewer.
 - Test, JSON, evidence-format, taskctl, owner compatibility or ordinary code failures remain High
   implementation work; do not escalate to Ultra.
 - Do not create another governance task for ordinary scope/evidence friction.
-- Broad verification never runs before Task 25.
+- Broad verification never runs before Task 27 / row 283.
 
-## 16. Completion evidence
+## 17. Completion evidence
 
 The overall cycle is complete only when:
 
