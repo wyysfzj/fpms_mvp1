@@ -660,9 +660,16 @@ export async function recordOfficialWorkbookAcceptance(
     payListId: number,
     payload: OfficialWorkbookAcceptancePayload,
 ): Promise<OfficialWorkbookAcceptanceResult> {
+    const request: OfficialWorkbookAcceptancePayload = {
+        artifact_id: payload.artifact_id,
+        evidence_ref: payload.evidence_ref,
+        evidence_sha256: payload.evidence_sha256,
+        accepted_at: payload.accepted_at,
+        idempotency_key: payload.idempotency_key,
+    }
     const response = await http.post<OfficialWorkbookAcceptanceResult>(
         `/pay-lists/${payListId}/official-workbook/acceptance`,
-        payload,
+        request,
     )
     return response.data
 }

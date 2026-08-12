@@ -24,6 +24,14 @@ const payload: OfficialWorkbookAcceptancePayload = {
     accepted_at: '2026-08-13T17:00:00',
     idempotency_key: 'official-workbook-acceptance-fe-221',
 }
+const widerCallerValue = {
+    ...payload,
+    accepted: true,
+    paid: true,
+    ticket_verified: true,
+    generated_status: 'GENERATED',
+    caller_only_note: 'must-not-cross-http-boundary',
+}
 
 const functionSignature: Exact<
     typeof recordOfficialWorkbookAcceptance,
@@ -106,8 +114,8 @@ async function verifyRuntimeContract(): Promise<void> {
             }
         }
 
-        const created = await recordOfficialWorkbookAcceptance(7, payload)
-        const reused = await recordOfficialWorkbookAcceptance(7, payload)
+        const created = await recordOfficialWorkbookAcceptance(7, widerCallerValue)
+        const reused = await recordOfficialWorkbookAcceptance(7, widerCallerValue)
 
         assertEqual(requests[0].method, 'post', 'HTTP method')
         assertEqual(
@@ -115,7 +123,19 @@ async function verifyRuntimeContract(): Promise<void> {
             '/pay-lists/7/official-workbook/acceptance',
             'HTTP path',
         )
-        assertEqual(JSON.stringify(JSON.parse(String(requests[0].data))), JSON.stringify(payload), 'body')
+        const postedBody = JSON.parse(String(requests[0].data)) as Record<string, unknown>
+        assertEqual(
+            Object.keys(postedBody).sort().join(','),
+            [
+                'accepted_at',
+                'artifact_id',
+                'evidence_ref',
+                'evidence_sha256',
+                'idempotency_key',
+            ].join(','),
+            'exact body keys',
+        )
+        assertEqual(JSON.stringify(postedBody), JSON.stringify(payload), 'exact body values')
         assertEqual(created, createdResult, 'CREATED response identity')
         assertEqual(reused.disposition, 'REUSED', 'REUSED disposition')
         assertEqual(reused.accepted, true, 'server accepted fact')
