@@ -240,6 +240,8 @@ def test_malformed_or_test_only_candidate_is_409_without_mutation(
         ("book_version", "2026.08\x00"),
         ("source_reference", " managed://service-price-books/2026-08.json"),
         ("source_reference", "managed://service-price-books/2026-08.json\x00"),
+        ("tax_policy", "EXCLUSIVE\x00"),
+        ("discount_policy", "NONE\x00"),
     ],
 )
 def test_persisted_activation_headers_are_canonical(
@@ -251,6 +253,16 @@ def test_persisted_activation_headers_are_canonical(
     row = _draft(transaction)
     _gate(transaction, row)
     setattr(row, field, value)
+    if field in {"tax_policy", "discount_policy"}:
+        snapshot = json.loads(row.item_snapshot)
+        snapshot[field] = value
+        row.item_snapshot = json.dumps(
+            snapshot,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        row.item_snapshot_hash = sha256(row.item_snapshot.encode()).hexdigest()
     gate = transaction.scalar(select(CustomerDecisionGate))
     assert gate is not None
     gate.source_version = row.book_version

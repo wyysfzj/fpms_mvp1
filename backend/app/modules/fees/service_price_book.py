@@ -497,6 +497,8 @@ def _activation_result(
 def _activation_snapshot(row: ServicePriceBook) -> str:
     _activation_persisted_text(row.book_version, "book_version", 128)
     _activation_persisted_text(row.source_reference, "source_reference")
+    _activation_persisted_text(row.tax_policy, "tax_policy")
+    _activation_persisted_text(row.discount_policy, "discount_policy")
     if (
         type(row.scope_key) is not str
         or type(row.currency) is not str
