@@ -2822,15 +2822,10 @@ def _official_workbook_acceptance_activity_command(
     generation_activity_id: str,
     workbook_input: WorkbookInputResult,
 ) -> LifecycleEventCommand:
-    activity_idempotency_key = (
-        f"official-workbook-acceptance:{command.artifact_id}:{command.idempotency_key}:{case_id}"
-    )
-    if len(activity_idempotency_key) > 128:
-        _fail_official_workbook_acceptance(
-            "OFFICIAL_WORKBOOK_ACCEPTANCE_INPUT_INVALID",
-            "idempotency_key is too long for the acceptance activity",
-            status_code=400,
-        )
+    activity_identity = sha256(
+        f"{command.artifact_id}\0{command.idempotency_key}\0{case_id}".encode()
+    ).hexdigest()
+    activity_idempotency_key = f"official-workbook-acceptance:{activity_identity}"
     return LifecycleEventCommand(
         case_id=case_id,
         event_type="OFFICIAL_PAYMENT_WORKBOOK_ACCEPTED",

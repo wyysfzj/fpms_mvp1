@@ -246,6 +246,7 @@ def test_production_acceptance_binds_input_gate_generation_and_acceptance_lineag
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    request_key = "00000000-0000-4000-8000-000000000278"
     artifact_id, input_version = _seed_generated_artifact(
         session_factory,
         tmp_path,
@@ -253,7 +254,9 @@ def test_production_acceptance_binds_input_gate_generation_and_acceptance_lineag
         source_classification="PRODUCTION",
     )
     with session_factory() as db:
-        result = service.record_official_workbook_acceptance(_command(artifact_id), db)
+        result = service.record_official_workbook_acceptance(
+            _command(artifact_id, idempotency_key=request_key), db
+        )
         db.commit()
 
     with session_factory() as db:
@@ -273,7 +276,12 @@ def test_production_acceptance_binds_input_gate_generation_and_acceptance_lineag
         generation = db.get(CaseActivityEvent, acceptance.source_activity_id)
 
         assert result.status == artifact.status == "OFFICIAL_SITE_ACCEPTED"
+        assert result.idempotency_key == request_key
         assert result.activity_id == acceptance.id
+        expected_identity = sha256(
+            f"{artifact_id}\0{request_key}\0{CASE_ID}".encode()
+        ).hexdigest()
+        assert acceptance.idempotency_key == f"official-workbook-acceptance:{expected_identity}"
         assert json.loads(generation.payload_json)["workbook_input_version_id"] == (
             input_version.version_id
         )
