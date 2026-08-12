@@ -2115,6 +2115,7 @@ class GenerateOfficialPaymentWorkbookResult:
     accepted: bool
     paid: bool
     ticket_verified: bool
+    disposition: str
 
 
 _OFFICIAL_PAYMENT_WORKBOOK_CONTENT_TYPE = "application/vnd.ms-excel.sheet.macroEnabled.12"
@@ -2638,6 +2639,7 @@ def generate_official_payment_workbook(
             accepted=False,
             paid=False,
             ticket_verified=False,
+            disposition="REUSED",
         )
 
     content = _render_resolved_official_payment_workbook(
@@ -2716,6 +2718,7 @@ def generate_official_payment_workbook(
         accepted=False,
         paid=False,
         ticket_verified=False,
+        disposition="CREATED",
     )
 
 

@@ -248,6 +248,7 @@ def test_generation_resolves_active_production_input_and_persists_distinct_fact(
     assert result.accepted is False
     assert result.paid is False
     assert result.ticket_verified is False
+    assert result.disposition == "CREATED"
     assert result.managed_storage_path == f"official-payment-workbooks/7/{result.artifact_id}.xlsm"
     assert (tmp_path / result.managed_storage_path).read_bytes() == result.content
 
@@ -373,7 +374,9 @@ def test_identical_replay_reuses_exact_artifact_activity_and_content(
     first = service.generate_official_payment_workbook(_command(), transaction)
     second = service.generate_official_payment_workbook(_command(), transaction)
 
-    assert second == first
+    assert replace(second, disposition="CREATED") == first
+    assert first.disposition == "CREATED"
+    assert second.disposition == "REUSED"
     assert adapter_rows == [_row()]
     assert len(activities) == 2
     assert activities[1] == activities[0]

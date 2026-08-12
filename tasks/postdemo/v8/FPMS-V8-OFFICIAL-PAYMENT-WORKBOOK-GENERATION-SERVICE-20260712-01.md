@@ -147,3 +147,6 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   write. Any differing actor, time, rows, input version/hash, artifact/activity tuple or managed
   bytes is `OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT` / `409`. A concurrent unique-write loss
   maps to the same conflict family; caller-owned commit/rollback remains unchanged.
+- The result returns server-owned `CREATED|REUSED` disposition. HTTP callers use it only to decide
+  whether a failed outer commit must compensate the newly created managed file; a `REUSED` replay's
+  durable file must never be deleted by request-level compensation.
