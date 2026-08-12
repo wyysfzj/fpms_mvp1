@@ -10,6 +10,7 @@ from sqlalchemy import literal, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
+from app.core.config import get_settings
 from app.core.errors import BusinessError, raise_business_error
 from app.db.session import get_db
 from app.modules.auth.models import T_User
@@ -70,9 +71,22 @@ from app.modules.fees.service import lock_fee_draft as lock_fee_draft_service
 from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_service
 from app.modules.fees.service import update_fee_item as update_fee_item_service
 from app.modules.fees.service import update_fee_rate as update_fee_rate_service
+from app.modules.fees.service_price_book import (
+    ImportServicePriceBookCommand,
+    ServicePriceBookItemInput,
+    import_service_price_book,
+)
+from app.modules.fees.service_price_book_schemas import (
+    ServicePriceBookImportIn,
+    ServicePriceBookImportOut,
+)
 from app.modules.masterdata.clients.models import Client
 
 router = APIRouter()
+
+
+def _service_price_book_runtime_profile() -> str:
+    return get_settings().fpms_env
 
 
 def _get_client_display_name(client: Client) -> str | None:
@@ -190,6 +204,53 @@ def _validate_approval_source_identity(row: Any, case_id: str) -> None:
             "费用减免审批来源当前标识数据损坏",
             status_code=status.HTTP_409_CONFLICT,
         )
+
+
+@router.post(
+    "/fees/service-price-books/import",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ServicePriceBookImportOut,
+    summary="Import a service price book draft",
+)
+def post_service_price_book_import(
+    payload: ServicePriceBookImportIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ServicePriceBookImportOut:
+    command = ImportServicePriceBookCommand(
+        source_classification=payload.source_classification,
+        book_version=payload.book_version,
+        scope_key=payload.scope_key,
+        currency=payload.currency,
+        tax_policy=payload.tax_policy,
+        discount_policy=payload.discount_policy,
+        source_reference=payload.source_reference,
+        source_content=payload.source_content,
+        expected_source_content_hash=payload.expected_source_content_hash,
+        items=tuple(
+            ServicePriceBookItemInput(
+                item_code=item.item_code,
+                unit_price=item.unit_price,
+            )
+            for item in payload.items
+        ),
+        effective_from=payload.effective_from,
+        effective_to=payload.effective_to,
+        actor_id=str(current_user.id),
+        idempotency_key=payload.idempotency_key,
+        runtime_profile=_service_price_book_runtime_profile(),
+    )
+    try:
+        result = import_service_price_book(db, command)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if result.disposition == "REUSED":
+        response.status_code = status.HTTP_200_OK
+    return ServicePriceBookImportOut.model_validate(result)
 
 
 @router.get("/fees/drafts", summary="List fee drafts")

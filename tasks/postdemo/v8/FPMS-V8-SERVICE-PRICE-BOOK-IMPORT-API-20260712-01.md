@@ -34,6 +34,26 @@ Task Contract Profile: `TC-API`
 
 One POST import endpoint using `Fee.Edit`; return 201 new/200 idempotent and 400/401/403/409/422 for invalid/duplicate/source conflicts.
 
+### Frozen HTTP contract
+
+- `POST /fees/service-price-books/import` accepts one strict JSON object containing only
+  `source_classification`, `book_version`, `scope_key`, `currency`, `tax_policy`,
+  `discount_policy`, `source_reference`, `source_content`,
+  `expected_source_content_hash`, `items`, `effective_from`, optional `effective_to`, and
+  `idempotency_key`.
+- Each `items` entry contains exactly `item_code` and decimal `unit_price`. The service remains
+  the sole owner of canonical source/item hashing, duplicate item-code validation and exact
+  source/version/idempotency conflict semantics.
+- `actor_id` and `runtime_profile` are server-owned and never accepted from the request. The API
+  supplies the authenticated user and current server runtime profile to the import service.
+- The safe response exposes the imported draft identity, classification, version, scope,
+  currency, policies, source reference and hashes, item count, `DRAFT` status, effective
+  interval, creator and `CREATED|REUSED` disposition. It does not expose source content and does
+  not claim approval, activation, current identity, production readiness or a receivable.
+- The API owns commit/rollback: `CREATED` returns 201, exact `REUSED` returns 200, service input
+  errors return 400, authentication/permission failures return 401/403, service conflicts return
+  409, and request-shape failures return 422.
+
 ## Explicit Non-Closure
 
 No second endpoint, router rewiring, business-rule duplication or frontend work. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
