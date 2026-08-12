@@ -81,6 +81,7 @@ def _result(disposition: str = "CREATED") -> object:
         template_content_hash="b" * 64,
         workbook_input_version_id="22222222-2222-4222-8222-222222222216",
         managed_storage_path="official-payment-workbooks/7/artifact.xlsm",
+        generated_status="GENERATED",
         disposition=disposition,
     )
 
@@ -119,6 +120,7 @@ def test_exact_route_permission_server_command_and_created_download(
     assert response.content == b"official-xlsm"
     assert response.headers["content-type"] == "application/vnd.ms-excel.sheet.macroEnabled.12"
     assert response.headers["x-fpms-workbook-disposition"] == "CREATED"
+    assert response.headers["x-fpms-generated-status"] == "GENERATED"
     assert response.headers["x-fpms-artifact-id"] == _result().artifact_id
     assert response.headers["x-fpms-template-content-sha256"] == "b" * 64
     assert response.headers["x-fpms-template-version"] == "%E7%89%88%E6%9C%AC2026%0D%0A"
@@ -148,7 +150,9 @@ def test_reused_download_is_200_and_commit_failure_compensation_is_disposition_s
         lambda *_args: _result("REUSED"),
     )
     client, transaction = _client(monkeypatch)
-    assert client.post("/api/v1/pay-lists/7/official-workbook", json=_payload()).status_code == 200
+    response = client.post("/api/v1/pay-lists/7/official-workbook", json=_payload())
+    assert response.status_code == 200
+    assert response.headers["x-fpms-generated-status"] == "GENERATED"
     assert compensated == []
     assert transaction.commits == 1 and transaction.rollbacks == 0
 

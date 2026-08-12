@@ -992,6 +992,7 @@ def post_official_payment_workbook(
                     safe="",
                 ),
                 "X-FPMS-Workbook-Disposition": quote(result.disposition, safe=""),
+                "X-FPMS-Generated-Status": quote(result.generated_status, safe=""),
             },
         )
         db.commit()

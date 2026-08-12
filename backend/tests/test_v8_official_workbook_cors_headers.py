@@ -13,6 +13,7 @@ EXPOSED_OFFICIAL_WORKBOOK_HEADERS = {
     "x-fpms-template-content-sha256",
     "x-fpms-workbook-input-version-id",
     "x-fpms-workbook-disposition",
+    "x-fpms-generated-status",
 }
 
 

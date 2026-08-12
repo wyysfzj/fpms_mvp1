@@ -22,6 +22,7 @@ _OFFICIAL_WORKBOOK_RESPONSE_HEADERS = [
     "X-FPMS-Template-Content-SHA256",
     "X-FPMS-Workbook-Input-Version-Id",
     "X-FPMS-Workbook-Disposition",
+    "X-FPMS-Generated-Status",
 ]
 
 
