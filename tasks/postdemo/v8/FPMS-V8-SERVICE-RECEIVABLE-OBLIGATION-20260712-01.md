@@ -137,3 +137,14 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
 - Exact replay reuses both source activity and obligation; a differing book/item/case/actor or stored
   source tuple conflicts. No official rate, CNIPA amount, GovPayment, PayList, draft, client
   instruction, payment or official-evidence fact is created or inferred.
+
+## Final Review Amendment (2026-08-13)
+
+- Preserve the generic deferred SQLite transaction helper for unrelated fee-obligation flows; the
+  service-receivable boundary alone acquires `BEGIN IMMEDIATE` before ownership reads.
+- Source activity/evidence append, obligation recognition and replay-parity validation execute in
+  one nested savepoint. Lifecycle, recognition and persistence failures at this write boundary map
+  to `SERVICE_RECEIVABLE_CONFLICT / 409`; caller transaction completion remains untouched.
+- Focused integration coverage proves complete-tuple rollback after a downstream failure, exact
+  short/long item-code persistence and lineage, stored replay mismatch handling, and absence of
+  GovPayment, PayList, draft, instruction, payment and official-evidence side effects.

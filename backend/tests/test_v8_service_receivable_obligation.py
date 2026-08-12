@@ -15,6 +15,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.errors import BusinessError
+from app.modules.annuity.models import GovPayment, PayList
 from app.modules.auth.models import T_User
 from app.modules.cases.lifecycle_contracts import (
     BusinessStage,
@@ -22,12 +23,14 @@ from app.modules.cases.lifecycle_contracts import (
     LegalStatus,
     OfficialProcedureStage,
 )
-from app.modules.cases.models import Case, CaseActivityEvent
+from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventEvidence
 from app.modules.fees import obligation_service as service
 from app.modules.fees.models import (
     FeeDraft,
     FeeObligation,
+    FeeObligationDraftItemLink,
     FeeObligationLine,
+    FeeObligationPaymentEvidenceLink,
     ServicePriceBook,
 )
 from app.modules.fees.obligation_contracts import FeeDomain, FeeOfficialEvidenceStatus
@@ -69,7 +72,11 @@ def _case(case_id: str) -> Case:
     )
 
 
-def _seed_active_book_and_gate(transaction: Session) -> tuple[ServicePriceBook, str]:
+def _seed_active_book_and_gate(
+    transaction: Session,
+    *,
+    item_code: str = ITEM_CODE,
+) -> tuple[ServicePriceBook, str]:
     actor_id = transaction.scalar(select(T_User.id).where(T_User.username == "admin"))
     assert actor_id is not None
     transaction.add(
@@ -85,7 +92,7 @@ def _seed_active_book_and_gate(transaction: Session) -> tuple[ServicePriceBook, 
         {
             "currency": "CNY",
             "discount_policy": "NONE",
-            "items": [{"item_code": ITEM_CODE, "unit_price": "3000.00"}],
+            "items": [{"item_code": item_code, "unit_price": "3000.00"}],
             "scope_key": "GLOBAL",
             "tax_policy": "EXCLUSIVE",
         }
@@ -143,11 +150,12 @@ def _command(
     actor_id: str,
     *,
     case_id: str = CASE_A,
+    item_code: str = ITEM_CODE,
     recognized_at: datetime = NOW,
 ) -> service.CreateServiceReceivableObligationCommand:
     return service.CreateServiceReceivableObligationCommand(
         price_book_version_id=PRICE_BOOK_ID,
-        item_code=ITEM_CODE,
+        item_code=item_code,
         case_id=case_id,
         actor_id=actor_id,
         idempotency_key="service-receivable-1",
@@ -176,9 +184,45 @@ def test_active_item_creates_service_obligation_and_caller_owns_transaction(
             )
         )
         source = transaction.get(CaseActivityEvent, result.source_activity_id)
-        assert header is not None and line is not None and source is not None
+        recognition = transaction.get(CaseActivityEvent, result.recognition.activity_id)
+        evidence = transaction.scalar(
+            select(CaseActivityEventEvidence).where(
+                CaseActivityEventEvidence.activity_id == result.source_activity_id
+            )
+        )
+        assert (
+            header is not None
+            and line is not None
+            and source is not None
+            and recognition is not None
+            and evidence is not None
+        )
         assert result.item_code == ITEM_CODE
-        assert json.loads(source.payload_json)["item_code"] == ITEM_CODE
+        assert json.loads(source.payload_json) == {
+            "book_version": "2026.08",
+            "currency": "CNY",
+            "discount_policy": "NONE",
+            "item_code": ITEM_CODE,
+            "item_snapshot_hash": _book.item_snapshot_hash,
+            "price_book_version_id": PRICE_BOOK_ID,
+            "schema": "FPMS_SERVICE_PRICE_ITEM_SELECTED_V1",
+            "source_content_hash": "a" * 64,
+            "tax_policy": "EXCLUSIVE",
+            "unit_price": "3000.00",
+        }
+        assert evidence.case_id == CASE_A
+        assert evidence.evidence_kind == "SERVICE_PRICE_BOOK_ITEM"
+        assert evidence.object_type == "ServicePriceBook"
+        assert evidence.object_id == PRICE_BOOK_ID
+        assert evidence.content_hash == _book.item_snapshot_hash
+        assert evidence.captured_at == NOW
+        recognition_payload = json.loads(recognition.payload_json)
+        assert recognition.source_activity_id == source.id
+        assert recognition_payload["obligation"]["source_activity_id"] == source.id
+        assert recognition_payload["obligation"]["fee_domain"] == "SERVICE"
+        assert recognition_payload["obligation"]["obligation_type"] == "SERVICE_FEE"
+        assert recognition_payload["obligation"]["source_document_id"] is None
+        assert recognition_payload["obligation"]["lines"][0]["fee_name"] == ITEM_CODE
         assert line.fee_name == ITEM_CODE
         mapped_code = service._service_receivable_fee_code(ITEM_CODE)
         assert mapped_code == service._service_receivable_fee_code(ITEM_CODE)
@@ -189,7 +233,14 @@ def test_active_item_creates_service_obligation_and_caller_owns_transaction(
         assert header.official_evidence_status == FeeOfficialEvidenceStatus.NOT_APPLICABLE.value
         assert line.official_full_amount is None
         assert line.payable_amount == line.source_amount == 3000
+        assert header.client_instruction_status == "PENDING"
+        assert header.draft_status == "NOT_CREATED"
+        assert header.payment_status == "UNPAID"
         assert _count(transaction, FeeDraft) == 0
+        assert _count(transaction, FeeObligationDraftItemLink) == 0
+        assert _count(transaction, FeeObligationPaymentEvidenceLink) == 0
+        assert _count(transaction, PayList) == 0
+        assert _count(transaction, GovPayment) == 0
 
         obligation_id = header.id
         source_id = source.id
@@ -198,6 +249,104 @@ def test_active_item_creates_service_obligation_and_caller_owns_transaction(
     with session_factory() as verification:
         assert verification.get(FeeObligation, obligation_id) is None
         assert verification.get(CaseActivityEvent, source_id) is None
+
+
+def test_short_item_code_is_persisted_unchanged(session_factory: sessionmaker) -> None:
+    short_code = "SERVICE-SEARCH-001"
+    with session_factory(expire_on_commit=False) as transaction:
+        _book, actor_id = _seed_active_book_and_gate(transaction, item_code=short_code)
+
+        result = service.create_service_receivable_obligation(
+            _command(actor_id, item_code=short_code),
+            transaction,
+        )
+
+        line = transaction.scalar(
+            select(FeeObligationLine).where(
+                FeeObligationLine.obligation_id == result.recognition.obligation.id
+            )
+        )
+        source = transaction.get(CaseActivityEvent, result.source_activity_id)
+        assert line is not None and source is not None
+        assert result.item_code == short_code
+        assert line.fee_code == short_code
+        assert line.fee_name == short_code
+        assert json.loads(source.payload_json)["item_code"] == short_code
+        transaction.rollback()
+
+
+def test_downstream_failure_restores_complete_service_receivable_tuple(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with session_factory() as transaction:
+        _book, actor_id = _seed_active_book_and_gate(transaction)
+        before = (
+            _count(transaction, CaseActivityEvent),
+            _count(transaction, CaseActivityEventEvidence),
+            _count(transaction, FeeObligation),
+            _count(transaction, FeeObligationLine),
+        )
+
+        def fail_recognition(*_args, **_kwargs):
+            raise BusinessError(
+                "FEE_OBLIGATION_STORED_STATE_INVALID",
+                "test failure",
+                status_code=409,
+            )
+
+        monkeypatch.setattr(service, "recognize_obligation", fail_recognition)
+        with pytest.raises(BusinessError) as caught:
+            service.create_service_receivable_obligation(_command(actor_id), transaction)
+
+        assert caught.value.code == "SERVICE_RECEIVABLE_CONFLICT"
+        assert caught.value.status_code == 409
+        assert (
+            _count(transaction, CaseActivityEvent),
+            _count(transaction, CaseActivityEventEvidence),
+            _count(transaction, FeeObligation),
+            _count(transaction, FeeObligationLine),
+        ) == before
+        transaction.commit()
+
+    with session_factory() as verification:
+        assert _count(verification, FeeObligation) == 0
+        assert _count(verification, FeeObligationLine) == 0
+        assert (
+            _count(verification, CaseActivityEvent),
+            _count(verification, CaseActivityEventEvidence),
+        ) == before[:2]
+
+
+def test_stored_source_replay_mismatch_maps_to_service_conflict(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory(expire_on_commit=False) as transaction:
+        _book, actor_id = _seed_active_book_and_gate(transaction)
+        result = service.create_service_receivable_obligation(_command(actor_id), transaction)
+        source = transaction.get(CaseActivityEvent, result.source_activity_id)
+        assert source is not None
+        payload = json.loads(source.payload_json)
+        payload["item_code"] = "stored-mismatch"
+        source.payload_json = _canonical_json(payload)
+        transaction.commit()
+
+    with session_factory() as replay:
+        before = (
+            _count(replay, CaseActivityEvent),
+            _count(replay, FeeObligation),
+            _count(replay, FeeObligationLine),
+        )
+        with pytest.raises(BusinessError) as caught:
+            service.create_service_receivable_obligation(_command(actor_id), replay)
+
+        assert caught.value.code == "SERVICE_RECEIVABLE_CONFLICT"
+        assert caught.value.status_code == 409
+        assert (
+            _count(replay, CaseActivityEvent),
+            _count(replay, FeeObligation),
+            _count(replay, FeeObligationLine),
+        ) == before
 
 
 def test_idempotency_key_is_globally_owned_across_cases(
@@ -284,6 +433,32 @@ def test_sqlite_serializes_before_service_receivable_reads(
         transaction.rollback()
 
 
+def test_shared_sqlite_outer_transaction_remains_deferred(
+    session_factory: sessionmaker,
+) -> None:
+    statements: list[str] = []
+    with session_factory() as transaction:
+        engine = transaction.get_bind()
+
+        def capture_statement(
+            _connection,
+            _cursor,
+            statement: str,
+            _parameters,
+            _context,
+            _executemany,
+        ) -> None:
+            statements.append(statement.strip())
+
+        event.listen(engine, "before_cursor_execute", capture_statement)
+        try:
+            service._ensure_sqlite_outer_transaction(transaction)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture_statement)
+
+    assert statements == ["BEGIN"]
+
+
 def test_non_sqlite_book_lock_uses_for_update() -> None:
     statement = service._service_receivable_book_for_update(PRICE_BOOK_ID)
     sql = str(statement.compile(dialect=postgresql.dialect()))
@@ -311,7 +486,7 @@ def test_sqlite_lock_conflict_is_controlled_without_transaction_completion(
             nonlocal rollbacks
             rollbacks += 1
 
-        monkeypatch.setattr(service, "_ensure_sqlite_outer_transaction", fail_lock)
+        monkeypatch.setattr(service, "_ensure_service_receivable_write_transaction", fail_lock)
         monkeypatch.setattr(transaction, "commit", commit)
         monkeypatch.setattr(transaction, "rollback", rollback)
 
