@@ -1,6 +1,8 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -11,7 +13,6 @@ const repoRoot = resolve(process.cwd(), "../..");
 const backendRoot = join(repoRoot, "backend");
 const frontendRoot = join(repoRoot, "frontend");
 const backendPython = join(backendRoot, ".venv", "bin", "python");
-const apiBaseUrl = "http://127.0.0.1:8000/api/v1";
 const liveRoot = mkdtempSync(join(tmpdir(), "fpms-row278-"));
 const databasePath = join(liveRoot, "row278.db");
 const storagePath = join(liveRoot, "storage");
@@ -35,6 +36,8 @@ const processEnv = {
 
 let backend: ChildProcess | undefined;
 let frontend: ChildProcess | undefined;
+let apiBaseUrl = "";
+let frontendBaseUrl = "";
 
 type Json = Record<string, unknown>;
 type IdRecord = { id: string };
@@ -64,9 +67,27 @@ function runBackendPython(script: string, args: string[] = []): string {
   }).trim();
 }
 
-async function waitForHttp(url: string): Promise<void> {
+async function reserveFreePort(): Promise<number> {
+  const server = createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    server.close();
+    throw new Error("Unable to reserve an isolated row278 port");
+  }
+  const port = address.port;
+  server.close();
+  await once(server, "close");
+  return port;
+}
+
+async function waitForOwnedHttp(child: ChildProcess, url: string): Promise<void> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Row278 child exited before readiness: ${url}`);
+    }
     try {
       const response = await fetch(url);
       if (response.status > 0) return;
@@ -76,6 +97,21 @@ async function waitForHttp(url: string): Promise<void> {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
   }
   throw new Error(`Timed out waiting for ${url}`);
+}
+
+async function stopChild(child: ChildProcess | undefined): Promise<void> {
+  if (child === undefined || child.exitCode !== null || child.signalCode !== null) return;
+  const exited = once(child, "exit");
+  child.kill("SIGTERM");
+  const outcome = await Promise.race([
+    exited.then(() => "exited" as const),
+    new Promise<"timeout">((resolvePromise) => setTimeout(() => resolvePromise("timeout"), 5_000)),
+  ]);
+  if (outcome === "timeout" && child.exitCode === null && child.signalCode === null) {
+    const forcedExit = once(child, "exit");
+    child.kill("SIGKILL");
+    await forcedExit;
+  }
 }
 
 function initializeControlledInput(): void {
@@ -293,25 +329,27 @@ async function fillGenerationForm(page: Page): Promise<void> {
 test.beforeAll(async () => {
   test.setTimeout(120_000);
   initializeControlledInput();
-  backend = spawn(backendPython, ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"], {
+  const [backendPort, frontendPort] = await Promise.all([reserveFreePort(), reserveFreePort()]);
+  apiBaseUrl = `http://127.0.0.1:${backendPort}/api/v1`;
+  frontendBaseUrl = `http://127.0.0.1:${frontendPort}`;
+  backend = spawn(backendPython, ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", String(backendPort)], {
     cwd: backendRoot,
-    env: processEnv,
+    env: { ...processEnv, CORS_ORIGINS: JSON.stringify([frontendBaseUrl]) },
     stdio: "ignore",
   });
-  frontend = spawn(join(frontendRoot, "node_modules", ".bin", "vite"), ["--host", "127.0.0.1", "--port", "5173"], {
+  frontend = spawn(join(frontendRoot, "node_modules", ".bin", "vite"), ["--host", "127.0.0.1", "--port", String(frontendPort), "--strictPort"], {
     cwd: frontendRoot,
     env: { ...processEnv, VITE_API_BASE_URL: apiBaseUrl },
     stdio: "ignore",
   });
   await Promise.all([
-    waitForHttp("http://127.0.0.1:8000/docs"),
-    waitForHttp("http://127.0.0.1:5173"),
+    waitForOwnedHttp(backend, `http://127.0.0.1:${backendPort}/docs`),
+    waitForOwnedHttp(frontend, frontendBaseUrl),
   ]);
 });
 
-test.afterAll(() => {
-  backend?.kill("SIGTERM");
-  frontend?.kill("SIGTERM");
+test.afterAll(async () => {
+  await Promise.all([stopChild(backend), stopChild(frontend)]);
   rmSync(liveRoot, { recursive: true, force: true });
 });
 
@@ -376,7 +414,9 @@ test("real workbook path keeps generated, accepted, paid and ticket facts distin
   openTestOnlyUiGate(payListId);
 
   await page.addInitScript((value) => localStorage.setItem("fpms_token", value), token);
-  await page.goto(`/fee-management/pay-lists/${payListId}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${frontendBaseUrl}/fee-management/pay-lists/${payListId}`, {
+    waitUntil: "domcontentloaded",
+  });
   await expect(page.getByRole("heading", { name: "官费清单详情" })).toBeVisible();
   const workbookPanel = page.getByTestId("official-workbook-panel");
   await expect(workbookPanel).toBeVisible();
