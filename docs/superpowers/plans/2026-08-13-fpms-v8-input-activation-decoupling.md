@@ -26,13 +26,15 @@ Hard boundaries:
 - Do not record either customer decision gate as positively resolved without a real reviewed input.
 - `TEST_ONLY` is never a production seed, default, fallback, or production-active source.
 - `fpms_env` is server configuration; request payloads cannot set or override it.
-- Production workbook resolution accepts only one exact `PRODUCTION + VALIDATED + APPROVED + ACTIVE`
-  version whose interval, hashes and current identity match.
+- Production workbook resolution accepts only one exact
+  `PRODUCTION + workflow_status=APPROVED + activation_status=ACTIVE` version whose retained
+  validation tuple, interval, hashes and current identity match.
 - `PRODUCTION_INPUT_ACTIVE` additionally requires the exact persisted
   `DG-PAYMENT-WORKBOOK:GLOBAL` or `DG-SERVICE-RATE-VERSION:GLOBAL` authority applicable to the
   lane; an active carrier alone is insufficient.
 - Test workbook resolution is available only when `fpms_env == "test"`; it accepts exactly one
-  explicitly selected `TEST_ONLY + VALIDATED + APPROVED + INACTIVE` record from isolated test data.
+  explicitly selected `TEST_ONLY + workflow_status=APPROVED + activation_status=INACTIVE` record
+  with a retained validation tuple from isolated test data.
   It never publishes `current_identity_key`, and production code paths reject it in every other
   environment.
 - Official fee, generated workbook, official-site acceptance, payment, ticket verification and
@@ -67,20 +69,22 @@ preflight while workers edit disjoint files.
 
 | Wave | Lane A — payment workbook | Lane B — service price | Serialized lane |
 | --- | --- | --- | --- |
-| 0 | — | — | Task 1 successor adoption/materialization |
-| 1 | WB-I1 carrier | — | migration/model/SQLite |
-| 2 | row 214 adapter | row 223 carrier after WB-I1 | migrations remain sequential |
-| 3 | WB-I2 governance service | row 224 import service | SQLite tests one at a time |
-| 4 | WB-I3 admin API | row 225 import API | `annuity/api.py` and `fees/api.py` are disjoint |
-| 5 | rows 215/216 generation service/API | rows 226/227 activation service/API | shared-file order within each module |
-| 6 | rows 217/218 FE/UI | rows 228/229 receivable service/API | frontend typecheck serialized |
-| 7 | rows 219/220 acceptance service/API | — | `annuity/service.py` then `annuity/api.py` |
-| 8 | rows 221/222 acceptance FE/UI | — | frontend typecheck serialized |
-| 9 | row 278 isolated full-stack E2E | — | Playwright single worker |
-| 10 | — | — | rows 281 → 282 → 283; release last |
+| 0 | — | — | Task 1 successor adoption and four task-card materializations |
+| 1 | row 175 manifest | row 176 manifest | manifest tests may run in parallel; close separately |
+| 2 | WB-I1 carrier | — | migration/model/SQLite |
+| 3 | row 214 adapter | row 223 carrier after WB-I1 | migrations remain sequential |
+| 4 | WB-I2 governance service | row 224 import service | SQLite tests one at a time |
+| 5 | WB-I3 admin API | row 225 import API | `annuity/api.py` and `fees/api.py` are disjoint |
+| 6 | rows 215/216 generation service/API | rows 226/227 activation service/API | shared-file order within each module |
+| 7 | rows 217/218 FE/UI | rows 228/229 receivable service/API | frontend typecheck serialized |
+| 8 | rows 219/220 acceptance service/API | — | `annuity/service.py` then `annuity/api.py` |
+| 9 | rows 221/222 acceptance FE/UI | — | frontend typecheck serialized |
+| 10 | row 278 isolated full-stack E2E | — | Playwright single worker |
+| 11 | — | — | capability close, then rows 281 → 282 → 283; release last |
 
 The mandatory payment dependency spine is exactly
-`WB-I1 → row 214 → WB-I2 → WB-I3 → rows 215–222 → row 278`.
+`row 175 → WB-I1 → row 214 → WB-I2 → WB-I3 → rows 215–222 → row 278`.
+The service-price spine starts `row 176 → row 223 → rows 224–229`.
 
 ## 4. Canonical per-task close loop
 
@@ -100,11 +104,41 @@ Every product task below uses the same close loop after its task-specific RED/GR
 
 - Create: `tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-DECOUPLING-ADOPTION-20260813-01.md`
 - Create: `docs/product/v8/reviews/V8-INPUT-ACTIVATION-DECOUPLING-CURRENT-ADOPTION.md`
-- Modify: `tasks/batches/FPMS-POSTDEMO-V8-PAYMENT-WORKBOOK-GATE-20260712-01.md`
-- Modify: `tasks/batches/FPMS-POSTDEMO-V8-SERVICE-RATE-GATE-20260712-01.md`
-- Modify: the exact task cards for rows 175, 176, 214–229, 278 and the Full/Final consumer
-  appendices required by the adopted successor
+- Create: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-VERSION-CARRIER-20260812-01.md`
+- Create: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-GOVERNANCE-SERVICE-20260812-01.md`
+- Create: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-ADMIN-API-20260812-01.md`
+- Create: `tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-CLOSE-20260813-01.md`
 - Create: `backend/tests/test_v8_input_activation_decoupling_contract.py`
+
+The exact existing task-card allowlist for latest-wins appendices is:
+
+```text
+tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-MANIFEST-ACTIVATION-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-SERVICE-RATE-MANIFEST-ACTIVATION-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-ADAPTER-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-GENERATION-SERVICE-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-HTTP-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-FE-ADAPTER-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-UI-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-SERVICE-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-API-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-FE-ADAPTER-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-UI-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-CARRIER-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-API-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-API-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-API-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md
+tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md
+```
+
+Task 1 also owns only its own task/evidence paths. It does not create or modify either lane batch
+manifest; those files do not exist at the parent and remain owned by rows 175 and 176.
 
 - [ ] **Step 1: Materialize the task and initialize evidence before other edits.**
 
@@ -121,7 +155,8 @@ Every product task below uses the same close loop after its task-specific RED/GR
 
   Run: `cd backend && .venv/bin/pytest -q tests/test_v8_input_activation_decoupling_contract.py`
 
-  Expected: FAIL because the adoption record, lane manifests and successor appendices are absent.
+  Expected: FAIL because the adoption record, four exact successor task cards and latest-wins
+  appendices are absent. It must not expect either lane batch manifest.
 
 - [ ] **Step 4: Add one latest-wins appendix to each affected existing task.**
 
@@ -134,11 +169,18 @@ Every product task below uses the same close loop after its task-specific RED/GR
   ```
 
   Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
-  Rows 175/176 manifests must include the three WB successors where applicable and must distinguish
-  capability acceptance from production activation. Full/Final appendices accept
+  The row-175 and row-176 task appendices permit their existing manifest-creation closures without
+  a positive real-input decision, but their frozen membership counts remain exactly 11 and 8;
+  WB-I1/I2/I3 are external successor prerequisites, never new manifest members. Full/Final appendices accept
   `CONFIG_REQUIRED` only with verified negative-path evidence and prohibit any activation claim.
 
-- [ ] **Step 5: Run GREEN and scoped checks.**
+- [ ] **Step 5: Materialize all four successor task cards before product edits.**
+
+  Each card must contain exact closure, non-closure, allowlist, dependencies, targeted RED/GREEN,
+  serialized ownership, evidence path and independent close. The capability-close card is QA-only.
+  Run repository atomic task-shape checks on all four cards.
+
+- [ ] **Step 6: Run GREEN and scoped checks.**
 
   Run:
 
@@ -150,15 +192,48 @@ Every product task below uses the same close loop after its task-specific RED/GR
 
   Expected: PASS; the frozen catalog hash is unchanged.
 
-- [ ] **Step 6: Independently review, close and commit.**
+- [ ] **Step 7: Independently review, close and commit.**
 
   Commit message: `docs(v8): activate input decoupling successor`
 
-## 6. Task 2 / WB-I1 — Payment workbook input version carrier
+## 6. Tasks 2–3 — Create and close the two original lane manifests
+
+### Task 2 / row 175 — Payment-workbook manifest
+
+**Files:** use the existing row-175 task card allowlist only.
+
+- [ ] **Step 1: Initialize row-175 evidence after Task 1 terminal PASS.**
+- [ ] **Step 2: Run its exact RED; expect failure because the batch manifest is absent.**
+- [ ] **Step 3: Create
+  `tasks/batches/FPMS-POSTDEMO-V8-PAYMENT-WORKBOOK-GATE-20260712-01.md` with exactly the original
+  activation row, nine product rows 214–222 and row 278. Do not add WB-I1/I2/I3 as members.**
+- [ ] **Step 4: Record the three WB successors as external prerequisite authority only, distinguish
+  `CAPABILITY_READY` from production activation, and retain the exact 11-member count.**
+- [ ] **Step 5: Run the exact focused GREEN/Ruff/diff checks from row 175.**
+- [ ] **Step 6: Independently close and commit `docs(v8): activate payment workbook capability lane`.**
+
+### Task 3 / row 176 — Service-rate manifest
+
+**Files:** use the existing row-176 task card allowlist only.
+
+- [ ] **Step 1: Initialize row-176 evidence after Task 1 terminal PASS.**
+- [ ] **Step 2: Run its exact RED; expect failure because the batch manifest is absent.**
+- [ ] **Step 3: Create
+  `tasks/batches/FPMS-POSTDEMO-V8-SERVICE-RATE-GATE-20260712-01.md` with exactly the original
+  activation row and seven product rows 223–229.**
+- [ ] **Step 4: Distinguish capability acceptance from production activation, retain the exact
+  `8-member count`, and do not add external successors as members.**
+- [ ] **Step 5: Run exact focused GREEN/Ruff/diff checks from row 176.**
+- [ ] **Step 6: Independently close and commit `docs(v8): activate service rate capability lane`.**
+
+Rows 175 and 176 touch disjoint files and may implement/review in parallel, but each reaches its own
+terminal PASS before its lane's first product task.
+
+## 7. Task 4 / WB-I1 — Payment workbook input version carrier
 
 **Files:**
 
-- Create: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-VERSION-CARRIER-20260812-01.md`
+- Modify: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-VERSION-CARRIER-20260812-01.md`
 - Create: `backend/alembic/versions/v8_payment_workbook_input_version.py`
 - Modify: `backend/app/modules/annuity/models.py`
 - Modify: `backend/app/models/__init__.py`
@@ -168,7 +243,8 @@ Preflight: `cd backend && PYTHONPATH=. .venv/bin/alembic heads` must return exac
 planning time it is `v8_grant_official_copy_01`; if Task 1 or accepted concurrent work changed the
 head, freeze the observed single head as `down_revision` before RED. Never create a branch or merge.
 
-- [ ] **Step 1: Freeze the exact SQLite-safe schema in the task card.**
+- [ ] **Step 1: Verify the already materialized exact card and initialize its evidence before source
+  edits. Do not alter its frozen schema semantics.**
 
   Create `OfficialPaymentWorkbookInputVersion` / `t_official_payment_workbook_input_version` with
   application UUID ID and these exact fields:
@@ -178,8 +254,8 @@ head, freeze the observed single head as `down_revision` before RED. Never creat
   template_storage_path, template_content_hash,
   upload_proof_storage_path, upload_proof_content_hash,
   structure_snapshot, structure_snapshot_hash,
-  validation_status, validated_by, validated_at, validation_reason,
-  review_status, reviewed_by, reviewed_at, review_reason,
+  workflow_status, validated_by, validated_at, validation_reason,
+  reviewed_by, reviewed_at, review_reason,
   activation_status, activated_by, activated_at,
   retired_by, retired_at, retirement_reason,
   effective_from, effective_to, supersedes_version_id,
@@ -192,14 +268,15 @@ head, freeze the observed single head as `down_revision` before RED. Never creat
 
   ```text
   source_classification: PRODUCTION | TEST_ONLY
-  validation_status: PENDING | VALIDATED | INVALID
-  review_status: PENDING | APPROVED | REJECTED
+  workflow_status: DRAFT | VALIDATED | APPROVED | REJECTED
   activation_status: INACTIVE | ACTIVE | RETIRED
   ```
 
-  Named constraints must enforce `scope_key='GLOBAL'`, hash length 64, interval ordering, complete
-  validation/review/activation tuples, `reviewed_by <> created_by`, approval only after validation,
-  and ACTIVE only for `PRODUCTION + VALIDATED + APPROVED` with
+  Named constraints must enforce `scope_key='GLOBAL'`, hash length 64, interval ordering and the
+  approved exact workflow tuple: DRAFT has no validation/review tuple; VALIDATED has a complete
+  validation tuple and no review tuple; APPROVED/REJECTED retain the complete validation tuple and
+  add a complete review tuple with `reviewed_by <> created_by`. ACTIVE is allowed only for
+  `PRODUCTION + workflow_status=APPROVED` with
   `current_identity_key='GLOBAL'`. RETIRED retains original activation actor/time plus retirement
   actor/time/reason and clears current identity. Add unique `(scope_key, template_version)`,
   idempotency key and nullable current identity, user FKs with RESTRICT, self-supersede FK with
@@ -235,7 +312,7 @@ head, freeze the observed single head as `down_revision` before RED. Never creat
 
   Commit message: `feat(v8): add payment workbook input version carrier`
 
-## 7. Task 3 / row 214 — Safe workbook adapter using a TEST_ONLY fixture
+## 8. Task 5 / row 214 — Safe workbook adapter using a TEST_ONLY fixture
 
 **Files:** use the existing exact row-214 task card allowlist only.
 
@@ -268,11 +345,11 @@ head, freeze the observed single head as `down_revision` before RED. Never creat
 
   Commit message: `feat(v8): add safe official payment workbook adapter`
 
-## 8. Task 4 / WB-I2 — Workbook input governance service
+## 9. Task 6 / WB-I2 — Workbook input governance service
 
 **Files:**
 
-- Create: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-GOVERNANCE-SERVICE-20260812-01.md`
+- Modify: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-GOVERNANCE-SERVICE-20260812-01.md`
 - Create: `backend/app/modules/annuity/official_payment_workbook_input_service.py`
 - Create: `backend/tests/test_v8_payment_workbook_input_service.py`
 
@@ -317,11 +394,11 @@ head, freeze the observed single head as `down_revision` before RED. Never creat
 
   Commit message: `feat(v8): govern payment workbook inputs`
 
-## 9. Task 5 / WB-I3 — Protected workbook input admin API
+## 10. Task 7 / WB-I3 — Protected workbook input admin API
 
 **Files:**
 
-- Create: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-ADMIN-API-20260812-01.md`
+- Modify: `tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-INPUT-ADMIN-API-20260812-01.md`
 - Modify: `backend/app/modules/annuity/api.py`
 - Create: `backend/app/modules/annuity/official_payment_workbook_input_schemas.py`
 - Create: `backend/tests/test_v8_payment_workbook_input_api.py`
@@ -346,7 +423,7 @@ head, freeze the observed single head as `down_revision` before RED. Never creat
 
   Commit message: `feat(v8): expose payment workbook input governance API`
 
-## 10. Tasks 6–13 — Existing payment-workbook product rows
+## 11. Tasks 8–15 — Existing payment-workbook product rows
 
 Execute each existing task independently and in this order. Reuse its exact closure, allowlist,
 tests and close loop; Task 1 is latest-wins only for dependency/gate interpretation.
@@ -375,7 +452,7 @@ Additional row-215 requirement: production resolution calls WB-I2 and rejects TE
 publishing ACTIVE/current identity. The generated artifact must retain the resolved template version
 and source hash; no success path may infer official acceptance, payment or ticket status.
 
-## 11. Tasks 14–20 — Existing service-price product rows
+## 12. Tasks 16–22 — Existing service-price product rows
 
 ### Task 14 / row 223 — Service price-book carrier
 
@@ -425,7 +502,7 @@ feat(v8): create service receivable obligations
 feat(v8): expose service receivable API
 ```
 
-## 12. Task 21 / row 278 — Isolated full-stack workbook E2E
+## 13. Task 23 / row 278 — Isolated full-stack workbook E2E
 
 **Files:** use the existing row-278 task card allowlist only.
 
@@ -437,11 +514,14 @@ feat(v8): expose service receivable API
 
   Run the exact row-278 Playwright spec with `--workers=1`.
 
-- [ ] **Step 4: Implement only task-owned E2E/UI corrections if RED identifies a contract gap.**
+- [ ] **Step 4: If RED identifies a product/UI defect, stop row 278 and materialize one separate
+  exact product task with its own closure, allowlist, RED/GREEN and independent close. Resume row
+  278 only after that task is terminal PASS.**
 
-  Do not weaken assertions, intercept the product API, mock a successful official submission, or
-  claim CNIPA acceptance. The test-profile resolver may supply the isolated TEST_ONLY input; the
-  browser must still traverse the real UI and HTTP/service/persistence path.
+  Row 278 is QA-only and may edit only its Playwright spec, task card and evidence. It never fixes
+  product/UI code. Do not weaken assertions, intercept the product API, mock a successful official
+  submission, or claim CNIPA acceptance. The test-profile resolver may supply the isolated
+  TEST_ONLY input; the browser must still traverse the real UI and HTTP/service/persistence path.
 
 - [ ] **Step 5: Run GREEN with one worker.**
 
@@ -450,13 +530,14 @@ feat(v8): expose service receivable API
 
 - [ ] **Step 6: Close and commit `test(v8): verify official workbook real UI path`.**
 
-## 13. Task 22 — Capability close and residual production configuration receipt
+## 14. Task 24 — Capability close and residual production configuration receipt
 
-Before Full, create one QA-only successor close task owned by an independent reviewer.
+Before Full, execute the QA-only successor close task already materialized by Task 1. It is owned by
+an independent reviewer.
 
 **Files:**
 
-- Create: `tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-CLOSE-20260813-01.md`
+- Modify: `tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-CLOSE-20260813-01.md`
 - Create: `docs/product/v8/reviews/V8-INPUT-ACTIVATION-CAPABILITY-CURRENT-ADOPTION.md`
 - Create: `backend/tests/test_v8_input_activation_capability_close.py`
 
@@ -483,17 +564,17 @@ Before Full, create one QA-only successor close task owned by an independent rev
 
   Commit message: `test(v8): close input activation capabilities`
 
-## 14. Tasks 23–25 — Full, item ledger and release close
+## 15. Tasks 25–27 — Full, item ledger and release close
 
-### Task 23 / row 281 — Inherited regression matrix
+### Task 25 / row 281 — Inherited regression matrix
 
-- [ ] Run only after Task 22 PASS.
+- [ ] Run only after Task 24 PASS.
 - [ ] Use the exact row-281 contract and Full manifest; include the successor capability receipt as
   authority for the two CONFIG_REQUIRED lanes.
 - [ ] Any product failure becomes a new exact task; row 281 does not fix product code.
 - [ ] Independently close and commit.
 
-### Task 24 / row 282 — Final item-to-slice ledger
+### Task 26 / row 282 — Final item-to-slice ledger
 
 - [ ] Map every immutable catalog row plus the new successor tasks to exact evidence and terminal
   gate outcome.
@@ -502,7 +583,7 @@ Before Full, create one QA-only successor close task owned by an independent rev
 - [ ] Do not change immutable catalog/Foundation counts; successor nodes are external overlays.
 - [ ] Independently close and commit.
 
-### Task 25 / row 283 — Final close and release last
+### Task 27 / row 283 — Final close and release last
 
 - [ ] Confirm every required product and successor task except self is terminal PASS.
 - [ ] Run clean SQLite upgrade+seed and the exact row-283 fresh-login check.
