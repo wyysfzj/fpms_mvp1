@@ -145,6 +145,171 @@ class PayListExportArtifact(UUIDPrimaryKeyMixin, Base):
     )
 
 
+class OfficialPaymentWorkbookInputVersion(Base):
+    __tablename__ = "t_official_payment_workbook_input_version"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    scope_key: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_classification: Mapped[str] = mapped_column(String(24), nullable=False)
+    template_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    template_storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    template_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    upload_proof_storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    upload_proof_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    structure_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    structure_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    workflow_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    validated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    validation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    activation_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    activated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    retired_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    retirement_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    supersedes_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    current_identity_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["validated_by"],
+            ["t_user.id"],
+            name="fk_t_official_payment_workbook_input_validated_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reviewed_by"],
+            ["t_user.id"],
+            name="fk_t_official_payment_workbook_input_reviewed_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["activated_by"],
+            ["t_user.id"],
+            name="fk_t_official_payment_workbook_input_activated_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["retired_by"],
+            ["t_user.id"],
+            name="fk_t_official_payment_workbook_input_retired_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by"],
+            ["t_user.id"],
+            name="fk_t_official_payment_workbook_input_created_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by"],
+            ["t_user.id"],
+            name="fk_t_official_payment_workbook_input_updated_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_version_id"],
+            ["t_official_payment_workbook_input_version.id"],
+            name="fk_t_official_payment_workbook_input_supersedes",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "scope_key",
+            "template_version",
+            name="uq_t_official_payment_workbook_input_scope_version",
+        ),
+        UniqueConstraint(
+            "idempotency_key",
+            name="uq_t_official_payment_workbook_input_idempotency_key",
+        ),
+        UniqueConstraint(
+            "current_identity_key",
+            name="uq_t_official_payment_workbook_input_current_identity_key",
+        ),
+        CheckConstraint(
+            "scope_key = 'GLOBAL'",
+            name="ck_t_official_payment_workbook_input_scope",
+        ),
+        CheckConstraint(
+            "source_classification IN ('PRODUCTION', 'TEST_ONLY')",
+            name="ck_t_official_payment_workbook_input_source_classification",
+        ),
+        CheckConstraint(
+            "workflow_status IN ('DRAFT', 'VALIDATED', 'APPROVED', 'REJECTED')",
+            name="ck_t_official_payment_workbook_input_workflow_status",
+        ),
+        CheckConstraint(
+            "activation_status IN ('INACTIVE', 'ACTIVE', 'RETIRED')",
+            name="ck_t_official_payment_workbook_input_activation_status",
+        ),
+        CheckConstraint(
+            "length(template_content_hash) = 64 "
+            "AND length(upload_proof_content_hash) = 64 "
+            "AND length(structure_snapshot_hash) = 64",
+            name="ck_t_official_payment_workbook_input_hashes",
+        ),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to > effective_from",
+            name="ck_t_official_payment_workbook_input_effective_interval",
+        ),
+        CheckConstraint(
+            "(workflow_status = 'DRAFT' "
+            "AND validated_by IS NULL AND validated_at IS NULL AND validation_reason IS NULL "
+            "AND reviewed_by IS NULL AND reviewed_at IS NULL AND review_reason IS NULL) "
+            "OR (workflow_status = 'VALIDATED' "
+            "AND validated_by IS NOT NULL AND validated_at IS NOT NULL "
+            "AND validation_reason IS NOT NULL "
+            "AND reviewed_by IS NULL AND reviewed_at IS NULL AND review_reason IS NULL) "
+            "OR (workflow_status IN ('APPROVED', 'REJECTED') "
+            "AND validated_by IS NOT NULL AND validated_at IS NOT NULL "
+            "AND validation_reason IS NOT NULL "
+            "AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL "
+            "AND review_reason IS NOT NULL AND reviewed_by <> created_by)",
+            name="ck_t_official_payment_workbook_input_workflow_tuple",
+        ),
+        CheckConstraint(
+            "(activation_status = 'INACTIVE' "
+            "AND activated_by IS NULL AND activated_at IS NULL "
+            "AND retired_by IS NULL AND retired_at IS NULL AND retirement_reason IS NULL "
+            "AND current_identity_key IS NULL) "
+            "OR (activation_status = 'ACTIVE' "
+            "AND source_classification = 'PRODUCTION' AND workflow_status = 'APPROVED' "
+            "AND activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND retired_by IS NULL AND retired_at IS NULL AND retirement_reason IS NULL "
+            "AND current_identity_key IS NOT NULL AND current_identity_key = 'GLOBAL') "
+            "OR (activation_status = 'RETIRED' "
+            "AND source_classification = 'PRODUCTION' AND workflow_status = 'APPROVED' "
+            "AND activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND retired_by IS NOT NULL AND retired_at IS NOT NULL "
+            "AND retirement_reason IS NOT NULL AND current_identity_key IS NULL)",
+            name="ck_t_official_payment_workbook_input_activation_tuple",
+        ),
+        Index(
+            "ix_t_official_payment_workbook_input_scope_status_effective",
+            "scope_key",
+            "workflow_status",
+            "activation_status",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
 class GovPayment(Base):
     __tablename__ = "t_gov_payment"
 
