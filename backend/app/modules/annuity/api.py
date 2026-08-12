@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
@@ -42,12 +42,15 @@ from app.modules.annuity.official_payment_workbook_input_service import (
 from app.modules.annuity.schemas import AnnuityTaskListResponse
 from app.modules.annuity.service import (
     ExportInternalPayListCommand,
+    GenerateOfficialPaymentWorkbookCommand,
     add_manual_gov_payment,
     compensate_internal_pay_list_export,
+    compensate_official_payment_workbook,
     create_historical_pay_list,
     create_pay_list_from_fee_items,
     export_internal_pay_list,
     generate_fee_drafts_from_annuity_tasks,
+    generate_official_payment_workbook,
     get_pay_list_detail,
     list_annuity_tasks_report,
     list_pay_lists,
@@ -55,6 +58,7 @@ from app.modules.annuity.service import (
     register_gov_payment,
     update_annuity_task_instruction,
 )
+from app.modules.annuity.verified_official_payment_workbook import OfficialPaymentRow
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 
@@ -69,6 +73,14 @@ _ANNUITY_DEADLINE_RULE = (
 _ANNUITY_FEE_NODE_EXPLANATION = (
     "年费费用节点：客户指示缴费后生成官费草单，进入官费清单并登记官方缴费回执。"
 )
+
+
+def _official_workbook_utcnow() -> datetime:
+    return datetime.utcnow()
+
+
+def _official_workbook_runtime_profile() -> str:
+    return get_settings().fpms_env
 
 
 class AnnuityInstructionUpdateIn(BaseModel):
@@ -90,6 +102,27 @@ class PayListFromFeeItemsIn(BaseModel):
     fee_item_ids: list[str] = Field(..., min_length=1)
     planned_pay_date: date | None = None
     remark: str | None = None
+
+
+class OfficialPaymentWorkbookRowIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    sequence_number: int = Field(..., ge=1)
+    application_number: str = Field(..., min_length=1, max_length=128)
+    business_type: str = Field(..., min_length=1, max_length=64)
+    invoice_title: str = Field(..., min_length=1, max_length=256)
+    unified_social_credit_code: str = Field(..., min_length=1, max_length=64)
+    fee_type: str = Field(..., min_length=1, max_length=128)
+    foreign_currency_amount: int | float | None = Field(default=None, ge=0)
+    amount_cny: int | float = Field(..., ge=0)
+    remark: str | None = Field(default=None, max_length=512)
+
+
+class OfficialPaymentWorkbookGenerateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+    rows: list[OfficialPaymentWorkbookRowIn] = Field(..., min_length=1, max_length=500)
 
 
 class HistoricalPayListCreateIn(BaseModel):
@@ -869,6 +902,66 @@ def post_pay_list_export(
         media_type=export_result.content_type,
         headers={
             "Content-Disposition": f'attachment; filename="{export_result.filename}"',
+        },
+    )
+
+
+@router.post(
+    "/pay-lists/{pay_list_id}/official-workbook",
+    summary="Generate official payment workbook",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"application/vnd.ms-excel.sheet.macroEnabled.12": {}},
+            "description": "Existing official payment workbook returned",
+        },
+        201: {
+            "content": {"application/vnd.ms-excel.sheet.macroEnabled.12": {}},
+            "description": "Official payment workbook generated",
+        },
+    },
+)
+def post_official_payment_workbook(
+    pay_list_id: int,
+    payload: OfficialPaymentWorkbookGenerateIn,
+    _perm: None = Depends(require_perm("PayList.Export")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> Response:
+    result = None
+    try:
+        result = generate_official_payment_workbook(
+            GenerateOfficialPaymentWorkbookCommand(
+                pay_list_id=pay_list_id,
+                rows=tuple(OfficialPaymentRow(**row.model_dump()) for row in payload.rows),
+                actor_id=str(current_user.id),
+                idempotency_key=payload.idempotency_key,
+                generated_at=_official_workbook_utcnow(),
+                runtime_profile=_official_workbook_runtime_profile(),
+            ),
+            db,
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        if result is not None and result.disposition == "CREATED":
+            try:
+                compensate_official_payment_workbook(result.managed_storage_path)
+            except Exception as compensation_error:
+                raise compensation_error from exc
+        raise
+    return Response(
+        status_code=201 if result.disposition == "CREATED" else 200,
+        content=result.content,
+        media_type=result.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{result.filename}"',
+            "X-FPMS-Artifact-Id": result.artifact_id,
+            "X-FPMS-Content-SHA256": result.content_sha256,
+            "X-FPMS-Template-Version": result.template_version,
+            "X-FPMS-Template-Content-SHA256": result.template_content_hash,
+            "X-FPMS-Workbook-Input-Version-Id": result.workbook_input_version_id,
+            "X-FPMS-Workbook-Disposition": result.disposition,
         },
     )
 

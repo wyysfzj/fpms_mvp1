@@ -101,3 +101,19 @@ Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+## Frozen HTTP Contract (2026-08-13)
+
+- Expose exactly one strict `POST /pay-lists/{pay_list_id}/official-workbook` download action under
+  `PayList.Export`. The request contains `idempotency_key` and one-to-500 exact official workbook
+  rows; extra fields fail `422`. Actor, naive server time and runtime profile come only from trusted
+  dependencies/configuration. The adapter performs no gate, input, artifact or payment pre-read.
+- Call only `generate_official_payment_workbook(...)`. A newly `CREATED` result returns `201`; an
+  exact `REUSED` result returns `200`. Both return the service bytes and content type as an
+  attachment, with server result headers for artifact ID, output hash, template version/source hash,
+  workbook-input version and disposition. Generated does not mean accepted, paid or ticket-verified.
+- The endpoint commits exactly once after a successful service result. On a service or outer-commit
+  exception it rolls back exactly once. If and only if a `CREATED` result exists, commit failure also
+  compensates that newly managed file; a `REUSED` result's durable file is never deleted. A
+  compensation failure remains the service-owned 500 error. Service-owned 400/404/409 errors,
+  framework 401/403/422 and standard error envelopes are preserved.
