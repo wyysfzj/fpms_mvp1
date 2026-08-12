@@ -128,6 +128,12 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   and recognition activity keys must be absent together or form one complete same-case linked
   tuple; cross-case ownership, multiplicity, partial tuples or mismatched activity types/lineage
   return `SERVICE_RECEIVABLE_CONFLICT / 409` before any write.
+- The caller must enter with a clean transaction. Before reading ownership, SQLite acquires its
+  cross-process write reservation with `BEGIN IMMEDIATE`; other supported databases lock the exact
+  named sole `GLOBAL` service-price book row with `SELECT ... FOR UPDATE`. That active book is the
+  serialization carrier for the subsequent global ownership scan; no process-local mutex is used.
+  Lock or write contention returns `SERVICE_RECEIVABLE_CONFLICT / 409` without service-level commit
+  or rollback, leaving transaction completion to the caller.
 - Exact replay reuses both source activity and obligation; a differing book/item/case/actor or stored
   source tuple conflicts. No official rate, CNIPA amount, GovPayment, PayList, draft, client
   instruction, payment or official-evidence fact is created or inferred.

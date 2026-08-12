@@ -621,11 +621,19 @@ def create_service_receivable_obligation(
     if transaction.new or transaction.dirty or transaction.deleted:
         _fail("SERVICE_RECEIVABLE_CONFLICT", "服务费应收事务状态冲突", status_code=409)
 
-    with transaction.no_autoflush:
-        case = transaction.scalar(select(Case).where(Case.id == command.case_id))
-        book = transaction.scalar(
-            select(ServicePriceBook).where(ServicePriceBook.id == command.price_book_version_id)
-        )
+    try:
+        _ensure_sqlite_outer_transaction(transaction)
+        with transaction.no_autoflush:
+            book = transaction.scalar(
+                _service_receivable_book_for_update(command.price_book_version_id)
+            )
+            case = transaction.scalar(select(Case).where(Case.id == command.case_id))
+    except OperationalError as exc:
+        raise BusinessError(
+            "SERVICE_RECEIVABLE_CONFLICT",
+            "服务费应收并发锁定冲突",
+            status_code=409,
+        ) from exc
     if case is None:
         _fail("CASE_NOT_FOUND", "案件不存在", status_code=404)
     if (
@@ -721,78 +729,85 @@ def create_service_receivable_obligation(
             )
     source_time = command.recognized_at if existing_source is None else existing_source.effective_at
     projection = _case_projection(case)
-    source_result = append_case_activity(
-        LifecycleEventCommand(
-            case_id=command.case_id,
-            event_type="SERVICE_PRICE_ITEM_SELECTED",
-            lane=ActivityLane.FEE,
-            effective_at=source_time,
-            occurred_at=source_time,
-            evidence_refs=(
-                EvidenceReference(
-                    case_id=command.case_id,
-                    evidence_kind="SERVICE_PRICE_BOOK_ITEM",
-                    object_type="ServicePriceBook",
-                    object_id=book.id,
-                    content_hash=book.item_snapshot_hash,
-                    captured_at=source_time,
+    try:
+        source_result = append_case_activity(
+            LifecycleEventCommand(
+                case_id=command.case_id,
+                event_type="SERVICE_PRICE_ITEM_SELECTED",
+                lane=ActivityLane.FEE,
+                effective_at=source_time,
+                occurred_at=source_time,
+                evidence_refs=(
+                    EvidenceReference(
+                        case_id=command.case_id,
+                        evidence_kind="SERVICE_PRICE_BOOK_ITEM",
+                        object_type="ServicePriceBook",
+                        object_id=book.id,
+                        content_hash=book.item_snapshot_hash,
+                        captured_at=source_time,
+                    ),
                 ),
+                actor_id=command.actor_id,
+                reviewer_id=None,
+                idempotency_key=source_key,
+                source_activity_id=None,
+                supersedes_event_id=None,
+                payload={
+                    "schema": _SERVICE_SOURCE_SCHEMA,
+                    "price_book_version_id": book.id,
+                    "book_version": book.book_version,
+                    "source_content_hash": book.source_content_hash,
+                    "item_snapshot_hash": book.item_snapshot_hash,
+                    "item_code": command.item_code,
+                    "unit_price": format(unit_price, "f"),
+                    "currency": book.currency,
+                    "tax_policy": book.tax_policy,
+                    "discount_policy": book.discount_policy,
+                },
+                confirmation_status=ConfirmationStatus.CONFIRMED,
             ),
-            actor_id=command.actor_id,
-            reviewer_id=None,
-            idempotency_key=source_key,
-            source_activity_id=None,
-            supersedes_event_id=None,
-            payload={
-                "schema": _SERVICE_SOURCE_SCHEMA,
-                "price_book_version_id": book.id,
-                "book_version": book.book_version,
-                "source_content_hash": book.source_content_hash,
-                "item_snapshot_hash": book.item_snapshot_hash,
-                "item_code": command.item_code,
-                "unit_price": format(unit_price, "f"),
-                "currency": book.currency,
-                "tax_policy": book.tax_policy,
-                "discount_policy": book.discount_policy,
-            },
-            confirmation_status=ConfirmationStatus.CONFIRMED,
-        ),
-        transaction,
-        previous_projection=projection,
-        current_projection=projection,
-        legacy_case_status=case.status,
-        conflict_codes=(),
-    )
-    recognition = recognize_obligation(
-        RecognizeFeeObligationCommand(
-            case_id=command.case_id,
-            source_activity_id=source_result.activity_id,
-            source_document_id=None,
-            fee_domain=FeeDomain.SERVICE,
-            obligation_type="SERVICE_FEE",
-            due_date=None,
-            currency=book.currency,
-            source_status=FeeSourceStatus.VERIFIED,
-            lines=(
-                FeeObligationLineInput(
-                    fee_code=_service_receivable_fee_code(command.item_code),
-                    fee_name=command.item_code,
-                    fee_year_key=0,
-                    official_full_amount=None,
-                    reduction_ratio=Decimal("0.0000"),
-                    payable_amount=unit_price,
-                    source_amount=unit_price,
-                    source_date=source_time.date(),
-                    difference_review_state=FeeDifferenceReviewState.MATCHED,
+            transaction,
+            previous_projection=projection,
+            current_projection=projection,
+            legacy_case_status=case.status,
+            conflict_codes=(),
+        )
+        recognition = recognize_obligation(
+            RecognizeFeeObligationCommand(
+                case_id=command.case_id,
+                source_activity_id=source_result.activity_id,
+                source_document_id=None,
+                fee_domain=FeeDomain.SERVICE,
+                obligation_type="SERVICE_FEE",
+                due_date=None,
+                currency=book.currency,
+                source_status=FeeSourceStatus.VERIFIED,
+                lines=(
+                    FeeObligationLineInput(
+                        fee_code=_service_receivable_fee_code(command.item_code),
+                        fee_name=command.item_code,
+                        fee_year_key=0,
+                        official_full_amount=None,
+                        reduction_ratio=Decimal("0.0000"),
+                        payable_amount=unit_price,
+                        source_amount=unit_price,
+                        source_date=source_time.date(),
+                        difference_review_state=FeeDifferenceReviewState.MATCHED,
+                    ),
                 ),
+                actor_id=command.actor_id,
+                idempotency_key=recognition_key,
+                supersedes_obligation_id=None,
+                supersede_reason=None,
             ),
-            actor_id=command.actor_id,
-            idempotency_key=recognition_key,
-            supersedes_obligation_id=None,
-            supersede_reason=None,
-        ),
-        transaction,
-    )
+            transaction,
+        )
+    except (IntegrityError, OperationalError) as exc:
+        raise BusinessError(
+            "SERVICE_RECEIVABLE_CONFLICT",
+            "服务费应收持久化冲突",
+            status_code=409,
+        ) from exc
     if source_result.reused != recognition.reused:
         _fail("SERVICE_RECEIVABLE_CONFLICT", "服务费应收重放状态冲突", status_code=409)
     return CreateServiceReceivableObligationResult(
@@ -809,6 +824,14 @@ def _service_receivable_fee_code(item_code: str) -> str:
     if len(item_code) <= 64:
         return item_code
     return hashlib.sha256(item_code.encode("utf-8")).hexdigest()
+
+
+def _service_receivable_book_for_update(price_book_version_id: str):
+    return (
+        select(ServicePriceBook)
+        .where(ServicePriceBook.id == price_book_version_id)
+        .with_for_update()
+    )
 
 
 def get_fee_obligation(
@@ -4305,7 +4328,7 @@ def _ensure_sqlite_outer_transaction(transaction: Session) -> None:
         return
     driver_connection = connection.connection.driver_connection
     if not driver_connection.in_transaction:
-        connection.exec_driver_sql("BEGIN")
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
 
 
 def _serialize_future_annuity_exception_draft(transaction: Session) -> None:

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import event, func, select, update
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.errors import BusinessError
@@ -250,3 +255,127 @@ def test_noncanonical_book_hash_is_409_without_receivable_write(
         assert _count(transaction, FeeObligation) == 0
         assert _count(transaction, FeeObligationLine) == 0
         assert _count(transaction, CaseActivityEvent) == before_activities
+
+
+def test_sqlite_serializes_before_service_receivable_reads(
+    session_factory: sessionmaker,
+) -> None:
+    statements: list[str] = []
+    with session_factory() as transaction:
+        _book, actor_id = _seed_active_book_and_gate(transaction)
+        engine = transaction.get_bind()
+
+        def capture_statement(
+            _connection,
+            _cursor,
+            statement: str,
+            _parameters,
+            _context,
+            _executemany,
+        ) -> None:
+            statements.append(statement.strip())
+
+        event.listen(engine, "before_cursor_execute", capture_statement)
+        try:
+            service.create_service_receivable_obligation(_command(actor_id), transaction)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture_statement)
+        assert statements[0] == "BEGIN IMMEDIATE"
+        transaction.rollback()
+
+
+def test_non_sqlite_book_lock_uses_for_update() -> None:
+    statement = service._service_receivable_book_for_update(PRICE_BOOK_ID)
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+    assert "FOR UPDATE" in sql
+    assert "t_service_price_book.id" in sql
+
+
+def test_sqlite_lock_conflict_is_controlled_without_transaction_completion(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with session_factory() as transaction:
+        _book, actor_id = _seed_active_book_and_gate(transaction)
+        commits = 0
+        rollbacks = 0
+
+        def fail_lock(_transaction: Session) -> None:
+            raise OperationalError("BEGIN IMMEDIATE", {}, Exception("database is locked"))
+
+        def commit() -> None:
+            nonlocal commits
+            commits += 1
+
+        def rollback() -> None:
+            nonlocal rollbacks
+            rollbacks += 1
+
+        monkeypatch.setattr(service, "_ensure_sqlite_outer_transaction", fail_lock)
+        monkeypatch.setattr(transaction, "commit", commit)
+        monkeypatch.setattr(transaction, "rollback", rollback)
+
+        with pytest.raises(BusinessError) as caught:
+            service.create_service_receivable_obligation(_command(actor_id), transaction)
+
+        assert caught.value.code == "SERVICE_RECEIVABLE_CONFLICT"
+        assert caught.value.status_code == 409
+        assert commits == rollbacks == 0
+
+
+def test_concurrent_cross_case_idempotency_has_one_global_owner(
+    session_factory: sessionmaker,
+) -> None:
+    with session_factory() as setup:
+        _book, actor_id = _seed_active_book_and_gate(setup)
+
+    first_written = threading.Event()
+    release_first = threading.Event()
+
+    def first_writer() -> tuple[str, str]:
+        with session_factory() as transaction:
+            result = service.create_service_receivable_obligation(
+                _command(actor_id, case_id=CASE_A),
+                transaction,
+            )
+            first_written.set()
+            assert release_first.wait(timeout=3)
+            transaction.commit()
+            return "ok", result.recognition.obligation.id
+
+    def second_writer() -> tuple[str, str]:
+        assert first_written.wait(timeout=3)
+        with session_factory() as transaction:
+            try:
+                service.create_service_receivable_obligation(
+                    _command(actor_id, case_id=CASE_B),
+                    transaction,
+                )
+            except BusinessError as exc:
+                transaction.rollback()
+                return "business", exc.code
+            except Exception as exc:  # pragma: no cover - asserted through returned diagnostics
+                transaction.rollback()
+                return "raw", type(exc).__name__
+            transaction.commit()
+            return "ok", "unexpected-second-owner"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(first_writer)
+        second = pool.submit(second_writer)
+        assert first_written.wait(timeout=3)
+        time.sleep(0.2)
+        release_first.set()
+        results = (first.result(timeout=5), second.result(timeout=5))
+
+    assert results[0][0] == "ok"
+    assert results[1] == ("business", "SERVICE_RECEIVABLE_CONFLICT")
+    with session_factory() as verification:
+        source_key = "service-receivable-source:service-receivable-1"
+        owners = tuple(
+            verification.scalars(
+                select(CaseActivityEvent).where(CaseActivityEvent.idempotency_key == source_key)
+            )
+        )
+        assert len(owners) == 1
+        assert owners[0].case_id == CASE_A
