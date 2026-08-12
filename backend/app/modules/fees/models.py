@@ -524,6 +524,138 @@ class FeeReductionApproval(Base):
     )
 
 
+class ServicePriceBook(Base):
+    __tablename__ = "t_service_price_book"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    source_classification: Mapped[str] = mapped_column(String(24), nullable=False)
+    book_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False)
+    tax_policy: Mapped[str] = mapped_column(Text, nullable=False)
+    discount_policy: Mapped[str] = mapped_column(Text, nullable=False)
+    source_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    source_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    item_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    item_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    approval_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    activated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    retired_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    retirement_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    supersedes_price_book_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    current_identity_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    updated_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["approved_by"],
+            ["t_user.id"],
+            name="fk_t_service_price_book_approved_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["activated_by"],
+            ["t_user.id"],
+            name="fk_t_service_price_book_activated_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["retired_by"],
+            ["t_user.id"],
+            name="fk_t_service_price_book_retired_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by"],
+            ["t_user.id"],
+            name="fk_t_service_price_book_created_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by"],
+            ["t_user.id"],
+            name="fk_t_service_price_book_updated_by",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_price_book_id"],
+            ["t_service_price_book.id"],
+            name="fk_t_service_price_book_supersedes",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("scope_key", "book_version", name="uq_t_service_price_book_scope_version"),
+        UniqueConstraint("idempotency_key", name="uq_t_service_price_book_idempotency_key"),
+        UniqueConstraint(
+            "current_identity_key", name="uq_t_service_price_book_current_identity_key"
+        ),
+        CheckConstraint("scope_key = 'GLOBAL'", name="ck_t_service_price_book_scope"),
+        CheckConstraint(
+            "source_classification IN ('PRODUCTION', 'TEST_ONLY')",
+            name="ck_t_service_price_book_source_classification",
+        ),
+        CheckConstraint(
+            "status IN ('DRAFT', 'ACTIVE', 'RETIRED')",
+            name="ck_t_service_price_book_status",
+        ),
+        CheckConstraint(
+            "length(source_content_hash) = 64 AND length(item_snapshot_hash) = 64",
+            name="ck_t_service_price_book_hashes",
+        ),
+        CheckConstraint("item_count >= 0", name="ck_t_service_price_book_item_count"),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_to > effective_from",
+            name="ck_t_service_price_book_effective_interval",
+        ),
+        CheckConstraint(
+            "(approved_by IS NULL AND approved_at IS NULL AND approval_reason IS NULL) OR "
+            "(approved_by IS NOT NULL AND approved_at IS NOT NULL "
+            "AND approval_reason IS NOT NULL AND approved_by <> created_by)",
+            name="ck_t_service_price_book_approval_tuple",
+        ),
+        CheckConstraint(
+            "(status = 'DRAFT' AND activated_by IS NULL AND activated_at IS NULL "
+            "AND retired_by IS NULL AND retired_at IS NULL AND retirement_reason IS NULL "
+            "AND current_identity_key IS NULL) OR "
+            "(status = 'ACTIVE' AND approved_by IS NOT NULL AND approved_at IS NOT NULL "
+            "AND approval_reason IS NOT NULL AND item_count > 0 "
+            "AND length(trim(item_snapshot)) > 2 "
+            "AND activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND retired_by IS NULL AND retired_at IS NULL AND retirement_reason IS NULL "
+            "AND current_identity_key IS NOT NULL AND current_identity_key = 'GLOBAL') OR "
+            "(status = 'RETIRED' AND approved_by IS NOT NULL AND approved_at IS NOT NULL "
+            "AND approval_reason IS NOT NULL AND item_count > 0 "
+            "AND length(trim(item_snapshot)) > 2 "
+            "AND activated_by IS NOT NULL AND activated_at IS NOT NULL "
+            "AND retired_by IS NOT NULL AND retired_at IS NOT NULL "
+            "AND retirement_reason IS NOT NULL AND current_identity_key IS NULL)",
+            name="ck_t_service_price_book_status_tuple",
+        ),
+        Index(
+            "ix_t_service_price_book_scope_status_effective",
+            "scope_key",
+            "status",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+
 class _LegacyFeeReductionValue(String):
     pass
 

@@ -34,6 +34,34 @@ Task Contract Profile: `TC-SCHEMA`
 
 Add only versioned service price-book header with immutable validated item snapshot/source hash/approval/currency/tax/discount/scope fields; no import or activation.
 
+### Frozen Physical Schema
+
+Create application-UUID `t_service_price_book` with exactly:
+
+`id`, `source_classification`, `book_version`, `scope_key`, `currency`, `tax_policy`,
+`discount_policy`, `source_reference`, `source_content_hash`, `item_snapshot`,
+`item_snapshot_hash`, `item_count`, `status`, `approved_by`, `approved_at`,
+`approval_reason`, `activated_by`, `activated_at`, `retired_by`, `retired_at`,
+`retirement_reason`, `effective_from`, `effective_to`, `supersedes_price_book_id`,
+`idempotency_key`, `current_identity_key`, `created_by`, `created_at`, `updated_by`,
+`updated_at`.
+
+- IDs are `String(36)`; hashes `String(64)`; version/identity `String(128)`; currency
+  `String(8)`; statuses/classification `String(24)`; policies, source reference, snapshot and
+  reasons are `Text`; counters are `Integer`; timestamps are naive `DateTime` with
+  `CURRENT_TIMESTAMP` audit defaults.
+- `scope_key='GLOBAL'`; source classification is `PRODUCTION|TEST_ONLY`; status is
+  `DRAFT|ACTIVE|RETIRED`; hashes are exactly 64 characters; `item_count >= 0`; and
+  `effective_to` is absent or later than `effective_from`.
+- The approval tuple is either entirely absent or entirely present, and an approver is a different
+  actual user from the creator. `DRAFT` has no activation/retirement/current tuple. `ACTIVE`
+  requires a complete approval tuple, `item_count > 0`, a nonempty validated snapshot, activation
+  actor/time, and `current_identity_key='GLOBAL'`. `RETIRED` retains approval and original
+  activation actor/time, adds a complete retirement tuple, and clears current identity.
+- Add unique `(scope_key, book_version)`, idempotency key and nullable current identity; user and
+  self-supersede FKs use `RESTRICT`; add one scope/status/effective interval index. Migration is
+  forward-only from `v8_payment_workbook_input_01`. No rows are seeded.
+
 ## Explicit Non-Closure
 
 No backfill, service, endpoint, seed, UI or second table/carrier. Do not absorb another V8 catalog row, a second closure slice, an unresolved customer policy or unrelated cleanup.
