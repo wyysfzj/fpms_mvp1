@@ -102,3 +102,18 @@ Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+## Frozen API Contract (2026-08-13)
+
+- Expose exactly one strict
+  `POST /pay-lists/{pay_list_id}/official-workbook/acceptance` action under `Fee.Edit`.
+  The body contains only `artifact_id`, `evidence_ref`, lowercase `evidence_sha256`, naive
+  `accepted_at` and `idempotency_key`; actor and runtime profile come from trusted server
+  dependencies/configuration.
+- Call only `record_official_workbook_acceptance(...)` with the caller-owned transaction. A new
+  `CREATED` result returns `201`; an exact `REUSED` result returns `200`. The response preserves the
+  service result as distinct generated/accepted/paid/ticket facts and adds no rule, payment or
+  ticket inference.
+- Commit exactly once after a successful service result. Any service, response-validation or
+  outer-commit exception rolls back exactly once. Preserve service-owned `400/404/409`, framework
+  `401/403/422` and the standard error envelope without endpoint pre-reads or rule duplication.

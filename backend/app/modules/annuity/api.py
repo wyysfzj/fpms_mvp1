@@ -40,10 +40,15 @@ from app.modules.annuity.official_payment_workbook_input_service import (
     review_workbook_input,
     validate_workbook_input,
 )
-from app.modules.annuity.schemas import AnnuityTaskListResponse
+from app.modules.annuity.schemas import (
+    AnnuityTaskListResponse,
+    OfficialWorkbookAcceptanceIn,
+    OfficialWorkbookAcceptanceOut,
+)
 from app.modules.annuity.service import (
     ExportInternalPayListCommand,
     GenerateOfficialPaymentWorkbookCommand,
+    RecordOfficialWorkbookAcceptanceCommand,
     add_manual_gov_payment,
     compensate_internal_pay_list_export,
     compensate_official_payment_workbook,
@@ -56,6 +61,7 @@ from app.modules.annuity.service import (
     list_annuity_tasks_report,
     list_pay_lists,
     mark_pay_list_paid,
+    record_official_workbook_acceptance,
     register_gov_payment,
     update_annuity_task_instruction,
 )
@@ -998,6 +1004,44 @@ def post_official_payment_workbook(
                 raise compensation_error from exc
         raise
     return response
+
+
+@router.post(
+    "/pay-lists/{pay_list_id}/official-workbook/acceptance",
+    status_code=status.HTTP_201_CREATED,
+    response_model=OfficialWorkbookAcceptanceOut,
+    summary="Record official workbook acceptance evidence",
+)
+def post_official_workbook_acceptance(
+    pay_list_id: int,
+    payload: OfficialWorkbookAcceptanceIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> OfficialWorkbookAcceptanceOut:
+    try:
+        result = record_official_workbook_acceptance(
+            RecordOfficialWorkbookAcceptanceCommand(
+                pay_list_id=pay_list_id,
+                artifact_id=payload.artifact_id,
+                evidence_ref=payload.evidence_ref,
+                evidence_sha256=payload.evidence_sha256,
+                accepted_at=payload.accepted_at,
+                actor_id=str(current_user.id),
+                idempotency_key=payload.idempotency_key,
+                runtime_profile=_official_workbook_runtime_profile(),
+            ),
+            db,
+        )
+        output = OfficialWorkbookAcceptanceOut.model_validate(result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if result.disposition == "REUSED":
+        response.status_code = status.HTTP_200_OK
+    return output
 
 
 @router.post("/pay-lists/{pay_list_id}/mark-paid", summary="Mark pay list paid")
