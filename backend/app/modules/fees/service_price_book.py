@@ -11,8 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from app.core.errors import raise_business_error
+from app.core.errors import BusinessError, raise_business_error
+from app.modules.auth.models import T_User
 from app.modules.fees.models import ServicePriceBook
+from app.modules.system.decision_gate_service import (
+    DecisionGateCode,
+    ResolveDecisionGateCommand,
+    resolve_decision_gate,
+)
 
 _HASH_HEX = frozenset("0123456789abcdef")
 _SOURCE_CLASSIFICATIONS = {"PRODUCTION", "TEST_ONLY"}
@@ -63,6 +69,37 @@ class ImportServicePriceBookResult:
     disposition: Literal["CREATED", "REUSED"]
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ActivateServicePriceBookCommand:
+    price_book_id: str
+    approval_reason: str
+    actor_id: str
+    at: datetime
+    expected_current_price_book_id: str | None
+    runtime_profile: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ActivateServicePriceBookResult:
+    price_book_id: str
+    source_classification: str
+    book_version: str
+    scope_key: str
+    source_content_hash: str
+    item_snapshot_hash: str
+    item_count: int
+    status: str
+    effective_from: datetime
+    effective_to: datetime | None
+    approved_by: str
+    approved_at: datetime
+    activated_by: str
+    activated_at: datetime
+    current_identity_key: str
+    supersedes_price_book_id: str | None
+    disposition: Literal["ACTIVATED", "REUSED"]
+
+
 def _invalid(field: str) -> NoReturn:
     raise_business_error(
         "SERVICE_PRICE_BOOK_IMPORT_INVALID",
@@ -79,6 +116,37 @@ def _conflict(reason: str, **details: object) -> NoReturn:
         details={"reason": reason, **details},
         status_code=409,
     )
+
+
+def _activation_conflict(reason: str, **details: object) -> NoReturn:
+    raise_business_error(
+        "SERVICE_PRICE_BOOK_ACTIVATION_CONFLICT",
+        "Service price book activation conflict",
+        details={"reason": reason, **details},
+        status_code=409,
+    )
+
+
+def _activation_text(value: object, field: str, limit: int | None = None) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or value != value.strip()
+        or "\x00" in value
+        or (limit is not None and len(value) > limit)
+    ):
+        _activation_conflict("command_invalid", field=field)
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        _activation_conflict("command_invalid", field=field)
+    return value
+
+
+def _activation_datetime(value: object, field: str) -> datetime:
+    if type(value) is not datetime or value.utcoffset() is not None:
+        _activation_conflict("command_invalid", field=field)
+    return value
 
 
 def _text(value: object, field: str, limit: int | None = None) -> str:
@@ -360,3 +428,243 @@ def import_service_price_book(
     transaction.add(row)
     _flush(transaction, row)
     return _result(row, "CREATED")
+
+
+def _activation_result(
+    row: ServicePriceBook,
+    disposition: Literal["ACTIVATED", "REUSED"],
+) -> ActivateServicePriceBookResult:
+    if (
+        row.approved_by is None
+        or row.approved_at is None
+        or row.activated_by is None
+        or row.activated_at is None
+        or row.current_identity_key is None
+    ):
+        _activation_conflict("persisted_activation_tuple_invalid", price_book_id=row.id)
+    return ActivateServicePriceBookResult(
+        price_book_id=row.id,
+        source_classification=row.source_classification,
+        book_version=row.book_version,
+        scope_key=row.scope_key,
+        source_content_hash=row.source_content_hash,
+        item_snapshot_hash=row.item_snapshot_hash,
+        item_count=row.item_count,
+        status=row.status,
+        effective_from=row.effective_from,
+        effective_to=row.effective_to,
+        approved_by=row.approved_by,
+        approved_at=row.approved_at,
+        activated_by=row.activated_by,
+        activated_at=row.activated_at,
+        current_identity_key=row.current_identity_key,
+        supersedes_price_book_id=row.supersedes_price_book_id,
+        disposition=disposition,
+    )
+
+
+def _activation_snapshot(row: ServicePriceBook) -> str:
+    if (
+        type(row.book_version) is not str
+        or not row.book_version
+        or type(row.scope_key) is not str
+        or type(row.currency) is not str
+        or type(row.tax_policy) is not str
+        or type(row.discount_policy) is not str
+        or type(row.source_reference) is not str
+        or not row.source_reference
+        or type(row.source_content_hash) is not str
+        or type(row.item_snapshot) is not str
+        or type(row.item_snapshot_hash) is not str
+        or type(row.item_count) is not int
+        or type(row.effective_from) is not datetime
+        or row.effective_from.utcoffset() is not None
+        or (
+            row.effective_to is not None
+            and (type(row.effective_to) is not datetime or row.effective_to.utcoffset() is not None)
+        )
+    ):
+        _activation_conflict("persisted_candidate_invalid", price_book_id=row.id)
+    try:
+        parsed = json.loads(row.item_snapshot)
+        canonical = _canonical_json(parsed)
+    except (TypeError, ValueError, UnicodeEncodeError):
+        _activation_conflict("item_snapshot_invalid", price_book_id=row.id)
+    expected_keys = {
+        "currency",
+        "discount_policy",
+        "items",
+        "scope_key",
+        "tax_policy",
+    }
+    if (
+        type(parsed) is not dict
+        or set(parsed) != expected_keys
+        or canonical != row.item_snapshot
+        or parsed["currency"] != row.currency
+        or parsed["discount_policy"] != row.discount_policy
+        or parsed["scope_key"] != row.scope_key
+        or parsed["tax_policy"] != row.tax_policy
+        or type(parsed["items"]) is not list
+        or len(parsed["items"]) != row.item_count
+        or row.item_count <= 0
+        or sha256(canonical.encode("utf-8")).hexdigest() != row.item_snapshot_hash
+        or len(row.source_content_hash) != 64
+        or any(character not in _HASH_HEX for character in row.source_content_hash)
+        or len(row.item_snapshot_hash) != 64
+        or any(character not in _HASH_HEX for character in row.item_snapshot_hash)
+    ):
+        _activation_conflict("item_snapshot_invalid", price_book_id=row.id)
+    return _canonical_json(
+        {
+            "book_version": row.book_version,
+            "currency": row.currency,
+            "discount_policy": row.discount_policy,
+            "effective_from": row.effective_from.isoformat(timespec="microseconds"),
+            "effective_to": (
+                None
+                if row.effective_to is None
+                else row.effective_to.isoformat(timespec="microseconds")
+            ),
+            "item_count": row.item_count,
+            "item_snapshot_hash": row.item_snapshot_hash,
+            "scope_key": row.scope_key,
+            "source_content_hash": row.source_content_hash,
+            "source_reference": row.source_reference,
+            "tax_policy": row.tax_policy,
+        }
+    )
+
+
+def activate_service_price_book(
+    transaction: Session,
+    command: ActivateServicePriceBookCommand,
+) -> ActivateServicePriceBookResult:
+    if type(command) is not ActivateServicePriceBookCommand:
+        _activation_conflict("command_invalid")
+    price_book_id = _activation_text(command.price_book_id, "price_book_id", 36)
+    approval_reason = _activation_text(command.approval_reason, "approval_reason")
+    actor_id = _activation_text(command.actor_id, "actor_id", 36)
+    at = _activation_datetime(command.at, "at")
+    runtime_profile = _activation_text(command.runtime_profile, "runtime_profile", 64)
+    expected_current = command.expected_current_price_book_id
+    if expected_current is not None:
+        expected_current = _activation_text(
+            expected_current,
+            "expected_current_price_book_id",
+            36,
+        )
+    with transaction.no_autoflush:
+        row = transaction.get(ServicePriceBook, price_book_id)
+    if row is None:
+        _activation_conflict("price_book_not_found", price_book_id=price_book_id)
+    decision_value = _activation_snapshot(row)
+    if (
+        row.source_classification != "PRODUCTION"
+        or runtime_profile == "test"
+        or row.scope_key != "GLOBAL"
+        or row.effective_from > at
+        or (row.effective_to is not None and at >= row.effective_to)
+    ):
+        _activation_conflict("candidate_not_eligible", price_book_id=row.id)
+    try:
+        gate = resolve_decision_gate(
+            ResolveDecisionGateCommand(
+                gate_code=DecisionGateCode.SERVICE_RATE_VERSION,
+                scope_key="GLOBAL",
+                as_of=at,
+            ),
+            transaction,
+        )
+    except BusinessError:
+        _activation_conflict("decision_gate_unavailable")
+    if (
+        gate.resolved_scope_key != "GLOBAL"
+        or gate.source_reference != row.source_reference
+        or gate.source_version != row.book_version
+        or gate.decision_value != decision_value
+    ):
+        _activation_conflict("decision_gate_mismatch", price_book_id=row.id)
+    if (
+        row.status == "ACTIVE"
+        and row.current_identity_key == "GLOBAL"
+        and row.approved_by == actor_id
+        and row.approved_at == at
+        and row.approval_reason == approval_reason
+        and row.activated_by == actor_id
+        and row.activated_at == at
+    ):
+        return _activation_result(row, "REUSED")
+    if (
+        row.status != "DRAFT"
+        or row.approved_by is not None
+        or row.approved_at is not None
+        or row.approval_reason is not None
+        or row.activated_by is not None
+        or row.activated_at is not None
+        or row.retired_by is not None
+        or row.retired_at is not None
+        or row.retirement_reason is not None
+        or row.supersedes_price_book_id is not None
+        or row.current_identity_key is not None
+        or row.created_by == actor_id
+    ):
+        _activation_conflict("candidate_predecessor_invalid", price_book_id=row.id)
+    with transaction.no_autoflush:
+        current_rows = list(
+            transaction.scalars(
+                select(ServicePriceBook).where(ServicePriceBook.current_identity_key == "GLOBAL")
+            ).all()
+        )
+        actor = transaction.get(T_User, actor_id)
+    if actor is None or not actor.is_active:
+        _activation_conflict("actor_not_active", actor_id=actor_id)
+    if len(current_rows) > 1:
+        _activation_conflict("current_multiplicity", count=len(current_rows))
+    predecessor = current_rows[0] if current_rows else None
+    actual_current = None if predecessor is None else predecessor.id
+    if expected_current != actual_current:
+        _activation_conflict(
+            "current_compare_and_set_conflict",
+            expected=expected_current,
+            actual=actual_current,
+        )
+    if predecessor is not None:
+        if (
+            predecessor.id == row.id
+            or predecessor.source_classification != "PRODUCTION"
+            or predecessor.scope_key != "GLOBAL"
+            or predecessor.status != "ACTIVE"
+            or predecessor.current_identity_key != "GLOBAL"
+            or predecessor.approved_by is None
+            or predecessor.approved_at is None
+            or predecessor.activated_by is None
+            or predecessor.activated_at is None
+            or predecessor.retired_by is not None
+            or predecessor.retired_at is not None
+            or predecessor.retirement_reason is not None
+            or predecessor.effective_to is None
+            or predecessor.effective_to > row.effective_from
+        ):
+            _activation_conflict("current_predecessor_invalid", predecessor_id=predecessor.id)
+        _activation_snapshot(predecessor)
+        predecessor.status = "RETIRED"
+        predecessor.retired_by = actor_id
+        predecessor.retired_at = at
+        predecessor.retirement_reason = f"由服务价格版本 {row.id} 替代"
+        predecessor.current_identity_key = None
+        predecessor.updated_by = actor_id
+        predecessor.updated_at = at
+        row.supersedes_price_book_id = predecessor.id
+        _flush(transaction, predecessor)
+    row.approved_by = actor_id
+    row.approved_at = at
+    row.approval_reason = approval_reason
+    row.activated_by = actor_id
+    row.activated_at = at
+    row.status = "ACTIVE"
+    row.current_identity_key = "GLOBAL"
+    row.updated_by = actor_id
+    row.updated_at = at
+    _flush(transaction, row)
+    return _activation_result(row, "ACTIVATED")

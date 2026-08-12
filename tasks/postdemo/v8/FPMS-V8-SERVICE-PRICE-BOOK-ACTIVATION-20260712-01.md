@@ -101,3 +101,49 @@ Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+## Frozen Activation Service Contract (2026-08-13)
+
+- The exact entry point is
+  `activate_service_price_book(transaction, ActivateServicePriceBookCommand(...))`.  The frozen
+  command contains `price_book_id`, `approval_reason`, `actor_id`, `at`,
+  `expected_current_price_book_id`, and server-derived `runtime_profile`.  The service never
+  commits or rolls back the caller-owned transaction.
+- One authenticated actor approves and activates the candidate atomically.  That actor must be a
+  persisted active user and must differ from the draft `created_by`; approval and activation are
+  recorded with the same actor/time.  This is the row's independent approval boundary; there is
+  no second review endpoint or hidden approval state in this closure.
+- Only a `PRODUCTION` draft may become `ACTIVE`, and only outside the `test` runtime profile.
+  `TEST_ONLY` drafts and production activation from the test profile return
+  `SERVICE_PRICE_BOOK_ACTIVATION_CONFLICT` / `409` with no mutation.  This prevents test fixtures
+  from occupying the production `GLOBAL` current identity.
+- Before mutation, the service validates the stored source hashes, canonical item snapshot,
+  snapshot hash, exact header values, positive item count, effective interval, untouched DRAFT
+  tuple, and approval/activation/retirement/lineage tuple.  Empty, malformed, non-canonical or
+  hash/count-inconsistent input returns `409` with no mutation.
+- Production activation resolves the current effective persisted
+  `DG-SERVICE-RATE-VERSION:GLOBAL` decision at `at`.  Its `source_reference` and `source_version`
+  must equal the candidate `source_reference` and `book_version`.  Its `decision_value` must be
+  the exact canonical JSON object below (UTF-8, sorted keys, compact separators, no NaN):
+
+  `{"book_version":"...","currency":"...","discount_policy":"...","effective_from":"YYYY-MM-DDTHH:MM:SS.ffffff","effective_to":null,"item_count":1,"item_snapshot_hash":"...","scope_key":"GLOBAL","source_content_hash":"...","source_reference":"...","tax_policy":"..."}`
+
+  The real candidate values replace the examples, and a non-null `effective_to` uses the same
+  microsecond ISO form.  Missing, revoked, future, corrupt, scope-mismatched or tuple-mismatched
+  decisions return `409` with no mutation.
+- `expected_current_price_book_id` is a compare-and-set precondition.  It must be `None` when no
+  current `GLOBAL` row exists and must exactly identify the sole current row otherwise.
+  Multiplicity, a mismatched expectation or corrupt current row is `409` / no write.
+- A predecessor may be replaced only when it is a valid `PRODUCTION` `ACTIVE` current row and its
+  effective interval does not overlap the candidate (`predecessor.effective_to <=
+  candidate.effective_from`).  It is atomically changed to `RETIRED`, loses the current identity,
+  records the activation actor/time and a deterministic replacement reason, and becomes the
+  candidate's `supersedes_price_book_id`.  Any overlap is `409` / no write.
+- The candidate atomically records `approved_by/approved_at/approval_reason`,
+  `activated_by/activated_at`, `status=ACTIVE`, `current_identity_key=GLOBAL`, and its predecessor
+  lineage.  An exact replay of these durable fields returns disposition `REUSED`; every differing
+  replay conflicts.  A first activation returns `ACTIVATED`.
+- The result exposes the activated row identity, source classification, version/scope, source and
+  item hashes/count, status/effective interval, approval/activation/current/predecessor lineage,
+  and `ACTIVATED|REUSED`; it does not quote, create a receivable, expose an endpoint, or infer an
+  official fee.
