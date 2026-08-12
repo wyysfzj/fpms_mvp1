@@ -97,7 +97,7 @@ row 214 的测试 fixture 是合同完整的合成 `.xlsm`，只证明处理引�
 ### 4.4 真实工作簿输入的最小 successor owners
 
 以下三个任务是本设计冻结的必要前置，不属于 rows 214–222 的隐含职责。实施计划必须按
-`WB-I1 → WB-I2 → row 214 → WB-I3 → rows 215–222 → row 278` 排序，并把 migration、
+`WB-I1 → row 214 → WB-I2 → WB-I3 → rows 215–222 → row 278` 排序，并把 migration、
 `annuity/models.py`、`annuity/api.py` 和 SQLite 写测试串行化。
 
 #### WB-I1 — `FPMS-V8-PAYMENT-WORKBOOK-INPUT-VERSION-CARRIER-20260812-01`
@@ -122,8 +122,9 @@ row 214 的测试 fixture 是合同完整的合成 `.xlsm`，只证明处理引�
   完成后，通过其同一只读 `.xlsm` 结构检查入口把 DRAFT 转为 VALIDATED。任何文件缺失、哈希、
   结构、范围、有效期、审批、身份分离或 predecessor 冲突均 409/rollback。`TEST_ONLY` 只能在
   测试环境的显式命令上下文中创建，服务对生产激活一律拒绝。宏只读取/保留，永不执行。
-- 依赖分段：register/review carrier 行为依赖 WB-I1；VALIDATED/activate 行为还依赖 row 214。
-  row 214 的 fixture 通过显式测试上下文直接调用 adapter，不依赖生产 active input，因而无环。
+- 依赖：WB-I1 和 row 214 都必须先独立 PASS；WB-I2 才作为一个完整原子任务实现
+  register/validate/review/activate/retire。row 214 的 fixture 通过显式测试上下文直接调用 adapter，
+  不依赖 WB-I2 或生产 active input，因而无环，也不存在跨任务半完成状态。
 - 权限：纯服务没有 endpoint；调用者必须提供服务器认证 actor，服务不接受客户端 reviewer/time。
 - allowlist：`backend/app/modules/annuity/official_payment_workbook_input_service.py`、
   `backend/tests/test_v8_payment_workbook_input_service.py`、精确任务卡和 evidence 目录；row 214
@@ -244,8 +245,8 @@ Full/Final 验收关注软件是否完整、安全地支持这两类用户输入
 
 1. 物化一个 successor authority/adoption 任务，精确绑定本设计、WB-I1/I2/I3，并修正 rows 175、176、
    214–229、278 与 Full/Final 的依赖解释；不改 frozen catalog。
-2. 先物化并完成 WB-I1，再允许 row 214 与 WB-I2 的无环分段；WB-I3 在 row 214 和 WB-I2
-   完成后提供受保护的真实输入路径。
+2. 先物化并完成 WB-I1，再完成使用隔离 fixture 的 row 214；随后完整执行 WB-I2，最后由
+   WB-I3 提供受保护的真实输入路径。任何任务都不得跨另一个任务保持半完成状态。
 3. 更新两条 lane manifest，使能力任务在 `CONFIG_REQUIRED` 下可执行，同时保留生产 gate。
 4. 先做 carrier/import/validation，再做 activation，最后做正式输出/应收与 UI/E2E；共享 schema、
    router、SQLite 写测试串行。
