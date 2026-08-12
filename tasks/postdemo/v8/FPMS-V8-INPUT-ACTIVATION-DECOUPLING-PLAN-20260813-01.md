@@ -1,6 +1,11 @@
 # FPMS-V8-INPUT-ACTIVATION-DECOUPLING-PLAN-20260813-01
 
 Status: IMPLEMENTING
+Risk-Tier: HIGH
+Closure-Tags: ["customer-decision", "fee", "governance", "source-authority"]
+Task-Path: tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-DECOUPLING-PLAN-20260813-01.md
+Execution class: `CONTRACT FROZEN`
+Chosen runbook: `P0-multi-lane-parallel-story`
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `V8 Full successor implementation planning`
 Executor role: Architect / default
