@@ -9,6 +9,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LEDGER_PATH = REPO_ROOT / "docs" / "product" / "v8" / "coverage-ledger.json"
 CHECKER_PATH = REPO_ROOT / "scripts" / "v8_lean_coverage_check.py"
+REVIEW_PATH = (
+    REPO_ROOT
+    / "docs"
+    / "product"
+    / "v8"
+    / "reviews"
+    / "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION.md"
+)
 STORY_ID = "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION"
 CATALOG_IDS = {
     "FPMS-V8-PAYMENT-WORKBOOK-MANIFEST-ACTIVATION-20260712-01",
@@ -148,6 +156,18 @@ def test_story_separates_ready_capability_from_unconfigured_production() -> None
     assert story["production_activation_claimed"] is False
     assert set(story["paths"]) == FINGERPRINT_PATHS
     assert len(story["paths"]) == 63
+
+
+def test_protected_story_has_exact_independent_approval_record() -> None:
+    ledger = _ledger()
+    story = next(story for story in ledger["stories"] if story["story_id"] == STORY_ID)
+    review = REVIEW_PATH.read_text()
+
+    assert "Verdict: APPROVED" in review
+    assert "P0: 0" in review
+    assert "P1: 0" in review
+    assert "P2: 0" in review
+    assert story["commits"][-1] in review
 
 
 def test_story_fingerprint_binds_candidate_and_current_product_bytes() -> None:
