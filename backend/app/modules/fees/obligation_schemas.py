@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.fees.obligation_contracts import (
     FeeClientInstruction,
@@ -88,3 +89,33 @@ class FeeObligationDetailOut(BaseModel):
     lines: tuple[FeeObligationLineOut, ...]
     supersedes_obligation_id: str | None
     supersede_reason: str | None
+
+
+class ServiceReceivableCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    price_book_version_id: UUID
+    item_code: str = Field(..., min_length=1, max_length=128)
+    case_id: UUID
+    idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+
+class ServiceReceivableRecognitionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    obligation: FeeObligationDetailOut
+    activity_id: str
+    idempotency_key: str
+    reused: bool
+    superseded_obligation_id: str | None
+
+
+class ServiceReceivableCreateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    recognition: ServiceReceivableRecognitionOut
+    price_book_version_id: str
+    item_code: str
+    unit_price: Decimal
+    source_activity_id: str
+    reused: bool

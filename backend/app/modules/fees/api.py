@@ -38,10 +38,14 @@ from app.modules.fees.obligation_schemas import (
     FeeObligationDetailOut,
     FeeObligationInstructionIn,
     FeeObligationInstructionOut,
+    ServiceReceivableCreateIn,
+    ServiceReceivableCreateOut,
 )
 from app.modules.fees.obligation_service import (
+    CreateServiceReceivableObligationCommand,
     FeeEstimatePreviewError,
     FeeEstimatePreviewErrorCode,
+    create_service_receivable_obligation,
     get_fee_obligation,
     preview_estimate,
     record_client_instruction,
@@ -293,6 +297,41 @@ def post_service_price_book_activation(
         db.rollback()
         raise
     return ServicePriceBookActivationOut.model_validate(result)
+
+
+@router.post(
+    "/fees/service-receivables",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ServiceReceivableCreateOut,
+    summary="Create a service receivable obligation",
+)
+def post_service_receivable(
+    payload: ServiceReceivableCreateIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ServiceReceivableCreateOut:
+    try:
+        result = create_service_receivable_obligation(
+            CreateServiceReceivableObligationCommand(
+                price_book_version_id=str(payload.price_book_version_id),
+                item_code=payload.item_code,
+                case_id=str(payload.case_id),
+                actor_id=str(current_user.id),
+                idempotency_key=payload.idempotency_key,
+                recognized_at=_service_price_book_utcnow(),
+            ),
+            db,
+        )
+        output = ServiceReceivableCreateOut.model_validate(result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if result.reused:
+        response.status_code = status.HTTP_200_OK
+    return output
 
 
 @router.get("/fees/drafts", summary="List fee drafts")

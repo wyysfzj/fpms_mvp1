@@ -104,3 +104,17 @@ Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+## Frozen API Contract (2026-08-13)
+
+- Expose exactly one strict `POST /fees/service-receivables` action under `Fee.Edit`. The body
+  contains only `price_book_version_id`, `item_code`, `case_id` and `idempotency_key`; actor and
+  naive recognition time come from trusted server dependencies.
+- Call only `create_service_receivable_obligation(...)` with the caller-owned transaction. A new
+  result returns `201`; an exact reused result returns `200`. The response validates and preserves
+  the complete service result, including its nested service-domain obligation/status facts.
+- Commit exactly once after a successful service result. Any service, response-validation or
+  outer-commit exception rolls back exactly once. Preserve service-owned `400/404/409`, framework
+  `401/403/422` and the standard error envelope without endpoint pre-reads or rule duplication.
+- The endpoint does not create or infer official rate, CNIPA amount, GovPayment, PayList, draft,
+  client instruction, payment or official-evidence facts.
