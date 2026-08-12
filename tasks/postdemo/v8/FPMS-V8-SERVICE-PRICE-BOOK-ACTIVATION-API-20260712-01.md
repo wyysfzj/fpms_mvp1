@@ -104,3 +104,30 @@ Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+## Frozen Activation API Contract (2026-08-13)
+
+- Expose exactly one `POST /fees/service-price-books/{price_book_id}/activate` route.  The path
+  parameter is a UUID.  The strict request body contains exactly required
+  `approval_reason: str` and required nullable `expected_current_price_book_id: UUID | null`;
+  extra fields are rejected.  `actor_id`, activation `at`, and `runtime_profile` are supplied by
+  the server and cannot be selected by the caller.
+- Inject `Fee.Edit` as the named `_perm` function parameter, inject the authenticated actor and
+  the existing database session, and call only
+  `activate_service_price_book(db, ActivateServicePriceBookCommand(...))`.  The adapter performs
+  no candidate/current/gate pre-read and duplicates no activation rule.
+- Return the direct activation result envelope with exactly: `price_book_id`,
+  `source_classification`, `book_version`, `scope_key`, `source_content_hash`,
+  `item_snapshot_hash`, `item_count`, `status`, `effective_from`, `effective_to`, `approved_by`,
+  `approved_at`, `activated_by`, `activated_at`, `current_identity_key`,
+  `supersedes_price_book_id`, and `disposition`.  Both `ACTIVATED` and exact-replay `REUSED`
+  return `200`; this activation route never returns `201` and exposes no source content.
+- Preserve the standard error envelope and status ownership: unauthenticated is `401`, missing
+  `Fee.Edit` is `403`, every service-owned empty/malformed/overlap/current/gate/source/replay or
+  persistence conflict remains `SERVICE_PRICE_BOOK_ACTIVATION_CONFLICT / 409`, and FastAPI
+  path/body validation is `422`.  This route does not reinterpret a service conflict as `400` or
+  `404`; an unmatched route remains the framework `404`.
+- The API owns the transaction boundary around the single service call: on either successful
+  disposition it commits exactly once; on any service or commit exception it rolls back exactly
+  once and re-raises.  Permission or request validation failure occurs before the service and
+  performs neither commit nor rollback.

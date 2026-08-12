@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime
 from hashlib import sha256
 from typing import Annotated, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from sqlalchemy import literal, select
@@ -72,11 +73,15 @@ from app.modules.fees.service import unlock_fee_draft as unlock_fee_draft_servic
 from app.modules.fees.service import update_fee_item as update_fee_item_service
 from app.modules.fees.service import update_fee_rate as update_fee_rate_service
 from app.modules.fees.service_price_book import (
+    ActivateServicePriceBookCommand,
     ImportServicePriceBookCommand,
     ServicePriceBookItemInput,
+    activate_service_price_book,
     import_service_price_book,
 )
 from app.modules.fees.service_price_book_schemas import (
+    ServicePriceBookActivationIn,
+    ServicePriceBookActivationOut,
     ServicePriceBookImportIn,
     ServicePriceBookImportOut,
 )
@@ -87,6 +92,10 @@ router = APIRouter()
 
 def _service_price_book_runtime_profile() -> str:
     return get_settings().fpms_env
+
+
+def _service_price_book_utcnow() -> datetime:
+    return datetime.utcnow()
 
 
 def _get_client_display_name(client: Client) -> str | None:
@@ -251,6 +260,39 @@ def post_service_price_book_import(
     if result.disposition == "REUSED":
         response.status_code = status.HTTP_200_OK
     return ServicePriceBookImportOut.model_validate(result)
+
+
+@router.post(
+    "/fees/service-price-books/{price_book_id}/activate",
+    response_model=ServicePriceBookActivationOut,
+    summary="Activate a service price book",
+)
+def post_service_price_book_activation(
+    price_book_id: UUID,
+    payload: ServicePriceBookActivationIn,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> ServicePriceBookActivationOut:
+    command = ActivateServicePriceBookCommand(
+        price_book_id=str(price_book_id),
+        approval_reason=payload.approval_reason,
+        actor_id=str(current_user.id),
+        at=_service_price_book_utcnow(),
+        expected_current_price_book_id=(
+            None
+            if payload.expected_current_price_book_id is None
+            else str(payload.expected_current_price_book_id)
+        ),
+        runtime_profile=_service_price_book_runtime_profile(),
+    )
+    try:
+        result = activate_service_price_book(db, command)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return ServicePriceBookActivationOut.model_validate(result)
 
 
 @router.get("/fees/drafts", summary="List fee drafts")
