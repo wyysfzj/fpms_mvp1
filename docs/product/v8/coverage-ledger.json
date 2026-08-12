@@ -1590,22 +1590,10 @@
     {
       "catalog_id": "FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FULL-CAPABILITY-MANIFEST-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identities": [
-          "DG-PAYMENT-WORKBOOK:GLOBAL",
-          "DG-SERVICE-RATE-VERSION:GLOBAL"
-        ],
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF",
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-GRANT-EVIDENCE-INGESTION-SERVICE-20260712-01",
@@ -7195,6 +7183,46 @@
       },
       "production_failure": "409 / NO WRITE",
       "production_activation_claimed": false
+    },
+    {
+      "story_id": "V8-FULL-CAPABILITY-MANIFEST-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "cab133769578aa30dee192ee8e121ffa0a881997"
+      ],
+      "paths": [
+        "tasks/postdemo/v8/FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01.md",
+        "tasks/postdemo/v8/FPMS-V8-FULL-CONFIG-REQUIRED-SUCCESSOR-20260813-01.md",
+        "docs/product/v8/stories/V8-FULL-CONFIG-REQUIRED-SUCCESSOR.md",
+        "scripts/tests/test_v8_full_config_required_successor.py",
+        "tasks/postdemo/v8/FPMS-V8-FULL-CAPABILITY-MANIFEST-CLOSE-20260813-01.md",
+        "docs/product/v8/stories/V8-FULL-CAPABILITY-MANIFEST-CLOSE.md",
+        "scripts/tests/test_v8_full_capability_manifest_close.py"
+      ],
+      "tree_sha256": "64708a9b450fb48c14869c986086ef2d8e617b4a930852e4411af18c8af9839a",
+      "tests": [
+        "Full CONFIG_REQUIRED successor focused contract passed 3 tests",
+        "Full capability-manifest focused contract passed 2 tests",
+        "lean inventory validation passed at exact candidate SHA",
+        "only Row199 adopted; Rows281-283 remain pending",
+        "independent High review required before ledger adoption commit"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FULL-CAPABILITY-MANIFEST-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FULL-CAPABILITY-MANIFEST-CURRENT-ADOPTION.md",
+      "capability_status": "CAPABILITY_VERIFIED",
+      "production_inputs": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "source_decision_status": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"
+      },
+      "production_failure": "409 / NO WRITE",
+      "production_activation_claimed": false,
+      "full_config_successor_commit": "99316d6c83fe9c1c0e93b9703a5ea28509ea1ac6",
+      "full_config_successor_review_commit": "dcb78fe978d3c655ef5fae7280ffba9e34b9bbeb"
     }
   ]
 }
