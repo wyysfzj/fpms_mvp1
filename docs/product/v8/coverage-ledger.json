@@ -1398,33 +1398,18 @@
     {
       "catalog_id": "FPMS-V8-PAYMENT-WORKBOOK-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-RATE-MANIFEST-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
-        "missing": [
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-LEGACY-FORM-001-MANIFEST-ACTIVATION-20260712-01",
@@ -1737,251 +1722,130 @@
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-GENERATION-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-HTTP-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-FE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-UI-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-API-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-FE-ADAPTER-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-UI-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-CARRIER-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
-        "missing": [
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
-        "missing": [
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-API-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
-        "missing": [
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
-        "missing": [
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-API-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
-        "missing": [
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
-        "missing": [
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-API-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-SERVICE-RATE-VERSION:GLOBAL",
-        "missing": [
-          "APPROVED_COMPLETE_PRICE_VERSION"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-OUT-001-RECTIFICATION-REPLY-20260712-01",
@@ -2370,18 +2234,10 @@
     {
       "catalog_id": "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01",
       "phase": "deferred",
-      "disposition": "CUSTOMER_BLOCKED",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "EXTERNAL_PREREQUISITE_REQUIRED",
-        "decision_identity": "DG-PAYMENT-WORKBOOK:GLOBAL",
-        "missing": [
-          "CLEAN_CURRENT_WORKBOOK",
-          "CONTROLLED_UPLOAD_PROOF"
-        ],
-        "ref": "docs/product/v8/stories/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FOUNDATION-INHERITED-REGRESSION-MATRIX-20260712-01",
@@ -7247,6 +7103,98 @@
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-SCHEME-A-RESIDUAL-BLOCKER-RECONCILIATION-CURRENT-ADOPTION.md"
+    },
+    {
+      "story_id": "V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "a8219b7a39047b819100cc69dd4cffadfc3e170c",
+        "11b0161541eb3811dd033e73caed442d31278cb8"
+      ],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-official-payment-workbook-ui.spec.ts",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-official-workbook-acceptance-ui.spec.ts",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-official-workbook-live.spec.ts",
+        "backend/alembic/versions/v8_payment_workbook_input_version.py",
+        "backend/alembic/versions/v8_w6_service_price_book.py",
+        "backend/app/main.py",
+        "backend/app/models/__init__.py",
+        "backend/app/modules/annuity/api.py",
+        "backend/app/modules/annuity/models.py",
+        "backend/app/modules/annuity/official_payment_workbook_input_schemas.py",
+        "backend/app/modules/annuity/official_payment_workbook_input_service.py",
+        "backend/app/modules/annuity/schemas.py",
+        "backend/app/modules/annuity/service.py",
+        "backend/app/modules/annuity/verified_official_payment_workbook.py",
+        "backend/app/modules/fees/api.py",
+        "backend/app/modules/fees/models.py",
+        "backend/app/modules/fees/obligation_schemas.py",
+        "backend/app/modules/fees/obligation_service.py",
+        "backend/app/modules/fees/service_price_book.py",
+        "backend/app/modules/fees/service_price_book_schemas.py",
+        "backend/tests/fixtures/v8_verified_official_payment_template.xlsm",
+        "backend/tests/test_v8_input_activation_capability_close.py",
+        "backend/tests/test_v8_official_payment_workbook_adapter.py",
+        "backend/tests/test_v8_official_payment_workbook_api.py",
+        "backend/tests/test_v8_official_payment_workbook_generation_service.py",
+        "backend/tests/test_v8_official_workbook_acceptance_api.py",
+        "backend/tests/test_v8_official_workbook_acceptance_service.py",
+        "backend/tests/test_v8_official_workbook_cors_headers.py",
+        "backend/tests/test_v8_payment_workbook_input_api.py",
+        "backend/tests/test_v8_payment_workbook_input_service.py",
+        "backend/tests/test_v8_payment_workbook_input_version.py",
+        "backend/tests/test_v8_payment_workbook_manifest_contract.py",
+        "backend/tests/test_v8_service_price_book_activation.py",
+        "backend/tests/test_v8_service_price_book_activation_api.py",
+        "backend/tests/test_v8_service_price_book_import.py",
+        "backend/tests/test_v8_service_price_book_import_api.py",
+        "backend/tests/test_v8_service_price_book_schema.py",
+        "backend/tests/test_v8_service_rate_manifest_contract.py",
+        "backend/tests/test_v8_service_receivable_obligation.py",
+        "backend/tests/test_v8_service_receivable_obligation_api.py",
+        "docs/product/v8/reviews/V8-INPUT-ACTIVATION-CAPABILITY-CURRENT-ADOPTION.md",
+        "frontend/src/api/contracts/v8_official_payment_workbook.contract.ts",
+        "frontend/src/api/contracts/v8_official_workbook_acceptance.contract.ts",
+        "frontend/src/api/govPayments.ts",
+        "frontend/src/api/govPayments.types.ts",
+        "frontend/src/modules/annuity/pages/PayListDetail.vue",
+        "tasks/batches/FPMS-POSTDEMO-V8-PAYMENT-WORKBOOK-GATE-20260712-01.md",
+        "tasks/batches/FPMS-POSTDEMO-V8-SERVICE-RATE-GATE-20260712-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-CLOSE-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-CORS-EXPOSURE-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-GENERATED-STATUS-HEADER-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-IDEMPOTENCY-CARRIER-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01.md",
+        "tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md",
+        "tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md",
+        "docs/product/v8/full-terminal-dependency-successor.json",
+        "docs/product/v8/stories/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
+        "docs/product/v8/stories/V8-INPUT-ACTIVATION-CAPABILITY-LEDGER-ADOPTION.md",
+        "scripts/v8_lean_coverage_check.py",
+        "scripts/tests/test_v8_lean_coverage_check.py",
+        "scripts/tests/test_v8_input_activation_capability_ledger_adoption.py",
+        "tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-LEDGER-ADOPTION-20260813-01.md"
+      ],
+      "tree_sha256": "866a7d1dd1b8315922eede284b810da7d46591d5ff040c7559e141ab003b4bfc",
+      "tests": [
+        "capability-close focused QA passed 4 tests",
+        "decisive inherited input tranche passed 15 tests",
+        "row278 isolated real-UI Playwright passed 1 test",
+        "lean checker focused suite and inventory validation passed",
+        "missing or invalid production inputs return 409 with no write; TEST_ONLY remains isolated",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-INPUT-ACTIVATION-CAPABILITIES-CURRENT-ADOPTION.md",
+      "capability_status": "CAPABILITY_READY",
+      "production_inputs": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "production_failure": "409 / NO WRITE",
+      "production_activation_claimed": false
     }
   ]
 }
