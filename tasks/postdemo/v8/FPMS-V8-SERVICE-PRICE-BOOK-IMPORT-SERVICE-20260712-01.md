@@ -1,6 +1,6 @@
 # FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01
 
-Status: READY / NOT STARTED
+Status: IMPLEMENTED / AWAITING INDEPENDENT REVIEW
 Program: `FPMS-POSTDEMO-V8-MITIGATION-20260712-01`
 Wave: `14. Wave 6 — customer decision gates`
 Catalog ordinal: `224`
@@ -11,6 +11,7 @@ Executor role: Backend Developer / worker
 - `AGENTS.md`
 - `docs/superpowers/specs/2026-07-12-fpms-postdemo-three-lane-mitigation-design.md`
 - `docs/superpowers/plans/2026-07-12-fpms-postdemo-v8-mitigation-implementation.md`
+- `docs/product/v8/reviews/V8-INPUT-ACTIVATION-DECOUPLING-CURRENT-ADOPTION.md`
 - Source catalog line: `732`
 - Expected manifest phase: `deferred`
 - Customer gate requirement: `DG-SERVICE-RATE-VERSION[GLOBAL]`
@@ -33,6 +34,46 @@ Task Contract Profile: `TC-SERVICE`
 ## Exact Closure Slice
 
 Create/reuse one DRAFT version from a source-backed item payload, validating unique item codes, decimal prices, currency/tax/discount/scope and content hash; do not activate.
+
+### Frozen command/result contract
+
+`ServicePriceBookItemInput` is a frozen, keyword-only DTO with exact fields `item_code: str`
+and `unit_price: Decimal`. `ImportServicePriceBookCommand` is a frozen, keyword-only DTO with
+exact fields `source_classification: str`, `book_version: str`, `scope_key: str`,
+`currency: str`, `tax_policy: str`, `discount_policy: str`, `source_reference: str`,
+`source_content: str`, `expected_source_content_hash: str`,
+`items: tuple[ServicePriceBookItemInput, ...]`, `effective_from: datetime`,
+`effective_to: datetime | None`, `actor_id: str`, `idempotency_key: str`, and
+`runtime_profile: str`.
+
+`ImportServicePriceBookResult` exposes exact persisted fields `price_book_id`,
+`source_classification`, `book_version`, `scope_key`, `currency`, `tax_policy`,
+`discount_policy`, `source_reference`, `source_content_hash`, `item_snapshot_hash`,
+`item_count`, `status`, `effective_from`, `effective_to`, `created_by`, and
+`disposition: CREATED|REUSED`.
+
+- Required text is already-trimmed, nonempty, contains no NUL, and fits its carrier column;
+  `scope_key` is exactly `GLOBAL`, `currency` is exactly three uppercase ASCII letters, and
+  classification is exactly `PRODUCTION|TEST_ONLY`. `TEST_ONLY` import additionally requires
+  `runtime_profile='test'`; it is never inferred from a name or source reference.
+- The effective timestamps are naive `datetime` values and `effective_to`, when present, is
+  strictly later than `effective_from`.
+- At least one item is required. Item codes are already-trimmed, nonempty, NUL-free, at most
+  128 characters and unique by exact code. Each price must be an actual finite `Decimal`,
+  strictly positive, and have at most two fractional decimal places; no float, integer, string,
+  rounding or numeric coercion is accepted.
+- The canonical source snapshot is compact sorted-key UTF-8 JSON over exact keys
+  `source_content` and `source_reference`. Its lowercase SHA-256 must exactly equal the supplied
+  64-character lowercase hexadecimal hash. The stored item snapshot is compact sorted-key UTF-8
+  JSON over exact header keys `currency`, `discount_policy`, `items`, `scope_key`, and
+  `tax_policy`; items are sorted by exact item code and prices are canonical fixed-point strings.
+  Its SHA-256 is stored separately. JSON framing, rather than delimiter concatenation, binds all
+  values unambiguously.
+- Shape/type/format failures are `SERVICE_PRICE_BOOK_IMPORT_INVALID` with status 400. Source
+  hash mismatch, idempotency mismatch, duplicate version, stored replay-integrity failure and
+  database write collision are `SERVICE_PRICE_BOOK_IMPORT_CONFLICT` with status 409.
+- Exact idempotency replay reuses only the same untouched DRAFT tuple. The service may `flush`
+  but never commits or rolls back; transaction completion remains caller-owned.
 
 ## Explicit Non-Closure
 
@@ -65,7 +106,6 @@ No endpoint/UI/schema and no adjacent service rule or second dataset beyond the 
 - `tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01.md`
 - `backend/app/modules/fees/service_price_book.py`
 - `backend/tests/test_v8_service_price_book_import.py`
-- `artifacts/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01/**`
 
 No other source, test, task, manifest or shared ownership file is authorized. Inherited regression inputs are read-only unless explicitly listed above. Preserve the captured dirty baseline.
 
@@ -74,7 +114,9 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 - Preserve AGENTS.md permission injection, response-envelope, FastAPI status/body, SQLite and Simplified Chinese UI rules applicable to this closure.
 - Use caller-owned transactions for business writes; no service-level commit unless the approved row explicitly owns it.
 - All SQLite-writing tests and shared-file verification run through the global serialized queue.
-- Require the exact persisted gate and lane activation; absent/revoked/future/scope-mismatched decisions are 409/no write.
+- Import itself does not read, confirm or activate `DG-SERVICE-RATE-VERSION:GLOBAL`. The missing
+  real production input does not block this development/import capability; production activation
+  and production use remain separately gated and outside this task.
 
 ## Verification Commands
 
@@ -83,21 +125,24 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 - `cd backend && .venv/bin/pytest -q tests/test_v8_service_price_book_import.py`
 - `cd backend && .venv/bin/ruff check --fix app/modules/fees/service_price_book.py tests/test_v8_service_price_book_import.py && .venv/bin/ruff format app/modules/fees/service_price_book.py tests/test_v8_service_price_book_import.py && .venv/bin/ruff check app/modules/fees/service_price_book.py tests/test_v8_service_price_book_import.py`
 - `git diff --check -- backend/app/modules/fees/service_price_book.py backend/tests/test_v8_service_price_book_import.py tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01.md`
-- `./scripts/task_validate.sh FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01`
-- Evidence validation: `python3 /Users/cfcc/.codex/skills/atomic-evidence-gates/scripts/evidence_gate.py validate FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01 --required-step lint --required-step test --required-step independent_review --required-step scope`
 
-## Evidence Path
+## Git-Native Evidence
 
-- `artifacts/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01/**`
-- Required PASS artifacts: `results.jsonl`, `summary.md`, `git/diff.patch`, and dirty-baseline artifacts when applicable.
+- Exact RED: focused test exited 1 because the import module was absent.
+- Exact GREEN: focused test passed `16 passed`.
+- Commit SHA and independent PROTECTED review are recorded by the integration owner after the
+  scoped checks below remain current.
 
 ## Done Definition
 
-The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01` pass. Only then may this task be reported PASS.
+The exact RED is observed; the minimum allowlisted change makes the exact GREEN pass; task-scoped
+lint/format/diff checks pass; SQLite verification is serialized; `backend/uv.lock` remains outside
+the commit; and an independent High reviewer approves the exact commit with zero P0/P1/P2
+findings. Only the independent integration owner may then report this PROTECTED story PASS.
 
 ## Latest-Wins Input Activation Dependency Interpretation
 
 Development prerequisite: adopted successor + exact code dependencies.
 Production prerequisite: original DG-* gate plus reviewed active real input.
 Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
-Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+Existing closure, non-closure, allowlist, permissions and primary test remain intact.
