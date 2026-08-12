@@ -493,3 +493,12 @@ validation, representative-row substitution or premature release execution block
 - This task reports every missing mapping, artifact, gate, verdict or residual as blocking; it never repairs product, alters an assertion, activates a customer gate, closes the ledger early, runs final close or moves/duplicates/weakens the release gate.
 - Existing scoped RED/GREEN, ledger test, Ruff/diff, Evidence 1.1, independent review, task gate, atomic validation and Done Definition remain binding for later High execution.
 - This Ultra materialization edits no ledger output/test/evidence and runs only the atomic task-file check.
+
+## Latest-Wins Input Activation Dependency Interpretation
+
+Development prerequisite: adopted successor + exact code dependencies.
+Production prerequisite: original DG-* gate plus reviewed active real input.
+Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
+Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+CONFIG_REQUIRED is acceptable only with verified negative-path evidence. This task never claims production activation.

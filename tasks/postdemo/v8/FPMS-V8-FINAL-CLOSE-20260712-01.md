@@ -536,3 +536,12 @@ be reported PASS.
   audit/test/product file and changes no inherited allowlist or release command.
 - Only atomic `check-task` runs now. Foundation, Full, ledger, final-close and release
   execution remain deferred until every prerequisite above is durably accepted PASS.
+
+## Latest-Wins Input Activation Dependency Interpretation
+
+Development prerequisite: adopted successor + exact code dependencies.
+Production prerequisite: original DG-* gate plus reviewed active real input.
+Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
+Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
+
+CONFIG_REQUIRED is acceptable only with verified negative-path evidence. This task never claims production activation.

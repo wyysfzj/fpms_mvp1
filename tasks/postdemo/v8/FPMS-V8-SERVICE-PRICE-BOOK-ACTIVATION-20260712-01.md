@@ -94,3 +94,10 @@ No other source, test, task, manifest or shared ownership file is authorized. In
 ## Done Definition
 
 The exact RED is preserved; the minimum allowlisted change makes the exact GREEN and targeted regressions pass; task-scoped lint/format/scope checks pass; shared files and SQLite verification were serialized; dirty-baseline and baseline-subtracted diff evidence exist; an independent reviewer approves the exact closure and non-closure; atomic evidence validation and `./scripts/task_validate.sh FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-20260712-01` pass. Only then may this task be reported PASS.
+
+## Latest-Wins Input Activation Dependency Interpretation
+
+Development prerequisite: adopted successor + exact code dependencies.
+Production prerequisite: original DG-* gate plus reviewed active real input.
+Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY_READY.
+Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
