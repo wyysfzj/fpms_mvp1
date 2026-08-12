@@ -233,6 +233,35 @@ def test_malformed_or_test_only_candidate_is_409_without_mutation(
     assert row.approved_by is None and row.current_identity_key is None
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("book_version", " 2026.08"),
+        ("book_version", "2026.08\x00"),
+        ("source_reference", " managed://service-price-books/2026-08.json"),
+        ("source_reference", "managed://service-price-books/2026-08.json\x00"),
+    ],
+)
+def test_persisted_activation_headers_are_canonical(
+    service: ModuleType,
+    transaction: Session,
+    field: str,
+    value: str,
+) -> None:
+    row = _draft(transaction)
+    _gate(transaction, row)
+    setattr(row, field, value)
+    gate = transaction.scalar(select(CustomerDecisionGate))
+    assert gate is not None
+    gate.source_version = row.book_version
+    gate.source_reference = row.source_reference
+    gate.decision_value = _decision_value(row)
+    transaction.flush()
+    _error(lambda: service.activate_service_price_book(transaction, _command(service, row)))
+    assert row.status == "DRAFT"
+    assert row.approved_by is None and row.current_identity_key is None
+
+
 def test_missing_or_mismatched_gate_is_409(service: ModuleType, transaction: Session) -> None:
     row = _draft(transaction)
     _error(lambda: service.activate_service_price_book(transaction, _command(service, row)))
@@ -291,6 +320,35 @@ def test_non_overlapping_predecessor_is_atomically_replaced(
     assert predecessor.current_identity_key is None
     assert predecessor.retired_by == ACTOR_ID and predecessor.retired_at == NOW
     assert predecessor.retirement_reason == f"由服务价格版本 {row.id} 替代"
+
+
+def test_replay_revalidates_exact_predecessor_retirement_tuple(
+    service: ModuleType,
+    transaction: Session,
+) -> None:
+    predecessor = _draft(
+        transaction,
+        book_version="2025.08",
+        idempotency_key="import-2025-08",
+        effective_from=NOW - timedelta(days=365),
+        effective_to=NOW,
+    )
+    predecessor.status = "ACTIVE"
+    predecessor.approved_by = ACTOR_ID
+    predecessor.approved_at = NOW - timedelta(days=365)
+    predecessor.approval_reason = "approved"
+    predecessor.activated_by = ACTOR_ID
+    predecessor.activated_at = NOW - timedelta(days=365)
+    predecessor.current_identity_key = "GLOBAL"
+    row = _draft(transaction)
+    _gate(transaction, row)
+    command = _command(service, row, expected_current_price_book_id=predecessor.id)
+
+    service.activate_service_price_book(transaction, command)
+    predecessor.retirement_reason = "corrupt replay lineage"
+    transaction.flush()
+
+    _error(lambda: service.activate_service_price_book(transaction, command))
 
 
 def test_overlap_or_wrong_cas_is_409_without_mutation(

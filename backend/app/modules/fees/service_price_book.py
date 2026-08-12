@@ -149,6 +149,26 @@ def _activation_datetime(value: object, field: str) -> datetime:
     return value
 
 
+def _activation_persisted_text(
+    value: object,
+    field: str,
+    limit: int | None = None,
+) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or value != value.strip()
+        or "\x00" in value
+        or (limit is not None and len(value) > limit)
+    ):
+        _activation_conflict("persisted_candidate_invalid", field=field)
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        _activation_conflict("persisted_candidate_invalid", field=field)
+    return value
+
+
 def _text(value: object, field: str, limit: int | None = None) -> str:
     if (
         type(value) is not str
@@ -475,10 +495,10 @@ def _activation_result(
 
 
 def _activation_snapshot(row: ServicePriceBook) -> str:
+    _activation_persisted_text(row.book_version, "book_version", 128)
+    _activation_persisted_text(row.source_reference, "source_reference")
     if (
-        type(row.book_version) is not str
-        or not row.book_version
-        or type(row.scope_key) is not str
+        type(row.scope_key) is not str
         or type(row.currency) is not str
         or len(row.currency) != 3
         or not row.currency.isascii()
@@ -490,8 +510,6 @@ def _activation_snapshot(row: ServicePriceBook) -> str:
         or type(row.discount_policy) is not str
         or not row.discount_policy
         or row.discount_policy != row.discount_policy.strip()
-        or type(row.source_reference) is not str
-        or not row.source_reference
         or type(row.source_content_hash) is not str
         or type(row.item_snapshot) is not str
         or type(row.item_snapshot_hash) is not str
@@ -661,6 +679,35 @@ def activate_service_price_book(
             or row.retirement_reason is not None
         ):
             _activation_conflict("activation_replay_conflict", price_book_id=row.id)
+        if row.supersedes_price_book_id is not None:
+            with transaction.no_autoflush:
+                replay_predecessor = transaction.get(
+                    ServicePriceBook,
+                    row.supersedes_price_book_id,
+                )
+            if (
+                replay_predecessor is None
+                or replay_predecessor.source_classification != "PRODUCTION"
+                or replay_predecessor.scope_key != "GLOBAL"
+                or replay_predecessor.status != "RETIRED"
+                or replay_predecessor.current_identity_key is not None
+                or replay_predecessor.approved_by is None
+                or replay_predecessor.approved_at is None
+                or replay_predecessor.activated_by is None
+                or replay_predecessor.activated_at is None
+                or replay_predecessor.retired_by != actor_id
+                or replay_predecessor.retired_at != at
+                or replay_predecessor.retirement_reason != f"由服务价格版本 {row.id} 替代"
+                or replay_predecessor.updated_by != actor_id
+                or replay_predecessor.updated_at != at
+                or replay_predecessor.effective_to is None
+                or replay_predecessor.effective_to > row.effective_from
+            ):
+                _activation_conflict(
+                    "activation_replay_predecessor_conflict",
+                    price_book_id=row.id,
+                )
+            _activation_snapshot(replay_predecessor)
         return _activation_result(row, "REUSED")
     if (
         row.status != "DRAFT"
