@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from hashlib import sha256
 from types import ModuleType
 
@@ -204,6 +204,36 @@ def test_canonical_price_scale_and_item_order_reuse_one_snapshot(
     assert '"unit_price":"1200.00"' in row.item_snapshot
     assert '"unit_price":"5000.50"' in row.item_snapshot
     assert _count(transaction) == 1
+
+
+def test_canonical_price_is_independent_of_decimal_context(
+    service: ModuleType,
+    transaction: Session,
+) -> None:
+    command = _command(
+        service,
+        items=(
+            service.ServicePriceBookItemInput(
+                item_code="LARGE",
+                unit_price=Decimal("1E+26"),
+            ),
+            service.ServicePriceBookItemInput(
+                item_code="ORDINARY",
+                unit_price=Decimal("5000.50"),
+            ),
+        ),
+    )
+    with localcontext() as context:
+        context.prec = 4
+        created = service.import_service_price_book(transaction, command)
+    row = transaction.get(ServicePriceBook, created.price_book_id)
+    assert row is not None
+    snapshot = json.loads(row.item_snapshot)
+    assert snapshot["items"] == [
+        {"item_code": "LARGE", "unit_price": "100000000000000000000000000.00"},
+        {"item_code": "ORDINARY", "unit_price": "5000.50"},
+    ]
+    assert sha256(row.item_snapshot.encode("utf-8")).hexdigest() == row.item_snapshot_hash
 
 
 @pytest.mark.parametrize(

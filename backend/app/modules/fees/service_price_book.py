@@ -120,6 +120,11 @@ def _canonical_json(value: object) -> str:
     )
 
 
+def _fixed_two_decimal_places(value: Decimal) -> str:
+    integer, separator, fraction = format(value, "f").partition(".")
+    return f"{integer}.{fraction.ljust(2, '0')}" if separator else f"{integer}.00"
+
+
 def _item_snapshot(
     items: object,
     *,
@@ -150,7 +155,7 @@ def _item_snapshot(
         canonical_items.append(
             {
                 "item_code": item_code,
-                "unit_price": format(unit_price.quantize(Decimal("0.01")), "f"),
+                "unit_price": _fixed_two_decimal_places(unit_price),
             }
         )
     canonical_items.sort(key=lambda item: item["item_code"])
