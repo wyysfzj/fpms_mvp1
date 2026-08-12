@@ -2876,7 +2876,7 @@ def _ensure_sqlite_outer_transaction(transaction: Session) -> None:
         return
     driver_connection = connection.connection.driver_connection
     if not driver_connection.in_transaction:
-        connection.exec_driver_sql("BEGIN")
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
 
 
 def _official_workbook_acceptance_conflict() -> None:
@@ -2983,7 +2983,14 @@ def record_official_workbook_acceptance(
     transaction: Session,
 ) -> OfficialWorkbookAcceptanceResult:
     _validate_official_workbook_acceptance_command(command)
-    _ensure_sqlite_outer_transaction(transaction)
+    try:
+        _ensure_sqlite_outer_transaction(transaction)
+    except OperationalError as exc:
+        raise BusinessError(
+            "OFFICIAL_WORKBOOK_ACCEPTANCE_CONFLICT",
+            "Official workbook acceptance lock conflicts",
+            status_code=409,
+        ) from exc
     pay_list = transaction.execute(
         select(PayList).where(PayList.id == command.pay_list_id)
     ).scalar_one_or_none()

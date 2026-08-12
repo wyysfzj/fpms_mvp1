@@ -8,7 +8,7 @@ from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 from shutil import copyfile
-from threading import Barrier
+from threading import Event, Lock
 from types import SimpleNamespace
 
 import pytest
@@ -416,7 +416,7 @@ def test_profile_switch_of_production_artifact_to_test_only_input_fails(
         assert db.get(PayListExportArtifact, artifact_id).status == "GENERATED"
 
 
-def test_two_conflicting_acceptances_have_one_winner_and_one_409(
+def test_sqlite_immediate_writer_has_one_winner_and_one_lock_conflict(
     session_factory: sessionmaker[Session],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -427,15 +427,34 @@ def test_two_conflicting_acceptances_have_one_winner_and_one_409(
         monkeypatch,
         source_classification="PRODUCTION",
     )
-    original = service._official_workbook_generation_lineage
-    barrier = Barrier(2)
+    original = service._ensure_sqlite_outer_transaction
+    first_acquired = Event()
+    release_first = Event()
+    second_acquired = Event()
+    acquisition_lock = Lock()
+    acquisition_count = 0
 
-    def synchronized_lineage(*args: object, **kwargs: object) -> object:
-        result = original(*args, **kwargs)
-        barrier.wait(timeout=10)
-        return result
+    def synchronized_acquisition(transaction: Session) -> None:
+        nonlocal acquisition_count
+        with acquisition_lock:
+            acquisition_count += 1
+            ordinal = acquisition_count
+        if ordinal == 1:
+            original(transaction)
+            first_acquired.set()
+            assert release_first.wait(timeout=10)
+            return
+        transaction.connection().exec_driver_sql("PRAGMA busy_timeout = 0")
+        acquired = False
+        try:
+            original(transaction)
+            acquired = True
+        finally:
+            if acquired:
+                second_acquired.set()
+            release_first.set()
 
-    monkeypatch.setattr(service, "_official_workbook_generation_lineage", synchronized_lineage)
+    monkeypatch.setattr(service, "_ensure_sqlite_outer_transaction", synchronized_acquisition)
 
     def attempt(index: int) -> str:
         with session_factory() as db:
@@ -452,12 +471,19 @@ def test_two_conflicting_acceptances_have_one_winner_and_one_409(
                 db.commit()
                 return "CREATED"
             except BusinessError as exc:
+                assert db.in_transaction()
                 db.rollback()
-                assert exc.status_code == 409
-                return "CONFLICT"
+                return f"{exc.code}:{exc.status_code}"
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        outcomes = sorted(executor.map(attempt, (1, 2)))
-    assert outcomes == ["CONFLICT", "CREATED"]
+        first = executor.submit(attempt, 1)
+        assert first_acquired.wait(timeout=10)
+        second = executor.submit(attempt, 2)
+        outcomes = (first.result(timeout=10), second.result(timeout=10))
+    assert outcomes == ("CREATED", "OFFICIAL_WORKBOOK_ACCEPTANCE_CONFLICT:409")
+    assert not second_acquired.is_set()
     with session_factory() as db:
+        artifact = db.get(PayListExportArtifact, artifact_id)
+        assert artifact.status == "OFFICIAL_SITE_ACCEPTED"
+        assert artifact.official_acceptance_evidence_ref.endswith("receipt-1")
         assert _activity_count(db, "OFFICIAL_PAYMENT_WORKBOOK_ACCEPTED") == 1

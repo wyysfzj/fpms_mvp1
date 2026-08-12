@@ -149,3 +149,11 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   `OFFICIAL_SITE_ACCEPTED` conditional update and appends the activity in one nested unit. Zero or
   multiple affected rows, database lock/race, activity collision or integrity failure is the
   contracted 409. Caller-owned commit/rollback semantics remain unchanged.
+
+## Final Concurrency Amendment — 2026-08-13
+
+- SQLite acquires `BEGIN IMMEDIATE` before the first business read so one caller owns the writer
+  reservation throughout validation and the acceptance write. Lock/acquisition
+  `OperationalError` maps to `OFFICIAL_WORKBOOK_ACCEPTANCE_CONFLICT` / 409 without service-level
+  commit or rollback. The existing non-SQLite artifact `SELECT ... FOR UPDATE` and conditional
+  artifact update remain unchanged.
