@@ -38,6 +38,7 @@ FINGERPRINT_PATHS = {
     "backend/alembic/versions/v8_payment_workbook_input_version.py",
     "backend/alembic/versions/v8_w6_service_price_book.py",
     "backend/app/models/__init__.py",
+    "backend/app/main.py",
     "backend/app/modules/annuity/api.py",
     "backend/app/modules/annuity/models.py",
     "backend/app/modules/annuity/official_payment_workbook_input_schemas.py",
@@ -58,6 +59,7 @@ FINGERPRINT_PATHS = {
     "backend/tests/test_v8_official_payment_workbook_generation_service.py",
     "backend/tests/test_v8_official_workbook_acceptance_api.py",
     "backend/tests/test_v8_official_workbook_acceptance_service.py",
+    "backend/tests/test_v8_official_workbook_cors_headers.py",
     "backend/tests/test_v8_payment_workbook_input_api.py",
     "backend/tests/test_v8_payment_workbook_input_service.py",
     "backend/tests/test_v8_payment_workbook_input_version.py",
@@ -79,6 +81,9 @@ FINGERPRINT_PATHS = {
     "tasks/batches/FPMS-POSTDEMO-V8-PAYMENT-WORKBOOK-GATE-20260712-01.md",
     "tasks/batches/FPMS-POSTDEMO-V8-SERVICE-RATE-GATE-20260712-01.md",
     "tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-CLOSE-20260813-01.md",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-CORS-EXPOSURE-20260813-01.md",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-GENERATED-STATUS-HEADER-20260813-01.md",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-IDEMPOTENCY-CARRIER-20260813-01.md",
     "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01.md",
     "tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01.md",
     "tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md",
@@ -142,7 +147,7 @@ def test_story_separates_ready_capability_from_unconfigured_production() -> None
     assert story["production_failure"] == "409 / NO WRITE"
     assert story["production_activation_claimed"] is False
     assert set(story["paths"]) == FINGERPRINT_PATHS
-    assert len(story["paths"]) == 58
+    assert len(story["paths"]) == 63
 
 
 def test_story_fingerprint_binds_candidate_and_current_product_bytes() -> None:

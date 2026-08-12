@@ -48,3 +48,6 @@ The exact closure, allowlist, verification and rollback boundary are frozen by
 `tasks/postdemo/v8/FPMS-V8-INPUT-ACTIVATION-CAPABILITY-LEDGER-ADOPTION-20260813-01.md`.
 No product source, runtime configuration, source registry, catalog, Row199, Full, Final or
 Release claim belongs to this story.
+
+The fingerprint also binds the CORS exposure, generated-status header and acceptance
+idempotency successor closures, including their exact product/test paths and task cards.

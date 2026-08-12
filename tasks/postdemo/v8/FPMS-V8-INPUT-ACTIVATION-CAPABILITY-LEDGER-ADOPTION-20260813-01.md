@@ -40,6 +40,8 @@ The story records `CAPABILITY_READY`, keeps
 3. Add focused regressions proving ledger-only metadata changes pass while any product-owned
    byte drift still fails.
 4. Add the exact 19-row adoption story and verify inventory against the adoption candidate.
+   Its fingerprint includes every path changed by accepted integration successors `090b4b7`,
+   `d2810c3` and `2280839`, including their task cards.
 
 ## Non-closure
 
