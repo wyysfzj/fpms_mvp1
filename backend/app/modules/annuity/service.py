@@ -2587,6 +2587,18 @@ def generate_official_payment_workbook(
             workbook_input=workbook_input,
             rows_snapshot_hash=rows_snapshot_hash,
         )
+        stored_activity_id = transaction.execute(
+            select(CaseActivityEvent.id).where(
+                CaseActivityEvent.case_id == case_id,
+                CaseActivityEvent.idempotency_key == replay_command.idempotency_key,
+            )
+        ).scalar_one_or_none()
+        if stored_activity_id is None:
+            _fail_official_workbook_generation(
+                "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT",
+                "Official payment workbook replay activity is missing",
+                status_code=409,
+            )
         projection, legacy_status = _activity_projection(transaction, case_id)
         try:
             activity = append_case_activity(
@@ -2603,6 +2615,12 @@ def generate_official_payment_workbook(
                 "Official payment workbook replay conflicts",
                 status_code=409,
             ) from exc
+        if activity.activity_id != stored_activity_id or not activity.reused:
+            _fail_official_workbook_generation(
+                "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT",
+                "Official payment workbook replay activity conflicts",
+                status_code=409,
+            )
         return GenerateOfficialPaymentWorkbookResult(
             artifact_id=artifact.id,
             pay_list_id=command.pay_list_id,

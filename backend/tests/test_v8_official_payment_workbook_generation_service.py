@@ -60,6 +60,7 @@ class _Transaction:
             )
         ]
         self.artifact = artifact
+        self.activity_ids: dict[str, str] = {}
         self.flushes = 0
         self.commits = 0
         self.rollbacks = 0
@@ -72,6 +73,9 @@ class _Transaction:
             return _Result([self.pay_list])
         if "t_gov_payment" in sql:
             return _Result(self.payments)
+        if "t_case_activity_event" in sql:
+            activity_id = next(iter(self.activity_ids.values()), None)
+            return _Result([activity_id] if activity_id is not None else [])
         raise AssertionError(f"unexpected statement: {sql}")
 
     def add(self, instance: object) -> None:
@@ -183,7 +187,9 @@ def _install_dependencies(
         adapter_rows.extend(rows)
         return b"verified-official-xlsm"
 
-    def append(command: object, *_args: object, **_kwargs: object) -> object:
+    def append(
+        command: object, transaction: _Transaction, *_args: object, **_kwargs: object
+    ) -> object:
         activities.append(command)
         if activity_error is not None:
             raise activity_error
@@ -192,9 +198,13 @@ def _install_dependencies(
             previous_command, previous_result = existing
             if previous_command != command:
                 raise BusinessError("LIFECYCLE_IDEMPOTENCY_CONFLICT", "conflict", status_code=409)
-            return previous_result
-        result = SimpleNamespace(activity_id=f"activity-{len(activity_results) + 1}")
+            return SimpleNamespace(activity_id=previous_result.activity_id, reused=True)
+        result = SimpleNamespace(
+            activity_id=f"activity-{len(activity_results) + 1}",
+            reused=False,
+        )
         activity_results[command.idempotency_key] = (command, result)
+        transaction.activity_ids[command.idempotency_key] = result.activity_id
         return result
 
     def resolve_gate(command: object, _transaction: object) -> object:
@@ -403,6 +413,22 @@ def test_differing_replay_and_multi_case_pay_list_fail_closed(
         service.generate_official_payment_workbook(_command(), second_transaction)
     assert multi_case_error.value.code == "OFFICIAL_PAYMENT_WORKBOOK_NO_CASES"
     assert second_transaction.artifact is None
+
+
+def test_replay_requires_the_original_durable_activity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    transaction = _Transaction()
+    _install_dependencies(monkeypatch, tmp_path, resolved_input=_input())
+    service.generate_official_payment_workbook(_command(), transaction)
+    transaction.activity_ids.clear()
+
+    with pytest.raises(BusinessError) as caught:
+        service.generate_official_payment_workbook(_command(), transaction)
+
+    assert caught.value.code == "OFFICIAL_PAYMENT_WORKBOOK_IDEMPOTENCY_CONFLICT"
+    assert caught.value.status_code == 409
 
 
 def test_adapter_or_activity_failure_leaves_no_durable_artifact_or_managed_file(

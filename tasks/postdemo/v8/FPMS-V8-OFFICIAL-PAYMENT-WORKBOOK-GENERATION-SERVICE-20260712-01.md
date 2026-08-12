@@ -119,7 +119,7 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   failure compensates the newly written managed file.
 - Scoped Ruff and whitespace checks are required again on the exact commit before independent
   review. No endpoint, UI, schema, payment/acceptance mutation or production input was added.
-- Amended candidate GREEN: the exact focused test passes `9` tests. The immediately preceding
+- Amended candidate GREEN: the exact focused test passes `10` tests. The immediately preceding
   generation/adapter/input-governance/internal-export tranche passed `45` tests before the final
   focused conflict regression was added; it is historical support, not a claim over the amended
   bytes. These are implementation evidence only until independent review accepts the closure.
