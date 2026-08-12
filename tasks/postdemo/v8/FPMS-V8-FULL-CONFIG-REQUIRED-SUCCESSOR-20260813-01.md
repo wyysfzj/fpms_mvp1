@@ -1,6 +1,6 @@
 # FPMS V8 Full CONFIG_REQUIRED Successor
 
-Status: `IMPLEMENTATION`
+Status: `IMPLEMENTED / INDEPENDENT PROTECTED REVIEW REQUIRED`
 Risk: `PROTECTED`
 Runbook: `P0-prereq-heavy-story`
 
@@ -64,3 +64,12 @@ git diff --check -- <exact allowlist>
 The implementation candidate requires an independent High review with P0/P1/P2 `0/0/0`.
 The reviewer, not the implementer, materializes the exact review receipt. Rollback removes only
 this authority successor; production configuration and data are never changed.
+
+## Implementation evidence
+
+- RED: the focused contract reported `3 failed` because
+  `docs/product/v8/stories/V8-FULL-CONFIG-REQUIRED-SUCCESSOR.md` did not exist; catalog, Row199
+  identity, 29 requested identities and current ledger preconditions reached that exact boundary.
+- GREEN: the focused contract reported `3 passed` after adding only the successor story.
+- The candidate changes no frozen catalog, registry, ledger, Row199/281/282/283 disposition,
+  product source or production input. Independent High acceptance remains outstanding.
