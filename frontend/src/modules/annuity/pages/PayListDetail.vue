@@ -630,7 +630,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import dayjs from 'dayjs'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
@@ -676,6 +676,12 @@ interface OfficialAcceptanceForm {
   accepted_at: string
 }
 
+interface BoundOfficialAcceptanceResult {
+  payListId: number
+  artifactId: string
+  result: OfficialWorkbookAcceptanceResult
+}
+
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -690,7 +696,7 @@ const officialAcceptanceDialogVisible = ref(false)
 const error = ref<GovPaymentsApiError | null>(null)
 const detail = ref<PayListDetailResult | null>(null)
 const generatedOfficialWorkbook = ref<OfficialWorkbookArtifact | null>(null)
-const officialAcceptanceResult = ref<OfficialWorkbookAcceptanceResult | null>(null)
+const boundOfficialAcceptanceResult = ref<BoundOfficialAcceptanceResult | null>(null)
 const markPaidFormRef = ref<FormInstance>()
 const officialWorkbookIdempotencyKey = ref(crypto.randomUUID())
 const officialAcceptanceIdempotencyKey = ref(crypto.randomUUID())
@@ -727,6 +733,16 @@ const payListId = computed(() => {
 const feePackageId = computed(() => String(route.query.package_id || route.query.packageId || '').trim())
 
 const payList = computed(() => detail.value?.pay_list ?? null)
+
+const officialAcceptanceResult = computed(() => {
+  const bound = boundOfficialAcceptanceResult.value
+  if (!bound || bound.payListId !== payListId.value) return null
+  if (bound.result.pay_list_id !== bound.payListId || bound.result.artifact_id !== bound.artifactId) {
+    return null
+  }
+  const artifact = detail.value?.official_evidence?.find((item) => item.id === bound.artifactId)
+  return artifact?.status === 'OFFICIAL_SITE_ACCEPTED' ? bound.result : null
+})
 
 const payListTitle = computed(() => {
   if (!payList.value) return '读取中'
@@ -808,12 +824,17 @@ function canRecordOfficialAcceptance(row: PayListOfficialEvidenceInfo): boolean 
 
 function openOfficialAcceptanceDialog(row: PayListOfficialEvidenceInfo) {
   if (!canRecordOfficialAcceptance(row)) return
+  clearOfficialAcceptanceResult()
   officialAcceptanceForm.artifact_id = row.id
   officialAcceptanceForm.evidence_ref = ''
   officialAcceptanceForm.evidence_sha256 = ''
   officialAcceptanceForm.accepted_at = ''
   officialAcceptanceIdempotencyKey.value = crypto.randomUUID()
   officialAcceptanceDialogVisible.value = true
+}
+
+function clearOfficialAcceptanceResult() {
+  boundOfficialAcceptanceResult.value = null
 }
 
 function resetOfficialAcceptanceForm() {
@@ -951,6 +972,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 async function loadDetail() {
+  clearOfficialAcceptanceResult()
   detail.value = null
   if (!payListId.value) {
     error.value = {
@@ -1035,13 +1057,16 @@ async function handleGenerateOfficialWorkbook() {
 async function handleRecordOfficialAcceptance() {
   if (!payList.value || !officialAcceptanceCanSubmit.value) return
 
+  const submittedPayListId = payList.value.id
+  const submittedArtifactId = officialAcceptanceForm.artifact_id
+  clearOfficialAcceptanceResult()
   recordingOfficialAcceptance.value = true
   error.value = null
   try {
-    officialAcceptanceResult.value = await recordOfficialWorkbookAcceptance(
-      payList.value.id,
+    const result = await recordOfficialWorkbookAcceptance(
+      submittedPayListId,
       {
-        artifact_id: officialAcceptanceForm.artifact_id,
+        artifact_id: submittedArtifactId,
         evidence_ref: officialAcceptanceForm.evidence_ref.trim(),
         evidence_sha256: officialAcceptanceForm.evidence_sha256,
         accepted_at: officialAcceptanceForm.accepted_at.trim(),
@@ -1050,8 +1075,25 @@ async function handleRecordOfficialAcceptance() {
     )
     officialAcceptanceDialogVisible.value = false
     ElMessage.success('官方页面接受事实已登记。')
-    await loadDetail()
+    if (payListId.value === submittedPayListId) {
+      await loadDetail()
+      const acceptedArtifact = detail.value?.official_evidence?.find(
+        (item) => item.id === submittedArtifactId && item.status === 'OFFICIAL_SITE_ACCEPTED',
+      )
+      if (
+        acceptedArtifact
+        && result.pay_list_id === submittedPayListId
+        && result.artifact_id === submittedArtifactId
+      ) {
+        boundOfficialAcceptanceResult.value = {
+          payListId: submittedPayListId,
+          artifactId: submittedArtifactId,
+          result,
+        }
+      }
+    }
   } catch (err) {
+    clearOfficialAcceptanceResult()
     error.value = mapGovPaymentsError(err)
   } finally {
     recordingOfficialAcceptance.value = false
@@ -1085,8 +1127,17 @@ async function handleManualSuccess() {
 }
 
 watch(payListId, () => {
+  clearOfficialAcceptanceResult()
+  officialAcceptanceDialogVisible.value = false
+  resetOfficialAcceptanceForm()
   void loadDetail()
 }, { immediate: true })
+
+onBeforeUnmount(() => {
+  clearOfficialAcceptanceResult()
+  officialAcceptanceDialogVisible.value = false
+  resetOfficialAcceptanceForm()
+})
 </script>
 
 <style scoped>

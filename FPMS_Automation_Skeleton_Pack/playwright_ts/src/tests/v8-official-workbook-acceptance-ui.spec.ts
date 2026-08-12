@@ -3,6 +3,7 @@ import type { Page, Request, Route } from "@playwright/test";
 
 const payListId = 222;
 const artifactId = "11111111-1111-4111-8111-111111111222";
+const secondArtifactId = "33333333-3333-4333-8333-333333333222";
 const activityId = "22222222-2222-4222-8222-222222222222";
 const evidenceHash = "a".repeat(64);
 
@@ -106,14 +107,83 @@ for (const status of [undefined, "INACTIVE"] as const) {
   });
 }
 
-test("official acceptance error stays Chinese, state-free and retry-safe", async ({ page }) => {
+test("clears prior acceptance facts before a different artifact fails", async ({ page }) => {
   let acceptanceCalls = 0;
+  let firstAccepted = false;
   await mockPayListApi(page, {
     permissions: ["PayList.Read", "Fee.Edit"],
     officialWorkbookStatus: "ACTIVE",
-    getArtifactStatus: () => "GENERATED",
+    getArtifactStatus: () => (firstAccepted ? "OFFICIAL_SITE_ACCEPTED" : "GENERATED"),
+    includeSecondArtifact: true,
     onAcceptance: async (route) => {
       acceptanceCalls += 1;
+      if (acceptanceCalls === 1) {
+        firstAccepted = true;
+        await fulfillJson(route, acceptanceResult(), 201);
+        return;
+      }
+      await fulfillJson(
+        route,
+        {
+          error: {
+            code: "PAYMENT_WORKBOOK_INPUT_CONFIG_REQUIRED",
+            message: "Second artifact acceptance rejected",
+            details: { gate_code: "DG-PAYMENT-WORKBOOK" },
+          },
+        },
+        409,
+      );
+    },
+  });
+
+  await openPayList(page);
+  const panel = page.getByTestId("official-acceptance-panel");
+  await panel
+    .getByTestId(`official-acceptance-artifact-${artifactId}`)
+    .getByRole("button", { name: "登记官方页面接受" })
+    .click();
+  await fillAcceptanceDialog(page);
+  await page.getByRole("button", { name: "提交官方页面接受" }).click();
+  await expect(panel.getByTestId("official-acceptance-result")).toBeVisible();
+
+  await panel
+    .getByTestId(`official-acceptance-artifact-${secondArtifactId}`)
+    .getByRole("button", { name: "登记官方页面接受" })
+    .click();
+  await expect(panel.getByTestId("official-acceptance-result")).toHaveCount(0);
+  await fillAcceptanceDialog(page);
+  await page.getByRole("button", { name: "提交官方页面接受" }).click();
+
+  await expect(page.getByText("数据冲突，当前请求无法完成。")).toBeVisible();
+  await expect(page.getByText("Second artifact acceptance rejected")).toHaveCount(0);
+  await expect(panel.getByTestId("official-acceptance-result")).toHaveCount(0);
+  await expect(
+    panel
+      .getByTestId(`official-acceptance-artifact-${secondArtifactId}`)
+      .getByText("服务端：已生成，尚未登记官方接受"),
+  ).toBeVisible();
+});
+
+test("official acceptance 409 retries with the same key and re-fetches server state", async ({
+  page,
+}) => {
+  const acceptanceRequests: Request[] = [];
+  let accepted = false;
+  let detailReads = 0;
+  await mockPayListApi(page, {
+    permissions: ["PayList.Read", "Fee.Edit"],
+    officialWorkbookStatus: "ACTIVE",
+    getArtifactStatus: () => (accepted ? "OFFICIAL_SITE_ACCEPTED" : "GENERATED"),
+    onDetailRead: () => {
+      detailReads += 1;
+    },
+    onAcceptance: async (route) => {
+      acceptanceRequests.push(route.request());
+      if (acceptanceRequests.length === 2) {
+        accepted = true;
+        await fulfillJson(route, acceptanceResult(artifactId, "REUSED"), 200);
+        return;
+      }
       await fulfillJson(
         route,
         {
@@ -143,13 +213,23 @@ test("official acceptance error stays Chinese, state-free and retry-safe", async
   await expect(panel.getByTestId("official-acceptance-result")).toHaveCount(0);
   await expect(panel.getByText("服务端：已生成，尚未登记官方接受")).toBeVisible();
   await expect(submit).toBeEnabled();
-  expect(acceptanceCalls).toBe(1);
+  expect(acceptanceRequests).toHaveLength(1);
+
+  const firstIdempotencyKey = acceptanceRequests[0].postDataJSON().idempotency_key;
+  await submit.click();
+
+  await expect(panel.getByTestId("official-acceptance-result")).toBeVisible();
+  await expect(panel.getByText("服务端：官方页面已接受")).toBeVisible();
+  expect(acceptanceRequests).toHaveLength(2);
+  expect(acceptanceRequests[1].postDataJSON().idempotency_key).toBe(firstIdempotencyKey);
+  await expect.poll(() => detailReads).toBe(2);
 });
 
 interface MockPayListApiOptions {
   permissions: string[];
   officialWorkbookStatus?: string;
   getArtifactStatus: () => "GENERATED" | "OFFICIAL_SITE_ACCEPTED";
+  includeSecondArtifact?: boolean;
   onDetailRead?: () => void;
   onAcceptance?: (route: Route) => Promise<void>;
 }
@@ -166,7 +246,11 @@ async function mockPayListApi(page: Page, options: MockPayListApiOptions): Promi
       options.onDetailRead?.();
       return fulfillJson(
         route,
-        payListDetail(options.officialWorkbookStatus, options.getArtifactStatus()),
+        payListDetail(
+          options.officialWorkbookStatus,
+          options.getArtifactStatus(),
+          options.includeSecondArtifact,
+        ),
       );
     }
     if (
@@ -209,9 +293,12 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
   });
 }
 
-function acceptanceResult(): Record<string, unknown> {
+function acceptanceResult(
+  targetArtifactId = artifactId,
+  disposition: "CREATED" | "REUSED" = "CREATED",
+): Record<string, unknown> {
   return {
-    artifact_id: artifactId,
+    artifact_id: targetArtifactId,
     pay_list_id: payListId,
     evidence_ref: "official-site/acceptance/receipt-222",
     evidence_sha256: evidenceHash,
@@ -222,13 +309,14 @@ function acceptanceResult(): Record<string, unknown> {
     paid: false,
     ticket_verified: false,
     idempotency_key: "official-workbook-acceptance-ui-222",
-    disposition: "CREATED",
+    disposition,
   };
 }
 
 function payListDetail(
   officialWorkbookStatus: string | undefined,
   artifactStatus: "GENERATED" | "OFFICIAL_SITE_ACCEPTED",
+  includeSecondArtifact = false,
 ): Record<string, unknown> {
   return {
     pay_list: {
@@ -262,27 +350,8 @@ function payListDetail(
       },
     ],
     export_artifacts: [
-      {
-        id: artifactId,
-        pay_list_id: payListId,
-        kind: "OFFICIAL_XLSM",
-        status: artifactStatus,
-        content_sha256: "b".repeat(64),
-        managed_storage_path: "official-workbooks/222.xlsm",
-        template_version: "2026.08",
-        generated_by: "generator-row-222",
-        generated_at: "2026-08-13T17:30:00",
-        idempotency_key: "official-workbook-generation-222",
-        official_acceptance_evidence_ref:
-          artifactStatus === "OFFICIAL_SITE_ACCEPTED"
-            ? "official-site/acceptance/receipt-222"
-            : null,
-        official_acceptance_evidence_hash:
-          artifactStatus === "OFFICIAL_SITE_ACCEPTED" ? evidenceHash : null,
-        official_accepted_at:
-          artifactStatus === "OFFICIAL_SITE_ACCEPTED" ? "2026-08-13T18:00:00" : null,
-        updated_at: "2026-08-13T18:00:00",
-      },
+      workbookArtifact(artifactId, artifactStatus),
+      ...(includeSecondArtifact ? [workbookArtifact(secondArtifactId, "GENERATED")] : []),
     ],
     ...(officialWorkbookStatus === undefined
       ? {}
@@ -294,5 +363,30 @@ function payListDetail(
             official_pay_list_boundary_note: "官方页面接受与支付、票据核验分离",
           },
         }),
+  };
+}
+
+function workbookArtifact(
+  targetArtifactId: string,
+  status: "GENERATED" | "OFFICIAL_SITE_ACCEPTED",
+): Record<string, unknown> {
+  return {
+    id: targetArtifactId,
+    pay_list_id: payListId,
+    kind: "OFFICIAL_XLSM",
+    status,
+    content_sha256: "b".repeat(64),
+    managed_storage_path: `official-workbooks/${targetArtifactId}.xlsm`,
+    template_version: "2026.08",
+    generated_by: "generator-row-222",
+    generated_at: "2026-08-13T17:30:00",
+    idempotency_key: `official-workbook-generation-${targetArtifactId}`,
+    official_acceptance_evidence_ref:
+      status === "OFFICIAL_SITE_ACCEPTED" ? "official-site/acceptance/receipt-222" : null,
+    official_acceptance_evidence_hash:
+      status === "OFFICIAL_SITE_ACCEPTED" ? evidenceHash : null,
+    official_accepted_at:
+      status === "OFFICIAL_SITE_ACCEPTED" ? "2026-08-13T18:00:00" : null,
+    updated_at: "2026-08-13T18:00:00",
   };
 }
