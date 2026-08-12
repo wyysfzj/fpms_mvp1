@@ -662,10 +662,8 @@ def activate_service_price_book(
         row.status == "ACTIVE"
         and row.current_identity_key == "GLOBAL"
         and row.approved_by == actor_id
-        and row.approved_at == at
         and row.approval_reason == approval_reason
         and row.activated_by == actor_id
-        and row.activated_at == at
     ):
         with transaction.no_autoflush:
             replay_actor = transaction.get(T_User, actor_id)
@@ -676,6 +674,11 @@ def activate_service_price_book(
             or expected_current != row.supersedes_price_book_id
             or row.source_classification != "PRODUCTION"
             or row.scope_key != "GLOBAL"
+            or row.approved_at is None
+            or row.activated_at is None
+            or row.approved_at != row.activated_at
+            or row.updated_by != actor_id
+            or row.updated_at != row.activated_at
             or row.retired_by is not None
             or row.retired_at is not None
             or row.retirement_reason is not None
@@ -698,10 +701,10 @@ def activate_service_price_book(
                 or replay_predecessor.activated_by is None
                 or replay_predecessor.activated_at is None
                 or replay_predecessor.retired_by != actor_id
-                or replay_predecessor.retired_at != at
+                or replay_predecessor.retired_at != row.activated_at
                 or replay_predecessor.retirement_reason != f"由服务价格版本 {row.id} 替代"
                 or replay_predecessor.updated_by != actor_id
-                or replay_predecessor.updated_at != at
+                or replay_predecessor.updated_at != row.activated_at
                 or replay_predecessor.effective_to is None
                 or replay_predecessor.effective_to > row.effective_from
             ):

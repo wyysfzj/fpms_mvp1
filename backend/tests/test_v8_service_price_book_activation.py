@@ -174,12 +174,16 @@ def test_activate_valid_gate_and_exact_replay(service: ModuleType, transaction: 
     _gate(transaction, row)
     command = _command(service, row)
     activated = service.activate_service_price_book(transaction, command)
-    replay = service.activate_service_price_book(transaction, command)
+    replay = service.activate_service_price_book(
+        transaction,
+        replace(command, at=NOW + timedelta(seconds=5)),
+    )
     assert activated.disposition == "ACTIVATED"
     assert replay.disposition == "REUSED"
     assert activated.status == "ACTIVE"
     assert activated.current_identity_key == "GLOBAL"
     assert activated.approved_by == activated.activated_by == ACTOR_ID
+    assert replay.approved_at == replay.activated_at == NOW
     _error(
         lambda: service.activate_service_price_book(
             transaction,

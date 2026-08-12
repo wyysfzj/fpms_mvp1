@@ -147,3 +147,12 @@ Existing closure, non-closure, allowlist, permissions, primary tests and evidenc
   item hashes/count, status/effective interval, approval/activation/current/predecessor lineage,
   and `ACTIVATED|REUSED`; it does not quote, create a receivable, expose an endpoint, or infer an
   official fee.
+
+## Frozen Server-Time Replay Clarification (2026-08-13)
+
+An activation command's `at` is trusted server observation time, not caller-controlled idempotency
+identity. The first successful activation durably owns `approved_at == activated_at == updated_at`.
+A later otherwise-exact request may arrive with a later server `at`; it must revalidate and return
+the original immutable activation and predecessor-retirement tuple as `REUSED`, without rewriting
+any timestamp. Replay still conflicts on actor, reason, expected predecessor, gate/source snapshot,
+candidate tuple, predecessor retirement tuple or any other durable field.
