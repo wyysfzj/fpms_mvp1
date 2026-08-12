@@ -270,6 +270,50 @@ def test_current_verified_rejects_integrated_tree_drift(tmp_path: Path) -> None:
         )
 
 
+def test_integrated_owner_allows_only_ledger_metadata_to_advance(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    repo, _initial_sha = _git_repo(tmp_path)
+    ledger_path = repo / "docs" / "product" / "v8" / "coverage-ledger.json"
+    ledger_path.parent.mkdir(parents=True)
+    ledger_path.write_text('{"revision": 1}\n')
+    _git(repo, "add", "docs/product/v8/coverage-ledger.json")
+    _git(repo, "commit", "-q", "-m", "reviewed ledger")
+    reviewed_sha = _git(repo, "rev-parse", "HEAD")
+    story = {
+        "story_id": "STORY-A",
+        "commits": [reviewed_sha],
+        "paths": [
+            "docs/product/v8/coverage-ledger.json",
+            "owned.txt",
+        ],
+    }
+
+    ledger_path.write_text('{"revision": 2}\n')
+    _git(repo, "add", "docs/product/v8/coverage-ledger.json")
+    _git(repo, "commit", "-q", "-m", "ledger metadata adoption")
+    metadata_sha = _git(repo, "rev-parse", "HEAD")
+
+    checker._validate_integrated_path_owners(
+        [story],
+        repo_root=repo,
+        integration_sha=metadata_sha,
+    )
+
+    (repo / "owned.txt").write_text("unreviewed product drift\n")
+    _git(repo, "add", "owned.txt")
+    _git(repo, "commit", "-q", "-m", "product drift")
+    drift_sha = _git(repo, "rev-parse", "HEAD")
+
+    with pytest.raises(checker.ValidationError, match="integrated bytes changed"):
+        checker._validate_integrated_path_owners(
+            [story],
+            repo_root=repo,
+            integration_sha=drift_sha,
+        )
+
+
 def test_current_verified_accepts_linear_reviewed_successor_on_shared_path(
     tmp_path: Path,
 ) -> None:
@@ -577,6 +621,19 @@ def test_full_terminal_dependency_successor_accepts_exact_overlay() -> None:
     )
 
 
+def test_full_terminal_dependency_successor_uses_git_native_task_authority(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+
+    checker.validate_full_terminal_dependency_successor(
+        contract_path=_write_terminal_contract(tmp_path, contract),
+        catalog_path=CATALOG_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+
 @pytest.mark.parametrize(
     ("target_index", "edge_index"),
     [(0, 0), (1, 0), (1, 1)],
@@ -662,7 +719,6 @@ def test_full_terminal_dependency_successor_rejects_extra_fields_and_removals(
 @pytest.mark.parametrize(
     "hash_field",
     [
-        "task_file_sha256",
         "base_dependency_sha256",
         "effective_dependency_sha256",
     ],
@@ -677,6 +733,23 @@ def test_full_terminal_dependency_successor_rejects_row_hash_drift(
     contract[hash_field][first_task_id] = "0" * 64
 
     with pytest.raises(checker.ValidationError, match="SHA-256"):
+        checker.validate_full_terminal_dependency_successor(
+            contract_path=_write_terminal_contract(tmp_path, contract),
+            catalog_path=CATALOG_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_full_terminal_dependency_successor_rejects_mutable_task_byte_pins(
+    tmp_path: Path,
+) -> None:
+    checker = _load_checker()
+    contract = _terminal_contract()
+    contract["task_file_sha256"] = {
+        "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01": "0" * 64,
+    }
+
+    with pytest.raises(checker.ValidationError, match="exact schema"):
         checker.validate_full_terminal_dependency_successor(
             contract_path=_write_terminal_contract(tmp_path, contract),
             catalog_path=CATALOG_PATH,

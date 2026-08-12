@@ -17,20 +17,17 @@ additive only: it cannot remove, reorder, discover, wildcard or generalize any d
 frozen catalog remains the sole authority for gate requirements, owner role, serialization
 groups, phase and task path.
 
-The protected inputs are pinned to catalog SHA-256
-`72c849825c9cbd39cb25f743d448b67a2a31bfccf7cfb68a3d2557c7bda178bf` and task-file
-SHA-256 values:
-
-- Row278: `4c58ce034d28a0343b1320c202f293ac038489c164fb2284d0d09289064bd4c7`;
-- Row281: `bdc8302bfc474ed8877e7b32cd3b777e2c16cc1711a421e8a9099c2a636851f1`;
-- Row282: `edfd182c7d15944b68e41bb3d2c552c15e21b5b69c8f0479643e3d9b7dd50041`;
-- Row283: `b1f2f715d91a8702031da3300cde7a2645bd3753dd8500d5f12b9f5ded5d2c59`.
+The protected catalog input remains pinned to SHA-256
+`72c849825c9cbd39cb25f743d448b67a2a31bfccf7cfb68a3d2557c7bda178bf`.
+Task cards may receive reviewed latest-wins appendices, so their mutable file bytes are not
+duplicatively pinned here. Current task and product bytes are bound by reachable Git commits
+and exact coverage-story tree fingerprints.
 
 ## Exact contract and validation
 
 `docs/product/v8/full-terminal-dependency-successor.json` has schema version 1 and exactly
-these top-level fields: `schema_version`, `catalog_sha256`, `task_file_sha256`,
-`base_dependency_sha256`, `dependency_overlays`, `effective_dependency_sha256`,
+these top-level fields: `schema_version`, `catalog_sha256`, `base_dependency_sha256`,
+`dependency_overlays`, `effective_dependency_sha256`,
 `row283_dependency_sha256`, `effective_order`, and `deferred_coverage`. Each overlay object
 contains only `target_task_id` and `add`; a removal field is invalid. Extra fields, targets,
 edges or changed order fail closed.
@@ -51,12 +48,14 @@ and proves all of the following against the exact catalog bytes:
 - Row282 contains Row281 and every effective Row281 dependency;
 - the complete effective catalog dependency graph remains acyclic;
 - Row283 remains all exact 282 predecessors;
-- task files, base dependencies, effective dependencies and the catalog match their pinned
-  hashes;
+- base dependencies, effective dependencies and the catalog match their pinned hashes;
 - the overlay carries no duplicate authority for gate, owner, serialization, phase or task
   path, and the catalog supplies each of those fields.
 
-The existing story-owner discovery and coverage-ledger semantics are unchanged.
+The integrated latest-owner byte comparison excludes only
+`docs/product/v8/coverage-ledger.json`, whose metadata necessarily advances when later stories
+are adopted. Historical candidate fingerprints still include the ledger where declared, and
+all product-owned paths retain latest-review drift protection.
 
 ## Targeted TDD evidence
 

@@ -37,12 +37,6 @@ ROW278 = "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01"
 ROW281 = "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01"
 ROW282 = "FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01"
 ROW283 = "FPMS-V8-FINAL-CLOSE-20260712-01"
-FULL_TERMINAL_TASK_SHA256 = {
-    ROW278: "4c58ce034d28a0343b1320c202f293ac038489c164fb2284d0d09289064bd4c7",
-    ROW281: "bdc8302bfc474ed8877e7b32cd3b777e2c16cc1711a421e8a9099c2a636851f1",
-    ROW282: "edfd182c7d15944b68e41bb3d2c552c15e21b5b69c8f0479643e3d9b7dd50041",
-    ROW283: "b1f2f715d91a8702031da3300cde7a2645bd3753dd8500d5f12b9f5ded5d2c59",
-}
 FULL_TERMINAL_BASE_DEPENDENCY_SHA256 = {
     ROW281: "5800da16f9408789bd14370c40fe03264890f0bd46f76ad2070ed3404351ee5d",
     ROW282: "5800da16f9408789bd14370c40fe03264890f0bd46f76ad2070ed3404351ee5d",
@@ -138,7 +132,6 @@ def validate_full_terminal_dependency_successor(
         {
             "schema_version",
             "catalog_sha256",
-            "task_file_sha256",
             "base_dependency_sha256",
             "dependency_overlays",
             "effective_dependency_sha256",
@@ -169,8 +162,6 @@ def validate_full_terminal_dependency_successor(
         or actual_catalog_sha256 != EXPECTED_CATALOG_SHA256
     ):
         raise ValidationError("full-terminal catalog SHA-256 mismatch")
-    if contract["task_file_sha256"] != FULL_TERMINAL_TASK_SHA256:
-        raise ValidationError("full-terminal task-file SHA-256 mismatch")
     if (
         contract["base_dependency_sha256"]
         != FULL_TERMINAL_BASE_DEPENDENCY_SHA256
@@ -216,11 +207,6 @@ def validate_full_terminal_dependency_successor(
     for ordinal, task_id in zip((278, 281, 282, 283), FULL_TERMINAL_EFFECTIVE_ORDER):
         if tasks[ordinal - 1].get("task_id") != task_id:
             raise ValidationError(f"catalog Row{ordinal} identity mismatch")
-
-    for task_id, expected_sha256 in FULL_TERMINAL_TASK_SHA256.items():
-        task_path = repo_root / catalog_by_id[task_id]["task_path"]
-        if _sha256(task_path) != expected_sha256:
-            raise ValidationError(f"task-file SHA-256 mismatch: {task_id}")
 
     row283_dependencies = catalog_by_id[ROW283].get("depends_on")
     exact_predecessors = [task["task_id"] for task in tasks[:282]]
@@ -433,6 +419,8 @@ def _validate_integrated_path_owners(
             ).stdout.strip()
         final_commit = canonical_commits[final_ref]
         for owned_path in story["paths"]:
+            if owned_path == "docs/product/v8/coverage-ledger.json":
+                continue
             owners.setdefault(owned_path, {}).setdefault(final_commit, set()).add(
                 story_id
             )
