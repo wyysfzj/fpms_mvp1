@@ -7321,6 +7321,48 @@
       "production_activation_claimed": false,
       "full_config_successor_commit": "99316d6c83fe9c1c0e93b9703a5ea28509ea1ac6",
       "full_config_successor_review_commit": "dcb78fe978d3c655ef5fae7280ffba9e34b9bbeb"
+    },
+    {
+      "story_id": "V8-ROW282-EXTERNAL-PATH-OWNERSHIP-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "aec5a3689c96d009966625eb775048f8c42e801b"
+      ],
+      "paths": [
+        "backend/app/modules/fees/official_rate_book.py",
+        "backend/tests/test_v8_official_fee_estimate_rate_provider.py",
+        "backend/tests/test_official_fee_preview_api.py",
+        "backend/app/modules/official_workflows/filing_evidence_resolver.py",
+        "backend/tests/test_v8_filing_submission_evidence_resolver.py",
+        "tasks/postdemo/v8/FPMS-V8-ROW282-EXTERNAL-PATH-OWNERSHIP-ADOPTION-20260813-01.md",
+        "backend/tests/test_v8_row282_external_path_ownership_adoption.py",
+        "docs/product/v8/stories/V8-ROW282-EXTERNAL-PATH-OWNERSHIP-CURRENT-ADOPTION.md"
+      ],
+      "tree_sha256": "577339916f760bc7e0cef7545296f5b8345cc181040f97ca85f7ca7bea9a9d91",
+      "tests": [
+        "exact three external suites passed 122 tests",
+        "official-fee preview semantic alignment passed 6 tests",
+        "focused adoption contract passed before ledger adoption",
+        "scoped Ruff and exact diff-check passed",
+        "independent High review required before ledger adoption commit"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-ROW282-EXTERNAL-PATH-OWNERSHIP-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-ROW282-EXTERNAL-PATH-OWNERSHIP-CURRENT-ADOPTION.md",
+      "external_task_paths": {
+        "FPMS-V8-OFFICIAL-FEE-ESTIMATE-RATE-PROVIDER-20260713-01": [
+          "backend/app/modules/fees/official_rate_book.py",
+          "backend/tests/test_v8_official_fee_estimate_rate_provider.py"
+        ],
+        "FPMS-V8-OFFICIAL-FEE-PREVIEW-LEGACY-TEST-MIGRATION-20260713-01": [
+          "backend/tests/test_official_fee_preview_api.py"
+        ],
+        "FPMS-V8-FILING-SUBMISSION-EVIDENCE-RESOLVER-20260715-01": [
+          "backend/app/modules/official_workflows/filing_evidence_resolver.py",
+          "backend/tests/test_v8_filing_submission_evidence_resolver.py"
+        ]
+      },
+      "production_activation_claimed": false
     }
   ]
 }
