@@ -7623,6 +7623,29 @@
       "test_only_isolated": true,
       "production_activation_claimed": false,
       "final_close_status": "FINAL_CLOSE_PENDING"
+    },
+    {
+      "story_id": "V8-FINAL-PAYLIST-LIVE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": ["5065900d6355e39bd5817af4ef895a5c7add6581", "e132b54f30dc30db87d430a6ec13b1a8df2969a4"],
+      "paths": [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-pay-list-boundary-live.spec.ts",
+        "backend/tests/test_v8_final_paylist_live_adoption.py",
+        "docs/product/v8/stories/V8-FINAL-PAYLIST-LIVE-CURRENT-ADOPTION.md",
+        "tasks/postdemo/v8/FPMS-V8-FINAL-PAYLIST-LIVE-CURRENT-ADOPTION-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-FINAL-PAYLIST-LIVE-LOCATOR-ALIGNMENT-20260813-01.md"
+      ],
+      "tree_sha256": "09f3e311d76b179f8c425427f40ab4c73a2d7434318af233f25aeaa0a9211438",
+      "tests": ["isolated real PayList boundary E2E passed 1 test", "focused adoption passed 2 tests", "independent High source review approved P0/P1/P2 0/0/0"],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FINAL-PAYLIST-LIVE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FINAL-PAYLIST-LIVE-CURRENT-ADOPTION.md",
+      "production_inputs": {"DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED", "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"},
+      "source_decision_status": {"DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING", "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"},
+      "production_failure": "409 / NO WRITE",
+      "test_only_isolated": true,
+      "production_activation_claimed": false,
+      "final_close_status": "FINAL_CLOSE_PENDING"
     }
   ]
 }
