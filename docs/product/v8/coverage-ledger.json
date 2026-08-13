@@ -2254,19 +2254,10 @@
     {
       "catalog_id": "FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01",
       "phase": "deferred",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FINAL-ITEM-SLICE-LEDGER-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "DEPENDENCY_BLOCKED",
-        "dependencies": [
-          "FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01",
-          "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01",
-          "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01"
-        ],
-        "ref": "docs/product/v8/reviews/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
-        "audit_ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FINAL-CLOSE-20260712-01",
@@ -7363,6 +7354,50 @@
         ]
       },
       "production_activation_claimed": false
+    },
+    {
+      "story_id": "V8-FINAL-ITEM-SLICE-LEDGER-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "86a92387c51a3760e4d4d6a7d89dafed9a15fde0"
+      ],
+      "paths": [
+        "tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md",
+        "backend/tests/test_v8_final_item_slice_ledger.py",
+        "docs/product/v8/final-item-slice-ledger.json",
+        "docs/product/v8/stories/V8-FINAL-ITEM-SLICE-LEDGER-CLOSE.md"
+      ],
+      "tree_sha256": "841c1e69a2acd230294e32572d7c4c0797ca018abdcf579868e843956d7bbf3c",
+      "tests": [
+        "RED failed only because the exact derived output was absent",
+        "focused current item-ledger contract passed 4 tests",
+        "all 283 catalog rows and 19 external product nodes are exact",
+        "scoped Ruff, JSON, exact diff and lean inventory passed",
+        "independent High review required before ledger adoption commit"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FINAL-ITEM-SLICE-LEDGER-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FINAL-ITEM-SLICE-LEDGER-CURRENT-ADOPTION.md",
+      "counts": {
+        "catalog_rows": 283,
+        "foundation_rows": 197,
+        "external_product_nodes": 19,
+        "effective_product_nodes": 302,
+        "effective_foundation_requirements": 216,
+        "deferred_rows": 86
+      },
+      "production_inputs": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "source_decision_status": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"
+      },
+      "production_failure": "409 / NO WRITE",
+      "test_only_isolated": true,
+      "production_activation_claimed": false,
+      "final_close_status": "FINAL_CLOSE_PENDING"
     }
   ]
 }
