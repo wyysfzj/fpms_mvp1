@@ -32,7 +32,7 @@ from app.modules.fees import models as fee_models
 
 REVISION = "v8_w4_official_rate_book_01"
 DOWN_REVISION = "v8_post_w1_customer_decision_gate_01"
-CURRENT_HEAD = "v8_d31_overlay_conflict_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 TABLE = "t_fee_rate_book"
 RATE_TABLE = "t_fee_rate"
 

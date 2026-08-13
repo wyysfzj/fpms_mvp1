@@ -31,6 +31,7 @@ from app.modules.documents import models as document_models
 
 REVISION = "v8_grant_official_copy_01"
 DOWN_REVISION = "v8_grant_manual_review_role_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 TABLE = "t_grant_official_copy_verification_event"
 NOW = datetime(2026, 8, 10, 9, 0, 0, 123456)
 HASH_A = "a" * 64
@@ -354,7 +355,10 @@ def test_exact_orm_and_registry_contract() -> None:
 def test_migration_reflection_head_and_clean_zero_rows(carrier_db) -> None:
     engine, config = carrier_db
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == [CURRENT_HEAD]
+    assert REVISION in {
+        item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+    }
     migration = script.get_revision(REVISION)
     assert migration is not None
     assert migration.down_revision == DOWN_REVISION

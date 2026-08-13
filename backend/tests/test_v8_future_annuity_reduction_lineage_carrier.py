@@ -28,7 +28,7 @@ from app.modules.annuity import models as annuity_models
 
 REVISION = "v8_d27_annuity_reduction_01"
 DOWN_REVISION = "v8_d4_evidence_kind_capacity_01"
-CURRENT_HEAD = "v8_d31_overlay_conflict_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 TABLE_NAME = "t_future_annuity_reduction_lineage"
 COLUMNS = (
     "annuity_task_id",

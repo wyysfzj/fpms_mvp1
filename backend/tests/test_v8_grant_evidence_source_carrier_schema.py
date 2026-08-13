@@ -32,6 +32,7 @@ from app.modules.system import models as system_models
 
 REVISION = "v8_grant_source_carrier_01"
 DOWN_REVISION = "v8_d31_overlay_conflict_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 SOURCE_TABLE = "t_grant_evidence_source_record"
 CONFIG_TABLE = "t_grant_evidence_source_config"
 CANDIDATE_TABLE = "t_grant_evidence_candidate"
@@ -696,7 +697,10 @@ def test_clean_upgrade_and_sqlite_constraints_preserve_fail_closed_lineage(
     engine = None
     try:
         script = ScriptDirectory.from_config(config)
-        assert script.get_heads() == [REVISION]
+        assert script.get_heads() == [CURRENT_HEAD]
+        assert REVISION in {
+            item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+        }
         migration = script.get_revision(REVISION)
         assert migration is not None
         assert migration.down_revision == DOWN_REVISION

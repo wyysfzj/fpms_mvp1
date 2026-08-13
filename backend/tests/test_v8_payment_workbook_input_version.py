@@ -29,6 +29,7 @@ from app.modules.auth.models import T_User
 
 REVISION = "v8_payment_workbook_input_01"
 DOWN_REVISION = "v8_grant_official_copy_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 TABLE = "t_official_payment_workbook_input_version"
 NOW = datetime(2026, 8, 13, 9, 0)
 LATER = NOW + timedelta(days=365)
@@ -297,7 +298,10 @@ def test_exact_model_schema_and_migration_chain() -> None:
 def test_clean_upgrade_reflects_exact_schema_and_has_no_seed(workbook_db) -> None:
     engine, config = workbook_db
     script = ScriptDirectory.from_config(config)
-    assert tuple(script.get_heads()) == (REVISION,)
+    assert tuple(script.get_heads()) == (CURRENT_HEAD,)
+    assert REVISION in {
+        item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+    }
     inspector = inspect(engine)
     assert tuple(column["name"] for column in inspector.get_columns(TABLE)) == COLUMNS
     assert {constraint["name"] for constraint in inspector.get_check_constraints(TABLE)} == CHECKS

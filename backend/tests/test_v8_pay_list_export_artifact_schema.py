@@ -29,7 +29,7 @@ from app.modules.annuity import models as annuity_models
 
 REVISION = "v8_w5_pay_list_export_artifact_01"
 DOWN_REVISION = "v8_w4_official_rate_book_01"
-CURRENT_HEAD = "v8_d31_overlay_conflict_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 TABLE = "t_pay_list_export_artifact"
 COLUMNS = (
     "id",

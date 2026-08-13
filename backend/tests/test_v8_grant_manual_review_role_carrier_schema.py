@@ -32,6 +32,7 @@ from app.modules.system import models as system_models
 
 REVISION = "v8_grant_manual_review_role_01"
 DOWN_REVISION = "v8_future_annuity_exception_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 TABLE = "t_grant_manual_review_role_config"
 USER_ID = "11111111-1111-4111-8111-111111111111"
 ROLE_IDS = tuple(f"role-{index}" for index in range(1, 6))
@@ -287,7 +288,10 @@ def test_exact_orm_and_registry_contract() -> None:
 def test_migration_reflection_head_and_clean_zero_rows(role_config_db) -> None:
     engine, config = role_config_db
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == [CURRENT_HEAD]
+    assert REVISION in {
+        item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+    }
     migration = script.get_revision(REVISION)
     assert migration is not None
     assert migration.down_revision == DOWN_REVISION

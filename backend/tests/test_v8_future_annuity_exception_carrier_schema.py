@@ -32,6 +32,7 @@ from app.modules.system import models as system_models
 
 REVISION = "v8_future_annuity_exception_01"
 DOWN_REVISION = "v8_grant_source_carrier_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 TABLE = "t_future_annuity_draft_exception_record"
 USER_ID = "11111111-1111-4111-8111-111111111111"
 CLIENT_ID = "22222222-2222-4222-8222-222222222222"
@@ -252,7 +253,10 @@ def test_exact_orm_contract_and_append_only_listeners() -> None:
 def test_migration_identity_reflection_and_clean_zero_row_upgrade(exception_db) -> None:
     engine, config = exception_db
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == [CURRENT_HEAD]
+    assert REVISION in {
+        item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+    }
     migration = script.get_revision(REVISION)
     assert migration is not None
     assert migration.down_revision == DOWN_REVISION

@@ -36,7 +36,7 @@ from app.modules.cases.models import Case, CaseActivityEvent, CaseActivityEventE
 
 REVISION = "v8_d4_evidence_kind_capacity_01"
 DOWN_REVISION = "v8_d4_legacy_fee_provenance_01"
-CURRENT_HEAD = "v8_d31_overlay_conflict_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 TABLE = "t_case_activity_event_evidence"
 CASE_ID = "case-evidence-kind-capacity"
 EVIDENCE_KIND = "MANUAL_EXTERNAL_SUBMISSION_RECORD"

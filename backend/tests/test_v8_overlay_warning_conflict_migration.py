@@ -13,6 +13,7 @@ from app.core.config import get_settings
 
 REVISION = "v8_d31_overlay_conflict_01"
 DOWN_REVISION = "v8_d27_annuity_reduction_01"
+CURRENT_HEAD = "v8_w6_service_price_book_01"
 
 
 def _config(path: Path, monkeypatch) -> Config:
@@ -301,7 +302,10 @@ def test_upgrade_backfills_only_exact_authoritative_history(tmp_path, monkeypatc
 def test_clean_head_exposes_exact_carrier_schema(tmp_path, monkeypatch) -> None:
     config = _config(tmp_path / "lineage-head.db", monkeypatch)
     script = ScriptDirectory.from_config(config)
-    assert tuple(script.get_heads()) == (REVISION,)
+    assert tuple(script.get_heads()) == (CURRENT_HEAD,)
+    assert REVISION in {
+        item.revision for item in script.walk_revisions(base="base", head=CURRENT_HEAD)
+    }
     assert script.get_revision(REVISION).down_revision == DOWN_REVISION
     command.upgrade(config, "head")
     engine = create_engine(config.get_main_option("sqlalchemy.url"), future=True)
