@@ -7599,6 +7599,30 @@
       "test_only_isolated": true,
       "production_activation_claimed": false,
       "final_close_status": "FINAL_CLOSE_PENDING"
+    },
+    {
+      "story_id": "V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": ["74caa4c7a5f64c3426769a9d47f5d9e4d56b5310", "b4b4c1e9db4bd0ba1b1f08357d010281a40f0989"],
+      "paths": [
+        "backend/tests/test_v8_adoption_history_snapshot_adoption.py",
+        "backend/tests/test_v8_final_governance_snapshot_adoption.py",
+        "backend/tests/test_v8_sqlite_pragma_isolation_adoption.py",
+        "docs/product/v8/stories/V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION.md",
+        "tasks/postdemo/v8/FPMS-V8-ADOPTION-HISTORY-SNAPSHOT-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION-20260813-01.md"
+      ],
+      "tree_sha256": "3e7598a88e29d63907c0e589897901ac6e67a57290de281988e01520fc43fd11",
+      "tests": ["focused adoption and historical snapshot contracts passed", "scoped Ruff, format and diff passed", "independent High source review approved P0/P1/P2 0/0/0"],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION.md",
+      "production_inputs": {"DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED", "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"},
+      "source_decision_status": {"DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING", "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"},
+      "production_failure": "409 / NO WRITE",
+      "test_only_isolated": true,
+      "production_activation_claimed": false,
+      "final_close_status": "FINAL_CLOSE_PENDING"
     }
   ]
 }
