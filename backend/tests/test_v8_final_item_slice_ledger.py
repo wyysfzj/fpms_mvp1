@@ -262,12 +262,35 @@ def _expected_catalog_entry(task: dict, row: dict) -> dict:
     }
 
 
+def _expected_story_evidence(story: dict) -> dict:
+    return {
+        "status": story["status"],
+        "commit": story["commits"][-1],
+        "paths": story["paths"],
+        "tree_sha256": story["tree_sha256"],
+        "review_ref": story["review_ref"],
+        "verification_ref": story["verification_ref"],
+        "tests": story["tests"],
+    }
+
+
 def test_output_is_the_exact_302_node_current_ledger() -> None:
     catalog = json.loads(CATALOG_PATH.read_text())
     ledger = json.loads(LEDGER_PATH.read_text())
     output = json.loads(OUTPUT_PATH.read_text())
     story_text = STORY_PATH.read_text()
 
+    assert set(output) == {
+        "schema_version",
+        "catalog_sha256",
+        "counts",
+        "catalog_entries",
+        "external_entries",
+        "story_evidence",
+        "audit_lineage",
+        "production_configuration",
+        "final_close",
+    }
     assert output["schema_version"] == "v8-final-item-slice-ledger-v1"
     assert output["catalog_sha256"] == ledger["catalog_sha256"]
     assert output["counts"] == {
@@ -291,6 +314,14 @@ def test_output_is_the_exact_302_node_current_ledger() -> None:
         }
         for task_id, item in EXTERNAL_ITEMS.items()
     ]
+    stories = _story_map(ledger)
+    referenced_story_ids = {entry["story_id"] for entry in output["catalog_entries"][:281]} | {
+        story_id for item in EXTERNAL_ITEMS.values() for story_id in item["story_ids"]
+    }
+    assert output["story_evidence"] == {
+        story_id: _expected_story_evidence(stories[story_id])
+        for story_id in sorted(referenced_story_ids)
+    }
     assert output["audit_lineage"] == AUDIT_LINEAGE
     assert "302" in story_text and "216" in story_text and "86" in story_text
     assert "Row283" in story_text and "FINAL_CLOSE_PENDING" in story_text
