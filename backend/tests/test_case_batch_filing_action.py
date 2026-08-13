@@ -6,6 +6,10 @@ from fastapi.testclient import TestClient
 
 from app.modules.cases.models import Case
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_batch_filing_lifecycle_adapter import (
+    _seed_filing_evidence_for_case,
+    _start_filing_preparation,
+)
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str], *, name_cn: str) -> str:
@@ -124,6 +128,12 @@ def test_batch_filing_action_updates_status_submitted_date_and_exam_request(
         recv_date="2026-03-05",
         has_exam_request=False,
     )
+    _start_filing_preparation(client, auth_headers, case_id=case_a["id"])
+    with session_factory() as db:
+        _seed_filing_evidence_for_case(db, case_id=case_a["id"], marker="action-a")
+    _start_filing_preparation(client, auth_headers, case_id=case_b["id"])
+    with session_factory() as db:
+        _seed_filing_evidence_for_case(db, case_id=case_b["id"], marker="action-b")
 
     response = client.post(
         "/api/v1/cases/batch-filing/submit",

@@ -10,6 +10,10 @@ from app.modules.cases.models import Case
 from app.modules.documents.models import Document
 from app.modules.masterdata.applicants.models import Applicant
 from app.modules.tasks.models import Task, TaskLog, TaskTemplate
+from tests.test_v8_batch_filing_lifecycle_adapter import (
+    _seed_filing_evidence_for_case,
+    _start_filing_preparation,
+)
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str], *, name_cn: str) -> str:
@@ -160,6 +164,12 @@ def test_batch_filing_generate_list_creates_documents_and_apply_fee_tasks(
         recv_date="2026-03-02",
         has_exam_request=False,
     )
+    _start_filing_preparation(client, auth_headers, case_id=case_a["id"])
+    with session_factory() as db:
+        _seed_filing_evidence_for_case(db, case_id=case_a["id"], marker="side-effects-a")
+    _start_filing_preparation(client, auth_headers, case_id=case_b["id"])
+    with session_factory() as db:
+        _seed_filing_evidence_for_case(db, case_id=case_b["id"], marker="side-effects-b")
 
     response = _submit_batch_filing(
         client,
@@ -229,6 +239,9 @@ def test_batch_filing_generate_list_false_skips_documents_but_creates_tasks(
         case_no_prefix="BFS2N",
         recv_date="2026-03-01",
     )
+    _start_filing_preparation(client, auth_headers, case_id=case_data["id"])
+    with session_factory() as db:
+        _seed_filing_evidence_for_case(db, case_id=case_data["id"], marker="no-list")
 
     response = _submit_batch_filing(
         client,
@@ -267,6 +280,9 @@ def test_batch_filing_reuses_existing_apply_fee_limit_task(
         case_no_prefix="BFS2I",
         recv_date="2026-03-01",
     )
+    _start_filing_preparation(client, auth_headers, case_id=case_data["id"])
+    with session_factory() as db:
+        _seed_filing_evidence_for_case(db, case_id=case_data["id"], marker="reuse-task")
     with session_factory() as db:
         template = (
             db.query(TaskTemplate).filter(TaskTemplate.code == "APPLY_FEE_LIMIT").one_or_none()

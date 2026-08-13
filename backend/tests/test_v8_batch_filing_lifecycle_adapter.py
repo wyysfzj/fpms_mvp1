@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -49,14 +50,6 @@ def _seed_case_evidence(
     bad_manifest_hash: bool = False,
 ) -> dict[str, str]:
     case_id = str(uuid4())
-    document_id = str(uuid4())
-    attachment_id = str(uuid4())
-    version_id = str(uuid4())
-    package_id = str(uuid4())
-    content_hash = f"sha256:{hashlib.sha256(marker.encode()).hexdigest()}"
-    reviewed_at = datetime(2026, 7, 17, 9, len(marker))
-    lineage_key = f"filing-{marker}"
-
     transaction.add(
         Case(
             id=case_id,
@@ -76,6 +69,38 @@ def _seed_case_evidence(
             no_power=True,
         )
     )
+    transaction.flush()
+    return _seed_filing_evidence_for_case(
+        transaction,
+        case_id=case_id,
+        marker=marker,
+        role=role,
+        bad_manifest_hash=bad_manifest_hash,
+    )
+
+
+def _seed_filing_evidence_for_case(
+    transaction: Session,
+    *,
+    case_id: str,
+    marker: str,
+    role: str = "SUBMITTED_XML",
+    bad_manifest_hash: bool = False,
+) -> dict[str, str]:
+    document_id = str(uuid4())
+    attachment_id = str(uuid4())
+    version_id = str(uuid4())
+    packages = transaction.scalars(
+        select(OfficialWorkPackage)
+        .where(OfficialWorkPackage.resolve_key == f"FILING_PREP:{case_id}")
+        .limit(2)
+    ).all()
+    assert len(packages) <= 1
+    package_id = packages[0].id if packages else str(uuid4())
+    content_hash = f"sha256:{hashlib.sha256(marker.encode()).hexdigest()}"
+    reviewed_at = datetime(2026, 7, 17, 9, len(marker))
+    lineage_key = f"filing-{marker}"
+
     transaction.add(
         Document(
             id=document_id,
@@ -115,15 +140,16 @@ def _seed_case_evidence(
             current_identity_key=f"{case_id}|{lineage_key}",
         )
     )
-    transaction.add(
-        OfficialWorkPackage(
-            id=package_id,
-            case_id=case_id,
-            package_kind="FILING_PREP",
-            resolve_key=f"FILING_PREP:{case_id}",
+    if not packages:
+        transaction.add(
+            OfficialWorkPackage(
+                id=package_id,
+                case_id=case_id,
+                package_kind="FILING_PREP",
+                resolve_key=f"FILING_PREP:{case_id}",
+            )
         )
-    )
-    transaction.flush()
+        transaction.flush()
     transaction.add(
         OfficialWorkPackageManifest(
             id=str(uuid4()),
@@ -144,6 +170,20 @@ def _seed_case_evidence(
         "lineage_key": lineage_key,
         "role": role,
     }
+
+
+def _start_filing_preparation(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    *,
+    case_id: str,
+) -> str:
+    response = client.post(
+        f"/api/v1/cases/{case_id}/official-work-packages/filing-preparation/resolve",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["package"]["id"]
 
 
 def _allow_material_gate(monkeypatch: pytest.MonkeyPatch) -> None:
