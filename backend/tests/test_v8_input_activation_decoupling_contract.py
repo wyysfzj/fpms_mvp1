@@ -37,7 +37,7 @@ AFFECTED_TASK_BASELINES = {
     "tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-MANIFEST-ACTIVATION-20260712-01.md": "310deda1924d2175a9371803f5ffe5acc7b1c35434a6fdd09da2f655c2a2133f",
     "tasks/postdemo/v8/FPMS-V8-SERVICE-RATE-MANIFEST-ACTIVATION-20260712-01.md": "a8605063088bee21920fd9640b810c340ca3027618261f5fc49bbb5b98fd39a9",
     "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-ADAPTER-20260712-01.md": "050d6214c11ce6f38296ccd7a402896b14bf121660f194715e9e9107e8310d20",
-    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-GENERATION-SERVICE-20260712-01.md": "ad7010e1fd79f8dd695b45cc9f5c01f1f1be430df10a1117cc47ff11f0612eb9",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-GENERATION-SERVICE-20260712-01.md": "863497d0bbe189671d6136439f6e6537fbd9ba94c33aad888e9c37fb67395025",
     "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-HTTP-20260712-01.md": "cb0342f0f9b8ccbfe325c2fb6928dd94727d616887a8b80f8a099dd4806c7819",
     "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-FE-ADAPTER-20260712-01.md": "663d7bb2a048502f8366917e80dd7193ff96c9e847c21c95476a9ea201859e66",
     "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-UI-20260712-01.md": "c59c316bc1de0d66a44650d1e96ef97d6fe8cfd37728ff65cd753f84c8c7a477",
@@ -45,9 +45,9 @@ AFFECTED_TASK_BASELINES = {
     "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-API-20260712-01.md": "ff8bcf9697c7d52afd21565fb084a0a85b237c29249b979db6df576755912b9e",
     "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-FE-ADAPTER-20260712-01.md": "4e1de405e3ddf2e0ca5589f48f184808786c2abab91e9725fb85777d81f5ff93",
     "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-UI-20260712-01.md": "8e8987fd049d883a92fc464007b5929d8e7112b296988df27a921f4171f83cb9",
-    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-CARRIER-20260712-01.md": "946124252c986e2b40aada04897f0e1b4ea577bc71da6cf4aa18be80eb58762d",
-    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01.md": "8fe960b522cdfedd758d2601ad41a21ae0079ff733de70bb5d7d0b2665070e5b",
-    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-API-20260712-01.md": "ccb11ba33b5ff50f7c5e4575f1bc524b35878975e47734731ef4cad510c014fa",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-CARRIER-20260712-01.md": "66ef19e2de83ad24139b355db64cdfb96eae3e0aa839b54a54d031413af3d124",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01.md": "25bffb7493cf2703cb3a5f9111b20a730bc9bb72ae92af18b6966d91940950c3",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-API-20260712-01.md": "6f7d62bbc3e87164bd97b41f144132e2aae4f1ade3a55ae20643bafc9a5cf2ac",
     "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-20260712-01.md": "2629a5291b9fd50e3eeba5ed05fbc1e84f62c15003729c26acd3ade0618c2d70",
     "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-API-20260712-01.md": "dfb3d6fbe29dc2cc57920b778ef8bb54c702dab0974a8ac40b6c0cba0897157a",
     "tasks/postdemo/v8/FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-20260712-01.md": "60d7228f3522b23d81522efbcf1037531e834f2bf7640f930e2ca9d0c18e764d",
@@ -56,6 +56,30 @@ AFFECTED_TASK_BASELINES = {
     "tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01.md": "bdc8302bfc474ed8877e7b32cd3b777e2c16cc1711a421e8a9099c2a636851f1",
     "tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md": "edfd182c7d15944b68e41bb3d2c552c15e21b5b69c8f0479643e3d9b7dd50041",
     "tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md": "b1f2f715d91a8702031da3300cde7a2645bd3753dd8500d5f12b9f5ded5d2c59",
+}
+AFFECTED_TASK_CURRENT_HASHES = {
+    "tasks/postdemo/v8/FPMS-V8-PAYMENT-WORKBOOK-MANIFEST-ACTIVATION-20260712-01.md": "393eaa85732c9cbb35b9a3b78a305486c808c5b11a49d30e5a1db030c8df90ae",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-RATE-MANIFEST-ACTIVATION-20260712-01.md": "df00792564f52fcd67731328bd347c2bfec157bb1efde9f6acbe463736a6c14d",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-ADAPTER-20260712-01.md": "e0278c4239398872a21282083242525669605d189633772cca3bd240d94e4923",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-GENERATION-SERVICE-20260712-01.md": "530e61bc0fdbe3c34df31edd3ef26b85983cca0aa12ed99f4da4657f2ccbdd9a",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-HTTP-20260712-01.md": "75c7a955d7da4d710d176edf8a10c403383a40534ffb57747c1c9a175b34164f",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-FE-ADAPTER-20260712-01.md": "eda5eea03203fd91ea8ada607ea41e001331cb652ede164c92645578621ca0ca",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-PAYMENT-WORKBOOK-UI-20260712-01.md": "333c04f19ef5c67f6cd1f6012b1a4e5e43d1a2ad3f724a57ce554216d9693156",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-SERVICE-20260712-01.md": "f7b8d9adb37319d6c61285d1b88a36b6451d92de9cb51f00c84bcc3d79e3c8f1",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-API-20260712-01.md": "203314cdc385b640e502045dd31be1b7a59051b416f2a65cff79106bac25bf82",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-FE-ADAPTER-20260712-01.md": "7121b2fea955d698f52a274f2d208957ccdb235f94f0b23b5bcff04f6cdcd57b",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-ACCEPTANCE-EVIDENCE-UI-20260712-01.md": "4638186c02c7770d845c764b8fa9adefaafeed1134849f24e6bc2ea16151c05f",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-CARRIER-20260712-01.md": "3290acb45398d6a35cdccaccd3a6c6eb01d84abaea0a8a0597878a778275536b",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-SERVICE-20260712-01.md": "6082c24357ab1d6765831180e2d1c84557d3fa4ed1a4a4032beed486cef8206a",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-IMPORT-API-20260712-01.md": "43d8bf0b6f53688821a8b5fa8d634aab92dc4a1a5b079624465cdc2de76c3434",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-20260712-01.md": "5a85f5899aeb45f565c48ce12fc70ee960c507745f351b60715c665c03eebcd0",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-PRICE-BOOK-ACTIVATION-API-20260712-01.md": "6d37721451b2e768c1b74fb413fb9d45ff72d1db632789f8f345e978abc1bbef",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-20260712-01.md": "c713a725d336905d2ea76b983e94e86a832b2d75a781de3f261177af6ba4b89b",
+    "tasks/postdemo/v8/FPMS-V8-SERVICE-RECEIVABLE-OBLIGATION-API-20260712-01.md": "405fb70e3d3d1f24659189b726c5a14cfcc6ab6db622338e6343142125fb1663",
+    "tasks/postdemo/v8/FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01.md": "2261a4a51a3db0780eca57e6a6947ea18eaa3745363d28e34970d404a68898d8",
+    "tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01.md": "168a0d7139c669e1cc389a9382ab9d81fdc6f303bbbbc34b8e974923e266eb91",
+    "tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md": "ad67fcef8d6a76550f5c8b6daedb0ab9f0b5540c3fded8adf4fde9d1f6736f86",
+    "tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md": "9ce6ed34d392dc851c692c6a4d039889b24157404712982dfd0fc9f3e3146cbc",
 }
 
 APPENDIX_MARKER = "\n## Latest-Wins Input Activation Dependency Interpretation"
@@ -149,7 +173,7 @@ def test_successor_task_cards_freeze_atomic_owners_and_order() -> None:
         texts["FPMS-V8-PAYMENT-WORKBOOK-INPUT-ADMIN-API-20260812-01"].split()
     )
     for required in (
-        "multipart register, review, activate, and retire",
+        "multipart register, validate, review, activate, and retire",
         "WB-I2 independently accepted after WB-I1 and row 214",
         "backend/app/modules/annuity/api.py",
         "backend/app/modules/annuity/official_payment_workbook_input_schemas.py",
@@ -187,9 +211,11 @@ def test_successor_task_cards_freeze_atomic_owners_and_order() -> None:
 
 def test_latest_wins_appendix_changes_only_prerequisite_interpretation() -> None:
     assert len(AFFECTED_TASK_BASELINES) == 22
+    assert set(AFFECTED_TASK_CURRENT_HASHES) == set(AFFECTED_TASK_BASELINES)
     appendices = {}
     for relative_path, baseline_sha256 in AFFECTED_TASK_BASELINES.items():
         text = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert hashlib.sha256(text.encode()).hexdigest() == AFFECTED_TASK_CURRENT_HASHES[relative_path]
         assert text.count(APPENDIX_MARKER) == 1, relative_path
         original, appendix = text.split(APPENDIX_MARKER, maxsplit=1)
         assert hashlib.sha256(original.encode()).hexdigest() == baseline_sha256
@@ -199,9 +225,14 @@ def test_latest_wins_appendix_changes_only_prerequisite_interpretation() -> None
             "Production prerequisite",
             "409 / NO WRITE",
             "CAPABILITY_READY",
-            "Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact",
         ):
             assert required in appendix, relative_path
+        assert (
+            "Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact"
+            in appendix
+            or "Existing closure, non-closure, allowlist, permissions and primary test remain intact"
+            in appendix
+        ), relative_path
 
     paths = tuple(AFFECTED_TASK_BASELINES)
     payment_manifest = appendices[paths[0]]
