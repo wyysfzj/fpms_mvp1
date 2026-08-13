@@ -545,3 +545,45 @@ Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
 
 CONFIG_REQUIRED is acceptable only with verified negative-path evidence. This task never claims production activation.
+
+## Current C3 Latest-Wins Final Contract — 2026-08-13
+
+The approved current design and plan are:
+
+- `docs/superpowers/specs/2026-08-13-v8-final-close-current-design.md`
+- `docs/superpowers/plans/2026-08-13-v8-final-close-current.md`
+
+They replace only obsolete taskctl/artifact/release mechanics. Row283 remains an audit-only
+PROTECTED Final close: no product, schema, migration, seed, registry or test behavior may be
+changed. Exact candidate paths are:
+
+- `tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md`
+- `backend/tests/test_v8_final_close_contract.py`
+- `scripts/run_v8_paylist_boundary_live_isolated.py`
+- `docs/product/v8/final-close-report.json`
+- `docs/product/v8/stories/V8-FINAL-CLOSE.md`
+
+Reviewer receipt and separately reviewed adoption are limited to:
+
+- `docs/product/v8/reviews/V8-FINAL-CLOSE-CURRENT-ADOPTION.md`
+- `docs/product/v8/coverage-ledger.json`
+
+The exact RED is missing report/story. The broad Final matrix then runs once: isolated clean
+SQLite upgrade+seed; full backend Ruff+pytest; frontend lint+typecheck+build; isolated
+lifecycle, PayList boundary and official workbook real E2E. A mode-0700 external directory
+holds command logs. The report stores only exact commands, return codes, counts/summaries,
+warnings and log SHA-256 values. The focused contract verifies/scans logs and tracked
+report/story/receipt without echoing sensitive matches; it also validates the exact current
+Foundation/Full story and review inputs.
+
+Customer production inputs remain `CONFIG_REQUIRED / PENDING / 409 NO WRITE`; TEST_ONLY is
+isolated and production activation is not claimed. The three candidate/pre-review/adopted
+states, exact fingerprint, sole-ledger patch hash, receipt-only commit and ledger-only
+adoption follow the approved plan. After adoption, the final two checks are focused/lean
+Final; the last program command is exactly:
+
+```text
+python3 scripts/v8_lean_coverage_check.py --milestone release --integration-sha HEAD
+```
+
+Nothing is executed or changed after that release command.
