@@ -59,6 +59,7 @@ def engine(migrated_db: str):
     def restore_sqlite_pragma(dbapi_connection, _connection_record, _connection_proxy):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=5000")
         cursor.close()
 
     try:
