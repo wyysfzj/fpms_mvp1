@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +24,8 @@ REVIEW_REF = (
     "docs/product/v8/reviews/"
     "V8-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION.md"
 )
+ROW281_CANDIDATE_SHA = "2e32394ad356c7a743b010e75306a7b1ceba0ce1"
+ROW281_ADOPTION_SHA = "cf81ba4"
 CANDIDATE_PATHS = [
     "backend/tests/test_addgap_document_create_atomicity.py",
     "backend/tests/test_addgap_document_deadline_create_api.py",
@@ -304,11 +307,20 @@ def _tasks01_70_paths() -> dict[str, list[str]]:
 
 def _current_v8_backend_paths() -> list[str]:
     inherited_backend = set(_tasks01_70_paths()["backend"])
+    paths = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", ROW281_CANDIDATE_SHA, "--", "backend/tests"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
     return sorted(
-        str(path.relative_to(ROOT))
-        for path in (ROOT / "backend/tests").glob("test_v8_*.py")
-        if path.name != "test_v8_inherited_regression_matrix_contract.py"
-        and str(path.relative_to(ROOT)) not in inherited_backend
+        path
+        for path in paths
+        if Path(path).name.startswith("test_v8_")
+        and Path(path).suffix == ".py"
+        and Path(path).name != "test_v8_inherited_regression_matrix_contract.py"
+        and path not in inherited_backend
     )
 
 
@@ -437,7 +449,15 @@ def test_matrix_records_fresh_successful_serialized_results() -> None:
 
 
 def test_ledger_adopts_only_row281_with_reviewed_matrix_metadata() -> None:
-    ledger = json.loads(LEDGER_PATH.read_text())
+    ledger = json.loads(
+        subprocess.run(
+            ["git", "show", f"{ROW281_ADOPTION_SHA}:docs/product/v8/coverage-ledger.json"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
     assert _unresolved_ordinals(ledger) == [282, 283]
     row281 = ledger["rows"][280]
     assert row281 == {

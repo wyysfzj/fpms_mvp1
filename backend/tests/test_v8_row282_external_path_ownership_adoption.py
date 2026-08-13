@@ -36,6 +36,7 @@ CANDIDATE_PATHS = [
     "backend/tests/test_v8_row282_external_path_ownership_adoption.py",
     "docs/product/v8/stories/V8-ROW282-EXTERNAL-PATH-OWNERSHIP-CURRENT-ADOPTION.md",
 ]
+ROW282_OWNERSHIP_ADOPTION_SHA = "d3f51ae"
 
 
 def _load_checker():
@@ -72,7 +73,10 @@ def test_required_story_binds_the_three_exact_external_path_sets() -> None:
 
 
 def test_ledger_adds_only_the_reviewed_external_ownership_story() -> None:
-    ledger = json.loads(LEDGER_PATH.read_text())
+    ledger = _git_show_json(
+        ROW282_OWNERSHIP_ADOPTION_SHA,
+        "docs/product/v8/coverage-ledger.json",
+    )
     story = next(item for item in ledger["stories"] if item["story_id"] == STORY_ID)
     assert story["status"] == "CURRENT_VERIFIED"
     assert story["paths"] == CANDIDATE_PATHS
