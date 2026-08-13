@@ -7560,6 +7560,45 @@
       "test_only_isolated": true,
       "production_activation_claimed": false,
       "final_close_status": "FINAL_CLOSE_PENDING"
+    },
+    {
+      "story_id": "V8-FINAL-GOVERNANCE-SNAPSHOT-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "b77c743e2f83883ecf97ff5111e5179aabd3af0f",
+        "2e147d3022700a400542cca0e6fc4af74a9d6d2f"
+      ],
+      "paths": [
+        "backend/tests/test_v8_final_governance_snapshot_adoption.py",
+        "backend/tests/test_v8_final_matrix_remediation_adoption.py",
+        "backend/tests/test_v8_input_activation_decoupling_contract.py",
+        "docs/product/v8/stories/V8-FINAL-GOVERNANCE-SNAPSHOT-CURRENT-ADOPTION.md",
+        "tasks/postdemo/v8/FPMS-V8-FINAL-GOVERNANCE-SNAPSHOT-CURRENT-ADOPTION-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-FINAL-SUITE-GOVERNANCE-SNAPSHOT-ALIGNMENT-20260813-01.md"
+      ],
+      "tree_sha256": "14a0d1e8a43d38be021ab7d670f2567dfb1c308c72e187ecae00a0e65c536096",
+      "tests": [
+        "full backend lane reached only two governance snapshot failures after 6152 passes",
+        "exact two-node RED reproduced both stale snapshot assertions",
+        "focused GREEN passed 2 tests",
+        "scoped Ruff, focused format and exact diff checks passed",
+        "independent High review approved P0/P1/P2 0/0/0"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FINAL-GOVERNANCE-SNAPSHOT-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FINAL-GOVERNANCE-SNAPSHOT-CURRENT-ADOPTION.md",
+      "production_inputs": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "source_decision_status": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"
+      },
+      "production_failure": "409 / NO WRITE",
+      "test_only_isolated": true,
+      "production_activation_claimed": false,
+      "final_close_status": "FINAL_CLOSE_PENDING"
     }
   ]
 }
