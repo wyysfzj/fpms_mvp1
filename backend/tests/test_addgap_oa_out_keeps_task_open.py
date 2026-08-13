@@ -72,7 +72,7 @@ def _case_tasks(client: TestClient, auth_headers: dict[str, str], case_id: str) 
     [True, False],
     ids=["oa-out-template", "generic-out-with-oa-source"],
 )
-def test_oa_out_records_reply_date_without_closing_oa_task_or_case(
+def test_oa_out_defers_date_while_generic_reply_records_without_closing_oa_source(
     client: TestClient,
     auth_headers: dict[str, str],
     use_oa_out_template: bool,
@@ -134,11 +134,12 @@ def test_oa_out_records_reply_date_without_closing_oa_task_or_case(
 
     incoming_response = client.get(f"/api/v1/documents/{incoming['id']}", headers=auth_headers)
     assert incoming_response.status_code == 200, incoming_response.text
-    assert incoming_response.json()["reply_date"] == "2026-03-01"
+    expected_reply_date = None if use_oa_out_template else "2026-03-01"
+    assert incoming_response.json()["reply_date"] == expected_reply_date
 
     case_response = client.get(f"/api/v1/cases/{case['id']}", headers=auth_headers)
     assert case_response.status_code == 200, case_response.text
-    assert case_response.json()["status"] == "OA1"
+    assert case_response.json()["status"] == case["status"]
 
 
 def test_ordinary_non_oa_reply_still_auto_closes_linked_task(

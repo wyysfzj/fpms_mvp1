@@ -197,11 +197,11 @@ def test_create_document_with_reply_fields(client: TestClient, auth_headers: dic
 # ---------------------------------------------------------------------------
 
 
-def test_oa_reply_records_date_without_auto_writeoff(
+def test_oa_reply_leaves_date_unset_without_auto_writeoff(
     client: TestClient, auth_headers: dict
 ) -> None:
     """Full lifecycle: IN doc (OA_IN template) → task auto-created →
-    OUT reply (OA_OUT template with reply_to_id) → task OPEN + reply_date set."""
+    OUT reply (OA_OUT template with reply_to_id) → task OPEN + reply_date unset."""
     # 1. Create case
     case = _create_case(client, auth_headers)
 
@@ -249,10 +249,10 @@ def test_oa_reply_records_date_without_auto_writeoff(
             f"Expected OA task status OPEN before receipt archive, got {t['status']}"
         )
 
-    # 8. Verify original IN document reply_date is set
+    # 8. Verify receipt-owned reply_date remains unset
     in_doc_refreshed = _get_document(client, auth_headers, in_doc["id"])
-    assert in_doc_refreshed.get("reply_date") is not None, (
-        "reply_date should be set on the original IN document after reply"
+    assert in_doc_refreshed.get("reply_date") is None, (
+        "reply_date must remain unset until the official receipt is archived"
     )
 
 
@@ -708,13 +708,13 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
         title="OA awaiting reply",
         **OA_CONFIRMED_DUE,
     )
-    replied_doc = _create_document(
+    reply_prepared_doc = _create_document(
         client,
         auth_headers,
         case["id"],
         direction="IN",
         doc_template_id=oa_in_tmpl["id"],
-        title="OA replied",
+        title="OA reply prepared",
         doc_date="2026-01-20",
         **OA_CONFIRMED_DUE,
     )
@@ -726,7 +726,7 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
         doc_template_id=oa_out_tmpl["id"],
         title="OA reply sent",
         doc_date="2026-02-01",
-        reply_to_id=replied_doc["id"],
+        reply_to_id=reply_prepared_doc["id"],
     )
     plain_doc = _create_document(
         client,
@@ -745,7 +745,7 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
     assert need_reply_resp.status_code == 200, need_reply_resp.text
     need_reply_ids = {item["id"] for item in need_reply_resp.json()["items"]}
     assert awaiting_reply["id"] in need_reply_ids
-    assert replied_doc["id"] in need_reply_ids
+    assert reply_prepared_doc["id"] in need_reply_ids
     assert plain_doc["id"] not in need_reply_ids
 
     pending_resp = client.get(
@@ -756,7 +756,7 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
     assert pending_resp.status_code == 200, pending_resp.text
     pending_ids = {item["id"] for item in pending_resp.json()["items"]}
     assert awaiting_reply["id"] in pending_ids
-    assert replied_doc["id"] not in pending_ids
+    assert reply_prepared_doc["id"] in pending_ids
 
     replied_resp = client.get(
         DOC_BASE,
@@ -765,7 +765,7 @@ def test_document_list_can_filter_by_reply_state(client: TestClient, auth_header
     )
     assert replied_resp.status_code == 200, replied_resp.text
     replied_ids = {item["id"] for item in replied_resp.json()["items"]}
-    assert replied_doc["id"] in replied_ids
+    assert reply_prepared_doc["id"] not in replied_ids
     assert awaiting_reply["id"] not in replied_ids
     assert plain_doc["id"] not in replied_ids
 
@@ -882,10 +882,10 @@ def test_full_oa_lifecycle(client: TestClient, auth_headers: dict) -> None:
             f"Task should remain OPEN after OA_OUT reply, got '{t['status']}'"
         )
 
-    # 6b. reply_date set on original IN document
+    # 6b. Receipt-owned reply_date remains unset
     oa_in_refreshed = _get_document(client, auth_headers, oa_in_doc["id"])
-    assert oa_in_refreshed.get("reply_date") is not None, (
-        "OA_IN reply_date should be set after OA_OUT reply"
+    assert oa_in_refreshed.get("reply_date") is None, (
+        "OA_IN reply_date must remain unset until the official receipt is archived"
     )
 
     # 6c. OUT doc has reply_to_id pointing to IN doc

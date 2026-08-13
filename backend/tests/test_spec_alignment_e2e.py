@@ -154,14 +154,14 @@ def test_e2e_oa_workflow(client, auth_headers):
     log_actions2 = [log["action"] for log in logs_resp2.json()]
     assert "AUTO_WRITEOFF" not in log_actions2
 
-    # Step 11: Verify original doc reply_date is set
+    # Step 11: Verify receipt-owned reply_date remains unset
     doc_in_check = client.get(f"/api/v1/documents/{doc_in_id}", headers=auth_headers)
     assert doc_in_check.status_code == 200
-    assert doc_in_check.json()["reply_date"] == "2026-03-01"
+    assert doc_in_check.json()["reply_date"] is None
 
-    # Step 12: Verify case appears in advanced search by client_id + status
+    # Step 12: Verify case remains searchable at its pre-receipt status
     search_resp = client.get(
-        f"/api/v1/cases?client_id={client_id}&status=OA1", headers=auth_headers
+        f"/api/v1/cases?client_id={client_id}&status=NOT_FILED", headers=auth_headers
     )
     assert search_resp.status_code == 200
     found_cases = [c for c in search_resp.json()["items"] if c["id"] == case_id]
