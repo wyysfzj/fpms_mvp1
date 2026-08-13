@@ -94,6 +94,7 @@ def test_update_case_full_persists_case_applicant_applicant_id(session_factory) 
             db,
             case.id,
             CaseUpdateFull(
+                fee_reduction="0",
                 applicants=[
                     {
                         "seq": 1,
