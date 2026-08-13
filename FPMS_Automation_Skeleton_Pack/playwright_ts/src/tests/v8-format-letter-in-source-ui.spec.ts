@@ -27,7 +27,10 @@ test("IN source retries one archive operation and displays the authoritative evi
 
   await action.click();
   await expect(page.getByText("temporary failure")).toBeVisible();
-  await page.getByRole("button", { name: "✕" }).click();
+  await page
+    .locator(".letter-handoff-panel .error-banner")
+    .getByRole("button", { name: "✕" })
+    .click();
   await action.click();
 
   await expect.poll(() => requests.length).toBe(2);
