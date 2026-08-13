@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BASE_SHA = "e6a0440c2823b4ce4a49cfd8e155b5746083775b"
 PRE_ADOPTION_TIP_SHA = "3f3177c4d234207ca4b752c3807e4ed933ff1fb6"
+ADOPTION_SHA = "e19d615c84c4c2d2afd10dcc440c4f2683fc2b77"
 PREEXISTING_PATH_COUNT = 84
 PREEXISTING_PATHS_SHA256 = "3261ce65b64a2cc44855daa7be907c8434e10c755460d5205f77c5cd180b3c29"
 STORY_ID = "V8-FINAL-MATRIX-REMEDIATION-CURRENT-ADOPTION"
@@ -71,7 +72,19 @@ def test_ledger_adoption_is_append_only_when_materialized() -> None:
         assert ledger["rows"][282]["disposition"] == "PENDING"
         return
 
-    candidate = story["commits"][-1]
+    adopted = json.loads(
+        subprocess.run(
+            ["git", "show", f"{ADOPTION_SHA}:docs/product/v8/coverage-ledger.json"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    adopted_story = adopted["stories"][-1]
+    assert adopted_story["story_id"] == STORY_ID
+    assert story == adopted_story
+    candidate = adopted_story["commits"][-1]
     baseline = json.loads(
         subprocess.run(
             ["git", "show", f"{candidate}:docs/product/v8/coverage-ledger.json"],
@@ -87,9 +100,11 @@ def test_ledger_adoption_is_append_only_when_materialized() -> None:
     assert set(candidate_paths) == set(
         _git_lines("diff", "--name-only", f"{BASE_SHA}..{PRE_ADOPTION_TIP_SHA}")
     ) | set(ADOPTION_PATHS)
-    assert ledger["rows"] == baseline["rows"]
-    assert ledger["stories"][:-1] == baseline["stories"]
-    assert ledger["stories"][-1] == story
+    assert adopted["rows"] == baseline["rows"]
+    assert adopted["stories"][:-1] == baseline["stories"]
+    assert adopted["stories"][-1] == story
+    assert ledger["rows"] == adopted["rows"]
+    assert ledger["stories"][: len(adopted["stories"])] == adopted["stories"]
     assert story["status"] == "CURRENT_VERIFIED"
     assert story["review_class"] == "PROTECTED"
     assert story["review_ref"] == story["verification_ref"] == REVIEW_REF
