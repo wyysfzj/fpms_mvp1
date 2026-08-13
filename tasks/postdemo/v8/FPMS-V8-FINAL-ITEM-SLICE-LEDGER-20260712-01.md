@@ -502,3 +502,73 @@ Missing production input: 409 / NO WRITE; does not block RED/GREEN or CAPABILITY
 Existing closure, non-closure, allowlist, permissions, primary tests and evidence remain intact.
 
 CONFIG_REQUIRED is acceptable only with verified negative-path evidence. This task never claims production activation.
+
+## Current C3 Latest-Wins Close Contract — 2026-08-13
+
+The approved current design is
+`docs/superpowers/specs/2026-08-13-v8-final-item-slice-ledger-current-design.md`.
+It replaces only the historical taskctl/artifact mechanics above. The business closure,
+non-closure, immutable catalog and Foundation counts, exact external identities and
+release-last boundary remain authoritative.
+
+The current derived ledger contains exactly `302` effective product nodes: the immutable
+`283` catalog rows plus the following `19` external Foundation nodes. The effective
+Foundation count is `216` (`197 + 19`) and the immutable deferred count remains `86`.
+Each external identity maps to these exact already-current path-owning stories:
+
+| External identity | Exact supporting current story IDs |
+| --- | --- |
+| `FPMS-V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-20260713-01` | `V8-GRANT-NOTICE-FEE-LINE-SNAPSHOT-CURRENT-ADOPTION` |
+| `FPMS-V8-OFFICIAL-FEE-ESTIMATE-RATE-PROVIDER-20260713-01` | `V8-ROW282-EXTERNAL-PATH-OWNERSHIP-CURRENT-ADOPTION` |
+| `FPMS-V8-OFFICIAL-FEE-PREVIEW-LEGACY-TEST-MIGRATION-20260713-01` | `V8-ROW282-EXTERNAL-PATH-OWNERSHIP-CURRENT-ADOPTION` |
+| `FPMS-V8-LC-RULE-REGISTRY-LEGACY-TEST-MIGRATION-20260714-01` | `V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION` |
+| `FPMS-V8-DE-RAW-ATTACHMENT-EVIDENCE-ROLE-20260714-01` | `V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION` |
+| `FPMS-V8-DE-RAW-ATTACHMENT-REGISTRATION-GUARD-20260714-01` | `V8-D4-07-REGISTRATION-MATRIX-CURRENT-VERIFICATION` |
+| `FPMS-V8-DE-EXTERNAL-SUBMISSION-ROLE-ALLOWLIST-20260714-01` | `V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION`, `V8-DOCUMENT-EVIDENCE-CORE-CURRENT-VERIFICATION` |
+| `FPMS-V8-LC-CASE-OPENED-EVIDENCE-GUARD-20260715-01` | `V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION` |
+| `FPMS-V8-CASE-CREATE-OPENED-EVIDENCE-ADAPTER-20260715-01` | `V8-CANARY-CASE-STATUS-UI-VERTICAL-CURRENT-VERIFICATION`, `V8-FULL-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION` |
+| `FPMS-V8-LC-FILING-PREPARATION-EVIDENCE-GUARD-20260715-01` | `V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION` |
+| `FPMS-V8-LC-FILING-EXTERNAL-SUBMISSION-EVIDENCE-GUARD-20260715-01` | `V8-FILING-LIFECYCLE-VERTICAL-CURRENT-VERIFICATION` |
+| `FPMS-V8-FILING-SUBMISSION-EVIDENCE-RESOLVER-20260715-01` | `V8-ROW282-EXTERNAL-PATH-OWNERSHIP-CURRENT-ADOPTION` |
+| `FPMS-V8-DE-DELTA4-EVIDENCE-ROLE-EXTENSION-20260715-01` | `V8-DOCUMENT-EVIDENCE-CONTRACTS-CURRENT-VERIFICATION` |
+| `FPMS-V8-DE-DELTA4-REGISTRATION-MATRIX-CORRECTION-20260715-01` | `V8-D4-07-REGISTRATION-MATRIX-CURRENT-VERIFICATION` |
+| `FPMS-V8-DE-OA-STRUCTURED-ATTACHMENT-PROMOTION-20260715-01` | `V8-D4-08-OA-STRUCTURED-ATTACHMENT-PROMOTION` |
+| `FPMS-V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-20260715-01` | `V8-CNIPA-246-LAYOUT-RATE-CANDIDATE-CURRENT-ADOPTION` |
+| `FPMS-V8-CNIPA-ANNUITY-RATE-CANDIDATE-20260715-01` | `V8-CNIPA-ANNUITY-RATE-CANDIDATE-CURRENT-ADOPTION` |
+| `FPMS-V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-20260715-01` | `V8-ANNUITY-TASK-OBLIGATION-LINEAGE-CARRIER-CURRENT-ADOPTION` |
+| `FPMS-V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-20260715-01` | `V8-LEGACY-FEE-REDUCTION-PROVENANCE-CARRIER-CURRENT-VERIFICATION` |
+
+The four Delta controller/overlay families and G1/G2 are audit-only lineage and add no
+product node. Current Git-native catalog hash, terminal overlay, coverage ledger, Row281
+matrix, focused contract, candidate fingerprint, independent High review and lean inventory
+replace their obsolete execution commands; historical artifacts are not rerun.
+
+Exact current candidate files are:
+
+- `tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md`
+- `backend/tests/test_v8_final_item_slice_ledger.py`
+- `docs/product/v8/final-item-slice-ledger.json`
+- `docs/product/v8/stories/V8-FINAL-ITEM-SLICE-LEDGER-CLOSE.md`
+
+Reviewer-only receipt and the separately reviewed ledger-only adoption are:
+
+- `docs/product/v8/reviews/V8-FINAL-ITEM-SLICE-LEDGER-CURRENT-ADOPTION.md`
+- `docs/product/v8/coverage-ledger.json`
+
+The exact RED is `FileNotFoundError` for the required output/story. GREEN requires:
+
+```text
+cd backend && .venv/bin/pytest -q tests/test_v8_final_item_slice_ledger.py
+cd backend && .venv/bin/ruff check tests/test_v8_final_item_slice_ledger.py
+python3 -m json.tool docs/product/v8/final-item-slice-ledger.json >/dev/null
+python3 -m json.tool docs/product/v8/coverage-ledger.json >/dev/null
+python3 scripts/v8_lean_coverage_check.py --milestone inventory --integration-sha <exact-candidate-sha>
+git diff --check <exact-base-sha>..<exact-candidate-sha> -- tasks/postdemo/v8/FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01.md backend/tests/test_v8_final_item_slice_ledger.py docs/product/v8/final-item-slice-ledger.json docs/product/v8/stories/V8-FINAL-ITEM-SLICE-LEDGER-CLOSE.md
+git diff --check -- docs/product/v8/coverage-ledger.json
+```
+
+Rows 1–281 must resolve before this close. Row282 alone becomes `CURRENT_VERIFIED` only
+after independent P0/P1/P2 `0/0/0` review. Row283 remains `FINAL_CLOSE_PENDING`; no Row283
+byte or release command is in scope. Production inputs remain
+`CONFIG_REQUIRED / PENDING / 409 NO WRITE`, TEST_ONLY remains isolated, and
+`production_activation_claimed` remains false.
