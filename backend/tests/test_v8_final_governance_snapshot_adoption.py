@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CANDIDATE_SHA = "b77c743e2f83883ecf97ff5111e5179aabd3af0f"
+ADOPTION_SHA = "69a80632cddbca7f8f814a59e526f53b82bca804"
 STORY_ID = "V8-FINAL-GOVERNANCE-SNAPSHOT-CURRENT-ADOPTION"
 REVIEW_REF = "docs/product/v8/reviews/V8-FINAL-GOVERNANCE-SNAPSHOT-CURRENT-ADOPTION.md"
 SOURCE_PATHS = [
@@ -60,7 +61,19 @@ def test_ledger_adoption_is_append_only_when_materialized() -> None:
     if story is None:
         assert ledger["rows"][282]["disposition"] == "PENDING"
         return
-    candidate = story["commits"][-1]
+    adopted = json.loads(
+        subprocess.run(
+            ["git", "show", f"{ADOPTION_SHA}:docs/product/v8/coverage-ledger.json"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    adopted_story = adopted["stories"][-1]
+    assert adopted_story["story_id"] == STORY_ID
+    assert story == adopted_story
+    candidate = adopted_story["commits"][-1]
     baseline = json.loads(
         subprocess.run(
             ["git", "show", f"{candidate}:docs/product/v8/coverage-ledger.json"],
@@ -71,9 +84,11 @@ def test_ledger_adoption_is_append_only_when_materialized() -> None:
         ).stdout
     )
     assert story["paths"] == PATHS
-    assert ledger["rows"] == baseline["rows"]
-    assert ledger["stories"][:-1] == baseline["stories"]
-    assert ledger["stories"][-1] == story
+    assert adopted["rows"] == baseline["rows"]
+    assert adopted["stories"][:-1] == baseline["stories"]
+    assert adopted["stories"][-1] == story
+    assert ledger["rows"] == adopted["rows"]
+    assert ledger["stories"][: len(adopted["stories"])] == adopted["stories"]
     assert story["review_ref"] == story["verification_ref"] == REVIEW_REF
     assert story["tree_sha256"] == _load_checker().compute_tree_fingerprint(ROOT, candidate, PATHS)
     assert [
