@@ -326,7 +326,9 @@ test("real PayList export preserves internal, official, and payment boundaries",
   });
   await expect(page.getByRole("heading", { name: "官费清单详情" })).toBeVisible();
   await expect(page.getByText("当前没有内部导出产物")).toBeVisible();
-  await expect(page.getByText("官方工作簿门禁尚未开放")).toBeVisible();
+  await expect(
+    page.getByTestId("official-workbook-panel").getByText("官方工作簿门禁尚未开放"),
+  ).toBeVisible();
   await expect(page.getByText("当前没有官方凭证")).toBeVisible();
   await expect(page.getByText(caseRecord.case_no).first()).toBeVisible();
 
@@ -358,7 +360,9 @@ test("real PayList export preserves internal, official, and payment boundaries",
 
   await page.getByRole("button", { name: "刷新" }).click();
   await expect(page.getByText(internalArtifacts[0].content_sha256)).toBeVisible();
-  await expect(page.getByText("官方工作簿门禁尚未开放")).toBeVisible();
+  await expect(
+    page.getByTestId("official-workbook-panel").getByText("官方工作簿门禁尚未开放"),
+  ).toBeVisible();
   await expect(page.getByText("当前没有官方凭证")).toBeVisible();
   await expect(page.getByText(caseRecord.case_no).first()).toBeVisible();
   await expect(page.getByText("已计划").first()).toBeVisible();
