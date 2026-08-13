@@ -26,6 +26,20 @@ SEED_DEV_ACTIVATIONS = {
         None,
         False,
     ),
+    "OFFICIAL_NOTICE_031": (
+        "FEE_REDUCTION_APPROVAL_NOTICE",
+        "FEE_REDUCTION_APPROVAL_NOTICE",
+        None,
+        None,
+        False,
+    ),
+    "OFFICIAL_NOTICE_034": (
+        "APPLICATION_FEE_NOTICE",
+        "APPLICATION_FEE_NOTICE",
+        None,
+        None,
+        False,
+    ),
 }
 
 
@@ -87,6 +101,23 @@ def _assert_activated_catalog(
             assert metadata["completion_event"] is None
             assert metadata["archive_status_restore"] is None
             assert metadata["deadline_source_policy"] == "EXPLICIT_OFFICIAL_DUE_REQUIRED"
+        elif behavior == "APPLICATION_FEE_NOTICE":
+            assert row.code == "OFFICIAL_NOTICE_034"
+            assert row.name == "缴纳申请费通知书"
+            assert metadata["official_doc_codes"] == ["200103"]
+            assert row.fee_draft_type == "APPLICATION_FEE"
+            assert metadata["completion_event"] is None
+            assert metadata["archive_status_restore"] is None
+            assert metadata["deadline_source_policy"] == "EXPLICIT_OFFICIAL_DUE_REQUIRED"
+        elif behavior == "FEE_REDUCTION_APPROVAL_NOTICE":
+            assert row.code == "OFFICIAL_NOTICE_031"
+            assert row.name == "费用减缓审批通知书"
+            assert metadata["official_doc_codes"] == ["200021"]
+            assert row.fee_draft_type is None
+            assert row.reply_to_template_code is None
+            assert metadata["completion_event"] is None
+            assert metadata["archive_status_restore"] is None
+            assert metadata["deadline_source_policy"] is None
         else:
             assert row.fee_draft_type is None
             assert metadata["completion_event"] is None
