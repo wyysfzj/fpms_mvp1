@@ -25,6 +25,7 @@ def _create_client(client, auth_headers) -> dict:
 def _create_case(client, auth_headers, client_id: str) -> dict:
     payload = {
         "case_no": f"CASE-OFF-{uuid4().hex[:6]}",
+        "fee_reduction": "0",
         "client_id": client_id,
         "case_type": "NORMAL",
     }

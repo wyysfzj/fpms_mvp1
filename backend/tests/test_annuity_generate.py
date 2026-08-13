@@ -38,13 +38,13 @@ def granted_case_id(
         "/api/v1/cases",
         json={
             "case_no": _uid("GEN-CASE"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "Annuity Gen Test",
             "filing_date": "2020-06-15",
-            "status": "GRANTED",
         },
         headers=auth_headers,
     )
@@ -54,6 +54,7 @@ def granted_case_id(
     # Set first_annuity_year directly in DB (no API for this field yet)
     with session_factory() as db:
         case = db.query(Case).filter(Case.id == case_id).first()
+        case.status = "GRANTED"
         case.first_annuity_year = 3
         db.commit()
 
@@ -66,12 +67,12 @@ def not_granted_case_id(client: TestClient, auth_headers: dict, client_id: str) 
         "/api/v1/cases",
         json={
             "case_no": _uid("GEN-NG"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "Not Granted Case",
-            "status": "NOT_FILED",
         },
         headers=auth_headers,
     )
@@ -80,23 +81,33 @@ def not_granted_case_id(client: TestClient, auth_headers: dict, client_id: str) 
 
 
 @pytest.fixture
-def granted_no_year_case_id(client: TestClient, auth_headers: dict, client_id: str) -> str:
+def granted_no_year_case_id(
+    client: TestClient,
+    auth_headers: dict,
+    client_id: str,
+    session_factory: sessionmaker,
+) -> str:
     resp = client.post(
         "/api/v1/cases",
         json={
             "case_no": _uid("GEN-NY"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "Granted No Year",
-            "status": "GRANTED",
             "filing_date": "2020-01-01",
         },
         headers=auth_headers,
     )
     assert resp.status_code == 201
-    return resp.json()["id"]
+    case_id = resp.json()["id"]
+    with session_factory() as db:
+        case = db.query(Case).filter(Case.id == case_id).one()
+        case.status = "GRANTED"
+        db.commit()
+    return case_id
 
 
 def _seed_annuity_rates(client: TestClient, auth_headers: dict) -> None:

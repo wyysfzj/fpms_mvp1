@@ -97,11 +97,10 @@ def _create_case(
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "申请费草单测试案",
-            "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "claim_count": claim_count,
             "has_exam_request": has_exam_request,
-            "fee_reduction": "0.85",
+            "fee_reduction": "0",
             "applicants": [
                 {
                     "seq": 1,
@@ -144,10 +143,10 @@ def test_generate_apply_fee_draft_calculates_items_and_is_idempotent(
     assert draft["client_id"] == client_id
     assert draft["draft_type"] == "APPLY_FEE"
     assert draft["status"] == "OPEN"
-    assert Decimal(draft["total_gov"]) == Decimal("860.00")
+    assert Decimal(draft["total_gov"]) == Decimal("3750.00")
     assert Decimal(draft["total_service"]) == Decimal("0.00")
     assert Decimal(draft["total_misc"]) == Decimal("0.00")
-    assert Decimal(draft["amount"]) == Decimal("860.00")
+    assert Decimal(draft["amount"]) == Decimal("3750.00")
 
     items_response = client.get(
         f"/api/v1/fees/drafts/{draft['id']}/items",
@@ -162,11 +161,11 @@ def test_generate_apply_fee_draft_calculates_items_and_is_idempotent(
         "CN_SUBSTANTIVE_EXAM_FEE",
     }
     assert {item["fee_type"] for item in items.values()} == {"GOV"}
-    assert Decimal(items["CN_INV_APPLICATION_FEE"]["amount"]) == Decimal("135.00")
+    assert Decimal(items["CN_INV_APPLICATION_FEE"]["amount"]) == Decimal("900.00")
     assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["quantity"]) == Decimal("2.0000")
     assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["amount"]) == Decimal("300.00")
     assert Decimal(items["CN_PUBLICATION_PRINT_FEE"]["amount"]) == Decimal("50.00")
-    assert Decimal(items["CN_SUBSTANTIVE_EXAM_FEE"]["amount"]) == Decimal("375.00")
+    assert Decimal(items["CN_SUBSTANTIVE_EXAM_FEE"]["amount"]) == Decimal("2500.00")
 
     rerun = client.post(
         "/api/v1/fees/drafts/apply-fee/generate",
@@ -221,7 +220,7 @@ def test_generate_apply_fee_draft_supports_um_case(
     auth_headers: dict[str, str],
     session_factory,
 ) -> None:
-    """实用新型申请费草单：不含公布印刷费/实审费，费减 0.85 应缴 15%。"""
+    """实用新型申请费草单：无费减时不含公布印刷费或实审费。"""
     _seed_apply_fee_rates(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
@@ -244,8 +243,7 @@ def test_generate_apply_fee_draft_supports_um_case(
     assert response.status_code == 201, response.text
     draft = response.json()
     assert draft["draft_type"] == "APPLY_FEE"
-    # 500 * 0.15 = 75
-    assert Decimal(draft["total_gov"]) == Decimal("75.00")
+    assert Decimal(draft["total_gov"]) == Decimal("500.00")
 
     items_response = client.get(
         f"/api/v1/fees/drafts/{draft['id']}/items",
@@ -254,7 +252,7 @@ def test_generate_apply_fee_draft_supports_um_case(
     assert items_response.status_code == 200, items_response.text
     items = {item["fee_code"]: item for item in items_response.json()}
     assert set(items) == {"CN_UM_APPLICATION_FEE"}
-    assert Decimal(items["CN_UM_APPLICATION_FEE"]["amount"]) == Decimal("75.00")
+    assert Decimal(items["CN_UM_APPLICATION_FEE"]["amount"]) == Decimal("500.00")
 
 
 def test_generate_apply_fee_draft_supports_des_case_with_excess_claims(
@@ -284,8 +282,7 @@ def test_generate_apply_fee_draft_supports_des_case_with_excess_claims(
 
     assert response.status_code == 201, response.text
     draft = response.json()
-    # 500 * 0.15 + 150 * 2 (不可费减) = 75 + 300 = 375
-    assert Decimal(draft["total_gov"]) == Decimal("375.00")
+    assert Decimal(draft["total_gov"]) == Decimal("800.00")
 
     items_response = client.get(
         f"/api/v1/fees/drafts/{draft['id']}/items",
@@ -294,6 +291,6 @@ def test_generate_apply_fee_draft_supports_des_case_with_excess_claims(
     assert items_response.status_code == 200, items_response.text
     items = {item["fee_code"]: item for item in items_response.json()}
     assert set(items) == {"CN_DES_APPLICATION_FEE", "CN_EXCESS_CLAIM_FEE"}
-    assert Decimal(items["CN_DES_APPLICATION_FEE"]["amount"]) == Decimal("75.00")
+    assert Decimal(items["CN_DES_APPLICATION_FEE"]["amount"]) == Decimal("500.00")
     assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["quantity"]) == Decimal("2.0000")
     assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["amount"]) == Decimal("300.00")

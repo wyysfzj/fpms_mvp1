@@ -40,6 +40,7 @@ def test_create_case_persists_case_applicant_applicant_id(session_factory) -> No
             db,
             CaseCreate(
                 case_no=f"CASE-{uuid4().hex[:8].upper()}",
+                fee_reduction="0",
                 applicants=[
                     {
                         "seq": 1,
@@ -76,6 +77,7 @@ def test_update_case_full_persists_case_applicant_applicant_id(session_factory) 
             db,
             CaseCreate(
                 case_no=f"CASE-{uuid4().hex[:8].upper()}",
+                fee_reduction="0",
                 applicants=[
                     {
                         "seq": 1,
@@ -118,6 +120,7 @@ def test_create_case_rejects_unknown_applicant_id(session_factory) -> None:
                 db,
                 CaseCreate(
                     case_no=f"CASE-{uuid4().hex[:8].upper()}",
+                    fee_reduction="0",
                     applicants=[
                         {
                             "seq": 1,
@@ -146,6 +149,7 @@ def test_update_case_full_rejects_unknown_applicant_id(session_factory) -> None:
             db,
             CaseCreate(
                 case_no=f"CASE-{uuid4().hex[:8].upper()}",
+                fee_reduction="0",
                 applicants=[
                     {
                         "seq": 1,
@@ -185,6 +189,7 @@ def test_blank_applicant_id_normalizes_to_none_on_create_and_update(session_fact
             db,
             CaseCreate(
                 case_no=f"CASE-{uuid4().hex[:8].upper()}",
+                fee_reduction="0",
                 applicants=[
                     {
                         "seq": 1,

@@ -53,6 +53,7 @@ def _create_case(
     """Helper to create a case with specific attributes."""
     payload = {
         "case_no": _unique_case_no(),
+        "fee_reduction": "0",
         "case_type": case_type,
         "patent_category": patent_category,
         "flow_dir": flow_dir,

@@ -40,6 +40,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str], *, title: str
         headers=auth_headers,
         json={
             "case_no": _unique_case_no(),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",

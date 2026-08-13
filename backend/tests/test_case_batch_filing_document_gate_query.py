@@ -52,12 +52,12 @@ def _create_case(
         "/api/v1/cases",
         json={
             "case_no": f"{case_no_prefix}-{uuid4().hex[:8]}",
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": f"{case_no_prefix} 标题",
-            "status": "NOT_FILED",
             "recv_date": recv_date,
             "no_power": True,
             "applicants": [

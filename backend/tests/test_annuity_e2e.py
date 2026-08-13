@@ -44,6 +44,7 @@ def _create_client_and_case(client: TestClient, auth_headers: dict[str, str]) ->
         "/api/v1/cases",
         json={
             "case_no": _uid("ANN-CASE"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
@@ -66,6 +67,7 @@ def _create_case(
 ) -> str:
     payload = {
         "case_no": case_no,
+        "fee_reduction": "0",
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
@@ -505,6 +507,7 @@ def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persisten
         "/api/v1/cases",
         json={
             "case_no": _uid("ANN-CASE"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",

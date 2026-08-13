@@ -62,6 +62,7 @@ def _case_payload(
 ) -> dict:
     return {
         "case_no": case_no,
+        "fee_reduction": "0",
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",

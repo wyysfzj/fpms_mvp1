@@ -46,6 +46,7 @@ def _create_case(
 ) -> dict:
     payload: dict[str, object] = {
         "case_no": _uid("CASEFILTER"),
+        "fee_reduction": "0",
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",

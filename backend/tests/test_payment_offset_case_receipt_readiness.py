@@ -79,10 +79,9 @@ def _create_case(
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "付款冲销测试案",
-            "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0.85",
+            "fee_reduction": "0",
             "applicants": [
                 {
                     "seq": 1,
@@ -184,8 +183,8 @@ def test_payment_offset_updates_bill_and_case_receipts(
     assert bill_detail_response.status_code == 200, bill_detail_response.text
     bill_detail = bill_detail_response.json()
     assert bill_detail["status"] == "PARTIALLY_SETTLED"
-    assert bill_detail["amount"] == "485.00"
-    assert bill_detail["balance"] == "185.00"
+    assert bill_detail["amount"] == "1250.00"
+    assert bill_detail["balance"] == "950.00"
 
     payment_detail_response = client.get(f"/api/v1/payments/{payment['id']}", headers=auth_headers)
     assert payment_detail_response.status_code == 200, payment_detail_response.text
@@ -207,6 +206,6 @@ def test_payment_offset_updates_bill_and_case_receipts(
     assert receipt["currency"] == "CNY"
     assert receipt["received_amt"] == "300.00"
     assert receipt["last_receipt_date"] == "2026-04-21"
-    assert Decimal(receipt["receivable_amt"]) == Decimal("485.00")
+    assert Decimal(receipt["receivable_amt"]) == Decimal("1250.00")
     assert Decimal(receipt["receivable_amt"]) > Decimal(receipt["received_amt"])
     assert receipt["bills"][0]["id"] == bill["id"]

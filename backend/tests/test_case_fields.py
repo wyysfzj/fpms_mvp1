@@ -64,8 +64,8 @@ _GROUP3_FIELDS = {
 
 _GROUP4_FIELDS = {
     "is_fee_monitor": True,
-    "fee_reduction": "70PCT",
-    "applicant_kind": "ENTERPRISE",
+    "fee_reduction": "0",
+    "applicant_kind": "ENTITY",
 }
 
 _ALL_15 = {**_GROUP1_FIELDS, **_GROUP2_FIELDS, **_GROUP3_FIELDS, **_GROUP4_FIELDS}
@@ -80,6 +80,7 @@ class TestCreateGroup1:
     def test_create_with_publication_grant_fields(self, client: TestClient, auth_headers: dict):
         payload = {
             "case_no": _unique_case_no(),
+            "fee_reduction": "0",
             "applicants": _MINIMAL_APPLICANT,
             **_GROUP1_FIELDS,
         }
@@ -98,6 +99,7 @@ class TestCreateGroup2:
     def test_create_with_spec_detail_fields(self, client: TestClient, auth_headers: dict):
         payload = {
             "case_no": _unique_case_no(),
+            "fee_reduction": "0",
             "applicants": _MINIMAL_APPLICANT,
             **_GROUP2_FIELDS,
         }
@@ -113,6 +115,7 @@ class TestCreateGroup3:
     def test_create_with_agent_assignment_fields(self, client: TestClient, auth_headers: dict):
         payload = {
             "case_no": _unique_case_no(),
+            "fee_reduction": "0",
             "applicants": _MINIMAL_APPLICANT,
             **_GROUP3_FIELDS,
         }
@@ -128,6 +131,7 @@ class TestCreateGroup4:
     def test_create_with_control_flag_fields(self, client: TestClient, auth_headers: dict):
         payload = {
             "case_no": _unique_case_no(),
+            "fee_reduction": "0",
             "applicants": _MINIMAL_APPLICANT,
             **_GROUP4_FIELDS,
         }
@@ -135,8 +139,8 @@ class TestCreateGroup4:
         assert r.status_code == 201, r.text
         data = r.json()
         assert data["is_fee_monitor"] is True
-        assert data["fee_reduction"] == "70PCT"
-        assert data["applicant_kind"] == "ENTERPRISE"
+        assert data["fee_reduction"] == "0"
+        assert data["applicant_kind"] == "ENTITY"
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +151,7 @@ class TestCreateAll15:
         case_no = _unique_case_no()
         payload = {
             "case_no": case_no,
+            "fee_reduction": "0",
             "applicants": _MINIMAL_APPLICANT,
             **_ALL_15,
         }
@@ -170,6 +175,7 @@ class TestGetDetail:
         case_no = _unique_case_no()
         payload = {
             "case_no": case_no,
+            "fee_reduction": "0",
             "applicants": _MINIMAL_APPLICANT,
             **_ALL_15,
         }
@@ -192,7 +198,11 @@ class TestUpdateFull:
         case_no = _unique_case_no()
         r = client.post(
             "/api/v1/cases",
-            json={"case_no": case_no, "applicants": _MINIMAL_APPLICANT},
+            json={
+                "case_no": case_no,
+                "fee_reduction": "0",
+                "applicants": _MINIMAL_APPLICANT,
+            },
             headers=auth_headers,
         )
         assert r.status_code == 201
@@ -220,7 +230,11 @@ class TestLimitedEdit:
         case_no = _unique_case_no()
         r = client.post(
             "/api/v1/cases",
-            json={"case_no": case_no, "applicants": _MINIMAL_APPLICANT},
+            json={
+                "case_no": case_no,
+                "fee_reduction": "0",
+                "applicants": _MINIMAL_APPLICANT,
+            },
             headers=auth_headers,
         )
         assert r.status_code == 201
@@ -251,6 +265,7 @@ class TestListFields:
             "/api/v1/cases",
             json={
                 "case_no": case_no,
+                "fee_reduction": "0",
                 "applicants": _MINIMAL_APPLICANT,
                 "patent_no": "ZL_LIST_001",
                 "primary_agent_id": "dddddddd-4444-4444-4444-dddddddddddd",
@@ -278,6 +293,7 @@ class TestBackwardCompat:
         """Existing callers that send no A3 fields should still work."""
         payload = {
             "case_no": _unique_case_no(),
+            "fee_reduction": "0",
             "applicants": _MINIMAL_APPLICANT,
         }
         r = client.post("/api/v1/cases", json=payload, headers=auth_headers)
@@ -299,6 +315,7 @@ class TestDateFormat:
         case_no = _unique_case_no()
         payload = {
             "case_no": case_no,
+            "fee_reduction": "0",
             "applicants": _MINIMAL_APPLICANT,
             "pub_date": "2025-06-15",
             "grant_date": "2025-12-20",
@@ -324,7 +341,11 @@ class TestBooleanDefaults:
         case_no = _unique_case_no()
         r = client.post(
             "/api/v1/cases",
-            json={"case_no": case_no, "applicants": _MINIMAL_APPLICANT},
+            json={
+                "case_no": case_no,
+                "fee_reduction": "0",
+                "applicants": _MINIMAL_APPLICANT,
+            },
             headers=auth_headers,
         )
         assert r.status_code == 201
@@ -345,6 +366,7 @@ class TestBusinessRules:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("CLIENT"),
+                "fee_reduction": "0",
                 "client_id": str(uuid4()),
                 "applicants": _MINIMAL_APPLICANT,
             },
@@ -362,6 +384,7 @@ class TestBusinessRules:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("PRIO"),
+                "fee_reduction": "0",
                 "client_id": client_id,
                 "applicants": _MINIMAL_APPLICANT,
                 "priorities": [
@@ -386,6 +409,7 @@ class TestBusinessRules:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("PRIOBLANK"),
+                "fee_reduction": "0",
                 "client_id": client_id,
                 "applicants": _MINIMAL_APPLICANT,
                 "priorities": [
@@ -403,13 +427,12 @@ class TestBusinessRules:
         payload = resp.json()["error"]
         assert payload["code"] == "CASE_PRIORITY_INCOMPLETE"
 
-    def test_update_rejects_active_status_without_application_fields(
-        self, client: TestClient, auth_headers: dict
-    ):
+    def test_update_rejects_direct_status_write(self, client: TestClient, auth_headers: dict):
         create_resp = client.post(
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("STATUS"),
+                "fee_reduction": "0",
                 "applicants": _MINIMAL_APPLICANT,
             },
             headers=auth_headers,
@@ -422,15 +445,16 @@ class TestBusinessRules:
             json={"status": "OA1"},
             headers=auth_headers,
         )
-        assert update_resp.status_code == 400, update_resp.text
+        assert update_resp.status_code == 409, update_resp.text
         payload = update_resp.json()["error"]
-        assert payload["code"] == "CASE_STATUS_REQUIRES_APPLICATION_FIELDS"
+        assert payload["code"] == "CASE_STATUS_MANAGED_BY_LIFECYCLE"
 
     def test_update_accepts_legacy_title_alias(self, client: TestClient, auth_headers: dict):
         create_resp = client.post(
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("TITLE"),
+                "fee_reduction": "0",
                 "applicants": _MINIMAL_APPLICANT,
             },
             headers=auth_headers,
@@ -456,6 +480,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("FOREIGN"),
+                "fee_reduction": "0",
                 "client_id": client_id,
                 "flow_dir": "FOREIGN_INBOUND",
                 "applicants": _MINIMAL_APPLICANT,
@@ -474,6 +499,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("FOREIGNAGENT"),
+                "fee_reduction": "0",
                 "client_id": client_id,
                 "flow_dir": "FOREIGN_INBOUND",
                 "foreign_agent_id": wrong_agent_id,
@@ -493,6 +519,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("BIO"),
+                "fee_reduction": "0",
                 "client_id": client_id,
                 "flow_dir": "FOREIGN_INBOUND",
                 "foreign_agent_id": foreign_agent_id,
@@ -537,6 +564,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("BIOERR"),
+                "fee_reduction": "0",
                 "applicants": _MINIMAL_APPLICANT,
                 "bio_deposits": [
                     {
@@ -555,6 +583,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("BIOSEQ"),
+                "fee_reduction": "0",
                 "applicants": _MINIMAL_APPLICANT,
                 "bio_deposits": [
                     {
@@ -585,6 +614,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("PCTI"),
+                "fee_reduction": "0",
                 "case_type": "PCT_INTL",
                 "applicants": _MINIMAL_APPLICANT,
             },
@@ -598,6 +628,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("PCTI"),
+                "fee_reduction": "0",
                 "case_type": "PCT_INTL",
                 "applicants": _MINIMAL_APPLICANT,
                 "intl_app_no": "PCT/CN2026/000001",
@@ -625,6 +656,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("PCTN"),
+                "fee_reduction": "0",
                 "case_type": "PCT_NATL",
                 "applicants": _MINIMAL_APPLICANT,
             },
@@ -638,6 +670,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("PCTN"),
+                "fee_reduction": "0",
                 "case_type": "PCT_NATL",
                 "applicants": _MINIMAL_APPLICANT,
                 "pct_national_entry_date": "2026-09-15",
@@ -654,6 +687,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("INV"),
+                "fee_reduction": "0",
                 "case_type": "INVALIDATION",
                 "applicants": _MINIMAL_APPLICANT,
             },
@@ -668,6 +702,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("ORIG"),
+                "fee_reduction": "0",
                 "applicants": _MINIMAL_APPLICANT,
             },
             headers=auth_headers,
@@ -679,6 +714,7 @@ class TestDeferredBatch1Fields:
             "/api/v1/cases",
             json={
                 "case_no": _unique_case_no("INV"),
+                "fee_reduction": "0",
                 "case_type": "INVALIDATION",
                 "applicants": _MINIMAL_APPLICANT,
                 "original_case_id": original_case_id,

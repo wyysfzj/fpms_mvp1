@@ -45,12 +45,12 @@ def _create_case(
 ) -> dict:
     payload: dict[str, object] = {
         "case_no": _uid("CASE-RPT"),
+        "fee_reduction": "0",
         "case_type": case_type,
         "patent_category": patent_category,
         "flow_dir": "CN_DOMESTIC",
         "client_id": client_id,
         "title_cn": "Case Report Fixture",
-        "status": status,
         "applicants": [{"seq": 1, "is_first": True, "name_cn": "测试申请人"}],
     }
     if filing_date is not None:
@@ -86,7 +86,19 @@ def _create_case(
 
     resp = client.post("/api/v1/cases", json=payload, headers=auth_headers)
     assert resp.status_code == 201, resp.text
-    return resp.json()
+    case_data = resp.json()
+    if status != "NOT_FILED":
+        db, db_gen = _db_session(client)
+        try:
+            from app.modules.cases.models import Case
+
+            case = db.query(Case).filter(Case.id == case_data["id"]).one()
+            case.status = status
+            db.commit()
+        finally:
+            db_gen.close()
+        case_data["status"] = status
+    return case_data
 
 
 def _set_case_terminal_dates(

@@ -80,12 +80,12 @@ def _create_not_filed_case(
         "/api/v1/cases",
         json={
             "case_no": f"AFB-{uuid4().hex[:8]}",
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "申请费基准测试案",
-            "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "applicants": [
                 {

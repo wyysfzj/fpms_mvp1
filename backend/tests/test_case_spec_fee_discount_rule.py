@@ -117,7 +117,7 @@ def test_a9_accepts_zero_and_safe_large_spec_discount_boundaries(
             claim_pages=666,
             manuscript_words=123456,
             discount_rate="1",
-            fee_reduction="1",
+            fee_reduction="0",
         ),
         headers=auth_headers,
     )
@@ -131,7 +131,7 @@ def test_a9_accepts_zero_and_safe_large_spec_discount_boundaries(
     assert one_detail["claim_pages"] == 666
     assert one_detail["manuscript_words"] == 123456
     assert one_detail["discount_rate"] == "1.0000"
-    assert one_detail["fee_reduction"] == "1"
+    assert one_detail["fee_reduction"] == "0"
 
 
 def test_a9_rejects_negative_spec_fields_and_out_of_range_discount_rate(

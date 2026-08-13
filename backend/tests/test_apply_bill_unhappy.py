@@ -80,10 +80,9 @@ def _create_case(
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
             "title_cn": "账单非法组合测试案",
-            "status": "NOT_FILED",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0.85",
+            "fee_reduction": "0",
             "applicants": [
                 {
                     "seq": 1,

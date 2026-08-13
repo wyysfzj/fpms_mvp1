@@ -16,6 +16,7 @@ def case_id(client: TestClient, auth_headers: dict) -> str:
         "/api/v1/cases",
         json={
             "case_no": f"CR-TEST-{uuid4().hex[:8]}",
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",

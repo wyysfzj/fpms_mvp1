@@ -102,6 +102,7 @@ def _create_case_via_api(
     """通过 API 创建案件，返回 case_id。"""
     payload: dict = {
         "case_no": case_no or f"V3-CASE-{uuid4().hex[:8]}",
+        "fee_reduction": "0",
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",

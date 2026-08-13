@@ -48,6 +48,7 @@ def _create_case(
         "/api/v1/cases",
         json={
             "case_no": _uid(case_tag),
+            "fee_reduction": "0",
             "case_type": case_type,
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",

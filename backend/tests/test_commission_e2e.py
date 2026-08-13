@@ -45,6 +45,7 @@ def _create_client_case_with_agent(
         "/api/v1/cases",
         json={
             "case_no": _uid("COM-CASE"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
@@ -444,6 +445,7 @@ def test_manual_bill_split_commission_rewrite_removes_stale_rows(
         "/api/v1/cases",
         json={
             "case_no": _uid("COM-SPLIT-CASE"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",

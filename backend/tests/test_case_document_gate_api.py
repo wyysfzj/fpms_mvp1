@@ -28,11 +28,11 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
         headers=auth_headers,
         json={
             "case_no": f"CASE-GATE-{uuid4().hex[:8].upper()}",
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "title_cn": "案件文件门禁测试案件",
-            "status": "NOT_FILED",
             "no_power": True,
             "applicants": [
                 {

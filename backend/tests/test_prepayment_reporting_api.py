@@ -31,6 +31,7 @@ def _create_case(client, auth_headers, *, client_id: str) -> dict:
         "/api/v1/cases",
         json={
             "case_no": _uid("CASE"),
+            "fee_reduction": "0",
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
