@@ -23,6 +23,7 @@ BASE = "/api/v1/official-work-packages"
 
 
 def _create_ready_package(session_factory: sessionmaker, *, package_kind: str) -> tuple[str, str]:
+    source_role = "FILING_FULL_WORD" if package_kind == "FILING_PREP" else "OA_MODIFIED_CLAIMS"
     with session_factory() as db:
         template = db.execute(select(DocTemplate).where(DocTemplate.code == "OA_OUT")).scalar_one()
         case = Case(
@@ -52,7 +53,7 @@ def _create_ready_package(session_factory: sessionmaker, *, package_kind: str) -
             file_path=f"attachments/{document.id}/claims.docx",
             mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             file_size=128,
-            official_file_role="OA_MODIFIED_CLAIMS",
+            official_file_role=source_role,
             content_hash="sha256:claims",
         )
         receipt_attachment = DocAttachment(
@@ -94,7 +95,7 @@ def _create_ready_package(session_factory: sessionmaker, *, package_kind: str) -
                 id=str(uuid4()),
                 package_id=package.id,
                 attachment_id=source_attachment.id,
-                official_file_role="OA_MODIFIED_CLAIMS",
+                official_file_role=source_role,
                 content_hash=source_attachment.content_hash,
                 required=True,
                 present=True,
