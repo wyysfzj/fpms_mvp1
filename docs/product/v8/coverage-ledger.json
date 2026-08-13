@@ -2262,16 +2262,10 @@
     {
       "catalog_id": "FPMS-V8-FINAL-CLOSE-20260712-01",
       "phase": "deferred",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FINAL-CLOSE-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "DEPENDENCY_BLOCKED",
-        "dependencies": [
-          "FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01"
-        ],
-        "ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     }
   ],
   "stories": [
@@ -7603,7 +7597,10 @@
     {
       "story_id": "V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
-      "commits": ["74caa4c7a5f64c3426769a9d47f5d9e4d56b5310", "b4b4c1e9db4bd0ba1b1f08357d010281a40f0989"],
+      "commits": [
+        "74caa4c7a5f64c3426769a9d47f5d9e4d56b5310",
+        "b4b4c1e9db4bd0ba1b1f08357d010281a40f0989"
+      ],
       "paths": [
         "backend/tests/test_v8_adoption_history_snapshot_adoption.py",
         "backend/tests/test_v8_final_governance_snapshot_adoption.py",
@@ -7613,12 +7610,22 @@
         "tasks/postdemo/v8/FPMS-V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION-20260813-01.md"
       ],
       "tree_sha256": "3e7598a88e29d63907c0e589897901ac6e67a57290de281988e01520fc43fd11",
-      "tests": ["focused adoption and historical snapshot contracts passed", "scoped Ruff, format and diff passed", "independent High source review approved P0/P1/P2 0/0/0"],
+      "tests": [
+        "focused adoption and historical snapshot contracts passed",
+        "scoped Ruff, format and diff passed",
+        "independent High source review approved P0/P1/P2 0/0/0"
+      ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-ADOPTION-HISTORY-SNAPSHOT-CURRENT-ADOPTION.md",
-      "production_inputs": {"DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED", "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"},
-      "source_decision_status": {"DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING", "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"},
+      "production_inputs": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "source_decision_status": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"
+      },
       "production_failure": "409 / NO WRITE",
       "test_only_isolated": true,
       "production_activation_claimed": false,
@@ -7627,7 +7634,10 @@
     {
       "story_id": "V8-FINAL-PAYLIST-LIVE-CURRENT-ADOPTION",
       "status": "CURRENT_VERIFIED",
-      "commits": ["5065900d6355e39bd5817af4ef895a5c7add6581", "e132b54f30dc30db87d430a6ec13b1a8df2969a4"],
+      "commits": [
+        "5065900d6355e39bd5817af4ef895a5c7add6581",
+        "e132b54f30dc30db87d430a6ec13b1a8df2969a4"
+      ],
       "paths": [
         "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-pay-list-boundary-live.spec.ts",
         "backend/tests/test_v8_final_paylist_live_adoption.py",
@@ -7636,16 +7646,63 @@
         "tasks/postdemo/v8/FPMS-V8-FINAL-PAYLIST-LIVE-LOCATOR-ALIGNMENT-20260813-01.md"
       ],
       "tree_sha256": "09f3e311d76b179f8c425427f40ab4c73a2d7434318af233f25aeaa0a9211438",
-      "tests": ["isolated real PayList boundary E2E passed 1 test", "focused adoption passed 2 tests", "independent High source review approved P0/P1/P2 0/0/0"],
+      "tests": [
+        "isolated real PayList boundary E2E passed 1 test",
+        "focused adoption passed 2 tests",
+        "independent High source review approved P0/P1/P2 0/0/0"
+      ],
       "review_class": "PROTECTED",
       "review_ref": "docs/product/v8/reviews/V8-FINAL-PAYLIST-LIVE-CURRENT-ADOPTION.md",
       "verification_ref": "docs/product/v8/reviews/V8-FINAL-PAYLIST-LIVE-CURRENT-ADOPTION.md",
-      "production_inputs": {"DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED", "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"},
-      "source_decision_status": {"DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING", "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"},
+      "production_inputs": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "source_decision_status": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"
+      },
       "production_failure": "409 / NO WRITE",
       "test_only_isolated": true,
       "production_activation_claimed": false,
       "final_close_status": "FINAL_CLOSE_PENDING"
+    },
+    {
+      "story_id": "V8-FINAL-CLOSE-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "512486b80c1cb2f0c5fe1d725cc7c8e8dd965516"
+      ],
+      "paths": [
+        "tasks/postdemo/v8/FPMS-V8-FINAL-CLOSE-20260712-01.md",
+        "backend/tests/test_v8_final_close_contract.py",
+        "scripts/run_v8_paylist_boundary_live_isolated.py",
+        "docs/product/v8/final-close-report.json",
+        "docs/product/v8/stories/V8-FINAL-CLOSE.md"
+      ],
+      "tree_sha256": "34b632e7b96d9869ce9cb38229ccbfdd5e18fac8e4248bff79af9e273cf438b4",
+      "tests": [
+        "clean SQLite upgrade and seed passed",
+        "backend Ruff passed",
+        "backend pytest passed 6158 tests with 33 skips and 114 subtests",
+        "frontend lint typecheck build passed",
+        "three isolated real UI E2E lanes each passed 1 test"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-FINAL-CLOSE-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-FINAL-CLOSE-CURRENT-ADOPTION.md",
+      "production_inputs": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "source_decision_status": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"
+      },
+      "production_failure": "409 / NO WRITE",
+      "test_only_isolated": true,
+      "production_activation_claimed": false,
+      "release_claimed": false
     }
   ]
 }
