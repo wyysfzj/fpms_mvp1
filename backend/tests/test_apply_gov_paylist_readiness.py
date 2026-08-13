@@ -4,7 +4,9 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from app.modules.annuity.models import GovPayment, PayList
 from app.modules.fees.models import FeeRate
 from app.modules.masterdata.applicants.models import Applicant
 from tests.test_v8_case_create_fee_reduction import _seed_approval_record
@@ -110,7 +112,7 @@ def _generate_apply_fee_draft(
     return response.json()["id"]
 
 
-def test_apply_fee_gov_items_can_be_planned_and_paid(
+def test_legacy_apply_fee_items_require_obligation_before_paylist(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory,
@@ -135,6 +137,11 @@ def test_apply_fee_gov_items_can_be_planned_and_paid(
         "CN_EXCESS_CLAIM_FEE",
         "CN_PUBLICATION_PRINT_FEE",
     }
+    assert {item["fee_code"]: item["amount"] for item in gov_items} == {
+        "CN_INV_APPLICATION_FEE": "135.00",
+        "CN_EXCESS_CLAIM_FEE": "300.00",
+        "CN_PUBLICATION_PRINT_FEE": "50.00",
+    }
 
     pay_list_response = client.post(
         "/api/v1/pay-lists/from-fee-items",
@@ -145,41 +152,12 @@ def test_apply_fee_gov_items_can_be_planned_and_paid(
         },
         headers=auth_headers,
     )
-    assert pay_list_response.status_code == 200, pay_list_response.text
-    pay_list_payload = pay_list_response.json()
-    assert pay_list_payload["summary"]["pay_list_created"] is True
-    assert pay_list_payload["summary"]["success"] == len(gov_items)
-    pay_list = pay_list_payload["pay_list"]
-    assert pay_list["status"] == "DRAFT"
-    assert pay_list["planned_pay_date"] == "2026-04-10"
-    assert Decimal(pay_list["total_amount"]) == sum(Decimal(item["amount"]) for item in gov_items)
-
-    for item in gov_items:
-        payment_response = client.post(
-            "/api/v1/gov-payments",
-            json={
-                "pay_list_id": pay_list["id"],
-                "fee_item_id": item["id"],
-                "paid_date": "2026-04-12",
-            },
-            headers=auth_headers,
-        )
-        assert payment_response.status_code == 200, payment_response.text
-        payment_payload = payment_response.json()["gov_payment"]
-        assert payment_payload["status"] == "PAID"
-        assert Decimal(payment_payload["paid_amount"]) == Decimal(item["amount"])
-
-    detail_response = client.get(f"/api/v1/pay-lists/{pay_list['id']}", headers=auth_headers)
-    assert detail_response.status_code == 200, detail_response.text
-    detail = detail_response.json()
-    assert detail["pay_list"]["status"] == "PAID"
-    assert detail["pay_list"]["paid_date"] == "2026-04-12"
-    assert len(detail["gov_payments"]) == len(gov_items)
-
-    list_response = client.get(
-        "/api/v1/pay-lists",
-        params={"status": "PAID", "page": 1, "page_size": 20},
-        headers=auth_headers,
-    )
-    assert list_response.status_code == 200, list_response.text
-    assert any(item["id"] == pay_list["id"] for item in list_response.json()["items"])
+    assert pay_list_response.status_code == 409, pay_list_response.text
+    assert pay_list_response.json()["error"] == {
+        "code": "PAY_LIST_OBLIGATION_LINK_REQUIRED",
+        "message": "Fee item must be linked to a fee obligation",
+        "details": None,
+    }
+    with session_factory() as db:
+        assert db.scalars(select(PayList)).all() == []
+        assert db.scalars(select(GovPayment)).all() == []

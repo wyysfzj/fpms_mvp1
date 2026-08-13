@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-from test_apply_gov_paylist_readiness import (
-    _create_case,
-    _create_client,
-    _generate_apply_fee_draft,
-    _seed_applicant,
-    _seed_apply_fee_rates,
+from app.modules.fees.obligation_contracts import (
+    FeeClientInstruction,
+    RecordFeeObligationInstructionCommand,
 )
-
-from tests.test_v8_case_create_fee_reduction import _seed_approval_record
+from app.modules.fees.obligation_service import record_client_instruction
+from tests.test_v8_application_auto_draft_policy import REVIEWER_ID, _apply, _seed_authority
 
 
 def test_zero_government_payment_returns_business_error(
@@ -16,26 +13,25 @@ def test_zero_government_payment_returns_business_error(
     auth_headers: dict[str, str],
     session_factory,
 ) -> None:
-    _seed_apply_fee_rates(session_factory)
-    client_id = _create_client(client, auth_headers)
-    applicant_id = _seed_applicant(session_factory)
-    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
-    case_data = _create_case(
-        client,
-        auth_headers,
-        client_id=client_id,
-        applicant_id=applicant_id,
-    )
-    draft_id = _generate_apply_fee_draft(client, auth_headers, case_data["id"])
-
-    items_response = client.get(f"/api/v1/fees/drafts/{draft_id}/items", headers=auth_headers)
-    assert items_response.status_code == 200, items_response.text
-    gov_item = next(item for item in items_response.json() if item["fee_type"] == "GOV")
+    with session_factory() as transaction:
+        _seed_authority(transaction)
+        result = _apply(transaction)
+        record_client_instruction(
+            RecordFeeObligationInstructionCommand(
+                obligation_id=result.recognition.obligation.id,
+                instruction=FeeClientInstruction.PAY,
+                actor_id=REVIEWER_ID,
+                idempotency_key="application-paylist-validation:pay",
+            ),
+            transaction,
+        )
+        gov_item_ids = [link.fee_item_id for link in result.draft.links]
+        transaction.commit()
 
     pay_list_response = client.post(
         "/api/v1/pay-lists/from-fee-items",
         json={
-            "fee_item_ids": [gov_item["id"]],
+            "fee_item_ids": gov_item_ids,
             "planned_pay_date": "2026-04-10",
         },
         headers=auth_headers,
@@ -47,7 +43,7 @@ def test_zero_government_payment_returns_business_error(
         "/api/v1/gov-payments",
         json={
             "pay_list_id": pay_list["id"],
-            "fee_item_id": gov_item["id"],
+            "fee_item_id": gov_item_ids[0],
             "paid_date": "2026-04-11",
             "paid_amount": "0.00",
         },
