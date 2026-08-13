@@ -48,6 +48,7 @@ def _create_case(
         "case_type": "NORMAL",
         "patent_category": "INV",
         "flow_dir": "CN_DOMESTIC",
+        "fee_reduction": "0",
         "title_cn": "Grant Fee Notice Test Case",
     }
     if client_id:

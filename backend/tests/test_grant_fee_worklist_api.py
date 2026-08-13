@@ -44,6 +44,7 @@ def _create_case(
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "title_cn": "Grant Fee Worklist Case",
             **({"client_id": client_id} if client_id else {}),
         },

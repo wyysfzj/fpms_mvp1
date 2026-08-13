@@ -42,6 +42,7 @@ def _create_case(
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "client_id": client_id,
             "title_cn": f"专项查询案件-{case_no}",
         },

@@ -26,6 +26,7 @@ def test_post_document_persists_canonical_deadline_and_rejects_invalid_writes(
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "title_cn": f"期限创建接口案件-{suffix}",
         },
     )
@@ -153,6 +154,7 @@ def test_post_document_validates_raw_deadline_carrier_without_rewriting_legacy_t
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "title_cn": f"原始期限载体案件-{suffix}",
         },
     )

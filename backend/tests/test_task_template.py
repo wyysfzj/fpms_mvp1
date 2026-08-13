@@ -38,6 +38,7 @@ def _create_case(client: TestClient, headers: dict) -> str:
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "client_id": client_id,
             "title_cn": "测试案件",
         },

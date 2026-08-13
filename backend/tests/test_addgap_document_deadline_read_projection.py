@@ -32,6 +32,7 @@ def _create_case(client: TestClient, auth_headers: dict[str, str]) -> dict:
             "case_type": "NORMAL",
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
             "client_id": client_response.json()["id"],
             "title_cn": f"期限投影案件-{suffix}",
         },
