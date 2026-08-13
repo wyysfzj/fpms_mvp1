@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from decimal import Decimal
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
 
+from app.modules.annuity.models import GovPayment, PayList
 from tests.test_b3_fee_linking import (
     _create_case,
     _create_client,
@@ -57,9 +59,10 @@ def _create_oa_fee_draft(client: TestClient, auth_headers: dict[str, str]) -> tu
     return case, draft_id
 
 
-def test_oa_fee_draft_supports_gov_payment_bill_offset_and_case_receipt(
+def test_oa_fee_draft_fails_closed_for_gov_paylist_and_supports_bill_receipt(
     client: TestClient,
     auth_headers: dict[str, str],
+    session_factory: sessionmaker,
 ) -> None:
     case, draft_id = _create_oa_fee_draft(client, auth_headers)
 
@@ -80,22 +83,15 @@ def test_oa_fee_draft_supports_gov_payment_bill_offset_and_case_receipt(
         },
         headers=auth_headers,
     )
-    assert pay_list_response.status_code == 200, pay_list_response.text
-    pay_list = pay_list_response.json()["pay_list"]
-    assert pay_list["status"] == "DRAFT"
-    assert Decimal(pay_list["total_amount"]) == Decimal("120.00")
-
-    gov_payment_response = client.post(
-        "/api/v1/gov-payments",
-        json={
-            "pay_list_id": pay_list["id"],
-            "fee_item_id": gov_items[0]["id"],
-            "paid_date": "2026-04-12",
-        },
-        headers=auth_headers,
-    )
-    assert gov_payment_response.status_code == 200, gov_payment_response.text
-    assert gov_payment_response.json()["gov_payment"]["status"] == "PAID"
+    assert pay_list_response.status_code == 409, pay_list_response.text
+    assert pay_list_response.json()["error"] == {
+        "code": "PAY_LIST_OBLIGATION_LINK_REQUIRED",
+        "message": "Fee item must be linked to a fee obligation",
+        "details": None,
+    }
+    with session_factory() as db:
+        assert db.scalars(select(PayList)).all() == []
+        assert db.scalars(select(GovPayment)).all() == []
 
     bill_response = client.post(
         "/api/v1/bills/from-drafts",
