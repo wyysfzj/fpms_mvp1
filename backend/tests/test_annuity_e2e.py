@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
+from v8_annuity_obligation_test_support import seed_annuity_obligations_with_pay_instruction
 
 import app.api.deps as deps
 from app.modules.annuity.models import AnnuityTask, GovPayment, PayList
@@ -291,9 +292,9 @@ def test_gov_payment_register_generated_planned_chain(
         case_id=case_id,
         client_id=client_id,
         year_no=1,
-        due_date=date(2026, 3, 1),
+        due_date=date(2026, 4, 1),
     )
-    _insert_annuity_task(
+    task_2 = _insert_annuity_task(
         session_factory,
         case_id=case_id,
         client_id=client_id,
@@ -301,6 +302,7 @@ def test_gov_payment_register_generated_planned_chain(
         due_date=date(2027, 3, 1),
     )
     _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_1, task_2])
 
     generate_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
@@ -320,9 +322,10 @@ def test_gov_payment_register_generated_planned_chain(
     )
     assert repeat_resp.status_code == 200, repeat_resp.text
     repeat_payload = repeat_resp.json()
-    assert repeat_payload["summary"]["success"] == 0
-    assert repeat_payload["summary"]["failed"] >= 1
-    assert all(row["code"] == "ANNUITY_DRAFT_ALREADY_GENERATED" for row in repeat_payload["failed"])
+    assert repeat_payload["summary"]["success"] == 2
+    assert repeat_payload["summary"]["failed"] == 0
+    assert repeat_payload["failed"] == []
+    assert all(row["activity_reused"] is True for row in repeat_payload["success"])
 
     draft_id = generate_payload["success"][0]["draft_id"]
     gov_fee_item_id = _first_fee_item_id_by_type(session_factory, draft_id, "GOV")
@@ -393,6 +396,7 @@ def test_gov_payment_register_generated_planned_chain(
         year_no=3,
         due_date=date(2028, 3, 1),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [zero_amount_task])
     zero_amount_generate_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -438,7 +442,7 @@ def test_gov_payment_register_generated_planned_chain(
     _assert_error(validation_resp, 422, "VALIDATION_ERROR")
 
 
-def test_gov_payment_register_keeps_exported_pay_list_exported(
+def test_gov_payment_register_advances_exported_pay_list_to_paid(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
@@ -453,6 +457,7 @@ def test_gov_payment_register_keeps_exported_pay_list_exported(
         year_no=1,
         due_date=date(2026, 6, 1),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -486,16 +491,16 @@ def test_gov_payment_register_keeps_exported_pay_list_exported(
     )
     assert register_resp.status_code == 200, register_resp.text
     register_payload = register_resp.json()
-    assert register_payload["pay_list"]["status"] == "EXPORTED"
+    assert register_payload["pay_list"]["status"] == "PAID"
 
     with session_factory() as db:
         pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one()
 
-    assert pay_list.status == "EXPORTED"
-    assert pay_list.paid_date is None
+    assert pay_list.status == "PAID"
+    assert pay_list.paid_date == date(2026, 6, 20)
 
 
-def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persistence(
+def test_pay_list_from_fee_items_rejects_mixed_client_selection_without_persistence(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
@@ -512,7 +517,7 @@ def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persisten
             "patent_category": "INV",
             "flow_dir": "CN_DOMESTIC",
             "client_id": client_id,
-            "title_cn": "Annuity E2E Case USD",
+            "title_cn": "Annuity E2E Same-Client Other Case",
         },
         headers=auth_headers,
     )
@@ -526,7 +531,7 @@ def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persisten
         year_no=1,
         due_date=date(2026, 7, 1),
     )
-    usd_task_id = _insert_annuity_task(
+    same_client_other_case_task_id = _insert_annuity_task(
         session_factory,
         case_id=other_case_id,
         client_id=client_id,
@@ -541,6 +546,10 @@ def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persisten
         due_date=date(2026, 7, 3),
     )
     _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+    seed_annuity_obligations_with_pay_instruction(
+        session_factory,
+        [same_client_cny_task_id, same_client_other_case_task_id, other_client_cny_task_id],
+    )
 
     cny_draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
@@ -548,12 +557,18 @@ def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persisten
         json={"task_ids": [same_client_cny_task_id], "pay_next_year": False, "currency": "CNY"},
     )
     assert cny_draft_resp.status_code == 200, cny_draft_resp.text
-    usd_draft_resp = client.post(
+    same_client_other_case_draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
-        json={"task_ids": [usd_task_id], "pay_next_year": False, "currency": "USD"},
+        json={
+            "task_ids": [same_client_other_case_task_id],
+            "pay_next_year": False,
+            "currency": "CNY",
+        },
     )
-    assert usd_draft_resp.status_code == 200, usd_draft_resp.text
+    assert same_client_other_case_draft_resp.status_code == 200, (
+        same_client_other_case_draft_resp.text
+    )
     other_client_cny_draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -566,9 +581,9 @@ def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persisten
         cny_draft_resp.json()["success"][0]["draft_id"],
         "GOV",
     )
-    same_client_usd_fee_item_id = _first_fee_item_id_by_type(
+    same_client_other_case_fee_item_id = _first_fee_item_id_by_type(
         session_factory,
-        usd_draft_resp.json()["success"][0]["draft_id"],
+        same_client_other_case_draft_resp.json()["success"][0]["draft_id"],
         "GOV",
     )
     other_client_cny_fee_item_id = _first_fee_item_id_by_type(
@@ -579,7 +594,7 @@ def test_pay_list_from_fee_items_rejects_mixed_scope_selection_without_persisten
 
     requested_ids = [
         same_client_cny_fee_item_id,
-        same_client_usd_fee_item_id,
+        same_client_other_case_fee_item_id,
         other_client_cny_fee_item_id,
     ]
 
@@ -618,6 +633,7 @@ def test_pay_list_from_fee_items_keeps_valid_same_scope_candidates_when_other_it
         due_date=date(2026, 7, 10),
     )
     _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
 
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
@@ -933,6 +949,7 @@ def test_pay_list_manual_item_rejects_generated_draft_pay_list(
         year_no=1,
         due_date=date(2026, 8, 1),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -1011,6 +1028,7 @@ def test_pay_list_query_filters_supported_headers_and_case_join_semantics(
         year_no=1,
         due_date=date(2026, 8, 2),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_one_id, task_two_id])
 
     draft_one_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
@@ -1094,7 +1112,7 @@ def test_pay_list_query_filters_supported_headers_and_case_join_semantics(
     assert item["status"] == "DRAFT"
     assert item["currency"] == "CNY"
     assert item["planned_pay_date"] == "2026-08-15"
-    assert item["total_amount"] == "200.00"
+    assert item["total_amount"] == "1800.00"
 
     explicit_range_resp = client.get(
         "/api/v1/pay-lists",
@@ -1177,6 +1195,7 @@ def test_pay_list_detail_returns_header_and_associated_gov_payments(
         year_no=1,
         due_date=date(2026, 8, 1),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -1226,7 +1245,7 @@ def test_pay_list_detail_returns_header_and_associated_gov_payments(
     assert pay_list_payload["currency"] == "CNY"
     assert pay_list_payload["planned_pay_date"] == "2026-08-15"
     assert pay_list_payload["paid_date"] is None
-    assert pay_list_payload["total_amount"] == "100.00"
+    assert pay_list_payload["total_amount"] == "900.00"
     assert len(payload["gov_payments"]) == 1
     assert set(gov_payment_payload) == {
         "id",
@@ -1259,10 +1278,10 @@ def test_pay_list_detail_returns_header_and_associated_gov_payments(
     assert gov_payment_payload["status"] == "PLANNED"
     assert gov_payment_payload["currency"] == "CNY"
     assert gov_payment_payload["paid_date"] is None
-    assert gov_payment_payload["paid_amount"] == "100.00"
+    assert gov_payment_payload["paid_amount"] == "900.00"
     assert gov_payment_payload["official_receipt_no"] is None
-    assert gov_payment_payload["fee_code"] == "ANNUITY_GOV"
-    assert gov_payment_payload["planned_amt"] == "100.00"
+    assert gov_payment_payload["fee_code"] == "CN_ANNUITY_FEE_INV"
+    assert gov_payment_payload["planned_amt"] == "900.00"
     assert gov_payment_payload["planned_currency"] == "CNY"
 
     not_found_resp = client.get("/api/v1/pay-lists/999999", headers=auth_headers)
@@ -1280,7 +1299,7 @@ def test_pay_list_detail_returns_header_and_associated_gov_payments(
     assert forbidden_resp.json()["error"]["details"]["required_perm"] == "PayList.Read"
 
 
-def test_pay_list_export_generates_xlsx_and_advances_status(
+def test_pay_list_export_generates_xlsx_without_advancing_payment_status(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
@@ -1295,6 +1314,7 @@ def test_pay_list_export_generates_xlsx_and_advances_status(
         year_no=1,
         due_date=date(2026, 10, 1),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -1330,19 +1350,20 @@ def test_pay_list_export_generates_xlsx_and_advances_status(
     assert pay_list_no in sheet_xml
     assert "清单编号" in sheet_xml
     assert "状态" in sheet_xml
-    assert "EXPORTED" in sheet_xml
-    assert "DRAFT" not in sheet_xml
+    assert "DRAFT" in sheet_xml
+    assert "EXPORTED" not in sheet_xml
     assert "缴费金额" in sheet_xml
-    assert "100.00" in sheet_xml
+    assert "900.00" in sheet_xml
 
     with session_factory() as db:
         pay_list = db.execute(select(PayList).where(PayList.id == pay_list_id)).scalar_one()
 
-    assert pay_list.status == "EXPORTED"
+    assert pay_list.status == "DRAFT"
     assert pay_list.paid_date is None
 
     repeat_resp = client.post(f"/api/v1/pay-lists/{pay_list_id}/export", headers=auth_headers)
-    _assert_error(repeat_resp, 409, "PAY_LIST_STATE_CONFLICT")
+    assert repeat_resp.status_code == 200, repeat_resp.text
+    assert repeat_resp.content == export_resp.content
 
 
 def test_pay_list_export_requires_permission_and_existing_header(
@@ -1361,6 +1382,7 @@ def test_pay_list_export_requires_permission_and_existing_header(
         year_no=1,
         due_date=date(2026, 11, 1),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -1422,6 +1444,7 @@ def test_pay_list_mark_paid_can_follow_exported_gov_payment_flow(
         year_no=1,
         due_date=date(2026, 12, 1),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -1449,12 +1472,12 @@ def test_pay_list_mark_paid_can_follow_exported_gov_payment_flow(
             "pay_list_id": pay_list_id,
             "fee_item_id": gov_fee_item_id,
             "paid_date": "2026-12-20",
-            "paid_amount": "100.00",
+            "paid_amount": "900.00",
             "official_receipt_no": _uid("OCR"),
         },
     )
     assert register_resp.status_code == 200, register_resp.text
-    assert register_resp.json()["pay_list"]["status"] == "EXPORTED"
+    assert register_resp.json()["pay_list"]["status"] == "PAID"
 
     mark_paid_resp = client.post(
         f"/api/v1/pay-lists/{pay_list_id}/mark-paid",
@@ -1495,6 +1518,7 @@ def test_pay_list_mark_paid_rejects_draft_state(
         year_no=1,
         due_date=date(2026, 12, 2),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -1536,6 +1560,7 @@ def test_pay_list_mark_paid_rejects_forbidden_and_missing_header(
         year_no=1,
         due_date=date(2026, 12, 3),
     )
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
     draft_resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
         headers=auth_headers,
@@ -1786,6 +1811,7 @@ def test_annuity_generate_drafts_normalizes_currency_case(
         due_date=date(2026, 6, 1),
     )
     _create_annuity_rates(client, auth_headers, tag=uuid4().hex[:6].upper())
+    seed_annuity_obligations_with_pay_instruction(session_factory, [task_id])
 
     resp = client.post(
         "/api/v1/annuity/tasks/generate-drafts",
@@ -1798,4 +1824,4 @@ def test_annuity_generate_drafts_normalizes_currency_case(
     assert payload["summary"]["failed"] == 0
     assert payload["success"][0]["currency"] == "CNY"
     # Annuity drafts carry the task-held gov fee amount only (no service fee).
-    assert payload["success"][0]["amount"] == "100.00"
+    assert payload["success"][0]["amount"] == "900.00"
