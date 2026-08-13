@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Any, get_type_hints
 
 import pytest
+import test_v8_future_annuity_obligation as future_annuity
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -60,14 +61,47 @@ def _identity_key(*, year: int, obligation_id: str = OBLIGATION_ID) -> str:
     return hashlib.sha256(source.encode()).hexdigest()
 
 
-def _recognition_payload(obligation_id: str) -> str:
+def _recognition_payload(
+    obligation_id: str,
+    *,
+    year: int = 4,
+    due_date: date = DUE_DATE,
+) -> str:
     return json.dumps(
         {
             "obligation_id": obligation_id,
             "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
+            "obligation": {
+                "actor_id": ACTOR_ID,
+                "case_id": CASE_ID,
+                "currency": "CNY",
+                "due_date": due_date.isoformat(),
+                "fee_domain": "GOV",
+                "lines": [
+                    {
+                        "difference_review_state": "MATCHED",
+                        "fee_code": "CN_ANNUITY_FEE_INV",
+                        "fee_name": "发明专利年费",
+                        "fee_year_key": year,
+                        "official_full_amount": "1200.00",
+                        "payable_amount": "1200.00",
+                        "reduction_ratio": "0.0000",
+                        "source_amount": None,
+                        "source_date": due_date.isoformat(),
+                    }
+                ],
+                "obligation_type": "FUTURE_ANNUITY",
+                "source_activity_id": SOURCE_ACTIVITY_ID,
+                "source_document_id": DOCUMENT_ID,
+                "source_status": "VERIFIED",
+                "supersede_reason": None,
+                "supersedes_obligation_id": None,
+            },
         },
+        ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
+        allow_nan=False,
     )
 
 
@@ -275,7 +309,11 @@ def _seed_second_task(transaction: Session) -> int:
             reviewer_id="annuity-instruction-reviewer",
             idempotency_key="annuity-instruction:recognition-2",
             supersedes_event_id=None,
-            payload_json=_recognition_payload(obligation_id),
+            payload_json=_recognition_payload(
+                obligation_id,
+                year=5,
+                due_date=date(2028, 8, 1),
+            ),
         )
     )
     transaction.flush()
@@ -434,6 +472,60 @@ def test_public_contract_is_exact_frozen_slotted_and_typed() -> None:
         "transaction": Session,
         "return": RecordAnnuityTaskInstructionResult,
     }
+
+
+def test_current_future_annuity_recognition_composes_with_instruction(
+    session_factory: sessionmaker,
+) -> None:
+    task_id = future_annuity._seed(session_factory)
+    with session_factory() as transaction:
+        recognition = future_annuity.recognize_future_annuity_obligation(
+            future_annuity._command(task_id), transaction
+        )
+        transaction.commit()
+
+    with session_factory() as transaction:
+        result = _record(
+            RecordAnnuityTaskInstructionCommand(
+                annuity_task_id=task_id,
+                instruction="PAY",
+                actor_id=future_annuity.ACTOR_ID,
+                idempotency_key="annuity-current-recognition:pay",
+            ),
+            transaction,
+        )
+
+        assert result.annuity_task_id == task_id
+        assert result.fee_obligation_id == recognition.fee_obligation_id
+        assert result.instruction.value == "PAY"
+        assert result.reused is False
+
+
+def test_obsolete_two_field_recognition_payload_is_rejected(
+    session_factory: sessionmaker,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task_id = _seed(session_factory)
+    with session_factory() as transaction:
+        recognition = transaction.get(CaseActivityEvent, RECOGNITION_ID)
+        assert recognition is not None
+        recognition.payload_json = json.dumps(
+            {
+                "obligation_id": OBLIGATION_ID,
+                "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        transaction.commit()
+
+        monkeypatch.setattr(
+            annuity_service,
+            "record_client_instruction",
+            lambda *_args, **_kwargs: pytest.fail("invalid payload delegated"),
+        )
+        error = _expect_status(409, lambda: _record(_command(task_id), transaction))
+        assert getattr(error, "code", None) == "ANNUITY_INSTRUCTION_LINEAGE_CONFLICT"
 
 
 @pytest.mark.parametrize("instruction", ["PAY", "HOLD", "ABANDON"])

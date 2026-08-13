@@ -4236,43 +4236,12 @@ def _annuity_instruction_exact_string(value: object, limit: int = 36) -> bool:
     return type(value) is str and bool(value) and value == value.strip() and len(value) <= limit
 
 
-def _has_future_annuity_exception_draft(
-    transaction: Session,
-    *,
-    case_id: str,
-    obligation_id: str,
-) -> bool:
-    matches: list[dict[str, object]] = []
-    for activity in transaction.scalars(
-        select(CaseActivityEvent).where(
-            CaseActivityEvent.case_id == case_id,
-            CaseActivityEvent.lane == ActivityLane.FEE.value,
-            CaseActivityEvent.activity_type == "FEE_DRAFT_CREATED",
-        )
-    ):
-        try:
-            payload = json.loads(activity.payload_json)
-        except (TypeError, ValueError):
-            continue
-        if type(payload) is dict and payload.get("obligation_id") == obligation_id:
-            matches.append(payload)
-    if not matches:
-        return False
-    if len(matches) != 1:
-        _annuity_instruction_conflict("年费任务费用义务草单活动不存在或不唯一")
-    return (
-        matches[0].get("schema")
-        == "FPMS_FEE_DRAFT_CREATED_FROM_FUTURE_ANNUITY_EXCEPTION_V1"
-    )
-
-
 def _validate_annuity_instruction_lineage(
     transaction: Session,
     *,
     task: AnnuityTask,
     obligation: FeeObligation,
     case: Case,
-    canonical_recognition: bool = False,
 ) -> None:
     lines = tuple(
         transaction.scalars(
@@ -4320,68 +4289,39 @@ def _validate_annuity_instruction_lineage(
     if len(evidence_links) != 1:
         _annuity_instruction_not_found("年费任务来源证据关联不存在或不唯一")
     evidence_link = evidence_links[0]
-    detail = None
-    if canonical_recognition:
-        recognitions: list[CaseActivityEvent] = []
-        for candidate in transaction.scalars(
-            select(CaseActivityEvent).where(
-                CaseActivityEvent.case_id == task.case_id,
-                CaseActivityEvent.lane == ActivityLane.FEE.value,
-                CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
-            )
-        ):
-            try:
-                payload = json.loads(candidate.payload_json)
-            except (TypeError, ValueError):
-                _annuity_instruction_conflict("年费任务费用义务识别活动无效")
-            if (
-                type(payload) is not dict
-                or payload.get("schema") != "FPMS_FEE_OBLIGATION_RECOGNIZED_V1"
-            ):
-                _annuity_instruction_conflict("年费任务费用义务识别活动无效")
-            if payload.get("obligation_id") == obligation.id:
-                recognitions.append(candidate)
-        if not recognitions:
-            _annuity_instruction_not_found("年费任务费用义务识别活动不存在")
-        if len(recognitions) != 1:
-            _annuity_instruction_conflict("年费任务费用义务识别活动不唯一")
+    recognitions: list[CaseActivityEvent] = []
+    for candidate in transaction.scalars(
+        select(CaseActivityEvent).where(
+            CaseActivityEvent.case_id == task.case_id,
+            CaseActivityEvent.lane == ActivityLane.FEE.value,
+            CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
+        )
+    ):
         try:
-            detail = get_fee_obligation(obligation.id, transaction)
-        except BusinessError:
+            payload = json.loads(candidate.payload_json)
+        except (TypeError, ValueError):
             _annuity_instruction_conflict("年费任务费用义务识别活动无效")
-    else:
-        expected_recognition_payload = json.dumps(
-            {
-                "obligation_id": obligation.id,
-                "schema": "FPMS_FEE_OBLIGATION_RECOGNIZED_V1",
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        recognitions = list(
-            transaction.scalars(
-                select(CaseActivityEvent).where(
-                    CaseActivityEvent.case_id == task.case_id,
-                    CaseActivityEvent.lane == ActivityLane.FEE.value,
-                    CaseActivityEvent.activity_type == "FEE_OBLIGATION_RECOGNIZED",
-                    CaseActivityEvent.payload_json == expected_recognition_payload,
-                )
-            )
-        )
-        if len(recognitions) != 1:
-            _annuity_instruction_not_found("年费任务费用义务识别活动不存在或不唯一")
+        if (
+            type(payload) is not dict
+            or payload.get("schema") != "FPMS_FEE_OBLIGATION_RECOGNIZED_V1"
+        ):
+            _annuity_instruction_conflict("年费任务费用义务识别活动无效")
+        if payload.get("obligation_id") == obligation.id:
+            recognitions.append(candidate)
+    if not recognitions:
+        _annuity_instruction_not_found("年费任务费用义务识别活动不存在")
+    if len(recognitions) != 1:
+        _annuity_instruction_conflict("年费任务费用义务识别活动不唯一")
+    try:
+        detail = get_fee_obligation(obligation.id, transaction)
+    except BusinessError:
+        _annuity_instruction_conflict("年费任务费用义务识别活动无效")
     recognition = recognitions[0]
     if (
-        (
-            canonical_recognition
-            and (
-                detail is None
-                or detail.id != obligation.id
-                or detail.case_id != case.id
-                or detail.source.source_activity_id != task.source_activity_id
-                or detail.source.source_document_id != task.source_document_id
-            )
-        )
+        detail.id != obligation.id
+        or detail.case_id != case.id
+        or detail.source.source_activity_id != task.source_activity_id
+        or detail.source.source_document_id != task.source_document_id
         or source_activity.case_id != case.id
         or source_activity.lane != ActivityLane.LIFECYCLE.value
         or source_activity.activity_type != "GRANT_ANNOUNCEMENT_CONFIRMED"
@@ -4452,11 +4392,6 @@ def record_annuity_task_instruction(
             task=task,
             obligation=obligation,
             case=case,
-            canonical_recognition=_has_future_annuity_exception_draft(
-                transaction,
-                case_id=case.id,
-                obligation_id=obligation.id,
-            ),
         )
     instruction = FeeClientInstruction(command.instruction)
     delegated = record_client_instruction(
@@ -4545,7 +4480,6 @@ def apply_future_annuity_auto_draft_policy(
                 task=task,
                 obligation=obligation,
                 case=case,
-                canonical_recognition=True,
             )
         except BusinessError as exc:
             status_code = 404 if exc.status_code == 404 else 409
