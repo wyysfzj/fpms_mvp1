@@ -748,14 +748,22 @@ def put_annuity_task_instruction(
 def post_annuity_generate_drafts(
     payload: AnnuityGenerateDraftsIn,
     _perm: None = Depends(require_perm("AnnuityTask.Action")),
+    current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return generate_fee_drafts_from_annuity_tasks(
-        db,
-        task_ids=payload.task_ids,
-        pay_next_year=payload.pay_next_year,
-        currency=payload.currency,
-    )
+    try:
+        result = generate_fee_drafts_from_annuity_tasks(
+            db,
+            task_ids=payload.task_ids,
+            pay_next_year=payload.pay_next_year,
+            currency=payload.currency,
+            actor_id=str(current_user.id),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return result
 
 
 @router.post(
