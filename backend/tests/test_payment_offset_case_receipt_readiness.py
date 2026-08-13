@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.modules.fees.models import FeeRate
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
@@ -81,7 +82,7 @@ def _create_case(
             "title_cn": "付款冲销测试案",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0",
+            "fee_reduction": "0.85",
             "applicants": [
                 {
                     "seq": 1,
@@ -148,6 +149,7 @@ def test_payment_offset_updates_bill_and_case_receipts(
     _seed_apply_fee_rates(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,
@@ -183,8 +185,8 @@ def test_payment_offset_updates_bill_and_case_receipts(
     assert bill_detail_response.status_code == 200, bill_detail_response.text
     bill_detail = bill_detail_response.json()
     assert bill_detail["status"] == "PARTIALLY_SETTLED"
-    assert bill_detail["amount"] == "1250.00"
-    assert bill_detail["balance"] == "950.00"
+    assert bill_detail["amount"] == "485.00"
+    assert bill_detail["balance"] == "185.00"
 
     payment_detail_response = client.get(f"/api/v1/payments/{payment['id']}", headers=auth_headers)
     assert payment_detail_response.status_code == 200, payment_detail_response.text
@@ -206,6 +208,6 @@ def test_payment_offset_updates_bill_and_case_receipts(
     assert receipt["currency"] == "CNY"
     assert receipt["received_amt"] == "300.00"
     assert receipt["last_receipt_date"] == "2026-04-21"
-    assert Decimal(receipt["receivable_amt"]) == Decimal("1250.00")
+    assert Decimal(receipt["receivable_amt"]) == Decimal("485.00")
     assert Decimal(receipt["receivable_amt"]) > Decimal(receipt["received_amt"])
     assert receipt["bills"][0]["id"] == bill["id"]

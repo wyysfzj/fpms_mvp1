@@ -87,6 +87,7 @@ This task may only:
 - `backend/tests/test_document_wizard_fee_preview.py`
 - `backend/tests/test_fee_report.py`
 - `backend/tests/test_flows.py`
+- `backend/tests/test_gov_paylist_validation_mvp.py`
 - `backend/tests/test_offset_list.py`
 - `backend/tests/test_payment_bill_linkage_api.py`
 - `backend/tests/test_payment_offset_case_receipt_readiness.py`
@@ -104,10 +105,17 @@ independent High review must approve P0/P1/P2 `0/0/0` before Row283 resumes.
 
 ## Current verification result
 
-The fresh exact 58-file run after alignment completed `252 passed / 30 failed` in `135.02s`.
-All original missing/rejected case-create input failures and all 23 setup errors are closed. The
-30 remaining failures are newly reached, causally distinct current-contract gaps: annuity
-obligation lineage, application-fee obligation/activation, batch-filing lifecycle/evidence,
-one applicant update boundary, one A2 canonical-value boundary, grant template/manifest
-maintenance and the official-package archive gate. They are not changed or claimed closed by
+The initial fresh exact 58-file run completed `252 passed / 30 failed` in `135.02s`. Independent
+review rejected that candidate because it had replaced existing `0.85` scenarios with no
+reduction. The amendment restores those exact non-zero scenarios and original amount assertions,
+seeds current applicant-scoped approval evidence, and retains the current maximum supported
+`0.85` boundary in the specification test.
+
+The fresh exact 58-file rerun on the amended bytes completed `252 passed / 30 failed` in
+`136.71s`. All restored fee-reduction scenarios pass through exact applicant-scoped approval and
+retain their original reduced amount assertions. The 30 remaining failures are causally distinct
+current-contract gaps reached after this task's boundary: annuity obligation lineage,
+application-fee obligation/activation, batch-filing lifecycle/evidence, one applicant update
+explicit-selection boundary, one A2 unsupported canonical-value boundary, grant template/manifest
+maintenance, and the official-package archive gate. They are not changed or claimed closed by
 this task.

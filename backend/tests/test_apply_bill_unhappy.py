@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.modules.fees.models import FeeRate
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str], label: str) -> str:
@@ -82,7 +83,7 @@ def _create_case(
             "title_cn": "账单非法组合测试案",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0",
+            "fee_reduction": "0.85",
             "applicants": [
                 {
                     "seq": 1,
@@ -116,6 +117,7 @@ def _assert_error(response, expected_code: str) -> None:
 def test_bill_from_drafts_rejects_mixed_clients(client, auth_headers, session_factory) -> None:
     _seed_apply_fee_rates(session_factory)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     first_client_id = _create_client(client, auth_headers, "A")
     second_client_id = _create_client(client, auth_headers, "B")
     first_case = _create_case(
@@ -152,6 +154,7 @@ def test_bill_from_drafts_rejects_mixed_currencies_and_empty_draft(
     _seed_apply_fee_rates(session_factory)
     client_id = _create_client(client, auth_headers, "C")
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,

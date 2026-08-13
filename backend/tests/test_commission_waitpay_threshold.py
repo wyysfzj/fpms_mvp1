@@ -12,6 +12,7 @@ from app.modules.commission.models import CommissionRule
 from app.modules.commission.service import recompute_commission_settleable
 from app.modules.fees.models import FeeRate
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_agent_user(session_factory: sessionmaker, username_prefix: str) -> str:
@@ -125,7 +126,7 @@ def _create_case(
             "title_cn": "提成阈值测试案",
             "recv_date": "2026-03-01",
             "claim_count": 12,
-            "fee_reduction": "0",
+            "fee_reduction": "0.85",
             "primary_agent_id": main_agent_id,
             "applicants": [
                 {
@@ -238,6 +239,7 @@ def test_waitpay_threshold_and_force_settle_readiness(
     service_rate_id = _seed_service_fee_rate(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     main_agent_id = _create_agent_user(session_factory, "wait-main")
     co_agent_id = _create_agent_user(session_factory, "wait-co")
 

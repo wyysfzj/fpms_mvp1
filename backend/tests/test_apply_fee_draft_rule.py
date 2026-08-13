@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.modules.fees.models import FeeDraft, FeeRate
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
@@ -100,7 +101,7 @@ def _create_case(
             "recv_date": "2026-03-01",
             "claim_count": claim_count,
             "has_exam_request": has_exam_request,
-            "fee_reduction": "0",
+            "fee_reduction": "0.85",
             "applicants": [
                 {
                     "seq": 1,
@@ -124,6 +125,7 @@ def test_generate_apply_fee_draft_calculates_items_and_is_idempotent(
     _seed_apply_fee_rates(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,
@@ -143,10 +145,10 @@ def test_generate_apply_fee_draft_calculates_items_and_is_idempotent(
     assert draft["client_id"] == client_id
     assert draft["draft_type"] == "APPLY_FEE"
     assert draft["status"] == "OPEN"
-    assert Decimal(draft["total_gov"]) == Decimal("3750.00")
+    assert Decimal(draft["total_gov"]) == Decimal("860.00")
     assert Decimal(draft["total_service"]) == Decimal("0.00")
     assert Decimal(draft["total_misc"]) == Decimal("0.00")
-    assert Decimal(draft["amount"]) == Decimal("3750.00")
+    assert Decimal(draft["amount"]) == Decimal("860.00")
 
     items_response = client.get(
         f"/api/v1/fees/drafts/{draft['id']}/items",
@@ -161,11 +163,11 @@ def test_generate_apply_fee_draft_calculates_items_and_is_idempotent(
         "CN_SUBSTANTIVE_EXAM_FEE",
     }
     assert {item["fee_type"] for item in items.values()} == {"GOV"}
-    assert Decimal(items["CN_INV_APPLICATION_FEE"]["amount"]) == Decimal("900.00")
+    assert Decimal(items["CN_INV_APPLICATION_FEE"]["amount"]) == Decimal("135.00")
     assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["quantity"]) == Decimal("2.0000")
     assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["amount"]) == Decimal("300.00")
     assert Decimal(items["CN_PUBLICATION_PRINT_FEE"]["amount"]) == Decimal("50.00")
-    assert Decimal(items["CN_SUBSTANTIVE_EXAM_FEE"]["amount"]) == Decimal("2500.00")
+    assert Decimal(items["CN_SUBSTANTIVE_EXAM_FEE"]["amount"]) == Decimal("375.00")
 
     rerun = client.post(
         "/api/v1/fees/drafts/apply-fee/generate",
@@ -196,6 +198,7 @@ def test_generate_apply_fee_draft_reports_missing_rate(
     _seed_apply_fee_rates(session_factory, include_exam=False)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,
@@ -220,10 +223,11 @@ def test_generate_apply_fee_draft_supports_um_case(
     auth_headers: dict[str, str],
     session_factory,
 ) -> None:
-    """实用新型申请费草单：无费减时不含公布印刷费或实审费。"""
+    """实用新型申请费草单：不含公布印刷费/实审费，费减 0.85 应缴 15%。"""
     _seed_apply_fee_rates(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,
@@ -243,7 +247,7 @@ def test_generate_apply_fee_draft_supports_um_case(
     assert response.status_code == 201, response.text
     draft = response.json()
     assert draft["draft_type"] == "APPLY_FEE"
-    assert Decimal(draft["total_gov"]) == Decimal("500.00")
+    assert Decimal(draft["total_gov"]) == Decimal("75.00")
 
     items_response = client.get(
         f"/api/v1/fees/drafts/{draft['id']}/items",
@@ -252,7 +256,7 @@ def test_generate_apply_fee_draft_supports_um_case(
     assert items_response.status_code == 200, items_response.text
     items = {item["fee_code"]: item for item in items_response.json()}
     assert set(items) == {"CN_UM_APPLICATION_FEE"}
-    assert Decimal(items["CN_UM_APPLICATION_FEE"]["amount"]) == Decimal("500.00")
+    assert Decimal(items["CN_UM_APPLICATION_FEE"]["amount"]) == Decimal("75.00")
 
 
 def test_generate_apply_fee_draft_supports_des_case_with_excess_claims(
@@ -264,6 +268,7 @@ def test_generate_apply_fee_draft_supports_des_case_with_excess_claims(
     _seed_apply_fee_rates(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,
@@ -282,7 +287,7 @@ def test_generate_apply_fee_draft_supports_des_case_with_excess_claims(
 
     assert response.status_code == 201, response.text
     draft = response.json()
-    assert Decimal(draft["total_gov"]) == Decimal("800.00")
+    assert Decimal(draft["total_gov"]) == Decimal("375.00")
 
     items_response = client.get(
         f"/api/v1/fees/drafts/{draft['id']}/items",
@@ -291,6 +296,6 @@ def test_generate_apply_fee_draft_supports_des_case_with_excess_claims(
     assert items_response.status_code == 200, items_response.text
     items = {item["fee_code"]: item for item in items_response.json()}
     assert set(items) == {"CN_DES_APPLICATION_FEE", "CN_EXCESS_CLAIM_FEE"}
-    assert Decimal(items["CN_DES_APPLICATION_FEE"]["amount"]) == Decimal("500.00")
+    assert Decimal(items["CN_DES_APPLICATION_FEE"]["amount"]) == Decimal("75.00")
     assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["quantity"]) == Decimal("2.0000")
     assert Decimal(items["CN_EXCESS_CLAIM_FEE"]["amount"]) == Decimal("300.00")

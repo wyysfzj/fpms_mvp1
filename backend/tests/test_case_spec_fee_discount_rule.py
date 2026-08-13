@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.modules.masterdata.applicants.models import Applicant
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
 
 
 def _create_client(client: TestClient, auth_headers: dict[str, str]) -> str:
@@ -87,6 +88,7 @@ def test_a9_accepts_zero_and_safe_large_spec_discount_boundaries(
 ) -> None:
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
 
     zero_response = client.post(
         "/api/v1/cases",
@@ -105,33 +107,33 @@ def test_a9_accepts_zero_and_safe_large_spec_discount_boundaries(
     assert zero_detail["discount_rate"] == "0.0000"
     assert zero_detail["fee_reduction"] == "0"
 
-    one_response = client.post(
+    maximum_response = client.post(
         "/api/v1/cases",
         json=_payload(
             client_id=client_id,
             applicant_id=applicant_id,
-            suffix="ONE",
+            suffix="MAXIMUM",
             spec_pages=999,
             draw_pages=888,
             claim_count=777,
             claim_pages=666,
             manuscript_words=123456,
             discount_rate="1",
-            fee_reduction="0",
+            fee_reduction="0.85",
         ),
         headers=auth_headers,
     )
-    assert one_response.status_code == 201, one_response.text
-    one_detail = client.get(
-        f"/api/v1/cases/{one_response.json()['id']}", headers=auth_headers
+    assert maximum_response.status_code == 201, maximum_response.text
+    maximum_detail = client.get(
+        f"/api/v1/cases/{maximum_response.json()['id']}", headers=auth_headers
     ).json()
-    assert one_detail["spec_pages"] == 999
-    assert one_detail["draw_pages"] == 888
-    assert one_detail["claim_count"] == 777
-    assert one_detail["claim_pages"] == 666
-    assert one_detail["manuscript_words"] == 123456
-    assert one_detail["discount_rate"] == "1.0000"
-    assert one_detail["fee_reduction"] == "0"
+    assert maximum_detail["spec_pages"] == 999
+    assert maximum_detail["draw_pages"] == 888
+    assert maximum_detail["claim_count"] == 777
+    assert maximum_detail["claim_pages"] == 666
+    assert maximum_detail["manuscript_words"] == 123456
+    assert maximum_detail["discount_rate"] == "1.0000"
+    assert maximum_detail["fee_reduction"] == "0.85"
 
 
 def test_a9_rejects_negative_spec_fields_and_out_of_range_discount_rate(

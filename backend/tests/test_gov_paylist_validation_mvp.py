@@ -8,6 +8,8 @@ from test_apply_gov_paylist_readiness import (
     _seed_apply_fee_rates,
 )
 
+from tests.test_v8_case_create_fee_reduction import _seed_approval_record
+
 
 def test_zero_government_payment_returns_business_error(
     client,
@@ -17,6 +19,7 @@ def test_zero_government_payment_returns_business_error(
     _seed_apply_fee_rates(session_factory)
     client_id = _create_client(client, auth_headers)
     applicant_id = _seed_applicant(session_factory)
+    _seed_approval_record(session_factory, applicant_ids=(applicant_id,), ratio="0.85")
     case_data = _create_case(
         client,
         auth_headers,
