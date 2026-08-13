@@ -2246,18 +2246,10 @@
     {
       "catalog_id": "FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01",
       "phase": "deferred",
-      "disposition": "PENDING",
-      "story_id": null,
+      "disposition": "CURRENT_VERIFIED",
+      "story_id": "V8-FULL-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION",
       "successor_story_id": null,
-      "blocker": {
-        "code": "DEPENDENCY_BLOCKED",
-        "dependencies": [
-          "FPMS-V8-FULL-MANIFEST-ACTIVATION-20260712-01",
-          "FPMS-V8-OFFICIAL-WORKBOOK-REAL-UI-E2E-20260712-01"
-        ],
-        "ref": "docs/product/v8/reviews/V8-FULL-TERMINAL-DEPENDENCY-SUCCESSOR-CONTRACT.md",
-        "audit_ref": "docs/product/v8/reviews/V8-FULL-ELIGIBILITY-BLOCKER-AUDIT-20260810.md"
-      }
+      "blocker": null
     },
     {
       "catalog_id": "FPMS-V8-FINAL-ITEM-SLICE-LEDGER-20260712-01",
@@ -7180,6 +7172,112 @@
       "production_inputs": {
         "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
         "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "production_failure": "409 / NO WRITE",
+      "production_activation_claimed": false
+    },
+    {
+      "story_id": "V8-FULL-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION",
+      "status": "CURRENT_VERIFIED",
+      "commits": [
+        "2e32394ad356c7a743b010e75306a7b1ceba0ce1"
+      ],
+      "paths": [
+        "backend/tests/test_addgap_document_create_atomicity.py",
+        "backend/tests/test_addgap_document_deadline_create_api.py",
+        "backend/tests/test_addgap_document_deadline_impact_preview.py",
+        "backend/tests/test_addgap_document_deadline_read_projection.py",
+        "backend/tests/test_addgap_document_deadline_update_api.py",
+        "backend/tests/test_addgap_document_wizard_deadline_backend.py",
+        "backend/tests/test_addgap_filing_ensure_service.py",
+        "backend/tests/test_addgap_filing_resolve_api.py",
+        "backend/tests/test_addgap_grant_auto_draft_gate.py",
+        "backend/tests/test_addgap_grant_preview_no_auto_draft.py",
+        "backend/tests/test_addgap_legacy_deadline_task_sync.py",
+        "backend/tests/test_addgap_notice_catalog_reference_gate.py",
+        "backend/tests/test_addgap_notice_grant_activation.py",
+        "backend/tests/test_addgap_notice_oa_acceptance_activation.py",
+        "backend/tests/test_addgap_oa_alias_reply_validation.py",
+        "backend/tests/test_addgap_oa_deadline_fail_closed.py",
+        "backend/tests/test_addgap_oa_out_keeps_task_open.py",
+        "backend/tests/test_b2_reply_chain.py",
+        "backend/tests/test_b3_fee_linking.py",
+        "backend/tests/test_b_official_due_date_task_generation.py",
+        "backend/tests/test_case_missing_fields_crud.py",
+        "backend/tests/test_document_generated_attachment_persist.py",
+        "backend/tests/test_document_specific_search_api.py",
+        "backend/tests/test_document_wizard_task_preview.py",
+        "backend/tests/test_grant_fee_draft_linkage_api.py",
+        "backend/tests/test_grant_fee_notice_document_api.py",
+        "backend/tests/test_grant_fee_notice_task_creation.py",
+        "backend/tests/test_grant_fee_state_machine_api.py",
+        "backend/tests/test_grant_fee_worklist_api.py",
+        "backend/tests/test_spec_alignment_e2e.py",
+        "backend/tests/test_task_template.py",
+        "backend/tests/test_v8_future_annuity_exception_carrier_schema.py",
+        "backend/tests/test_v8_future_annuity_reduction_lineage_carrier.py",
+        "backend/tests/test_v8_grant_evidence_source_carrier_schema.py",
+        "backend/tests/test_v8_grant_manual_review_role_carrier_schema.py",
+        "backend/tests/test_v8_grant_official_copy_verification_carrier_schema.py",
+        "backend/tests/test_v8_grant_review_gate_manifest_contract.py",
+        "backend/tests/test_v8_grant_source_gate_manifest_contract.py",
+        "backend/tests/test_v8_input_activation_decoupling_contract.py",
+        "backend/tests/test_v8_lifecycle_evidence_kind_capacity.py",
+        "backend/tests/test_v8_official_rate_book_schema.py",
+        "backend/tests/test_v8_overlay_warning_conflict_migration.py",
+        "backend/tests/test_v8_pay_list_export_artifact_schema.py",
+        "backend/tests/test_v8_payment_workbook_input_version.py",
+        "tasks/postdemo/v8/FPMS-V8-CURRENT-HEAD-MIGRATION-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-CURRENT-TASK-HASH-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-CASE-CREATE-INPUT-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-DECLARED-CASE-CREATE-INPUT-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-FILING-PREPARATION-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-GRANT-LIFECYCLE-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-NOTICE-SEED-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-OA-REPLY-PROJECTION-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-20260712-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-CLOSE-20260813-01.md",
+        "backend/tests/test_v8_inherited_regression_matrix_contract.py",
+        "docs/product/v8/inherited-regression-matrix.json",
+        "docs/product/v8/stories/V8-INHERITED-REGRESSION-MATRIX-CLOSE.md",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-format-letter-in-source-ui.spec.ts",
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-detail-gates-warnings.spec.ts",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-FORMAT-LETTER-ERROR-LOCATOR-TEST-ALIGNMENT-20260813-01.md",
+        "tasks/postdemo/v8/FPMS-V8-INHERITED-OVERLAY-READ-COUNT-TEST-ALIGNMENT-20260813-01.md",
+        "scripts/run_v8_playwright_mock_isolated.py",
+        "scripts/run_v8_lifecycle_overlay_live_isolated.py"
+      ],
+      "tree_sha256": "60fdc71fd57a665870d9fe3b170f8f4e02c6b6f96d8e97ae18ac6de25c0e261a",
+      "tests": [
+        "Tasks01-70 backend matrix passed 400 tests",
+        "current V8 backend matrix passed 5206 tests with 24 controlled skips and 114 subtests",
+        "declared non-overlap backend matrix passed 17 tests",
+        "frontend typecheck and executable workbook contracts passed",
+        "Tasks01-70 mock Playwright passed 22 tests; all 21 declared primary Playwright paths passed 52 tests; two isolated live paths passed one each",
+        "Full successor and lean governance contracts passed 5 and 32 tests",
+        "independent High review required before ledger adoption commit"
+      ],
+      "review_class": "PROTECTED",
+      "review_ref": "docs/product/v8/reviews/V8-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION.md",
+      "verification_ref": "docs/product/v8/reviews/V8-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION.md",
+      "matrix_scope": "FULL_MANIFEST_V8_TO_TASKS01_70",
+      "effective_dependency_sha256": "6b17123b63d5a862a5f702454e38d2bab1e5a41512a4ed177b79957946c362b7",
+      "pre_adoption_unresolved_rows": [
+        281,
+        282,
+        283
+      ],
+      "post_adoption_unresolved_rows": [
+        282,
+        283
+      ],
+      "production_inputs": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+      },
+      "source_decision_status": {
+        "DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING",
+        "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"
       },
       "production_failure": "409 / NO WRITE",
       "production_activation_claimed": false
