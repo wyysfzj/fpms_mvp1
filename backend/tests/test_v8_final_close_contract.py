@@ -124,6 +124,17 @@ def _ledger_patch_sha256() -> str:
     return hashlib.sha256(patch).hexdigest()
 
 
+def _assert_pre_report_state() -> None:
+    assert not REPORT_PATH.exists()
+    assert not STORY_PATH.exists()
+    assert not RECEIPT_PATH.exists()
+    head_ledger = _git_json("HEAD", "docs/product/v8/coverage-ledger.json")
+    worktree_ledger = json.loads(LEDGER_PATH.read_text())
+    assert head_ledger["rows"][282]["disposition"] == "PENDING"
+    assert worktree_ledger["rows"][282]["disposition"] == "PENDING"
+    assert STORY_ID not in _story_map(worktree_ledger)
+
+
 def _assert_current_story(story: dict) -> None:
     assert story["status"] == "CURRENT_VERIFIED"
     assert story["paths"] == CANDIDATE_PATHS
@@ -137,6 +148,10 @@ def _assert_current_story(story: dict) -> None:
 
 
 def test_report_records_the_exact_successful_final_matrix() -> None:
+    if not REPORT_PATH.exists():
+        _assert_pre_report_state()
+        return
+    assert STORY_PATH.is_file()
     report = json.loads(REPORT_PATH.read_text())
     assert report["schema_version"] == "v8-final-close-report-v1"
     assert report["expensive_matrix_runs"] == 1

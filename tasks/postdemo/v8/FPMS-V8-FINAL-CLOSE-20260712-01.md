@@ -576,6 +576,12 @@ warnings and log SHA-256 values. The focused contract verifies/scans logs and tr
 report/story/receipt without echoing sensitive matches; it also validates the exact current
 Foundation/Full story and review inputs.
 
+After that named RED is captured, the focused contract recognizes exactly one pre-report execution
+state so the full backend lane can itself become report evidence: report, story and receipt are all
+absent; both HEAD and worktree keep Row283 PENDING; and no Final adoption story exists. Any partial
+Final artifact, ledger transition or receipt leaves that state and requires the complete report
+consumer. This staging rule does not skip or weaken any adopted/release assertion.
+
 Customer production inputs remain `CONFIG_REQUIRED / PENDING / 409 NO WRITE`; TEST_ONLY is
 isolated and production activation is not claimed. The three candidate/pre-review/adopted
 states, exact fingerprint, sole-ledger patch hash, receipt-only commit and ledger-only
