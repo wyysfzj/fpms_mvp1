@@ -1,0 +1,55 @@
+{
+  "schema_version": "v8-final-close-report-v1",
+  "expensive_matrix_runs": 1,
+  "configuration_residual": {
+    "inputs": {
+      "DG-PAYMENT-WORKBOOK:GLOBAL": "CONFIG_REQUIRED",
+      "DG-SERVICE-RATE-VERSION:GLOBAL": "CONFIG_REQUIRED"
+    },
+    "source_decisions": {
+      "DG-PAYMENT-WORKBOOK:GLOBAL": "PENDING",
+      "DG-SERVICE-RATE-VERSION:GLOBAL": "PENDING"
+    },
+    "production_failure": "409 / NO WRITE",
+    "test_only_isolated": true,
+    "production_activation_claimed": false
+  },
+  "lanes": {
+    "clean_sqlite_upgrade_seed": {
+      "command": "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT; cd backend && FPMS_ENV=test DATABASE_URL=\"sqlite:///$tmp/final.db\" STORAGE_DIR=\"$tmp/storage\" .venv/bin/alembic upgrade head && FPMS_ENV=test DATABASE_URL=\"sqlite:///$tmp/final.db\" STORAGE_DIR=\"$tmp/storage\" .venv/bin/python scripts/seed_dev.py",
+      "status": "PASS", "return_code": 0,
+      "observed_summary": "Clean temporary SQLite upgraded to head and development seed completed.",
+      "warnings": [], "log_sha256": "1035d8cde370caea32402c4ea8a66764242ff98f49af2f52eca2c83ec5748e9f"
+    },
+    "backend_ruff": {
+      "command": "cd backend && .venv/bin/ruff check .", "status": "PASS", "return_code": 0,
+      "observed_summary": "All backend Ruff checks passed.",
+      "warnings": ["pyproject top-level linter settings deprecation"], "log_sha256": "d71d2c39cb6b6e0bf858263c9842819a8527d458645355fc8ce99bd5f0e36c6e"
+    },
+    "backend_pytest": {
+      "command": "cd backend && .venv/bin/pytest -q", "status": "PASS", "return_code": 0,
+      "observed_summary": "6158 passed, 33 skipped, 114 subtests passed in 1797.46s.",
+      "warnings": ["4 inherited dependency and schema deprecation warnings"], "log_sha256": "55223d12311422f8c81b8a39e4af7fb4f53a55220c783ce602851d29ad86f2c9"
+    },
+    "frontend_quality": {
+      "command": "cd frontend && npm run lint && npm run typecheck && npm run build", "status": "PASS", "return_code": 0,
+      "observed_summary": "ESLint and vue-tsc passed; Vite production build completed.",
+      "warnings": ["Vite chunk-size advisory"], "log_sha256": "381b502f1417574e0377f532731c8440358270c11f46cf4577912d4181c0f34c"
+    },
+    "lifecycle_real_e2e": {
+      "command": "python3 scripts/run_v8_lifecycle_overlay_live_isolated.py", "status": "PASS", "return_code": 0,
+      "observed_summary": "Real isolated lifecycle overlay Playwright: 1 passed.",
+      "warnings": ["Playwright NO_COLOR/FORCE_COLOR advisory"], "log_sha256": "8ec7fac9869aaac1de37df4da065f8dddc580ea2dd01877919629ddbed7f6e34"
+    },
+    "paylist_real_e2e": {
+      "command": "python3 scripts/run_v8_paylist_boundary_live_isolated.py", "status": "PASS", "return_code": 0,
+      "observed_summary": "Real isolated PayList boundary Playwright: 1 passed.",
+      "warnings": ["Playwright NO_COLOR/FORCE_COLOR advisory"], "log_sha256": "d260eb233474b3d7e6b02b5b87343b51af7073b8421425d8057b61f5f6d386ac"
+    },
+    "workbook_real_e2e": {
+      "command": "cd FPMS_Automation_Skeleton_Pack/playwright_ts && npx playwright test src/tests/v8-official-workbook-live.spec.ts --workers=1", "status": "PASS", "return_code": 0,
+      "observed_summary": "Real isolated official workbook Playwright: 1 passed.",
+      "warnings": ["passlib bcrypt metadata advisory", "Playwright NO_COLOR/FORCE_COLOR advisory"], "log_sha256": "e3348c9cdbf91bba1ec82ef9726967bc1b4a2710f891d4ce862e304bffc4d8aa"
+    }
+  }
+}
