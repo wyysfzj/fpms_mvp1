@@ -81,7 +81,7 @@ def _create_grant_notice(
     return resp.json()
 
 
-def _set_case_ready_for_granted(session_factory: sessionmaker, *, case_id: str) -> None:
+def _set_complete_grant_fields(session_factory: sessionmaker, *, case_id: str) -> None:
     with session_factory() as db:
         case = db.execute(select(Case).where(Case.id == case_id)).scalar_one()
         case.app_no = "CN202610000009"
@@ -96,7 +96,7 @@ def _set_case_ready_for_granted(session_factory: sessionmaker, *, case_id: str) 
         db.commit()
 
 
-def _set_case_missing_publication_fields_for_granted(
+def _set_incomplete_grant_fields(
     session_factory: sessionmaker, *, case_id: str
 ) -> None:
     with session_factory() as db:
@@ -293,7 +293,7 @@ def test_grant_notice_document_creation_creates_one_reusable_grant_fee_task(
 
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANT_PENDING"
+    assert case_resp.json()["status"] == case["status"]
 
 
 def test_grant_notice_document_creation_prefills_official_gov_fee_from_annuity_rate(
@@ -302,7 +302,7 @@ def test_grant_notice_document_creation_prefills_official_gov_fee_from_annuity_r
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _set_complete_grant_fields(session_factory, case_id=case["id"])
     _seed_inv_annuity_gov_rate(session_factory)
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
@@ -328,7 +328,7 @@ def test_grant_notice_document_creation_prefills_current_effective_gov_fee(
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _set_complete_grant_fields(session_factory, case_id=case["id"])
     _seed_inv_annuity_gov_rate_with_effective_windows(session_factory)
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
@@ -348,13 +348,13 @@ def test_grant_notice_document_creation_prefills_current_effective_gov_fee(
         assert task.service_fee_amt == Decimal("0.00")
 
 
-def test_grant_notice_attachment_upload_advances_ready_case_to_granted(
+def test_grant_notice_attachment_is_lifecycle_neutral_with_complete_grant_fields(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _set_complete_grant_fields(session_factory, case_id=case["id"])
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
     document = _create_grant_notice(
@@ -367,7 +367,7 @@ def test_grant_notice_attachment_upload_advances_ready_case_to_granted(
 
     pending_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert pending_resp.status_code == 200, pending_resp.text
-    assert pending_resp.json()["status"] == "GRANT_PENDING"
+    assert pending_resp.json()["status"] == case["status"]
 
     upload_resp = client.post(
         f"{DOC_BASE}/{document['id']}/attachments",
@@ -384,16 +384,16 @@ def test_grant_notice_attachment_upload_advances_ready_case_to_granted(
 
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANTED"
+    assert case_resp.json()["status"] == case["status"]
 
 
-def test_grant_notice_attachment_upload_does_not_advance_without_publication_fields(
+def test_grant_notice_attachment_is_lifecycle_neutral_with_incomplete_grant_fields(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_missing_publication_fields_for_granted(session_factory, case_id=case["id"])
+    _set_incomplete_grant_fields(session_factory, case_id=case["id"])
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
 
     document = _create_grant_notice(
@@ -406,7 +406,7 @@ def test_grant_notice_attachment_upload_does_not_advance_without_publication_fie
 
     pending_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert pending_resp.status_code == 200, pending_resp.text
-    assert pending_resp.json()["status"] == "GRANT_PENDING"
+    assert pending_resp.json()["status"] == case["status"]
 
     upload_resp = client.post(
         f"{DOC_BASE}/{document['id']}/attachments",
@@ -423,20 +423,21 @@ def test_grant_notice_attachment_upload_does_not_advance_without_publication_fie
 
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANT_PENDING"
+    assert case_resp.json()["status"] == case["status"]
 
 
-def test_imported_grant_notice_attachment_upload_advances_case_and_creates_fee_task(
+def test_imported_grant_notice_attachment_keeps_case_status_and_creates_fee_task(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
 ) -> None:
     case = _create_case(client, auth_headers)
-    _set_case_ready_for_granted(session_factory, case_id=case["id"])
+    _set_complete_grant_fields(session_factory, case_id=case["id"])
     with session_factory() as db:
         target_case = db.execute(select(Case).where(Case.id == case["id"])).scalar_one()
         target_case.status = "SUB_EXAM"
         db.commit()
+        pre_attachment_status = target_case.status
     template = _get_template(client, auth_headers, "GRANT_NOTICE")
     document_id = _seed_imported_grant_notice_document(
         session_factory,
@@ -459,7 +460,7 @@ def test_imported_grant_notice_attachment_upload_advances_case_and_creates_fee_t
     assert upload_resp.status_code == 201, upload_resp.text
     case_resp = client.get(f"{CASE_BASE}/{case['id']}", headers=auth_headers)
     assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANTED"
+    assert case_resp.json()["status"] == pre_attachment_status
 
     task_resp = client.get(
         GRANT_FEE_TASK_BASE,

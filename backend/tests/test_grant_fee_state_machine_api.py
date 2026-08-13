@@ -7,10 +7,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
+from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.documents.models import Document
 from app.modules.fees.models import T_GrantFeeTask
 
 STATE_BASE = "/api/v1/grant-fee-tasks"
+GRANT_FEE_TEST_ACTOR_ID = "grant-fee-state-machine-actor"
 
 
 def _uid(prefix: str) -> str:
@@ -40,8 +42,6 @@ def _set_case_grant_fields(
     case_id: str,
     complete: bool,
 ) -> None:
-    from app.modules.cases.models import Case
-
     with session_factory() as db:
         case = db.execute(select(Case).where(Case.id == case_id)).scalar_one()
         case.status = "GRANT_PENDING"
@@ -88,6 +88,8 @@ def _insert_task(
             notice_sent=overrides.pop("notice_sent", False),
             is_overdue=overrides.pop("is_overdue", False),
             remark=overrides.pop("remark", None),
+            created_by=GRANT_FEE_TEST_ACTOR_ID,
+            updated_by=GRANT_FEE_TEST_ACTOR_ID,
         )
         db.add(task)
         db.commit()
@@ -223,7 +225,7 @@ def test_grant_fee_state_machine_supports_pay_and_done_flow(
     assert task.notify_count == 4
 
 
-def test_grant_fee_done_advances_case_to_granted_when_grant_fields_present(
+def test_grant_fee_done_records_fee_activity_without_granting_case(
     client: TestClient,
     auth_headers: dict[str, str],
     session_factory: sessionmaker,
@@ -247,9 +249,30 @@ def test_grant_fee_done_advances_case_to_granted_when_grant_fields_present(
     assert done_resp.status_code == 200, done_resp.text
     assert done_resp.json()["state"] == "DONE"
 
-    case_resp = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
-    assert case_resp.status_code == 200, case_resp.text
-    assert case_resp.json()["status"] == "GRANTED"
+    with session_factory() as db:
+        case = db.execute(select(Case).where(Case.id == case_id)).scalar_one()
+        activities = (
+            db.execute(
+                select(CaseActivityEvent).where(
+                    CaseActivityEvent.case_id == case_id,
+                    CaseActivityEvent.activity_type == "GRANT_FEE_TASK_DONE",
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert case.status == "GRANT_PENDING"
+    assert len(activities) == 1
+    assert (
+        activities[0].lane,
+        activities[0].activity_type,
+        activities[0].actor_id,
+    ) == (
+        "FEE",
+        "GRANT_FEE_TASK_DONE",
+        GRANT_FEE_TEST_ACTOR_ID,
+    )
 
 
 def test_grant_fee_done_does_not_advance_case_without_required_grant_fields(

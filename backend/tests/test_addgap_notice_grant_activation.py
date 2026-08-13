@@ -24,6 +24,10 @@ PRIOR_EXECUTABLE_CODES = {
 }
 GRANT_CODE = "OFFICIAL_NOTICE_009"
 EXPECTED_EXECUTABLE_CODES = PRIOR_EXECUTABLE_CODES | {GRANT_CODE}
+CURRENT_SEED_EXECUTABLE_CODES = EXPECTED_EXECUTABLE_CODES | {
+    "OFFICIAL_NOTICE_031",
+    "OFFICIAL_NOTICE_034",
+}
 
 
 def _seed_grant_catalog(db) -> int:
@@ -44,14 +48,18 @@ def _catalog_rows(db) -> list[DocTemplate]:
     )
 
 
-def _assert_grant_target_state(rows: list[DocTemplate]) -> None:
+def _assert_grant_target_state(
+    rows: list[DocTemplate],
+    *,
+    expected_executable_codes: set[str] = EXPECTED_EXECUTABLE_CODES,
+) -> None:
     assert len(rows) == len(notice_catalog.OFFICIAL_NOTICE_CATALOG) == 60
     executable_codes = {
         row.code
         for row in rows
         if json.loads(row.input_fields or "{}")["catalog_status"] == "EXECUTABLE"
     }
-    assert executable_codes == EXPECTED_EXECUTABLE_CODES
+    assert executable_codes == expected_executable_codes
 
     grant = next(row for row in rows if row.code == GRANT_CODE)
     metadata = json.loads(grant.input_fields or "{}")
@@ -67,7 +75,7 @@ def _assert_grant_target_state(rows: list[DocTemplate]) -> None:
     assert metadata["archive_status_restore"] is None
 
     for row in rows:
-        if row.code in EXPECTED_EXECUTABLE_CODES:
+        if row.code in expected_executable_codes:
             continue
         metadata = json.loads(row.input_fields or "{}")
         assert metadata["catalog_status"] == "REFERENCE_ONLY"
@@ -141,12 +149,18 @@ def test_seed_dev_uses_grant_target_state_idempotently(
     with session_factory() as db:
         seed_dev.seed_doc_templates(db)
         first_rows = _catalog_rows(db)
-        _assert_grant_target_state(first_rows)
+        _assert_grant_target_state(
+            first_rows,
+            expected_executable_codes=CURRENT_SEED_EXECUTABLE_CODES,
+        )
         first_snapshot = [(row.id, row.code, row.input_fields) for row in first_rows]
 
         seed_dev.seed_doc_templates(db)
         second_rows = _catalog_rows(db)
-        _assert_grant_target_state(second_rows)
+        _assert_grant_target_state(
+            second_rows,
+            expected_executable_codes=CURRENT_SEED_EXECUTABLE_CODES,
+        )
         assert [(row.id, row.code, row.input_fields) for row in second_rows] == first_snapshot
 
 
@@ -220,5 +234,5 @@ def test_activated_grant_with_confirmed_due_creates_source_task_without_generic_
         )
         assert (
             db.execute(select(Case).where(Case.id == case["id"])).scalar_one().status
-            == "GRANT_PENDING"
+            == case["status"]
         )
