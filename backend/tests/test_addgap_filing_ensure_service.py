@@ -16,6 +16,8 @@ from app.modules.official_workflows.models import (
     OfficialWorkPackageManifest,
 )
 
+TEST_ACTOR_ID = "filing-alignment-actor"
+
 
 def _create_case(db: Session, *, status: str = "NOT_FILED") -> Case:
     case = Case(
@@ -26,6 +28,11 @@ def _create_case(db: Session, *, status: str = "NOT_FILED") -> Case:
         flow_dir="CN_DOMESTIC",
         title_cn="Filing ensure service 测试案件",
         status=status,
+        business_stage="NEW_CASE",
+        official_procedure_stage="NOT_SUBMITTED",
+        legal_status="NOT_ESTABLISHED",
+        lifecycle_revision=0,
+        lifecycle_verification_status="CONFIRMED",
     )
     db.add(case)
     db.commit()
@@ -34,7 +41,11 @@ def _create_case(db: Session, *, status: str = "NOT_FILED") -> Case:
 
 def _ensure(db: Session, *, case_id: str):
     service = importlib.import_module("app.modules.official_workflows.service")
-    return service.ensure_filing_preparation_package(db, case_id=case_id)
+    return service.ensure_filing_preparation_package(
+        db,
+        case_id=case_id,
+        actor_id=TEST_ACTOR_ID,
+    )
 
 
 def test_not_filed_case_creates_one_initialized_filing_package(
@@ -98,6 +109,8 @@ def test_existing_archived_package_is_returned_before_case_state_gate(
         case = _create_case(db)
         created = _ensure(db, case_id=case.id)
         package = db.get(OfficialWorkPackage, created.package.id)
+        original_creator = package.created_by
+        assert original_creator == TEST_ACTOR_ID
         package.status = "ARCHIVED"
         case.status = "GRANTED"
         db.commit()
@@ -125,6 +138,7 @@ def test_existing_archived_package_is_returned_before_case_state_gate(
 
         assert resolved.package.id == package.id
         assert resolved.package.status == "ARCHIVED"
+        assert db.get(OfficialWorkPackage, package.id).created_by == original_creator
         assert (
             len(
                 db.execute(
@@ -225,38 +239,50 @@ def test_missing_case_returns_not_found(session_factory: sessionmaker) -> None:
         assert exc_info.value.code == "CASE_NOT_FOUND"
 
 
-def test_unique_race_rereads_committed_winner(
+def test_unique_race_fails_closed_without_adopting_committed_winner_or_rollback(
     session_factory: sessionmaker,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with session_factory() as db:
         case = _create_case(db)
+        case_id = case.id
         original_flush = db.flush
+        original_rollback = db.rollback
         winner_id: list[str] = []
 
         def racing_flush(*args, **kwargs) -> None:
             monkeypatch.setattr(db, "flush", original_flush)
-            db.rollback()
+            original_rollback()
             with session_factory() as rival_db:
-                winner = _ensure(rival_db, case_id=case.id)
+                winner = _ensure(rival_db, case_id=case_id)
+                rival_db.commit()
                 winner_id.append(winner.package.id)
             raise IntegrityError("simulated unique-key race", {}, Exception())
 
         monkeypatch.setattr(db, "flush", racing_flush)
-
-        resolved = _ensure(db, case_id=case.id)
-
-        assert resolved.package.id == winner_id[0]
-        packages = (
-            db.execute(
-                select(OfficialWorkPackage).where(
-                    OfficialWorkPackage.case_id == case.id,
-                    OfficialWorkPackage.package_kind == "FILING_PREP",
-                )
-            )
-            .scalars()
-            .all()
+        monkeypatch.setattr(
+            db,
+            "rollback",
+            lambda: pytest.fail("service must not roll back the caller transaction"),
         )
+
+        with pytest.raises(BusinessError) as exc_info:
+            _ensure(db, case_id=case_id)
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.code == "FILING_PREPARATION_IDENTITY_CONFLICT"
+        assert len(winner_id) == 1
+        with session_factory() as verification:
+            packages = (
+                verification.execute(
+                    select(OfficialWorkPackage).where(
+                        OfficialWorkPackage.case_id == case_id,
+                        OfficialWorkPackage.package_kind == "FILING_PREP",
+                    )
+                )
+                .scalars()
+                .all()
+            )
         assert [package.id for package in packages] == winner_id
 
 

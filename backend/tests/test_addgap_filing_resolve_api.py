@@ -22,6 +22,11 @@ def _create_case(session_factory: sessionmaker, *, status: str = "NOT_FILED") ->
             flow_dir="CN_DOMESTIC",
             title_cn="新申请递交包解析 API 测试案件",
             status=status,
+            business_stage="NEW_CASE",
+            official_procedure_stage="NOT_SUBMITTED",
+            legal_status="NOT_ESTABLISHED",
+            lifecycle_revision=0,
+            lifecycle_verification_status="CONFIRMED",
         )
         db.add(case)
         db.commit()
