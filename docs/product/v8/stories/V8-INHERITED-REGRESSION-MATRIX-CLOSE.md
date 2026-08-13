@@ -17,9 +17,10 @@ replaced by the two current Full successor contracts; no other missing input is 
 
 The matrix partitions execution without duplicate claims. The 55 backend regressions are covered
 by the disjoint Tasks01–70, current-V8 and five-file declared-nonoverlap tranches. The seven
-Playwright regressions are contained in the eleven non-live Tasks01–70 specs. The independent
-lifecycle live spec and Row278 workbook live spec use isolated migrated SQLite databases and real
-strict-port services with no route fulfillment.
+Playwright regressions are contained in the eleven non-live Tasks01–70 specs. The mock Playwright
+paths use a dynamic strict-port Vite child. The independent lifecycle live spec and Row278 workbook
+live spec use isolated migrated SQLite databases and real strict-port services with no route
+fulfillment.
 
 ## Fresh results
 
@@ -30,8 +31,9 @@ strict-port services with no route fulfillment.
 - `lean_governance_contract`: `32 passed in 1.14s`
 - `frontend_typecheck`: `vue-tsc --noEmit passed`
 - `frontend_contracts`: `row217 and row221 executable contracts passed`
-- `playwright_tasks01_70_mock`: `22 passed in 1.4m`
-- `playwright_lifecycle_live`: `1 passed in 4.5s`
+- `playwright_tasks01_70_mock`: `22 passed in 2.3m`
+- `playwright_declared_primary`: `52 passed in 4.8m`
+- `playwright_lifecycle_live`: `1 passed in 4.1s`
 - `playwright_workbook_live`: `1 passed in 9.5s`
 - `focused_contract`: `4 pre-adoption contract tests passed; ledger adoption remains independently reviewed`
 

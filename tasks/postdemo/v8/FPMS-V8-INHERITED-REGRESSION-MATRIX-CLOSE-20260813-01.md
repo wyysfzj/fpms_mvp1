@@ -50,6 +50,8 @@ actions remain `409 / NO WRITE`, and TEST_ONLY remains isolated.
 
 - `tasks/postdemo/v8/FPMS-V8-INHERITED-REGRESSION-MATRIX-CLOSE-20260813-01.md`
 - `backend/tests/test_v8_inherited_regression_matrix_contract.py`
+- `scripts/run_v8_playwright_mock_isolated.py`
+- `scripts/run_v8_lifecycle_overlay_live_isolated.py`
 - `docs/product/v8/inherited-regression-matrix.json`
 - `docs/product/v8/stories/V8-INHERITED-REGRESSION-MATRIX-CLOSE.md`
 - `docs/product/v8/reviews/V8-INHERITED-REGRESSION-MATRIX-CURRENT-ADOPTION.md`

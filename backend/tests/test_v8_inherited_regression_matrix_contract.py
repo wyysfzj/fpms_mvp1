@@ -81,7 +81,28 @@ CANDIDATE_PATHS = [
     "backend/tests/test_v8_inherited_regression_matrix_contract.py",
     "docs/product/v8/inherited-regression-matrix.json",
     "docs/product/v8/stories/V8-INHERITED-REGRESSION-MATRIX-CLOSE.md",
+    "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-format-letter-in-source-ui.spec.ts",
+    "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/v8-case-detail-gates-warnings.spec.ts",
+    "tasks/postdemo/v8/FPMS-V8-INHERITED-FORMAT-LETTER-ERROR-LOCATOR-TEST-ALIGNMENT-20260813-01.md",
+    "tasks/postdemo/v8/FPMS-V8-INHERITED-OVERLAY-READ-COUNT-TEST-ALIGNMENT-20260813-01.md",
+    "scripts/run_v8_playwright_mock_isolated.py",
+    "scripts/run_v8_lifecycle_overlay_live_isolated.py",
 ]
+
+EXPECTED_COMMAND_SHA256 = {
+    "backend_tasks01_70": "fdf2035825aea26c56e7d3830bca449418aadc3bf800255e3d13818cac04e703",
+    "backend_current_v8": "a6dcab940c3877585809583e17d30c614e9feec70f88fcb9e19b65419b599c43",
+    "backend_declared_nonoverlap": "75a67fca63743a286108dbb5a39280a849e79aa1b112332f69c7dad82d4bd119",
+    "full_successor_contracts": "02ce2b4047c9482aa69e43ea98075a29003380beb5f21d37682e22d69a88b6b7",
+    "lean_governance_contract": "4518d87c582e26b78f26a7e551b0b9ed2df5d69c2668c019a4c02ac1339c4865",
+    "frontend_typecheck": "7ba6caf345c7a61a919ae6cafa1fbe8f1732d9ed757d4ba619ed3727764f1bda",
+    "frontend_contracts": "330cdc03e0dcec09c8b0e0460553fc58c1467995d44fd978a6eaf941417d26d6",
+    "playwright_tasks01_70_mock": "8093c4d346d309dfd0360db6f2fd83c918bad3181469e67add190a8e2ebfd03a",
+    "playwright_declared_primary": "b36611be6cf6be0bf1de43768076bdaf888c12951901d9b0b91816315c10d326",
+    "playwright_lifecycle_live": "dffe792f381cdbca981bf715ea4692e4e60f75589bada384f5f5deb2dc001c50",
+    "playwright_workbook_live": "155a54a11c9b6db4a168377837e9ab3a8b6b22adfde343f7ed48b191cdd41692",
+    "focused_contract": "89848a5f77160c10c462267b0cfbe8c5c9b9c85c5f188b3785c2c372bbfb3747",
+}
 
 
 def _load_checker():
@@ -281,6 +302,32 @@ def _tasks01_70_paths() -> dict[str, list[str]]:
     }
 
 
+def _current_v8_backend_paths() -> list[str]:
+    inherited_backend = set(_tasks01_70_paths()["backend"])
+    return sorted(
+        str(path.relative_to(ROOT))
+        for path in (ROOT / "backend/tests").glob("test_v8_*.py")
+        if path.name != "test_v8_inherited_regression_matrix_contract.py"
+        and str(path.relative_to(ROOT)) not in inherited_backend
+    )
+
+
+def _declared_primary_playwright_paths() -> list[str]:
+    catalog = json.loads(CATALOG_PATH.read_text())
+    tasks = catalog["tasks"]
+    by_id = {task["task_id"]: task for task in tasks}
+    row281 = tasks[280]
+    effective_dependencies = _ordered_unique([*row281["depends_on"], ROW278_ID])
+    return sorted(
+        {
+            path
+            for task_id in effective_dependencies
+            for path in by_id[task_id]["primary_tests"]
+            if path.startswith("FPMS_Automation_Skeleton_Pack/")
+        }
+    )
+
+
 def test_matrix_reuses_the_exact_current_tasks01_70_authority_map() -> None:
     matrix = json.loads(MATRIX_PATH.read_text())
     groups = _tasks01_70_paths()
@@ -294,13 +341,7 @@ def test_matrix_reuses_the_exact_current_tasks01_70_authority_map() -> None:
 
 def test_matrix_binds_the_current_v8_and_frontend_compile_surfaces() -> None:
     matrix = json.loads(MATRIX_PATH.read_text())
-    inherited_backend = set(_tasks01_70_paths()["backend"])
-    expected_v8 = sorted(
-        str(path.relative_to(ROOT))
-        for path in (ROOT / "backend/tests").glob("test_v8_*.py")
-        if path.name != "test_v8_inherited_regression_matrix_contract.py"
-        and str(path.relative_to(ROOT)) not in inherited_backend
-    )
+    expected_v8 = _current_v8_backend_paths()
     expected_contracts = sorted(
         str(path.relative_to(ROOT))
         for path in (ROOT / "frontend/src/api/contracts").glob("v8_*.contract.ts")
@@ -331,6 +372,27 @@ def test_matrix_binds_the_current_v8_and_frontend_compile_surfaces() -> None:
     }
     assert matrix["production_failure"] == "409 / NO WRITE"
     assert matrix["production_activation_claimed"] is False
+    primary_playwright = _declared_primary_playwright_paths()
+    workbook_live = [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/"
+        "v8-official-workbook-live.spec.ts"
+    ]
+    primary_mocked = sorted(set(primary_playwright) - set(workbook_live))
+    tasks01_70_playwright = _tasks01_70_paths()["playwright"]
+    lifecycle_live = [
+        "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/"
+        "v8-lifecycle-overlay-live.spec.ts"
+    ]
+    tasks01_70_mocked = sorted(set(tasks01_70_playwright) - set(lifecycle_live))
+    assert matrix["playwright_execution_audit"] == {
+        "declared_primary": _summary(primary_playwright),
+        "primary_mocked": _summary(primary_mocked),
+        "primary_live": _summary(workbook_live),
+        "tasks01_70_mock": _summary(tasks01_70_mocked),
+        "tasks01_70_lifecycle_live": _summary(lifecycle_live),
+    }
+    assert set(primary_mocked).isdisjoint(tasks01_70_mocked)
+    assert sorted([*primary_mocked, *workbook_live]) == primary_playwright
 
 
 def test_matrix_records_fresh_successful_serialized_results() -> None:
@@ -345,6 +407,7 @@ def test_matrix_records_fresh_successful_serialized_results() -> None:
         "frontend_typecheck",
         "frontend_contracts",
         "playwright_tasks01_70_mock",
+        "playwright_declared_primary",
         "playwright_lifecycle_live",
         "playwright_workbook_live",
         "focused_contract",
@@ -354,6 +417,12 @@ def test_matrix_records_fresh_successful_serialized_results() -> None:
         assert result["return_code"] == 0
         assert result["command"]
         assert result["observed"]
+        assert "<" not in result["command"]
+        assert not result["command"].startswith("run ")
+        assert hashlib.sha256(result["command"].encode()).hexdigest() == (
+            EXPECTED_COMMAND_SHA256[result["lane"]]
+        )
+    assert len(_declared_primary_playwright_paths()) == 21
     assert matrix["failures"] == []
     assert matrix["product_fixes"] == []
 

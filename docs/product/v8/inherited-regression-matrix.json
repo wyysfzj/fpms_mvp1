@@ -87,6 +87,28 @@
     "paths_sha256": "e93492ffb5c7c8cbe019ce8c82285941727028dcf8bfe69b6e263f9bb4d37f3e",
     "pattern": "frontend/src/api/contracts/v8_*.contract.ts"
   },
+  "playwright_execution_audit": {
+    "declared_primary": {
+      "count": 21,
+      "paths_sha256": "de529f8f5666683d6e4c4e527a914220dd44e54cb287d310370c713909c80363"
+    },
+    "primary_mocked": {
+      "count": 20,
+      "paths_sha256": "2ae67d3afb4f558378e9dce60486e26bd3c24d370c4861a9941fa98ceb6a754a"
+    },
+    "primary_live": {
+      "count": 1,
+      "paths_sha256": "b0cd214631c82b1ed121e03496fd2c62158cc12a8c949a2d7c0706e3e7c1f187"
+    },
+    "tasks01_70_mock": {
+      "count": 11,
+      "paths_sha256": "5a7c5485bf517d392d86879522156b2f82d8b7ca5fa59aa3084107d57f8fbd30"
+    },
+    "tasks01_70_lifecycle_live": {
+      "count": 1,
+      "paths_sha256": "65213b41ddfff2ac26842010461421d02ecd702201815248b30993a31c4e2baf"
+    }
+  },
   "counts": {
     "targeted_regressions": 62,
     "backend_targeted": 55,
@@ -108,14 +130,14 @@
   "results": [
     {
       "lane": "backend_tasks01_70",
-      "command": "cd backend && .venv/bin/pytest -q <59 exact Tasks01-70 authority-map backend paths>",
+      "command": "cd backend && .venv/bin/pytest -q $(.venv/bin/python -c 'import importlib.util,pathlib; r=pathlib.Path.cwd().parent; p=r/\"backend/tests/test_v8_foundation_inherited_regression_matrix_contract.py\"; s=importlib.util.spec_from_file_location(\"f\",p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); ids=[x for g in m.INHERITED_TASK_GROUPS.values() for x in g]; print(\" \".join(sorted({v.removeprefix(\"backend/\") for x in ids for v in m._resolved_task_authority(x)[\"verification_paths\"] if v.startswith(\"backend/\")})))')",
       "status": "PASS",
       "return_code": 0,
       "observed": "400 passed, 4 warnings in 157.10s"
     },
     {
       "lane": "backend_current_v8",
-      "command": "cd backend && .venv/bin/pytest -q <284 exact current V8 paths excluding Row281 focus and Tasks01-70 backend>",
+      "command": "cd backend && .venv/bin/pytest -q $(.venv/bin/python -c 'import importlib.util,pathlib; r=pathlib.Path.cwd().parent; p=r/\"backend/tests/test_v8_inherited_regression_matrix_contract.py\"; s=importlib.util.spec_from_file_location(\"m\",p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); print(\" \".join(v.removeprefix(\"backend/\") for v in m._current_v8_backend_paths()))')",
       "status": "PASS",
       "return_code": 0,
       "observed": "5206 passed, 24 skipped, 4 warnings, 114 subtests passed in 1390.36s"
@@ -150,24 +172,31 @@
     },
     {
       "lane": "frontend_contracts",
-      "command": "cd frontend && run the two executable V8 workbook contract probes",
+      "command": "cd frontend && npx esbuild src/api/contracts/v8_official_payment_workbook.contract.ts --bundle --platform=node --format=cjs --define:import.meta.env='{}' --outfile=/tmp/fpms-row217-contract.cjs && node /tmp/fpms-row217-contract.cjs && npx esbuild src/api/contracts/v8_official_workbook_acceptance.contract.ts --bundle --platform=node --format=cjs --define:import.meta.env='{}' --outfile=/tmp/fpms-row221-contract.cjs && node /tmp/fpms-row221-contract.cjs",
       "status": "PASS",
       "return_code": 0,
       "observed": "row217 and row221 executable contracts passed"
     },
     {
       "lane": "playwright_tasks01_70_mock",
-      "command": "cd FPMS_Automation_Skeleton_Pack/playwright_ts && npx playwright test <11 exact non-live Tasks01-70 specs> --workers=1",
+      "command": "python3 scripts/run_v8_playwright_mock_isolated.py src/tests/addgap-document-deadline-create-ui.spec.ts src/tests/addgap-document-deadline-edit-ui.spec.ts src/tests/addgap-document-deadline-wizard-ui.spec.ts src/tests/addgap-filing-case-entry.spec.ts src/tests/addgap-filing-page-resolve.spec.ts src/tests/addgap-grant-lineage-ui.spec.ts src/tests/addgap-grant-mutation-lineage-ui-gate.spec.ts src/tests/addgap-grant-replacement-ui.spec.ts src/tests/addgap-notice-catalog-ui-clarity.spec.ts src/tests/addgap-oa-page-resolve.spec.ts src/tests/addgap-wizard-template-limit.spec.ts",
       "status": "PASS",
       "return_code": 0,
-      "observed": "22 passed in 1.4m"
+      "observed": "22 passed in 2.3m"
+    },
+    {
+      "lane": "playwright_declared_primary",
+      "command": "python3 scripts/run_v8_playwright_mock_isolated.py src/tests/v8-case-create-fee-reduction.spec.ts src/tests/v8-case-create-status-gate.spec.ts src/tests/v8-case-detail-gates-warnings.spec.ts src/tests/v8-case-detail-overlay-cursor.spec.ts src/tests/v8-case-detail-three-lane.spec.ts src/tests/v8-case-edit-fee-reduction.spec.ts src/tests/v8-case-edit-status-gate.spec.ts src/tests/v8-case-fees-estimate-obligation.spec.ts src/tests/v8-case-fees-instruction.spec.ts src/tests/v8-document-evidence-review-ui.spec.ts src/tests/v8-fee-draft-obligation.spec.ts src/tests/v8-fee-reduction-approval-case-edit.spec.ts src/tests/v8-format-letter-in-source-ui.spec.ts src/tests/v8-grant-evidence-review-ui.spec.ts src/tests/v8-official-payment-workbook-ui.spec.ts src/tests/v8-official-workbook-acceptance-ui.spec.ts src/tests/v8-overlay-center-lane.spec.ts src/tests/v8-overlay-document-lane.spec.ts src/tests/v8-overlay-fee-lane.spec.ts src/tests/v8-pay-list-boundary-ui.spec.ts",
+      "status": "PASS",
+      "return_code": 0,
+      "observed": "52 passed in 4.8m"
     },
     {
       "lane": "playwright_lifecycle_live",
-      "command": "run v8-lifecycle-overlay-live.spec.ts against isolated migrated SQLite and dynamic strict-port real services",
+      "command": "python3 scripts/run_v8_lifecycle_overlay_live_isolated.py",
       "status": "PASS",
       "return_code": 0,
-      "observed": "1 passed in 4.5s"
+      "observed": "1 passed in 4.1s"
     },
     {
       "lane": "playwright_workbook_live",
