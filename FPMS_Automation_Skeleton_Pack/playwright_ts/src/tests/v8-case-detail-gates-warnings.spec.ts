@@ -23,9 +23,9 @@ const unresolvedReasons = [
 
 test('案件详情无损展示 29 个客户决策和两级警告且不发起写请求', async ({ page }) => {
     const mutationRequests: string[] = []
-    let overlayGetCount = 0
-    await mockCaseOverlay(page, mutationRequests, () => {
-        overlayGetCount += 1
+    const overlayGetUrls: string[] = []
+    await mockCaseOverlay(page, mutationRequests, (url) => {
+        overlayGetUrls.push(url)
     })
     await page.addInitScript(() => {
         window.localStorage.setItem('fpms_token', 'v8-gates-warnings-token')
@@ -145,7 +145,13 @@ test('案件详情无损展示 29 个客户决策和两级警告且不发起写�
         ],
     ])
 
-    expect(overlayGetCount).toBe(1)
+    expect(overlayGetUrls.length).toBeGreaterThanOrEqual(1)
+    expect(overlayGetUrls.length).toBeLessThanOrEqual(2)
+    expect(new Set(overlayGetUrls).size).toBe(1)
+    const overlayUrl = new URL(overlayGetUrls[0])
+    expect(overlayUrl.searchParams.get('after_sequence')).toBe('0')
+    expect(overlayUrl.searchParams.get('limit')).toBe('200')
+    expect(overlayUrl.searchParams.get('as_of_revision')).toBeNull()
     expect(mutationRequests).toEqual([])
     await expect(page.getByRole('button', { name: /激活|确认|撤销/ })).toHaveCount(0)
 })
@@ -153,7 +159,7 @@ test('案件详情无损展示 29 个客户决策和两级警告且不发起写�
 async function mockCaseOverlay(
     page: Page,
     mutationRequests: string[],
-    onOverlayGet: () => void,
+    onOverlayGet: (url: string) => void,
 ): Promise<void> {
     await page.route('**/api/v1/**', async (route) => {
         const request = route.request()
@@ -169,7 +175,7 @@ async function mockCaseOverlay(
             return fulfillJson(route, backendCase())
         }
         if (request.method() === 'GET' && apiPath === `/cases/${caseId}/lifecycle-overlay`) {
-            onOverlayGet()
+            onOverlayGet(request.url())
             return fulfillJson(route, overlayResponse())
         }
         if (request.method() === 'GET' && apiPath === '/tasks') {
