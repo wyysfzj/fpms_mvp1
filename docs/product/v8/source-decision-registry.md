@@ -165,32 +165,34 @@ updates this index.
 
 ### `DEC-LOCAL-DEMO-ABC-20260815`
 
-- Status: `APPROVED_DEMO_SCOPE / IMPLEMENTATION_REVIEW_REQUIRED`.
-- Exact source/version: customer approval in the current Codex thread, preserved without
-  normalization at
+- Status: `SCOPE_SELECTED / WRITTEN_ADOPTION_PENDING`.
+- Exact source/version: customer approval in Codex task
+  `019ffc07-14a5-7dc2-9536-f2047327e14a`, preserved without normalization at
   `docs/product/v8/customer-decisions/2026-08-15-local-demo-abc.txt`, decision version
   `customer-decision:2026-08-15:local-demo-abc:v1`, received on `2026-08-15` in timezone
   `Asia/Shanghai`.
 - Exact source size: `87` bytes.
 - Source SHA-256:
   `c0a1021f46f18ecd13e81417b387cd4dba4326e523a4b5d9d19d361fd5b0cc45`.
-- Decision value: the customer approved one local ABC demonstration that combines the already
-  presented cumulative scopes: (A) customer/case, filing preparation, OA and receipt archive;
-  (B) an externally supplied, immutable `DEMO_ONLY` runtime bundle for one internal template
-  preview and one customer service-price input leading to a fee draft; and (C) one AR bill,
-  customer payment and offset that settles that bill. The approved finance path is customer AR,
-  not an official PayList or official payment.
+- Decision value: the customer selected the previously discussed high-level combination: a local
+  demonstration, a runtime bundle, and customer AR billing/payment/offset. The exact checkpoint,
+  lifecycle, input-authority, transaction and acceptance semantics are only the proposal in
+  `docs/superpowers/specs/2026-08-15-fpms-local-demo-abc-design.md`; they are not inferred as
+  customer-approved bytes. Product implementation remains unauthorized until the customer
+  confirms an independently reviewed exact commit of that written specification.
 - Preserved boundaries: this decision does not activate `DG-SERVICE-RATE-VERSION`,
   `DG-PAYMENT-WORKBOOK`, an official rate, a production template or a legal conclusion. Missing or
   invalid demo input remains fail-closed. The demonstration is limited to loopback or controlled
   screen sharing, a disposable SQLite database and storage directory, and fictional data. It is
   not authority for public hosting, production deployment, security acceptance or release.
-- Actor and acceptance authority: the repository customer/user approved the scope. Every
-  `PROTECTED` implementation slice and the exact integrated demo candidate still require an
-  independent High review before `DEMO_READY`.
-- Effective scope/time: active from `2026-08-15` only for the local ABC demo design and its exact
-  reviewed successor implementation. A future production input, remote demo, official payment,
-  bad debt, dunning, commission or release requires separate authority and acceptance.
+- Actor and acceptance authority: the repository customer/user selected the high-level scope.
+  The exact written design still requires customer adoption; every later `PROTECTED`
+  implementation slice and the exact integrated demo candidate require independent High review
+  before `DEMO_READY`.
+- Effective scope/time: active from `2026-08-15` only as authority to produce and review the W0
+  written design. It does not yet authorize product implementation. A future production input,
+  remote demo, official payment, bad debt, dunning, commission or release requires separate
+  authority and acceptance.
 - Rollback impact: reverting the local demo branch or selecting no valid external bundle disables
   the demo-only providers. Rollback must not delete or rewrite any already created demo history;
   production input and decision-gate state remain unchanged because this decision never activates

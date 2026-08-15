@@ -1,7 +1,7 @@
 # FPMS Local ABC End-to-End Demo Design
 
 Date: 2026-08-15
-Status: REVIEW — chat design approved; written specification review pending
+Status: REVIEW — high-level scope selected; written specification adoption pending
 Risk: PROTECTED
 Baseline: `d1df69e649f5d28cb192d347d25c8d775663aaf2`
 
@@ -16,28 +16,60 @@ The accepted terminal state is `DEMO_READY`. It is not `RELEASE_PASS`, productio
 security acceptance, official submission, official payment, or activation of a customer or legal
 source.
 
-## 2. Authority and fixed interpretation
+## 2. Authority and proposed interpretation
 
-The controlling customer decision is
-`docs/product/v8/customer-decisions/2026-08-15-local-demo-abc.txt`, adopted in
-`DEC-LOCAL-DEMO-ABC-20260815`. It accepts the cumulative scopes presented immediately before the
-approval:
+### 2.1 Customer scope selection and written adoption
 
-- A: client/case, filing preparation, OA and receipt archive;
+The high-level customer scope selection is the exact 87-byte message in
+`docs/product/v8/customer-decisions/2026-08-15-local-demo-abc.txt`, recorded by
+`DEC-LOCAL-DEMO-ABC-20260815` from Codex task
+`019ffc07-14a5-7dc2-9536-f2047327e14a`. It selects the cumulative labels discussed immediately
+before the approval:
+
+- A: client/case, an evidence-reachable filing/OA lifecycle and receipt archive;
 - B: runtime template and service-price input, template preview and fee draft;
 - C: one unique AR bill, one customer payment and one offset that settles the bill.
+
+The 87-byte message does not itself contain the detailed semantics below. This document is the
+exact proposed expansion. It remains non-executable until an independent High reviewer approves
+its exact commit and the customer explicitly confirms that reviewed commit. That later confirmation
+is preserved as a second exact decision source before any product story starts.
 
 This design also preserves:
 
 - `docs/product/v8/domain-contract.md`;
 - `docs/product/v8/source-decision-registry.md`;
-- the V7 lifecycle design, script and runbook;
-- the independent High audit findings `DEPLOY-PKG-002`, `STATE-UI-002`, `EVID-RETRY-003`,
-  `TXN-DOCFEE-008`, `FIN-BILL-001`, `FIN-OFFSET-001`, `FIN-DASH-004` and
-  `FIN-ADAPTER-005`.
+- the exact baseline versions of the V7 lifecycle design
+  (`docs/postdemo/postdemo_p1_lifecycle_demo_design_v7_20260711.md`, SHA-256
+  `02ba842f812f5999c3e7cc72f59d3f8568bf2a47d31335573b6db6b3c768dc29`), script
+  (`docs/postdemo/postdemo_p1_lifecycle_demo_script_v7_20260711.md`, SHA-256
+  `20b63ebf1a5aee8e3b3a7a86634e3af9c35a7a7f7abf657fdf99e82ff55c393b`) and runbook
+  (`docs/postdemo/postdemo_p1_v7_ui_e2e_success_runbook_20260711.md`, SHA-256
+  `e1d6fc0beeeacd32edf2d8bc1a6ad6fbb2bb674c9b2959b34d527459a573b677`).
 
 The current production service-price and payment-workbook gates remain pending. The demo bundle
 cannot satisfy or mutate either gate.
+
+The pinned V7 files are reusable presentation/history inputs only. Their historical jump from
+filing preparation to OA cannot override the current lifecycle graph; section 5's full prerequisite
+ladder is the controlling successor behavior.
+
+### 2.2 Durable High-audit finding snapshot
+
+The planning input was the independent High report bound to the baseline above, external artifact
+SHA-256 `0e49c6997c9ebd52de1eb8c4bee9550f130ee2552c246b02ef5a3053758e5ed9`. External artifact
+availability is not required to interpret this design; the exact finding meanings used here are:
+
+| ID | Baseline defect that controls this demo | Exact demo closure |
+| --- | --- | --- |
+| `DEPLOY-PKG-002` | `backend/pyproject.toml` omits `openpyxl` although importing `app.main` reaches `verified_official_payment_workbook.py` and imports it. | Clean declared dependencies import/start the local runner. |
+| `STATE-UI-002` | Main detail/edit pages bind route identity only at mount or retain prior async/form/artifact state. | Every ABC page clears, reloads and mutates the complete current route identity. |
+| `EVID-RETRY-003` | Attachment review discards the authoritative POST result; a later GET failure plus regenerated timestamp makes exact retry conflict. | Consume POST truth; on uncertainty reconcile durable state first, then reuse one immutable intent. |
+| `TXN-DOCFEE-008` | Document fee creation can add a partial zero draft before a swallowed downstream exception and outer commit. | Runtime template/rate failure rolls back source activity, obligation, draft and items together. |
+| `FIN-BILL-001` | `from-drafts` accepts OPEN/unconsumed sources and lacks source uniqueness/idempotency, so one draft can create multiple AR bills. | The single ABC locked draft/item is atomically claimed once; exact replay reuses it. |
+| `FIN-OFFSET-001` | Offset/reverse use check-then-write without durable idempotency or a concurrency boundary. | File-backed SQLite concurrent allocation/reversal is serialized, atomic and replay-safe. |
+| `FIN-DASH-004` | Dashboard totals the first 100 raw payments and labels allocated payments as pending. | The labelled CNY card consumes a server-side CNY unapplied summary/filter. |
+| `FIN-ADAPTER-005` | Financial adapters coerce absent, malformed or non-finite money to zero. | ABC-reached adapters preserve decimal strings and fail closed on invalid required values. |
 
 ## 3. Approaches considered
 
@@ -67,10 +99,16 @@ runtime input is promoted to a production table or decision gate.
 - Run backend and frontend only on loopback, with a unique `FPMS_DEMO_RUN_ID`, disposable SQLite
   database and disposable storage directory per run.
 - Use fictional data only. Do not connect to a shared or production database or storage location.
-- Use a single existing `admin` demo operator. No authentication bypass, finance-role claim or
-  new permission broadening is allowed even though security remediation is deferred.
-- The canonical runner starts from an empty run directory, migrates, installs only demo-safe master
-  data, validates the runtime bundle, starts the API and UI, and exposes health/readiness.
+- Use two distinct per-run demo identities: existing `admin` performs customer/lifecycle/finance
+  actions and `demo_evidence_reviewer` performs only evidence review. Both use the existing Admin
+  role in the disposable demo DB, so no new permission vocabulary is invented; backend review
+  still requires different uploader/reviewer IDs. Credentials are supplied to the local runner,
+  not committed to source or evidence. No authentication bypass, Finance-role claim or production
+  permission broadening is allowed even though general security remediation is deferred.
+- The canonical runner starts from an empty run directory and validates/copies the required runtime
+  bundle before creating a database, running migration/seed or opening a port. Only after that
+  preflight succeeds does it migrate, install demo-safe master data, start API/UI and expose
+  health/readiness.
 - Baseline startup must declare `openpyxl`; a clean declared-dependency environment must import
   `app.main` before any journey verification.
 
@@ -82,14 +120,14 @@ fixed shared volume is removed from the accepted path.
 ## 5. Customer-visible journey
 
 The live presentation contains seven checkpoints. Negative and concurrency cases stay in the
-automated gate so the customer story remains approximately 25–30 minutes.
+automated gate so the customer story remains approximately 30–40 minutes.
 
 | ID | Customer action | Required observable result |
 | --- | --- | --- |
 | `ABC-01` | Create one fictional client, primary contact and domestic invention case through UI. | One client/contact/case identity; case `NOT_FILED`; no package, draft, bill or payment exists. |
-| `ABC-02` | Enter filing preparation, select the runtime internal template and render a preview. Resolve the preparation package twice. | Both resolves return the same package; template version/hash and rendered case values are visible; legal status remains `NOT_FILED`; preparation is explicitly not official submission. |
-| `ABC-03` | Register an OA notice with exact due date, explicit source and `CONFIRMED`; resolve its OA package and create the linked OA_OUT. | One source/package/task identity; OA task remains `OPEN`; case remains in the observed OA stage; package awaits receipt. |
-| `ABC-04` | Select the eligible same-case receipt attachment, complete the checklist and archive. | Package `ARCHIVED`; exactly the target OA task becomes `DONE`; the case projection is the actual reviewed post-receipt state; no presenter-invented transition. |
+| `ABC-02` | Enter filing preparation, render the runtime internal-template preview, then use visible evidence actions to record the fictional external filing, receipt, acceptance, preliminary examination, publication and substantive-examination prerequisites. | Repeated preparation resolve returns one package. Preparation alone remains `NOT_FILED`; only the ordered reviewed evidence ladder below reaches `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` and legacy display `SUB_EXAM`. |
+| `ABC-03` | Upload/register the bundle OA notice through `OA_NOTICE_RECORDED` with exact due date, source and `CONFIRMED`; resolve its OA package and create the linked OA_OUT. | One source/package/task identity; OA task remains `OPEN`; case is exactly `OA_REPLY_IN_PROGRESS / OFFICE_ACTION_RESPONSE / APPLICATION_PENDING / CONFIRMED` with legacy display `OA1`; package awaits receipt. |
+| `ABC-04` | Select the eligible same-case OA receipt attachment, complete the checklist and archive through `OA_RECEIPT_ARCHIVED`. | Package `ARCHIVED`; exactly the target OA task becomes `DONE`; case returns exactly to `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` with legacy display `SUB_EXAM`. |
 | `ABC-05` | Select the one runtime service-price item, record customer `PAY`, prepare and lock the draft. | Bundle/version/hash/item and Simplified-Chinese demo disclaimer are visible; one SERVICE obligation and one linked `LOCKED` draft; `total_service` equals the exact bundle amount; no official-fee or PayList line is created. |
 | `ABC-06` | Generate an AR bill from that locked draft and repeat the same user intent. | Exactly one AR bill; source draft/item lineage visible; first result created, exact retry reused; bill `UNSETTLED`, balance equals amount. |
 | `ABC-07` | Record one equal CNY bank payment and offset it to the bill. Reload payment, bill, case-finance and dashboard views. | Before offset the payment is `UNALLOCATED`; after one offset the bill is `SETTLED` with zero balance, payment is `FULLY_ALLOCATED` with zero unapplied amount, and case/dashboard projections show the same CNY truth. |
@@ -98,19 +136,50 @@ The live script keeps only two deliberate positive boundary demonstrations: repe
 resolve returns the same identity, and OA_OUT creation does not close the task. Other negative
 cases run automatically.
 
+`ABC-02` is one customer checkpoint but its prerequisite ladder is not compressed into a seed or
+status edit. Each row is an authenticated visible UI action and the after-state is read back before
+the next row:
+
+| Ordered action/event | Required evidence identity | Exact projection after success |
+| --- | --- | --- |
+| Create case / `CASE_OPENED` | `CASE_RECORD` | `NEW_CASE / NOT_SUBMITTED / NOT_ESTABLISHED / CONFIRMED`; legacy `NOT_FILED` |
+| Resolve filing preparation / `FILING_PREPARATION_STARTED` | `FILING_WORK_PACKAGE / OfficialWorkPackage` | `FILING_PREPARATION / NOT_SUBMITTED / NOT_ESTABLISHED / CONFIRMED` |
+| Record fictional external submission / `FILING_EXTERNAL_SUBMISSION_RECORDED` | approved `FINAL_SUBMISSION_VERSION / DocumentEvidenceVersion` plus `MANUAL_EXTERNAL_SUBMISSION_RECORD / CaseActivityEvent` | `WAITING_EXTERNAL_RECEIPT / SUBMITTED_WAITING_RECEIPT / NOT_ESTABLISHED / CONFIRMED`; legacy `WAITING_RECEIPT` |
+| Archive bundle filing receipt / `FILING_RECEIPT_ARCHIVED` | the same final version plus reviewed `VALID_FILING_RECEIPT / OfficialWorkPackageReceipt` | `PROSECUTION_MANAGEMENT / SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE / APPLICATION_PENDING / CONFIRMED`; legacy `WAITING_RECEIPT` |
+| Register bundle acceptance notice / `ACCEPTANCE_NOTICE_RECORDED` | approved `ACCEPTANCE_NOTICE / DocumentEvidenceVersion` | `PROSECUTION_MANAGEMENT / ACCEPTED / APPLICATION_PENDING / CONFIRMED`; legacy `ACCEPTED` |
+| Start preliminary examination / `PRELIMINARY_EXAMINATION_STARTED` | approved `PRELIMINARY_EXAMINATION_SOURCE / DocumentEvidenceVersion` | `PROSECUTION_MANAGEMENT / PRELIMINARY_EXAMINATION / APPLICATION_PENDING / CONFIRMED`; legacy `PRELIM_EXAM` |
+| Register publication / `PUBLICATION_NOTICE_RECORDED` | approved `PUBLICATION_NOTICE / DocumentEvidenceVersion` | `PROSECUTION_MANAGEMENT / PUBLISHED / APPLICATION_PENDING / CONFIRMED`; legacy `PUBLISHED` |
+| Start substantive examination / `SUBSTANTIVE_EXAMINATION_STARTED` | approved `SUBSTANTIVE_EXAMINATION_SOURCE / DocumentEvidenceVersion` | `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED`; legacy `SUB_EXAM` |
+
+The demo documents are visibly fictional inputs from the customer-authorized bundle. They prove
+the software's ordered evidence processing for a fictional case; the presenter must not describe
+them as a real filing, official receipt or real legal status.
+
+The external-submission command uses operation code `EXTERNAL_SUBMISSION_RECORDED`, server-checked
+naive `occurred_at`, the approved final submission version and its manual external-submission
+activity. Filing receipt archive requires same-case reviewed bytes/hash, `received_at`,
+`archive_status=ARCHIVED` and a receipt kind in `RECEIPT_PDF|MERGED_PDF|ELECTRONIC_APPLICATION_RECEIPT`.
+The acceptance/preliminary/publication/substantive/OA evidence adapters accept only
+`{evidence_version_id, effective_at, occurred_at?, idempotency_key}`; the evidence supplies role
+and case. OA metadata additionally carries exact `official_due_date=YYYY-MM-DD`,
+`official_due_date_source=MANUAL_OFFICIAL_NOTICE|IMPORTED_OFFICIAL_NOTICE`,
+`official_due_date_status=CONFIRMED`, sequence 1 and an inbound executable OA template code.
+`PRELIMINARY_EXAMINATION_PASSED` is deliberately absent because the frozen lifecycle graph does
+not require it between preliminary examination and publication.
+
 ## 6. Runtime bundle v1
 
 ### 6.1 Packaging and activation
 
-The external directory contains exactly `manifest.json` and allowlisted files below
-`templates/`. It is never committed as production input. The loader accepts it only when all of
+The external directory contains exactly `manifest.json` and allowlisted files below `templates/`
+and `evidence/`. It is never committed as production input. The loader accepts it only when all of
 the following are exact:
 
 - `FPMS_ENV=demo`;
 - `FPMS_DEMO_SCOPE=LOCAL_ABC_E2E`;
 - a non-empty `FPMS_DEMO_RUN_ID`;
 - an explicit bundle path outside product storage;
-- an external expected canonical-manifest SHA-256;
+- an external expected SHA-256 of the exact raw `manifest.json` bytes;
 - the reviewed specification reference and content digest recorded by the manifest.
 
 Import means offline validation into a content-addressed, read-only run location. Activation means
@@ -119,36 +188,121 @@ API. A changed bundle requires a new run ID and process restart. Rollback select
 path/digest and starts a new run; it never rewrites prior business history.
 
 The process must fail before migration/seed and before opening a port when a required bundle is
-missing or invalid. A missing optional capability during a request returns
-`409 DEMO_INPUT_CONFIG_REQUIRED` with no business write.
+missing or invalid. All three v1 capabilities are required. A later request for any capability
+outside the exact allowlist returns `409 DEMO_INPUT_CONFIG_REQUIRED` with no business write; that
+request failure can never substitute for the startup gate.
 
-### 6.2 Manifest contract
+### 6.2 Exhaustive manifest contract
 
-The canonical UTF-8 JSON rejects unknown fields and contains at least:
+`manifest.json` is UTF-8 without BOM, uses LF and ends with one LF. The external digest is
+`sha256(raw_manifest_bytes)`; the loader never reserializes JSON to compute it. Parsing rejects
+duplicate keys, unknown keys and unknown enum values. The exhaustive v1 shape is:
 
-- `schema_version = fpms.demo-input-bundle/v1`;
-- `bundle_id`, `bundle_version`, `classification = DEMO_ONLY`;
-- `purpose = LOCAL_ABC_E2E`, validity interval and provenance;
-- exact `contract_ref` and `contract_sha256`;
-- an exact capability allowlist with no wildcard;
-- one neutral internal DOCX template with relative path, media type, byte size, SHA-256 and exact
-  required variables;
-- one `SERVICE_DEMO_PRICE` item with unique code, Simplified-Chinese name, `CNY`, fixed positive
-  two-decimal amount, source reference/version/hash and a Simplified-Chinese disclaimer.
+Angle-bracket strings below are schema metavariables, not literal bundle values; `or null` means
+the JSON null value, never the text `"null"`.
+
+```json
+{
+  "schema_version": "fpms.demo-input-bundle/v1",
+  "bundle_id": "<1..64 lowercase ASCII [a-z0-9._-]>",
+  "bundle_version": "<1..64 ASCII [A-Za-z0-9._-]>",
+  "classification": "DEMO_ONLY",
+  "purpose": "LOCAL_ABC_E2E",
+  "valid_from": "<YYYY-MM-DD>",
+  "valid_until": "<YYYY-MM-DD, not before valid_from>",
+  "authority": {
+    "decision_ref": "<1..240 repository-relative path>",
+    "decision_version": "<1..120 identifier>"
+  },
+  "provenance": {
+    "label_zh_cn": "<1..120 characters>",
+    "source_ref": "<1..240 characters>",
+    "source_version": "<1..120 characters>",
+    "source_sha256": "<64 lowercase hex>"
+  },
+  "contract": {
+    "ref": "docs/superpowers/specs/2026-08-15-fpms-local-demo-abc-design.md",
+    "sha256": "<SHA-256 of exact adopted specification bytes>"
+  },
+  "capabilities": [
+    "FICTIONAL_LIFECYCLE_EVIDENCE",
+    "INTERNAL_TEMPLATE_PREVIEW",
+    "SERVICE_PRICE_TO_OBLIGATION"
+  ],
+  "templates": [{
+    "consumer": "DOCUMENT_RENDER",
+    "template_code": "<1..64 uppercase ASCII [A-Z0-9_]>",
+    "group": "INTERNAL_DEMO",
+    "language": "zh-CN",
+    "path": "templates/<normalized filename>.docx",
+    "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size_bytes": 1,
+    "sha256": "<64 lowercase hex>",
+    "required_variables": ["<unique sorted names matching [a-z][a-z0-9_]{0,63}>"]
+  }],
+  "evidence": [{
+    "role": "<one exact required lifecycle role>",
+    "title_zh_cn": "<1..120 characters>",
+    "classification": "FICTIONAL_DEMO_EVIDENCE",
+    "path": "evidence/<normalized filename>.pdf",
+    "media_type": "application/pdf",
+    "size_bytes": 1,
+    "sha256": "<64 lowercase hex>",
+    "metadata": {
+      "effective_at": "<YYYY-MM-DDTHH:MM:SS or null>",
+      "received_at": "<YYYY-MM-DDTHH:MM:SS or null>",
+      "receipt_kind": "<RECEIPT_PDF|MERGED_PDF|ELECTRONIC_APPLICATION_RECEIPT or null>",
+      "official_due_date": "<YYYY-MM-DD or null>",
+      "official_due_date_source": "<MANUAL_OFFICIAL_NOTICE|IMPORTED_OFFICIAL_NOTICE or null>",
+      "official_due_date_status": "<CONFIRMED or null>",
+      "oa_sequence": 1,
+      "source_template_code": "<1..64 uppercase ASCII [A-Z0-9_] or null>"
+    }
+  }],
+  "rates": [{
+    "domain": "SERVICE_DEMO_PRICE",
+    "item_code": "<1..64 uppercase ASCII [A-Z0-9_]>",
+    "name_zh_cn": "<1..120 characters>",
+    "currency": "CNY",
+    "calc_mode": "FIXED",
+    "amount": "<positive decimal string with exactly two fractional digits>",
+    "source_ref": "<1..240 characters>",
+    "source_version": "<1..120 characters>",
+    "source_sha256": "<64 lowercase hex>",
+    "disclaimer_zh_cn": "<1..200 characters>"
+  }]
+}
+```
+
+Arrays contain exactly the shown capability values, one template, one rate and one evidence entry
+for each of these eight roles, sorted in this order:
+`FILING_FINAL_SUBMISSION`, `FILING_RECEIPT`, `ACCEPTANCE_NOTICE`,
+`PRELIMINARY_EXAMINATION_SOURCE`, `PUBLICATION_NOTICE`, `SUBSTANTIVE_EXAMINATION_SOURCE`,
+`OA_NOTICE`, `OA_RECEIPT`. No other role or wildcard is legal.
+Every PDF visibly says `FICTIONAL_DEMO_EVIDENCE / 仅用于本地虚构演示` on its first page. JSON
+numbers are permitted only for `size_bytes` (`1..10485760`) and the exact integer OA sequence 1;
+all money is a string. Every metadata key is present. Filing-final and non-OA notice roles have
+only `effective_at`; receipt roles have only `received_at/receipt_kind`; OA notice has
+`effective_at`, all four official-due-date/sequence/template values; all inapplicable values are
+JSON null. The loader validates the adopted specification bytes/hash and the separate
+bundle-authority record before it trusts self-declared authority/provenance fields.
 
 The initial bundle contains no official-fee amount. `total_gov=0` means that this scenario has no
 official-fee line, not that an unknown official fee was converted to zero.
 
 This design freezes the bundle schema and fail-closed behavior, not the actual template or price.
-Product development may use an isolated fixture marked `TEST_ONLY`, but `DEMO_READY` requires one
-exact external bundle whose template bytes, price amount, validity, disclaimer and hashes are
-separately supplied or explicitly accepted as `DEMO_ONLY`. The implementation must not invent
-those values or promote a development fixture merely to make the rehearsal pass.
+Product development may use an isolated fixture marked `TEST_ONLY`, but `DEMO_READY` requires an
+exact customer-authorized bundle decision recorded in the source registry with actor, approval
+time, decision version, raw manifest digest and every template/evidence/rate source digest. The
+exact template/evidence bytes, price amount, validity and disclaimer must be part of that approved
+bundle. The implementation must not invent those values or promote a development fixture merely
+to make the rehearsal pass.
 
 Paths must be normalized relatives beneath the bundle root. Reject `..`, absolute paths,
 symlinks, extra files, macro-enabled files, external DOCX relationships, duplicate identities,
 variable drift, non-finite numbers, floating-point JSON amounts and hash/size mismatch. The
-template itself must carry a visible local-demo marker.
+template itself must carry a visible local-demo marker. Reject a DOCX with more than 200 ZIP
+entries, more than 20 MiB total uncompressed bytes or any entry compression ratio above 100:1.
 
 ### 6.3 Provider and durable usage lineage
 
@@ -157,6 +311,9 @@ Do not extend or populate `OfficialRateBook`, `ServicePriceBook`, `FeeRate`, `Te
 
 The demo provider exposes only the allowlisted template and service-price item. It is not
 registered outside the exact demo profile and never falls back to seed or production sources.
+For the `OA_NOTICE` evidence role it also exposes the manifest-bound inbound executable semantic
+identified by `source_template_code` directly to the dedicated OA evidence adapter; it does not
+create or activate a production `Template` row.
 
 Selecting the runtime service item is a real authenticated UI/API action, not bootstrap
 enrichment. The adapter resolves and validates the complete immutable item before writing. In one
@@ -166,12 +323,64 @@ then creates or reuses one SERVICE obligation through the existing obligation se
 customer-instruction and draft-preparation services create the linked draft only after `PAY`.
 Same idempotency key and payload reuse the same source/obligation; key drift returns 409.
 
+The source-selection command derives `actor_id` and `occurred_at` from authenticated request/server
+context and binds the idempotency record to that actor. Its durable activity stores the manifest
+fields under the same bounded names above without truncation. The later `PAY` instruction is a
+separate authenticated, actor-bound idempotent command against the exact current obligation; it
+persists actor, server time, obligation ID/version and source-activity ID before draft preparation.
+A stale/superseded obligation, actor drift or payload drift returns 409/no write.
+
 Template preview is read-only and returns only a visibly demo-marked rendering. It creates no
 official document, submission, letter-handoff or email fact.
+
+### 6.4 Durable command identity
+
+Every idempotent write first validates and normalizes its typed fields, then stores a snapshot with
+exact operation name, authenticated actor ID and the command fields named in this specification.
+IDs have surrounding whitespace rejected; dates use ISO form; CNY decimals use exactly two digits;
+set-like ID arrays are de-duplicated and sorted; optional values remain explicit null. The backend
+serializes that snapshot with UTF-8, `ensure_ascii=false`, lexicographically sorted object keys,
+separators `,` and `:`, and no trailing LF, then stores its SHA-256. Floats, NaN, infinity, omitted
+versus null ambiguity and unlisted fields are rejected before hashing. Replay equality compares the
+stored snapshot bytes/hash, not a newly interpreted raw request.
+
+### 6.5 Public evidence-review prerequisite
+
+Ordinary upload remains honest: it creates only a DRAFT attachment/evidence candidate and cannot
+advance lifecycle. The operator uploads all bundle evidence to the newly created case through UI.
+In a separate authenticated browser context, `demo_evidence_reviewer` uses a visible review queue
+to compare case, bundle/manifest digest, role, bytes/hash, first-page fictional marker and required
+metadata, then approves each exact candidate. Batch UI is allowed for speed, but every item has its
+own immutable command/result.
+
+The review service enforces reviewer ID different from uploader/creating actor, current unmodified
+attachment bytes, one allowlisted bundle role and actor-bound idempotency. Success stores reviewer,
+server time, source attachment ID/hash, bundle ID/version/manifest hash, role and metadata without
+truncation. It produces:
+
+- one independently approved `FINAL` filing evidence version for `FILING_FINAL_SUBMISSION`;
+- independently approved `FINAL / OFFICIAL_FINAL_PDF` versions for acceptance, preliminary,
+  publication, substantive-examination and OA notice roles;
+- reviewed filing/OA receipt attachments that can later become the corresponding
+  `OfficialWorkPackageReceipt` only through the existing archive actions.
+
+Same key/same candidate returns the same immutable version; same actor as uploader, role/hash
+mismatch, changed bytes, stale metadata, command drift or a second owner returns 409/no write.
+There is no public arbitrary evidence-version constructor, self-review switch or test-enrichment
+fallback. Until this controlled review capability exists, the fresh journey is blocked after
+`FILING_PREPARATION_STARTED` and must not be rehearsed as end to end.
 
 ## 7. Lifecycle, document and UI reliability
 
 - Filing and OA resolve use existing-first identity; repeated calls do not duplicate packages.
+- The ABC-02 ladder is the sole path from the new case to OA eligibility. No generic status editor,
+  bootstrap record, direct lifecycle-event endpoint, Playwright request write or legacy projection
+  import may substitute for an ordered dedicated adapter.
+- Baseline services/APIs expose external-submission and evidence adapters for acceptance,
+  preliminary examination, publication and substantive examination, but no complete public UI
+  reaches them from fresh evidence. The accepted journey adds visible Simplified-Chinese controls
+  on the filing/reviewed-document page. Each control displays the current prerequisite projection,
+  exact evidence version/hash and resulting projection before confirmation.
 - OA notices require exact due date, source and `CONFIRMED`; no relative-month calculation or
   title inference is accepted.
 - OA_OUT linkage is atomic and leaves the task open.
@@ -204,6 +413,12 @@ Creation is allowed only when every source draft:
 - exists, is `LOCKED`, has positive finite items, and has not been consumed;
 - belongs to the same client and currency;
 - has source items that have not appeared in another bill.
+
+The accepted ABC command is deliberately narrower than the plural legacy shape: `draft_ids`
+contains exactly one ID, and that draft contains exactly one positive SERVICE fee item for one
+case. A multi-draft, multi-case, mixed-fee or multi-item request returns 409/no write in this
+closure. General grouped billing and item-level partial allocation require a separate design; no
+implementer may invent an allocation rule here.
 
 The service resolves drafts in stable order and, in one caller-owned transaction, claims all
 sources, creates the bill and items, and commits. The existing `OPEN|LOCKED` fee-draft status model
@@ -253,13 +468,17 @@ PostgreSQL.
 Database constraints protect positive offset amount and non-negative projections, including
 `raw_amount = allocated_amt + balance_amt`. CaseReceipt receives a durable unique key formed from
 case, fee code/type, normalized year and currency; nullable-field equality is not used as an
-identity.
+identity. The exact key bytes are UTF-8
+`case_id|fee_code|fee_type|year_or_-|currency`, with `-` as the sole no-year sentinel, and the DB
+owns a unique constraint on that stored key. Each component rejects `|` and surrounding
+whitespace before key construction.
 
 Create returns an authoritative composite containing Offset, Bill status/balance/currency,
 PaymentLine allocated/balance/currency, receipt summary and `idempotency_key/reused`. The UI
-consumes this transaction result. If transport outcome is uncertain it replays the same command
-and key before issuing reconciliation reads; it never creates a new intent merely because a GET
-failed.
+consumes this transaction result. If transport outcome is uncertain, the UI first queries durable
+command state by the exact idempotency key. If that read proves completion it consumes the stored
+composite; only an explicit incomplete/not-found result permits replay of the identical key and
+payload. An inconclusive reconciliation remains pending and never creates a new intent.
 
 An exact create retry returns the same composite with 201 and `reused=true`. A second intent that
 would over-allocate, a stale balance, wrong client/currency or command drift returns 409 and rolls
@@ -267,10 +486,24 @@ back every projection. Reverse is not shown live but its 200 response has the sa
 shape; affected regressions must prove exact replay restores only once and a different-key second
 reverse is rejected.
 
+Reverse acquires the same `PaymentLine -> Bill -> CaseReceipt` lock/CAS boundary, verifies that the
+target Offset is active, and in one transaction marks it reversed, restores PaymentLine and Bill
+balances/status, reverses the exact CaseReceipt delta, persists `reversed_by/reversed_at` and owns
+the reverse idempotency command. Any failure rolls back every mutation. Exact replay returns the
+stored composite; command drift, different-key second reverse or a lost concurrent guard returns
+409/no write.
+
 Strict schema/format failures return 422, absent resources return 404, deterministic domain
 validation such as customer/currency mismatch or amount exceeding a balance retains 400, and 409
 is reserved for lifecycle/source consumption, idempotency drift, unique/concurrent ownership or
 repeat reversal conflicts. Every 4xx path is no-write.
+
+Read-only reconciliation endpoints are fixed as
+`GET /bills/from-drafts/idempotency/{key}`, `GET /payments/idempotency/{key}`,
+`GET /offsets/idempotency/{key}` and `GET /offsets/reversals/idempotency/{key}`, under the same
+read permission as their resource. They return 200 plus the stored authoritative composite for a
+completed command, 202 for a durable in-progress owner and 404 only when no command exists. The UI
+waits/reconciles on 202, consumes 200, and may replay the identical mutation only after 404.
 
 Bill, payment, offset and reverse commands all derive the current authenticated actor from the
 request context and persist create/update/reversal attribution. Command ownership is included in
@@ -284,9 +517,11 @@ Reverse persists `reversed_by/reversed_at` rather than accepting or discarding a
   never silently defaulted.
 - Keep canonical decimal strings through adapters and commands. Formatting occurs only at the
   presentation boundary.
-- The demo scope is one CNY bucket. Dashboard KPI uses the backend
-  `remaining_prepayment_balance`; the queue requests only `unapplied_amt > 0` and displays that
-  amount. It never totals the first 100 `Payment.amount` rows.
+- The demo scope is one CNY bucket. The backend read contract accepts and applies
+  `currency=CNY` before both row selection and `remaining_prepayment_balance` aggregation; the
+  queue also applies `has_unapplied_only=true` and displays each `unapplied_amt`. The CNY card never
+  totals the first 100 `Payment.amount` rows or includes another currency. A mixed-CNY/USD focused
+  test proves bucket isolation.
 - After full allocation, the payment disappears from the pending-allocation queue. Case finance,
   bill, payment and dashboard must agree after reload.
 - Payment and offset selectors expose only matching-client, matching-currency, positive-balance
@@ -300,25 +535,27 @@ Reverse persists `reversed_by/reversed_at` rather than accepting or discarding a
 Only two implementation lanes run concurrently, and shared migrations/models/routers/SQLite tests
 are serialized.
 
-1. `ABC-DEMO-BUNDLE-PARSER`: canonical manifest, path/DOCX/rate validation and digest binding.
+1. `ABC-DEMO-BUNDLE-PARSER`: raw-manifest, path/DOCX/evidence/rate validation and digest binding.
 2. `ABC-DEMO-LOCAL-BOOT`: declared dependency, run-ID environment, demo-safe bootstrap and one
    canonical start/reset/stop command.
 3. `ABC-DEMO-RUNTIME-PROVIDERS`: template preview and authenticated service-price-to-obligation
    adapter with durable source activity.
-4. `ABC-DEMO-LIFECYCLE`: fresh verification and only actual blockers for client/case, filing,
-   OA, OA_OUT, receipt and route/evidence reliability.
-5. `ABC-FIN-BILL`: source-consumption/idempotency migration, service/API and bill UI.
-6. `ABC-FIN-PAYMENT`: truthful payment model/API/UI and idempotency.
-7. `ABC-FIN-OFFSET`: atomic allocation/reversal, CaseReceipt identity and projections.
-8. `ABC-FIN-ADAPTER-DASH`: strict money contracts and authoritative dashboard.
-9. `ABC-DEMO-LIVE-E2E`: one browser-driven seven-checkpoint spec and negative no-write matrix.
-10. `ABC-DEMO-READY`: two fresh runs, headed rehearsal, independent High review and operator pack.
+4. `ABC-DEMO-EVIDENCE-REVIEW`: distinct-actor upload/review, immutable final versions and visible
+   review queue/actions.
+5. `ABC-DEMO-LIFECYCLE`: visible evidence adapters and exact client/case, filing prerequisite, OA,
+   OA_OUT, receipt and route/evidence reliability.
+6. `ABC-FIN-BILL`: source-consumption/idempotency migration, service/API and bill UI.
+7. `ABC-FIN-PAYMENT`: truthful payment model/API/UI and idempotency.
+8. `ABC-FIN-OFFSET`: atomic allocation/reversal, CaseReceipt identity and projections.
+9. `ABC-FIN-ADAPTER-DASH`: strict money contracts and authoritative dashboard.
+10. `ABC-DEMO-LIVE-E2E`: one browser-driven seven-checkpoint spec and negative no-write matrix.
+11. `ABC-DEMO-READY`: two fresh runs, headed rehearsal, independent High review and operator pack.
 
 Dependency spine:
 
 ```text
-bundle parser -> local boot -> runtime provider -> ABC-05
-clean baseline -> lifecycle -> ABC-01..04
+bundle parser -> local boot -> {runtime provider, evidence review}
+runtime provider + evidence review -> lifecycle -> ABC-01..04
 runtime provider -> bill -> payment -> offset -> ABC-05..07
 lifecycle + finance APIs -> frontend adapters/navigation -> live E2E -> Demo Ready
 ```
@@ -331,23 +568,30 @@ slice becomes a separate blocker story; it does not reopen this design.
 
 The final targeted gate must prove:
 
-1. clean declared-dependency import and one-command fresh migrate/bootstrap/start;
-2. invalid/missing bundle fails before ports open or returns the exact optional-capability 409 with
-   zero business writes;
-3. all seven checkpoints use real Vue, API and SQLite, with no `page.route` response mock, direct
-   database write, lifecycle enrichment, fixed downstream object ID or skipped checkpoint;
-4. repeated resolve, bundle selection, obligation/draft command, bill creation, payment creation
-   and offset command are safe under exact replay;
-5. wrong OA deadline/source/receipt, bundle hash/version/item, draft state/source, payment
+1. clean declared-dependency import and one-command bundle-preflight/migrate/bootstrap/start;
+2. a missing/invalid bundle or any missing required capability exits before database
+   creation/migration/seed and before ports open; separately, a request outside the validated
+   allowlist returns `409 DEMO_INPUT_CONFIG_REQUIRED` with zero business writes;
+3. all seven checkpoints use real Vue, API and SQLite. Every checkpoint business mutation is
+   performed through a visible UI control; Playwright request APIs are read-only after-state
+   verification. There is no `page.route` response mock, direct database write, lifecycle
+   enrichment, fixed downstream object ID or skipped checkpoint;
+4. two distinct authenticated browser contexts prove uploader/reviewer separation; DRAFT evidence
+   cannot drive lifecycle and every approved version binds the bundle/source bytes and reviewer;
+5. ABC-02 reaches every exact projection in order, and repeated resolve, bundle selection,
+   obligation/draft command, bill creation, payment creation and offset command are safe under
+   exact replay;
+6. missing/out-of-order/unreviewed lifecycle evidence, self-review, wrong OA
+   deadline/source/receipt, bundle hash/version/item, draft state/source, payment
    customer/currency/reference and offset amount produce the expected 4xx and no partial write;
-6. one locked draft creates one bill; one payment plus one active offset settles it; all reloaded
+7. one locked draft creates one bill; one payment plus one active offset settles it; all reloaded
    balances and statuses agree;
-7. route A-to-B and commit-then-drop reconciliation do not target or display the wrong object;
-8. the exact live spec passes on two different fresh run IDs, followed by one headed operator
+8. route A-to-B and commit-then-drop reconciliation do not target or display the wrong object;
+9. the exact live spec passes on two different fresh run IDs, followed by one headed operator
    rehearsal;
-9. candidate SHA/tree, bundle manifest/file hashes, run IDs, object IDs, screenshots, request IDs,
+10. candidate SHA/tree, bundle manifest/file hashes, run IDs, object IDs, screenshots, request IDs,
    focused results and cleanup receipts are recorded without token/password/full-HAR leakage;
-10. an independent High reviewer returns zero findings for the exact integrated demo scope.
+11. an independent High reviewer returns zero findings for the exact integrated demo scope.
 
 The final acceptance evidence must bind the separately supplied/accepted bundle manifest digest.
 Without that exact input, implementation may be code-complete and testable but remains
@@ -367,6 +611,8 @@ release work is completed. No broad/release gate is run for this milestone.
   Compose/nginx/TLS, release evidence or disaster recovery.
 - Production input upload/approval/activation UI, real customer service rates, current legal or
   official fees, official payment workbook/VBA, PayList, official payment or receipt verification.
+- General production evidence-ingestion/approval administration; this closure exposes only the
+  bundle-bound fictional local-demo review path and does not activate its evidence outside demo.
 - Finance-role permission repair; the accepted journey is operated only by the existing demo
   `admin` account and makes no claim that the Finance role can perform it.
 - Automatic CPC/official-system login, submission, signature, receipt download, email or RPA.

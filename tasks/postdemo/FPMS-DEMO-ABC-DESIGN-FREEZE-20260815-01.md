@@ -1,9 +1,12 @@
 # FPMS-DEMO-ABC-DESIGN-FREEZE-20260815-01
 
 Status: REVIEW
-Risk: PROTECTED
+Risk-Class: PROTECTED
+Risk-Tier: HIGH
+Closure-Tags: ["customer-decision", "demo", "lifecycle", "fee", "payment", "schema", "sqlite"]
+Task-Path: tasks/postdemo/FPMS-DEMO-ABC-DESIGN-FREEZE-20260815-01.md
 Role: Architect / default
-Outcome: freeze the customer-approved local ABC end-to-end demo contract before product changes.
+Outcome: freeze the detailed contract for the customer-selected local ABC scope before product changes.
 
 ## Authority
 
@@ -11,7 +14,11 @@ Outcome: freeze the customer-approved local ABC end-to-end demo contract before 
 - `docs/product/v8/domain-contract.md`
 - `docs/product/v8/source-decision-registry.md`
 - `docs/product/v8/customer-decisions/2026-08-15-local-demo-abc.txt`
-- Independent High audit bound to `d1df69e649f5d28cb192d347d25c8d775663aaf2`
+- Independent High audit bound to `d1df69e649f5d28cb192d347d25c8d775663aaf2` and
+  restated as the durable finding snapshot in design section 2.2. The external review artifact
+  was
+  `/Users/cfcc/.codex/visualizations/2026/08/13/019ffc07-14a5-7dc2-9536-f2047327e14a/fpms-high-review/FPMS_HIGH_REVIEW.md`,
+  SHA-256 `0e49c6997c9ebd52de1eb8c4bee9550f130ee2552c246b02ef5a3053758e5ed9`.
 - Existing V7 lifecycle design/script/runbook
 
 ## Catalog and requirements
@@ -29,8 +36,10 @@ Outcome: freeze the customer-approved local ABC end-to-end demo contract before 
 Record the exact user decision and freeze one written design covering:
 
 - clean baseline and local-only runtime topology;
-- seven customer-visible ABC checkpoints;
+- seven customer-visible ABC checkpoints, including the exact evidence-driven filing-to-OA
+  prerequisite ladder and projections;
 - immutable `DEMO_ONLY` bundle validation/provider/no-fallback behavior;
+- distinct-actor public evidence review and immutable final evidence prerequisites;
 - dynamic runtime service-price selection through source activity, obligation, customer
   instruction and locked draft;
 - unique/idempotent bill, truthful/idempotent payment, atomic/idempotent offset;
@@ -65,6 +74,7 @@ catalog/ledger edit, broad/release gate, or claim of `DEMO_READY`.
 - `ABC-DEMO-BUNDLE-PARSER`
 - `ABC-DEMO-LOCAL-BOOT`
 - `ABC-DEMO-RUNTIME-PROVIDERS`
+- `ABC-DEMO-EVIDENCE-REVIEW`
 - `ABC-DEMO-LIFECYCLE`
 - `ABC-FIN-BILL`
 - `ABC-FIN-PAYMENT`
