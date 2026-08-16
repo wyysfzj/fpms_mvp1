@@ -87,3 +87,63 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
 
     metadata = (result.run_root / "run-metadata.json").read_text()
     assert result.bundle.authority_sha256 in metadata
+
+
+def test_port_probe_enables_address_reuse_before_bind(monkeypatch):
+    assert run_local_demo_abc is not None, "local runner is not implemented"
+    calls: list[tuple] = []
+
+    class FakeSocket:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def setsockopt(self, level, option, value):
+            calls.append(("setsockopt", level, option, value))
+
+        def bind(self, address):
+            calls.append(("bind", address))
+
+    monkeypatch.setattr(run_local_demo_abc.socket, "socket", FakeSocket)
+
+    run_local_demo_abc._assert_port_available(8000)
+
+    assert calls == [
+        (
+            "setsockopt",
+            run_local_demo_abc.socket.SOL_SOCKET,
+            run_local_demo_abc.socket.SO_REUSEADDR,
+            1,
+        ),
+        ("bind", ("127.0.0.1", 8000)),
+    ]
+
+
+def test_port_probe_preserves_active_listener_failure(monkeypatch):
+    assert run_local_demo_abc is not None, "local runner is not implemented"
+
+    class BusySocket:
+        def __init__(self, *_args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def setsockopt(self, *_args):
+            return None
+
+        def bind(self, _address):
+            raise OSError("busy")
+
+    monkeypatch.setattr(run_local_demo_abc.socket, "socket", BusySocket)
+
+    with pytest.raises(RuntimeError, match="local demo port is already in use: 5173"):
+        run_local_demo_abc._assert_port_available(5173)
