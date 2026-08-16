@@ -466,7 +466,9 @@ def _validate_pdf(path: Path) -> None:
                 state["font_size"] = float(operands[1])
             elif operator in {b"W", b"W*"}:
                 state["clipped"] = True
-            elif operator in {b"Tj", b"TJ", b"'", b'"'}:
+            elif operator in {b"TJ", b"'", b'"'}:
+                state["unsafe_text_show"] = True
+            elif operator == b"Tj":
                 if not text_show_is_visible(_cm, _tm):
                     state["unsafe_text_show"] = True
 

@@ -102,6 +102,7 @@ def _write_pdf(
     font_size: int = 12,
     horizontal_scale: int = 100,
     mixed_horizontal_scale: str | None = None,
+    unsafe_operator: str | None = None,
 ) -> None:
     writer = PdfWriter()
     page = writer.add_blank_page(width=612, height=792)
@@ -141,7 +142,19 @@ def _write_pdf(
     }[marker]
     encoded = visible.encode("utf-16-be").hex().upper()
     render_mode = "3 Tr " if invisible else ""
-    if mixed_horizontal_scale is None:
+    if unsafe_operator == "quote":
+        content = (
+            f"BT /F1 {font_size} Tf 100 Tz 1000 TL 72 720 Td <{encoded}> ' ET"
+        )
+    elif unsafe_operator == "double-quote":
+        content = (
+            f'BT /F1 {font_size} Tf 100 Tz 1000 TL 72 720 Td 0 0 <{encoded}> " ET'
+        )
+    elif unsafe_operator == "tj-array":
+        content = (
+            f"BT /F1 {font_size} Tf 100 Tz 72 720 Td [100000 <{encoded}>] TJ ET"
+        )
+    elif mixed_horizontal_scale is None:
         content = (
             f"BT /F1 {font_size} Tf {horizontal_scale} Tz "
             f"{render_mode}72 720 Td <{encoded}> Tj ET"
@@ -512,6 +525,16 @@ def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch
     manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
     digest = _write_manifest(root, manifest)
     _load_bundle(root, digest)
+
+    for operator in ("quote", "double-quote", "tj-array"):
+        root, manifest, _digest = _valid_bundle(tmp_path / f"unsafe-{operator}")
+        evidence_path = root / manifest["evidence"][0]["path"]
+        _write_pdf(evidence_path, unsafe_operator=operator)
+        manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
+        manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
+        digest = _write_manifest(root, manifest)
+        with pytest.raises(DemoBundleError, match="visible bilingual"):
+            _load_bundle(root, digest)
 
     root, manifest, _digest = _valid_bundle(tmp_path / "zero-horizontal-scale-pdf")
     evidence_path = root / manifest["evidence"][0]["path"]
