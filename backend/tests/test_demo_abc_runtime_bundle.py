@@ -111,7 +111,57 @@ def _metadata_for(role: str) -> dict[str, object]:
 def _write_manifest(bundle_root: Path, manifest: dict[str, object]) -> str:
     raw = (json.dumps(manifest, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     (bundle_root / "manifest.json").write_bytes(raw)
-    return _sha256(raw)
+    manifest_digest = _sha256(raw)
+    decision_ref = manifest["authority"]["decision_ref"]
+    file_rows = [manifest["templates"][0], *manifest["evidence"]]
+    authority = {
+        "schema_version": "fpms.demo-bundle-authority/v1",
+        "status": "APPROVED",
+        "approved_by": "customer-authorized-demo-owner",
+        "approved_at": "2026-08-16T12:00:00+08:00",
+        "decision_ref": decision_ref,
+        "decision_version": manifest["authority"]["decision_version"],
+        "decision_sha256": _sha256((REPO_ROOT / decision_ref).read_bytes()),
+        "bundle_id": manifest["bundle_id"],
+        "bundle_version": manifest["bundle_version"],
+        "manifest_sha256": manifest_digest,
+        "source_digests": [
+            {
+                "kind": "PROVENANCE",
+                "ref": manifest["provenance"]["source_ref"],
+                "version": manifest["provenance"]["source_version"],
+                "sha256": manifest["provenance"]["source_sha256"],
+            },
+            {
+                "kind": "SERVICE_RATE",
+                "ref": manifest["rates"][0]["source_ref"],
+                "version": manifest["rates"][0]["source_version"],
+                "sha256": manifest["rates"][0]["source_sha256"],
+            },
+        ],
+        "file_digests": sorted(
+            ({"path": row["path"], "sha256": row["sha256"]} for row in file_rows),
+            key=lambda row: row["path"],
+        ),
+    }
+    authority_raw = (
+        json.dumps(authority, ensure_ascii=False, separators=(",", ":")) + "\n"
+    ).encode()
+    (bundle_root / "authority.json").write_bytes(authority_raw)
+    return manifest_digest
+
+
+def _authority_digest(bundle_root: Path) -> str:
+    return _sha256((bundle_root / "authority.json").read_bytes())
+
+
+def _load_bundle(bundle_root: Path, manifest_digest: str):
+    return load_demo_bundle(
+        bundle_root,
+        expected_manifest_sha256=manifest_digest,
+        expected_authority_sha256=_authority_digest(bundle_root),
+        repo_root=REPO_ROOT,
+    )
 
 
 def _valid_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
@@ -208,10 +258,13 @@ def test_valid_bundle_returns_immutable_snapshot(tmp_path: Path, monkeypatch: py
     root, _manifest, digest = _valid_bundle(tmp_path)
     monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
 
-    snapshot = load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+    snapshot = _load_bundle(root, digest)
 
     assert snapshot.bundle_id == "fpms-local-abc"
     assert snapshot.manifest_sha256 == digest
+    assert snapshot.authority_sha256 == _authority_digest(root)
+    assert snapshot.approved_by == "customer-authorized-demo-owner"
+    assert snapshot.approved_at == "2026-08-16T12:00:00+08:00"
     assert snapshot.service_rate.amount == "1200.00"
     assert snapshot.evidence_roles == tuple(EVIDENCE_ROLES)
 
@@ -241,14 +294,19 @@ def test_manifest_contract_mismatch_fails_closed(
     monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
 
     with pytest.raises(DemoBundleError, match=message):
-        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+        _load_bundle(root, digest)
 
 
 def test_external_manifest_digest_is_checked_before_parsing(tmp_path: Path):
     root, _manifest, _digest = _valid_bundle(tmp_path)
 
     with pytest.raises(DemoBundleError, match="manifest digest"):
-        load_demo_bundle(root, expected_manifest_sha256="0" * 64, repo_root=REPO_ROOT)
+        load_demo_bundle(
+            root,
+            expected_manifest_sha256="0" * 64,
+            expected_authority_sha256=_authority_digest(root),
+            repo_root=REPO_ROOT,
+        )
 
 
 def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch):
@@ -258,12 +316,12 @@ def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch
     evidence_path.write_bytes(b"tampered")
 
     with pytest.raises(DemoBundleError, match="size or hash"):
-        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+        _load_bundle(root, digest)
 
     root, _manifest, digest = _valid_bundle(tmp_path / "extra")
     (root / "unexpected.txt").write_text("unexpected")
     with pytest.raises(DemoBundleError, match="file set"):
-        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+        _load_bundle(root, digest)
 
     root, manifest, _digest = _valid_bundle(tmp_path / "marker")
     template_path = root / manifest["templates"][0]["path"]
@@ -272,7 +330,7 @@ def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch
     manifest["templates"][0]["sha256"] = _sha256(template_path.read_bytes())
     digest = _write_manifest(root, manifest)
     with pytest.raises(DemoBundleError, match="demo marker"):
-        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+        _load_bundle(root, digest)
 
 
 def test_docx_external_relationship_fails_closed(tmp_path: Path, monkeypatch):
@@ -285,7 +343,7 @@ def test_docx_external_relationship_fails_closed(tmp_path: Path, monkeypatch):
     digest = _write_manifest(root, manifest)
 
     with pytest.raises(DemoBundleError, match="external relationship"):
-        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+        _load_bundle(root, digest)
 
 
 def test_docx_placeholder_drift_and_pseudo_pdf_fail_closed(tmp_path: Path, monkeypatch):
@@ -294,7 +352,7 @@ def test_docx_placeholder_drift_and_pseudo_pdf_fail_closed(tmp_path: Path, monke
     manifest["templates"][0]["required_variables"] = ["case_no", "missing_value"]
     digest = _write_manifest(root, manifest)
     with pytest.raises(DemoBundleError, match="placeholder"):
-        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+        _load_bundle(root, digest)
 
     root, manifest, _digest = _valid_bundle(tmp_path / "pdf")
     evidence_path = root / manifest["evidence"][0]["path"]
@@ -305,7 +363,7 @@ def test_docx_placeholder_drift_and_pseudo_pdf_fail_closed(tmp_path: Path, monke
     manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
     digest = _write_manifest(root, manifest)
     with pytest.raises(DemoBundleError, match="PDF"):
-        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+        _load_bundle(root, digest)
 
 
 def test_bundle_root_symlink_fails_closed(tmp_path: Path, monkeypatch):
@@ -315,4 +373,49 @@ def test_bundle_root_symlink_fails_closed(tmp_path: Path, monkeypatch):
     alias.symlink_to(root, target_is_directory=True)
 
     with pytest.raises(DemoBundleError, match="root"):
-        load_demo_bundle(alias, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+        load_demo_bundle(
+            alias,
+            expected_manifest_sha256=digest,
+            expected_authority_sha256=_authority_digest(root),
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_authority_record_is_independently_pinned_and_exact(tmp_path: Path, monkeypatch):
+    root, _manifest, digest = _valid_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
+
+    with pytest.raises(DemoBundleError, match="authority digest"):
+        load_demo_bundle(
+            root,
+            expected_manifest_sha256=digest,
+            expected_authority_sha256="0" * 64,
+            repo_root=REPO_ROOT,
+        )
+
+    authority_path = root / "authority.json"
+    authority = json.loads(authority_path.read_text())
+    authority["status"] = "PENDING"
+    authority_path.write_text(
+        json.dumps(authority, ensure_ascii=False, separators=(",", ":")) + "\n"
+    )
+    with pytest.raises(DemoBundleError, match="authority.status"):
+        _load_bundle(root, digest)
+
+    authority["status"] = "APPROVED"
+    authority["decision_sha256"] = "0" * 64
+    authority_path.write_text(
+        json.dumps(authority, ensure_ascii=False, separators=(",", ":")) + "\n"
+    )
+    with pytest.raises(DemoBundleError, match="decision digest"):
+        _load_bundle(root, digest)
+
+    authority["decision_sha256"] = _sha256(
+        (REPO_ROOT / authority["decision_ref"]).read_bytes()
+    )
+    authority["source_digests"][0]["sha256"] = "0" * 64
+    authority_path.write_text(
+        json.dumps(authority, ensure_ascii=False, separators=(",", ":")) + "\n"
+    )
+    with pytest.raises(DemoBundleError, match="source digests"):
+        _load_bundle(root, digest)

@@ -29,6 +29,7 @@ def main() -> int:
     snapshot = load_demo_bundle(
         Path(_required_env("FPMS_DEMO_BUNDLE_PATH")),
         expected_manifest_sha256=_required_env("FPMS_DEMO_EXPECTED_MANIFEST_SHA256"),
+        expected_authority_sha256=_required_env("FPMS_DEMO_EXPECTED_AUTHORITY_SHA256"),
         repo_root=Path(__file__).resolve().parents[2],
     )
     print(
@@ -39,6 +40,9 @@ def main() -> int:
                 "bundle_id": snapshot.bundle_id,
                 "bundle_version": snapshot.bundle_version,
                 "manifest_sha256": snapshot.manifest_sha256,
+                "authority_sha256": snapshot.authority_sha256,
+                "approved_by": snapshot.approved_by,
+                "approved_at": snapshot.approved_at,
                 "evaluated_date": snapshot.local_date.isoformat(),
                 "timezone": "Asia/Shanghai",
             },

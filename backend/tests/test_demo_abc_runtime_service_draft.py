@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import runpy
 from datetime import date
 from pathlib import Path
@@ -58,6 +59,10 @@ def _configure_bundle(tmp_path: Path, monkeypatch) -> tuple[Path, str]:
     monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
     monkeypatch.setenv("FPMS_DEMO_BUNDLE_PATH", str(root))
     monkeypatch.setenv("FPMS_DEMO_EXPECTED_MANIFEST_SHA256", digest)
+    monkeypatch.setenv(
+        "FPMS_DEMO_EXPECTED_AUTHORITY_SHA256",
+        hashlib.sha256((root / "authority.json").read_bytes()).hexdigest(),
+    )
     monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
     return root, digest
 

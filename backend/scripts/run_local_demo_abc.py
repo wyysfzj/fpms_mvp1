@@ -69,6 +69,7 @@ def _preflight() -> tuple[str, DemoBundleSnapshot, DemoIdentity, DemoIdentity, s
     bundle = load_demo_bundle(
         Path(_required_env("FPMS_DEMO_BUNDLE_PATH")),
         expected_manifest_sha256=_required_env("FPMS_DEMO_EXPECTED_MANIFEST_SHA256"),
+        expected_authority_sha256=_required_env("FPMS_DEMO_EXPECTED_AUTHORITY_SHA256"),
         repo_root=_REPO_ROOT,
     )
     operator = _validated_identity(
@@ -105,6 +106,7 @@ def _materialize_bundle(bundle: DemoBundleSnapshot, run_root: Path) -> DemoBundl
     copied = load_demo_bundle(
         target,
         expected_manifest_sha256=bundle.manifest_sha256,
+        expected_authority_sha256=bundle.authority_sha256,
         repo_root=_REPO_ROOT,
     )
     for path in sorted(target.rglob("*"), reverse=True):
@@ -157,6 +159,9 @@ def bootstrap_demo_run() -> DemoRun:
         "bundle_id": bundle.bundle_id,
         "bundle_version": bundle.bundle_version,
         "manifest_sha256": bundle.manifest_sha256,
+        "authority_sha256": bundle.authority_sha256,
+        "approved_by": bundle.approved_by,
+        "approved_at": bundle.approved_at,
         "evaluated_date": bundle.local_date.isoformat(),
         "timezone": "Asia/Shanghai",
         "operator_username": operator.username,

@@ -90,11 +90,14 @@ def _config_required(message: str) -> BusinessError:
 
 
 @lru_cache(maxsize=8)
-def _load_bundle_snapshot(root: str, digest: str) -> DemoBundleSnapshot:
+def _load_bundle_snapshot(
+    root: str, manifest_digest: str, authority_digest: str
+) -> DemoBundleSnapshot:
     try:
         return load_demo_bundle(
             Path(root),
-            expected_manifest_sha256=digest,
+            expected_manifest_sha256=manifest_digest,
+            expected_authority_sha256=authority_digest,
             repo_root=_REPO_ROOT,
         )
     except DemoBundleError as exc:
@@ -106,9 +109,10 @@ def _bundle() -> DemoBundleSnapshot:
         raise _config_required("本地演示输入仅在 LOCAL_ABC_E2E 模式可用")
     root = os.environ.get("FPMS_DEMO_BUNDLE_PATH", "")
     digest = os.environ.get("FPMS_DEMO_EXPECTED_MANIFEST_SHA256", "")
-    if not root or not digest:
+    authority_digest = os.environ.get("FPMS_DEMO_EXPECTED_AUTHORITY_SHA256", "")
+    if not root or not digest or not authority_digest:
         raise _config_required("本地演示输入未配置")
-    return _load_bundle_snapshot(root, digest)
+    return _load_bundle_snapshot(root, digest, authority_digest)
 
 
 def get_demo_service_item() -> DemoServiceItem:

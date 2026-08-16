@@ -44,6 +44,9 @@ class DemoBundleSnapshot:
     bundle_id: str
     bundle_version: str
     manifest_sha256: str
+    authority_sha256: str
+    approved_by: str
+    approved_at: str
     local_date: date
     template: DemoTemplate
     service_rate: DemoServiceRate
@@ -172,6 +175,23 @@ def _naive_timestamp(value: Any, label: str) -> str:
     return value
 
 
+def _aware_timestamp(value: Any, label: str) -> str:
+    if not isinstance(value, str):
+        raise _error(f"{label} must be an aware ISO timestamp")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise _error(f"{label} must be an aware ISO timestamp") from exc
+    if (
+        parsed.tzinfo is None
+        or parsed.utcoffset() is None
+        or parsed.microsecond != 0
+        or parsed.isoformat() != value
+    ):
+        raise _error(f"{label} must be a second-precision aware ISO timestamp")
+    return value
+
+
 def _safe_relative_path(value: Any, label: str, prefix: str, suffix: str) -> str:
     text = _string(value, label, maximum=240)
     pure = PurePosixPath(text)
@@ -288,6 +308,107 @@ def _validate_authority(manifest: dict[str, Any], repo_root: Path) -> None:
         raise _error("adopted contract digest mismatch")
 
 
+def _validate_authority_record(
+    root: Path,
+    *,
+    expected_authority_sha256: str,
+    manifest: dict[str, Any],
+    manifest_sha256: str,
+    repo_root: Path,
+    expected_file_digests: list[dict[str, str]],
+) -> tuple[str, str]:
+    authority_path = root / "authority.json"
+    if authority_path.is_symlink() or not authority_path.is_file():
+        raise _error("authority.json is missing")
+    if _sha256_file(authority_path) != expected_authority_sha256:
+        raise _error("authority digest mismatch")
+    raw = authority_path.read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf") or b"\r" in raw or not raw.endswith(b"\n"):
+        raise _error("authority encoding or line endings are invalid")
+    try:
+        authority = json.loads(
+            raw.decode("utf-8"), object_pairs_hook=_object_without_duplicates
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise _error("authority JSON is invalid") from exc
+    authority = _expect_keys(
+        authority,
+        {
+            "schema_version",
+            "status",
+            "approved_by",
+            "approved_at",
+            "decision_ref",
+            "decision_version",
+            "decision_sha256",
+            "bundle_id",
+            "bundle_version",
+            "manifest_sha256",
+            "source_digests",
+            "file_digests",
+        },
+        "authority record",
+    )
+    _exact(
+        authority["schema_version"],
+        "fpms.demo-bundle-authority/v1",
+        "authority.schema_version",
+    )
+    _exact(authority["status"], "APPROVED", "authority.status")
+    approved_by = _string(authority["approved_by"], "authority.approved_by", maximum=120)
+    approved_at = _aware_timestamp(authority["approved_at"], "authority.approved_at")
+
+    manifest_authority = manifest["authority"]
+    decision_ref = _safe_relative_path(
+        authority["decision_ref"], "authority.decision_ref", "docs/", ".txt"
+    )
+    _exact(decision_ref, manifest_authority["decision_ref"], "authority.decision_ref")
+    _exact(
+        authority["decision_version"],
+        manifest_authority["decision_version"],
+        "authority.decision_version",
+    )
+    decision_digest = _matches(
+        authority["decision_sha256"], _HASH_RE, "authority.decision_sha256"
+    )
+    decision_path = (repo_root / decision_ref).resolve()
+    if repo_root not in decision_path.parents or not decision_path.is_file():
+        raise _error("authority decision_ref is unavailable")
+    if _sha256_file(decision_path) != decision_digest:
+        raise _error("authority decision digest mismatch")
+
+    _exact(authority["bundle_id"], manifest["bundle_id"], "authority.bundle_id")
+    _exact(
+        authority["bundle_version"],
+        manifest["bundle_version"],
+        "authority.bundle_version",
+    )
+    _exact(
+        authority["manifest_sha256"],
+        manifest_sha256,
+        "authority.manifest_sha256",
+    )
+    expected_sources = [
+        {
+            "kind": "PROVENANCE",
+            "ref": manifest["provenance"]["source_ref"],
+            "version": manifest["provenance"]["source_version"],
+            "sha256": manifest["provenance"]["source_sha256"],
+        },
+        {
+            "kind": "SERVICE_RATE",
+            "ref": manifest["rates"][0]["source_ref"],
+            "version": manifest["rates"][0]["source_version"],
+            "sha256": manifest["rates"][0]["source_sha256"],
+        },
+    ]
+    if authority["source_digests"] != expected_sources:
+        raise _error("authority source digests do not match the manifest")
+    if authority["file_digests"] != expected_file_digests:
+        raise _error("authority file digests do not match the manifest")
+    return approved_by, approved_at
+
+
 def _validate_metadata(role: str, metadata_value: Any) -> None:
     metadata = _expect_keys(metadata_value, _METADATA_KEYS, f"evidence[{role}].metadata")
     receipt_role = role in {"FILING_RECEIPT", "OA_RECEIPT"}
@@ -341,6 +462,7 @@ def load_demo_bundle(
     bundle_root: Path,
     *,
     expected_manifest_sha256: str,
+    expected_authority_sha256: str,
     repo_root: Path,
 ) -> DemoBundleSnapshot:
     unresolved_root = Path(bundle_root)
@@ -350,6 +472,9 @@ def load_demo_bundle(
     repo = Path(repo_root).resolve()
     expected_digest = _matches(
         expected_manifest_sha256, _HASH_RE, "expected manifest digest"
+    )
+    expected_authority_digest = _matches(
+        expected_authority_sha256, _HASH_RE, "expected authority digest"
     )
     if not root.is_dir():
         raise _error("bundle root must be a real directory")
@@ -427,7 +552,7 @@ def load_demo_bundle(
     evidence_rows = manifest["evidence"]
     if not isinstance(evidence_rows, list) or [row.get("role") for row in evidence_rows if isinstance(row, dict)] != _EVIDENCE_ROLES:
         raise _error("evidence roles or order are invalid")
-    expected_files = {"manifest.json", template_relative}
+    expected_files = {"manifest.json", "authority.json", template_relative}
     for index, row_value in enumerate(evidence_rows):
         role = _EVIDENCE_ROLES[index]
         row = _expect_keys(
@@ -506,11 +631,33 @@ def load_demo_bundle(
         _validate_file(evidence_path, row, f"evidence[{index}]")
         _validate_pdf(evidence_path)
 
+    expected_file_digests = sorted(
+        [
+            {"path": template_relative, "sha256": template_row["sha256"]},
+            *(
+                {"path": row["path"], "sha256": row["sha256"]}
+                for row in evidence_rows
+            ),
+        ],
+        key=lambda row: row["path"],
+    )
+    approved_by, approved_at = _validate_authority_record(
+        root,
+        expected_authority_sha256=expected_authority_digest,
+        manifest=manifest,
+        manifest_sha256=expected_digest,
+        repo_root=repo,
+        expected_file_digests=expected_file_digests,
+    )
+
     return DemoBundleSnapshot(
         bundle_root=root,
         bundle_id=bundle_id,
         bundle_version=bundle_version,
         manifest_sha256=expected_digest,
+        authority_sha256=expected_authority_digest,
+        approved_by=approved_by,
+        approved_at=approved_at,
         local_date=local_date,
         template=DemoTemplate(
             template_code=template_code,
