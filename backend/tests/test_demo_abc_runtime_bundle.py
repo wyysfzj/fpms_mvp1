@@ -101,6 +101,7 @@ def _write_pdf(
     invisible: bool = False,
     font_size: int = 12,
     horizontal_scale: int = 100,
+    mixed_horizontal_scale: str | None = None,
 ) -> None:
     writer = PdfWriter()
     page = writer.add_blank_page(width=612, height=792)
@@ -140,10 +141,32 @@ def _write_pdf(
     }[marker]
     encoded = visible.encode("utf-16-be").hex().upper()
     render_mode = "3 Tr " if invisible else ""
-    stream.set_data(
-        f"BT /F1 {font_size} Tf {horizontal_scale} Tz "
-        f"{render_mode}72 720 Td <{encoded}> Tj ET".encode()
-    )
+    if mixed_horizontal_scale is None:
+        content = (
+            f"BT /F1 {font_size} Tf {horizontal_scale} Tz "
+            f"{render_mode}72 720 Td <{encoded}> Tj ET"
+        )
+    else:
+        ordinary = "ordinary".encode("utf-16-be").hex().upper()
+        if mixed_horizontal_scale == "hidden-marker-first":
+            content = (
+                f"BT /F1 {font_size} Tf 0 Tz 72 720 Td <{encoded}> Tj "
+                f"100 Tz <{ordinary}> Tj ET"
+            )
+        elif mixed_horizontal_scale == "visible-marker-first":
+            content = (
+                f"BT /F1 {font_size} Tf 100 Tz 72 720 Td <{encoded}> Tj "
+                f"0 Tz <{ordinary}> Tj ET"
+            )
+        elif mixed_horizontal_scale == "hidden-marker-then-state":
+            content = (
+                f"BT /F1 {font_size} Tf 0 Tz 72 720 Td <{encoded}> Tj 100 Tz ET"
+            )
+        else:
+            content = (
+                f"BT /F1 {font_size} Tf 100 Tz 72 720 Td <{encoded}> Tj 0 Tz ET"
+            )
+    stream.set_data(content.encode())
     page[NameObject("/Contents")] = writer._add_object(stream)
     with path.open("wb") as output:
         writer.write(output)
@@ -462,6 +485,33 @@ def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch
     digest = _write_manifest(root, manifest)
     with pytest.raises(DemoBundleError, match="visible bilingual"):
         _load_bundle(root, digest)
+
+    for order in ("hidden-marker-first", "visible-marker-first"):
+        root, manifest, _digest = _valid_bundle(tmp_path / f"mixed-tz-{order}")
+        evidence_path = root / manifest["evidence"][0]["path"]
+        _write_pdf(evidence_path, mixed_horizontal_scale=order)
+        manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
+        manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
+        digest = _write_manifest(root, manifest)
+        with pytest.raises(DemoBundleError, match="visible bilingual"):
+            _load_bundle(root, digest)
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "hidden-marker-then-state")
+    evidence_path = root / manifest["evidence"][0]["path"]
+    _write_pdf(evidence_path, mixed_horizontal_scale="hidden-marker-then-state")
+    manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
+    manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
+    digest = _write_manifest(root, manifest)
+    with pytest.raises(DemoBundleError, match="visible bilingual"):
+        _load_bundle(root, digest)
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "visible-marker-then-state")
+    evidence_path = root / manifest["evidence"][0]["path"]
+    _write_pdf(evidence_path, mixed_horizontal_scale="visible-marker-then-state")
+    manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
+    manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
+    digest = _write_manifest(root, manifest)
+    _load_bundle(root, digest)
 
     root, manifest, _digest = _valid_bundle(tmp_path / "zero-horizontal-scale-pdf")
     evidence_path = root / manifest["evidence"][0]["path"]

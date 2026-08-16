@@ -401,9 +401,44 @@ def _validate_pdf(path: Path) -> None:
             raise _error("PDF must contain a readable first page")
         first_page = reader.pages[0]
         box = first_page.cropbox
-        state = {"render_mode": 0, "clipped": False, "horizontal_scale": 100.0}
-        stack: list[tuple[int, bool, float]] = []
+        state = {
+            "render_mode": 0,
+            "clipped": False,
+            "horizontal_scale": 100.0,
+            "font_size": None,
+            "unsafe_text_show": False,
+        }
+        stack: list[tuple[int, bool, float, float | None]] = []
         visible_fragments: list[str] = []
+
+        def text_show_is_visible(cm, tm) -> bool:
+            font_size = state["font_size"]
+            if font_size is None:
+                return False
+            size = float(font_size)
+            horizontal_scale = float(state["horizontal_scale"])
+            values = [*(float(value) for value in cm), *(float(value) for value in tm)]
+            determinant = (
+                (float(cm[0]) * float(cm[3]) - float(cm[1]) * float(cm[2]))
+                * (float(tm[0]) * float(tm[3]) - float(tm[1]) * float(tm[2]))
+                * horizontal_scale
+                / 100.0
+            )
+            x = float(tm[4]) * float(cm[0]) + float(tm[5]) * float(cm[2]) + float(cm[4])
+            y = float(tm[4]) * float(cm[1]) + float(tm[5]) * float(cm[3]) + float(cm[5])
+            return (
+                state["render_mode"] == 0
+                and not state["clipped"]
+                and math.isfinite(size)
+                and size > 0
+                and math.isfinite(horizontal_scale)
+                and abs(horizontal_scale) > 1e-12
+                and all(math.isfinite(value) for value in values)
+                and math.isfinite(determinant)
+                and abs(determinant) > 1e-12
+                and float(box.left) <= x <= float(box.right)
+                and float(box.bottom) <= y <= float(box.top)
+            )
 
         def before_operand(operator, operands, _cm, _tm) -> None:
             if operator == b"q":
@@ -412,6 +447,7 @@ def _validate_pdf(path: Path) -> None:
                         state["render_mode"],
                         state["clipped"],
                         state["horizontal_scale"],
+                        state["font_size"],
                     )
                 )
             elif operator == b"Q":
@@ -420,39 +456,22 @@ def _validate_pdf(path: Path) -> None:
                         state["render_mode"],
                         state["clipped"],
                         state["horizontal_scale"],
+                        state["font_size"],
                     ) = stack.pop()
             elif operator == b"Tr" and operands:
                 state["render_mode"] = int(operands[0])
             elif operator == b"Tz" and operands:
                 state["horizontal_scale"] = float(operands[0])
+            elif operator == b"Tf" and len(operands) >= 2:
+                state["font_size"] = float(operands[1])
             elif operator in {b"W", b"W*"}:
                 state["clipped"] = True
+            elif operator in {b"Tj", b"TJ", b"'", b'"'}:
+                if not text_show_is_visible(_cm, _tm):
+                    state["unsafe_text_show"] = True
 
-        def visit_text(text, cm, tm, _font, font_size) -> None:
-            if not text or state["render_mode"] != 0 or state["clipped"]:
-                return
-            values = [*(float(value) for value in cm), *(float(value) for value in tm)]
-            size = float(font_size)
-            horizontal_scale = state["horizontal_scale"]
-            determinant = (
-                (float(cm[0]) * float(cm[3]) - float(cm[1]) * float(cm[2]))
-                * (float(tm[0]) * float(tm[3]) - float(tm[1]) * float(tm[2]))
-                * horizontal_scale
-                / 100.0
-            )
-            if (
-                not math.isfinite(size)
-                or size <= 0
-                or not math.isfinite(horizontal_scale)
-                or abs(horizontal_scale) <= 1e-12
-                or not all(math.isfinite(value) for value in values)
-                or not math.isfinite(determinant)
-                or abs(determinant) <= 1e-12
-            ):
-                return
-            x = float(tm[4]) * float(cm[0]) + float(tm[5]) * float(cm[2]) + float(cm[4])
-            y = float(tm[4]) * float(cm[1]) + float(tm[5]) * float(cm[3]) + float(cm[5])
-            if float(box.left) <= x <= float(box.right) and float(box.bottom) <= y <= float(box.top):
+        def visit_text(text, _cm, _tm, _font, _font_size) -> None:
+            if text:
                 visible_fragments.append(text)
 
         first_page.extract_text(
@@ -463,7 +482,7 @@ def _validate_pdf(path: Path) -> None:
         raise
     except Exception as exc:
         raise _error("PDF is not structurally readable") from exc
-    if _PDF_MARKER not in "".join(visible_fragments):
+    if state["unsafe_text_show"] or _PDF_MARKER not in "".join(visible_fragments):
         raise _error("PDF first-page visible bilingual fictional demo marker is missing")
 
 
