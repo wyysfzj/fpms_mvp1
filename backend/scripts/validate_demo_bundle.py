@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+import json
+import os
+import re
+from pathlib import Path
+
+from app.core.demo_bundle import DemoBundleError, load_demo_bundle
+
+_RUN_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,96}")
+
+
+def _required_env(name: str) -> str:
+    value = os.environ.get(name, "")
+    if not value:
+        raise DemoBundleError(f"DEMO_INPUT_INVALID: required environment variable {name} is missing")
+    return value
+
+
+def main() -> int:
+    if _required_env("FPMS_ENV") != "demo":
+        raise DemoBundleError("DEMO_INPUT_INVALID: FPMS_ENV must be demo")
+    if _required_env("FPMS_DEMO_SCOPE") != "LOCAL_ABC_E2E":
+        raise DemoBundleError("DEMO_INPUT_INVALID: FPMS_DEMO_SCOPE must be LOCAL_ABC_E2E")
+    run_id = _required_env("FPMS_DEMO_RUN_ID")
+    if _RUN_ID_RE.fullmatch(run_id) is None:
+        raise DemoBundleError("DEMO_INPUT_INVALID: FPMS_DEMO_RUN_ID has invalid format")
+
+    snapshot = load_demo_bundle(
+        Path(_required_env("FPMS_DEMO_BUNDLE_PATH")),
+        expected_manifest_sha256=_required_env("FPMS_DEMO_EXPECTED_MANIFEST_SHA256"),
+        repo_root=Path(__file__).resolve().parents[2],
+    )
+    print(
+        json.dumps(
+            {
+                "status": "VALID",
+                "run_id": run_id,
+                "bundle_id": snapshot.bundle_id,
+                "bundle_version": snapshot.bundle_version,
+                "manifest_sha256": snapshot.manifest_sha256,
+                "evaluated_date": snapshot.local_date.isoformat(),
+                "timezone": "Asia/Shanghai",
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
