@@ -143,6 +143,7 @@ def bootstrap_demo_run() -> DemoRun:
     get_settings.cache_clear()
 
     alembic_config = Config(str(_BACKEND_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(_BACKEND_ROOT / "alembic"))
     alembic_config.set_main_option("sqlalchemy.url", database_url)
     command.upgrade(alembic_config, "head")
 

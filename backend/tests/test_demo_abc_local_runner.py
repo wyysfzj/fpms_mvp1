@@ -62,6 +62,7 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
     root, _manifest, digest = _bundle(tmp_path / "input")
     _configure(monkeypatch, root, digest, "fresh-run")
     monkeypatch.setattr(run_local_demo_abc.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.chdir(tmp_path)
 
     result = run_local_demo_abc.bootstrap_demo_run()
 
