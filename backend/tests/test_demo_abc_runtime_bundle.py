@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tomllib
 import zipfile
 from datetime import date
 from pathlib import Path
 
 import pytest
+from docx import Document
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 try:
     from app.core import demo_bundle
@@ -41,21 +45,40 @@ def _sha256(data: bytes) -> str:
 
 def _write_docx(path: Path, *, marker: bool = True, external: bool = False) -> None:
     marker_text = "DEMO_ONLY / 仅用于本地虚构演示" if marker else "普通模板"
-    relationship = (
-        '<Relationship Id="rId1" Target="https://example.invalid" TargetMode="External" />'
-        if external
-        else ""
+    document = Document()
+    document.add_paragraph(marker_text)
+    document.add_paragraph("案号 {{ case_no }} / 客户 {{ client_name }}")
+    document.save(path)
+    if external:
+        with zipfile.ZipFile(path, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "word/_rels/demo-external.rels",
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId999" Target="https://example.invalid" '
+                'TargetMode="External" /></Relationships>',
+            )
+
+
+def _write_pdf(path: Path, *, marker: bool = True) -> None:
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
     )
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(
-            "word/document.xml",
-            f'<w:document xmlns:w="urn:test"><w:body><w:t>{marker_text}</w:t></w:body></w:document>',
-        )
-        archive.writestr(
-            "word/_rels/document.xml.rels",
-            f'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            f"{relationship}</Relationships>",
-        )
+    font_ref = writer._add_object(font)
+    page[NameObject("/Resources")] = DictionaryObject(
+        {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})}
+    )
+    stream = DecodedStreamObject()
+    visible = "FICTIONAL_DEMO_EVIDENCE / LOCAL FICTIONAL DEMO" if marker else "ordinary"
+    stream.set_data(f"BT /F1 12 Tf 72 720 Td ({visible}) Tj ET".encode())
+    page[NameObject("/Contents")] = writer._add_object(stream)
+    with path.open("wb") as output:
+        writer.write(output)
 
 
 def _metadata_for(role: str) -> dict[str, object]:
@@ -66,7 +89,7 @@ def _metadata_for(role: str) -> dict[str, object]:
         "official_due_date": None,
         "official_due_date_source": None,
         "official_due_date_status": None,
-        "oa_sequence": 1,
+        "oa_sequence": None,
         "source_template_code": None,
     }
     if role in {"FILING_RECEIPT", "OA_RECEIPT"}:
@@ -80,6 +103,7 @@ def _metadata_for(role: str) -> dict[str, object]:
             official_due_date_source="MANUAL_OFFICIAL_NOTICE",
             official_due_date_status="CONFIRMED",
             source_template_code="DEMO_OA_NOTICE_1",
+            oa_sequence=1,
         )
     return metadata
 
@@ -102,12 +126,8 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
     evidence_rows: list[dict[str, object]] = []
     for role in EVIDENCE_ROLES:
         evidence_path = evidence / f"{role.lower()}.pdf"
-        evidence_bytes = (
-            b"%PDF-1.4\n% FICTIONAL_DEMO_EVIDENCE / "
-            + "仅用于本地虚构演示".encode()
-            + b"\n%%EOF\n"
-        )
-        evidence_path.write_bytes(evidence_bytes)
+        _write_pdf(evidence_path)
+        evidence_bytes = evidence_path.read_bytes()
         evidence_rows.append(
             {
                 "role": role,
@@ -129,7 +149,7 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
         "classification": "DEMO_ONLY",
         "purpose": "LOCAL_ABC_E2E",
         "valid_from": "2026-08-16",
-        "valid_until": "2026-08-16",
+        "valid_until": "2026-08-31",
         "authority": {
             "decision_ref": "docs/product/v8/customer-decisions/2026-08-15-local-demo-abc.txt",
             "decision_version": "DEC-LOCAL-DEMO-ABC-20260815",
@@ -181,6 +201,10 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
 
 
 def test_valid_bundle_returns_immutable_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    dependencies = tomllib.loads((REPO_ROOT / "backend/pyproject.toml").read_text())["project"][
+        "dependencies"
+    ]
+    assert "pypdf>=6.0,<7" in dependencies
     root, _manifest, digest = _valid_bundle(tmp_path)
     monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
 
@@ -262,3 +286,33 @@ def test_docx_external_relationship_fails_closed(tmp_path: Path, monkeypatch):
 
     with pytest.raises(DemoBundleError, match="external relationship"):
         load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+
+
+def test_docx_placeholder_drift_and_pseudo_pdf_fail_closed(tmp_path: Path, monkeypatch):
+    root, manifest, _digest = _valid_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
+    manifest["templates"][0]["required_variables"] = ["case_no", "missing_value"]
+    digest = _write_manifest(root, manifest)
+    with pytest.raises(DemoBundleError, match="placeholder"):
+        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "pdf")
+    evidence_path = root / manifest["evidence"][0]["path"]
+    evidence_path.write_bytes(
+        b"%PDF-1.4\n% FICTIONAL_DEMO_EVIDENCE / marker only in comment\n%%EOF\n"
+    )
+    manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
+    manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
+    digest = _write_manifest(root, manifest)
+    with pytest.raises(DemoBundleError, match="PDF"):
+        load_demo_bundle(root, expected_manifest_sha256=digest, repo_root=REPO_ROOT)
+
+
+def test_bundle_root_symlink_fails_closed(tmp_path: Path, monkeypatch):
+    root, _manifest, digest = _valid_bundle(tmp_path / "source")
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
+    alias = tmp_path / "bundle-link"
+    alias.symlink_to(root, target_is_directory=True)
+
+    with pytest.raises(DemoBundleError, match="root"):
+        load_demo_bundle(alias, expected_manifest_sha256=digest, repo_root=REPO_ROOT)

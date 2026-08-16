@@ -99,15 +99,38 @@ def _sqlite_engine(database_url: str):
     return engine
 
 
+def _materialize_bundle(bundle: DemoBundleSnapshot, run_root: Path) -> DemoBundleSnapshot:
+    target = run_root / "input" / bundle.manifest_sha256
+    shutil.copytree(bundle.bundle_root, target, symlinks=False)
+    copied = load_demo_bundle(
+        target,
+        expected_manifest_sha256=bundle.manifest_sha256,
+        repo_root=_REPO_ROOT,
+    )
+    for path in sorted(target.rglob("*"), reverse=True):
+        path.chmod(0o555 if path.is_dir() else 0o444)
+    target.chmod(0o555)
+    (run_root / "input").chmod(0o555)
+    os.environ["FPMS_DEMO_BUNDLE_PATH"] = str(target)
+    return copied
+
+
 def bootstrap_demo_run() -> DemoRun:
     run_id, bundle, operator, reviewer, jwt_secret = _preflight()
     run_root = Path(tempfile.gettempdir()) / f"fpms-demo-abc-{run_id}"
     if run_root.exists() or run_root.is_symlink():
         raise RuntimeError(f"demo run ID already exists: {run_id}")
 
+    run_root.mkdir()
+    try:
+        bundle = _materialize_bundle(bundle, run_root)
+    except Exception:
+        shutil.rmtree(run_root)
+        raise
+
     storage_path = run_root / "storage"
     database_path = run_root / "fpms-demo.db"
-    storage_path.mkdir(parents=True)
+    storage_path.mkdir()
     database_url = f"sqlite:///{database_path}"
     os.environ.update(
         DATABASE_URL=database_url,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import runpy
 import sqlite3
 from pathlib import Path
@@ -62,6 +63,10 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
 
     assert result.run_root == tmp_path / "fpms-demo-abc-fresh-run"
     assert result.database_path.is_file()
+    assert result.bundle.template.path.is_relative_to(result.run_root / "input")
+    assert os.environ["FPMS_DEMO_BUNDLE_PATH"] == str(result.bundle.template.path.parents[1])
+    for path in (result.run_root / "input").rglob("*"):
+        assert path.stat().st_mode & 0o222 == 0
     with sqlite3.connect(result.database_path) as connection:
         users = connection.execute(
             "SELECT username, password_hash FROM t_user ORDER BY username"

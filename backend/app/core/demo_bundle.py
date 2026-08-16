@@ -10,6 +10,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from docxtpl import DocxTemplate
+from pypdf import PdfReader
+
 
 class DemoBundleError(RuntimeError):
     pass
@@ -37,6 +40,7 @@ class DemoTemplate:
 
 @dataclass(frozen=True)
 class DemoBundleSnapshot:
+    bundle_root: Path
     bundle_id: str
     bundle_version: str
     manifest_sha256: str
@@ -94,7 +98,7 @@ _VERSION_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")
 _CODE_RE = re.compile(r"[A-Z0-9_]{1,64}")
 _VARIABLE_RE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 _AMOUNT_RE = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}")
-_PDF_MARKER = "FICTIONAL_DEMO_EVIDENCE / 仅用于本地虚构演示".encode()
+_PDF_MARKER = "FICTIONAL_DEMO_EVIDENCE"
 _DOCX_MARKER = "DEMO_ONLY / 仅用于本地虚构演示"
 
 
@@ -197,7 +201,7 @@ def _validate_file(path: Path, row: dict[str, Any], label: str) -> None:
         raise _error(f"{label} size or hash mismatch")
 
 
-def _validate_docx(path: Path) -> None:
+def _validate_docx(path: Path, required_variables: tuple[str, ...]) -> None:
     try:
         with zipfile.ZipFile(path) as archive:
             entries = archive.infolist()
@@ -229,12 +233,29 @@ def _validate_docx(path: Path) -> None:
                 raise _error("DOCX visible demo marker is missing")
     except zipfile.BadZipFile as exc:
         raise _error("DOCX is not a valid ZIP package") from exc
+    try:
+        actual_variables = tuple(sorted(DocxTemplate(str(path)).get_undeclared_template_variables()))
+    except Exception as exc:
+        raise _error("DOCX template variables cannot be extracted") from exc
+    if actual_variables != required_variables:
+        raise _error(
+            "DOCX placeholder mismatch: "
+            f"actual={list(actual_variables)}, declared={list(required_variables)}"
+        )
 
 
 def _validate_pdf(path: Path) -> None:
-    data = path.read_bytes()
-    if not data.startswith(b"%PDF-") or _PDF_MARKER not in data:
-        raise _error("PDF visible fictional demo marker is missing")
+    try:
+        reader = PdfReader(str(path), strict=True)
+        if reader.is_encrypted or not reader.pages:
+            raise _error("PDF must contain a readable first page")
+        first_page_text = reader.pages[0].extract_text() or ""
+    except DemoBundleError:
+        raise
+    except Exception as exc:
+        raise _error("PDF is not structurally readable") from exc
+    if _PDF_MARKER not in first_page_text:
+        raise _error("PDF first-page visible fictional demo marker is missing")
 
 
 def _validate_authority(manifest: dict[str, Any], repo_root: Path) -> None:
@@ -269,7 +290,6 @@ def _validate_authority(manifest: dict[str, Any], repo_root: Path) -> None:
 
 def _validate_metadata(role: str, metadata_value: Any) -> None:
     metadata = _expect_keys(metadata_value, _METADATA_KEYS, f"evidence[{role}].metadata")
-    _exact(metadata["oa_sequence"], 1, f"evidence[{role}].metadata.oa_sequence")
     receipt_role = role in {"FILING_RECEIPT", "OA_RECEIPT"}
     oa_notice = role == "OA_NOTICE"
 
@@ -289,6 +309,7 @@ def _validate_metadata(role: str, metadata_value: Any) -> None:
             "source_template_code",
         }
     elif oa_notice:
+        _exact(metadata["oa_sequence"], 1, "evidence[OA_NOTICE].metadata.oa_sequence")
         _naive_timestamp(metadata["effective_at"], "evidence[OA_NOTICE].effective_at")
         _iso_date(metadata["official_due_date"], "evidence[OA_NOTICE].official_due_date")
         if metadata["official_due_date_source"] not in {
@@ -309,6 +330,8 @@ def _validate_metadata(role: str, metadata_value: Any) -> None:
             "official_due_date_status",
             "source_template_code",
         }
+    if not oa_notice:
+        null_keys.add("oa_sequence")
     for key in null_keys:
         if metadata[key] is not None:
             raise _error(f"evidence[{role}].metadata.{key} must be null")
@@ -320,13 +343,18 @@ def load_demo_bundle(
     expected_manifest_sha256: str,
     repo_root: Path,
 ) -> DemoBundleSnapshot:
-    root = Path(bundle_root).resolve()
+    unresolved_root = Path(bundle_root)
+    if unresolved_root.is_symlink():
+        raise _error("bundle root must not be a symlink")
+    root = unresolved_root.resolve()
     repo = Path(repo_root).resolve()
     expected_digest = _matches(
         expected_manifest_sha256, _HASH_RE, "expected manifest digest"
     )
-    if not root.is_dir() or root.is_symlink():
+    if not root.is_dir():
         raise _error("bundle root must be a real directory")
+    if root == repo or repo in root.parents:
+        raise _error("bundle root must be outside the repository")
     manifest_path = root / "manifest.json"
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise _error("manifest.json is missing")
@@ -472,13 +500,14 @@ def load_demo_bundle(
 
     template_path = root / template_relative
     _validate_file(template_path, template_row, "templates[0]")
-    _validate_docx(template_path)
+    _validate_docx(template_path, tuple(variables))
     for index, row in enumerate(evidence_rows):
         evidence_path = root / row["path"]
         _validate_file(evidence_path, row, f"evidence[{index}]")
         _validate_pdf(evidence_path)
 
     return DemoBundleSnapshot(
+        bundle_root=root,
         bundle_id=bundle_id,
         bundle_version=bundle_version,
         manifest_sha256=expected_digest,

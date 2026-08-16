@@ -144,7 +144,7 @@ def test_runtime_service_item_to_pay_locked_draft(
         assert len(source_rows) == 1
 
 
-def test_invalid_or_drifted_runtime_input_creates_no_fee_facts(
+def test_invalid_item_creates_no_fee_facts_and_cached_bundle_ignores_external_drift(
     client,
     auth_headers,
     session_factory,
@@ -164,15 +164,20 @@ def test_invalid_or_drifted_runtime_input_creates_no_fee_facts(
     )
     assert wrong_item.status_code == 409, wrong_item.text
 
+    first_item = client.get("/api/v1/fees/demo-service-item", headers=auth_headers)
+    assert first_item.status_code == 200
     with (root / "manifest.json").open("ab") as stream:
         stream.write(b"tampered")
+    cached_item = client.get("/api/v1/fees/demo-service-item", headers=auth_headers)
+    assert cached_item.status_code == 200
+    assert cached_item.json() == first_item.json()
     command["item_code"] = "DEMO_SERVICE_1"
-    invalid_bundle = client.post(
+    created_from_cached_snapshot = client.post(
         "/api/v1/fees/demo-service-obligations", json=command, headers=auth_headers
     )
-    assert invalid_bundle.status_code == 409, invalid_bundle.text
+    assert created_from_cached_snapshot.status_code == 201, created_from_cached_snapshot.text
 
     with session_factory() as db:
-        assert db.query(FeeObligation).count() == 0
+        assert db.query(FeeObligation).count() == 1
         assert db.query(FeeDraft).count() == 0
         assert db.query(FeeItem).count() == 0

@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 from pathlib import Path
 from uuid import UUID
 
@@ -88,13 +89,8 @@ def _config_required(message: str) -> BusinessError:
     )
 
 
-def _bundle() -> DemoBundleSnapshot:
-    if os.environ.get("FPMS_ENV") != "demo" or os.environ.get("FPMS_DEMO_SCOPE") != "LOCAL_ABC_E2E":
-        raise _config_required("本地演示输入仅在 LOCAL_ABC_E2E 模式可用")
-    root = os.environ.get("FPMS_DEMO_BUNDLE_PATH", "")
-    digest = os.environ.get("FPMS_DEMO_EXPECTED_MANIFEST_SHA256", "")
-    if not root or not digest:
-        raise _config_required("本地演示输入未配置")
+@lru_cache(maxsize=8)
+def _load_bundle_snapshot(root: str, digest: str) -> DemoBundleSnapshot:
     try:
         return load_demo_bundle(
             Path(root),
@@ -103,6 +99,16 @@ def _bundle() -> DemoBundleSnapshot:
         )
     except DemoBundleError as exc:
         raise _config_required("本地演示输入无效或已变化") from exc
+
+
+def _bundle() -> DemoBundleSnapshot:
+    if os.environ.get("FPMS_ENV") != "demo" or os.environ.get("FPMS_DEMO_SCOPE") != "LOCAL_ABC_E2E":
+        raise _config_required("本地演示输入仅在 LOCAL_ABC_E2E 模式可用")
+    root = os.environ.get("FPMS_DEMO_BUNDLE_PATH", "")
+    digest = os.environ.get("FPMS_DEMO_EXPECTED_MANIFEST_SHA256", "")
+    if not root or not digest:
+        raise _config_required("本地演示输入未配置")
+    return _load_bundle_snapshot(root, digest)
 
 
 def get_demo_service_item() -> DemoServiceItem:
