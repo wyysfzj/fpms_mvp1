@@ -85,12 +85,13 @@ def build_synthetic_bundle(parent: Path) -> tuple[Path, str, str]:
 
 
 def wait_url(url: str, process: subprocess.Popen[bytes], timeout: float = 120) -> None:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError(f"local runner exited before readiness: rc={process.returncode}")
         try:
-            with urllib.request.urlopen(url, timeout=1) as response:
+            with opener.open(url, timeout=1) as response:
                 if response.status < 500:
                     return
         except Exception:
@@ -257,6 +258,8 @@ def run_one(
         FPMS_DEMO_REVIEWER_USERNAME="demo_evidence_reviewer",
         FPMS_DEMO_REVIEWER_PASSWORD=reviewer_password,
         JWT_SECRET=secrets.token_urlsafe(48),
+        NO_PROXY="127.0.0.1,localhost",
+        no_proxy="127.0.0.1,localhost",
     )
     commands = artifact / "commands.jsonl"
     results = artifact / "results.jsonl"
@@ -271,7 +274,11 @@ def run_one(
             "step": f"run{ordinal}-launch",
             "cwd": str(BACKEND),
             "argv": runner_argv,
-            "environment_keys": sorted(key for key in env if key.startswith("FPMS_DEMO_") or key == "JWT_SECRET"),
+            "environment_keys": sorted(
+                key
+                for key in env
+                if key.startswith("FPMS_DEMO_") or key in {"JWT_SECRET", "NO_PROXY", "no_proxy"}
+            ),
             "credentials": "EPHEMERAL_REDACTED",
             "ts": now(),
         },
