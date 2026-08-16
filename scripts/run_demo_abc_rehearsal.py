@@ -262,7 +262,8 @@ def run_one(
     results = artifact / "results.jsonl"
     runner_argv = [
         sys.executable,
-        "scripts/run_local_demo_abc.py",
+        "-m",
+        "scripts.run_local_demo_abc",
     ]
     append_jsonl(
         commands,
