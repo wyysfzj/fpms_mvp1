@@ -1843,7 +1843,7 @@ def create_demo_bill_from_draft(
         raise_business_error(
             "DEMO_BILL_DRAFT_SCOPE_INVALID",
             "演示账单仅支持已关联客户的 CNY 草稿",
-            status_code=409,
+            status_code=400,
         )
     consumed = db.scalar(
         select(BillDraftSource).where(BillDraftSource.draft_id == draft.id)
@@ -1871,7 +1871,7 @@ def create_demo_bill_from_draft(
         raise_business_error(
             "DEMO_BILL_DRAFT_CONTENT_INVALID",
             "演示账单要求一个正额服务费项目",
-            status_code=409,
+            status_code=400,
         )
 
     bill_id = str(uuid4())
@@ -2031,29 +2031,40 @@ def create_demo_bank_receipt(
         )
 
     bill = db.scalar(select(Bill).where(Bill.id == data.target_bill_id))
+    if bill is None:
+        raise_business_error(
+            "DEMO_PAYMENT_BILL_NOT_FOUND",
+            "目标账单不存在",
+            status_code=404,
+        )
     source = db.scalar(
         select(BillDraftSource).where(BillDraftSource.bill_id == data.target_bill_id)
     )
     items = tuple(
         db.scalars(select(BillItem).where(BillItem.bill_id == data.target_bill_id)).all()
     )
-    if bill is None or source is None or len(items) != 1 or items[0].case_id is None:
+    if source is None or len(items) != 1 or items[0].case_id is None:
         raise_business_error(
             "DEMO_PAYMENT_BILL_INVALID",
             "目标账单不是可收款的本地演示账单",
+            status_code=400,
+        )
+    if bill.status != "UNSETTLED":
+        raise_business_error(
+            "DEMO_PAYMENT_BILL_STATE_CONFLICT",
+            "目标账单当前状态不可登记回款",
             status_code=409,
         )
     if (
         bill.currency != "CNY"
         or bill.direction != "AR"
-        or bill.status != "UNSETTLED"
         or bill.balance <= Decimal("0")
         or data.amount != bill.balance
     ):
         raise_business_error(
             "DEMO_PAYMENT_AMOUNT_OR_BILL_CONFLICT",
             "回款金额必须等于当前演示账单余额",
-            status_code=409,
+            status_code=400,
         )
     prior_target = db.scalar(
         select(DemoPaymentCommand.id).where(
@@ -2217,8 +2228,14 @@ def create_demo_full_offset(
         )
 
     bill = db.get(Bill, data.bill_id)
+    if bill is None:
+        raise_business_error("DEMO_OFFSET_BILL_NOT_FOUND", "目标账单不存在", status_code=404)
     line = db.get(PaymentLine, data.payment_line_id)
+    if line is None:
+        raise_business_error("DEMO_OFFSET_LINE_NOT_FOUND", "回款明细不存在", status_code=404)
     payment = db.get(Payment, line.payment_id) if line is not None else None
+    if payment is None:
+        raise_business_error("DEMO_OFFSET_PAYMENT_NOT_FOUND", "客户回款不存在", status_code=404)
     item = db.scalar(select(BillItem).where(BillItem.bill_id == data.bill_id))
     source = db.scalar(select(BillDraftSource).where(BillDraftSource.bill_id == data.bill_id))
     active_offset = db.scalar(
@@ -2228,18 +2245,20 @@ def create_demo_full_offset(
         )
     )
     if (
-        bill is None
-        or line is None
-        or payment is None
-        or item is None
+        item is None
         or item.case_id is None
         or item.fee_code is None
         or source is None
-        or active_offset is not None
     ):
         raise_business_error(
             "DEMO_OFFSET_SCOPE_INVALID",
             "账单或回款不属于可核销的本地演示闭环",
+            status_code=400,
+        )
+    if active_offset is not None or bill.status != "UNSETTLED":
+        raise_business_error(
+            "DEMO_OFFSET_STATE_CONFLICT",
+            "账单已有核销或当前状态不可核销",
             status_code=409,
         )
     if (
@@ -2247,7 +2266,6 @@ def create_demo_full_offset(
         or bill.currency != payment.currency
         or bill.currency != "CNY"
         or line.case_id != item.case_id
-        or bill.status != "UNSETTLED"
         or bill.balance <= Decimal("0")
         or line.balance_amt <= Decimal("0")
         or data.offset_amt != bill.balance
@@ -2256,13 +2274,27 @@ def create_demo_full_offset(
         raise_business_error(
             "DEMO_OFFSET_BALANCE_CONFLICT",
             "核销金额必须等于账单及回款可用余额",
-            status_code=409,
+            status_code=400,
         )
 
-    receipt_key = (
-        f"DEMO:{item.case_id}:{item.fee_code}:SERVICE:"
-        f"{item.year_no if item.year_no is not None and item.year_no > 0 else '-'}:CNY"
+    year_component = str(item.year_no) if item.year_no is not None and item.year_no > 0 else "-"
+    receipt_components = (
+        item.case_id,
+        item.fee_code,
+        "SERVICE",
+        year_component,
+        "CNY",
     )
+    if any(
+        not component or component != component.strip() or "|" in component
+        for component in receipt_components
+    ):
+        raise_business_error(
+            "DEMO_OFFSET_RECEIPT_IDENTITY_INVALID",
+            "案件收款标识包含非法分隔符或空白",
+            status_code=400,
+        )
+    receipt_key = "|".join(receipt_components)
     receipt = db.scalar(
         select(CaseReceipt).where(CaseReceipt.receipt_key == receipt_key)
     )

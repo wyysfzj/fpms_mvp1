@@ -216,3 +216,25 @@ def test_demo_bill_dates_are_explicit_and_ordered(
     assert response.status_code == 422, response.text
     with session_factory() as db:
         assert db.query(Bill).count() == 0
+
+    whitespace_id = client.post(
+        "/api/v1/bills/demo-from-draft",
+        json={
+            "draft_id": f" {draft_id}",
+            "bill_date": "2026-08-16",
+            "idempotency_key": "demo-bill-whitespace",
+        },
+        headers=auth_headers,
+    )
+    assert whitespace_id.status_code == 422, whitespace_id.text
+
+    datetime_value = client.post(
+        "/api/v1/bills/demo-from-draft",
+        json={
+            "draft_id": draft_id,
+            "bill_date": "2026-08-16T00:00:00",
+            "idempotency_key": "demo-bill-datetime",
+        },
+        headers=auth_headers,
+    )
+    assert datetime_value.status_code == 422, datetime_value.text

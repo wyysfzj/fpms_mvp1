@@ -1,10 +1,44 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
+
+_DEMO_MONEY_RE = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}")
+
+
+def _strict_positive_demo_money(value: object) -> Decimal:
+    if type(value) is not str or _DEMO_MONEY_RE.fullmatch(value) is None:
+        raise ValueError("money must be a decimal string with exactly two fractional digits")
+    parsed = Decimal(value)
+    if parsed <= 0 or len(parsed.as_tuple().digits) > 18:
+        raise ValueError("money must be positive with at most 18 digits")
+    return parsed
+
+
+def _strict_demo_date(value: object) -> date:
+    if type(value) is not str:
+        raise ValueError("date must be an ISO date string")
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("date must be an ISO date string") from exc
+    if parsed.isoformat() != value:
+        raise ValueError("date must be an ISO date string")
+    return parsed
+
+
+DemoPositiveMoney = Annotated[Decimal, BeforeValidator(_strict_positive_demo_money)]
+DemoDate = Annotated[date, BeforeValidator(_strict_demo_date)]
+
+
+def _strict_demo_text(value: object, label: str) -> object:
+    if type(value) is not str or not value or value != value.strip() or "\x00" in value:
+        raise ValueError(f"{label} must be a non-empty trimmed string")
+    return value
 
 
 class BillCreateSchema(BaseModel):
@@ -196,9 +230,16 @@ class DemoBillFromDraftRequest(BaseModel):
 
     draft_id: str = Field(..., min_length=1, max_length=36)
     bill_no: str | None = Field(None, min_length=1, max_length=64)
-    bill_date: date
-    due_date: date | None = None
+    bill_date: DemoDate
+    due_date: DemoDate | None = None
     idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+    @field_validator("draft_id", "bill_no", "idempotency_key", mode="before")
+    @classmethod
+    def validate_text(cls, value: object, info):
+        if value is None and info.field_name == "bill_no":
+            return value
+        return _strict_demo_text(value, info.field_name)
 
     @model_validator(mode="after")
     def validate_date_order(self) -> "DemoBillFromDraftRequest":
@@ -217,14 +258,25 @@ class DemoBankReceiptRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target_bill_id: str = Field(..., min_length=1, max_length=36)
-    amount: Decimal = Field(..., gt=0, max_digits=18, decimal_places=2)
+    amount: DemoPositiveMoney
     pay_no: str = Field(..., min_length=1, max_length=64)
-    pay_date: date
+    pay_date: DemoDate
     currency: Literal["CNY"]
     pay_method: Literal["BANK_TRANSFER"]
     bank_ref_no: str = Field(..., min_length=1, max_length=96)
     remark: str | None = Field(None, max_length=512)
     idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+    @field_validator(
+        "target_bill_id",
+        "pay_no",
+        "bank_ref_no",
+        "idempotency_key",
+        mode="before",
+    )
+    @classmethod
+    def validate_text(cls, value: object, info):
+        return _strict_demo_text(value, info.field_name)
 
 
 class DemoPaymentOut(BaseModel):
@@ -263,9 +315,14 @@ class DemoFullOffsetRequest(BaseModel):
 
     payment_line_id: str = Field(..., min_length=1, max_length=36)
     bill_id: str = Field(..., min_length=1, max_length=36)
-    offset_amt: Decimal = Field(..., gt=0, max_digits=18, decimal_places=2)
-    offset_date: date
+    offset_amt: DemoPositiveMoney
+    offset_date: DemoDate
     idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+    @field_validator("payment_line_id", "bill_id", "idempotency_key", mode="before")
+    @classmethod
+    def validate_text(cls, value: object, info):
+        return _strict_demo_text(value, info.field_name)
 
 
 class DemoOffsetOut(BaseModel):

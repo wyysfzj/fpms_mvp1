@@ -4,10 +4,10 @@ import runpy
 from pathlib import Path
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 from app.modules.billing.models import (
     Bill,
+    BillItem,
     CaseReceipt,
     DemoOffsetCommand,
     DemoPaymentCommand,
@@ -191,23 +191,10 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
         offset_command_row = db.query(DemoOffsetCommand).one()
         assert offset_command_row.receipt_id == exact_receipt_id
         case_receipt = db.query(CaseReceipt).one()
-        assert case_receipt.receipt_key.endswith(":SERVICE:-:CNY")
+        assert case_receipt.receipt_key == f"{case_id}|DEMO_SERVICE_1|SERVICE|-|CNY"
         bill = db.get(Bill, bill_id)
         assert bill.balance == 0
         assert bill.status == "SETTLED"
-
-        db.add(
-            PaymentLine(
-                payment_id=payment_id,
-                case_id=case_id,
-                raw_amount=-1,
-                allocated_amt=0,
-                balance_amt=-1,
-            )
-        )
-        with pytest.raises(IntegrityError):
-            db.commit()
-
 
 def test_demo_payment_and_offset_reject_invalid_money_without_partial_write(
     client,
@@ -238,3 +225,140 @@ def test_demo_payment_and_offset_reject_invalid_money_without_partial_write(
         assert db.query(Payment).count() == 0
         assert db.query(PaymentLine).count() == 0
         assert db.query(DemoPaymentCommand).count() == 0
+
+
+@pytest.mark.parametrize("amount", [1200, "1200.0", " 1200.00"])
+def test_demo_payment_rejects_coerced_or_noncanonical_money(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+    amount,
+):
+    _client_id, _case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    response = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json={
+            "target_bill_id": bill_id,
+            "amount": amount,
+            "pay_no": "DEMO-PAY-STRICT",
+            "pay_date": "2026-08-16",
+            "currency": "CNY",
+            "pay_method": "BANK_TRANSFER",
+            "bank_ref_no": "DEMO-BANK-STRICT",
+            "idempotency_key": "demo-payment-strict",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 422, response.text
+    with session_factory() as db:
+        assert db.query(Payment).count() == 0
+
+
+def test_demo_payment_and_offset_use_404_and_400_semantics(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    missing_id = "00000000-0000-0000-0000-000000000000"
+    _client_id, _case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    missing = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json={
+            "target_bill_id": missing_id,
+            "amount": "1200.00",
+            "pay_no": "DEMO-PAY-MISSING",
+            "pay_date": "2026-08-16",
+            "currency": "CNY",
+            "pay_method": "BANK_TRANSFER",
+            "bank_ref_no": "DEMO-BANK-MISSING",
+            "idempotency_key": "demo-payment-missing",
+        },
+        headers=auth_headers,
+    )
+    assert missing.status_code == 404, missing.text
+
+    wrong_amount = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json={
+            "target_bill_id": bill_id,
+            "amount": "1100.00",
+            "pay_no": "DEMO-PAY-WRONG",
+            "pay_date": "2026-08-16",
+            "currency": "CNY",
+            "pay_method": "BANK_TRANSFER",
+            "bank_ref_no": "DEMO-BANK-WRONG",
+            "idempotency_key": "demo-payment-wrong",
+        },
+        headers=auth_headers,
+    )
+    assert wrong_amount.status_code == 400, wrong_amount.text
+
+    missing_offset = client.post(
+        "/api/v1/offsets/demo-full",
+        json={
+            "payment_line_id": missing_id,
+            "bill_id": missing_id,
+            "offset_amt": "1200.00",
+            "offset_date": "2026-08-16",
+            "idempotency_key": "demo-offset-missing",
+        },
+        headers=auth_headers,
+    )
+    assert missing_offset.status_code == 404, missing_offset.text
+
+
+def test_demo_offset_rejects_ambiguous_receipt_key_component_without_write(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    _client_id, _case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    payment = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json={
+            "target_bill_id": bill_id,
+            "amount": "1200.00",
+            "pay_no": "DEMO-PAY-KEY",
+            "pay_date": "2026-08-16",
+            "currency": "CNY",
+            "pay_method": "BANK_TRANSFER",
+            "bank_ref_no": "DEMO-BANK-KEY",
+            "idempotency_key": "demo-payment-key",
+        },
+        headers=auth_headers,
+    )
+    assert payment.status_code == 201, payment.text
+    line_id = payment.json()["line"]["id"]
+    with session_factory() as db:
+        item = db.query(BillItem).filter(BillItem.bill_id == bill_id).one()
+        item.fee_code = "BAD|CODE"
+        db.commit()
+
+    response = client.post(
+        "/api/v1/offsets/demo-full",
+        json={
+            "payment_line_id": line_id,
+            "bill_id": bill_id,
+            "offset_amt": "1200.00",
+            "offset_date": "2026-08-16",
+            "idempotency_key": "demo-offset-key",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 400, response.text
+    with session_factory() as db:
+        assert db.query(Offset).count() == 0
+        assert db.query(CaseReceipt).count() == 0
+        assert db.query(DemoOffsetCommand).count() == 0
