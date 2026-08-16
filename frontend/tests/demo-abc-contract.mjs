@@ -37,6 +37,10 @@ assert.ok(page.includes('manifest_sha256'))
 assert.ok(page.includes('idempotencyKeys'))
 assert.ok(!page.includes('amount || 0'))
 assert.ok(!page.includes('Number('))
+assert.ok(page.includes("import { getCaseByCaseNo } from '../../../api/cases'"))
+assert.ok(page.includes('getCaseByCaseNo(caseNoInput.value)'))
+assert.ok(page.includes('data-testid="demo-case-no"'))
+assert.ok(!page.includes('data-testid="demo-case-id"'))
 assert.match(
   api,
   /http\.post\(`\/fees\/drafts\/\$\{draftId\}\/lock`\)[\s\S]*http\.get<DemoDraft>\(`\/fees\/drafts\/\$\{draftId\}`\)/,

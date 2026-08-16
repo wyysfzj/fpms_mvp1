@@ -30,11 +30,11 @@
       <template #header><strong>2. 选择已创建案件</strong></template>
       <p class="hint">
         先通过 <router-link to="/clients/new">客户管理</router-link> 和
-        <router-link to="/cases/new">案件管理</router-link> 创建虚构演示数据，再粘贴案件 ID。
+        <router-link to="/cases/new">案件管理</router-link> 创建虚构演示数据，再输入页面可见的案号。
       </p>
       <el-form inline @submit.prevent="loadCase">
-        <el-form-item label="案件 ID">
-          <el-input v-model.trim="caseIdInput" data-testid="demo-case-id" placeholder="UUID" style="width: 360px" />
+        <el-form-item label="案号">
+          <el-input v-model.trim="caseNoInput" data-testid="demo-case-no" placeholder="例如：DEMO-CASE-001" style="width: 360px" />
         </el-form-item>
         <el-button type="primary" :loading="loading === 'case'" @click="loadCase">加载案件</el-button>
       </el-form>
@@ -87,7 +87,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { getCase } from '../../../api/cases'
+import { getCaseByCaseNo } from '../../../api/cases'
 import type { Case } from '../../../api/cases.types'
 import {
   createDemoBankReceipt,
@@ -110,7 +110,7 @@ import type {
 
 const bundle = ref<DemoServiceItem>()
 const selectedCase = ref<Case>()
-const caseIdInput = ref('')
+const caseNoInput = ref('')
 const obligation = ref<DemoFeeObligationResponse>()
 const draft = ref<DemoDraft>()
 const bill = ref<DemoBillDetail>()
@@ -160,8 +160,8 @@ async function loadBundle() {
 }
 
 async function loadCase() {
-  if (!caseIdInput.value) return
-  await run('case', async () => { selectedCase.value = await getCase(caseIdInput.value) })
+  if (!caseNoInput.value) return
+  await run('case', async () => { selectedCase.value = await getCaseByCaseNo(caseNoInput.value) })
 }
 
 async function createObligation() {
