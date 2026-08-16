@@ -144,6 +144,24 @@ def _materialize_bundle(bundle: DemoBundleSnapshot, run_root: Path) -> DemoBundl
     return copied
 
 
+def _candidate_identity() -> tuple[str, str]:
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=_REPO_ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    ).stdout.strip()
+    tree = subprocess.run(
+        ["git", "rev-parse", "HEAD^{tree}"],
+        cwd=_REPO_ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    ).stdout.strip()
+    return commit, tree
+
+
 def bootstrap_demo_run() -> DemoRun:
     run_id, bundle, operator, reviewer, jwt_secret = _preflight()
     run_root = Path(tempfile.gettempdir()) / f"fpms-demo-abc-{run_id}"
@@ -182,8 +200,11 @@ def bootstrap_demo_run() -> DemoRun:
     finally:
         engine.dispose()
 
+    candidate_commit, candidate_tree = _candidate_identity()
     metadata = {
         "run_id": run_id,
+        "candidate_commit": candidate_commit,
+        "candidate_tree": candidate_tree,
         "run_profile": os.environ["FPMS_DEMO_RUN_PROFILE"],
         "bundle_id": bundle.bundle_id,
         "bundle_version": bundle.bundle_version,

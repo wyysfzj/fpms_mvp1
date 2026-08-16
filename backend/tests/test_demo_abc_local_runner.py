@@ -103,6 +103,8 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
 
     metadata = (result.run_root / "run-metadata.json").read_text()
     assert result.bundle.authority_sha256 in metadata
+    assert '"candidate_commit":' in metadata
+    assert '"candidate_tree":' in metadata
     assert '"customer_activation_eligible": false' in metadata
 
 

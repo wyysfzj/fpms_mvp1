@@ -23,6 +23,11 @@ TASKS = {
     "FPMS-DEMO-ABC-BUNDLE-AUTHORITY-20260817-01": ("f1a1d4b", "dec431b"),
     "FPMS-DEMO-ABC-COMMAND-RECONCILIATION-20260817-01": ("b544ce2", "cfd56df"),
     "FPMS-DEMO-ABC-FINANCE-DECODER-20260817-01": ("be83ffd", "e95a435"),
+    "FPMS-DEMO-ABC-EVIDENCE-REBUILD-20260817-01": ("f3f2ed4", "6821efd"),
+    "FPMS-DEMO-ABC-TRUST-BOUNDARY-HARDENING-20260817-01": ("eb8273b", "fc3c381"),
+    "FPMS-DEMO-ABC-FINANCE-SCOPE-HARDENING-20260817-01": ("fc3c381", "ef0d84c"),
+    "FPMS-DEMO-ABC-COMMAND-RESULT-HARDENING-20260817-01": ("ef0d84c", "3da45be"),
+    "FPMS-DEMO-ABC-FINANCE-DECODER-HARDENING-20260817-02": ("3da45be", "f429247"),
 }
 
 EVIDENCE_ONLY = {
@@ -56,19 +61,83 @@ def write(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
+def section(text: str, heading: str) -> str:
+    marker = f"## {heading}\n"
+    if marker not in text:
+        return "Not recorded in the historical task card."
+    value = text.split(marker, 1)[1].split("\n## ", 1)[0].strip()
+    return " ".join(line.strip() for line in value.splitlines() if line.strip())
+
+
+def populate_summary(
+    task_id: str,
+    task_path: Path,
+    changed_files: list[str],
+    implementation: str,
+) -> None:
+    artifact = ROOT / "artifacts" / task_id
+    summary_path = artifact / "summary.md"
+    if not summary_path.is_file():
+        return
+    current = summary_path.read_text(encoding="utf-8")
+    if "- Role: \n" not in current and "- Role:\n" not in current:
+        return
+    task_text = task_path.read_text(encoding="utf-8")
+    changed = "\n".join(f"- `{path}`" for path in changed_files) or "- Evidence-only task"
+    summary = f"""# {task_id} Summary
+
+## Status
+- Final status: BLOCKED
+
+## Task
+- Role: reconstructed local ABC atomic story
+- Runbook: `{task_path.relative_to(ROOT).as_posix()}`
+- Closure slice: {section(task_text, "Exact Closure Slice")}
+- Non-closure boundary: {section(task_text, "Explicit Non-Closure")}
+
+## Modified Files
+{changed}
+
+## Verification
+- Git reconstruction binds implementation `{implementation}` to its direct baseline; binary patch hash and byte length were recomputed.
+- Later focused checks and final rehearsal evidence supersede historical mutable log summaries.
+
+## Scope Compliance
+- Historical raw command/result rows were not rewritten; this summary is a non-destructive reconstruction from the task card and Git objects.
+
+## Notes
+- Status remains BLOCKED pending the current independent High review and actual customer runtime input.
+"""
+    write(summary_path, summary.encode())
+
+
+def reconcile_finance_ui_results(now: str) -> None:
+    path = (
+        ROOT
+        / "artifacts"
+        / "FPMS-DEMO-ABC-FINANCE-UI-20260816-01"
+        / "results-reconciliation.json"
+    )
+    payload = {
+        "status": "RECONCILED_NON_DESTRUCTIVELY",
+        "reconciled_at": now,
+        "raw_results_preserved": True,
+        "conflict": {
+            "log": "outputs/20260816T232011_test.log",
+            "recorded_rcs": [127, 0],
+            "interpretation": "The path was overwritten between two attempts; neither row alone is accepted as durable proof.",
+        },
+        "superseding_evidence": "FPMS-DEMO-ABC-FINAL-REHEARSAL-20260817-02",
+    }
+    write(path, (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode())
+
+
 def main() -> int:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     candidate = full_revision("HEAD")
     candidate_tree = tree("HEAD")
     rebuilt: list[dict[str, object]] = []
     task_pairs = dict(TASKS)
-    subject = git("show", "-s", "--format=%s", "HEAD").decode().strip()
-    if subject != "chore(evidence): rebuild demo task patches":
-        raise RuntimeError("evidence reconstruction must run from its committed implementation")
-    task_pairs["FPMS-DEMO-ABC-EVIDENCE-REBUILD-20260817-01"] = (
-        "HEAD^",
-        "HEAD",
-    )
 
     for task_id, (baseline_short, implementation_short) in task_pairs.items():
         baseline = full_revision(baseline_short)
@@ -111,6 +180,7 @@ def main() -> int:
             (json.dumps(metadata, ensure_ascii=False, indent=2) + "\n").encode(),
         )
         write(artifact_git / "patch.sha256", f"{sha256(patch)}  diff.patch\n".encode())
+        populate_summary(task_id, task_path, changed_files, implementation)
         rebuilt.append(metadata)
 
     for task_id, revision_short in EVIDENCE_ONLY.items():
@@ -132,6 +202,24 @@ def main() -> int:
             (json.dumps(marker, ensure_ascii=False, indent=2) + "\n").encode(),
         )
 
+    reconcile_finance_ui_results(now)
+
+    verification: list[dict[str, object]] = []
+    for task_id, metadata in ((row["task_id"], row) for row in rebuilt):
+        patch_path = ROOT / "artifacts" / str(task_id) / "git" / "diff.patch"
+        patch = patch_path.read_bytes()
+        verification.append(
+            {
+                "task_id": task_id,
+                "patch_bytes": len(patch),
+                "patch_sha256": sha256(patch),
+                "matches_metadata": len(patch) == metadata["patch_bytes"]
+                and sha256(patch) == metadata["patch_sha256"],
+            }
+        )
+    if not all(row["matches_metadata"] for row in verification):
+        raise RuntimeError("one or more reconstructed patches failed verification")
+
     status = git("status", "--porcelain=v1")
     output = {
         "status": "PASS",
@@ -142,6 +230,7 @@ def main() -> int:
         "implementation_task_count": len(rebuilt),
         "evidence_only_task_count": len(EVIDENCE_ONLY),
         "tasks": rebuilt,
+        "verification": verification,
     }
     output_path = (
         ROOT
