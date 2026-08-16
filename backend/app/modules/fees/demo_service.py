@@ -44,6 +44,9 @@ class DemoServiceItem:
     bundle_id: str
     bundle_version: str
     manifest_sha256: str
+    template_code: str
+    template_sha256: str
+    template_required_variables: tuple[str, ...]
     item_code: str
     name_zh_cn: str
     currency: str
@@ -60,6 +63,9 @@ class DemoServiceObligationResult:
     bundle_id: str
     bundle_version: str
     manifest_sha256: str
+    template_code: str
+    template_sha256: str
+    template_required_variables: tuple[str, ...]
     item_code: str
     name_zh_cn: str
     currency: str
@@ -111,6 +117,9 @@ def get_demo_service_item() -> DemoServiceItem:
         bundle_id=snapshot.bundle_id,
         bundle_version=snapshot.bundle_version,
         manifest_sha256=snapshot.manifest_sha256,
+        template_code=snapshot.template.template_code,
+        template_sha256=snapshot.template.sha256,
+        template_required_variables=snapshot.template.required_variables,
         item_code=rate.item_code,
         name_zh_cn=rate.name_zh_cn,
         currency=rate.currency,
@@ -290,6 +299,9 @@ def create_demo_service_obligation(
         bundle_id=item.bundle_id,
         bundle_version=item.bundle_version,
         manifest_sha256=item.manifest_sha256,
+        template_code=item.template_code,
+        template_sha256=item.template_sha256,
+        template_required_variables=item.template_required_variables,
         item_code=item.item_code,
         name_zh_cn=item.name_zh_cn,
         currency=item.currency,

@@ -76,6 +76,9 @@ def test_runtime_service_item_to_pay_locked_draft(
     assert item_response.status_code == 200, item_response.text
     assert item_response.json()["amount"] == "1200.00"
     assert item_response.json()["classification"] == "DEMO_ONLY"
+    assert item_response.json()["template_code"] == "DEMO_INTERNAL_LETTER_1"
+    assert len(item_response.json()["template_sha256"]) == 64
+    assert item_response.json()["template_required_variables"] == ["case_no", "client_name"]
 
     command = {
         "case_id": case_id,

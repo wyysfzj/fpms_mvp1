@@ -1,0 +1,215 @@
+import { http } from '../../api/http'
+
+export interface DemoServiceItem {
+  classification: 'DEMO_ONLY'
+  bundle_id: string
+  bundle_version: string
+  manifest_sha256: string
+  template_code: string
+  template_sha256: string
+  template_required_variables: string[]
+  item_code: string
+  name_zh_cn: string
+  currency: 'CNY'
+  amount: string
+  source_ref: string
+  source_version: string
+  source_sha256: string
+  disclaimer_zh_cn: string
+}
+
+export interface DemoFeeObligationResponse extends DemoServiceItem {
+  obligation: { id: string }
+  source_activity_id: string
+  idempotency_key: string
+  reused: boolean
+}
+
+export interface DemoDraft {
+  id: string
+  case_id: string
+  client_id: string
+  currency: string
+  status: 'OPEN' | 'LOCKED'
+  total_gov: string
+  total_service: string
+  total_misc: string
+  amount: string
+}
+
+export interface DemoBillDetail {
+  id: string
+  bill_no: string
+  client_id: string
+  case_id: string
+  currency: string
+  direction: 'AR'
+  status: 'UNSETTLED' | 'SETTLED'
+  total_gov: string
+  total_service: string
+  total_misc: string
+  amount: string
+  balance: string
+  bill_date: string
+  due_date?: string
+  source_draft_ids: string[]
+  items: Array<{ id: string; fee_type: string; amount: string }>
+}
+
+export interface DemoPaymentLine {
+  id: string
+  payment_id: string
+  case_id: string
+  raw_amount: string
+  allocated_amt: string
+  balance_amt: string
+  status: 'UNALLOCATED' | 'FULLY_ALLOCATED'
+}
+
+export interface DemoBankReceiptResponse {
+  payment: {
+    id: string
+    pay_no: string
+    client_id: string
+    pay_date: string
+    currency: string
+    amount: string
+    pay_method: 'BANK_TRANSFER'
+    bank_ref_no: string
+  }
+  line: DemoPaymentLine
+  bill: DemoBillDetail
+  target_bill_id: string
+  idempotency_key: string
+  reused: boolean
+}
+
+export interface DemoOffsetResponse {
+  offset: {
+    id: string
+    payment_line_id: string
+    bill_id: string
+    offset_amt: string
+    offset_date: string
+    is_reversed: boolean
+  }
+  bill: DemoBillDetail
+  line: DemoPaymentLine
+  case_receipt: {
+    id: string
+    case_id: string
+    fee_type: string
+    fee_code: string
+    currency: string
+    receivable_amt: string
+    received_amt: string
+    last_receipt_date: string
+  }
+  idempotency_key: string
+  reused: boolean
+}
+
+export async function readDemoServiceItem(): Promise<DemoServiceItem> {
+  return (await http.get<DemoServiceItem>('/fees/demo-service-item')).data
+}
+
+export async function createDemoServiceObligation(
+  caseId: string,
+  itemCode: string,
+  idempotencyKey: string,
+): Promise<DemoFeeObligationResponse> {
+  return (
+    await http.post<DemoFeeObligationResponse>('/fees/demo-service-obligations', {
+      case_id: caseId,
+      item_code: itemCode,
+      idempotency_key: idempotencyKey,
+    })
+  ).data
+}
+
+export async function recordDemoPayInstruction(
+  obligationId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await http.post(`/fees/obligations/${obligationId}/instruction`, {
+    instruction: 'PAY',
+    idempotency_key: idempotencyKey,
+  })
+}
+
+export async function createDemoDraft(
+  caseId: string,
+  clientId: string,
+  obligationId: string,
+): Promise<DemoDraft> {
+  return (
+    await http.post<DemoDraft>('/fees/drafts', {
+      case_id: caseId,
+      client_id: clientId,
+      draft_type: 'GENERIC',
+      currency: 'CNY',
+      obligation_id: obligationId,
+    })
+  ).data
+}
+
+export async function lockDemoDraft(draftId: string): Promise<DemoDraft> {
+  return (await http.post<DemoDraft>(`/fees/drafts/${draftId}/lock`)).data
+}
+
+export async function createDemoBill(
+  draftId: string,
+  billNo: string,
+  billDate: string,
+  dueDate: string,
+  idempotencyKey: string,
+): Promise<{ bill: DemoBillDetail; idempotency_key: string; reused: boolean }> {
+  return (
+    await http.post('/bills/demo-from-draft', {
+      draft_id: draftId,
+      bill_no: billNo,
+      bill_date: billDate,
+      due_date: dueDate,
+      idempotency_key: idempotencyKey,
+    })
+  ).data
+}
+
+export async function createDemoBankReceipt(
+  bill: DemoBillDetail,
+  payNo: string,
+  bankRefNo: string,
+  payDate: string,
+  idempotencyKey: string,
+): Promise<DemoBankReceiptResponse> {
+  return (
+    await http.post<DemoBankReceiptResponse>('/payments/demo-bank-receipts', {
+      target_bill_id: bill.id,
+      amount: bill.balance,
+      pay_no: payNo,
+      pay_date: payDate,
+      currency: 'CNY',
+      pay_method: 'BANK_TRANSFER',
+      bank_ref_no: bankRefNo,
+      remark: 'ABC 本地演示客户回款',
+      idempotency_key: idempotencyKey,
+    })
+  ).data
+}
+
+export async function createDemoFullOffset(
+  paymentLine: DemoPaymentLine,
+  bill: DemoBillDetail,
+  offsetDate: string,
+  idempotencyKey: string,
+): Promise<DemoOffsetResponse> {
+  return (
+    await http.post<DemoOffsetResponse>('/offsets/demo-full', {
+      payment_line_id: paymentLine.id,
+      bill_id: bill.id,
+      offset_amt: paymentLine.balance_amt,
+      offset_date: offsetDate,
+      idempotency_key: idempotencyKey,
+    })
+  ).data
+}

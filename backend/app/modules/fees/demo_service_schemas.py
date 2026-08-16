@@ -15,6 +15,9 @@ class DemoServiceItemOut(BaseModel):
     bundle_id: str
     bundle_version: str
     manifest_sha256: str
+    template_code: str
+    template_sha256: str
+    template_required_variables: tuple[str, ...]
     item_code: str
     name_zh_cn: str
     currency: str
