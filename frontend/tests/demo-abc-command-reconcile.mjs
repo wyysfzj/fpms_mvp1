@@ -1,43 +1,54 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { Buffer } from 'node:buffer'
+import { readFile } from 'node:fs/promises'
+import ts from 'typescript'
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const api = readFileSync(join(root, 'src/modules/demo/demo.api.ts'), 'utf8')
+const helperSource = await readFile(
+  new URL('../src/modules/demo/command-reconcile.ts', import.meta.url),
+  'utf8',
+)
+const compiled = ts.transpileModule(helperSource, {
+  compilerOptions: {
+    module: ts.ModuleKind.ES2022,
+    target: ts.ScriptTarget.ES2022,
+  },
+}).outputText
+const helper = await import(
+  `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
+)
 
+assert.equal(
+  helper.shouldReconcileUnknownCommand({ status: 0, code: 'UNKNOWN_ERROR' }),
+  true,
+)
+assert.equal(
+  helper.shouldReconcileUnknownCommand({ isAxiosError: true, response: undefined }),
+  true,
+)
+for (const deterministic of [
+  { status: 409, code: 'DEMO_FINANCE_IDEMPOTENCY_CONFLICT' },
+  { status: 422, code: 'VALIDATION_ERROR' },
+  { isAxiosError: true, response: { status: 409 } },
+  new Error('ordinary programming error'),
+]) {
+  assert.equal(helper.shouldReconcileUnknownCommand(deterministic), false)
+}
+
+assert.equal(helper.classifyCommandReadStatus(200), 'COMPLETED')
+assert.equal(helper.classifyCommandReadStatus(202), 'IN_PROGRESS')
+assert.equal(helper.classifyCommandReadStatus(404), 'ABSENT')
+assert.equal(helper.classifyCommandReadStatus(409), 'INVALID')
+
+const api = await readFile(new URL('../src/modules/demo/demo.api.ts', import.meta.url), 'utf8')
 for (const endpoint of [
-  '/demo/commands/bills/',
-  '/demo/commands/payments/',
-  '/demo/commands/offsets/',
+  '/bills/from-drafts/idempotency/',
+  '/payments/idempotency/',
+  '/offsets/idempotency/',
 ]) {
   assert.ok(api.includes(endpoint), `missing durable command reconciliation ${endpoint}`)
 }
+assert.match(api, /if \(!shouldReconcileUnknownCommand\(error\)\) throw error/)
+assert.match(api, /classification === 'IN_PROGRESS'/)
+assert.match(api, /classification === 'ABSENT'/)
 
-for (const functionName of [
-  'createDemoBill',
-  'createDemoBankReceipt',
-  'createDemoFullOffset',
-]) {
-  const start = api.indexOf(`export async function ${functionName}`)
-  assert.ok(start >= 0, `missing ${functionName}`)
-  const next = api.indexOf('\nexport async function ', start + 1)
-  const body = api.slice(start, next < 0 ? api.length : next)
-  assert.match(body, /catch \(error\)/, `${functionName} must handle unknown POST outcome`)
-  assert.match(
-    body,
-    /reconcileUnknownCommand/,
-    `${functionName} must reconcile through authoritative GET`,
-  )
-}
-
-const lockStart = api.indexOf('export async function lockDemoDraft')
-const lockEnd = api.indexOf('\nexport async function ', lockStart + 1)
-const lockBody = api.slice(lockStart, lockEnd)
-assert.match(lockBody, /catch \(error\)/)
-assert.match(lockBody, /http\.get<DemoDraft>/)
-assert.match(lockBody, /draft\.status === 'LOCKED'/)
-assert.match(api, /async function reconcileUnknownCommand[\s\S]*http\.get/)
-assert.match(api, /async function reconcileUnknownCommand[\s\S]*throw error/)
-
-console.log('demo ABC command reconciliation source contract OK')
+console.log('demo ABC command reconciliation behavior contract OK')

@@ -9,6 +9,7 @@ from app.modules.billing.models import (
     Bill,
     BillItem,
     CaseReceipt,
+    DemoFinanceCommand,
     DemoOffsetCommand,
     DemoPaymentCommand,
     Offset,
@@ -85,7 +86,7 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
     assert receipt["bill"]["balance"] == "1200.00"
 
     payment_reconciled = client.get(
-        f"/api/v1/demo/commands/payments/{receipt_command['idempotency_key']}",
+        f"/api/v1/payments/idempotency/{receipt_command['idempotency_key']}",
         headers=auth_headers,
     )
     assert payment_reconciled.status_code == 200, payment_reconciled.text
@@ -158,7 +159,7 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
     exact_receipt_id = allocated["case_receipt"]["id"]
 
     offset_reconciled = client.get(
-        f"/api/v1/demo/commands/offsets/{offset_command['idempotency_key']}",
+        f"/api/v1/offsets/idempotency/{offset_command['idempotency_key']}",
         headers=auth_headers,
     )
     assert offset_reconciled.status_code == 200, offset_reconciled.text
@@ -173,6 +174,17 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
     assert offset_replay.json()["offset"]["id"] == offset_id
     assert offset_replay.json()["case_receipt"]["id"] == exact_receipt_id
 
+    immutable_payment = client.get(
+        f"/api/v1/payments/idempotency/{receipt_command['idempotency_key']}",
+        headers=auth_headers,
+    )
+    assert immutable_payment.status_code == 200, immutable_payment.text
+    assert immutable_payment.json()["reused"] is True
+    assert immutable_payment.json()["line"]["allocated_amt"] == "0.00"
+    assert immutable_payment.json()["line"]["balance_amt"] == "1200.00"
+    assert immutable_payment.json()["bill"]["status"] == "UNSETTLED"
+    assert immutable_payment.json()["bill"]["balance"] == "1200.00"
+
     second_offset = dict(offset_command, idempotency_key="demo-offset-intent-2")
     second = client.post(
         "/api/v1/offsets/demo-full", json=second_offset, headers=auth_headers
@@ -185,6 +197,9 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
         assert db.query(DemoPaymentCommand).count() == 1
         assert db.query(Offset).count() == 1
         assert db.query(DemoOffsetCommand).count() == 1
+        assert db.query(DemoFinanceCommand).count() == 3
+        assert {row.state for row in db.query(DemoFinanceCommand).all()} == {"COMPLETED"}
+        assert all(row.result_snapshot for row in db.query(DemoFinanceCommand).all())
         assert db.query(CaseReceipt).count() == 1
         payment_command = db.query(DemoPaymentCommand).one()
         assert payment_command.target_bill_id == bill_id
@@ -195,6 +210,83 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
         bill = db.get(Bill, bill_id)
         assert bill.balance == 0
         assert bill.status == "SETTLED"
+
+
+def test_demo_command_reconciliation_distinguishes_pending_absent_and_heals_commit_gap(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    _client_id, _case_id, bill_id = _demo_bill(
+        client, auth_headers, session_factory, tmp_path, monkeypatch
+    )
+    command = {
+        "target_bill_id": bill_id,
+        "amount": "1200.00",
+        "pay_no": "DEMO-PAY-PENDING",
+        "pay_date": "2026-08-16",
+        "currency": "CNY",
+        "pay_method": "BANK_TRANSFER",
+        "bank_ref_no": "DEMO-BANK-PENDING",
+        "idempotency_key": "demo-payment-pending",
+    }
+    created = client.post(
+        "/api/v1/payments/demo-bank-receipts", json=command, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    expected = created.json()
+
+    with session_factory() as db:
+        durable = (
+            db.query(DemoFinanceCommand)
+            .filter_by(operation="PAYMENT", idempotency_key=command["idempotency_key"])
+            .one()
+        )
+        durable.state = "IN_PROGRESS"
+        durable.result_snapshot = None
+        db.commit()
+
+    healed = client.get(
+        f"/api/v1/payments/idempotency/{command['idempotency_key']}",
+        headers=auth_headers,
+    )
+    assert healed.status_code == 200, healed.text
+    assert healed.json()["payment"]["id"] == expected["payment"]["id"]
+    assert healed.json()["line"]["balance_amt"] == "1200.00"
+
+    with session_factory() as db:
+        actor_id = db.query(DemoFinanceCommand.created_by).first()[0]
+        db.add(
+            DemoFinanceCommand(
+                operation="PAYMENT",
+                idempotency_key="demo-payment-still-pending",
+                state="IN_PROGRESS",
+                command_hash="1" * 64,
+                command_snapshot='{"pending":true}',
+                result_snapshot=None,
+                created_by=actor_id,
+                updated_by=actor_id,
+            )
+        )
+        db.commit()
+
+    pending = client.get(
+        "/api/v1/payments/idempotency/demo-payment-still-pending",
+        headers=auth_headers,
+    )
+    assert pending.status_code == 202, pending.text
+    assert pending.json() == {
+        "idempotency_key": "demo-payment-still-pending",
+        "status": "IN_PROGRESS",
+    }
+
+    absent = client.get(
+        "/api/v1/payments/idempotency/demo-payment-absent",
+        headers=auth_headers,
+    )
+    assert absent.status_code == 404, absent.text
 
 def test_demo_payment_and_offset_reject_invalid_money_without_partial_write(
     client,

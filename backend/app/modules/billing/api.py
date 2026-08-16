@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user_dep, require_perm
 from app.common.doc_render.renderer import DocxRenderer
-from app.core.errors import raise_business_error
+from app.core.errors import BusinessError, raise_business_error
 from app.db.session import get_db
 from app.models.letter_head import LetterHead
 from app.models.system_param import SystemParam
@@ -57,15 +59,18 @@ from app.modules.billing.service import (
     DemoBankReceiptResult,
     DemoBillFromDraftResult,
     DemoFullOffsetResult,
+    abandon_demo_finance_command,
     apply_bill_bad_debt_action,
     apply_bill_bad_debt_recovery,
     build_bill_report_item,
+    complete_demo_finance_command,
     create_case_receipt,
     create_demo_bank_receipt,
     create_demo_bill_from_draft,
     create_demo_full_offset,
     create_manual_bill_record,
     generate_bill_from_drafts,
+    get_demo_finance_command,
     list_bills,
     list_case_receipts,
     list_fee_overview_case_receipts,
@@ -77,6 +82,7 @@ from app.modules.billing.service import (
     reconcile_demo_bank_receipt,
     reconcile_demo_bill_from_draft,
     reconcile_demo_full_offset,
+    reserve_demo_finance_command,
     update_case_receipt,
 )
 from app.modules.billing.service import (
@@ -93,6 +99,43 @@ from app.modules.fees.models import FeeDraft
 from app.modules.masterdata.clients.models import Client
 
 router = APIRouter()
+
+
+def _demo_command_snapshot(response: Any) -> str:
+    frozen = response.model_copy(update={"reused": False})
+    return json.dumps(
+        frozen.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
+def _complete_demo_command(
+    db: Session,
+    *,
+    command_id: str,
+    actor_id: str,
+    response: Any,
+) -> None:
+    complete_demo_finance_command(
+        db,
+        command_id=command_id,
+        actor_id=actor_id,
+        result_snapshot=_demo_command_snapshot(response),
+    )
+
+
+def _stored_demo_command_response(model: Any, snapshot: str) -> Any:
+    return model.model_validate_json(snapshot).model_copy(update={"reused": True})
+
+
+def _pending_demo_command(idempotency_key: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"idempotency_key": idempotency_key, "status": "IN_PROGRESS"},
+    )
 
 
 def _get_client_display_name(client: Client | None) -> str | None:
@@ -311,13 +354,51 @@ def create_local_demo_bill_from_draft(
     _perm: None = Depends(require_perm("Bill.Create")),
     current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> DemoBillFromDraftResponse:
-    result = create_demo_bill_from_draft(
+) -> DemoBillFromDraftResponse | Response:
+    actor_id = str(current_user.id)
+    reservation = reserve_demo_finance_command(
         db,
-        payload,
-        actor_id=str(current_user.id),
+        operation="BILL",
+        idempotency_key=payload.idempotency_key,
+        actor_id=actor_id,
+        payload=payload.model_dump(mode="json"),
     )
-    return _demo_bill_command_response(db, result)
+    if reservation.state == "COMPLETED" and reservation.result_snapshot is not None:
+        return _stored_demo_command_response(
+            DemoBillFromDraftResponse, reservation.result_snapshot
+        )
+    if not reservation.created:
+        try:
+            result = reconcile_demo_bill_from_draft(
+                db, payload.idempotency_key, actor_id=actor_id
+            )
+        except BusinessError as exc:
+            if exc.status_code == 404:
+                return _pending_demo_command(payload.idempotency_key)
+            raise
+        response = _demo_bill_command_response(db, result)
+        _complete_demo_command(
+            db,
+            command_id=reservation.command_id,
+            actor_id=actor_id,
+            response=response,
+        )
+        return response
+    try:
+        result = create_demo_bill_from_draft(db, payload, actor_id=actor_id)
+    except BusinessError:
+        abandon_demo_finance_command(
+            db, command_id=reservation.command_id, actor_id=actor_id
+        )
+        raise
+    response = _demo_bill_command_response(db, result)
+    _complete_demo_command(
+        db,
+        command_id=reservation.command_id,
+        actor_id=actor_id,
+        response=response,
+    )
+    return response
 
 
 def _demo_bill_command_response(
@@ -331,7 +412,7 @@ def _demo_bill_command_response(
 
 
 @router.get(
-    "/demo/commands/bills/{idempotency_key}",
+    "/bills/from-drafts/idempotency/{idempotency_key}",
     response_model=DemoBillFromDraftResponse,
     summary="Reconcile one local-demo AR bill command",
 )
@@ -340,11 +421,35 @@ def reconcile_local_demo_bill_from_draft(
     _perm: None = Depends(require_perm("Bill.Read")),
     current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> DemoBillFromDraftResponse:
-    result = reconcile_demo_bill_from_draft(
-        db, idempotency_key, actor_id=str(current_user.id)
+) -> DemoBillFromDraftResponse | Response:
+    actor_id = str(current_user.id)
+    command = get_demo_finance_command(
+        db,
+        operation="BILL",
+        idempotency_key=idempotency_key,
+        actor_id=actor_id,
     )
-    return _demo_bill_command_response(db, result)
+    if command is None:
+        raise_business_error(
+            "DEMO_BILL_COMMAND_NOT_FOUND",
+            "未找到可对账的账单命令",
+            status_code=404,
+        )
+    if command.state == "COMPLETED" and command.result_snapshot is not None:
+        return _stored_demo_command_response(
+            DemoBillFromDraftResponse, command.result_snapshot
+        )
+    try:
+        result = reconcile_demo_bill_from_draft(db, idempotency_key, actor_id=actor_id)
+    except BusinessError as exc:
+        if exc.status_code == 404:
+            return _pending_demo_command(idempotency_key)
+        raise
+    response = _demo_bill_command_response(db, result)
+    _complete_demo_command(
+        db, command_id=command.id, actor_id=actor_id, response=response
+    )
+    return response
 
 
 def _demo_payment_out(payment: Payment) -> DemoPaymentOut:
@@ -385,9 +490,51 @@ def create_local_demo_bank_receipt(
     _perm: None = Depends(require_perm("Payment.Create")),
     current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> DemoBankReceiptResponse:
-    result = create_demo_bank_receipt(db, payload, actor_id=str(current_user.id))
-    return _demo_bank_receipt_command_response(db, result)
+) -> DemoBankReceiptResponse | Response:
+    actor_id = str(current_user.id)
+    reservation = reserve_demo_finance_command(
+        db,
+        operation="PAYMENT",
+        idempotency_key=payload.idempotency_key,
+        actor_id=actor_id,
+        payload=payload.model_dump(mode="json"),
+    )
+    if reservation.state == "COMPLETED" and reservation.result_snapshot is not None:
+        return _stored_demo_command_response(
+            DemoBankReceiptResponse, reservation.result_snapshot
+        )
+    if not reservation.created:
+        try:
+            result = reconcile_demo_bank_receipt(
+                db, payload.idempotency_key, actor_id=actor_id
+            )
+        except BusinessError as exc:
+            if exc.status_code == 404:
+                return _pending_demo_command(payload.idempotency_key)
+            raise
+        response = _demo_bank_receipt_command_response(db, result)
+        _complete_demo_command(
+            db,
+            command_id=reservation.command_id,
+            actor_id=actor_id,
+            response=response,
+        )
+        return response
+    try:
+        result = create_demo_bank_receipt(db, payload, actor_id=actor_id)
+    except BusinessError:
+        abandon_demo_finance_command(
+            db, command_id=reservation.command_id, actor_id=actor_id
+        )
+        raise
+    response = _demo_bank_receipt_command_response(db, result)
+    _complete_demo_command(
+        db,
+        command_id=reservation.command_id,
+        actor_id=actor_id,
+        response=response,
+    )
+    return response
 
 
 def _demo_bank_receipt_command_response(
@@ -412,7 +559,7 @@ def _demo_bank_receipt_command_response(
 
 
 @router.get(
-    "/demo/commands/payments/{idempotency_key}",
+    "/payments/idempotency/{idempotency_key}",
     response_model=DemoBankReceiptResponse,
     summary="Reconcile one local-demo bank receipt command",
 )
@@ -421,11 +568,33 @@ def reconcile_local_demo_bank_receipt(
     _perm: None = Depends(require_perm("Payment.Read")),
     current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> DemoBankReceiptResponse:
-    result = reconcile_demo_bank_receipt(
-        db, idempotency_key, actor_id=str(current_user.id)
+) -> DemoBankReceiptResponse | Response:
+    actor_id = str(current_user.id)
+    command = get_demo_finance_command(
+        db,
+        operation="PAYMENT",
+        idempotency_key=idempotency_key,
+        actor_id=actor_id,
     )
-    return _demo_bank_receipt_command_response(db, result)
+    if command is None:
+        raise_business_error(
+            "DEMO_PAYMENT_COMMAND_NOT_FOUND",
+            "未找到可对账的回款命令",
+            status_code=404,
+        )
+    if command.state == "COMPLETED" and command.result_snapshot is not None:
+        return _stored_demo_command_response(DemoBankReceiptResponse, command.result_snapshot)
+    try:
+        result = reconcile_demo_bank_receipt(db, idempotency_key, actor_id=actor_id)
+    except BusinessError as exc:
+        if exc.status_code == 404:
+            return _pending_demo_command(idempotency_key)
+        raise
+    response = _demo_bank_receipt_command_response(db, result)
+    _complete_demo_command(
+        db, command_id=command.id, actor_id=actor_id, response=response
+    )
+    return response
 
 
 @router.post(
@@ -439,9 +608,51 @@ def create_local_demo_full_offset(
     _perm: None = Depends(require_perm("Payment.Create")),
     current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> DemoFullOffsetResponse:
-    result = create_demo_full_offset(db, payload, actor_id=str(current_user.id))
-    return _demo_full_offset_command_response(db, result)
+) -> DemoFullOffsetResponse | Response:
+    actor_id = str(current_user.id)
+    reservation = reserve_demo_finance_command(
+        db,
+        operation="OFFSET",
+        idempotency_key=payload.idempotency_key,
+        actor_id=actor_id,
+        payload=payload.model_dump(mode="json"),
+    )
+    if reservation.state == "COMPLETED" and reservation.result_snapshot is not None:
+        return _stored_demo_command_response(
+            DemoFullOffsetResponse, reservation.result_snapshot
+        )
+    if not reservation.created:
+        try:
+            result = reconcile_demo_full_offset(
+                db, payload.idempotency_key, actor_id=actor_id
+            )
+        except BusinessError as exc:
+            if exc.status_code == 404:
+                return _pending_demo_command(payload.idempotency_key)
+            raise
+        response = _demo_full_offset_command_response(db, result)
+        _complete_demo_command(
+            db,
+            command_id=reservation.command_id,
+            actor_id=actor_id,
+            response=response,
+        )
+        return response
+    try:
+        result = create_demo_full_offset(db, payload, actor_id=actor_id)
+    except BusinessError:
+        abandon_demo_finance_command(
+            db, command_id=reservation.command_id, actor_id=actor_id
+        )
+        raise
+    response = _demo_full_offset_command_response(db, result)
+    _complete_demo_command(
+        db,
+        command_id=reservation.command_id,
+        actor_id=actor_id,
+        response=response,
+    )
+    return response
 
 
 def _demo_full_offset_command_response(
@@ -483,7 +694,7 @@ def _demo_full_offset_command_response(
 
 
 @router.get(
-    "/demo/commands/offsets/{idempotency_key}",
+    "/offsets/idempotency/{idempotency_key}",
     response_model=DemoFullOffsetResponse,
     summary="Reconcile one local-demo full offset command",
 )
@@ -492,11 +703,33 @@ def reconcile_local_demo_full_offset(
     _perm: None = Depends(require_perm("Bill.Read")),
     current_user: T_User = current_user_dep,
     db: Session = Depends(get_db),
-) -> DemoFullOffsetResponse:
-    result = reconcile_demo_full_offset(
-        db, idempotency_key, actor_id=str(current_user.id)
+) -> DemoFullOffsetResponse | Response:
+    actor_id = str(current_user.id)
+    command = get_demo_finance_command(
+        db,
+        operation="OFFSET",
+        idempotency_key=idempotency_key,
+        actor_id=actor_id,
     )
-    return _demo_full_offset_command_response(db, result)
+    if command is None:
+        raise_business_error(
+            "DEMO_OFFSET_COMMAND_NOT_FOUND",
+            "未找到可对账的核销命令",
+            status_code=404,
+        )
+    if command.state == "COMPLETED" and command.result_snapshot is not None:
+        return _stored_demo_command_response(DemoFullOffsetResponse, command.result_snapshot)
+    try:
+        result = reconcile_demo_full_offset(db, idempotency_key, actor_id=actor_id)
+    except BusinessError as exc:
+        if exc.status_code == 404:
+            return _pending_demo_command(idempotency_key)
+        raise
+    response = _demo_full_offset_command_response(db, result)
+    _complete_demo_command(
+        db, command_id=command.id, actor_id=actor_id, response=response
+    )
+    return response
 
 
 @router.post(

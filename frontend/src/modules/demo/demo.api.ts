@@ -7,6 +7,10 @@ import {
   parseDemoOffsetResponse,
   parseDemoServiceItem,
 } from './demo.contract'
+import {
+  classifyCommandReadStatus,
+  shouldReconcileUnknownCommand,
+} from './command-reconcile'
 
 export interface DemoServiceItem {
   classification: 'DEMO_ONLY'
@@ -185,11 +189,26 @@ async function reconcileUnknownCommand<T>(
   error: unknown,
   parse: (value: unknown) => T,
 ): Promise<T> {
-  try {
-    return parse((await http.get(endpoint)).data)
-  } catch {
-    throw error
+  if (!shouldReconcileUnknownCommand(error)) throw error
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await http.get(endpoint, {
+        validateStatus: (status) => status === 200 || status === 202 || status === 404,
+      })
+      const classification = classifyCommandReadStatus(response.status)
+      if (classification === 'COMPLETED') return parse(response.data)
+      if (classification === 'ABSENT') throw error
+      if (classification === 'IN_PROGRESS') {
+        await new Promise((resolve) => window.setTimeout(resolve, 100))
+        continue
+      }
+      throw error
+    } catch (reconcileError) {
+      if (reconcileError === error) throw error
+      throw error
+    }
   }
+  throw error
 }
 
 export async function createDemoBill(
@@ -213,7 +232,7 @@ export async function createDemoBill(
     )
   } catch (error) {
     return reconcileUnknownCommand(
-      `/demo/commands/bills/${encodeURIComponent(idempotencyKey)}`,
+      `/bills/from-drafts/idempotency/${encodeURIComponent(idempotencyKey)}`,
       error,
       parseDemoBillCommandResponse,
     )
@@ -245,7 +264,7 @@ export async function createDemoBankReceipt(
     )
   } catch (error) {
     return reconcileUnknownCommand(
-      `/demo/commands/payments/${encodeURIComponent(idempotencyKey)}`,
+      `/payments/idempotency/${encodeURIComponent(idempotencyKey)}`,
       error,
       parseDemoBankReceiptResponse,
     )
@@ -272,7 +291,7 @@ export async function createDemoFullOffset(
     )
   } catch (error) {
     return reconcileUnknownCommand(
-      `/demo/commands/offsets/${encodeURIComponent(idempotencyKey)}`,
+      `/offsets/idempotency/${encodeURIComponent(idempotencyKey)}`,
       error,
       parseDemoOffsetResponse,
     )

@@ -22,6 +22,7 @@ from app.modules.billing.models import (
     BillDraftSource,
     BillItem,
     CaseReceipt,
+    DemoFinanceCommand,
     DemoOffsetCommand,
     DemoPaymentCommand,
     Offset,
@@ -78,6 +79,175 @@ class DemoFullOffsetResult:
     receipt_id: str
     idempotency_key: str
     reused: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DemoFinanceReservation:
+    command_id: str
+    state: str
+    result_snapshot: str | None
+    created: bool
+
+
+_DEMO_FINANCE_OPERATIONS = frozenset({"BILL", "PAYMENT", "OFFSET"})
+
+
+def reserve_demo_finance_command(
+    db: Session,
+    *,
+    operation: str,
+    idempotency_key: str,
+    actor_id: str,
+    payload: dict[str, object],
+) -> DemoFinanceReservation:
+    _demo_finance_scope_or_fail()
+    if operation not in _DEMO_FINANCE_OPERATIONS:
+        raise ValueError(f"unsupported demo finance operation: {operation}")
+    canonical = json.dumps(
+        {
+            "actor_id": actor_id,
+            "operation": operation,
+            "payload": payload,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    command_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    existing = db.scalar(
+        select(DemoFinanceCommand).where(
+            DemoFinanceCommand.operation == operation,
+            DemoFinanceCommand.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        if existing.created_by != actor_id or existing.command_hash != command_hash:
+            raise_business_error(
+                "DEMO_FINANCE_IDEMPOTENCY_CONFLICT",
+                "财务命令幂等键已由其他命令占用",
+                status_code=409,
+            )
+        return DemoFinanceReservation(
+            command_id=existing.id,
+            state=existing.state,
+            result_snapshot=existing.result_snapshot,
+            created=False,
+        )
+
+    command = DemoFinanceCommand(
+        id=str(uuid4()),
+        operation=operation,
+        idempotency_key=idempotency_key,
+        state="IN_PROGRESS",
+        command_hash=command_hash,
+        command_snapshot=canonical,
+        result_snapshot=None,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add(command)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.scalar(
+            select(DemoFinanceCommand).where(
+                DemoFinanceCommand.operation == operation,
+                DemoFinanceCommand.idempotency_key == idempotency_key,
+            )
+        )
+        if (
+            existing is None
+            or existing.created_by != actor_id
+            or existing.command_hash != command_hash
+        ):
+            raise_business_error(
+                "DEMO_FINANCE_IDEMPOTENCY_CONFLICT",
+                "财务命令幂等键已由其他命令占用",
+                status_code=409,
+            )
+        return DemoFinanceReservation(
+            command_id=existing.id,
+            state=existing.state,
+            result_snapshot=existing.result_snapshot,
+            created=False,
+        )
+    return DemoFinanceReservation(
+        command_id=command.id,
+        state=command.state,
+        result_snapshot=None,
+        created=True,
+    )
+
+
+def get_demo_finance_command(
+    db: Session,
+    *,
+    operation: str,
+    idempotency_key: str,
+    actor_id: str,
+) -> DemoFinanceCommand | None:
+    _demo_finance_scope_or_fail()
+    return db.scalar(
+        select(DemoFinanceCommand).where(
+            DemoFinanceCommand.operation == operation,
+            DemoFinanceCommand.idempotency_key == idempotency_key,
+            DemoFinanceCommand.created_by == actor_id,
+        )
+    )
+
+
+def complete_demo_finance_command(
+    db: Session,
+    *,
+    command_id: str,
+    actor_id: str,
+    result_snapshot: str,
+) -> None:
+    command = db.scalar(
+        select(DemoFinanceCommand).where(
+            DemoFinanceCommand.id == command_id,
+            DemoFinanceCommand.created_by == actor_id,
+        )
+    )
+    if command is None:
+        raise_business_error(
+            "DEMO_FINANCE_COMMAND_NOT_FOUND",
+            "未找到财务命令",
+            status_code=404,
+        )
+    if command.state == "COMPLETED":
+        if command.result_snapshot != result_snapshot:
+            raise_business_error(
+                "DEMO_FINANCE_RESULT_IMMUTABLE",
+                "财务命令结果已经冻结",
+                status_code=409,
+            )
+        return
+    command.state = "COMPLETED"
+    command.result_snapshot = result_snapshot
+    command.updated_by = actor_id
+    db.commit()
+
+
+def abandon_demo_finance_command(
+    db: Session,
+    *,
+    command_id: str,
+    actor_id: str,
+) -> None:
+    db.rollback()
+    command = db.scalar(
+        select(DemoFinanceCommand).where(
+            DemoFinanceCommand.id == command_id,
+            DemoFinanceCommand.created_by == actor_id,
+            DemoFinanceCommand.state == "IN_PROGRESS",
+        )
+    )
+    if command is not None:
+        db.delete(command)
+        db.commit()
 
 
 def _run_commission_hook_non_blocking(db: Session, bill: Bill) -> None:

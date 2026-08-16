@@ -12,6 +12,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -225,3 +226,21 @@ class DemoOffsetCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
     idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
     command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class DemoFinanceCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_demo_finance_command"
+    __table_args__ = (
+        UniqueConstraint(
+            "operation",
+            "idempotency_key",
+            name="uq_demo_finance_command_operation_key",
+        ),
+    )
+
+    operation: Mapped[str] = mapped_column(String(16), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    command_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+    result_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)

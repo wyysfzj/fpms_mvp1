@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.modules.billing.models import Bill, BillDraftSource, BillItem
+from app.modules.billing.models import Bill, BillDraftSource, BillItem, DemoFinanceCommand
 from app.modules.fees.models import FeeDraft
 
 
@@ -147,7 +147,7 @@ def test_demo_bill_is_exactly_once_and_billed_draft_cannot_unlock(
     assert replay_response.json()["bill"]["id"] == bill_id
 
     reconciled = client.get(
-        f"/api/v1/demo/commands/bills/{command['idempotency_key']}",
+        f"/api/v1/bills/from-drafts/idempotency/{command['idempotency_key']}",
         headers=auth_headers,
     )
     assert reconciled.status_code == 200, reconciled.text
@@ -175,6 +175,11 @@ def test_demo_bill_is_exactly_once_and_billed_draft_cannot_unlock(
         assert db.query(Bill).count() == 1
         assert db.query(BillItem).count() == 1
         assert db.query(BillDraftSource).count() == 1
+        assert db.query(DemoFinanceCommand).count() == 1
+        durable = db.query(DemoFinanceCommand).one()
+        assert durable.operation == "BILL"
+        assert durable.state == "COMPLETED"
+        assert durable.result_snapshot
         source = db.query(BillDraftSource).one()
         assert source.bill_id == bill_id
         assert source.draft_id == draft_id
