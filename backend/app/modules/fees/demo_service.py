@@ -91,13 +91,17 @@ def _config_required(message: str) -> BusinessError:
 
 @lru_cache(maxsize=8)
 def _load_bundle_snapshot(
-    root: str, manifest_digest: str, authority_digest: str
+    root: str,
+    manifest_digest: str,
+    authority_digest: str,
+    authority_classification: str,
 ) -> DemoBundleSnapshot:
     try:
         return load_demo_bundle(
             Path(root),
             expected_manifest_sha256=manifest_digest,
             expected_authority_sha256=authority_digest,
+            expected_authority_classification=authority_classification,
             repo_root=_REPO_ROOT,
         )
     except DemoBundleError as exc:
@@ -110,9 +114,19 @@ def _bundle() -> DemoBundleSnapshot:
     root = os.environ.get("FPMS_DEMO_BUNDLE_PATH", "")
     digest = os.environ.get("FPMS_DEMO_EXPECTED_MANIFEST_SHA256", "")
     authority_digest = os.environ.get("FPMS_DEMO_EXPECTED_AUTHORITY_SHA256", "")
-    if not root or not digest or not authority_digest:
+    authority_classification = os.environ.get(
+        "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION", ""
+    )
+    if not root or not digest or not authority_digest or not authority_classification:
         raise _config_required("本地演示输入未配置")
-    return _load_bundle_snapshot(root, digest, authority_digest)
+    required_profile = (
+        "TECHNICAL_REHEARSAL"
+        if authority_classification == "SYNTHETIC_TEST_ONLY"
+        else "CUSTOMER_DEMO"
+    )
+    if os.environ.get("FPMS_DEMO_RUN_PROFILE") != required_profile:
+        raise _config_required("本地演示输入来源分类与运行模式不匹配")
+    return _load_bundle_snapshot(root, digest, authority_digest, authority_classification)
 
 
 def get_demo_service_item() -> DemoServiceItem:

@@ -22,6 +22,7 @@ def main() -> int:
         raise DemoBundleError("DEMO_INPUT_INVALID: FPMS_ENV must be demo")
     if _required_env("FPMS_DEMO_SCOPE") != "LOCAL_ABC_E2E":
         raise DemoBundleError("DEMO_INPUT_INVALID: FPMS_DEMO_SCOPE must be LOCAL_ABC_E2E")
+    run_profile = _required_env("FPMS_DEMO_RUN_PROFILE")
     run_id = _required_env("FPMS_DEMO_RUN_ID")
     if _RUN_ID_RE.fullmatch(run_id) is None:
         raise DemoBundleError("DEMO_INPUT_INVALID: FPMS_DEMO_RUN_ID has invalid format")
@@ -30,17 +31,32 @@ def main() -> int:
         Path(_required_env("FPMS_DEMO_BUNDLE_PATH")),
         expected_manifest_sha256=_required_env("FPMS_DEMO_EXPECTED_MANIFEST_SHA256"),
         expected_authority_sha256=_required_env("FPMS_DEMO_EXPECTED_AUTHORITY_SHA256"),
+        expected_authority_classification=_required_env(
+            "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION"
+        ),
         repo_root=Path(__file__).resolve().parents[2],
     )
+    required_profile = (
+        "TECHNICAL_REHEARSAL"
+        if snapshot.authority_classification == "SYNTHETIC_TEST_ONLY"
+        else "CUSTOMER_DEMO"
+    )
+    if run_profile != required_profile:
+        raise DemoBundleError(
+            "DEMO_INPUT_INVALID: authority classification and run profile do not match"
+        )
     print(
         json.dumps(
             {
                 "status": "VALID",
                 "run_id": run_id,
+                "run_profile": run_profile,
                 "bundle_id": snapshot.bundle_id,
                 "bundle_version": snapshot.bundle_version,
                 "manifest_sha256": snapshot.manifest_sha256,
                 "authority_sha256": snapshot.authority_sha256,
+                "authority_classification": snapshot.authority_classification,
+                "customer_activation_eligible": snapshot.customer_activation_eligible,
                 "approved_by": snapshot.approved_by,
                 "approved_at": snapshot.approved_at,
                 "evaluated_date": snapshot.local_date.isoformat(),

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
+from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
 from docxtpl import DocxTemplate
@@ -45,6 +46,8 @@ class DemoBundleSnapshot:
     bundle_version: str
     manifest_sha256: str
     authority_sha256: str
+    authority_classification: str
+    customer_activation_eligible: bool
     approved_by: str
     approved_at: str
     local_date: date
@@ -74,6 +77,7 @@ _TOP_KEYS = {
     "bundle_id",
     "bundle_version",
     "classification",
+    "authority_classification",
     "purpose",
     "valid_from",
     "valid_until",
@@ -101,8 +105,10 @@ _VERSION_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")
 _CODE_RE = re.compile(r"[A-Z0-9_]{1,64}")
 _VARIABLE_RE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 _AMOUNT_RE = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}")
-_PDF_MARKER = "FICTIONAL_DEMO_EVIDENCE"
+_AUTHORITY_CLASSIFICATIONS = {"SYNTHETIC_TEST_ONLY", "CUSTOMER_AUTHORIZED"}
+_PDF_MARKER = "FICTIONAL_DEMO_EVIDENCE / 仅用于本地虚构演示"
 _DOCX_MARKER = "DEMO_ONLY / 仅用于本地虚构演示"
+_WORD_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 def _current_demo_date() -> date:
@@ -147,8 +153,43 @@ def _matches(value: Any, pattern: re.Pattern[str], label: str) -> str:
 
 
 def _exact(value: Any, expected: Any, label: str) -> None:
-    if value != expected:
+    if type(value) is not type(expected) or value != expected:
         raise _error(f"{label} must be {expected!r}")
+
+
+def _visible_word_text(document_xml: str) -> str:
+    try:
+        root = ElementTree.fromstring(document_xml)
+    except ElementTree.ParseError as exc:
+        raise _error("DOCX document.xml is invalid") from exc
+    word = f"{{{_WORD_NAMESPACE}}}"
+    visible: list[str] = []
+
+    def is_enabled(element: ElementTree.Element | None) -> bool:
+        if element is None:
+            return False
+        value = element.get(f"{word}val")
+        return value is None or value.lower() not in {"0", "false", "off", "no"}
+
+    def collect(node: ElementTree.Element, hidden: bool = False) -> None:
+        if node.tag in {f"{word}del", f"{word}moveFrom"}:
+            return
+        if node.tag == f"{word}r":
+            properties = node.find(f"{word}rPr")
+            hidden = hidden or (
+                properties is not None
+                and any(
+                    is_enabled(properties.find(f"{word}{name}"))
+                    for name in ("vanish", "webHidden")
+                )
+            )
+        if not hidden and node.tag == f"{word}t" and node.text:
+            visible.append(node.text)
+        for child in node:
+            collect(child, hidden)
+
+    collect(root)
+    return "".join(visible)
 
 
 def _iso_date(value: Any, label: str) -> date:
@@ -249,7 +290,7 @@ def _validate_docx(path: Path, required_variables: tuple[str, ...]) -> None:
                 document_xml = archive.read("word/document.xml").decode("utf-8")
             except (KeyError, UnicodeDecodeError) as exc:
                 raise _error("DOCX document.xml is missing or invalid") from exc
-            if _DOCX_MARKER not in document_xml:
+            if _DOCX_MARKER not in _visible_word_text(document_xml):
                 raise _error("DOCX visible demo marker is missing")
     except zipfile.BadZipFile as exc:
         raise _error("DOCX is not a valid ZIP package") from exc
@@ -275,7 +316,7 @@ def _validate_pdf(path: Path) -> None:
     except Exception as exc:
         raise _error("PDF is not structurally readable") from exc
     if _PDF_MARKER not in first_page_text:
-        raise _error("PDF first-page visible fictional demo marker is missing")
+        raise _error("PDF first-page visible bilingual fictional demo marker is missing")
 
 
 def _validate_authority(manifest: dict[str, Any], repo_root: Path) -> None:
@@ -316,7 +357,8 @@ def _validate_authority_record(
     manifest_sha256: str,
     repo_root: Path,
     expected_file_digests: list[dict[str, str]],
-) -> tuple[str, str]:
+    expected_authority_classification: str,
+) -> tuple[str, str, str]:
     authority_path = root / "authority.json"
     if authority_path.is_symlink() or not authority_path.is_file():
         raise _error("authority.json is missing")
@@ -336,6 +378,7 @@ def _validate_authority_record(
         {
             "schema_version",
             "status",
+            "authority_classification",
             "approved_by",
             "approved_at",
             "decision_ref",
@@ -355,6 +398,23 @@ def _validate_authority_record(
         "authority.schema_version",
     )
     _exact(authority["status"], "APPROVED", "authority.status")
+    authority_classification = _string(
+        authority["authority_classification"],
+        "authority.authority_classification",
+        maximum=64,
+    )
+    if authority_classification not in _AUTHORITY_CLASSIFICATIONS:
+        raise _error("authority classification is invalid")
+    _exact(
+        authority_classification,
+        expected_authority_classification,
+        "authority classification",
+    )
+    _exact(
+        authority_classification,
+        manifest["authority_classification"],
+        "authority classification",
+    )
     approved_by = _string(authority["approved_by"], "authority.approved_by", maximum=120)
     approved_at = _aware_timestamp(authority["approved_at"], "authority.approved_at")
 
@@ -406,7 +466,7 @@ def _validate_authority_record(
         raise _error("authority source digests do not match the manifest")
     if authority["file_digests"] != expected_file_digests:
         raise _error("authority file digests do not match the manifest")
-    return approved_by, approved_at
+    return authority_classification, approved_by, approved_at
 
 
 def _validate_metadata(role: str, metadata_value: Any) -> None:
@@ -463,7 +523,9 @@ def load_demo_bundle(
     *,
     expected_manifest_sha256: str,
     expected_authority_sha256: str,
+    expected_authority_classification: str,
     repo_root: Path,
+    forbidden_roots: tuple[Path, ...] = (),
 ) -> DemoBundleSnapshot:
     unresolved_root = Path(bundle_root)
     if unresolved_root.is_symlink():
@@ -476,10 +538,16 @@ def load_demo_bundle(
     expected_authority_digest = _matches(
         expected_authority_sha256, _HASH_RE, "expected authority digest"
     )
+    if expected_authority_classification not in _AUTHORITY_CLASSIFICATIONS:
+        raise _error("expected authority classification is invalid")
     if not root.is_dir():
         raise _error("bundle root must be a real directory")
     if root == repo or repo in root.parents:
         raise _error("bundle root must be outside the repository")
+    for forbidden_root in forbidden_roots:
+        forbidden = Path(forbidden_root).resolve()
+        if root == forbidden or forbidden in root.parents:
+            raise _error("bundle root must be outside product and run storage")
     manifest_path = root / "manifest.json"
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise _error("manifest.json is missing")
@@ -499,6 +567,16 @@ def load_demo_bundle(
     bundle_id = _matches(manifest["bundle_id"], _BUNDLE_ID_RE, "bundle_id")
     bundle_version = _matches(manifest["bundle_version"], _VERSION_RE, "bundle_version")
     _exact(manifest["classification"], "DEMO_ONLY", "classification")
+    authority_classification = _string(
+        manifest["authority_classification"],
+        "authority_classification",
+        maximum=64,
+    )
+    _exact(
+        authority_classification,
+        expected_authority_classification,
+        "authority classification",
+    )
     _exact(manifest["purpose"], "LOCAL_ABC_E2E", "purpose")
     valid_from = _iso_date(manifest["valid_from"], "valid_from")
     valid_until = _iso_date(manifest["valid_until"], "valid_until")
@@ -641,13 +719,14 @@ def load_demo_bundle(
         ],
         key=lambda row: row["path"],
     )
-    approved_by, approved_at = _validate_authority_record(
+    authority_classification, approved_by, approved_at = _validate_authority_record(
         root,
         expected_authority_sha256=expected_authority_digest,
         manifest=manifest,
         manifest_sha256=expected_digest,
         repo_root=repo,
         expected_file_digests=expected_file_digests,
+        expected_authority_classification=expected_authority_classification,
     )
 
     return DemoBundleSnapshot(
@@ -656,6 +735,8 @@ def load_demo_bundle(
         bundle_version=bundle_version,
         manifest_sha256=expected_digest,
         authority_sha256=expected_authority_digest,
+        authority_classification=authority_classification,
+        customer_activation_eligible=authority_classification == "CUSTOMER_AUTHORIZED",
         approved_by=approved_by,
         approved_at=approved_at,
         local_date=local_date,

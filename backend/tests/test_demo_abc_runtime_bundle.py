@@ -9,8 +9,16 @@ from pathlib import Path
 
 import pytest
 from docx import Document
+from docx.oxml import OxmlElement
 from pypdf import PdfWriter
-from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+from pypdf.generic import (
+    ArrayObject,
+    DecodedStreamObject,
+    DictionaryObject,
+    NameObject,
+    NumberObject,
+    TextStringObject,
+)
 
 try:
     from app.core import demo_bundle
@@ -43,10 +51,24 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _write_docx(path: Path, *, marker: bool = True, external: bool = False) -> None:
+def _write_docx(
+    path: Path,
+    *,
+    marker: bool = True,
+    hidden_marker: bool = False,
+    deleted_marker: bool = False,
+    external: bool = False,
+) -> None:
     marker_text = "DEMO_ONLY / 仅用于本地虚构演示" if marker else "普通模板"
     document = Document()
-    document.add_paragraph(marker_text)
+    marker_run = document.add_paragraph().add_run(marker_text)
+    marker_run.font.hidden = hidden_marker
+    if deleted_marker:
+        paragraph = marker_run._r.getparent()
+        deleted = OxmlElement("w:del")
+        paragraph.remove(marker_run._r)
+        deleted.append(marker_run._r)
+        paragraph.append(deleted)
     document.add_paragraph("案号 {{ case_no }} / 客户 {{ client_name }}")
     document.save(path)
     if external:
@@ -59,14 +81,31 @@ def _write_docx(path: Path, *, marker: bool = True, external: bool = False) -> N
             )
 
 
-def _write_pdf(path: Path, *, marker: bool = True) -> None:
+def _write_pdf(path: Path, *, marker: str = "bilingual") -> None:
     writer = PdfWriter()
     page = writer.add_blank_page(width=612, height=792)
+    descendant_font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/CIDFontType0"),
+            NameObject("/BaseFont"): NameObject("/STSong-Light"),
+            NameObject("/CIDSystemInfo"): DictionaryObject(
+                {
+                    NameObject("/Registry"): TextStringObject("Adobe"),
+                    NameObject("/Ordering"): TextStringObject("GB1"),
+                    NameObject("/Supplement"): NumberObject(4),
+                }
+            ),
+        }
+    )
+    descendant_ref = writer._add_object(descendant_font)
     font = DictionaryObject(
         {
             NameObject("/Type"): NameObject("/Font"),
-            NameObject("/Subtype"): NameObject("/Type1"),
-            NameObject("/BaseFont"): NameObject("/Helvetica"),
+            NameObject("/Subtype"): NameObject("/Type0"),
+            NameObject("/BaseFont"): NameObject("/STSong-Light"),
+            NameObject("/Encoding"): NameObject("/UniGB-UCS2-H"),
+            NameObject("/DescendantFonts"): ArrayObject([descendant_ref]),
         }
     )
     font_ref = writer._add_object(font)
@@ -74,8 +113,13 @@ def _write_pdf(path: Path, *, marker: bool = True) -> None:
         {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})}
     )
     stream = DecodedStreamObject()
-    visible = "FICTIONAL_DEMO_EVIDENCE / LOCAL FICTIONAL DEMO" if marker else "ordinary"
-    stream.set_data(f"BT /F1 12 Tf 72 720 Td ({visible}) Tj ET".encode())
+    visible = {
+        "bilingual": "FICTIONAL_DEMO_EVIDENCE / 仅用于本地虚构演示",
+        "english": "FICTIONAL_DEMO_EVIDENCE / LOCAL FICTIONAL DEMO",
+        "missing": "ordinary",
+    }[marker]
+    encoded = visible.encode("utf-16-be").hex().upper()
+    stream.set_data(f"BT /F1 12 Tf 72 720 Td <{encoded}> Tj ET".encode())
     page[NameObject("/Contents")] = writer._add_object(stream)
     with path.open("wb") as output:
         writer.write(output)
@@ -117,7 +161,8 @@ def _write_manifest(bundle_root: Path, manifest: dict[str, object]) -> str:
     authority = {
         "schema_version": "fpms.demo-bundle-authority/v1",
         "status": "APPROVED",
-        "approved_by": "customer-authorized-demo-owner",
+        "authority_classification": manifest["authority_classification"],
+        "approved_by": "synthetic-test-fixture-generator",
         "approved_at": "2026-08-16T12:00:00+08:00",
         "decision_ref": decision_ref,
         "decision_version": manifest["authority"]["decision_version"],
@@ -160,6 +205,7 @@ def _load_bundle(bundle_root: Path, manifest_digest: str):
         bundle_root,
         expected_manifest_sha256=manifest_digest,
         expected_authority_sha256=_authority_digest(bundle_root),
+        expected_authority_classification="SYNTHETIC_TEST_ONLY",
         repo_root=REPO_ROOT,
     )
 
@@ -197,6 +243,7 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
         "bundle_id": "fpms-local-abc",
         "bundle_version": "2026.08.16",
         "classification": "DEMO_ONLY",
+        "authority_classification": "SYNTHETIC_TEST_ONLY",
         "purpose": "LOCAL_ABC_E2E",
         "valid_from": "2026-08-16",
         "valid_until": "2026-08-31",
@@ -206,7 +253,7 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
         },
         "provenance": {
             "label_zh_cn": "本地虚构演示输入",
-            "source_ref": "customer-demo-input",
+            "source_ref": "synthetic-test-only-input",
             "source_version": "2026.08.16",
             "source_sha256": "a" * 64,
         },
@@ -240,7 +287,7 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
                 "currency": "CNY",
                 "calc_mode": "FIXED",
                 "amount": "1200.00",
-                "source_ref": "customer-demo-rate",
+                "source_ref": "synthetic-test-only-rate",
                 "source_version": "2026.08.16",
                 "source_sha256": "b" * 64,
                 "disclaimer_zh_cn": "仅用于本地虚构演示，不是正式报价或官方费用。",
@@ -263,7 +310,9 @@ def test_valid_bundle_returns_immutable_snapshot(tmp_path: Path, monkeypatch: py
     assert snapshot.bundle_id == "fpms-local-abc"
     assert snapshot.manifest_sha256 == digest
     assert snapshot.authority_sha256 == _authority_digest(root)
-    assert snapshot.approved_by == "customer-authorized-demo-owner"
+    assert snapshot.authority_classification == "SYNTHETIC_TEST_ONLY"
+    assert snapshot.customer_activation_eligible is False
+    assert snapshot.approved_by == "synthetic-test-fixture-generator"
     assert snapshot.approved_at == "2026-08-16T12:00:00+08:00"
     assert snapshot.service_rate.amount == "1200.00"
     assert snapshot.evidence_roles == tuple(EVIDENCE_ROLES)
@@ -305,6 +354,7 @@ def test_external_manifest_digest_is_checked_before_parsing(tmp_path: Path):
             root,
             expected_manifest_sha256="0" * 64,
             expected_authority_sha256=_authority_digest(root),
+            expected_authority_classification="SYNTHETIC_TEST_ONLY",
             repo_root=REPO_ROOT,
         )
 
@@ -330,6 +380,54 @@ def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch
     manifest["templates"][0]["sha256"] = _sha256(template_path.read_bytes())
     digest = _write_manifest(root, manifest)
     with pytest.raises(DemoBundleError, match="demo marker"):
+        _load_bundle(root, digest)
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "hidden-marker")
+    template_path = root / manifest["templates"][0]["path"]
+    _write_docx(template_path, hidden_marker=True)
+    manifest["templates"][0]["size_bytes"] = template_path.stat().st_size
+    manifest["templates"][0]["sha256"] = _sha256(template_path.read_bytes())
+    digest = _write_manifest(root, manifest)
+    with pytest.raises(DemoBundleError, match="visible demo marker"):
+        _load_bundle(root, digest)
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "deleted-marker")
+    template_path = root / manifest["templates"][0]["path"]
+    _write_docx(template_path, deleted_marker=True)
+    manifest["templates"][0]["size_bytes"] = template_path.stat().st_size
+    manifest["templates"][0]["sha256"] = _sha256(template_path.read_bytes())
+    digest = _write_manifest(root, manifest)
+    with pytest.raises(DemoBundleError, match="visible demo marker"):
+        _load_bundle(root, digest)
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "english-pdf")
+    evidence_path = root / manifest["evidence"][0]["path"]
+    _write_pdf(evidence_path, marker="english")
+    manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
+    manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
+    digest = _write_manifest(root, manifest)
+    with pytest.raises(DemoBundleError, match="bilingual"):
+        _load_bundle(root, digest)
+
+
+def test_authority_classification_is_cross_bound_and_expected(tmp_path: Path, monkeypatch):
+    root, manifest, _digest = _valid_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
+    manifest["authority_classification"] = "CUSTOMER_AUTHORIZED"
+    digest = _write_manifest(root, manifest)
+
+    with pytest.raises(DemoBundleError, match="authority classification"):
+        _load_bundle(root, digest)
+
+
+@pytest.mark.parametrize("oa_sequence", [True, 1.0, "1"])
+def test_oa_sequence_requires_exact_integer_one(tmp_path: Path, monkeypatch, oa_sequence):
+    root, manifest, _digest = _valid_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
+    manifest["evidence"][6]["metadata"]["oa_sequence"] = oa_sequence
+    digest = _write_manifest(root, manifest)
+
+    with pytest.raises(DemoBundleError, match="oa_sequence"):
         _load_bundle(root, digest)
 
 
@@ -377,7 +475,24 @@ def test_bundle_root_symlink_fails_closed(tmp_path: Path, monkeypatch):
             alias,
             expected_manifest_sha256=digest,
             expected_authority_sha256=_authority_digest(root),
+            expected_authority_classification="SYNTHETIC_TEST_ONLY",
             repo_root=REPO_ROOT,
+        )
+
+
+def test_bundle_root_inside_product_storage_fails_closed(tmp_path: Path, monkeypatch):
+    storage_root = tmp_path / "product-storage"
+    root, _manifest, digest = _valid_bundle(storage_root / "input")
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
+
+    with pytest.raises(DemoBundleError, match="product and run storage"):
+        load_demo_bundle(
+            root,
+            expected_manifest_sha256=digest,
+            expected_authority_sha256=_authority_digest(root),
+            expected_authority_classification="SYNTHETIC_TEST_ONLY",
+            repo_root=REPO_ROOT,
+            forbidden_roots=(storage_root,),
         )
 
 
@@ -390,6 +505,7 @@ def test_authority_record_is_independently_pinned_and_exact(tmp_path: Path, monk
             root,
             expected_manifest_sha256=digest,
             expected_authority_sha256="0" * 64,
+            expected_authority_classification="SYNTHETIC_TEST_ONLY",
             repo_root=REPO_ROOT,
         )
 

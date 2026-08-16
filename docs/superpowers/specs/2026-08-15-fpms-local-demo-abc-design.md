@@ -207,6 +207,7 @@ the JSON null value, never the text `"null"`.
   "bundle_id": "<1..64 lowercase ASCII [a-z0-9._-]>",
   "bundle_version": "<1..64 ASCII [A-Za-z0-9._-]>",
   "classification": "DEMO_ONLY",
+  "authority_classification": "<SYNTHETIC_TEST_ONLY|CUSTOMER_AUTHORIZED>",
   "purpose": "LOCAL_ABC_E2E",
   "valid_from": "<YYYY-MM-DD>",
   "valid_until": "<YYYY-MM-DD, not before valid_from>",
@@ -286,6 +287,15 @@ only `effective_at`; receipt roles have only `received_at/receipt_kind`; OA noti
 `effective_at`, all four official-due-date/sequence/template values; all inapplicable values are
 JSON null. The loader validates the adopted specification bytes/hash and the separate
 bundle-authority record before it trusts self-declared authority/provenance fields.
+
+The separate authority record repeats the exact `authority_classification`, and the external
+startup setting pins that same value. `SYNTHETIC_TEST_ONLY` is permitted only for technical
+rehearsal, uses unmistakably synthetic actor/source identities, and is structurally ineligible for
+customer activation or `DEMO_READY`. Only a separately supplied and exact-digest-pinned
+`CUSTOMER_AUTHORIZED` record can be activation-eligible; the loader never promotes one class into
+the other. A run copies an external bundle into its own immutable input directory, but initial
+preflight rejects inputs located below the repository, a product storage root or any existing demo
+run root.
 
 The initial bundle contains no official-fee amount. `total_gov=0` means that this scenario has no
 official-fee line, not that an unknown official fee was converted to zero.

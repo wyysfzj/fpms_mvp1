@@ -57,11 +57,15 @@ def _configure_bundle(tmp_path: Path, monkeypatch) -> tuple[Path, str]:
     root, _manifest, digest = _bundle(tmp_path)
     monkeypatch.setenv("FPMS_ENV", "demo")
     monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
+    monkeypatch.setenv("FPMS_DEMO_RUN_PROFILE", "TECHNICAL_REHEARSAL")
     monkeypatch.setenv("FPMS_DEMO_BUNDLE_PATH", str(root))
     monkeypatch.setenv("FPMS_DEMO_EXPECTED_MANIFEST_SHA256", digest)
     monkeypatch.setenv(
         "FPMS_DEMO_EXPECTED_AUTHORITY_SHA256",
         hashlib.sha256((root / "authority.json").read_bytes()).hexdigest(),
+    )
+    monkeypatch.setenv(
+        "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION", "SYNTHETIC_TEST_ONLY"
     )
     monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
     return root, digest

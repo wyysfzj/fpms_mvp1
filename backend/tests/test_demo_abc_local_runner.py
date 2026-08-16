@@ -25,12 +25,14 @@ def _configure(monkeypatch: pytest.MonkeyPatch, root: Path, digest: str, run_id:
     values = {
         "FPMS_ENV": "demo",
         "FPMS_DEMO_SCOPE": "LOCAL_ABC_E2E",
+        "FPMS_DEMO_RUN_PROFILE": "TECHNICAL_REHEARSAL",
         "FPMS_DEMO_RUN_ID": run_id,
         "FPMS_DEMO_BUNDLE_PATH": str(root),
         "FPMS_DEMO_EXPECTED_MANIFEST_SHA256": digest,
         "FPMS_DEMO_EXPECTED_AUTHORITY_SHA256": hashlib.sha256(
             (root / "authority.json").read_bytes()
         ).hexdigest(),
+        "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION": "SYNTHETIC_TEST_ONLY",
         "FPMS_DEMO_ADMIN_USERNAME": "admin",
         "FPMS_DEMO_ADMIN_PASSWORD": "local-demo-admin-pass",
         "FPMS_DEMO_REVIEWER_USERNAME": "demo_evidence_reviewer",
@@ -55,6 +57,18 @@ def test_invalid_bundle_creates_no_run_directory(tmp_path: Path, monkeypatch):
     assert not (tmp_path / "fpms-demo-abc-invalid-input").exists()
 
 
+def test_synthetic_bundle_requires_technical_rehearsal_profile(tmp_path: Path, monkeypatch):
+    root, _manifest, digest = _bundle(tmp_path / "input")
+    _configure(monkeypatch, root, digest, "wrong-profile")
+    monkeypatch.setenv("FPMS_DEMO_RUN_PROFILE", "CUSTOMER_DEMO")
+    monkeypatch.setattr(run_local_demo_abc.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    with pytest.raises(RuntimeError, match="requires TECHNICAL_REHEARSAL"):
+        run_local_demo_abc.bootstrap_demo_run()
+
+    assert not (tmp_path / "fpms-demo-abc-wrong-profile").exists()
+
+
 def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
     tmp_path: Path, monkeypatch
 ):
@@ -70,6 +84,8 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
     assert result.database_path.is_file()
     assert result.bundle.template.path.is_relative_to(result.run_root / "input")
     assert result.bundle.authority_sha256
+    assert result.bundle.authority_classification == "SYNTHETIC_TEST_ONLY"
+    assert result.bundle.customer_activation_eligible is False
     assert os.environ["FPMS_DEMO_BUNDLE_PATH"] == str(result.bundle.template.path.parents[1])
     for path in (result.run_root / "input").rglob("*"):
         assert path.stat().st_mode & 0o222 == 0
@@ -87,6 +103,7 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
 
     metadata = (result.run_root / "run-metadata.json").read_text()
     assert result.bundle.authority_sha256 in metadata
+    assert '"customer_activation_eligible": false' in metadata
 
 
 def test_port_probe_enables_address_reuse_before_bind(monkeypatch):

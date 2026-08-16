@@ -59,6 +59,7 @@ def _preflight() -> tuple[str, DemoBundleSnapshot, DemoIdentity, DemoIdentity, s
         raise RuntimeError("FPMS_ENV must be demo")
     if _required_env("FPMS_DEMO_SCOPE") != "LOCAL_ABC_E2E":
         raise RuntimeError("FPMS_DEMO_SCOPE must be LOCAL_ABC_E2E")
+    run_profile = _required_env("FPMS_DEMO_RUN_PROFILE")
     run_id = _required_env("FPMS_DEMO_RUN_ID")
     if _RUN_ID_RE.fullmatch(run_id) is None:
         raise RuntimeError("FPMS_DEMO_RUN_ID has invalid format")
@@ -66,12 +67,37 @@ def _preflight() -> tuple[str, DemoBundleSnapshot, DemoIdentity, DemoIdentity, s
     if len(jwt_secret) < 32:
         raise RuntimeError("JWT_SECRET must contain at least 32 characters for the local demo")
 
+    bundle_path = Path(_required_env("FPMS_DEMO_BUNDLE_PATH"))
+    resolved_bundle = bundle_path.resolve()
+    current_run_name = f"fpms-demo-abc-{run_id}"
+    if any(
+        part.startswith("fpms-demo-abc-") and part != current_run_name
+        for part in resolved_bundle.parts
+    ):
+        raise RuntimeError("demo bundle must not come from an existing run directory")
+    forbidden_roots: list[Path] = []
+    configured_storage = os.environ.get("STORAGE_DIR")
+    if configured_storage:
+        forbidden_roots.append(Path(configured_storage))
     bundle = load_demo_bundle(
-        Path(_required_env("FPMS_DEMO_BUNDLE_PATH")),
+        bundle_path,
         expected_manifest_sha256=_required_env("FPMS_DEMO_EXPECTED_MANIFEST_SHA256"),
         expected_authority_sha256=_required_env("FPMS_DEMO_EXPECTED_AUTHORITY_SHA256"),
+        expected_authority_classification=_required_env(
+            "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION"
+        ),
         repo_root=_REPO_ROOT,
+        forbidden_roots=tuple(forbidden_roots),
     )
+    required_profile = (
+        "TECHNICAL_REHEARSAL"
+        if bundle.authority_classification == "SYNTHETIC_TEST_ONLY"
+        else "CUSTOMER_DEMO"
+    )
+    if run_profile != required_profile:
+        raise RuntimeError(
+            f"{bundle.authority_classification} requires {required_profile} run profile"
+        )
     operator = _validated_identity(
         "FPMS_DEMO_ADMIN_USERNAME",
         "FPMS_DEMO_ADMIN_PASSWORD",
@@ -107,6 +133,7 @@ def _materialize_bundle(bundle: DemoBundleSnapshot, run_root: Path) -> DemoBundl
         target,
         expected_manifest_sha256=bundle.manifest_sha256,
         expected_authority_sha256=bundle.authority_sha256,
+        expected_authority_classification=bundle.authority_classification,
         repo_root=_REPO_ROOT,
     )
     for path in sorted(target.rglob("*"), reverse=True):
@@ -157,10 +184,13 @@ def bootstrap_demo_run() -> DemoRun:
 
     metadata = {
         "run_id": run_id,
+        "run_profile": os.environ["FPMS_DEMO_RUN_PROFILE"],
         "bundle_id": bundle.bundle_id,
         "bundle_version": bundle.bundle_version,
         "manifest_sha256": bundle.manifest_sha256,
         "authority_sha256": bundle.authority_sha256,
+        "authority_classification": bundle.authority_classification,
+        "customer_activation_eligible": bundle.customer_activation_eligible,
         "approved_by": bundle.approved_by,
         "approved_at": bundle.approved_at,
         "evaluated_date": bundle.local_date.isoformat(),
