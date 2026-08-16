@@ -52,8 +52,16 @@ function digest(value: unknown, path: string): string {
 
 function date(value: unknown, path: string): string {
   const parsed = string(value, path)
-  if (!DATE.test(parsed) || Number.isNaN(Date.parse(`${parsed}T00:00:00Z`))) invalid(path)
+  if (!DATE.test(parsed)) invalid(path)
+  const [year, month, day] = parsed.split('-').map(Number)
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1]) invalid(path)
   return parsed
+}
+
+function equal(actual: string, expected: string, path: string): void {
+  if (actual !== expected) invalid(path)
 }
 
 function literal<T extends string>(value: unknown, allowed: readonly T[], path: string): T {
@@ -237,19 +245,30 @@ export function parseDemoBillDetail(value: unknown): DemoBillDetail {
   id(row.case_id, 'bill.case_id')
   literal(row.currency, ['CNY'], 'bill.currency')
   literal(row.direction, ['AR'], 'bill.direction')
-  literal(row.status, ['UNSETTLED', 'SETTLED'], 'bill.status')
-  for (const field of ['total_gov', 'total_service', 'total_misc', 'amount', 'balance']) {
-    money(row[field], `bill.${field}`)
-  }
-  date(row.bill_date, 'bill.bill_date')
+  const status = literal(row.status, ['UNSETTLED', 'SETTLED'], 'bill.status')
+  const totalGov = money(row.total_gov, 'bill.total_gov')
+  const totalService = money(row.total_service, 'bill.total_service')
+  const totalMisc = money(row.total_misc, 'bill.total_misc')
+  const amount = money(row.amount, 'bill.amount')
+  const balance = money(row.balance, 'bill.balance')
+  const billDate = date(row.bill_date, 'bill.bill_date')
   const dueDate = optionalString(row.due_date, 'bill.due_date')
-  if (dueDate !== undefined) date(dueDate, 'bill.due_date')
-  stringArray(row.source_draft_ids, 'bill.source_draft_ids', id)
+  if (dueDate !== undefined && date(dueDate, 'bill.due_date') < billDate) {
+    invalid('bill.due_date')
+  }
+  const sourceDraftIds = stringArray(row.source_draft_ids, 'bill.source_draft_ids', id)
+  if (sourceDraftIds.length !== 1) invalid('bill.source_draft_ids')
   if (!Array.isArray(row.items) || row.items.length !== 1) invalid('bill.items')
   const item = record(row.items[0], 'bill.items[0]')
   id(item.id, 'bill.items[0].id')
   literal(item.fee_type, ['SERVICE'], 'bill.items[0].fee_type')
-  money(item.amount, 'bill.items[0].amount')
+  const itemAmount = money(item.amount, 'bill.items[0].amount')
+  equal(totalGov, '0.00', 'bill.total_gov')
+  equal(totalMisc, '0.00', 'bill.total_misc')
+  if (amount === '0.00') invalid('bill.amount')
+  equal(totalService, amount, 'bill.total_service')
+  equal(itemAmount, amount, 'bill.items[0].amount')
+  equal(balance, status === 'SETTLED' ? '0.00' : amount, 'bill.balance')
   return value as DemoBillDetail
 }
 
@@ -276,19 +295,29 @@ export function parseDemoBillCommandResponse(value: unknown): DemoBillCommandRes
 export function parseDemoBankReceiptResponse(value: unknown): DemoBankReceiptResponse {
   const row = record(value, 'bank_receipt')
   const payment = record(row.payment, 'bank_receipt.payment')
-  id(payment.id, 'bank_receipt.payment.id')
+  const paymentId = id(payment.id, 'bank_receipt.payment.id')
   string(payment.pay_no, 'bank_receipt.payment.pay_no')
-  id(payment.client_id, 'bank_receipt.payment.client_id')
+  const clientId = id(payment.client_id, 'bank_receipt.payment.client_id')
   date(payment.pay_date, 'bank_receipt.payment.pay_date')
   literal(payment.currency, ['CNY'], 'bank_receipt.payment.currency')
-  money(payment.amount, 'bank_receipt.payment.amount')
+  const paymentAmount = money(payment.amount, 'bank_receipt.payment.amount')
   literal(payment.pay_method, ['BANK_TRANSFER'], 'bank_receipt.payment.pay_method')
   string(payment.bank_ref_no, 'bank_receipt.payment.bank_ref_no')
-  parseDemoPaymentLine(row.line)
-  parseDemoBillDetail(row.bill)
-  id(row.target_bill_id, 'bank_receipt.target_bill_id')
+  const line = parseDemoPaymentLine(row.line)
+  const bill = parseDemoBillDetail(row.bill)
+  const targetBillId = id(row.target_bill_id, 'bank_receipt.target_bill_id')
   string(row.idempotency_key, 'bank_receipt.idempotency_key')
   boolean(row.reused, 'bank_receipt.reused')
+  equal(line.payment_id, paymentId, 'bank_receipt.line.payment_id')
+  equal(line.case_id, bill.case_id, 'bank_receipt.line.case_id')
+  equal(line.raw_amount, paymentAmount, 'bank_receipt.line.raw_amount')
+  equal(line.allocated_amt, '0.00', 'bank_receipt.line.allocated_amt')
+  equal(line.balance_amt, paymentAmount, 'bank_receipt.line.balance_amt')
+  equal(line.status, 'UNALLOCATED', 'bank_receipt.line.status')
+  equal(clientId, bill.client_id, 'bank_receipt.payment.client_id')
+  equal(paymentAmount, bill.amount, 'bank_receipt.payment.amount')
+  equal(targetBillId, bill.id, 'bank_receipt.target_bill_id')
+  equal(bill.status, 'UNSETTLED', 'bank_receipt.bill.status')
   return value as DemoBankReceiptResponse
 }
 
@@ -296,23 +325,47 @@ export function parseDemoOffsetResponse(value: unknown): DemoOffsetResponse {
   const row = record(value, 'offset_response')
   const offset = record(row.offset, 'offset_response.offset')
   id(offset.id, 'offset_response.offset.id')
-  id(offset.payment_line_id, 'offset_response.offset.payment_line_id')
-  id(offset.bill_id, 'offset_response.offset.bill_id')
-  money(offset.offset_amt, 'offset_response.offset.offset_amt')
-  date(offset.offset_date, 'offset_response.offset.offset_date')
-  boolean(offset.is_reversed, 'offset_response.offset.is_reversed')
-  parseDemoBillDetail(row.bill)
-  parseDemoPaymentLine(row.line)
+  const paymentLineId = id(offset.payment_line_id, 'offset_response.offset.payment_line_id')
+  const billId = id(offset.bill_id, 'offset_response.offset.bill_id')
+  const offsetAmount = money(offset.offset_amt, 'offset_response.offset.offset_amt')
+  const offsetDate = date(offset.offset_date, 'offset_response.offset.offset_date')
+  const reversed = boolean(offset.is_reversed, 'offset_response.offset.is_reversed')
+  const bill = parseDemoBillDetail(row.bill)
+  const line = parseDemoPaymentLine(row.line)
   const receipt = record(row.case_receipt, 'offset_response.case_receipt')
   id(receipt.id, 'offset_response.case_receipt.id')
-  id(receipt.case_id, 'offset_response.case_receipt.case_id')
+  const receiptCaseId = id(receipt.case_id, 'offset_response.case_receipt.case_id')
   literal(receipt.fee_type, ['SERVICE'], 'offset_response.case_receipt.fee_type')
   string(receipt.fee_code, 'offset_response.case_receipt.fee_code')
   literal(receipt.currency, ['CNY'], 'offset_response.case_receipt.currency')
-  money(receipt.receivable_amt, 'offset_response.case_receipt.receivable_amt')
-  money(receipt.received_amt, 'offset_response.case_receipt.received_amt')
-  date(receipt.last_receipt_date, 'offset_response.case_receipt.last_receipt_date')
+  const receivableAmount = money(
+    receipt.receivable_amt,
+    'offset_response.case_receipt.receivable_amt',
+  )
+  const receivedAmount = money(
+    receipt.received_amt,
+    'offset_response.case_receipt.received_amt',
+  )
+  const receiptDate = date(
+    receipt.last_receipt_date,
+    'offset_response.case_receipt.last_receipt_date',
+  )
   string(row.idempotency_key, 'offset_response.idempotency_key')
   boolean(row.reused, 'offset_response.reused')
+  if (reversed) invalid('offset_response.offset.is_reversed')
+  equal(paymentLineId, line.id, 'offset_response.offset.payment_line_id')
+  equal(billId, bill.id, 'offset_response.offset.bill_id')
+  equal(line.case_id, bill.case_id, 'offset_response.line.case_id')
+  equal(line.raw_amount, offsetAmount, 'offset_response.line.raw_amount')
+  equal(line.allocated_amt, offsetAmount, 'offset_response.line.allocated_amt')
+  equal(line.balance_amt, '0.00', 'offset_response.line.balance_amt')
+  equal(line.status, 'FULLY_ALLOCATED', 'offset_response.line.status')
+  equal(bill.status, 'SETTLED', 'offset_response.bill.status')
+  equal(bill.balance, '0.00', 'offset_response.bill.balance')
+  equal(bill.amount, offsetAmount, 'offset_response.bill.amount')
+  equal(receiptCaseId, bill.case_id, 'offset_response.case_receipt.case_id')
+  equal(receivableAmount, offsetAmount, 'offset_response.case_receipt.receivable_amt')
+  equal(receivedAmount, offsetAmount, 'offset_response.case_receipt.received_amt')
+  equal(receiptDate, offsetDate, 'offset_response.case_receipt.last_receipt_date')
   return value as DemoOffsetResponse
 }

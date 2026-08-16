@@ -39,9 +39,15 @@ const baseBill = {
 }
 
 assert.deepEqual(contract.parseDemoBillDetail(structuredClone(baseBill)), baseBill)
+const largeExact = {
+  ...structuredClone(baseBill),
+  total_service: '9007199254740993.01',
+  amount: '9007199254740993.01',
+  balance: '9007199254740993.01',
+  items: [{ ...baseBill.items[0], amount: '9007199254740993.01' }],
+}
 assert.equal(
-  contract.parseDemoBillDetail({ ...structuredClone(baseBill), amount: '9007199254740993.01' })
-    .amount,
+  contract.parseDemoBillDetail(largeExact).amount,
   '9007199254740993.01',
 )
 
@@ -59,6 +65,11 @@ for (const mutation of [
   { status: 'PAID' },
   { direction: 'AP' },
   { source_draft_ids: [null] },
+  { bill_date: '2026-02-30' },
+  { due_date: '2026-13-01' },
+  { total_service: '1100.00' },
+  { total_gov: '1.00' },
+  { balance: '0.00' },
 ]) {
   assert.throws(
     () => contract.parseDemoBillDetail({ ...structuredClone(baseBill), ...mutation }),
@@ -96,5 +107,73 @@ assert.throws(
   () => contract.parseDemoBankReceiptResponse({ ...paymentResponse, line: { ...paymentResponse.line, status: 'PARTIAL' } }),
   (error) => error?.code === 'FINANCE_CONTRACT_INVALID',
 )
+
+for (const mutation of [
+  { line: { ...paymentResponse.line, payment_id: '88888888-8888-4888-8888-888888888888' } },
+  { line: { ...paymentResponse.line, case_id: '88888888-8888-4888-8888-888888888888' } },
+  { line: { ...paymentResponse.line, raw_amount: '1199.00' } },
+  { payment: { ...paymentResponse.payment, client_id: '88888888-8888-4888-8888-888888888888' } },
+  { payment: { ...paymentResponse.payment, pay_date: '2026-02-30' } },
+  { target_bill_id: '88888888-8888-4888-8888-888888888888' },
+]) {
+  assert.throws(
+    () => contract.parseDemoBankReceiptResponse({ ...structuredClone(paymentResponse), ...mutation }),
+    (error) => error?.code === 'FINANCE_CONTRACT_INVALID',
+  )
+}
+
+const settledBill = {
+  ...structuredClone(baseBill),
+  status: 'SETTLED',
+  balance: '0.00',
+}
+const offsetResponse = {
+  offset: {
+    id: '88888888-8888-4888-8888-888888888888',
+    payment_line_id: paymentResponse.line.id,
+    bill_id: settledBill.id,
+    offset_amt: '1200.00',
+    offset_date: '2026-08-17',
+    is_reversed: false,
+  },
+  bill: settledBill,
+  line: {
+    ...paymentResponse.line,
+    allocated_amt: '1200.00',
+    balance_amt: '0.00',
+    status: 'FULLY_ALLOCATED',
+  },
+  case_receipt: {
+    id: '99999999-9999-4999-8999-999999999999',
+    case_id: settledBill.case_id,
+    fee_type: 'SERVICE',
+    fee_code: 'DEMO_SERVICE_1',
+    currency: 'CNY',
+    receivable_amt: '1200.00',
+    received_amt: '1200.00',
+    last_receipt_date: '2026-08-17',
+  },
+  idempotency_key: 'offset-intent-1',
+  reused: false,
+}
+assert.deepEqual(contract.parseDemoOffsetResponse(structuredClone(offsetResponse)), offsetResponse)
+
+for (const mutation of [
+  { offset: { ...offsetResponse.offset, payment_line_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } },
+  { offset: { ...offsetResponse.offset, bill_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } },
+  { offset: { ...offsetResponse.offset, offset_date: '2025-02-29' } },
+  { offset: { ...offsetResponse.offset, is_reversed: true } },
+  { line: { ...offsetResponse.line, case_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } },
+  { line: { ...offsetResponse.line, allocated_amt: '1199.00' } },
+  { bill: { ...offsetResponse.bill, status: 'UNSETTLED' } },
+  { case_receipt: { ...offsetResponse.case_receipt, case_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } },
+  { case_receipt: { ...offsetResponse.case_receipt, received_amt: '1199.00' } },
+  { case_receipt: { ...offsetResponse.case_receipt, last_receipt_date: '2026-08-18' } },
+]) {
+  assert.throws(
+    () => contract.parseDemoOffsetResponse({ ...structuredClone(offsetResponse), ...mutation }),
+    (error) => error?.code === 'FINANCE_CONTRACT_INVALID',
+  )
+}
 
 console.log('demo ABC finance decoder contract OK')
