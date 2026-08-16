@@ -157,7 +157,7 @@ def _exact(value: Any, expected: Any, label: str) -> None:
         raise _error(f"{label} must be {expected!r}")
 
 
-def _visible_word_text(document_xml: str) -> str:
+def _visible_word_text(document_xml: str, styles_xml: str | None) -> str:
     try:
         root = ElementTree.fromstring(document_xml)
     except ElementTree.ParseError as exc:
@@ -171,22 +171,95 @@ def _visible_word_text(document_xml: str) -> str:
         value = element.get(f"{word}val")
         return value is None or value.lower() not in {"0", "false", "off", "no"}
 
-    def collect(node: ElementTree.Element, hidden: bool = False) -> None:
+    def properties_hidden(properties: ElementTree.Element | None) -> bool:
+        return properties is not None and any(
+            is_enabled(properties.find(f"{word}{name}"))
+            for name in ("vanish", "webHidden")
+        )
+
+    style_hidden: dict[str, bool] = {}
+    if styles_xml is not None:
+        try:
+            styles_root = ElementTree.fromstring(styles_xml)
+        except ElementTree.ParseError as exc:
+            raise _error("DOCX styles.xml is invalid") from exc
+        style_rows: dict[str, tuple[str | None, bool]] = {}
+        for style in styles_root.findall(f"{word}style"):
+            style_id = style.get(f"{word}styleId")
+            if not style_id:
+                continue
+            based_on = style.find(f"{word}basedOn")
+            based_on_id = based_on.get(f"{word}val") if based_on is not None else None
+            style_rows[style_id] = (based_on_id, properties_hidden(style.find(f"{word}rPr")))
+
+        resolving: set[str] = set()
+
+        def resolve_style(style_id: str) -> bool:
+            if style_id in style_hidden:
+                return style_hidden[style_id]
+            if style_id in resolving:
+                raise _error("DOCX style inheritance cycle is invalid")
+            row = style_rows.get(style_id)
+            if row is None:
+                return True
+            resolving.add(style_id)
+            based_on_id, directly_hidden = row
+            hidden = directly_hidden or (
+                based_on_id is not None and resolve_style(based_on_id)
+            )
+            resolving.remove(style_id)
+            style_hidden[style_id] = hidden
+            return hidden
+
+        for style_id in style_rows:
+            resolve_style(style_id)
+        default_properties = styles_root.find(
+            f"{word}docDefaults/{word}rPrDefault/{word}rPr"
+        )
+        default_hidden = properties_hidden(default_properties)
+    else:
+        default_hidden = False
+
+    def referenced_style_hidden(
+        properties: ElementTree.Element | None, style_tag: str
+    ) -> bool:
+        if properties is None:
+            return False
+        reference = properties.find(f"{word}{style_tag}")
+        if reference is None:
+            return False
+        style_id = reference.get(f"{word}val")
+        return style_id is None or style_hidden.get(style_id, True)
+
+    def collect(
+        node: ElementTree.Element,
+        hidden: bool = False,
+        paragraph_style_is_hidden: bool = False,
+    ) -> None:
         if node.tag in {f"{word}del", f"{word}moveFrom"}:
             return
+        if node.tag == f"{word}p":
+            paragraph_properties = node.find(f"{word}pPr")
+            paragraph_style_is_hidden = referenced_style_hidden(
+                paragraph_properties, "pStyle"
+            ) or properties_hidden(
+                paragraph_properties.find(f"{word}rPr")
+                if paragraph_properties is not None
+                else None
+            )
         if node.tag == f"{word}r":
             properties = node.find(f"{word}rPr")
-            hidden = hidden or (
-                properties is not None
-                and any(
-                    is_enabled(properties.find(f"{word}{name}"))
-                    for name in ("vanish", "webHidden")
-                )
+            hidden = (
+                hidden
+                or default_hidden
+                or paragraph_style_is_hidden
+                or properties_hidden(properties)
+                or referenced_style_hidden(properties, "rStyle")
             )
         if not hidden and node.tag == f"{word}t" and node.text:
             visible.append(node.text)
         for child in node:
-            collect(child, hidden)
+            collect(child, hidden, paragraph_style_is_hidden)
 
     collect(root)
     return "".join(visible)
@@ -290,7 +363,13 @@ def _validate_docx(path: Path, required_variables: tuple[str, ...]) -> None:
                 document_xml = archive.read("word/document.xml").decode("utf-8")
             except (KeyError, UnicodeDecodeError) as exc:
                 raise _error("DOCX document.xml is missing or invalid") from exc
-            if _DOCX_MARKER not in _visible_word_text(document_xml):
+            try:
+                styles_xml = archive.read("word/styles.xml").decode("utf-8")
+            except KeyError:
+                styles_xml = None
+            except UnicodeDecodeError as exc:
+                raise _error("DOCX styles.xml is invalid") from exc
+            if _DOCX_MARKER not in _visible_word_text(document_xml, styles_xml):
                 raise _error("DOCX visible demo marker is missing")
     except zipfile.BadZipFile as exc:
         raise _error("DOCX is not a valid ZIP package") from exc
@@ -310,13 +389,59 @@ def _validate_pdf(path: Path) -> None:
         reader = PdfReader(str(path), strict=True)
         if reader.is_encrypted or not reader.pages:
             raise _error("PDF must contain a readable first page")
-        first_page_text = reader.pages[0].extract_text() or ""
+        first_page = reader.pages[0]
+        box = first_page.cropbox
+        state = {"render_mode": 0, "clipped": False}
+        stack: list[tuple[int, bool]] = []
+        visible_fragments: list[str] = []
+
+        def before_operand(operator, operands, _cm, _tm) -> None:
+            if operator == b"q":
+                stack.append((state["render_mode"], state["clipped"]))
+            elif operator == b"Q":
+                if stack:
+                    state["render_mode"], state["clipped"] = stack.pop()
+            elif operator == b"Tr" and operands:
+                state["render_mode"] = int(operands[0])
+            elif operator in {b"W", b"W*"}:
+                state["clipped"] = True
+
+        def visit_text(text, cm, tm, _font, _font_size) -> None:
+            if not text or state["render_mode"] != 0 or state["clipped"]:
+                return
+            x = float(tm[4]) * float(cm[0]) + float(tm[5]) * float(cm[2]) + float(cm[4])
+            y = float(tm[4]) * float(cm[1]) + float(tm[5]) * float(cm[3]) + float(cm[5])
+            if float(box.left) <= x <= float(box.right) and float(box.bottom) <= y <= float(box.top):
+                visible_fragments.append(text)
+
+        first_page.extract_text(
+            visitor_operand_before=before_operand,
+            visitor_text=visit_text,
+        )
     except DemoBundleError:
         raise
     except Exception as exc:
         raise _error("PDF is not structurally readable") from exc
-    if _PDF_MARKER not in first_page_text:
+    if _PDF_MARKER not in "".join(visible_fragments):
         raise _error("PDF first-page visible bilingual fictional demo marker is missing")
+
+
+def demo_bundle_forbidden_roots(
+    bundle_path: Path,
+    *,
+    run_id: str,
+    configured_storage: str | None,
+) -> tuple[Path, ...]:
+    resolved_bundle = Path(bundle_path).resolve()
+    current_run_name = f"fpms-demo-abc-{run_id}"
+    if any(
+        part.startswith("fpms-demo-abc-") and part != current_run_name
+        for part in resolved_bundle.parts
+    ):
+        raise _error("demo bundle must not come from an existing run directory")
+    if configured_storage:
+        return (Path(configured_storage),)
+    return ()
 
 
 def _validate_authority(manifest: dict[str, Any], repo_root: Path) -> None:

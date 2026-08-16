@@ -5,7 +5,11 @@ import os
 import re
 from pathlib import Path
 
-from app.core.demo_bundle import DemoBundleError, load_demo_bundle
+from app.core.demo_bundle import (
+    DemoBundleError,
+    demo_bundle_forbidden_roots,
+    load_demo_bundle,
+)
 
 _RUN_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,96}")
 
@@ -27,14 +31,21 @@ def main() -> int:
     if _RUN_ID_RE.fullmatch(run_id) is None:
         raise DemoBundleError("DEMO_INPUT_INVALID: FPMS_DEMO_RUN_ID has invalid format")
 
+    bundle_path = Path(_required_env("FPMS_DEMO_BUNDLE_PATH"))
+    forbidden_roots = demo_bundle_forbidden_roots(
+        bundle_path,
+        run_id=run_id,
+        configured_storage=os.environ.get("STORAGE_DIR"),
+    )
     snapshot = load_demo_bundle(
-        Path(_required_env("FPMS_DEMO_BUNDLE_PATH")),
+        bundle_path,
         expected_manifest_sha256=_required_env("FPMS_DEMO_EXPECTED_MANIFEST_SHA256"),
         expected_authority_sha256=_required_env("FPMS_DEMO_EXPECTED_AUTHORITY_SHA256"),
         expected_authority_classification=_required_env(
             "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION"
         ),
         repo_root=Path(__file__).resolve().parents[2],
+        forbidden_roots=forbidden_roots,
     )
     required_profile = (
         "TECHNICAL_REHEARSAL"

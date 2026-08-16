@@ -19,7 +19,11 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
-from app.core.demo_bundle import DemoBundleSnapshot, load_demo_bundle
+from app.core.demo_bundle import (
+    DemoBundleSnapshot,
+    demo_bundle_forbidden_roots,
+    load_demo_bundle,
+)
 from scripts.seed_demo_abc import DemoIdentity, seed_demo_identities
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -68,17 +72,11 @@ def _preflight() -> tuple[str, DemoBundleSnapshot, DemoIdentity, DemoIdentity, s
         raise RuntimeError("JWT_SECRET must contain at least 32 characters for the local demo")
 
     bundle_path = Path(_required_env("FPMS_DEMO_BUNDLE_PATH"))
-    resolved_bundle = bundle_path.resolve()
-    current_run_name = f"fpms-demo-abc-{run_id}"
-    if any(
-        part.startswith("fpms-demo-abc-") and part != current_run_name
-        for part in resolved_bundle.parts
-    ):
-        raise RuntimeError("demo bundle must not come from an existing run directory")
-    forbidden_roots: list[Path] = []
-    configured_storage = os.environ.get("STORAGE_DIR")
-    if configured_storage:
-        forbidden_roots.append(Path(configured_storage))
+    forbidden_roots = demo_bundle_forbidden_roots(
+        bundle_path,
+        run_id=run_id,
+        configured_storage=os.environ.get("STORAGE_DIR"),
+    )
     bundle = load_demo_bundle(
         bundle_path,
         expected_manifest_sha256=_required_env("FPMS_DEMO_EXPECTED_MANIFEST_SHA256"),
@@ -87,7 +85,7 @@ def _preflight() -> tuple[str, DemoBundleSnapshot, DemoIdentity, DemoIdentity, s
             "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION"
         ),
         repo_root=_REPO_ROOT,
-        forbidden_roots=tuple(forbidden_roots),
+        forbidden_roots=forbidden_roots,
     )
     required_profile = (
         "TECHNICAL_REHEARSAL"

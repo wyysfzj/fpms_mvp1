@@ -11,9 +11,10 @@ import pytest
 from app.core.demo_bundle import DemoBundleError
 
 try:
-    from scripts import run_local_demo_abc
+    from scripts import run_local_demo_abc, validate_demo_bundle
 except ImportError:
     run_local_demo_abc = None
+    validate_demo_bundle = None
 
 
 def _bundle(tmp_path: Path):
@@ -67,6 +68,30 @@ def test_synthetic_bundle_requires_technical_rehearsal_profile(tmp_path: Path, m
         run_local_demo_abc.bootstrap_demo_run()
 
     assert not (tmp_path / "fpms-demo-abc-wrong-profile").exists()
+
+
+def test_validator_and_runner_reject_the_same_product_storage_root(
+    tmp_path: Path, monkeypatch
+):
+    storage_root = tmp_path / "product-storage"
+    root, _manifest, digest = _bundle(storage_root / "input")
+    _configure(monkeypatch, root, digest, "storage-boundary")
+    monkeypatch.setenv("STORAGE_DIR", str(storage_root))
+
+    with pytest.raises(DemoBundleError, match="product and run storage"):
+        validate_demo_bundle.main()
+    with pytest.raises(DemoBundleError, match="product and run storage"):
+        run_local_demo_abc._preflight()
+
+
+def test_validator_and_runner_reject_the_same_prior_run_root(tmp_path: Path, monkeypatch):
+    root, _manifest, digest = _bundle(tmp_path / "fpms-demo-abc-prior" / "input")
+    _configure(monkeypatch, root, digest, "new-run")
+
+    with pytest.raises(DemoBundleError, match="existing run directory"):
+        validate_demo_bundle.main()
+    with pytest.raises(DemoBundleError, match="existing run directory"):
+        run_local_demo_abc._preflight()
 
 
 def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
