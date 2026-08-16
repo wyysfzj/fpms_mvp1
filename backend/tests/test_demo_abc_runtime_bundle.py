@@ -100,6 +100,7 @@ def _write_pdf(
     marker: str = "bilingual",
     invisible: bool = False,
     font_size: int = 12,
+    horizontal_scale: int = 100,
 ) -> None:
     writer = PdfWriter()
     page = writer.add_blank_page(width=612, height=792)
@@ -140,7 +141,8 @@ def _write_pdf(
     encoded = visible.encode("utf-16-be").hex().upper()
     render_mode = "3 Tr " if invisible else ""
     stream.set_data(
-        f"BT /F1 {font_size} Tf {render_mode}72 720 Td <{encoded}> Tj ET".encode()
+        f"BT /F1 {font_size} Tf {horizontal_scale} Tz "
+        f"{render_mode}72 720 Td <{encoded}> Tj ET".encode()
     )
     page[NameObject("/Contents")] = writer._add_object(stream)
     with path.open("wb") as output:
@@ -455,6 +457,15 @@ def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch
     root, manifest, _digest = _valid_bundle(tmp_path / "invisible-pdf")
     evidence_path = root / manifest["evidence"][0]["path"]
     _write_pdf(evidence_path, invisible=True)
+    manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
+    manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
+    digest = _write_manifest(root, manifest)
+    with pytest.raises(DemoBundleError, match="visible bilingual"):
+        _load_bundle(root, digest)
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "zero-horizontal-scale-pdf")
+    evidence_path = root / manifest["evidence"][0]["path"]
+    _write_pdf(evidence_path, horizontal_scale=0)
     manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
     manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
     digest = _write_manifest(root, manifest)

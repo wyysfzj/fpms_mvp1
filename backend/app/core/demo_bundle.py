@@ -401,18 +401,30 @@ def _validate_pdf(path: Path) -> None:
             raise _error("PDF must contain a readable first page")
         first_page = reader.pages[0]
         box = first_page.cropbox
-        state = {"render_mode": 0, "clipped": False}
-        stack: list[tuple[int, bool]] = []
+        state = {"render_mode": 0, "clipped": False, "horizontal_scale": 100.0}
+        stack: list[tuple[int, bool, float]] = []
         visible_fragments: list[str] = []
 
         def before_operand(operator, operands, _cm, _tm) -> None:
             if operator == b"q":
-                stack.append((state["render_mode"], state["clipped"]))
+                stack.append(
+                    (
+                        state["render_mode"],
+                        state["clipped"],
+                        state["horizontal_scale"],
+                    )
+                )
             elif operator == b"Q":
                 if stack:
-                    state["render_mode"], state["clipped"] = stack.pop()
+                    (
+                        state["render_mode"],
+                        state["clipped"],
+                        state["horizontal_scale"],
+                    ) = stack.pop()
             elif operator == b"Tr" and operands:
                 state["render_mode"] = int(operands[0])
+            elif operator == b"Tz" and operands:
+                state["horizontal_scale"] = float(operands[0])
             elif operator in {b"W", b"W*"}:
                 state["clipped"] = True
 
@@ -421,13 +433,18 @@ def _validate_pdf(path: Path) -> None:
                 return
             values = [*(float(value) for value in cm), *(float(value) for value in tm)]
             size = float(font_size)
+            horizontal_scale = state["horizontal_scale"]
             determinant = (
                 (float(cm[0]) * float(cm[3]) - float(cm[1]) * float(cm[2]))
                 * (float(tm[0]) * float(tm[3]) - float(tm[1]) * float(tm[2]))
+                * horizontal_scale
+                / 100.0
             )
             if (
                 not math.isfinite(size)
                 or size <= 0
+                or not math.isfinite(horizontal_scale)
+                or abs(horizontal_scale) <= 1e-12
                 or not all(math.isfinite(value) for value in values)
                 or not math.isfinite(determinant)
                 or abs(determinant) <= 1e-12
