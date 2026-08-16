@@ -20,19 +20,19 @@ Task-Path: tasks/postdemo/FPMS-DEMO-ABC-LOCAL-BOOT-DEPENDENCY-20260816-01.md
 - `docs/superpowers/plans/2026-08-16-fpms-local-demo-abc-fast-track.md`
 - Audit finding `DEPLOY-PKG-002`
 
-## Exact closure slice
+## Exact Closure Slice
 
 Declare the `openpyxl` runtime dependency required by the unconditional `app.main` import graph,
 keep tracked package metadata synchronized, and prove a fresh declared-dependency installation can
 import `app.main`.
 
-## Explicit non-closure
+## Explicit Non-Closure
 
 No Docker/Compose/entrypoint, seed, storage, runtime-bundle, application API, workbook behavior,
 frontend, database/schema/migration, security or production deployment change. This task does not
 claim the local container is runnable; it closes only the clean package import prerequisite.
 
-## Remaining follow-up task IDs
+## Remaining Follow-Up Task IDs
 
 - `FPMS-DEMO-ABC-BUNDLE-PREFLIGHT-20260816-01`
 - `FPMS-DEMO-ABC-FRESH-LOCAL-RUNNER-20260816-01`
@@ -42,14 +42,14 @@ claim the local container is runnable; it closes only the clean package import p
 - `FPMS-DEMO-ABC-FINANCE-UI-20260816-01`
 - `FPMS-DEMO-ABC-LIVE-E2E-20260816-01`
 
-## Allowed files
+## Allowed Files
 
 - `backend/pyproject.toml`
 - `backend/fpms_api.egg-info/requires.txt`
 - `backend/tests/test_demo_declared_runtime_dependencies.py`
 - `artifacts/FPMS-DEMO-ABC-LOCAL-BOOT-DEPENDENCY-20260816-01/**`
 
-## Required verification
+## Verification Commands
 
 1. RED: the target test fails because `openpyxl` is absent from declared runtime metadata.
 2. GREEN: `cd backend && python3 -m pytest tests/test_demo_declared_runtime_dependencies.py -q`.
@@ -58,7 +58,7 @@ claim the local container is runnable; it closes only the clean package import p
    metadata, change outside the repository path and run `python -c 'import app.main'`.
 5. `git diff --check` and evidence validation pass for the exact allowlist.
 
-## Evidence path
+## Evidence Path
 
 - `artifacts/FPMS-DEMO-ABC-LOCAL-BOOT-DEPENDENCY-20260816-01/`
 
