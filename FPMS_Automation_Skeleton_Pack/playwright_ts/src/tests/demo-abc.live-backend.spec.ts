@@ -37,6 +37,12 @@ test("@demo-abc visible customer AR receipt and offset closes exactly once", asy
     const clientField = page.locator(".el-form-item").filter({ hasText: "客户" }).first();
     await clientField.getByRole("combobox").click();
     await page.getByRole("option", { name: clientName }).click();
+    await page.getByText("申请人信息", { exact: true }).click();
+    await page.getByRole("button", { name: "新增申请人" }).click();
+    const applicantField = page.locator(".el-form-item").filter({ hasText: "从客户主数据回填" });
+    await applicantField.locator(".el-select__wrapper").click();
+    await page.getByRole("option", { name: clientName }).click();
+    await expect(page.getByPlaceholder("申请人中文名称")).toHaveValue(clientName);
     await page.getByText("控制标记", { exact: true }).click();
     const reductionField = page.locator(".el-form-item").filter({ hasText: "费用减缓比例" });
     await reductionField.locator(".el-select__wrapper").click();
