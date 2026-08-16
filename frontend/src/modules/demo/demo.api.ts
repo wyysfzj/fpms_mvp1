@@ -154,8 +154,26 @@ export async function createDemoDraft(
 }
 
 export async function lockDemoDraft(draftId: string): Promise<DemoDraft> {
-  await http.post(`/fees/drafts/${draftId}/lock`)
+  try {
+    await http.post(`/fees/drafts/${draftId}/lock`)
+  } catch (error) {
+    try {
+      const draft = (await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data
+      if (draft.status === 'LOCKED') return draft
+    } catch {
+      // Preserve the mutation error when durable state cannot be established.
+    }
+    throw error
+  }
   return (await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data
+}
+
+async function reconcileUnknownCommand<T>(endpoint: string, error: unknown): Promise<T> {
+  try {
+    return (await http.get<T>(endpoint)).data
+  } catch {
+    throw error
+  }
 }
 
 export async function createDemoBill(
@@ -165,15 +183,22 @@ export async function createDemoBill(
   dueDate: string,
   idempotencyKey: string,
 ): Promise<{ bill: DemoBillDetail; idempotency_key: string; reused: boolean }> {
-  return (
-    await http.post('/bills/demo-from-draft', {
-      draft_id: draftId,
-      bill_no: billNo,
-      bill_date: billDate,
-      due_date: dueDate,
-      idempotency_key: idempotencyKey,
-    })
-  ).data
+  try {
+    return (
+      await http.post('/bills/demo-from-draft', {
+        draft_id: draftId,
+        bill_no: billNo,
+        bill_date: billDate,
+        due_date: dueDate,
+        idempotency_key: idempotencyKey,
+      })
+    ).data
+  } catch (error) {
+    return reconcileUnknownCommand(
+      `/demo/commands/bills/${encodeURIComponent(idempotencyKey)}`,
+      error,
+    )
+  }
 }
 
 export async function createDemoBankReceipt(
@@ -183,19 +208,26 @@ export async function createDemoBankReceipt(
   payDate: string,
   idempotencyKey: string,
 ): Promise<DemoBankReceiptResponse> {
-  return (
-    await http.post<DemoBankReceiptResponse>('/payments/demo-bank-receipts', {
-      target_bill_id: bill.id,
-      amount: bill.balance,
-      pay_no: payNo,
-      pay_date: payDate,
-      currency: 'CNY',
-      pay_method: 'BANK_TRANSFER',
-      bank_ref_no: bankRefNo,
-      remark: 'ABC 本地演示客户回款',
-      idempotency_key: idempotencyKey,
-    })
-  ).data
+  try {
+    return (
+      await http.post<DemoBankReceiptResponse>('/payments/demo-bank-receipts', {
+        target_bill_id: bill.id,
+        amount: bill.balance,
+        pay_no: payNo,
+        pay_date: payDate,
+        currency: 'CNY',
+        pay_method: 'BANK_TRANSFER',
+        bank_ref_no: bankRefNo,
+        remark: 'ABC 本地演示客户回款',
+        idempotency_key: idempotencyKey,
+      })
+    ).data
+  } catch (error) {
+    return reconcileUnknownCommand(
+      `/demo/commands/payments/${encodeURIComponent(idempotencyKey)}`,
+      error,
+    )
+  }
 }
 
 export async function createDemoFullOffset(
@@ -204,13 +236,20 @@ export async function createDemoFullOffset(
   offsetDate: string,
   idempotencyKey: string,
 ): Promise<DemoOffsetResponse> {
-  return (
-    await http.post<DemoOffsetResponse>('/offsets/demo-full', {
-      payment_line_id: paymentLine.id,
-      bill_id: bill.id,
-      offset_amt: paymentLine.balance_amt,
-      offset_date: offsetDate,
-      idempotency_key: idempotencyKey,
-    })
-  ).data
+  try {
+    return (
+      await http.post<DemoOffsetResponse>('/offsets/demo-full', {
+        payment_line_id: paymentLine.id,
+        bill_id: bill.id,
+        offset_amt: paymentLine.balance_amt,
+        offset_date: offsetDate,
+        idempotency_key: idempotencyKey,
+      })
+    ).data
+  } catch (error) {
+    return reconcileUnknownCommand(
+      `/demo/commands/offsets/${encodeURIComponent(idempotencyKey)}`,
+      error,
+    )
+  }
 }

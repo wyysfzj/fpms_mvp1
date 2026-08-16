@@ -54,6 +54,9 @@ from app.modules.billing.schemas import (
     PaymentSchema,
 )
 from app.modules.billing.service import (
+    DemoBankReceiptResult,
+    DemoBillFromDraftResult,
+    DemoFullOffsetResult,
     apply_bill_bad_debt_action,
     apply_bill_bad_debt_recovery,
     build_bill_report_item,
@@ -71,6 +74,9 @@ from app.modules.billing.service import (
     list_payments,
     load_bill_bad_debt_chain,
     process_payment,
+    reconcile_demo_bank_receipt,
+    reconcile_demo_bill_from_draft,
+    reconcile_demo_full_offset,
     update_case_receipt,
 )
 from app.modules.billing.service import (
@@ -311,11 +317,34 @@ def create_local_demo_bill_from_draft(
         payload,
         actor_id=str(current_user.id),
     )
+    return _demo_bill_command_response(db, result)
+
+
+def _demo_bill_command_response(
+    db: Session, result: DemoBillFromDraftResult
+) -> DemoBillFromDraftResponse:
     return DemoBillFromDraftResponse(
         bill=_build_bill_detail_response(db, result.bill_id),
         idempotency_key=result.idempotency_key,
         reused=result.reused,
     )
+
+
+@router.get(
+    "/demo/commands/bills/{idempotency_key}",
+    response_model=DemoBillFromDraftResponse,
+    summary="Reconcile one local-demo AR bill command",
+)
+def reconcile_local_demo_bill_from_draft(
+    idempotency_key: str,
+    _perm: None = Depends(require_perm("Bill.Read")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoBillFromDraftResponse:
+    result = reconcile_demo_bill_from_draft(
+        db, idempotency_key, actor_id=str(current_user.id)
+    )
+    return _demo_bill_command_response(db, result)
 
 
 def _demo_payment_out(payment: Payment) -> DemoPaymentOut:
@@ -358,6 +387,12 @@ def create_local_demo_bank_receipt(
     db: Session = Depends(get_db),
 ) -> DemoBankReceiptResponse:
     result = create_demo_bank_receipt(db, payload, actor_id=str(current_user.id))
+    return _demo_bank_receipt_command_response(db, result)
+
+
+def _demo_bank_receipt_command_response(
+    db: Session, result: DemoBankReceiptResult
+) -> DemoBankReceiptResponse:
     payment = db.get(Payment, result.payment_id)
     line = db.get(PaymentLine, result.line_id)
     if payment is None or line is None:
@@ -376,6 +411,23 @@ def create_local_demo_bank_receipt(
     )
 
 
+@router.get(
+    "/demo/commands/payments/{idempotency_key}",
+    response_model=DemoBankReceiptResponse,
+    summary="Reconcile one local-demo bank receipt command",
+)
+def reconcile_local_demo_bank_receipt(
+    idempotency_key: str,
+    _perm: None = Depends(require_perm("Payment.Read")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoBankReceiptResponse:
+    result = reconcile_demo_bank_receipt(
+        db, idempotency_key, actor_id=str(current_user.id)
+    )
+    return _demo_bank_receipt_command_response(db, result)
+
+
 @router.post(
     "/offsets/demo-full",
     status_code=status.HTTP_201_CREATED,
@@ -389,6 +441,12 @@ def create_local_demo_full_offset(
     db: Session = Depends(get_db),
 ) -> DemoFullOffsetResponse:
     result = create_demo_full_offset(db, payload, actor_id=str(current_user.id))
+    return _demo_full_offset_command_response(db, result)
+
+
+def _demo_full_offset_command_response(
+    db: Session, result: DemoFullOffsetResult
+) -> DemoFullOffsetResponse:
     offset = db.get(Offset, result.offset_id)
     line = db.get(PaymentLine, result.line_id)
     receipt = db.get(CaseReceipt, result.receipt_id)
@@ -422,6 +480,23 @@ def create_local_demo_full_offset(
         idempotency_key=result.idempotency_key,
         reused=result.reused,
     )
+
+
+@router.get(
+    "/demo/commands/offsets/{idempotency_key}",
+    response_model=DemoFullOffsetResponse,
+    summary="Reconcile one local-demo full offset command",
+)
+def reconcile_local_demo_full_offset(
+    idempotency_key: str,
+    _perm: None = Depends(require_perm("Bill.Read")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoFullOffsetResponse:
+    result = reconcile_demo_full_offset(
+        db, idempotency_key, actor_id=str(current_user.id)
+    )
+    return _demo_full_offset_command_response(db, result)
 
 
 @router.post(

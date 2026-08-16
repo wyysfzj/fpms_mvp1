@@ -146,6 +146,14 @@ def test_demo_bill_is_exactly_once_and_billed_draft_cannot_unlock(
     assert replay_response.json()["reused"] is True
     assert replay_response.json()["bill"]["id"] == bill_id
 
+    reconciled = client.get(
+        f"/api/v1/demo/commands/bills/{command['idempotency_key']}",
+        headers=auth_headers,
+    )
+    assert reconciled.status_code == 200, reconciled.text
+    assert reconciled.json()["reused"] is True
+    assert reconciled.json()["bill"]["id"] == bill_id
+
     drifted = dict(command, due_date="2026-09-01")
     drift_response = client.post(
         "/api/v1/bills/demo-from-draft", json=drifted, headers=auth_headers

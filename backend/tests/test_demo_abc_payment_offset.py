@@ -3,6 +3,9 @@ from __future__ import annotations
 import runpy
 from pathlib import Path
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from app.modules.billing.models import (
     Bill,
     CaseReceipt,
@@ -81,6 +84,14 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
     assert receipt["bill"]["status"] == "UNSETTLED"
     assert receipt["bill"]["balance"] == "1200.00"
 
+    payment_reconciled = client.get(
+        f"/api/v1/demo/commands/payments/{receipt_command['idempotency_key']}",
+        headers=auth_headers,
+    )
+    assert payment_reconciled.status_code == 200, payment_reconciled.text
+    assert payment_reconciled.json()["reused"] is True
+    assert payment_reconciled.json()["payment"]["id"] == payment_id
+
     replay = client.post(
         "/api/v1/payments/demo-bank-receipts",
         json=receipt_command,
@@ -108,6 +119,19 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
     )
     assert duplicate.status_code == 409, duplicate.text
 
+    second_intent = dict(
+        receipt_command,
+        idempotency_key="demo-payment-second-intent",
+        pay_no="DEMO-PAY-0003",
+        bank_ref_no="DEMO-BANK-REF-0003",
+    )
+    second_payment = client.post(
+        "/api/v1/payments/demo-bank-receipts",
+        json=second_intent,
+        headers=auth_headers,
+    )
+    assert second_payment.status_code == 409, second_payment.text
+
     offset_command = {
         "payment_line_id": line_id,
         "bill_id": bill_id,
@@ -131,6 +155,15 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
     assert allocated["case_receipt"]["fee_type"] == "SERVICE"
     assert allocated["case_receipt"]["receivable_amt"] == "1200.00"
     assert allocated["case_receipt"]["received_amt"] == "1200.00"
+    exact_receipt_id = allocated["case_receipt"]["id"]
+
+    offset_reconciled = client.get(
+        f"/api/v1/demo/commands/offsets/{offset_command['idempotency_key']}",
+        headers=auth_headers,
+    )
+    assert offset_reconciled.status_code == 200, offset_reconciled.text
+    assert offset_reconciled.json()["reused"] is True
+    assert offset_reconciled.json()["case_receipt"]["id"] == exact_receipt_id
 
     offset_replay = client.post(
         "/api/v1/offsets/demo-full", json=offset_command, headers=auth_headers
@@ -138,6 +171,7 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
     assert offset_replay.status_code == 201, offset_replay.text
     assert offset_replay.json()["reused"] is True
     assert offset_replay.json()["offset"]["id"] == offset_id
+    assert offset_replay.json()["case_receipt"]["id"] == exact_receipt_id
 
     second_offset = dict(offset_command, idempotency_key="demo-offset-intent-2")
     second = client.post(
@@ -152,9 +186,27 @@ def test_demo_bank_receipt_then_full_offset_is_exact_and_idempotent(
         assert db.query(Offset).count() == 1
         assert db.query(DemoOffsetCommand).count() == 1
         assert db.query(CaseReceipt).count() == 1
+        payment_command = db.query(DemoPaymentCommand).one()
+        assert payment_command.target_bill_id == bill_id
+        offset_command_row = db.query(DemoOffsetCommand).one()
+        assert offset_command_row.receipt_id == exact_receipt_id
+        case_receipt = db.query(CaseReceipt).one()
+        assert case_receipt.receipt_key.endswith(":SERVICE:-:CNY")
         bill = db.get(Bill, bill_id)
         assert bill.balance == 0
         assert bill.status == "SETTLED"
+
+        db.add(
+            PaymentLine(
+                payment_id=payment_id,
+                case_id=case_id,
+                raw_amount=-1,
+                allocated_amt=0,
+                balance_amt=-1,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            db.commit()
 
 
 def test_demo_payment_and_offset_reject_invalid_money_without_partial_write(

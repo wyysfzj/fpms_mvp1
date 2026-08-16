@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -22,6 +23,11 @@ from app.db.mixins import AuditMixin, UUIDPrimaryKeyMixin
 
 class Bill(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_bill"
+    __table_args__ = (
+        CheckConstraint("amount >= 0", name="ck_bill_amount_nonnegative"),
+        CheckConstraint("balance >= 0", name="ck_bill_balance_nonnegative"),
+        CheckConstraint("balance <= amount", name="ck_bill_balance_not_above_amount"),
+    )
 
     bill_no: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     client_id: Mapped[str] = mapped_column(String(36), ForeignKey("t_client.id"), nullable=False)
@@ -55,6 +61,9 @@ class Bill(UUIDPrimaryKeyMixin, AuditMixin, Base):
 
 class BillItem(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_bill_item"
+    __table_args__ = (
+        CheckConstraint("amount >= 0", name="ck_bill_item_amount_nonnegative"),
+    )
 
     bill_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_bill.id", ondelete="CASCADE"), nullable=False
@@ -120,6 +129,13 @@ class BadDebtRecovery(UUIDPrimaryKeyMixin, AuditMixin, Base):
 
 class CaseReceipt(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_case_receipt"
+    __table_args__ = (
+        CheckConstraint("receivable_amt >= 0", name="ck_case_receipt_receivable_nonnegative"),
+        CheckConstraint("received_amt >= 0", name="ck_case_receipt_received_nonnegative"),
+        CheckConstraint(
+            "received_amt <= receivable_amt", name="ck_case_receipt_received_not_above_receivable"
+        ),
+    )
 
     case_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_case.id", ondelete="CASCADE"), nullable=False
@@ -153,6 +169,9 @@ class CaseReceipt(UUIDPrimaryKeyMixin, AuditMixin, Base):
 
 class Offset(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_offset"
+    __table_args__ = (
+        CheckConstraint("offset_amt > 0", name="ck_offset_amount_positive"),
+    )
 
     payment_line_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_payment_line.id", ondelete="CASCADE"), nullable=False
@@ -170,6 +189,9 @@ class Offset(UUIDPrimaryKeyMixin, AuditMixin, Base):
 
 class Payment(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_payment"
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_payment_amount_positive"),
+    )
 
     pay_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
     client_id: Mapped[str] = mapped_column(String(36), ForeignKey("t_client.id"), nullable=False)
@@ -185,6 +207,15 @@ class Payment(UUIDPrimaryKeyMixin, AuditMixin, Base):
 
 class PaymentLine(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_payment_line"
+    __table_args__ = (
+        CheckConstraint("raw_amount > 0", name="ck_payment_line_raw_positive"),
+        CheckConstraint("allocated_amt >= 0", name="ck_payment_line_allocated_nonnegative"),
+        CheckConstraint("balance_amt >= 0", name="ck_payment_line_balance_nonnegative"),
+        CheckConstraint(
+            "raw_amount = allocated_amt + balance_amt",
+            name="ck_payment_line_projection_exact",
+        ),
+    )
 
     payment_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_payment.id", ondelete="CASCADE"), nullable=False
@@ -207,6 +238,9 @@ class DemoPaymentCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
     payment_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_payment.id", ondelete="CASCADE"), nullable=False, unique=True
     )
+    target_bill_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_bill.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
     idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
     command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
@@ -216,6 +250,9 @@ class DemoOffsetCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
 
     offset_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("t_offset.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    receipt_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_case_receipt.id", ondelete="RESTRICT"), nullable=False, unique=True
     )
     idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
     command_hash: Mapped[str] = mapped_column(String(64), nullable=False)

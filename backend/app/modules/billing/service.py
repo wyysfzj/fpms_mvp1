@@ -1932,6 +1932,29 @@ def create_demo_bill_from_draft(
     )
 
 
+def reconcile_demo_bill_from_draft(
+    db: Session, idempotency_key: str, *, actor_id: str
+) -> DemoBillFromDraftResult:
+    _demo_finance_scope_or_fail()
+    command = db.scalar(
+        select(BillDraftSource).where(
+            BillDraftSource.idempotency_key == idempotency_key,
+            BillDraftSource.created_by == actor_id,
+        )
+    )
+    if command is None:
+        raise_business_error(
+            "DEMO_BILL_COMMAND_NOT_FOUND",
+            "未找到可对账的账单命令",
+            status_code=404,
+        )
+    return DemoBillFromDraftResult(
+        bill_id=command.bill_id,
+        idempotency_key=command.idempotency_key,
+        reused=True,
+    )
+
+
 def _demo_finance_scope_or_fail() -> None:
     if os.environ.get("FPMS_ENV") != "demo" or os.environ.get("FPMS_DEMO_SCOPE") != "LOCAL_ABC_E2E":
         raise_business_error(
@@ -2002,7 +2025,7 @@ def create_demo_bank_receipt(
         return DemoBankReceiptResult(
             payment_id=existing.payment_id,
             line_id=line.id,
-            target_bill_id=data.target_bill_id,
+            target_bill_id=existing.target_bill_id,
             idempotency_key=data.idempotency_key,
             reused=True,
         )
@@ -2030,6 +2053,17 @@ def create_demo_bank_receipt(
         raise_business_error(
             "DEMO_PAYMENT_AMOUNT_OR_BILL_CONFLICT",
             "回款金额必须等于当前演示账单余额",
+            status_code=409,
+        )
+    prior_target = db.scalar(
+        select(DemoPaymentCommand.id).where(
+            DemoPaymentCommand.target_bill_id == bill.id
+        )
+    )
+    if prior_target is not None:
+        raise_business_error(
+            "DEMO_PAYMENT_BILL_ALREADY_OWNED",
+            "目标账单已有客户回款命令",
             status_code=409,
         )
     if db.scalar(select(Payment.id).where(Payment.pay_no == data.pay_no)) is not None or db.scalar(
@@ -2069,6 +2103,7 @@ def create_demo_bank_receipt(
     command = DemoPaymentCommand(
         id=str(uuid4()),
         payment_id=payment_id,
+        target_bill_id=bill.id,
         idempotency_key=data.idempotency_key,
         command_hash=command_hash,
         created_by=actor_id,
@@ -2092,6 +2127,40 @@ def create_demo_bank_receipt(
         target_bill_id=bill.id,
         idempotency_key=data.idempotency_key,
         reused=False,
+    )
+
+
+def reconcile_demo_bank_receipt(
+    db: Session, idempotency_key: str, *, actor_id: str
+) -> DemoBankReceiptResult:
+    _demo_finance_scope_or_fail()
+    command = db.scalar(
+        select(DemoPaymentCommand).where(
+            DemoPaymentCommand.idempotency_key == idempotency_key,
+            DemoPaymentCommand.created_by == actor_id,
+        )
+    )
+    if command is None:
+        raise_business_error(
+            "DEMO_PAYMENT_COMMAND_NOT_FOUND",
+            "未找到可对账的回款命令",
+            status_code=404,
+        )
+    line = db.scalar(
+        select(PaymentLine).where(PaymentLine.payment_id == command.payment_id)
+    )
+    if line is None:
+        raise_business_error(
+            "DEMO_PAYMENT_STORED_STATE_INVALID",
+            "回款存量状态无效",
+            status_code=409,
+        )
+    return DemoBankReceiptResult(
+        payment_id=command.payment_id,
+        line_id=line.id,
+        target_bill_id=command.target_bill_id,
+        idempotency_key=command.idempotency_key,
+        reused=True,
     )
 
 
@@ -2131,17 +2200,7 @@ def create_demo_full_offset(
             )
         offset = db.get(Offset, existing.offset_id)
         line = db.get(PaymentLine, data.payment_line_id)
-        item = db.scalar(select(BillItem).where(BillItem.bill_id == data.bill_id))
-        receipt = (
-            db.scalar(
-                select(CaseReceipt).where(
-                    CaseReceipt.case_id == item.case_id,
-                    CaseReceipt.receipt_key.isnot(None),
-                )
-            )
-            if item is not None
-            else None
-        )
+        receipt = db.get(CaseReceipt, existing.receipt_id)
         if offset is None or line is None or receipt is None:
             raise_business_error(
                 "DEMO_OFFSET_STORED_STATE_INVALID",
@@ -2200,7 +2259,10 @@ def create_demo_full_offset(
             status_code=409,
         )
 
-    receipt_key = f"DEMO:{item.case_id}:{item.fee_code}:SERVICE:CNY"
+    receipt_key = (
+        f"DEMO:{item.case_id}:{item.fee_code}:SERVICE:"
+        f"{item.year_no if item.year_no is not None and item.year_no > 0 else '-'}:CNY"
+    )
     receipt = db.scalar(
         select(CaseReceipt).where(CaseReceipt.receipt_key == receipt_key)
     )
@@ -2242,6 +2304,7 @@ def create_demo_full_offset(
     command = DemoOffsetCommand(
         id=str(uuid4()),
         offset_id=offset.id,
+        receipt_id=receipt.id,
         idempotency_key=data.idempotency_key,
         command_hash=command_hash,
         created_by=actor_id,
@@ -2272,6 +2335,41 @@ def create_demo_full_offset(
         receipt_id=receipt.id,
         idempotency_key=data.idempotency_key,
         reused=False,
+    )
+
+
+def reconcile_demo_full_offset(
+    db: Session, idempotency_key: str, *, actor_id: str
+) -> DemoFullOffsetResult:
+    _demo_finance_scope_or_fail()
+    command = db.scalar(
+        select(DemoOffsetCommand).where(
+            DemoOffsetCommand.idempotency_key == idempotency_key,
+            DemoOffsetCommand.created_by == actor_id,
+        )
+    )
+    if command is None:
+        raise_business_error(
+            "DEMO_OFFSET_COMMAND_NOT_FOUND",
+            "未找到可对账的核销命令",
+            status_code=404,
+        )
+    offset = db.get(Offset, command.offset_id)
+    receipt = db.get(CaseReceipt, command.receipt_id)
+    line = db.get(PaymentLine, offset.payment_line_id) if offset is not None else None
+    if offset is None or receipt is None or line is None:
+        raise_business_error(
+            "DEMO_OFFSET_STORED_STATE_INVALID",
+            "核销存量状态无效",
+            status_code=409,
+        )
+    return DemoFullOffsetResult(
+        offset_id=offset.id,
+        bill_id=offset.bill_id,
+        line_id=line.id,
+        receipt_id=receipt.id,
+        idempotency_key=command.idempotency_key,
+        reused=True,
     )
 
 
