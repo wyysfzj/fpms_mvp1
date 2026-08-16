@@ -75,6 +75,19 @@ class BillItem(UUIDPrimaryKeyMixin, AuditMixin, Base):
     )
 
 
+class BillDraftSource(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_bill_draft_source"
+
+    bill_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_bill.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    draft_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_fee_draft.id", ondelete="RESTRICT"), nullable=False, unique=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 class BadDebtVoucher(UUIDPrimaryKeyMixin, AuditMixin, Base):
     __tablename__ = "t_bad_debt_voucher"
 

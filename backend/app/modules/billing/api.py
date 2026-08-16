@@ -8,12 +8,13 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_perm
+from app.api.deps import current_user_dep, require_perm
 from app.common.doc_render.renderer import DocxRenderer
 from app.core.errors import raise_business_error
 from app.db.session import get_db
 from app.models.letter_head import LetterHead
 from app.models.system_param import SystemParam
+from app.modules.auth.models import T_User
 from app.modules.billing.doc_render_bill_context import BillContextBuilder
 from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
 from app.modules.billing.schemas import (
@@ -32,6 +33,8 @@ from app.modules.billing.schemas import (
     CaseReceiptCreate,
     CaseReceiptResponse,
     CaseReceiptUpdate,
+    DemoBillFromDraftRequest,
+    DemoBillFromDraftResponse,
     FeeOverviewCaseReceiptListResponse,
     FeeOverviewGovPaymentListResponse,
     FeeUnifiedQueryListResponse,
@@ -47,6 +50,7 @@ from app.modules.billing.service import (
     apply_bill_bad_debt_recovery,
     build_bill_report_item,
     create_case_receipt,
+    create_demo_bill_from_draft,
     create_manual_bill_record,
     generate_bill_from_drafts,
     list_bills,
@@ -277,6 +281,30 @@ def get_bills(
         bad_debt_amount=summary.bad_debt_amount,
         total_recovered_amount=summary.total_recovered_amount,
         remaining_bad_debt_balance=summary.remaining_bad_debt_balance,
+    )
+
+
+@router.post(
+    "/bills/demo-from-draft",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DemoBillFromDraftResponse,
+    summary="Create or replay one local-demo AR bill",
+)
+def create_local_demo_bill_from_draft(
+    payload: DemoBillFromDraftRequest,
+    _perm: None = Depends(require_perm("Bill.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoBillFromDraftResponse:
+    result = create_demo_bill_from_draft(
+        db,
+        payload,
+        actor_id=str(current_user.id),
+    )
+    return DemoBillFromDraftResponse(
+        bill=_build_bill_detail_response(db, result.bill_id),
+        idempotency_key=result.idempotency_key,
+        reused=result.reused,
     )
 
 

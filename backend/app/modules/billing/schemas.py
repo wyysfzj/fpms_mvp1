@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BillCreateSchema(BaseModel):
@@ -189,6 +189,28 @@ class BillDetailResponse(BaseModel):
     bad_debt_recoveries: list[BillBadDebtRecoveryResponse] = []
     bad_debt_total_recovered: Decimal = Field(Decimal("0"), ge=0)
     bad_debt_remaining_amount: Decimal = Field(Decimal("0"), ge=0)
+
+
+class DemoBillFromDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft_id: str = Field(..., min_length=1, max_length=36)
+    bill_no: str | None = Field(None, min_length=1, max_length=64)
+    bill_date: date
+    due_date: date | None = None
+    idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+    @model_validator(mode="after")
+    def validate_date_order(self) -> "DemoBillFromDraftRequest":
+        if self.due_date is not None and self.due_date < self.bill_date:
+            raise ValueError("due_date must not precede bill_date")
+        return self
+
+
+class DemoBillFromDraftResponse(BaseModel):
+    bill: BillDetailResponse
+    idempotency_key: str
+    reused: bool
 
 
 class PaymentSchema(BaseModel):

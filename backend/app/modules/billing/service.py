@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import os
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
@@ -14,6 +19,7 @@ from app.modules.billing.models import (
     BadDebtRecovery,
     BadDebtVoucher,
     Bill,
+    BillDraftSource,
     BillItem,
     CaseReceipt,
     Offset,
@@ -29,6 +35,7 @@ from app.modules.billing.schemas import (
     BillStatusSchema,
     CaseReceiptCreate,
     CaseReceiptUpdate,
+    DemoBillFromDraftRequest,
     OffsetCreateSchema,
     PaymentSchema,
 )
@@ -41,6 +48,13 @@ from app.modules.consulting.service import filter_consulting_search_case_ids
 from app.modules.fees.models import FeeDraft, FeeItem
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class DemoBillFromDraftResult:
+    bill_id: str
+    idempotency_key: str
+    reused: bool
 
 
 def _run_commission_hook_non_blocking(db: Session, bill: Bill) -> None:
@@ -1722,6 +1736,177 @@ def process_payment(db: Session, data: PaymentSchema) -> Payment:
     db.commit()
     db.refresh(payment)
     return payment
+
+
+def _demo_bill_command_hash(data: DemoBillFromDraftRequest, actor_id: str) -> str:
+    canonical = json.dumps(
+        {
+            "actor_id": actor_id,
+            "bill_date": data.bill_date.isoformat(),
+            "bill_no": data.bill_no,
+            "draft_id": data.draft_id,
+            "due_date": data.due_date.isoformat() if data.due_date is not None else None,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def create_demo_bill_from_draft(
+    db: Session,
+    data: DemoBillFromDraftRequest,
+    *,
+    actor_id: str,
+) -> DemoBillFromDraftResult:
+    if os.environ.get("FPMS_ENV") != "demo" or os.environ.get("FPMS_DEMO_SCOPE") != "LOCAL_ABC_E2E":
+        raise_business_error(
+            "DEMO_BILL_SCOPE_REQUIRED",
+            "本地演示账单命令未启用",
+            status_code=409,
+        )
+    if (
+        not actor_id
+        or actor_id != actor_id.strip()
+        or "\x00" in actor_id
+        or not data.idempotency_key
+        or data.idempotency_key != data.idempotency_key.strip()
+        or "\x00" in data.idempotency_key
+        or (data.bill_no is not None and data.bill_no != data.bill_no.strip())
+    ):
+        raise_business_error(
+            "DEMO_BILL_INPUT_INVALID",
+            "本地演示账单输入无效",
+            status_code=400,
+        )
+    command_hash = _demo_bill_command_hash(data, actor_id)
+    connection = db.connection()
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.driver_connection.in_transaction
+    ):
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+
+    existing_key = db.scalar(
+        select(BillDraftSource).where(
+            BillDraftSource.idempotency_key == data.idempotency_key
+        )
+    )
+    if existing_key is not None:
+        if existing_key.command_hash != command_hash:
+            raise_business_error(
+                "DEMO_BILL_IDEMPOTENCY_CONFLICT",
+                "账单幂等键已用于不同命令",
+                status_code=409,
+            )
+        return DemoBillFromDraftResult(
+            bill_id=existing_key.bill_id,
+            idempotency_key=data.idempotency_key,
+            reused=True,
+        )
+
+    draft = db.scalar(select(FeeDraft).where(FeeDraft.id == data.draft_id))
+    if draft is None:
+        raise_business_error("BILL_DRAFT_NOT_FOUND", "费用草稿不存在", status_code=404)
+    if draft.status != "LOCKED":
+        raise_business_error(
+            "DEMO_BILL_DRAFT_NOT_LOCKED",
+            "仅已锁定的费用草稿可以生成演示账单",
+            status_code=409,
+        )
+    if draft.client_id is None or draft.currency != "CNY":
+        raise_business_error(
+            "DEMO_BILL_DRAFT_SCOPE_INVALID",
+            "演示账单仅支持已关联客户的 CNY 草稿",
+            status_code=409,
+        )
+    consumed = db.scalar(
+        select(BillDraftSource).where(BillDraftSource.draft_id == draft.id)
+    )
+    if consumed is not None:
+        raise_business_error(
+            "DEMO_BILL_DRAFT_ALREADY_CONSUMED",
+            "费用草稿已生成账单",
+            status_code=409,
+        )
+
+    items = tuple(
+        db.scalars(select(FeeItem).where(FeeItem.draft_id == draft.id)).all()
+    )
+    if (
+        len(items) != 1
+        or items[0].fee_type != "SERVICE"
+        or items[0].amount is None
+        or items[0].amount <= Decimal("0")
+        or draft.total_gov != Decimal("0")
+        or draft.total_misc != Decimal("0")
+        or draft.total_service != items[0].amount
+        or draft.amount != items[0].amount
+    ):
+        raise_business_error(
+            "DEMO_BILL_DRAFT_CONTENT_INVALID",
+            "演示账单要求一个正额服务费项目",
+            status_code=409,
+        )
+
+    bill_id = str(uuid4())
+    bill = Bill(
+        id=bill_id,
+        bill_no=data.bill_no or f"DEMO-AR-{draft.id[:8].upper()}",
+        client_id=draft.client_id,
+        currency="CNY",
+        direction="AR",
+        status="UNSETTLED",
+        bill_date=data.bill_date,
+        due_date=data.due_date,
+        total_gov=Decimal("0"),
+        total_service=items[0].amount,
+        total_misc=Decimal("0"),
+        amount=items[0].amount,
+        balance=items[0].amount,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    bill_item = BillItem(
+        id=str(uuid4()),
+        bill_id=bill_id,
+        case_id=items[0].case_id,
+        draft_id=draft.id,
+        fee_item_id=items[0].id,
+        fee_code=items[0].fee_code,
+        fee_name=items[0].fee_name,
+        fee_type=items[0].fee_type,
+        year_no=items[0].year_no,
+        amount=items[0].amount,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    source = BillDraftSource(
+        id=str(uuid4()),
+        bill_id=bill_id,
+        draft_id=draft.id,
+        idempotency_key=data.idempotency_key,
+        command_hash=command_hash,
+        created_by=actor_id,
+        updated_by=actor_id,
+    )
+    db.add_all((bill, bill_item, source))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise_business_error(
+            "DEMO_BILL_CONCURRENT_CONFLICT",
+            "费用草稿已由另一账单命令占用",
+            status_code=409,
+        )
+    return DemoBillFromDraftResult(
+        bill_id=bill_id,
+        idempotency_key=data.idempotency_key,
+        reused=False,
+    )
 
 
 def generate_bill_from_drafts(db: Session, data: BillFromDraftsRequest) -> Bill:

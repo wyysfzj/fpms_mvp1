@@ -12,7 +12,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import raise_business_error
-from app.modules.billing.models import Bill, BillItem
+from app.modules.billing.models import Bill, BillDraftSource, BillItem
 from app.modules.cases.models import Case, T_CaseAgentSplit
 from app.modules.fees.enums import FeeDraftStatus, FeeType
 from app.modules.fees.models import FeeDraft, FeeItem, FeeRate
@@ -1189,6 +1189,12 @@ def unlock_fee_draft(
         raise_business_error(
             "FEE_DRAFT_NOT_LOCKED",
             "Fee draft not locked",
+            status_code=409,
+        )
+    if db.scalar(select(BillDraftSource.id).where(BillDraftSource.draft_id == draft_id)):
+        raise_business_error(
+            "FEE_DRAFT_ALREADY_BILLED",
+            "已生成账单的费用草稿不可解锁",
             status_code=409,
         )
     draft.status = FeeDraftStatus.OPEN.value
