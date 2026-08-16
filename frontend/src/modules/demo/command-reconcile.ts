@@ -47,13 +47,13 @@ export async function resolveCommandMutationResponse<T>(
     }
     const classification = classifyCommandReadStatus(response.status)
     if (classification !== 'IN_PROGRESS') {
-      throw new CommandReconciliationError(`unexpected command status ${response.status}`)
+      throw new CommandReconciliationError(`命令状态异常（${response.status}）。`)
     }
     if (attempt === 3) break
     await wait()
     response = await readCommand()
   }
-  throw new CommandReconciliationError('command remained in progress')
+  throw new CommandReconciliationError('命令仍在处理中，请稍后重试。')
 }
 
 export async function reconcileUnknownMutationResult<T>(

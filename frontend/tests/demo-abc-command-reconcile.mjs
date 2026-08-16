@@ -54,6 +54,25 @@ const completed = await helper.resolveCommandMutationResponse(
 assert.equal(completed, 'durable')
 assert.equal(commandReads, 2)
 
+await assert.rejects(
+  helper.resolveCommandMutationResponse(
+    { status: 409, data: {} },
+    async () => ({ status: 404, data: {} }),
+    (value) => value,
+    async () => {},
+  ),
+  (error) => error.message === '命令状态异常（409）。',
+)
+await assert.rejects(
+  helper.resolveCommandMutationResponse(
+    { status: 202, data: {} },
+    async () => ({ status: 202, data: {} }),
+    (value) => value,
+    async () => {},
+  ),
+  (error) => error.message === '命令仍在处理中，请稍后重试。',
+)
+
 let lockReads = 0
 await assert.rejects(
   helper.reconcileUnknownMutationResult(
