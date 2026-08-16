@@ -1,4 +1,12 @@
 import { http } from '../../api/http'
+import {
+  parseDemoBankReceiptResponse,
+  parseDemoBillCommandResponse,
+  parseDemoDraft,
+  parseDemoFeeObligationResponse,
+  parseDemoOffsetResponse,
+  parseDemoServiceItem,
+} from './demo.contract'
 
 export interface DemoServiceItem {
   classification: 'DEMO_ONLY'
@@ -110,7 +118,7 @@ export interface DemoOffsetResponse {
 }
 
 export async function readDemoServiceItem(): Promise<DemoServiceItem> {
-  return (await http.get<DemoServiceItem>('/fees/demo-service-item')).data
+  return parseDemoServiceItem((await http.get('/fees/demo-service-item')).data)
 }
 
 export async function createDemoServiceObligation(
@@ -118,13 +126,15 @@ export async function createDemoServiceObligation(
   itemCode: string,
   idempotencyKey: string,
 ): Promise<DemoFeeObligationResponse> {
-  return (
-    await http.post<DemoFeeObligationResponse>('/fees/demo-service-obligations', {
-      case_id: caseId,
-      item_code: itemCode,
-      idempotency_key: idempotencyKey,
-    })
-  ).data
+  return parseDemoFeeObligationResponse(
+    (
+      await http.post('/fees/demo-service-obligations', {
+        case_id: caseId,
+        item_code: itemCode,
+        idempotency_key: idempotencyKey,
+      })
+    ).data,
+  )
 }
 
 export async function recordDemoPayInstruction(
@@ -142,15 +152,17 @@ export async function createDemoDraft(
   clientId: string,
   obligationId: string,
 ): Promise<DemoDraft> {
-  return (
-    await http.post<DemoDraft>('/fees/drafts', {
-      case_id: caseId,
-      client_id: clientId,
-      draft_type: 'GENERIC',
-      currency: 'CNY',
-      obligation_id: obligationId,
-    })
-  ).data
+  return parseDemoDraft(
+    (
+      await http.post('/fees/drafts', {
+        case_id: caseId,
+        client_id: clientId,
+        draft_type: 'GENERIC',
+        currency: 'CNY',
+        obligation_id: obligationId,
+      })
+    ).data,
+  )
 }
 
 export async function lockDemoDraft(draftId: string): Promise<DemoDraft> {
@@ -158,19 +170,23 @@ export async function lockDemoDraft(draftId: string): Promise<DemoDraft> {
     await http.post(`/fees/drafts/${draftId}/lock`)
   } catch (error) {
     try {
-      const draft = (await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data
+      const draft = parseDemoDraft((await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data)
       if (draft.status === 'LOCKED') return draft
     } catch {
       // Preserve the mutation error when durable state cannot be established.
     }
     throw error
   }
-  return (await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data
+  return parseDemoDraft((await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data)
 }
 
-async function reconcileUnknownCommand<T>(endpoint: string, error: unknown): Promise<T> {
+async function reconcileUnknownCommand<T>(
+  endpoint: string,
+  error: unknown,
+  parse: (value: unknown) => T,
+): Promise<T> {
   try {
-    return (await http.get<T>(endpoint)).data
+    return parse((await http.get(endpoint)).data)
   } catch {
     throw error
   }
@@ -184,19 +200,22 @@ export async function createDemoBill(
   idempotencyKey: string,
 ): Promise<{ bill: DemoBillDetail; idempotency_key: string; reused: boolean }> {
   try {
-    return (
-      await http.post('/bills/demo-from-draft', {
-        draft_id: draftId,
-        bill_no: billNo,
-        bill_date: billDate,
-        due_date: dueDate,
-        idempotency_key: idempotencyKey,
-      })
-    ).data
+    return parseDemoBillCommandResponse(
+      (
+        await http.post('/bills/demo-from-draft', {
+          draft_id: draftId,
+          bill_no: billNo,
+          bill_date: billDate,
+          due_date: dueDate,
+          idempotency_key: idempotencyKey,
+        })
+      ).data,
+    )
   } catch (error) {
     return reconcileUnknownCommand(
       `/demo/commands/bills/${encodeURIComponent(idempotencyKey)}`,
       error,
+      parseDemoBillCommandResponse,
     )
   }
 }
@@ -209,23 +228,26 @@ export async function createDemoBankReceipt(
   idempotencyKey: string,
 ): Promise<DemoBankReceiptResponse> {
   try {
-    return (
-      await http.post<DemoBankReceiptResponse>('/payments/demo-bank-receipts', {
-        target_bill_id: bill.id,
-        amount: bill.balance,
-        pay_no: payNo,
-        pay_date: payDate,
-        currency: 'CNY',
-        pay_method: 'BANK_TRANSFER',
-        bank_ref_no: bankRefNo,
-        remark: 'ABC 本地演示客户回款',
-        idempotency_key: idempotencyKey,
-      })
-    ).data
+    return parseDemoBankReceiptResponse(
+      (
+        await http.post<DemoBankReceiptResponse>('/payments/demo-bank-receipts', {
+          target_bill_id: bill.id,
+          amount: bill.balance,
+          pay_no: payNo,
+          pay_date: payDate,
+          currency: 'CNY',
+          pay_method: 'BANK_TRANSFER',
+          bank_ref_no: bankRefNo,
+          remark: 'ABC 本地演示客户回款',
+          idempotency_key: idempotencyKey,
+        })
+      ).data,
+    )
   } catch (error) {
     return reconcileUnknownCommand(
       `/demo/commands/payments/${encodeURIComponent(idempotencyKey)}`,
       error,
+      parseDemoBankReceiptResponse,
     )
   }
 }
@@ -237,19 +259,22 @@ export async function createDemoFullOffset(
   idempotencyKey: string,
 ): Promise<DemoOffsetResponse> {
   try {
-    return (
-      await http.post<DemoOffsetResponse>('/offsets/demo-full', {
-        payment_line_id: paymentLine.id,
-        bill_id: bill.id,
-        offset_amt: paymentLine.balance_amt,
-        offset_date: offsetDate,
-        idempotency_key: idempotencyKey,
-      })
-    ).data
+    return parseDemoOffsetResponse(
+      (
+        await http.post<DemoOffsetResponse>('/offsets/demo-full', {
+          payment_line_id: paymentLine.id,
+          bill_id: bill.id,
+          offset_amt: paymentLine.balance_amt,
+          offset_date: offsetDate,
+          idempotency_key: idempotencyKey,
+        })
+      ).data,
+    )
   } catch (error) {
     return reconcileUnknownCommand(
       `/demo/commands/offsets/${encodeURIComponent(idempotencyKey)}`,
       error,
+      parseDemoOffsetResponse,
     )
   }
 }
