@@ -16,7 +16,7 @@ from app.models.letter_head import LetterHead
 from app.models.system_param import SystemParam
 from app.modules.auth.models import T_User
 from app.modules.billing.doc_render_bill_context import BillContextBuilder
-from app.modules.billing.models import Bill, BillItem, CaseReceipt, Payment, PaymentLine
+from app.modules.billing.models import Bill, BillItem, CaseReceipt, Offset, Payment, PaymentLine
 from app.modules.billing.schemas import (
     BillBadDebtActionSchema,
     BillBadDebtRecoveryActionSchema,
@@ -33,8 +33,16 @@ from app.modules.billing.schemas import (
     CaseReceiptCreate,
     CaseReceiptResponse,
     CaseReceiptUpdate,
+    DemoBankReceiptRequest,
+    DemoBankReceiptResponse,
     DemoBillFromDraftRequest,
     DemoBillFromDraftResponse,
+    DemoCaseReceiptOut,
+    DemoFullOffsetRequest,
+    DemoFullOffsetResponse,
+    DemoOffsetOut,
+    DemoPaymentLineOut,
+    DemoPaymentOut,
     FeeOverviewCaseReceiptListResponse,
     FeeOverviewGovPaymentListResponse,
     FeeUnifiedQueryListResponse,
@@ -50,7 +58,9 @@ from app.modules.billing.service import (
     apply_bill_bad_debt_recovery,
     build_bill_report_item,
     create_case_receipt,
+    create_demo_bank_receipt,
     create_demo_bill_from_draft,
+    create_demo_full_offset,
     create_manual_bill_record,
     generate_bill_from_drafts,
     list_bills,
@@ -303,6 +313,112 @@ def create_local_demo_bill_from_draft(
     )
     return DemoBillFromDraftResponse(
         bill=_build_bill_detail_response(db, result.bill_id),
+        idempotency_key=result.idempotency_key,
+        reused=result.reused,
+    )
+
+
+def _demo_payment_out(payment: Payment) -> DemoPaymentOut:
+    return DemoPaymentOut(
+        id=payment.id,
+        pay_no=payment.pay_no or "",
+        client_id=payment.client_id,
+        pay_date=payment.pay_date,
+        currency=payment.currency,
+        amount=payment.amount,
+        pay_method=payment.pay_method or "",
+        bank_ref_no=payment.bank_ref_no or "",
+        remark=payment.remark,
+    )
+
+
+def _demo_line_out(line: PaymentLine) -> DemoPaymentLineOut:
+    status_value = "FULLY_ALLOCATED" if line.balance_amt == 0 else "UNALLOCATED"
+    return DemoPaymentLineOut(
+        id=line.id,
+        payment_id=line.payment_id,
+        case_id=line.case_id or "",
+        raw_amount=line.raw_amount,
+        allocated_amt=line.allocated_amt,
+        balance_amt=line.balance_amt,
+        status=status_value,
+    )
+
+
+@router.post(
+    "/payments/demo-bank-receipts",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DemoBankReceiptResponse,
+    summary="Record or replay one local-demo customer bank receipt",
+)
+def create_local_demo_bank_receipt(
+    payload: DemoBankReceiptRequest,
+    _perm: None = Depends(require_perm("Payment.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoBankReceiptResponse:
+    result = create_demo_bank_receipt(db, payload, actor_id=str(current_user.id))
+    payment = db.get(Payment, result.payment_id)
+    line = db.get(PaymentLine, result.line_id)
+    if payment is None or line is None:
+        raise_business_error(
+            "DEMO_PAYMENT_STORED_STATE_INVALID",
+            "回款存量状态无效",
+            status_code=409,
+        )
+    return DemoBankReceiptResponse(
+        payment=_demo_payment_out(payment),
+        line=_demo_line_out(line),
+        bill=_build_bill_detail_response(db, result.target_bill_id),
+        target_bill_id=result.target_bill_id,
+        idempotency_key=result.idempotency_key,
+        reused=result.reused,
+    )
+
+
+@router.post(
+    "/offsets/demo-full",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DemoFullOffsetResponse,
+    summary="Create or replay one local-demo full offset",
+)
+def create_local_demo_full_offset(
+    payload: DemoFullOffsetRequest,
+    _perm: None = Depends(require_perm("Payment.Create")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoFullOffsetResponse:
+    result = create_demo_full_offset(db, payload, actor_id=str(current_user.id))
+    offset = db.get(Offset, result.offset_id)
+    line = db.get(PaymentLine, result.line_id)
+    receipt = db.get(CaseReceipt, result.receipt_id)
+    if offset is None or line is None or receipt is None:
+        raise_business_error(
+            "DEMO_OFFSET_STORED_STATE_INVALID",
+            "核销存量状态无效",
+            status_code=409,
+        )
+    return DemoFullOffsetResponse(
+        offset=DemoOffsetOut(
+            id=offset.id,
+            payment_line_id=offset.payment_line_id,
+            bill_id=offset.bill_id,
+            offset_amt=offset.offset_amt,
+            offset_date=offset.offset_date,
+            is_reversed=offset.is_reversed,
+        ),
+        bill=_build_bill_detail_response(db, result.bill_id),
+        line=_demo_line_out(line),
+        case_receipt=DemoCaseReceiptOut(
+            id=receipt.id,
+            case_id=receipt.case_id,
+            fee_type=receipt.fee_type or "",
+            fee_code=receipt.fee_code or "",
+            currency=receipt.currency,
+            receivable_amt=receipt.receivable_amt,
+            received_amt=receipt.received_amt,
+            last_receipt_date=receipt.last_receipt_date,
+        ),
         idempotency_key=result.idempotency_key,
         reused=result.reused,
     )

@@ -148,6 +148,7 @@ class CaseReceipt(UUIDPrimaryKeyMixin, AuditMixin, Base):
         Boolean, nullable=True, server_default=text("0")
     )
     remark: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    receipt_key: Mapped[str | None] = mapped_column(String(192), nullable=True, unique=True)
 
 
 class Offset(UUIDPrimaryKeyMixin, AuditMixin, Base):
@@ -178,6 +179,8 @@ class Payment(UUIDPrimaryKeyMixin, AuditMixin, Base):
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pay_method: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    bank_ref_no: Mapped[str | None] = mapped_column(String(96), nullable=True, unique=True)
 
 
 class PaymentLine(UUIDPrimaryKeyMixin, AuditMixin, Base):
@@ -196,3 +199,23 @@ class PaymentLine(UUIDPrimaryKeyMixin, AuditMixin, Base):
     balance_amt: Mapped[Decimal] = mapped_column(
         Numeric(18, 2), nullable=False, server_default=text("0")
     )
+
+
+class DemoPaymentCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_demo_payment_command"
+
+    payment_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_payment.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class DemoOffsetCommand(UUIDPrimaryKeyMixin, AuditMixin, Base):
+    __tablename__ = "t_demo_offset_command"
+
+    offset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("t_offset.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(96), nullable=False, unique=True)
+    command_hash: Mapped[str] = mapped_column(String(64), nullable=False)

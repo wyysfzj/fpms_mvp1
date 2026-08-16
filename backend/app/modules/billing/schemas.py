@@ -213,6 +213,90 @@ class DemoBillFromDraftResponse(BaseModel):
     reused: bool
 
 
+class DemoBankReceiptRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_bill_id: str = Field(..., min_length=1, max_length=36)
+    amount: Decimal = Field(..., gt=0, max_digits=18, decimal_places=2)
+    pay_no: str = Field(..., min_length=1, max_length=64)
+    pay_date: date
+    currency: Literal["CNY"]
+    pay_method: Literal["BANK_TRANSFER"]
+    bank_ref_no: str = Field(..., min_length=1, max_length=96)
+    remark: str | None = Field(None, max_length=512)
+    idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+
+class DemoPaymentOut(BaseModel):
+    id: str
+    pay_no: str
+    client_id: str
+    pay_date: date
+    currency: str
+    amount: Decimal
+    pay_method: str
+    bank_ref_no: str
+    remark: str | None = None
+
+
+class DemoPaymentLineOut(BaseModel):
+    id: str
+    payment_id: str
+    case_id: str
+    raw_amount: Decimal
+    allocated_amt: Decimal
+    balance_amt: Decimal
+    status: str
+
+
+class DemoBankReceiptResponse(BaseModel):
+    payment: DemoPaymentOut
+    line: DemoPaymentLineOut
+    bill: BillDetailResponse
+    target_bill_id: str
+    idempotency_key: str
+    reused: bool
+
+
+class DemoFullOffsetRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    payment_line_id: str = Field(..., min_length=1, max_length=36)
+    bill_id: str = Field(..., min_length=1, max_length=36)
+    offset_amt: Decimal = Field(..., gt=0, max_digits=18, decimal_places=2)
+    offset_date: date
+    idempotency_key: str = Field(..., min_length=1, max_length=96)
+
+
+class DemoOffsetOut(BaseModel):
+    id: str
+    payment_line_id: str
+    bill_id: str
+    offset_amt: Decimal
+    offset_date: date
+    is_reversed: bool
+
+
+class DemoCaseReceiptOut(BaseModel):
+    id: str
+    case_id: str
+    fee_type: str
+    fee_code: str
+    currency: str
+    receivable_amt: Decimal
+    received_amt: Decimal
+    last_receipt_date: date
+
+
+class DemoFullOffsetResponse(BaseModel):
+    offset: DemoOffsetOut
+    bill: BillDetailResponse
+    line: DemoPaymentLineOut
+    case_receipt: DemoCaseReceiptOut
+    idempotency_key: str
+    reused: bool
+
+
 class PaymentSchema(BaseModel):
     """Schema for recording payments."""
 
