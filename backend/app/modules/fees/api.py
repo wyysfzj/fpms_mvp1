@@ -17,6 +17,12 @@ from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.documents.models import DocumentEvidenceVersion
+from app.modules.fees.demo_service import create_demo_service_obligation, get_demo_service_item
+from app.modules.fees.demo_service_schemas import (
+    DemoServiceItemOut,
+    DemoServiceObligationIn,
+    DemoServiceObligationOut,
+)
 from app.modules.fees.fee_reduction import FeeReductionValidationError
 from app.modules.fees.fee_reduction_approval_schemas import (
     FeeReductionApprovalCreateIn,
@@ -100,6 +106,49 @@ def _service_price_book_runtime_profile() -> str:
 
 def _service_price_book_utcnow() -> datetime:
     return datetime.utcnow()
+
+
+@router.get(
+    "/fees/demo-service-item",
+    response_model=DemoServiceItemOut,
+    summary="Read the validated local-demo service item",
+)
+def get_local_demo_service_item(
+    _perm: None = Depends(require_perm("Fee.Read")),
+) -> DemoServiceItemOut:
+    return DemoServiceItemOut.model_validate(get_demo_service_item())
+
+
+@router.post(
+    "/fees/demo-service-obligations",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DemoServiceObligationOut,
+    summary="Create a local-demo service obligation",
+)
+def post_local_demo_service_obligation(
+    payload: DemoServiceObligationIn,
+    response: Response,
+    _perm: None = Depends(require_perm("Fee.Edit")),
+    current_user: T_User = current_user_dep,
+    db: Session = Depends(get_db),
+) -> DemoServiceObligationOut:
+    try:
+        result = create_demo_service_obligation(
+            db,
+            case_id=str(payload.case_id),
+            item_code=payload.item_code,
+            actor_id=str(current_user.id),
+            idempotency_key=payload.idempotency_key,
+            recognized_at=_service_price_book_utcnow(),
+        )
+        output = DemoServiceObligationOut.model_validate(result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if result.reused:
+        response.status_code = status.HTTP_200_OK
+    return output
 
 
 def _get_client_display_name(client: Client) -> str | None:
