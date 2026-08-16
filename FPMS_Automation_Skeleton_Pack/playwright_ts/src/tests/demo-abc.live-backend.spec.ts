@@ -17,7 +17,7 @@ test("@demo-abc visible customer AR receipt and offset closes exactly once", asy
     const formItems = page.locator(".el-form-item");
     await formItems.nth(0).locator("input").fill(process.env.FPMS_ADMIN_USERNAME || "");
     await formItems.nth(1).locator("input").fill(process.env.FPMS_ADMIN_PASSWORD || "");
-    await page.getByRole("button", { name: "登录" }).click();
+    await page.getByRole("button", { name: "登 录" }).click();
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 
@@ -39,7 +39,7 @@ test("@demo-abc visible customer AR receipt and offset closes exactly once", asy
     await page.getByRole("option", { name: clientName }).click();
     await page.getByText("控制标记", { exact: true }).click();
     const reductionField = page.locator(".el-form-item").filter({ hasText: "费用减缓比例" });
-    await reductionField.getByRole("combobox").click();
+    await reductionField.locator(".el-select__wrapper").click();
     await page.getByRole("option", { name: "不减免（0）" }).click();
     await page.getByRole("button", { name: "创建案件" }).click();
     await expect(page).toHaveURL(/\/cases$/);
