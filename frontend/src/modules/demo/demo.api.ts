@@ -154,7 +154,8 @@ export async function createDemoDraft(
 }
 
 export async function lockDemoDraft(draftId: string): Promise<DemoDraft> {
-  return (await http.post<DemoDraft>(`/fees/drafts/${draftId}/lock`)).data
+  await http.post(`/fees/drafts/${draftId}/lock`)
+  return (await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data
 }
 
 export async function createDemoBill(

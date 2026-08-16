@@ -37,5 +37,10 @@ assert.ok(page.includes('manifest_sha256'))
 assert.ok(page.includes('idempotencyKeys'))
 assert.ok(!page.includes('amount || 0'))
 assert.ok(!page.includes('Number('))
+assert.match(
+  api,
+  /http\.post\(`\/fees\/drafts\/\$\{draftId\}\/lock`\)[\s\S]*http\.get<DemoDraft>\(`\/fees\/drafts\/\$\{draftId\}`\)/,
+  'draft lock acknowledgement must be reconciled with the authoritative draft detail',
+)
 
 console.log('demo ABC frontend source contract OK')
