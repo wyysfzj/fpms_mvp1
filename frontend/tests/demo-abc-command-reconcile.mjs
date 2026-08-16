@@ -39,6 +39,45 @@ assert.equal(helper.classifyCommandReadStatus(202), 'IN_PROGRESS')
 assert.equal(helper.classifyCommandReadStatus(404), 'ABSENT')
 assert.equal(helper.classifyCommandReadStatus(409), 'INVALID')
 
+let commandReads = 0
+const completed = await helper.resolveCommandMutationResponse(
+  { status: 202, data: { status: 'IN_PROGRESS' } },
+  async () => {
+    commandReads += 1
+    return commandReads === 1
+      ? { status: 202, data: { status: 'IN_PROGRESS' } }
+      : { status: 200, data: { result: 'durable' } }
+  },
+  (value) => value.result,
+  async () => {},
+)
+assert.equal(completed, 'durable')
+assert.equal(commandReads, 2)
+
+let lockReads = 0
+await assert.rejects(
+  helper.reconcileUnknownMutationResult(
+    { isAxiosError: true, response: { status: 409 } },
+    async () => {
+      lockReads += 1
+      return { status: 'LOCKED' }
+    },
+    (value) => value.status === 'LOCKED',
+  ),
+)
+assert.equal(lockReads, 0)
+
+const reconciledLock = await helper.reconcileUnknownMutationResult(
+  { isAxiosError: true, response: undefined },
+  async () => {
+    lockReads += 1
+    return { status: 'LOCKED' }
+  },
+  (value) => value.status === 'LOCKED',
+)
+assert.equal(reconciledLock.status, 'LOCKED')
+assert.equal(lockReads, 1)
+
 const api = await readFile(new URL('../src/modules/demo/demo.api.ts', import.meta.url), 'utf8')
 for (const endpoint of [
   '/bills/from-drafts/idempotency/',
@@ -48,7 +87,8 @@ for (const endpoint of [
   assert.ok(api.includes(endpoint), `missing durable command reconciliation ${endpoint}`)
 }
 assert.match(api, /if \(!shouldReconcileUnknownCommand\(error\)\) throw error/)
-assert.match(api, /classification === 'IN_PROGRESS'/)
 assert.match(api, /classification === 'ABSENT'/)
+assert.match(api, /resolveCommandMutationResponse/)
+assert.match(api, /reconcileUnknownMutationResult/)
 
 console.log('demo ABC command reconciliation behavior contract OK')

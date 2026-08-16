@@ -33,6 +33,7 @@ const baseBill = {
     {
       id: '55555555-5555-4555-8555-555555555555',
       fee_type: 'SERVICE',
+      fee_code: 'DEMO_SERVICE_1',
       amount: '1200.00',
     },
   ],
@@ -167,6 +168,7 @@ for (const mutation of [
   { line: { ...offsetResponse.line, allocated_amt: '1199.00' } },
   { bill: { ...offsetResponse.bill, status: 'UNSETTLED' } },
   { case_receipt: { ...offsetResponse.case_receipt, case_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } },
+  { case_receipt: { ...offsetResponse.case_receipt, fee_code: 'DEMO_SERVICE_WRONG' } },
   { case_receipt: { ...offsetResponse.case_receipt, received_amt: '1199.00' } },
   { case_receipt: { ...offsetResponse.case_receipt, last_receipt_date: '2026-08-18' } },
 ]) {

@@ -9,6 +9,8 @@ import {
 } from './demo.contract'
 import {
   classifyCommandReadStatus,
+  reconcileUnknownMutationResult,
+  resolveCommandMutationResponse,
   shouldReconcileUnknownCommand,
 } from './command-reconcile'
 
@@ -65,7 +67,7 @@ export interface DemoBillDetail {
   bill_date: string
   due_date?: string
   source_draft_ids: string[]
-  items: Array<{ id: string; fee_type: string; amount: string }>
+  items: Array<{ id: string; fee_type: string; fee_code: string; amount: string }>
 }
 
 export interface DemoPaymentLine {
@@ -173,15 +175,20 @@ export async function lockDemoDraft(draftId: string): Promise<DemoDraft> {
   try {
     await http.post(`/fees/drafts/${draftId}/lock`)
   } catch (error) {
-    try {
-      const draft = parseDemoDraft((await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data)
-      if (draft.status === 'LOCKED') return draft
-    } catch {
-      // Preserve the mutation error when durable state cannot be established.
-    }
-    throw error
+    return reconcileUnknownMutationResult(
+      error,
+      async () =>
+        parseDemoDraft((await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data),
+      (draft) => draft.status === 'LOCKED',
+    )
   }
   return parseDemoDraft((await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data)
+}
+
+async function readCommand(endpoint: string) {
+  return http.get(endpoint, {
+    validateStatus: (status) => status === 200 || status === 202 || status === 404,
+  })
 }
 
 async function reconcileUnknownCommand<T>(
@@ -190,25 +197,14 @@ async function reconcileUnknownCommand<T>(
   parse: (value: unknown) => T,
 ): Promise<T> {
   if (!shouldReconcileUnknownCommand(error)) throw error
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const response = await http.get(endpoint, {
-        validateStatus: (status) => status === 200 || status === 202 || status === 404,
-      })
-      const classification = classifyCommandReadStatus(response.status)
-      if (classification === 'COMPLETED') return parse(response.data)
-      if (classification === 'ABSENT') throw error
-      if (classification === 'IN_PROGRESS') {
-        await new Promise((resolve) => window.setTimeout(resolve, 100))
-        continue
-      }
-      throw error
-    } catch (reconcileError) {
-      if (reconcileError === error) throw error
-      throw error
-    }
+  try {
+    const response = await readCommand(endpoint)
+    const classification = classifyCommandReadStatus(response.status)
+    if (classification === 'ABSENT') throw error
+    return await resolveCommandMutationResponse(response, () => readCommand(endpoint), parse)
+  } catch {
+    throw error
   }
-  throw error
 }
 
 export async function createDemoBill(
@@ -218,25 +214,24 @@ export async function createDemoBill(
   dueDate: string,
   idempotencyKey: string,
 ): Promise<{ bill: DemoBillDetail; idempotency_key: string; reused: boolean }> {
+  const endpoint = `/bills/from-drafts/idempotency/${encodeURIComponent(idempotencyKey)}`
+  let response
   try {
-    return parseDemoBillCommandResponse(
-      (
-        await http.post('/bills/demo-from-draft', {
-          draft_id: draftId,
-          bill_no: billNo,
-          bill_date: billDate,
-          due_date: dueDate,
-          idempotency_key: idempotencyKey,
-        })
-      ).data,
-    )
+    response = await http.post('/bills/demo-from-draft', {
+      draft_id: draftId,
+      bill_no: billNo,
+      bill_date: billDate,
+      due_date: dueDate,
+      idempotency_key: idempotencyKey,
+    })
   } catch (error) {
-    return reconcileUnknownCommand(
-      `/bills/from-drafts/idempotency/${encodeURIComponent(idempotencyKey)}`,
-      error,
-      parseDemoBillCommandResponse,
-    )
+    return reconcileUnknownCommand(endpoint, error, parseDemoBillCommandResponse)
   }
+  return resolveCommandMutationResponse(
+    response,
+    () => readCommand(endpoint),
+    parseDemoBillCommandResponse,
+  )
 }
 
 export async function createDemoBankReceipt(
@@ -246,29 +241,28 @@ export async function createDemoBankReceipt(
   payDate: string,
   idempotencyKey: string,
 ): Promise<DemoBankReceiptResponse> {
+  const endpoint = `/payments/idempotency/${encodeURIComponent(idempotencyKey)}`
+  let response
   try {
-    return parseDemoBankReceiptResponse(
-      (
-        await http.post<DemoBankReceiptResponse>('/payments/demo-bank-receipts', {
-          target_bill_id: bill.id,
-          amount: bill.balance,
-          pay_no: payNo,
-          pay_date: payDate,
-          currency: 'CNY',
-          pay_method: 'BANK_TRANSFER',
-          bank_ref_no: bankRefNo,
-          remark: 'ABC 本地演示客户回款',
-          idempotency_key: idempotencyKey,
-        })
-      ).data,
-    )
+    response = await http.post<DemoBankReceiptResponse>('/payments/demo-bank-receipts', {
+      target_bill_id: bill.id,
+      amount: bill.balance,
+      pay_no: payNo,
+      pay_date: payDate,
+      currency: 'CNY',
+      pay_method: 'BANK_TRANSFER',
+      bank_ref_no: bankRefNo,
+      remark: 'ABC 本地演示客户回款',
+      idempotency_key: idempotencyKey,
+    })
   } catch (error) {
-    return reconcileUnknownCommand(
-      `/payments/idempotency/${encodeURIComponent(idempotencyKey)}`,
-      error,
-      parseDemoBankReceiptResponse,
-    )
+    return reconcileUnknownCommand(endpoint, error, parseDemoBankReceiptResponse)
   }
+  return resolveCommandMutationResponse(
+    response,
+    () => readCommand(endpoint),
+    parseDemoBankReceiptResponse,
+  )
 }
 
 export async function createDemoFullOffset(
@@ -277,23 +271,22 @@ export async function createDemoFullOffset(
   offsetDate: string,
   idempotencyKey: string,
 ): Promise<DemoOffsetResponse> {
+  const endpoint = `/offsets/idempotency/${encodeURIComponent(idempotencyKey)}`
+  let response
   try {
-    return parseDemoOffsetResponse(
-      (
-        await http.post<DemoOffsetResponse>('/offsets/demo-full', {
-          payment_line_id: paymentLine.id,
-          bill_id: bill.id,
-          offset_amt: paymentLine.balance_amt,
-          offset_date: offsetDate,
-          idempotency_key: idempotencyKey,
-        })
-      ).data,
-    )
+    response = await http.post<DemoOffsetResponse>('/offsets/demo-full', {
+      payment_line_id: paymentLine.id,
+      bill_id: bill.id,
+      offset_amt: paymentLine.balance_amt,
+      offset_date: offsetDate,
+      idempotency_key: idempotencyKey,
+    })
   } catch (error) {
-    return reconcileUnknownCommand(
-      `/offsets/idempotency/${encodeURIComponent(idempotencyKey)}`,
-      error,
-      parseDemoOffsetResponse,
-    )
+    return reconcileUnknownCommand(endpoint, error, parseDemoOffsetResponse)
   }
+  return resolveCommandMutationResponse(
+    response,
+    () => readCommand(endpoint),
+    parseDemoOffsetResponse,
+  )
 }

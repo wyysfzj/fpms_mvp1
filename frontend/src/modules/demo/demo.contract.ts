@@ -132,7 +132,7 @@ export interface DemoBillDetail {
   bill_date: string
   due_date?: string
   source_draft_ids: string[]
-  items: Array<{ id: string; fee_type: 'SERVICE'; amount: string }>
+  items: Array<{ id: string; fee_type: 'SERVICE'; fee_code: string; amount: string }>
 }
 
 export interface DemoPaymentLine {
@@ -262,6 +262,7 @@ export function parseDemoBillDetail(value: unknown): DemoBillDetail {
   const item = record(row.items[0], 'bill.items[0]')
   id(item.id, 'bill.items[0].id')
   literal(item.fee_type, ['SERVICE'], 'bill.items[0].fee_type')
+  string(item.fee_code, 'bill.items[0].fee_code')
   const itemAmount = money(item.amount, 'bill.items[0].amount')
   equal(totalGov, '0.00', 'bill.total_gov')
   equal(totalMisc, '0.00', 'bill.total_misc')
@@ -336,7 +337,7 @@ export function parseDemoOffsetResponse(value: unknown): DemoOffsetResponse {
   id(receipt.id, 'offset_response.case_receipt.id')
   const receiptCaseId = id(receipt.case_id, 'offset_response.case_receipt.case_id')
   literal(receipt.fee_type, ['SERVICE'], 'offset_response.case_receipt.fee_type')
-  string(receipt.fee_code, 'offset_response.case_receipt.fee_code')
+  const receiptFeeCode = string(receipt.fee_code, 'offset_response.case_receipt.fee_code')
   literal(receipt.currency, ['CNY'], 'offset_response.case_receipt.currency')
   const receivableAmount = money(
     receipt.receivable_amt,
@@ -364,6 +365,7 @@ export function parseDemoOffsetResponse(value: unknown): DemoOffsetResponse {
   equal(bill.balance, '0.00', 'offset_response.bill.balance')
   equal(bill.amount, offsetAmount, 'offset_response.bill.amount')
   equal(receiptCaseId, bill.case_id, 'offset_response.case_receipt.case_id')
+  equal(receiptFeeCode, bill.items[0].fee_code, 'offset_response.case_receipt.fee_code')
   equal(receivableAmount, offsetAmount, 'offset_response.case_receipt.receivable_amt')
   equal(receivedAmount, offsetAmount, 'offset_response.case_receipt.received_amt')
   equal(receiptDate, offsetDate, 'offset_response.case_receipt.last_receipt_date')
