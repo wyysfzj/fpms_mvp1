@@ -58,6 +58,7 @@ def _write_docx(
     marker: bool = True,
     hidden_marker: bool = False,
     style_hidden_marker: bool = False,
+    default_hidden_marker: str | None = None,
     deleted_marker: bool = False,
     external: bool = False,
 ) -> None:
@@ -71,6 +72,10 @@ def _write_docx(
         hidden_child = document.styles.add_style("HiddenMarkerChild", WD_STYLE_TYPE.CHARACTER)
         hidden_child.base_style = hidden_base
         marker_run.style = hidden_child
+    if default_hidden_marker == "paragraph":
+        document.styles["Normal"].font.hidden = True
+    elif default_hidden_marker == "character":
+        document.styles["Default Paragraph Font"].font.hidden = True
     if deleted_marker:
         paragraph = marker_run._r.getparent()
         deleted = OxmlElement("w:del")
@@ -89,7 +94,13 @@ def _write_docx(
             )
 
 
-def _write_pdf(path: Path, *, marker: str = "bilingual", invisible: bool = False) -> None:
+def _write_pdf(
+    path: Path,
+    *,
+    marker: str = "bilingual",
+    invisible: bool = False,
+    font_size: int = 12,
+) -> None:
     writer = PdfWriter()
     page = writer.add_blank_page(width=612, height=792)
     descendant_font = DictionaryObject(
@@ -128,7 +139,9 @@ def _write_pdf(path: Path, *, marker: str = "bilingual", invisible: bool = False
     }[marker]
     encoded = visible.encode("utf-16-be").hex().upper()
     render_mode = "3 Tr " if invisible else ""
-    stream.set_data(f"BT /F1 12 Tf {render_mode}72 720 Td <{encoded}> Tj ET".encode())
+    stream.set_data(
+        f"BT /F1 {font_size} Tf {render_mode}72 720 Td <{encoded}> Tj ET".encode()
+    )
     page[NameObject("/Contents")] = writer._add_object(stream)
     with path.open("wb") as output:
         writer.write(output)
@@ -400,6 +413,18 @@ def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch
     with pytest.raises(DemoBundleError, match="visible demo marker"):
         _load_bundle(root, digest)
 
+    for default_kind in ("paragraph", "character"):
+        root, manifest, _digest = _valid_bundle(
+            tmp_path / f"default-hidden-{default_kind}"
+        )
+        template_path = root / manifest["templates"][0]["path"]
+        _write_docx(template_path, default_hidden_marker=default_kind)
+        manifest["templates"][0]["size_bytes"] = template_path.stat().st_size
+        manifest["templates"][0]["sha256"] = _sha256(template_path.read_bytes())
+        digest = _write_manifest(root, manifest)
+        with pytest.raises(DemoBundleError, match="visible demo marker"):
+            _load_bundle(root, digest)
+
     root, manifest, _digest = _valid_bundle(tmp_path / "style-hidden-marker")
     template_path = root / manifest["templates"][0]["path"]
     _write_docx(template_path, style_hidden_marker=True)
@@ -430,6 +455,15 @@ def test_file_hash_extra_file_and_marker_fail_closed(tmp_path: Path, monkeypatch
     root, manifest, _digest = _valid_bundle(tmp_path / "invisible-pdf")
     evidence_path = root / manifest["evidence"][0]["path"]
     _write_pdf(evidence_path, invisible=True)
+    manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
+    manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
+    digest = _write_manifest(root, manifest)
+    with pytest.raises(DemoBundleError, match="visible bilingual"):
+        _load_bundle(root, digest)
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "zero-font-pdf")
+    evidence_path = root / manifest["evidence"][0]["path"]
+    _write_pdf(evidence_path, font_size=0)
     manifest["evidence"][0]["size_bytes"] = evidence_path.stat().st_size
     manifest["evidence"][0]["sha256"] = _sha256(evidence_path.read_bytes())
     digest = _write_manifest(root, manifest)

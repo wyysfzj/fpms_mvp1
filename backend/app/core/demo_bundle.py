@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import zipfile
 from dataclasses import dataclass
@@ -184,10 +185,17 @@ def _visible_word_text(document_xml: str, styles_xml: str | None) -> str:
         except ElementTree.ParseError as exc:
             raise _error("DOCX styles.xml is invalid") from exc
         style_rows: dict[str, tuple[str | None, bool]] = {}
+        default_style_ids: dict[str, str] = {}
         for style in styles_root.findall(f"{word}style"):
             style_id = style.get(f"{word}styleId")
             if not style_id:
                 continue
+            style_type = style.get(f"{word}type")
+            if (
+                style_type in {"paragraph", "character"}
+                and style.get(f"{word}default", "0").lower() in {"1", "true", "on", "yes"}
+            ):
+                default_style_ids[style_type] = style_id
             based_on = style.find(f"{word}basedOn")
             based_on_id = based_on.get(f"{word}val") if based_on is not None else None
             style_rows[style_id] = (based_on_id, properties_hidden(style.find(f"{word}rPr")))
@@ -219,15 +227,17 @@ def _visible_word_text(document_xml: str, styles_xml: str | None) -> str:
         default_hidden = properties_hidden(default_properties)
     else:
         default_hidden = False
+        default_style_ids = {}
 
     def referenced_style_hidden(
-        properties: ElementTree.Element | None, style_tag: str
+        properties: ElementTree.Element | None,
+        style_tag: str,
+        default_style_type: str,
     ) -> bool:
-        if properties is None:
-            return False
-        reference = properties.find(f"{word}{style_tag}")
+        reference = properties.find(f"{word}{style_tag}") if properties is not None else None
         if reference is None:
-            return False
+            default_style_id = default_style_ids.get(default_style_type)
+            return default_style_id is not None and style_hidden.get(default_style_id, True)
         style_id = reference.get(f"{word}val")
         return style_id is None or style_hidden.get(style_id, True)
 
@@ -241,7 +251,7 @@ def _visible_word_text(document_xml: str, styles_xml: str | None) -> str:
         if node.tag == f"{word}p":
             paragraph_properties = node.find(f"{word}pPr")
             paragraph_style_is_hidden = referenced_style_hidden(
-                paragraph_properties, "pStyle"
+                paragraph_properties, "pStyle", "paragraph"
             ) or properties_hidden(
                 paragraph_properties.find(f"{word}rPr")
                 if paragraph_properties is not None
@@ -254,7 +264,7 @@ def _visible_word_text(document_xml: str, styles_xml: str | None) -> str:
                 or default_hidden
                 or paragraph_style_is_hidden
                 or properties_hidden(properties)
-                or referenced_style_hidden(properties, "rStyle")
+                or referenced_style_hidden(properties, "rStyle", "character")
             )
         if not hidden and node.tag == f"{word}t" and node.text:
             visible.append(node.text)
@@ -406,8 +416,22 @@ def _validate_pdf(path: Path) -> None:
             elif operator in {b"W", b"W*"}:
                 state["clipped"] = True
 
-        def visit_text(text, cm, tm, _font, _font_size) -> None:
+        def visit_text(text, cm, tm, _font, font_size) -> None:
             if not text or state["render_mode"] != 0 or state["clipped"]:
+                return
+            values = [*(float(value) for value in cm), *(float(value) for value in tm)]
+            size = float(font_size)
+            determinant = (
+                (float(cm[0]) * float(cm[3]) - float(cm[1]) * float(cm[2]))
+                * (float(tm[0]) * float(tm[3]) - float(tm[1]) * float(tm[2]))
+            )
+            if (
+                not math.isfinite(size)
+                or size <= 0
+                or not all(math.isfinite(value) for value in values)
+                or not math.isfinite(determinant)
+                or abs(determinant) <= 1e-12
+            ):
                 return
             x = float(tm[4]) * float(cm[0]) + float(tm[5]) * float(cm[2]) + float(cm[4])
             y = float(tm[4]) * float(cm[1]) + float(tm[5]) * float(cm[3]) + float(cm[5])
@@ -433,11 +457,9 @@ def demo_bundle_forbidden_roots(
     configured_storage: str | None,
 ) -> tuple[Path, ...]:
     resolved_bundle = Path(bundle_path).resolve()
-    current_run_name = f"fpms-demo-abc-{run_id}"
-    if any(
-        part.startswith("fpms-demo-abc-") and part != current_run_name
-        for part in resolved_bundle.parts
-    ):
+    if not run_id:
+        raise _error("demo run ID is missing")
+    if any(part.startswith("fpms-demo-abc-") for part in resolved_bundle.parts):
         raise _error("demo bundle must not come from an existing run directory")
     if configured_storage:
         return (Path(configured_storage),)

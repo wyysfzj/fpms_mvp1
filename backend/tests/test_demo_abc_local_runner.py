@@ -94,6 +94,16 @@ def test_validator_and_runner_reject_the_same_prior_run_root(tmp_path: Path, mon
         run_local_demo_abc._preflight()
 
 
+def test_validator_and_runner_reject_matching_run_id_root(tmp_path: Path, monkeypatch):
+    root, _manifest, digest = _bundle(tmp_path / "fpms-demo-abc-same" / "input")
+    _configure(monkeypatch, root, digest, "same")
+
+    with pytest.raises(DemoBundleError, match="existing run directory"):
+        validate_demo_bundle.main()
+    with pytest.raises(DemoBundleError, match="existing run directory"):
+        run_local_demo_abc._preflight()
+
+
 def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
     tmp_path: Path, monkeypatch
 ):
@@ -123,7 +133,7 @@ def test_fresh_bootstrap_seeds_only_two_demo_users_and_rejects_reuse(
         for table in ["t_client", "t_case", "t_template", "t_fee_rate", "t_doc_template"]:
             assert connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
 
-    with pytest.raises(RuntimeError, match="run ID already exists"):
+    with pytest.raises(DemoBundleError, match="existing run directory"):
         run_local_demo_abc.bootstrap_demo_run()
 
     metadata = (result.run_root / "run-metadata.json").read_text()
