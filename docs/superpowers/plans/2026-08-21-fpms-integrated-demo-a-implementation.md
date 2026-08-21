@@ -1,173 +1,143 @@
 # FPMS Integrated Demo A Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Execute with `superpowers:executing-plans`, TDD and the atomic evidence gate, one ordinal at a time.
 
-**Goal:** Deliver one repeatable local demonstration in which one fictional client and one fictional case complete the prior V7 lifecycle journey and then the new runtime SERVICE input, unique AR bill, bank receipt and full offset journey.
+**Goal:** one repeatable local demo where one fictional client/case completes the prior V7
+lifecycle and the new runtime SERVICE input → locked draft → unique AR bill → bank receipt → offset.
 
-**Architecture:** Preserve the accepted local ABC path and add a versioned integrated bundle successor rather than reinterpreting v1. A single visible Playwright contract drives public UI/API surfaces with dynamic identities; backend lifecycle/finance services remain the truth, while the runner creates only accounts/master data and disposable infrastructure. Each real RED becomes one separately materialized atomic task and no already-green product code is changed.
+**Authority:** accepted design
+`docs/superpowers/specs/2026-08-21-fpms-integrated-demo-a-design.md` at
+`d3d6cd4817284663edda257f7d606c82f994f1e4`; approved High report
+`artifacts/FPMS-DEMO-INTEGRATED-A-DESIGN-HIGH-REVIEW-20260821-03/HIGH_REVIEW.md`
+(SHA-256 `6c70874e5060ddcea0a345d92e1573a66efb2ec078d870bbe3becbad75e0ed28`);
+written acceptance `docs/product/v8/customer-decisions/2026-08-21-integrated-demo-a-written-spec-acceptance.txt`.
 
-**Tech Stack:** FastAPI, SQLAlchemy/Alembic, SQLite, Vue 3/TypeScript/Element Plus, Playwright Chromium, Python evidence runner.
+**Non-closure:** customer activation, official-fee truth, production, PostgreSQL, remote deployment,
+security, broad/product/release gates. Synthetic input is always `SYNTHETIC_TEST_ONLY`.
 
----
+## Frozen cross-task contract
 
-## Frozen inputs and boundaries
+Canonical spec:
+`FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a.live-backend.spec.ts`.
+It owns IA-00…IA-18 and one dynamic client/case. Historical `addgap-final-real-path.spec.ts` is
+reference-only and never edited. Canonical controller:
+`scripts/run_demo_integrated_a_rehearsal.py`, created in Task 1 before the first behavioral RED:
 
-- Accepted design: `docs/superpowers/specs/2026-08-21-fpms-integrated-demo-a-design.md` at commit `d3d6cd4817284663edda257f7d606c82f994f1e4`.
-- Design High review: `artifacts/FPMS-DEMO-INTEGRATED-A-DESIGN-HIGH-REVIEW-20260821-03/HIGH_REVIEW.md`, SHA-256 `6c70874e5060ddcea0a345d92e1573a66efb2ec078d870bbe3becbad75e0ed28`.
-- Execution mode: inline, one atomic task at a time. Shared schemas, routers, frontend APIs/routes and SQLite-writing verification are serialized.
-- No direct DB business writes, route mocks, request interception, lifecycle enrichment, fixed business IDs or skipped checkpoints.
-- Synthetic input remains `SYNTHETIC_TEST_ONLY`; actual customer activation is an external gate.
-- No production, PostgreSQL, remote deployment, security, broad product or release closure.
+```text
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact <absolute-dir> --runs <1|2> [--headless]
+```
 
-## File responsibility map
+For every ordered manifest role, the browser must persist and assert:
 
-| Area | Exact files | Responsibility |
-| --- | --- | --- |
-| Integrated input contract | `backend/app/core/demo_bundle.py`, `backend/tests/test_demo_abc_runtime_bundle.py` | Parse both accepted ABC v1 and additive integrated-a-v1; expose immutable template/rate/evidence descriptors. |
-| Runtime metadata/API | `backend/app/modules/fees/demo_service.py`, `backend/app/modules/fees/demo_service_schemas.py`, `backend/tests/test_demo_abc_runtime_bundle.py` | Return exact visible provenance without creating business facts. |
-| Finance presentation | `frontend/src/modules/demo/pages/DemoAbc.vue`, `frontend/src/modules/demo/demo.api.ts`, `frontend/src/modules/demo/demo-contract.ts`, `frontend/tests/demo-abc-contract.mjs` | Display exact template/rate provenance and retain accepted finance actions. |
-| Evidence review recovery | `frontend/src/api/documents.ts`, `frontend/src/modules/documents/components/AttachmentList.vue`, focused document review tests | Consume POST truth/reconcile unknown transport without masking deterministic rejection. |
-| Canonical journey | `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a.live-backend.spec.ts`, optional focused support beside that file | Execute IA-00…IA-18 on one dynamic case using public surfaces. |
-| Static browser contract | `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs` | Reject mocks, DB writes, enrichment, fixed business IDs and skips; require every checkpoint token. |
-| Local runner/evidence | `scripts/run_demo_integrated_a_rehearsal.py`, `backend/scripts/run_local_demo_abc.py` only if a generic profile seam is required, focused runner test | Create two fresh runs, start services, run headed Chromium, export lifecycle/finance postconditions and clean exact roots. |
-| Atomic governance | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-*.md`, task-local `artifacts/**` | Exact closure, RED/GREEN, allowlists, review and acceptance evidence. |
+```text
+role -> manifest path/hash/metadata -> visible-UI attachment id/content hash
+     -> different-reviewer APPROVED evidence-version id/content hash
+     -> exact consuming lifecycle command/result
+```
 
-### Task 1: Materialize the full integrated browser contract and prove RED
+All 12 files use the visible `AttachmentList` upload control and `setInputFiles`; a separate
+reviewer browser context uses the visible review control. Direct attachment/review request calls
+are forbidden. `evidence-role-map.json` proves: final submission → external-submission command and
+activity; receipt/acceptance/preliminary/publication/substantive roles → their exact stored command
+evidence; OA1/OA2 notice/receipt → distinct reviewed ids/hashes, sequences, packages and tasks;
+grant original/replacement → their reviewed ids/hashes and supersession lineage. OA2 also has its
+complete due-date/source/CONFIRMED triple.
 
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01`
+The static contract rejects `page.route`, `route.fulfill`, direct attachment/review request calls,
+`SessionLocal`, `sqlite3`, enrichment, `test.skip`, `markSkeleton` and fixed business UUIDs. It
+requires IA-00…18, all 12 roles, both actors, role-map fields, four old-task mutations and every
+exact final-state field.
 
-**Files:**
-- Create: `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a.live-backend.spec.ts`
-- Create: `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs`
-- Create: `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01.md`
-- Evidence: `artifacts/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01/**`
+Each ordinal owns only its listed paths. Zero-product-diff still commits its task card, focused
+test/contract and evidence. A failure outside the exact owners stops and materializes a separate
+suffix task; it never widens the current allowlist.
 
-- [ ] **Step 1: Write the static contract first**
+Every ordinal uses the exact task/evidence/commit contract below. Each evidence root must contain
+`task.json`, `summary.md`, `git/diff.patch`, `git/rev.txt`, `git/status.txt`, `commands.jsonl`,
+`review/HIGH_REVIEW.md` and `checksums.sha256`; the review binds the exact candidate commit/tree and
+returns `0/0/0` before the commit shown for that ordinal is accepted.
 
-Require every literal `IA-00` through `IA-18`; reject `page.route(`, `route.fulfill(`,
-`SessionLocal`, `sqlite3`, `pdP1LiveSeed`, `enrich`, `test.skip`, `markSkeleton` and fixed UUIDs.
-Require two login identities, the single dynamic `caseId`, bundle-role upload mapping, lifecycle
-tuple assertions, the four superseded-task mutations and final finance assertions.
+| Ordinal | Exact task path | Exact evidence root | Literal commit command |
+| --- | --- | --- | --- |
+| 1 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01/` | `git commit -m "test(demo): freeze integrated scheme A journey"` |
+| 2 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-BUNDLE-SUCCESSOR-20260821-02.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-BUNDLE-SUCCESSOR-20260821-02/` | `git commit -m "feat(demo): add integrated input bundle contract"` |
+| 3 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-PROVENANCE-UI-20260821-03.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-PROVENANCE-UI-20260821-03/` | `git commit -m "feat(demo): show integrated input provenance"` |
+| 4 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-EVIDENCE-REVIEW-20260821-04.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-EVIDENCE-REVIEW-20260821-04/` | `git commit -m "fix(documents): reconcile evidence review commands"` |
+| 5 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-FIRST-OA-20260821-05.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-FIRST-OA-20260821-05/` | `git commit -m "test(demo): close integrated filing and first OA"` |
+| 6 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-SECOND-OA-20260821-06.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-SECOND-OA-20260821-06/` | `git commit -m "test(demo): close receipt gates and second OA"` |
+| 7 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-GRANT-20260821-07.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-GRANT-20260821-07/` | `git commit -m "fix(demo): preserve grant authority boundary"` |
+| 8 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-FINANCE-20260821-08.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-FINANCE-20260821-08/` | `git commit -m "test(demo): connect finance to integrated case"` |
+| 9 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-RUNNER-20260821-09.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-RUNNER-20260821-09/` | `git commit -m "test(demo): harden integrated rehearsal controller"` |
+| 10 | `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-FINAL-20260821-10.md` | `artifacts/FPMS-DEMO-INTEGRATED-A-FINAL-REHEARSAL-20260821-01/` | `git commit -m "chore(demo): freeze integrated final acceptance"` |
 
-- [ ] **Step 2: Run the static contract and observe RED**
+## Task 1 — Browser contract plus executable RED
 
-Run:
+**ID:** `FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01`
+
+**Files:** create canonical live spec; create
+`FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs`;
+create controller; create `backend/tests/test_demo_integrated_a_runner.py`; create exact task card;
+evidence `artifacts/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01/**`.
+
+- [ ] Static/runner RED, then minimal one-run controller and contract-complete spec:
 
 ```bash
 node FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs
+/tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_integrated_a_runner.py
+/Users/cfcc/Library/Python/3.11/bin/ruff check scripts/run_demo_integrated_a_rehearsal.py backend/tests/test_demo_integrated_a_runner.py
 ```
 
-Expected: FAIL because the integrated browser spec does not yet exist.
-
-- [ ] **Step 3: Add the contract-complete Playwright scenario**
-
-Start from the tested helpers in `addgap-final-real-path.spec.ts` and
-`demo-abc.live-backend.spec.ts`, but use one client and one case. The spec must:
-
-- login visibly as operator and obtain a separate reviewer session;
-- create client/contact/case with dynamic suffix;
-- execute and label all IA checkpoints;
-- upload only files located through the integrated manifest role mapping;
-- review every lifecycle evidence version with the separate reviewer;
-- use exact first/second OA due-date triples and distinct IDs;
-- stop grant flow after current-task `PAY`, with zero activated official-fee carriers;
-- continue through the existing demo SERVICE/locked-draft/bill/payment/offset UI;
-- save per-checkpoint JSON plus key screenshots.
-
-- [ ] **Step 4: Run the static contract GREEN**
-
-Expected: PASS, with no browser/backend execution yet.
-
-- [ ] **Step 5: Run one current-candidate browser attempt and preserve behavioral RED**
-
-Run the existing local runner with the integrated spec selected explicitly. Expected first failure:
-the accepted v1 bundle lacks `integrated-a-v1` roles/metadata. If it fails earlier, record the first
-actual checkpoint and do not infer later failures.
-
-- [ ] **Step 6: Commit only the test contract**
+- [ ] Executable behavioral RED (expected first missing integrated bundle; preserve actual first):
 
 ```bash
-git add FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a.* tasks/postdemo/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01.md
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task01 --runs 1 --headless
+```
+
+- [ ] Review/evidence, remove only that temp root, then commit:
+
+```bash
+git add FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a.live-backend.spec.ts FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs scripts/run_demo_integrated_a_rehearsal.py backend/tests/test_demo_integrated_a_runner.py tasks/postdemo/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01.md
 git commit -m "test(demo): freeze integrated scheme A journey"
 ```
 
-### Task 2: Add the integrated runtime-bundle successor
+## Task 2 — Integrated bundle successor
 
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-BUNDLE-SUCCESSOR-20260821-02`
+**ID:** `FPMS-DEMO-INTEGRATED-A-BUNDLE-SUCCESSOR-20260821-02`
 
-**Files:**
-- Modify: `backend/app/core/demo_bundle.py`
-- Modify: `backend/tests/test_demo_abc_runtime_bundle.py`
-- Create: `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-BUNDLE-SUCCESSOR-20260821-02.md`
-- Evidence: `artifacts/FPMS-DEMO-INTEGRATED-A-BUNDLE-SUCCESSOR-20260821-02/**`
+**Files:** modify `backend/app/core/demo_bundle.py`,
+`backend/tests/test_demo_abc_runtime_bundle.py`, controller and runner test; create exact task card;
+evidence `artifacts/FPMS-DEMO-INTEGRATED-A-BUNDLE-SUCCESSOR-20260821-02/**`.
 
-- [ ] **Step 1: Add failing parser tests**
-
-Test the exact 12 ordered roles, sequence-2 metadata, grant original/replacement metadata,
-pairwise-distinct hashes, 13 authority file digests and old-v1 compatibility. Test missing/extra
-role, sequence fallback, hash alias, wrong supersedes role and schema confusion as fail-closed.
-
-- [ ] **Step 2: Run focused RED**
+- [ ] RED: exact 12 roles, OA2, grant original/replacement, pairwise hashes, 13 authority digests,
+v1 compatibility, missing/extra/alias/schema-confusion fail closed.
 
 ```bash
-source /tmp/fpms-demo-python-20260817/bin/activate
-pytest -q backend/tests/test_demo_abc_runtime_bundle.py -k integrated
+/tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_abc_runtime_bundle.py -k integrated
 ```
 
-Expected: FAIL because only `fpms.demo-input-bundle/v1` and eight roles are accepted.
-
-- [ ] **Step 3: Implement the minimal version dispatch**
-
-Keep the current v1 constants and validator byte-compatible. Add an exact integrated-a-v1 role
-table and metadata validator. Extend the immutable snapshot with evidence descriptors containing
-role/path/hash/metadata; do not expose mutable manifest dictionaries. Both versions keep the same
-path, visible-marker, authority, size/hash and forbidden-root protections.
-
-- [ ] **Step 4: Run focused GREEN and Ruff**
+- [ ] Implement exact schema dispatch/immutable descriptors and synthetic fixture builder; no
+business writes. GREEN and advance real RED beyond IA-00:
 
 ```bash
-pytest -q backend/tests/test_demo_abc_runtime_bundle.py
-/Users/cfcc/Library/Python/3.11/bin/ruff check backend/app/core/demo_bundle.py backend/tests/test_demo_abc_runtime_bundle.py
+/tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_abc_runtime_bundle.py backend/tests/test_demo_integrated_a_runner.py
+/Users/cfcc/Library/Python/3.11/bin/ruff check backend/app/core/demo_bundle.py backend/tests/test_demo_abc_runtime_bundle.py scripts/run_demo_integrated_a_rehearsal.py backend/tests/test_demo_integrated_a_runner.py
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task02 --runs 1 --headless
 ```
 
-- [ ] **Step 5: Re-run the browser contract**
+- [ ] Review/evidence/cleanup; commit `feat(demo): add integrated input bundle contract` with only
+the four source/test files and exact task card.
 
-Expected next RED must advance beyond IA-00. Preserve its exact checkpoint/log before Task 3.
+## Task 3 — Visible provenance
 
-- [ ] **Step 6: Independent review and atomic commit**
+**ID:** `FPMS-DEMO-INTEGRATED-A-PROVENANCE-UI-20260821-03`
 
-Commit message: `feat(demo): add integrated input bundle contract`.
+**Files:** `backend/app/modules/fees/demo_service.py`, `demo_service_schemas.py`,
+`frontend/src/modules/demo/pages/DemoAbc.vue`, `frontend/src/modules/demo/demo.api.ts`,
+`frontend/tests/demo-abc-contract.mjs`, exact task card; evidence
+`artifacts/FPMS-DEMO-INTEGRATED-A-PROVENANCE-UI-20260821-03/**`.
 
-### Task 3: Expose exact provenance on the visible finance chapter
-
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-PROVENANCE-UI-20260821-03`
-
-**Files:**
-- Modify: `backend/app/modules/fees/demo_service.py`
-- Modify: `backend/app/modules/fees/demo_service_schemas.py`
-- Modify: `frontend/src/modules/demo/pages/DemoAbc.vue`
-- Modify only if decoder contract requires it: `frontend/src/modules/demo/demo.api.ts`
-- Modify: `frontend/tests/demo-abc-contract.mjs`
-- Create: `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-PROVENANCE-UI-20260821-03.md`
-- Evidence: `artifacts/FPMS-DEMO-INTEGRATED-A-PROVENANCE-UI-20260821-03/**`
-
-- [ ] **Step 1: Add failing API/UI contract assertions**
-
-Assert visible labels and exact values for bundle ID/version/manifest hash, template code/file SHA,
-rate item/source ref/source version/source SHA and disclaimer. Assert `未配置` for official fees and
-that no official fee value enters the total.
-
-- [ ] **Step 2: Run RED**
-
-Expected: backend already returns most fields; frontend contract fails on absent rate source SHA
-and explicit official-fee boundary.
-
-- [ ] **Step 3: Implement only missing presentation fields**
-
-Do not add an admin upload system or persistent activation table. Render immutable values returned
-by `/fees/demo-service-item`; keep hashes selectable/wrappable and preserve Simplified Chinese.
-
-- [ ] **Step 4: Run GREEN**
+- [ ] RED/GREEN: visible bundle id/version/manifest hash, template code/file SHA, rate item/source
+ref/source version/source SHA, disclaimer, and official fee `未配置` excluded from total.
 
 ```bash
 node frontend/tests/demo-abc-contract.mjs
@@ -175,230 +145,178 @@ cd frontend && npm run typecheck
 cd frontend && npx eslint src/modules/demo/pages/DemoAbc.vue src/modules/demo/demo.api.ts
 ```
 
-- [ ] **Step 5: Independent review and commit**
+- [ ] Review/evidence; commit `feat(demo): show integrated input provenance` with exact files.
 
-Commit message: `feat(demo): show integrated input provenance`.
+## Task 4 — Evidence command reconciliation
 
-### Task 4: Close public evidence upload/review reconciliation for the integrated path
+**ID:** `FPMS-DEMO-INTEGRATED-A-EVIDENCE-REVIEW-20260821-04`
 
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-EVIDENCE-REVIEW-20260821-04`
+**Files:** `frontend/src/api/documents.ts`,
+`frontend/src/modules/documents/components/AttachmentList.vue`; create
+`frontend/tests/document-evidence-review-contract.mjs`; exact task card; evidence
+`artifacts/FPMS-DEMO-INTEGRATED-A-EVIDENCE-REVIEW-20260821-04/**`.
 
-**Files:**
-- Modify only on demonstrated RED: `frontend/src/api/documents.ts`
-- Modify only on demonstrated RED: `frontend/src/modules/documents/components/AttachmentList.vue`
-- Add focused test beside the existing document evidence-review frontend contract
-- Create: `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-EVIDENCE-REVIEW-20260821-04.md`
-- Evidence: `artifacts/FPMS-DEMO-INTEGRATED-A-EVIDENCE-REVIEW-20260821-04/**`
+- [ ] RED/GREEN: POST truth, unknown-transport reconciliation with one immutable key/timestamp,
+deterministic 4xx not masked by GET, self-review/wrong-case/hash-drift no-write.
 
-- [ ] **Step 1: Add failing transport/reviewer tests**
+```bash
+node frontend/tests/document-evidence-review-contract.mjs
+cd frontend && npm run typecheck
+cd frontend && npx eslint src/api/documents.ts src/modules/documents/components/AttachmentList.vue
+```
 
-Cover operator upload, different reviewer APPROVE, authoritative POST response, dropped response
-reconciliation with the same immutable key, and deterministic 4xx without GET masking. Self-review,
-wrong case and changed timestamp/key payload must make no lifecycle write.
+- [ ] If already green, record zero-product-diff; otherwise reconcile only unknown transport.
+Review/evidence; commit `fix(documents): reconcile evidence review commands` with exact files.
 
-- [ ] **Step 2: Run RED and identify whether the current accepted fix already closes it**
+## Task 5 — Filing and first OA
 
-If all focused tests pass, create zero-product-diff evidence and do not edit the two product files.
-Otherwise preserve the exact failing trace.
+**ID:** `FPMS-DEMO-INTEGRATED-A-FIRST-OA-20260821-05`
 
-- [ ] **Step 3: Apply the minimum reconciliation change**
+**Files:** canonical spec; create `backend/tests/test_demo_integrated_first_oa.py`; exact possible
+owners `backend/app/modules/cases/service.py`, `backend/app/modules/official_workflows/service.py`,
+`backend/app/modules/official_workflows/filing_evidence_resolver.py`,
+`backend/app/modules/documents/lifecycle_evidence_adapters.py`; exact task card; evidence
+`artifacts/FPMS-DEMO-INTEGRATED-A-FIRST-OA-20260821-05/**`.
 
-Consume the POST projection. Only unknown transport outcomes may query durable evidence state; do
-not turn 400/409 into an old success. Reuse one timestamp and idempotency key for one UI intent.
+- [ ] RED/GREEN IA-01…06: client/contact/case, exact 60-row catalog, existing-first filing,
+prerequisites, reviewed submission binding/activity, OA1 five-surface triple, reused package,
+OA_OUT with task OPEN.
 
-- [ ] **Step 4: Run focused tests, typecheck and scoped lint**
+```bash
+/tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_integrated_first_oa.py
+node FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task05 --runs 1 --headless
+```
 
-- [ ] **Step 5: Independent review and commit (or zero-diff PASS)**
+- [ ] Edit only an exact failing owner or record zero-product-diff; review/evidence/cleanup; commit
+`test(demo): close integrated filing and first OA` with the listed files.
 
-### Task 5: Execute one-case filing and first-OA lifecycle
+## Task 6 — Receipt gates and OA2
 
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-FIRST-OA-20260821-05`
+**ID:** `FPMS-DEMO-INTEGRATED-A-SECOND-OA-20260821-06`
 
-**Files:**
-- Primary test owner: `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a.live-backend.spec.ts`
-- Modify product files only when a focused RED identifies the exact owner under
-  `backend/app/modules/official_workflows/**`, `backend/app/modules/documents/**`,
-  `backend/app/modules/cases/**` or the corresponding frontend page/API.
-- Create the exact task card after the first failing checkpoint freezes the allowlist.
+**Files:** canonical spec; create `backend/tests/test_demo_integrated_second_oa.py`; exact possible
+owners `backend/app/modules/official_workflows/service.py`,
+`backend/app/modules/documents/lifecycle_evidence_adapters.py`,
+`backend/app/modules/documents/api.py`; exact task card; evidence
+`artifacts/FPMS-DEMO-INTEGRATED-A-SECOND-OA-20260821-06/**`.
 
-- [ ] **Step 1: Run IA-01…IA-06 against a fresh database**
+- [ ] RED/GREEN IA-07…09: two invalid receipt classes no-write; valid receipt closes only target;
+OA2 uses mapped sequence-2 notice/receipt ids/hashes, complete triple and distinct identities;
+sequence-1 reuse/incomplete triple no-write.
 
-Assert client/contact/case, 60-row catalog, existing-first filing package, every filing prerequisite
-projection, first OA five-surface due-date triple, reused OA resolve and OA_OUT with task still OPEN.
+```bash
+/tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_integrated_second_oa.py
+node FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task06 --runs 1 --headless
+```
 
-- [ ] **Step 2: For each first failure, write a focused backend/frontend RED before product code**
+- [ ] Exact owner or zero-product-diff; review/evidence/cleanup; commit
+`test(demo): close receipt gates and second OA` with listed files.
 
-Do not combine unrelated lifecycle events. If more than one owner fails, materialize sequential
-`-05A`, `-05B` tasks rather than widening an allowlist.
+## Task 7 — Grant replacement boundary
 
-- [ ] **Step 3: Implement the minimum owner-local fix and run its focused GREEN**
+**ID:** `FPMS-DEMO-INTEGRATED-A-GRANT-20260821-07`
 
-- [ ] **Step 4: Re-run IA-01…IA-06 from a new run ID**
+**Files:** canonical spec; create `backend/tests/test_demo_integrated_grant.py`; exact possible owners
+`backend/app/modules/grant_fees/service.py`, `api.py`, `schemas.py`,
+`backend/app/modules/documents/lifecycle_evidence_adapters.py`, `frontend/src/api/grantFees.ts`;
+exact task card; evidence `artifacts/FPMS-DEMO-INTEGRATED-A-GRANT-20260821-07/**`.
 
-Expected: PASS without direct DB writes, fixed business IDs or enrichment.
+- [ ] RED/GREEN IA-10…12: mapped original/replacement reviewed ids/hashes reach dispatch; exact
+lineage; one actionable task; four old-task mutations 409/no-write; current PAY once; zero official
+fee item/obligation/draft/payable.
 
-- [ ] **Step 5: Independent review and atomic commit(s)**
+```bash
+/tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_integrated_grant.py
+node FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task07 --runs 1 --headless
+```
 
-### Task 6: Close receipt gates and the independent second OA
+- [ ] Missing official-fee authority stays CONFIG_REQUIRED/no-write. Exact owner or zero-product-
+diff; review/evidence/cleanup; commit `fix(demo): preserve grant authority boundary`.
 
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-SECOND-OA-20260821-06`
+## Task 8 — Same-case finance
 
-**Files:**
-- Primary test owner: integrated Playwright spec.
-- Likely focused owners, only after RED: `backend/app/modules/official_workflows/service.py`,
-  `backend/app/modules/documents/lifecycle_evidence_adapters.py`, relevant schemas/API and focused
-  tests; frontend OA/document pages only for an observed UI blocker.
+**ID:** `FPMS-DEMO-INTEGRATED-A-FINANCE-20260821-08`
 
-- [ ] **Step 1: Run IA-07…IA-09**
+**Files:** canonical spec; `frontend/src/modules/demo/pages/DemoAbc.vue`, `demo.api.ts`;
+`backend/app/modules/fees/demo_service.py`, `demo_service_schemas.py`;
+`backend/tests/test_demo_abc_runtime_service_draft.py`,
+`test_demo_abc_unique_ar_bill.py`, `test_demo_abc_payment_offset.py`; exact task card; evidence
+`artifacts/FPMS-DEMO-INTEGRATED-A-FINANCE-20260821-08/**`.
 
-Cross-case and same-case-wrong-source receipts must preserve counts/state. Correct receipt archives
-only its package/task. Sequence-2 notice must use its own bundle hash, exact due-date triple and new
-source/package/task/OA_OUT/receipt identities; sequence-1 reuse and incomplete triple must no-write.
+- [ ] RED/GREEN IA-13…17 on IA-02 case: one SERVICE obligation/LOCKED draft, manifest amount,
+unique/reused bill, bank receipt, one offset, SETTLED/FULLY_ALLOCATED, zero balances, matching
+CaseReceipt, route identity after reload; official fee unavailable, not zero.
 
-- [ ] **Step 2: Write one owner-local RED for the first actual failure**
+```bash
+/tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_abc_runtime_service_draft.py backend/tests/test_demo_abc_unique_ar_bill.py backend/tests/test_demo_abc_payment_offset.py
+node frontend/tests/demo-abc-contract.mjs
+cd frontend && npm run typecheck
+cd frontend && npx eslint src/modules/demo/pages/DemoAbc.vue src/modules/demo/demo.api.ts
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task08 --runs 1 --headless
+```
 
-- [ ] **Step 3: Implement minimum GREEN and rerun the focused contract**
+- [ ] Exact owner or zero-product-diff; review/evidence/cleanup; commit
+`test(demo): connect finance to integrated case`.
 
-- [ ] **Step 4: Re-run IA-07…IA-09 on a new run ID**
+## Task 9 — Two-run controller
 
-- [ ] **Step 5: Independent review and atomic commit(s)**
+**ID:** `FPMS-DEMO-INTEGRATED-A-RUNNER-20260821-09`
 
-### Task 7: Preserve grant replacement while removing the historical fee shortcut
+**Files:** controller, `backend/tests/test_demo_integrated_a_runner.py`, exact task card; evidence
+`artifacts/FPMS-DEMO-INTEGRATED-A-RUNNER-20260821-09/**`.
 
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-GRANT-20260821-07`
+- [ ] RED/GREEN: clean pin, two roots/business identity sets, headed mode, IA 19/19, maps, exact
+postconditions, redacted commands, screenshots, checksums, cleanup and no listeners.
 
-**Files:**
-- Primary test owner: integrated Playwright spec.
-- Likely focused owners, only after RED: `backend/app/modules/grant_fees/**`, document grant adapter,
-  `frontend/src/api/grantFees.ts`, grant task pages and focused tests.
+```bash
+/tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_integrated_a_runner.py
+/Users/cfcc/Library/Python/3.11/bin/ruff check scripts/run_demo_integrated_a_rehearsal.py backend/tests/test_demo_integrated_a_runner.py
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task09 --runs 2 --headless
+```
 
-- [ ] **Step 1: Run IA-10…IA-12**
+- [ ] Review/evidence/cleanup; commit `test(demo): harden integrated rehearsal controller`.
 
-Create original and replacement documents from distinct bundle evidence hashes. Assert exact
-grant-registration projection, old/new lineage, one actionable task, four old-task mutation gates,
-current-task PAY once and zero activated official-fee item/obligation/draft/payable carriers.
+## Task 10 — Final acceptance
 
-- [ ] **Step 2: Preserve expected historical RED**
+**ID:** `FPMS-DEMO-INTEGRATED-A-FINAL-20260821-10`
 
-The old `addgap-final-real-path.spec.ts` directly generates a grant draft. Update its contract only
-after the new test proves the customer/source boundary: PAY may persist, but missing official-fee
-authority cannot create a payable draft.
+**Files:** create exact final task card; evidence
+`artifacts/FPMS-DEMO-INTEGRATED-A-FINAL-REHEARSAL-20260821-01/**`; independent report
+`artifacts/FPMS-DEMO-INTEGRATED-A-FINAL-HIGH-REVIEW-20260821-01/HIGH_REVIEW.md`.
 
-- [ ] **Step 3: Implement the smallest fail-closed correction if current behavior writes a draft**
+- [ ] Commit task card first as `chore(demo): freeze integrated final acceptance`.
+- [ ] Run only Tasks 2–9 focused gates, then two fresh **headed** runs:
 
-Do not infer an official amount from the SERVICE rate or synthetic notice. Return `409
-CONFIG_REQUIRED`/no-write for the official draft lane while leaving the separate service path
-available.
+```bash
+python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-final --runs 2
+```
 
-- [ ] **Step 4: Run focused grant lifecycle/lineage/instruction regressions and scoped lint**
+- [ ] Both have distinct IDs, IA 19/19, and exact authoritative state:
 
-- [ ] **Step 5: Re-run IA-10…IA-12 and obtain independent review**
+```text
+lifecycle_status = GRANT_REGISTRATION_IN_PROGRESS
+lifecycle_stage = GRANT_REGISTRATION
+application_status = APPLICATION_PENDING
+source_state = CONFIRMED
+legacy_display = GRANT_PENDING
+bill_status = SETTLED
+payment_status = FULLY_ALLOCATED
+bill_balance = 0.00 CNY
+payment_unapplied = 0.00 CNY
+```
 
-### Task 8: Connect the accepted ABC finance chapter to the same lifecycle case
+- [ ] Check hashes/screenshots/maps/no-write negatives; redact secrets/PII/full HAR; clean exact
+temp root; prove clean tree/no 8000/5173 listeners. Independent High must bind exact candidate/tree/
+evidence and return APPROVED 0/0/0.
+- [ ] Claim only `INTEGRATED_TECHNICAL_REHEARSAL_PASS`; customer bundle activation remains external.
 
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-FINANCE-20260821-08`
+## Serial rule
 
-**Files:**
-- Modify only if RED: `frontend/src/modules/demo/pages/DemoAbc.vue`,
-  `frontend/src/modules/demo/demo.api.ts`, accepted demo finance backend services and focused tests.
-- Primary test owner: integrated Playwright spec.
-
-- [ ] **Step 1: Run IA-13…IA-17 using the IA-02 case ID**
-
-Assert one SERVICE obligation, one LOCKED draft, exact bundle amount, unique/reused bill, unique
-bank receipt, one active offset, settled/fully allocated zero balances and matching case receipt.
-Reload all touched pages and assert the displayed IDs match the current route object.
-
-- [ ] **Step 2: Run accepted ABC focused tests before editing**
-
-If they and the integrated slice pass, record a zero-diff PASS. Otherwise add only the failing
-same-case/provenance/route assertion and follow RED→GREEN.
-
-- [ ] **Step 3: Run frontend contracts, typecheck, scoped ESLint and focused backend finance tests**
-
-- [ ] **Step 4: Independent review and atomic commit (or zero-diff PASS)**
-
-### Task 9: Build the canonical integrated two-run rehearsal controller
-
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-RUNNER-20260821-09`
-
-**Files:**
-- Create: `scripts/run_demo_integrated_a_rehearsal.py`
-- Add focused runner test under `backend/tests/` or `scripts/tests/` following current repository style.
-- Create: `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-RUNNER-20260821-09.md`
-
-- [ ] **Step 1: Write runner contract RED**
-
-Require exact candidate clean pin, integrated bundle schema, two distinct run roots and business
-identity sets, headed mode, IA 19/19 results, lifecycle tuples, evidence-role mappings, finance
-counts/states, screenshots, redacted commands, checksums and cleanup/no-listener receipts.
-
-- [ ] **Step 2: Implement by extracting only the reusable mechanics from `run_demo_abc_rehearsal.py`**
-
-Do not mutate/delete old evidence. Use a new artifact family and exact run-root prefix. Export DB
-postconditions read-only after the browser exits; the browser remains the business writer.
-
-- [ ] **Step 3: Run one diagnostic integrated rehearsal**
-
-Expected: all IA checkpoints PASS or the exact first remaining task blocker is captured.
-
-- [ ] **Step 4: Run focused runner tests and Ruff**
-
-- [ ] **Step 5: Independent review and commit**
-
-### Task 10: Final integrated acceptance
-
-**Task ID:** `FPMS-DEMO-INTEGRATED-A-FINAL-20260821-10`
-
-**Files:**
-- Evidence only: `artifacts/FPMS-DEMO-INTEGRATED-A-FINAL-REHEARSAL-20260821-01/**`
-- Final task card and independent High report artifacts.
-
-- [ ] **Step 1: Run the canonical focused backend and frontend gate on the exact candidate**
-
-No broad/product/release gate. Store literal commands, rc, duration, candidate commit/tree and
-scoped results.
-
-- [ ] **Step 2: Run two fresh headed Chromium rehearsals**
-
-Both must show IA 19/19 PASS with different run/client/case/OA/task/draft/bill/payment/offset IDs.
-Each ends at `GRANT_PENDING` lifecycle projection plus `SETTLED` bill,
-`FULLY_ALLOCATED` payment and `0.00 CNY` balances; this is a registration-pending fictional story,
-not patent-in-force truth.
-
-- [ ] **Step 3: Validate evidence and cleanup**
-
-All checksums pass; no credentials/PII/full HAR; worktree is clean; exact run roots removed; no
-listeners remain on 8000/5173.
-
-- [ ] **Step 4: Independent High review**
-
-Reviewer must bind the exact candidate/patch/evidence and return `APPROVED`,
-`P0/P1/P2 = 0/0/0` for the integrated local technical scope.
-
-- [ ] **Step 5: Declare only the exact result**
-
-Allowed claim: `INTEGRATED_TECHNICAL_REHEARSAL_PASS`. Customer-specific output remains blocked
-until an actual customer-authorized runtime bundle passes the separate activation gate. Do not
-claim product/release/production/security/PostgreSQL readiness.
-
-## Execution order and stop rules
-
-The strict order is `1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10`. Tasks 5–8 may produce zero-diff
-evidence when the current implementation already satisfies their RED. They may not run in parallel
-because they share the canonical browser spec and disposable SQLite verification lane.
-
-At every task:
-
-1. materialize exact task path/closure/non-closure/allowlist;
-2. initialize evidence before product edits;
-3. run and preserve correct RED;
-4. implement the minimum GREEN;
-5. run focused tests/lint/scope;
-6. obtain independent High zero-finding review;
-7. finalize evidence and commit before the next ordinal.
-
-A newly discovered independent closure is assigned a suffix task and inserted immediately after its
-parent ordinal. A transport failure is reconciled from durable evidence; completed ordinals are
-never repeated. Three review iterations on the same unresolved contract stop for customer input;
-test/runtime defects do not trigger redesign.
+Order `1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10`. SQLite/shared files are serialized. Each:
+RED → minimum GREEN → focused verification → exact scope → independent High 0/0/0 → evidence →
+commit. Completed ordinals are not repeated. Transport ambiguity reconciles durable state. A new
+owner creates one exact suffix task, not redesign. Three failed reviews of the same contract stop
+for customer input.
