@@ -77,3 +77,11 @@ def test_initial_finance_counts_use_visible_empty_lists_not_response_bodies() ->
         "locator('.el-table__row').count()",
     ):
         assert token in method
+
+
+def test_archive_reads_legacy_case_status_from_case_detail_not_overlay_center() -> None:
+    source = _source()
+    method = source.split("async archiveOa1", 1)[1].split("async completeOa2", 1)[0]
+    assert "center.legacy_case_status" not in method
+    assert "caseDetail.status" in method
+    assert "endsWith(`/api/v1/cases/${this.caseId}`)" in method

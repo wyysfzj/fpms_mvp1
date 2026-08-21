@@ -1030,7 +1030,9 @@ class IntegratedJourneyDriver {
     const tasks = await this.visibleOaTasks(this.caseId, sourceId)
     expect(tasks.count).toBe(1)
     expect(tasks.states).toEqual(['DONE'])
+    const caseDetailPromise = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${this.caseId}`)).then((item) => item.json() as Promise<Json>)
     const overlay = await this.loadLifecycleOverlay(this.caseId)
+    const caseDetail = await caseDetailPromise
     const center = overlay.center_snapshot
     const projection = [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status]
     const history = {
@@ -1046,7 +1048,7 @@ class IntegratedJourneyDriver {
       this.oa1ReceiptId = receipt.id
       this.oa1History = history
     }
-    return { package_status: archived.package.status, closed_task_ids: tasks.ids, projection, legacy_display: center.legacy_case_status, receipt_id: receipt.id, uploaded_outputs: uploadedOutputs, history }
+    return { package_status: archived.package.status, closed_task_ids: tasks.ids, projection, legacy_display: caseDetail.status, receipt_id: receipt.id, uploaded_outputs: uploadedOutputs, history }
   }
 
   async completeOa2(caseId: string): Promise<Json> {
