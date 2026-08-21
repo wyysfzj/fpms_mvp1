@@ -41,6 +41,28 @@ class DemoTemplate:
 
 
 @dataclass(frozen=True)
+class DemoEvidenceMetadata:
+    effective_at: str | None
+    received_at: str | None
+    receipt_kind: str | None
+    official_due_date: str | None
+    official_due_date_source: str | None
+    official_due_date_status: str | None
+    oa_sequence: int | None
+    source_template_code: str | None
+    supersedes_role: str | None
+
+
+@dataclass(frozen=True)
+class DemoEvidence:
+    role: str
+    title_zh_cn: str
+    path: Path
+    sha256: str
+    metadata: DemoEvidenceMetadata
+
+
+@dataclass(frozen=True)
 class DemoBundleSnapshot:
     bundle_root: Path
     bundle_id: str
@@ -54,10 +76,15 @@ class DemoBundleSnapshot:
     local_date: date
     template: DemoTemplate
     service_rate: DemoServiceRate
+    schema_version: str
     evidence_roles: tuple[str, ...]
+    evidence: tuple[DemoEvidence, ...]
 
 
 _CONTRACT_REF = "docs/superpowers/specs/2026-08-15-fpms-local-demo-abc-design.md"
+_INTEGRATED_CONTRACT_REF = (
+    "docs/superpowers/specs/2026-08-21-fpms-integrated-demo-a-design.md"
+)
 _CAPABILITIES = [
     "FICTIONAL_LIFECYCLE_EVIDENCE",
     "INTERNAL_TEMPLATE_PREVIEW",
@@ -72,6 +99,20 @@ _EVIDENCE_ROLES = [
     "SUBSTANTIVE_EXAMINATION_SOURCE",
     "OA_NOTICE",
     "OA_RECEIPT",
+]
+_INTEGRATED_EVIDENCE_ROLES = [
+    "FILING_FINAL_SUBMISSION",
+    "FILING_RECEIPT",
+    "ACCEPTANCE_NOTICE",
+    "PRELIMINARY_EXAMINATION_SOURCE",
+    "PUBLICATION_NOTICE",
+    "SUBSTANTIVE_EXAMINATION_SOURCE",
+    "OA_NOTICE_1",
+    "OA_RECEIPT_1",
+    "OA_NOTICE_2",
+    "OA_RECEIPT_2",
+    "GRANT_NOTICE_ORIGINAL",
+    "GRANT_NOTICE_REPLACEMENT",
 ]
 _TOP_KEYS = {
     "schema_version",
@@ -100,6 +141,7 @@ _METADATA_KEYS = {
     "oa_sequence",
     "source_template_code",
 }
+_INTEGRATED_METADATA_KEYS = _METADATA_KEYS | {"supersedes_role"}
 _HASH_RE = re.compile(r"[0-9a-f]{64}")
 _BUNDLE_ID_RE = re.compile(r"[a-z0-9._-]{1,64}")
 _VERSION_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")
@@ -504,7 +546,9 @@ def demo_bundle_forbidden_roots(
     return ()
 
 
-def _validate_authority(manifest: dict[str, Any], repo_root: Path) -> None:
+def _validate_authority(
+    manifest: dict[str, Any], repo_root: Path, *, contract_ref: str
+) -> None:
     authority = _expect_keys(manifest["authority"], {"decision_ref", "decision_version"}, "authority")
     decision_ref = _safe_relative_path(
         authority["decision_ref"], "authority.decision_ref", "docs/", ".txt"
@@ -525,9 +569,9 @@ def _validate_authority(manifest: dict[str, Any], repo_root: Path) -> None:
     _matches(provenance["source_sha256"], _HASH_RE, "provenance.source_sha256")
 
     contract = _expect_keys(manifest["contract"], {"ref", "sha256"}, "contract")
-    _exact(contract["ref"], _CONTRACT_REF, "contract.ref")
+    _exact(contract["ref"], contract_ref, "contract.ref")
     contract_digest = _matches(contract["sha256"], _HASH_RE, "contract.sha256")
-    contract_path = (repo_root / _CONTRACT_REF).resolve()
+    contract_path = (repo_root / contract_ref).resolve()
     if repo_root.resolve() not in contract_path.parents or not contract_path.is_file():
         raise _error("adopted contract is unavailable")
     if _sha256_file(contract_path) != contract_digest:
@@ -654,10 +698,27 @@ def _validate_authority_record(
     return authority_classification, approved_by, approved_at
 
 
-def _validate_metadata(role: str, metadata_value: Any) -> None:
-    metadata = _expect_keys(metadata_value, _METADATA_KEYS, f"evidence[{role}].metadata")
-    receipt_role = role in {"FILING_RECEIPT", "OA_RECEIPT"}
-    oa_notice = role == "OA_NOTICE"
+def _validate_metadata(
+    role: str, metadata_value: Any, *, integrated: bool
+) -> DemoEvidenceMetadata:
+    expected_keys = _INTEGRATED_METADATA_KEYS if integrated else _METADATA_KEYS
+    metadata = _expect_keys(
+        metadata_value, expected_keys, f"evidence[{role}].metadata"
+    )
+    receipt_roles = (
+        {"FILING_RECEIPT", "OA_RECEIPT_1", "OA_RECEIPT_2"}
+        if integrated
+        else {"FILING_RECEIPT", "OA_RECEIPT"}
+    )
+    oa_roles = {"OA_NOTICE_1", "OA_NOTICE_2"} if integrated else {"OA_NOTICE"}
+    grant_roles = (
+        {"GRANT_NOTICE_ORIGINAL", "GRANT_NOTICE_REPLACEMENT"}
+        if integrated
+        else set()
+    )
+    receipt_role = role in receipt_roles
+    oa_notice = role in oa_roles
+    grant_notice = role in grant_roles
 
     if receipt_role:
         _naive_timestamp(metadata["received_at"], f"evidence[{role}].received_at")
@@ -675,17 +736,51 @@ def _validate_metadata(role: str, metadata_value: Any) -> None:
             "source_template_code",
         }
     elif oa_notice:
-        _exact(metadata["oa_sequence"], 1, "evidence[OA_NOTICE].metadata.oa_sequence")
-        _naive_timestamp(metadata["effective_at"], "evidence[OA_NOTICE].effective_at")
-        _iso_date(metadata["official_due_date"], "evidence[OA_NOTICE].official_due_date")
+        sequence = 2 if role == "OA_NOTICE_2" else 1
+        _exact(
+            metadata["oa_sequence"],
+            sequence,
+            f"evidence[{role}].metadata.oa_sequence",
+        )
+        _naive_timestamp(metadata["effective_at"], f"evidence[{role}].effective_at")
+        _iso_date(metadata["official_due_date"], f"evidence[{role}].official_due_date")
         if metadata["official_due_date_source"] not in {
             "MANUAL_OFFICIAL_NOTICE",
             "IMPORTED_OFFICIAL_NOTICE",
         }:
             raise _error("OA semantic due-date source is invalid")
         _exact(metadata["official_due_date_status"], "CONFIRMED", "OA semantic due-date status")
-        _exact(metadata["source_template_code"], "DEMO_OA_NOTICE_1", "OA semantic template")
+        _exact(
+            metadata["source_template_code"],
+            f"DEMO_OA_NOTICE_{sequence}",
+            "OA semantic template",
+        )
         null_keys = {"received_at", "receipt_kind"}
+    elif grant_notice:
+        _naive_timestamp(metadata["effective_at"], f"evidence[{role}].effective_at")
+        _iso_date(metadata["official_due_date"], f"evidence[{role}].official_due_date")
+        _exact(
+            metadata["official_due_date_source"],
+            "IMPORTED_OFFICIAL_NOTICE",
+            f"evidence[{role}].official_due_date_source",
+        )
+        _exact(
+            metadata["official_due_date_status"],
+            "CONFIRMED",
+            f"evidence[{role}].official_due_date_status",
+        )
+        replacement = role == "GRANT_NOTICE_REPLACEMENT"
+        _exact(
+            metadata["source_template_code"],
+            "DEMO_GRANT_NOTICE_2" if replacement else "DEMO_GRANT_NOTICE_1",
+            f"evidence[{role}].source_template_code",
+        )
+        _exact(
+            metadata["supersedes_role"],
+            "GRANT_NOTICE_ORIGINAL" if replacement else None,
+            f"evidence[{role}].metadata.supersedes_role",
+        )
+        null_keys = {"received_at", "receipt_kind", "oa_sequence"}
     else:
         _naive_timestamp(metadata["effective_at"], f"evidence[{role}].effective_at")
         null_keys = {
@@ -698,9 +793,22 @@ def _validate_metadata(role: str, metadata_value: Any) -> None:
         }
     if not oa_notice:
         null_keys.add("oa_sequence")
+    if integrated and not grant_notice:
+        null_keys.add("supersedes_role")
     for key in null_keys:
         if metadata[key] is not None:
             raise _error(f"evidence[{role}].metadata.{key} must be null")
+    return DemoEvidenceMetadata(
+        effective_at=metadata["effective_at"],
+        received_at=metadata["received_at"],
+        receipt_kind=metadata["receipt_kind"],
+        official_due_date=metadata["official_due_date"],
+        official_due_date_source=metadata["official_due_date_source"],
+        official_due_date_status=metadata["official_due_date_status"],
+        oa_sequence=metadata["oa_sequence"],
+        source_template_code=metadata["source_template_code"],
+        supersedes_role=metadata.get("supersedes_role"),
+    )
 
 
 def load_demo_bundle(
@@ -748,7 +856,19 @@ def load_demo_bundle(
         raise _error("manifest JSON is invalid") from exc
     manifest = _expect_keys(manifest, _TOP_KEYS, "manifest")
 
-    _exact(manifest["schema_version"], "fpms.demo-input-bundle/v1", "schema_version")
+    schema_version = manifest["schema_version"]
+    if schema_version == "fpms.demo-input-bundle/v1":
+        integrated = False
+        purpose = "LOCAL_ABC_E2E"
+        contract_ref = _CONTRACT_REF
+        evidence_roles = _EVIDENCE_ROLES
+    elif schema_version == "fpms.demo-input-bundle/integrated-a-v1":
+        integrated = True
+        purpose = "LOCAL_INTEGRATED_A_E2E"
+        contract_ref = _INTEGRATED_CONTRACT_REF
+        evidence_roles = _INTEGRATED_EVIDENCE_ROLES
+    else:
+        raise _error("schema_version is unsupported")
     bundle_id = _matches(manifest["bundle_id"], _BUNDLE_ID_RE, "bundle_id")
     bundle_version = _matches(manifest["bundle_version"], _VERSION_RE, "bundle_version")
     _exact(manifest["classification"], "DEMO_ONLY", "classification")
@@ -762,7 +882,7 @@ def load_demo_bundle(
         expected_authority_classification,
         "authority classification",
     )
-    _exact(manifest["purpose"], "LOCAL_ABC_E2E", "purpose")
+    _exact(manifest["purpose"], purpose, "purpose")
     valid_from = _iso_date(manifest["valid_from"], "valid_from")
     valid_until = _iso_date(manifest["valid_until"], "valid_until")
     local_date = _current_demo_date()
@@ -770,7 +890,7 @@ def load_demo_bundle(
         raise _error(
             "bundle validity does not include the current Asia/Shanghai local date"
         )
-    _validate_authority(manifest, repo)
+    _validate_authority(manifest, repo, contract_ref=contract_ref)
     _exact(manifest["capabilities"], _CAPABILITIES, "capabilities")
 
     templates = manifest["templates"]
@@ -813,11 +933,14 @@ def load_demo_bundle(
         raise _error("required_variables must be a non-empty sorted unique allowlist")
 
     evidence_rows = manifest["evidence"]
-    if not isinstance(evidence_rows, list) or [row.get("role") for row in evidence_rows if isinstance(row, dict)] != _EVIDENCE_ROLES:
+    if not isinstance(evidence_rows, list) or [
+        row.get("role") for row in evidence_rows if isinstance(row, dict)
+    ] != evidence_roles:
         raise _error("evidence roles or order are invalid")
     expected_files = {"manifest.json", "authority.json", template_relative}
+    evidence_metadata: list[DemoEvidenceMetadata] = []
     for index, row_value in enumerate(evidence_rows):
-        role = _EVIDENCE_ROLES[index]
+        role = evidence_roles[index]
         row = _expect_keys(
             row_value,
             {
@@ -840,7 +963,33 @@ def load_demo_bundle(
         if relative in expected_files:
             raise _error("duplicate bundle file identity")
         expected_files.add(relative)
-        _validate_metadata(role, row["metadata"])
+        evidence_metadata.append(
+            _validate_metadata(role, row["metadata"], integrated=integrated)
+        )
+
+    if integrated:
+        critical_rows = evidence_rows[6:12]
+        if len({row["sha256"] for row in critical_rows}) != len(critical_rows):
+            raise _error("critical evidence hashes must be distinct")
+        oa1, receipt1, oa2, receipt2, original_grant, replacement_grant = critical_rows
+        if any(oa1[key] == oa2[key] for key in ("path", "sha256")) or any(
+            oa1["metadata"][key] == oa2["metadata"][key]
+            for key in ("effective_at", "official_due_date", "source_template_code")
+        ):
+            raise _error("OA2 semantic metadata must be distinct from OA1")
+        if any(receipt1[key] == receipt2[key] for key in ("path", "sha256")) or (
+            receipt1["metadata"]["received_at"]
+            == receipt2["metadata"]["received_at"]
+        ):
+            raise _error("OA2 receipt semantic metadata must be distinct from OA1")
+        if any(
+            original_grant[key] == replacement_grant[key]
+            for key in ("path", "sha256")
+        ) or any(
+            original_grant["metadata"][key] == replacement_grant["metadata"][key]
+            for key in ("effective_at", "official_due_date", "source_template_code")
+        ):
+            raise _error("grant replacement semantic metadata must be distinct")
 
     rates = manifest["rates"]
     if not isinstance(rates, list) or len(rates) != 1:
@@ -941,5 +1090,16 @@ def load_demo_bundle(
             source_sha256=source_sha,
             disclaimer_zh_cn=disclaimer,
         ),
-        evidence_roles=tuple(_EVIDENCE_ROLES),
+        schema_version=schema_version,
+        evidence_roles=tuple(evidence_roles),
+        evidence=tuple(
+            DemoEvidence(
+                role=row["role"],
+                title_zh_cn=row["title_zh_cn"],
+                path=root / row["path"],
+                sha256=row["sha256"],
+                metadata=evidence_metadata[index],
+            )
+            for index, row in enumerate(evidence_rows)
+        ),
     )

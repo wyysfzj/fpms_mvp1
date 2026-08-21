@@ -20,7 +20,6 @@ if str(ROOT) not in sys.path:
 
 from scripts import run_demo_abc_rehearsal as abc  # noqa: E402
 
-
 BACKEND = ROOT / "backend"
 PLAYWRIGHT = ROOT / "FPMS_Automation_Skeleton_Pack" / "playwright_ts"
 SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a.live-backend.spec.ts"

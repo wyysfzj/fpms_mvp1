@@ -35,10 +35,16 @@ def test_runner_selects_only_the_integrated_spec_and_supports_one_or_two_runs():
         module.parse_args(["--artifact", "/tmp/integrated-a", "--runs", "3"])
 
 
-def test_runner_fails_at_the_missing_integrated_bundle_builder(tmp_path: Path):
+def test_runner_builds_the_integrated_bundle_successor(tmp_path: Path):
     module = _module()
-    with pytest.raises(RuntimeError, match="integrated-a-v1 bundle builder is unavailable"):
-        module.build_integrated_bundle(tmp_path)
+    bundle, manifest_sha, authority_sha = module.build_integrated_bundle(tmp_path)
+
+    assert bundle.is_dir()
+    assert len(manifest_sha) == 64
+    assert len(authority_sha) == 64
+    manifest = (bundle / "manifest.json").read_text(encoding="utf-8")
+    assert '"schema_version":"fpms.demo-input-bundle/integrated-a-v1"' in manifest
+    assert manifest.count('"classification":"FICTIONAL_DEMO_EVIDENCE"') == 12
 
 
 def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():

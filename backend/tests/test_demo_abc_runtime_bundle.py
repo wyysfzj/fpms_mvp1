@@ -36,6 +36,11 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_REF = "docs/superpowers/specs/2026-08-15-fpms-local-demo-abc-design.md"
+INTEGRATED_CONTRACT_REF = "docs/superpowers/specs/2026-08-21-fpms-integrated-demo-a-design.md"
+INTEGRATED_DECISION_REF = (
+    "docs/product/v8/customer-decisions/"
+    "2026-08-21-integrated-demo-a-written-spec-acceptance.txt"
+)
 EVIDENCE_ROLES = [
     "FILING_FINAL_SUBMISSION",
     "FILING_RECEIPT",
@@ -45,6 +50,20 @@ EVIDENCE_ROLES = [
     "SUBSTANTIVE_EXAMINATION_SOURCE",
     "OA_NOTICE",
     "OA_RECEIPT",
+]
+INTEGRATED_EVIDENCE_ROLES = [
+    "FILING_FINAL_SUBMISSION",
+    "FILING_RECEIPT",
+    "ACCEPTANCE_NOTICE",
+    "PRELIMINARY_EXAMINATION_SOURCE",
+    "PUBLICATION_NOTICE",
+    "SUBSTANTIVE_EXAMINATION_SOURCE",
+    "OA_NOTICE_1",
+    "OA_RECEIPT_1",
+    "OA_NOTICE_2",
+    "OA_RECEIPT_2",
+    "GRANT_NOTICE_ORIGINAL",
+    "GRANT_NOTICE_REPLACEMENT",
 ]
 
 
@@ -103,8 +122,11 @@ def _write_pdf(
     horizontal_scale: int = 100,
     mixed_horizontal_scale: str | None = None,
     unsafe_operator: str | None = None,
+    unique_text: str | None = None,
 ) -> None:
     writer = PdfWriter()
+    if unique_text is not None:
+        writer.add_metadata({"/Title": unique_text})
     page = writer.add_blank_page(width=612, height=792)
     descendant_font = DictionaryObject(
         {
@@ -208,6 +230,47 @@ def _metadata_for(role: str) -> dict[str, object]:
             official_due_date_status="CONFIRMED",
             source_template_code="DEMO_OA_NOTICE_1",
             oa_sequence=1,
+        )
+    return metadata
+
+
+def _integrated_metadata_for(role: str, ordinal: int) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "effective_at": None,
+        "received_at": None,
+        "receipt_kind": None,
+        "official_due_date": None,
+        "official_due_date_source": None,
+        "official_due_date_status": None,
+        "oa_sequence": None,
+        "source_template_code": None,
+        "supersedes_role": None,
+    }
+    if role in {"FILING_RECEIPT", "OA_RECEIPT_1", "OA_RECEIPT_2"}:
+        metadata["received_at"] = f"2026-08-{ordinal + 1:02d}T10:00:00"
+        metadata["receipt_kind"] = "RECEIPT_PDF"
+        return metadata
+
+    metadata["effective_at"] = f"2026-08-{ordinal + 1:02d}T09:00:00"
+    if role in {"OA_NOTICE_1", "OA_NOTICE_2"}:
+        sequence = 1 if role.endswith("_1") else 2
+        metadata.update(
+            official_due_date=f"2026-{9 if sequence == 1 else 10:02d}-{21 + sequence:02d}",
+            official_due_date_source="MANUAL_OFFICIAL_NOTICE",
+            official_due_date_status="CONFIRMED",
+            oa_sequence=sequence,
+            source_template_code=f"DEMO_OA_NOTICE_{sequence}",
+        )
+    elif role in {"GRANT_NOTICE_ORIGINAL", "GRANT_NOTICE_REPLACEMENT"}:
+        replacement = role == "GRANT_NOTICE_REPLACEMENT"
+        metadata.update(
+            official_due_date="2026-11-24" if replacement else "2026-11-23",
+            official_due_date_source="IMPORTED_OFFICIAL_NOTICE",
+            official_due_date_status="CONFIRMED",
+            source_template_code=(
+                "DEMO_GRANT_NOTICE_2" if replacement else "DEMO_GRANT_NOTICE_1"
+            ),
+            supersedes_role=("GRANT_NOTICE_ORIGINAL" if replacement else None),
         )
     return metadata
 
@@ -351,6 +414,95 @@ def _valid_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
                 "source_version": "2026.08.16",
                 "source_sha256": "b" * 64,
                 "disclaimer_zh_cn": "仅用于本地虚构演示，不是正式报价或官方费用。",
+            }
+        ],
+    }
+    return bundle_root, manifest, _write_manifest(bundle_root, manifest)
+
+
+def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
+    bundle_root = tmp_path / "bundle"
+    templates = bundle_root / "templates"
+    evidence = bundle_root / "evidence"
+    templates.mkdir(parents=True)
+    evidence.mkdir()
+
+    template_path = templates / "integrated-demo-letter.docx"
+    _write_docx(template_path)
+    evidence_rows: list[dict[str, object]] = []
+    for ordinal, role in enumerate(INTEGRATED_EVIDENCE_ROLES):
+        evidence_path = evidence / f"{ordinal + 1:02d}-{role.lower()}.pdf"
+        _write_pdf(evidence_path, unique_text=f"integrated-a-{ordinal + 1:02d}-{role}")
+        evidence_rows.append(
+            {
+                "role": role,
+                "title_zh_cn": f"虚构集成演示证据-{ordinal + 1:02d}",
+                "classification": "FICTIONAL_DEMO_EVIDENCE",
+                "path": f"evidence/{evidence_path.name}",
+                "media_type": "application/pdf",
+                "size_bytes": evidence_path.stat().st_size,
+                "sha256": _sha256(evidence_path.read_bytes()),
+                "metadata": _integrated_metadata_for(role, ordinal),
+            }
+        )
+
+    contract_bytes = (REPO_ROOT / INTEGRATED_CONTRACT_REF).read_bytes()
+    manifest: dict[str, object] = {
+        "schema_version": "fpms.demo-input-bundle/integrated-a-v1",
+        "bundle_id": "fpms-integrated-a",
+        "bundle_version": "2026.08.21",
+        "classification": "DEMO_ONLY",
+        "authority_classification": "SYNTHETIC_TEST_ONLY",
+        "purpose": "LOCAL_INTEGRATED_A_E2E",
+        "valid_from": "2026-08-21",
+        "valid_until": "2026-09-30",
+        "authority": {
+            "decision_ref": INTEGRATED_DECISION_REF,
+            "decision_version": "DEC-INTEGRATED-DEMO-A-20260821",
+        },
+        "provenance": {
+            "label_zh_cn": "本地虚构集成演示输入",
+            "source_ref": "synthetic-integrated-a-input",
+            "source_version": "2026.08.21",
+            "source_sha256": "c" * 64,
+        },
+        "contract": {
+            "ref": INTEGRATED_CONTRACT_REF,
+            "sha256": _sha256(contract_bytes),
+        },
+        "capabilities": [
+            "FICTIONAL_LIFECYCLE_EVIDENCE",
+            "INTERNAL_TEMPLATE_PREVIEW",
+            "SERVICE_PRICE_TO_OBLIGATION",
+        ],
+        "templates": [
+            {
+                "consumer": "DOCUMENT_RENDER",
+                "template_code": "DEMO_INTEGRATED_LETTER_1",
+                "group": "INTERNAL_DEMO",
+                "language": "zh-CN",
+                "path": "templates/integrated-demo-letter.docx",
+                "media_type": (
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                ),
+                "size_bytes": template_path.stat().st_size,
+                "sha256": _sha256(template_path.read_bytes()),
+                "required_variables": ["case_no", "client_name"],
+            }
+        ],
+        "evidence": evidence_rows,
+        "rates": [
+            {
+                "domain": "SERVICE_DEMO_PRICE",
+                "item_code": "DEMO_INTEGRATED_SERVICE_1",
+                "name_zh_cn": "集成演示服务费",
+                "currency": "CNY",
+                "calc_mode": "FIXED",
+                "amount": "1200.00",
+                "source_ref": "synthetic-integrated-a-rate",
+                "source_version": "2026.08.21",
+                "source_sha256": "d" * 64,
+                "disclaimer_zh_cn": "仅用于本地虚构集成演示，不是正式报价或官方费用。",
             }
         ],
     }
@@ -679,4 +831,131 @@ def test_authority_record_is_independently_pinned_and_exact(tmp_path: Path, monk
         json.dumps(authority, ensure_ascii=False, separators=(",", ":")) + "\n"
     )
     with pytest.raises(DemoBundleError, match="source digests"):
+        _load_bundle(root, digest)
+
+
+def test_integrated_bundle_returns_exact_immutable_descriptors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root, manifest, digest = _valid_integrated_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    snapshot = _load_bundle(root, digest)
+
+    assert snapshot.schema_version == "fpms.demo-input-bundle/integrated-a-v1"
+    assert snapshot.bundle_id == "fpms-integrated-a"
+    assert snapshot.evidence_roles == tuple(INTEGRATED_EVIDENCE_ROLES)
+    assert len(snapshot.evidence) == 12
+    assert [row.role for row in snapshot.evidence] == INTEGRATED_EVIDENCE_ROLES
+    assert [row.sha256 for row in snapshot.evidence] == [
+        row["sha256"] for row in manifest["evidence"]
+    ]
+    assert snapshot.evidence[8].metadata.oa_sequence == 2
+    assert snapshot.evidence[8].metadata.source_template_code == "DEMO_OA_NOTICE_2"
+    assert (
+        snapshot.evidence[11].metadata.supersedes_role
+        == "GRANT_NOTICE_ORIGINAL"
+    )
+    with pytest.raises(AttributeError):
+        snapshot.evidence[0].role = "MUTATED"
+
+    authority = json.loads((root / "authority.json").read_text())
+    assert len(authority["file_digests"]) == 13
+
+
+def test_integrated_schema_is_additive_and_does_not_reinterpret_v1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    legacy_root, _legacy_manifest, legacy_digest = _valid_bundle(tmp_path / "legacy")
+    integrated_root, _integrated_manifest, integrated_digest = _valid_integrated_bundle(
+        tmp_path / "integrated"
+    )
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    legacy = _load_bundle(legacy_root, legacy_digest)
+    integrated = _load_bundle(integrated_root, integrated_digest)
+
+    assert legacy.schema_version == "fpms.demo-input-bundle/v1"
+    assert legacy.evidence_roles == tuple(EVIDENCE_ROLES)
+    assert integrated.schema_version == "fpms.demo-input-bundle/integrated-a-v1"
+    assert integrated.evidence_roles == tuple(INTEGRATED_EVIDENCE_ROLES)
+
+
+def test_integrated_roles_missing_extra_alias_and_schema_confusion_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "missing")
+    manifest["evidence"].pop()
+    with pytest.raises(DemoBundleError, match="roles or order"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "extra")
+    manifest["evidence"].append(dict(manifest["evidence"][-1]))
+    with pytest.raises(DemoBundleError, match="roles or order"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "alias")
+    manifest["evidence"][6]["role"] = "OA_NOTICE"
+    with pytest.raises(DemoBundleError, match="roles or order"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+    root, manifest, _digest = _valid_bundle(tmp_path / "schema-confusion")
+    manifest["schema_version"] = "fpms.demo-input-bundle/integrated-a-v1"
+    manifest["purpose"] = "LOCAL_INTEGRATED_A_E2E"
+    manifest["contract"] = {
+        "ref": INTEGRATED_CONTRACT_REF,
+        "sha256": _sha256((REPO_ROOT / INTEGRATED_CONTRACT_REF).read_bytes()),
+    }
+    with pytest.raises(DemoBundleError, match="roles or order"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "unknown-schema")
+    manifest["schema_version"] = "fpms.demo-input-bundle/integrated-a-v2"
+    with pytest.raises(DemoBundleError, match="schema_version"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+
+def test_integrated_critical_hash_and_semantic_fallback_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "hash")
+    first = manifest["evidence"][6]
+    second = manifest["evidence"][8]
+    first_bytes = (root / first["path"]).read_bytes()
+    (root / second["path"]).write_bytes(first_bytes)
+    second["size_bytes"] = len(first_bytes)
+    second["sha256"] = first["sha256"]
+    with pytest.raises(DemoBundleError, match="critical evidence hashes"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "oa-fallback")
+    manifest["evidence"][8]["metadata"]["official_due_date"] = manifest["evidence"][6][
+        "metadata"
+    ]["official_due_date"]
+    with pytest.raises(DemoBundleError, match="OA2 semantic metadata"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "grant-lineage")
+    manifest["evidence"][11]["metadata"]["supersedes_role"] = "OA_NOTICE_2"
+    with pytest.raises(DemoBundleError, match="supersedes_role"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+
+def test_integrated_authority_requires_exactly_thirteen_file_digests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root, _manifest, digest = _valid_integrated_bundle(tmp_path)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+    authority_path = root / "authority.json"
+    authority = json.loads(authority_path.read_text())
+    assert len(authority["file_digests"]) == 13
+    authority["file_digests"].pop()
+    authority_path.write_text(
+        json.dumps(authority, ensure_ascii=False, separators=(",", ":")) + "\n"
+    )
+    with pytest.raises(DemoBundleError, match="file digests"):
         _load_bundle(root, digest)
