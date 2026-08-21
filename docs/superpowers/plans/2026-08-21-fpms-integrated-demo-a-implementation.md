@@ -39,9 +39,10 @@ All 12 files use the visible `AttachmentList` upload control and `setInputFiles`
 reviewer browser context uses the visible review control. Direct attachment/review request calls
 are forbidden. `evidence-role-map.json` proves: final submission → external-submission command and
 activity; receipt/acceptance/preliminary/publication/substantive roles → their exact stored command
-evidence; OA1/OA2 notice/receipt → distinct reviewed ids/hashes, sequences, packages and tasks;
-grant original/replacement → their reviewed ids/hashes and supersession lineage. OA2 also has its
-complete due-date/source/CONFIRMED triple.
+evidence; `FILING_FINAL_SUBMISSION` is the exact final-submission role; OA1/OA2 notice/receipt →
+distinct reviewed ids/hashes, sequences, packages and tasks; grant original/replacement → their
+reviewed ids/hashes and supersession lineage. OA2 also has its complete
+`official_due_date / official_due_date_source / CONFIRMED` triple.
 
 The static contract rejects `page.route`, `route.fulfill`, direct attachment/review request calls,
 `SessionLocal`, `sqlite3`, enrichment, `test.skip`, `markSkeleton` and fixed business UUIDs. It
