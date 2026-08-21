@@ -232,6 +232,10 @@ async function run(step: string, action: () => Promise<void>) {
   }
 }
 
+async function loadBundle() {
+  await run('bundle', async () => { bundle.value = await readDemoServiceItem() })
+}
+
 async function validatePreflight() {
   preflight.value = undefined
   await run('preflight', async () => {

@@ -1447,7 +1447,15 @@ class IntegratedJourneyDriver {
     expect(replayed.reused).toBe(true)
 
     const draftCreated = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/fees/drafts'))
-    const draftRead = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.includes('/api/v1/fees/drafts/'))
+    const draftRead = this.operatorPage.waitForResponse(async (item) => {
+      if (item.status() !== 200 || !new URL(item.url()).pathname.includes('/api/v1/fees/drafts/')) return false
+      try {
+        const body = await item.json() as Json
+        return typeof body.id === 'string' && body.status === 'LOCKED'
+      } catch {
+        return false
+      }
+    })
     await this.operatorPage.getByTestId('create-draft').click()
     const openDraft = await (await draftCreated).json() as Json
     const lockedDraft = await (await draftRead).json() as Json
