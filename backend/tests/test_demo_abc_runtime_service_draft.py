@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import runpy
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,6 +11,7 @@ import pytest
 from app.core import demo_bundle
 from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.fees.models import FeeDraft, FeeItem, FeeObligation
+from app.modules.fees.obligation_service import get_fee_obligation
 from app.modules.masterdata.clients.models import Client
 
 
@@ -48,8 +49,32 @@ def _seed_case(session_factory) -> tuple[str, str]:
                 business_stage="NEW_CASE",
                 official_procedure_stage="NOT_SUBMITTED",
                 legal_status="NOT_ESTABLISHED",
-                lifecycle_revision=0,
+                lifecycle_revision=1,
                 lifecycle_verification_status="CONFIRMED",
+            )
+        )
+        db.flush()
+        db.add(
+            CaseActivityEvent(
+                id=str(uuid4()),
+                case_id=case_id,
+                sequence=1,
+                lane="LIFECYCLE",
+                activity_type="CASE_OPENED",
+                occurred_at=datetime(2026, 8, 1, 9, 0),
+                effective_at=datetime(2026, 8, 1, 9, 0),
+                confirmation_status="CONFIRMED",
+                new_business_stage="NEW_CASE",
+                new_official_procedure_stage="NOT_SUBMITTED",
+                new_legal_status="NOT_ESTABLISHED",
+                actor_id="demo-test-actor",
+                idempotency_key=f"case-opened:{case_id}",
+                payload_json="{}",
+                conflict_lineage_version="V1",
+                conflict_code_count=0,
+                conflict_codes_sha256=(
+                    "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+                ),
             )
         )
         db.commit()
@@ -154,6 +179,8 @@ def test_runtime_service_item_to_pay_locked_draft(
     assert lock_response.status_code == 200, lock_response.text
 
     with session_factory() as db:
+        detail = get_fee_obligation(obligation_id, db)
+        assert detail.id == obligation_id
         assert db.get(FeeDraft, draft_id).status == "LOCKED"
         items = db.query(FeeItem).filter(FeeItem.draft_id == draft_id).all()
         assert len(items) == 1
@@ -166,6 +193,12 @@ def test_runtime_service_item_to_pay_locked_draft(
             .all()
         )
         assert len(source_rows) == 1
+
+    overlay = client.get(
+        f"/api/v1/cases/{case_id}/lifecycle-overlay?after_sequence=0&limit=200",
+        headers=auth_headers,
+    )
+    assert overlay.status_code == 200, overlay.text
 
 
 def test_demo_preflight_requires_validated_input_and_zero_business_counts(
