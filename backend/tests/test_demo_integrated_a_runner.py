@@ -136,6 +136,10 @@ def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
         "const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(request), 'fetch')!; const hiddenSend = descriptor.value.bind(request); await hiddenSend('/documents/fake/attachments', { method: 'POST' })",
         "const uiAlias = page as any; const hiddenTransport = uiAlias[['req', 'uest'].join('')]; const hiddenSend = hiddenTransport[['po', 'st'].join('')]; await hiddenSend('/documents/fake/attachments', {})",
         "const hiddenTransport = (journey as any)[['api', 'Request'].join('')]; const hiddenSend = hiddenTransport[['fe', 'tch'].join('')]; await hiddenSend('/documents/fake/attachments', { method: 'POST' })",
+        'await page.addScriptTag({ content: "void globalThis[\'fe\' + \'tch\'](\'/api/v1/documents/fake/attachments\',{method:\'POST\'})" })',
+        'await page.setContent("<script>void globalThis[\'fe\' + \'tch\'](\'/api/v1/documents/fake/attachments\',{method:\'POST\'})</script>")',
+        "await page.goto('javascript:void globalThis.fetch(\'/api/v1/documents/fake/attachments\')')",
+        "await page.goto('data:text/html,<script>fetch(\'/api/v1/documents/fake/attachments\')</script>')",
     ],
 )
 def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):

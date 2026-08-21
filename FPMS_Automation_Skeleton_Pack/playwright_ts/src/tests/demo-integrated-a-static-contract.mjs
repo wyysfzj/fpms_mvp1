@@ -188,10 +188,32 @@ const forbiddenNetworkMembers = new Set([
   'bind',
   'call',
   'apply',
+  'addScriptTag',
+  'setContent',
 ])
 const allowedDynamicElementAccess = new Set([
   'publicLifecycleApiAllowlist[operation]',
   'expectedConsumerByRole[role]',
+])
+const allowedMemberCalls = new Set([
+  'archiveOa1', 'click', 'close', 'completeFilingAndOa1', 'completeOa2',
+  'createBill', 'createCase', 'createClientAndContact', 'createGrantOriginal',
+  'createOaOut', 'createOffset', 'createPayment', 'createServiceDraft', 'entries',
+  'exerciseGrantGatesAndPay', 'fill', 'find', 'get', 'getByPlaceholder', 'getByRole',
+  'getByTestId', 'getByText', 'goto', 'includes', 'inspectCatalog', 'join', 'json',
+  'keys', 'locator', 'map', 'newContext', 'newPage', 'now', 'objectContaining',
+  'preflight', 'red', 'rejectInvalidReceipts', 'reloadSummary', 'replace',
+  'replaceGrant', 'resolveFiling', 'set', 'setInputFiles', 'setTimeout', 'status',
+  'step', 'stringify', 'toBe', 'toBeDefined', 'toBeGreaterThan',
+  'toBeGreaterThanOrEqual', 'toBeVisible', 'toContain', 'toContainEqual', 'toEqual',
+  'toHaveLength', 'toHaveURL', 'toMatch', 'uploadRole', 'url', 'values',
+  'waitForResponse',
+])
+const allowedIdentifierCalls = new Set([
+  'assertCompleteEvidenceLedger', 'callPublicLifecycleApi', 'encodeURIComponent',
+  'expect', 'login', 'mkdir', 'recordDocumentLifecycleConsumer',
+  'recordFilingSubmission', 'recordGrantConsumer', 'recordReceiptConsumer', 'test',
+  'uploadAndReviewEvidenceViaVisibleUi', 'writeFile',
 ])
 
 assert.equal((source.match(/\bAPIRequestContext\b/g) || []).length, 3, 'evidence writes must use visible UI; APIRequestContext is confined to the audited helper and driver transport')
@@ -289,6 +311,16 @@ function visit(node) {
       auditedFetchCount += 1
     } else if (['fetch', 'post', 'put', 'patch', 'delete', 'addInitScript', 'evaluate', 'route', 'fulfill', 'eval', 'Function', 'import'].includes(name)) {
       assert.fail(`evidence writes must use visible UI; network call ${name} is outside the audited helper`)
+    } else if (ts.isIdentifier(node.expression)) {
+      assert.ok(allowedIdentifierCalls.has(node.expression.text), `evidence writes must use visible UI; identifier call ${node.expression.text} is outside the exact call allowlist`)
+    } else if (name !== undefined) {
+      assert.ok(allowedMemberCalls.has(name), `evidence writes must use visible UI; member call ${name} is outside the exact call allowlist`)
+      if (name === 'goto') {
+        const target = node.arguments[0]?.getText(syntax) ?? ''
+        assert.ok(target.startsWith('`${baseUrl}/'), 'evidence writes must use visible UI; navigation must stay under the configured base URL')
+      }
+    } else {
+      assert.fail('evidence writes must use visible UI; indirect call is outside the exact call allowlist')
     }
   }
   ts.forEachChild(node, visit)
