@@ -596,7 +596,7 @@ class IntegratedJourneyDriver {
       const sourceField = this.operatorPage.locator('.el-form-item').filter({ hasText: '截止日来源' }).first()
       await sourceField.locator('.el-select__wrapper').click()
       const sourceLabel = deadline.official_due_date_source === 'IMPORTED_OFFICIAL_NOTICE'
-        ? '导入官方通知'
+        ? '从官方通知导入'
         : '人工核对官方通知'
       await this.operatorPage.getByRole('option', { name: sourceLabel, exact: true }).click()
       const impactResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/documents/impact-preview'))
