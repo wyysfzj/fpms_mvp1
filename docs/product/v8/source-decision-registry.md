@@ -382,6 +382,39 @@ dispatch lane.
   the prior local ABC technical boundary. It must not delete or rewrite any historical evidence,
   lifecycle, obligation, draft, bill, payment or offset fact.
 
+### `DEC-INTEGRATED-DEMO-A-API-BOUNDARY-20260821`
+
+- Status: `APPROVED_TASK_CORRECTION`.
+- Exact source/version: the complete API-whitelist correction proposal and the customer's approval
+  in Codex task `019ffc07-14a5-7dc2-9536-f2047327e14a`, preserved as a labelled UTF-8/LF
+  transcript with one terminal LF at
+  `docs/product/v8/customer-decisions/2026-08-21-integrated-demo-a-api-whitelist-boundary.txt`,
+  decision version `customer-decision:2026-08-21:integrated-demo-a-api-boundary:v1`, received on
+  `2026-08-21` in timezone `Asia/Shanghai`.
+- Exact source size: `1200` bytes.
+- Source SHA-256:
+  `78d2dab3e2c7c468f0d49fe562a88816850d0d9afc6a459139174f9200e62fb3`.
+- Actor and acceptance authority: after the third independent Task 1 High review identified that
+  a blanket public-network ban made the approved lifecycle journey unreachable, the repository
+  customer/user explicitly sent `批准 API 白名单整改边界`.
+- Approved decision: evidence attachment upload and review remain visible-UI-only. A lifecycle
+  operation that has no current visible UI may use the canonical contract's explicit allowlist of
+  existing formal public APIs. The allowlist must bind the exact HTTP method and path template;
+  all calls must use the authenticated public surface and assert the endpoint's actual response
+  fields plus independently read immutable evidence facts. It must not invent a normalized
+  response field merely for the rehearsal.
+- Forbidden boundary: no attachment-upload or evidence-review API shortcut, direct database or
+  session access, seed/enrichment lifecycle write, route mock, request interception, catch-all
+  network permission, dynamic endpoint construction outside the audited allowlist, or customer,
+  legal, fee, production, security or release activation.
+- Effective scope/time: active immediately only for remediation and independent review of
+  `FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01`. Later ordinals may consume the accepted
+  contract through their own exact task/review gates; this record does not mark any implementation
+  or demo run accepted.
+- Rollback impact: reverting this authority record restores the blanket-network-ban conflict and
+  blocks Task 1. Rollback performs no data mutation and must not delete or reinterpret historical
+  evidence or review reports.
+
 The first story that relies on a new or changed source/decision must update this registry
 with source/version/hash, decision value, actor, effective scope/time and rollback impact.
 Official/legal/fee/customer truth remains `PROTECTED` and requires independent review.
