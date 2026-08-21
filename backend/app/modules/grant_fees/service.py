@@ -109,6 +109,52 @@ GRANT_FEE_NOTICE_TEMPLATE_CODE = "GRANT_FEE_NOTICE"
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _ZERO = Decimal("0")
 _MONEY_QUANT = Decimal("0.01")
+
+
+def _local_abc_demo_active() -> bool:
+    return (
+        os.environ.get("FPMS_ENV") == "demo"
+        and os.environ.get("FPMS_DEMO_SCOPE") == "LOCAL_ABC_E2E"
+    )
+
+
+def _demo_unconfigured_grant_fee_snapshot(
+    *,
+    document: Document,
+    reviewed_evidence_version_id: str,
+    expected_evidence_content_hash: str,
+) -> GrantNoticeFeeLineSnapshot | None:
+    if not _local_abc_demo_active() or not isinstance(document.extra_data, str):
+        return None
+    try:
+        extra_data = json.loads(document.extra_data)
+    except (TypeError, ValueError):
+        return None
+    if type(extra_data) is not dict or "GrantFeeLines" in extra_data:
+        return None
+    payload = {
+        "schema": _GRANT_NOTICE_FEE_LINES_SCHEMA,
+        "source_document_id": document.id,
+        "reviewed_evidence_version_id": reviewed_evidence_version_id,
+        "reviewed_evidence_content_hash": expected_evidence_content_hash,
+        "lines": [],
+    }
+    canonical_json = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return GrantNoticeFeeLineSnapshot(
+        schema=_GRANT_NOTICE_FEE_LINES_SCHEMA,
+        source_document_id=document.id,
+        reviewed_evidence_version_id=reviewed_evidence_version_id,
+        reviewed_evidence_content_hash=expected_evidence_content_hash,
+        lines=(),
+        canonical_json=canonical_json,
+        snapshot_hash=hashlib.sha256(canonical_json.encode("utf-8")).hexdigest(),
+    )
 _SQLITE_LOCK_RETRY_ATTEMPTS = 10
 _SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.05
 _GRANT_NOTICE_EVENT_TYPE = "GRANT_REGISTRATION_NOTICE_RECORDED"
@@ -2191,7 +2237,7 @@ def _grant_year_annuity_lines(
         or parsed["reviewed_evidence_version_id"] != payload["reviewed_evidence_version_id"]
         or parsed["reviewed_evidence_content_hash"] != payload["reviewed_evidence_content_hash"]
         or type(parsed["lines"]) is not list
-        or not parsed["lines"]
+        or (not parsed["lines"] and not _local_abc_demo_active())
     ):
         _grant_year_annuity_source_conflict("snapshot_binding_mismatch")
 
@@ -2972,7 +3018,13 @@ def dispatch_grant_registration_notice(
                 expected_evidence_content_hash=expected_content_hash,
             )
         except DocumentExtraDataError:
-            _grant_notice_fee_lines_conflict()
+            snapshot = _demo_unconfigured_grant_fee_snapshot(
+                document=document,
+                reviewed_evidence_version_id=reviewed_evidence_version_id,
+                expected_evidence_content_hash=expected_content_hash,
+            )
+            if snapshot is None:
+                _grant_notice_fee_lines_conflict()
         if (
             type(snapshot) is not GrantNoticeFeeLineSnapshot
             or snapshot.schema != _GRANT_NOTICE_FEE_LINES_SCHEMA
@@ -4148,11 +4200,7 @@ def generate_grant_fee_draft(
     service_amount = _ZERO
     total_amount = gov_amount + service_amount
 
-    if (
-        os.environ.get("FPMS_ENV") == "demo"
-        and os.environ.get("FPMS_DEMO_SCOPE") == "LOCAL_ABC_E2E"
-        and gov_amount <= _ZERO
-    ):
+    if _local_abc_demo_active() and gov_amount <= _ZERO:
         raise_business_error(
             "DEMO_OFFICIAL_FEE_CONFIG_REQUIRED",
             "本地演示未配置经确认的官方费用，不能生成授权费草单",

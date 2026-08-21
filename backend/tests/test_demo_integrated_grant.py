@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.modules.documents.models import Document
 from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
+from app.modules.grant_fees import service as grant_fee_service
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = (
@@ -185,3 +186,48 @@ def test_demo_missing_official_fee_authority_is_409_and_zero_write(
         assert task is not None
         assert task.client_instruction == "PAY"
         assert task.draft_generated is False
+
+
+def test_demo_lifecycle_can_hash_an_explicitly_unconfigured_fee_snapshot(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FPMS_ENV", "demo")
+    monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
+    document = Document(
+        id=str(uuid4()),
+        case_id=str(uuid4()),
+        direction="IN",
+        doc_date=date(2026, 8, 11),
+        title="虚构授权通知",
+        extra_data='{"official_due_date":"2026-11-23"}',
+    )
+
+    snapshot = grant_fee_service._demo_unconfigured_grant_fee_snapshot(
+        document=document,
+        reviewed_evidence_version_id=str(uuid4()),
+        expected_evidence_content_hash=f"sha256:{'a' * 64}",
+    )
+
+    assert snapshot is not None
+    assert snapshot.lines == ()
+    assert '"lines":[]' in snapshot.canonical_json
+    assert len(snapshot.snapshot_hash) == 64
+
+
+def test_demo_does_not_downgrade_present_but_invalid_fee_lines(monkeypatch) -> None:
+    monkeypatch.setenv("FPMS_ENV", "demo")
+    monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
+    document = Document(
+        id=str(uuid4()),
+        case_id=str(uuid4()),
+        direction="IN",
+        doc_date=date(2026, 8, 11),
+        title="虚构授权通知",
+        extra_data='{"GrantFeeLines":[]}',
+    )
+
+    assert grant_fee_service._demo_unconfigured_grant_fee_snapshot(
+        document=document,
+        reviewed_evidence_version_id=str(uuid4()),
+        expected_evidence_content_hash=f"sha256:{'b' * 64}",
+    ) is None
