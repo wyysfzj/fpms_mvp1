@@ -584,7 +584,11 @@ class IntegratedJourneyDriver {
     await this.operatorPage.getByPlaceholder('请输入文件标题').fill(title)
     await this.operatorPage.getByText(direction === 'IN' ? '收文' : '发文', { exact: true }).click()
     await this.operatorPage.getByPlaceholder('请选择日期').fill(documentDate)
-    const typeSelect = this.operatorPage.getByPlaceholder('请选择文件类型')
+    const typeField = this.operatorPage.locator('.el-form-item').filter({
+      has: this.operatorPage.locator('.el-form-item__label').filter({ hasText: /^文件类型$/ }),
+    })
+    await expect(typeField).toHaveCount(1)
+    const typeSelect = typeField.locator('.el-select__wrapper')
     await expect(typeSelect).toBeVisible()
     await typeSelect.click()
     const typeOption = this.operatorPage.getByRole('option', { name: direction === 'IN' ? '官方来文' : '官方去文', exact: true })
