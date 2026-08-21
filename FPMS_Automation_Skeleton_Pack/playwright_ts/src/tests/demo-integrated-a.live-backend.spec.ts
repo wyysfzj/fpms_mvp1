@@ -1314,8 +1314,9 @@ class IntegratedJourneyDriver {
       replacement_source_evidence_version_id: binding.evidenceVersionId,
       replacement_source_content_hash: binding.contentHash,
       replacement_metadata: binding.metadata,
-      original_activity_id: this.evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.consumerResultId,
-      replacement_activity_id: dispatched.body.activity_id,
+      original_activity_id: originalState.body.lifecycle_activity_id,
+      replacement_activity_id: replacementState.body.lifecycle_activity_id,
+      supersedes_activity_id: replacementState.body.supersedes_activity_id,
       actionable_task_ids: actionable.map((item) => item.task_id),
       original_hash: this.evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.contentHash,
       replacement_hash: binding.contentHash,
@@ -1326,26 +1327,63 @@ class IntegratedJourneyDriver {
   }
 
   async exerciseGrantGatesAndPay(oldTaskId: string, newTaskId: string): Promise<Json> {
-    const beforeOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
-    const beforeCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
-    expect(beforeOld.status).toBe(200)
-    expect(beforeCurrent.status).toBe(200)
-    const beforeVisible = await this.visibleCaseSnapshot(this.caseId)
-    const before = { old_task: beforeOld.body, current_task: beforeCurrent.body, official_fee_carriers: beforeVisible.official_fee_carriers }
-    const blocked = [
-      await this.publicLifecycleApi('GRANT_GENERATE_DRAFT', { task_id: oldTaskId }),
-      await this.publicLifecycleApi('GRANT_BATCH_INSTRUCTION', {}, { task_ids: [oldTaskId], action: 'record_pay_instruction' }),
-      await this.publicLifecycleApi('GRANT_GENERATE_NOTICES', {}, { task_ids: [oldTaskId] }),
-      await this.publicLifecycleApi('GRANT_TASK_STATE', { task_id: oldTaskId }, { action: 'mark_waiting_client' }),
-    ]
-    expect(blocked.map((item) => item.status)).toEqual([409, 409, 409, 409])
-    const afterOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
-    const afterCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
-    expect(afterOld.status).toBe(200)
-    expect(afterCurrent.status).toBe(200)
-    const afterVisible = await this.visibleCaseSnapshot(this.caseId)
-    const after = { old_task: afterOld.body, current_task: afterCurrent.body, official_fee_carriers: afterVisible.official_fee_carriers }
-    expect(after).toEqual(before)
+    const blockedObservations: Json[] = []
+    {
+      const beforeOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+      const beforeCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+      const beforeVisible = await this.visibleCaseSnapshot(this.caseId)
+      const beforeSnapshot = { old_task: beforeOld.body, current_task: beforeCurrent.body, official_fee_carriers: beforeVisible.official_fee_carriers }
+      const response = await this.publicLifecycleApi('GRANT_GENERATE_DRAFT', { task_id: oldTaskId })
+      expect(response.status).toBe(409)
+      const afterOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+      const afterCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+      const afterVisible = await this.visibleCaseSnapshot(this.caseId)
+      const afterSnapshot = { old_task: afterOld.body, current_task: afterCurrent.body, official_fee_carriers: afterVisible.official_fee_carriers }
+      expect(afterSnapshot).toEqual(beforeSnapshot)
+      blockedObservations.push({ operation: 'generate-draft', status: response.status, before_snapshot: beforeSnapshot, after_snapshot: afterSnapshot })
+    }
+    {
+      const beforeOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+      const beforeCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+      const beforeVisible = await this.visibleCaseSnapshot(this.caseId)
+      const beforeSnapshot = { old_task: beforeOld.body, current_task: beforeCurrent.body, official_fee_carriers: beforeVisible.official_fee_carriers }
+      const response = await this.publicLifecycleApi('GRANT_BATCH_INSTRUCTION', {}, { task_ids: [oldTaskId], action: 'record_pay_instruction' })
+      expect(response.status).toBe(409)
+      const afterOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+      const afterCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+      const afterVisible = await this.visibleCaseSnapshot(this.caseId)
+      const afterSnapshot = { old_task: afterOld.body, current_task: afterCurrent.body, official_fee_carriers: afterVisible.official_fee_carriers }
+      expect(afterSnapshot).toEqual(beforeSnapshot)
+      blockedObservations.push({ operation: 'batch-instruction', status: response.status, before_snapshot: beforeSnapshot, after_snapshot: afterSnapshot })
+    }
+    {
+      const beforeOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+      const beforeCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+      const beforeVisible = await this.visibleCaseSnapshot(this.caseId)
+      const beforeSnapshot = { old_task: beforeOld.body, current_task: beforeCurrent.body, official_fee_carriers: beforeVisible.official_fee_carriers }
+      const response = await this.publicLifecycleApi('GRANT_GENERATE_NOTICES', {}, { task_ids: [oldTaskId] })
+      expect(response.status).toBe(409)
+      const afterOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+      const afterCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+      const afterVisible = await this.visibleCaseSnapshot(this.caseId)
+      const afterSnapshot = { old_task: afterOld.body, current_task: afterCurrent.body, official_fee_carriers: afterVisible.official_fee_carriers }
+      expect(afterSnapshot).toEqual(beforeSnapshot)
+      blockedObservations.push({ operation: 'generate-notices', status: response.status, before_snapshot: beforeSnapshot, after_snapshot: afterSnapshot })
+    }
+    {
+      const beforeOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+      const beforeCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+      const beforeVisible = await this.visibleCaseSnapshot(this.caseId)
+      const beforeSnapshot = { old_task: beforeOld.body, current_task: beforeCurrent.body, official_fee_carriers: beforeVisible.official_fee_carriers }
+      const response = await this.publicLifecycleApi('GRANT_TASK_STATE', { task_id: oldTaskId }, { action: 'mark_waiting_client' })
+      expect(response.status).toBe(409)
+      const afterOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+      const afterCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+      const afterVisible = await this.visibleCaseSnapshot(this.caseId)
+      const afterSnapshot = { old_task: afterOld.body, current_task: afterCurrent.body, official_fee_carriers: afterVisible.official_fee_carriers }
+      expect(afterSnapshot).toEqual(beforeSnapshot)
+      blockedObservations.push({ operation: 'mark_waiting_client', status: response.status, before_snapshot: beforeSnapshot, after_snapshot: afterSnapshot })
+    }
 
     const waiting = await this.publicLifecycleApi('GRANT_TASK_STATE', { task_id: newTaskId }, { action: 'mark_waiting_client' })
     expect(waiting.status).toBe(200)
@@ -1373,9 +1411,8 @@ class IntegratedJourneyDriver {
     const currentPayRows = tasks.filter((item) => item.task_id === newTaskId && item.client_instruction === 'PAY')
     return {
       blocked_mutations: ['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client'],
-      blocked_statuses: blocked.map((item) => item.status),
-      before_snapshot: before,
-      after_snapshot: after,
+      blocked_statuses: blockedObservations.map((item) => item.status),
+      blocked_observations: blockedObservations,
       current_instruction: paidState.body.client_instruction,
       current_instruction_count: currentPayRows.length,
       missing_authority_status: missingAuthority.status,
@@ -1589,12 +1626,12 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     const x = await journey.replaceGrant(grantOriginalTaskId)
     const binding = evidenceRoleMap.get('GRANT_NOTICE_REPLACEMENT')!; grantReplacementTaskId = x.replacement_task_id
     expect(evidenceRoleMap.size).toBe(12)
-    expect(grantReplacementTaskId).not.toBe(grantOriginalTaskId); expect(x.original_document_id).not.toBe(x.replacement_document_id); expect(x.replacement_document_id).toBe(x.document_id); expect(x.superseded_task_id).toBe(grantOriginalTaskId); expect(x.replacement_predecessor_task_id).toBe(grantOriginalTaskId); expect(x.original_activity_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.consumerResultId); expect(x.replacement_activity_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_REPLACEMENT')!.consumerResultId); expect(x.replacement_activity_id).not.toBe(x.original_activity_id); expect(x.original_source_evidence_version_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.evidenceVersionId); expect(x.replacement_source_evidence_version_id).toBe(binding.evidenceVersionId); expect(x.replacement_source_content_hash).toBe(binding.contentHash); expect(x.replacement_metadata).toEqual(binding.metadata); expect(x.actionable_task_ids).toEqual([grantReplacementTaskId]); expect(x.original_hash).not.toBe(x.replacement_hash); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED'])
+    expect(grantReplacementTaskId).not.toBe(grantOriginalTaskId); expect(x.original_document_id).not.toBe(x.replacement_document_id); expect(x.replacement_document_id).toBe(x.document_id); expect(x.superseded_task_id).toBe(grantOriginalTaskId); expect(x.replacement_predecessor_task_id).toBe(grantOriginalTaskId); expect(x.original_activity_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.consumerResultId); expect(x.replacement_activity_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_REPLACEMENT')!.consumerResultId); expect(x.replacement_activity_id).not.toBe(x.original_activity_id); expect(x.supersedes_activity_id).toBe(x.original_activity_id); expect(x.original_source_evidence_version_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.evidenceVersionId); expect(x.replacement_source_evidence_version_id).toBe(binding.evidenceVersionId); expect(x.replacement_source_content_hash).toBe(binding.contentHash); expect(x.replacement_metadata).toEqual(binding.metadata); expect(x.actionable_task_ids).toEqual([grantReplacementTaskId]); expect(x.original_hash).not.toBe(x.replacement_hash); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED'])
     task7Checkpoints.push({ checkpoint: 'IA-11', result: x })
   })
   await test.step(checkpointContract[12], async () => {
     const x = await journey.exerciseGrantGatesAndPay(grantOriginalTaskId, grantReplacementTaskId)
-    expect(x.blocked_mutations).toEqual(['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client']); expect(x.blocked_statuses).toEqual([409, 409, 409, 409]); expect(x.before_snapshot).toEqual(x.after_snapshot); expect(x.current_instruction).toBe('PAY'); expect(x.current_instruction_count).toBe(1); expect(x.missing_authority_status).toBe(409); expect(x.missing_authority_code).toBe('DEMO_OFFICIAL_FEE_CONFIG_REQUIRED'); expect(x.missing_authority_before).toEqual(x.missing_authority_after); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
+    expect(x.blocked_mutations).toEqual(['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client']); expect(x.blocked_statuses).toEqual([409, 409, 409, 409]); expect(x.blocked_observations).toHaveLength(4); for (const observation of x.blocked_observations as Json[]) expect(observation.after_snapshot).toEqual(observation.before_snapshot); expect(x.current_instruction).toBe('PAY'); expect(x.current_instruction_count).toBe(1); expect(x.missing_authority_status).toBe(409); expect(x.missing_authority_code).toBe('DEMO_OFFICIAL_FEE_CONFIG_REQUIRED'); expect(x.missing_authority_before).toEqual(x.missing_authority_after); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
     task7Checkpoints.push({ checkpoint: 'IA-12', result: x })
     await mkdir(evidenceDir!, { recursive: true })
     await writeFile(path.join(evidenceDir!, 'task7-checkpoints.json'), JSON.stringify({ checkpoints: [...task5Checkpoints, ...task6Checkpoints, ...task7Checkpoints], evidence_bindings: [...evidenceRoleMap.values()] }, null, 2))

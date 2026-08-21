@@ -162,6 +162,8 @@ class GrantFeeTaskStateOut(BaseModel):
     source_document_id: str | None = None
     deadline_source: str | None = None
     deadline_confirmed_at: datetime | None = None
+    lifecycle_activity_id: str | None = None
+    supersedes_activity_id: str | None = None
     client_instruction: str
     notify_count: int
     draft_generated: bool

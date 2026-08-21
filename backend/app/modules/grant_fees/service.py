@@ -3445,7 +3445,38 @@ def _append_grant_fee_task_done_activity(db: Session, *, task: T_GrantFeeTask) -
 def get_grant_fee_task_state(db: Session, *, task_id: str) -> dict[str, Any]:
     task = _load_grant_fee_task(db, task_id=task_id)
     state = derive_grant_fee_task_state(task)
-    return _serialize_grant_fee_task_state(task, state=state)
+    activity_id, supersedes_activity_id = _grant_notice_activity_lineage(db, task=task)
+    return _serialize_grant_fee_task_state(
+        task,
+        state=state,
+        lifecycle_activity_id=activity_id,
+        supersedes_activity_id=supersedes_activity_id,
+    )
+
+
+def _grant_notice_activity_lineage(
+    db: Session,
+    *,
+    task: T_GrantFeeTask,
+) -> tuple[str | None, str | None]:
+    matches: list[CaseActivityEvent] = []
+    for activity in db.scalars(
+        select(CaseActivityEvent)
+        .where(
+            CaseActivityEvent.case_id == task.case_id,
+            CaseActivityEvent.activity_type == _GRANT_NOTICE_EVENT_TYPE,
+        )
+        .order_by(CaseActivityEvent.sequence.asc(), CaseActivityEvent.id.asc())
+    ).all():
+        try:
+            payload = json.loads(activity.payload_json)
+        except (TypeError, ValueError):
+            continue
+        if type(payload) is dict and payload.get("grant_fee_task_id") == task.id:
+            matches.append(activity)
+    if len(matches) != 1:
+        return None, None
+    return matches[0].id, matches[0].supersedes_event_id
 
 
 def apply_grant_fee_task_action(
@@ -4273,7 +4304,13 @@ def generate_grant_fee_draft(
     )
 
 
-def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict[str, Any]:
+def _serialize_grant_fee_task_state(
+    task: T_GrantFeeTask,
+    *,
+    state: str,
+    lifecycle_activity_id: str | None = None,
+    supersedes_activity_id: str | None = None,
+) -> dict[str, Any]:
     lineage_status = _derive_grant_fee_task_lineage_status(task)
     return {
         "task_id": task.id,
@@ -4283,6 +4320,8 @@ def _serialize_grant_fee_task_state(task: T_GrantFeeTask, *, state: str) -> dict
         "source_document_id": task.source_document_id,
         "deadline_source": task.deadline_source,
         "deadline_confirmed_at": task.deadline_confirmed_at,
+        "lifecycle_activity_id": lifecycle_activity_id,
+        "supersedes_activity_id": supersedes_activity_id,
         "client_instruction": (task.client_instruction or "NONE").strip().upper() or "NONE",
         "notify_count": int(task.notify_count or 0),
         "draft_generated": bool(task.draft_generated),

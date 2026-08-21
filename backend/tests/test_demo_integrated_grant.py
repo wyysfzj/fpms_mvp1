@@ -78,6 +78,7 @@ def test_replacement_grant_has_distinct_evidence_and_exact_lineage() -> None:
         "replacement_predecessor_task_id",
         "replacement_activity_id",
         "original_activity_id",
+        "supersedes_activity_id",
     ):
         assert token in method
 
@@ -93,9 +94,10 @@ def test_superseded_mutations_and_missing_fee_authority_are_observable_no_write(
     ):
         assert f"this.publicLifecycleApi('{operation}'" in method
     for token in (
+        "blocked_observations",
         "before_snapshot",
         "after_snapshot",
-        "expect(after).toEqual(before)",
+        "expect(afterSnapshot).toEqual(beforeSnapshot)",
         "record_pay_instruction",
         "DEMO_OFFICIAL_FEE_CONFIG_REQUIRED",
         "missing_authority_status",
