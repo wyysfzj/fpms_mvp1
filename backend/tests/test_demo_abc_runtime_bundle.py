@@ -945,6 +945,32 @@ def test_integrated_critical_hash_and_semantic_fallback_fail_closed(
         _load_bundle(root, _write_manifest(root, manifest))
 
 
+def test_integrated_all_evidence_titles_and_hashes_are_unique_chinese(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 21))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "title")
+    manifest["evidence"][1]["title_zh_cn"] = manifest["evidence"][0]["title_zh_cn"]
+    with pytest.raises(DemoBundleError, match="titles must be unique"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "english-title")
+    manifest["evidence"][0]["title_zh_cn"] = "Fictional integrated evidence"
+    with pytest.raises(DemoBundleError, match="must contain Chinese text"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+    root, manifest, _digest = _valid_integrated_bundle(tmp_path / "early-hash")
+    first = manifest["evidence"][0]
+    third = manifest["evidence"][2]
+    first_bytes = (root / first["path"]).read_bytes()
+    (root / third["path"]).write_bytes(first_bytes)
+    third["size_bytes"] = len(first_bytes)
+    third["sha256"] = first["sha256"]
+    with pytest.raises(DemoBundleError, match="hashes must be unique"):
+        _load_bundle(root, _write_manifest(root, manifest))
+
+
 def test_integrated_authority_requires_exactly_thirteen_file_digests(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):

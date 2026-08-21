@@ -148,6 +148,7 @@ _VERSION_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")
 _CODE_RE = re.compile(r"[A-Z0-9_]{1,64}")
 _VARIABLE_RE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 _AMOUNT_RE = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}")
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 _AUTHORITY_CLASSIFICATIONS = {"SYNTHETIC_TEST_ONLY", "CUSTOMER_AUTHORIZED"}
 _PDF_MARKER = "FICTIONAL_DEMO_EVIDENCE / 仅用于本地虚构演示"
 _DOCX_MARKER = "DEMO_ONLY / 仅用于本地虚构演示"
@@ -968,9 +969,16 @@ def load_demo_bundle(
         )
 
     if integrated:
+        titles = [row["title_zh_cn"] for row in evidence_rows]
+        if any(_CJK_RE.search(title) is None for title in titles):
+            raise _error("integrated evidence title_zh_cn must contain Chinese text")
+        if len(set(titles)) != len(titles):
+            raise _error("integrated evidence titles must be unique")
         critical_rows = evidence_rows[6:12]
         if len({row["sha256"] for row in critical_rows}) != len(critical_rows):
             raise _error("critical evidence hashes must be distinct")
+        if len({row["sha256"] for row in evidence_rows}) != len(evidence_rows):
+            raise _error("integrated evidence hashes must be unique")
         oa1, receipt1, oa2, receipt2, original_grant, replacement_grant = critical_rows
         if any(oa1[key] == oa2[key] for key in ("path", "sha256")) or any(
             oa1["metadata"][key] == oa2["metadata"][key]
