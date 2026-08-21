@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import re
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +35,16 @@ FORBIDDEN_SPEC_TOKENS = (
     "v6-enrich",
     "test.skip",
     "markSkeleton",
-    "/attachments`, {",
-    "/review`, {",
+    "contractRed",
+    ".toBeTruthy()",
+    "expect({",
 )
+FORBIDDEN_EVIDENCE_PATTERNS = (
+    re.compile(r"(?:page\.)?request\s*\.\s*(?:post|put|patch|fetch)\s*\([^)]*(?:attachments|evidence-versions|/review)", re.S),
+    re.compile(r"\bfetch\s*\([^)]*(?:attachments|evidence-versions|/review)", re.S),
+    re.compile(r"\baxios\s*\.\s*(?:post|put|patch)\s*\([^)]*(?:attachments|evidence-versions|/review)", re.S),
+)
+ALLOWED_SPEC_IMPORTS = {"@playwright/test", "node:fs/promises", "node:path"}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -55,6 +63,17 @@ def build_integrated_bundle(parent: Path) -> tuple[Path, str, str]:
     bundle, _manifest, manifest_sha = builder(parent)
     authority_sha = hashlib.sha256((bundle / "authority.json").read_bytes()).hexdigest()
     return bundle, manifest_sha, authority_sha
+
+
+def validate_spec_source(source: str) -> None:
+    forbidden = [token for token in FORBIDDEN_SPEC_TOKENS if token in source]
+    if forbidden:
+        raise RuntimeError(f"focused spec contains forbidden constructs: {forbidden}")
+    if any(pattern.search(source) for pattern in FORBIDDEN_EVIDENCE_PATTERNS):
+        raise RuntimeError("focused spec contains a direct evidence write shortcut")
+    imports = set(re.findall(r"from\s+['\"]([^'\"]+)['\"]", source))
+    if imports != ALLOWED_SPEC_IMPORTS:
+        raise RuntimeError(f"focused spec imports are not allowlisted: {sorted(imports)}")
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -161,9 +180,7 @@ def main(argv: list[str] | None = None) -> int:
         raise RuntimeError(f"evidence path already exists: {artifact}")
     candidate = abc.candidate_identity()
     source = SPEC.read_text(encoding="utf-8")
-    forbidden = [token for token in FORBIDDEN_SPEC_TOKENS if token in source]
-    if forbidden:
-        raise RuntimeError(f"focused spec contains forbidden constructs: {forbidden}")
+    validate_spec_source(source)
     artifact.mkdir(parents=True)
     _write_json(artifact / "candidate.json", candidate)
     bundle_parent = Path(tempfile.mkdtemp(prefix="fpms-integrated-a-bundle-"))

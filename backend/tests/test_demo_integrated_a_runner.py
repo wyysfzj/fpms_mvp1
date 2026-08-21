@@ -44,4 +44,27 @@ def test_runner_fails_at_the_missing_integrated_bundle_builder(tmp_path: Path):
 def test_runner_forbids_mock_db_enrichment_and_direct_evidence_shortcuts():
     module = _module()
     source = SPEC.read_text(encoding="utf-8")
-    assert not [token for token in module.FORBIDDEN_SPEC_TOKENS if token in source]
+    module.validate_spec_source(source)
+
+
+@pytest.mark.parametrize(
+    "shortcut",
+    [
+        'page.request.post("/documents/x/attachments", { data: payload })',
+        "request.fetch('/documents/x/attachments', { method: 'POST' })",
+        'fetch("/documents/evidence-versions/x/review", { method: "POST" })',
+        'axios.post("/documents/evidence-versions/x/review", payload)',
+    ],
+)
+def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):
+    module = _module()
+    source = SPEC.read_text(encoding="utf-8") + "\n" + shortcut
+    with pytest.raises(RuntimeError, match="direct evidence write shortcut"):
+        module.validate_spec_source(source)
+
+
+def test_runner_rejects_imported_local_helper_evasion():
+    module = _module()
+    source = SPEC.read_text(encoding="utf-8") + '\nimport { uploadAttachment } from "./helper"'
+    with pytest.raises(RuntimeError, match="imports are not allowlisted"):
+        module.validate_spec_source(source)

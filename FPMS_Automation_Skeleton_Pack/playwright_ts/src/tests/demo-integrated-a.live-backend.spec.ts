@@ -118,40 +118,71 @@ async function uploadAndReviewEvidenceViaVisibleUi(
   }
 }
 
-function bindConsumer(
-  binding: EvidenceBinding,
-  consumer: string,
-  result: Json,
-  payload: Json,
-): EvidenceBinding {
-  expect(payload.reviewed_evidence_version_id).toBe(binding.evidenceVersionId)
-  expect(payload.expected_content_hash).toBe(binding.contentHash)
-  return { ...binding, consumer, consumerResultId: String(result.id || result.activity_id || result.task_id) }
+function lifecycleEvidencePayload(binding: EvidenceBinding): Json {
+  return { evidence_version_id: binding.evidenceVersionId }
 }
 
-function contractRed(checkpoint: string): never {
-  throw new Error(`${checkpoint} contract RED: implementation belongs to its later atomic ordinal`)
+function grantEvidencePayload(binding: EvidenceBinding): Json {
+  return { reviewed_evidence_version_id: binding.evidenceVersionId, expected_content_hash: binding.contentHash }
+}
+
+function bindFilingSubmission(binding: EvidenceBinding, result: Json): EvidenceBinding {
+  expect(result.reviewed_final_submission_version_id).toBe(binding.evidenceVersionId)
+  expect(result.reviewed_final_submission_content_hash).toBe(binding.contentHash)
+  expect(typeof result.external_submission_activity_id).toBe('string')
+  return { ...binding, consumer: 'filing-external-submission', consumerResultId: result.external_submission_activity_id }
+}
+
+class IntegratedJourneyDriver {
+  constructor(
+    readonly operatorPage: Page,
+    readonly reviewerPage: Page,
+    readonly evidenceRoleMap: Map<EvidenceRole, EvidenceBinding>,
+  ) {}
+
+  private red(checkpoint: string): never {
+    throw new Error(`${checkpoint} action RED: implement through its public UI/API owner`)
+  }
+
+  async createClientAndContact(_code: string): Promise<Json> { return this.red('IA-01') }
+  async createCase(_clientId: string, _caseNo: string): Promise<Json> { return this.red('IA-02') }
+  async inspectCatalog(_caseId: string): Promise<Json> { return this.red('IA-03') }
+  async resolveFiling(_caseId: string): Promise<Json> { return this.red('IA-04') }
+  async completeFilingAndOa1(_caseId: string): Promise<Json> { return this.red('IA-05') }
+  async createOaOut(_sourceId: string, _packageId: string): Promise<Json> { return this.red('IA-06') }
+  async rejectInvalidReceipts(_caseId: string, _packageId: string): Promise<Json> { return this.red('IA-07') }
+  async archiveOa1(_packageId: string): Promise<Json> { return this.red('IA-08') }
+  async completeOa2(_caseId: string): Promise<Json> { return this.red('IA-09') }
+  async createGrantOriginal(_caseId: string): Promise<Json> { return this.red('IA-10') }
+  async replaceGrant(_taskId: string): Promise<Json> { return this.red('IA-11') }
+  async exerciseGrantGatesAndPay(_oldId: string, _newId: string): Promise<Json> { return this.red('IA-12') }
+  async createServiceDraft(_caseId: string): Promise<Json> { return this.red('IA-13') }
+  async createBill(_draftId: string): Promise<Json> { return this.red('IA-14') }
+  async createPayment(_clientId: string, _billId: string): Promise<Json> { return this.red('IA-15') }
+  async createOffset(_lineId: string, _billId: string): Promise<Json> { return this.red('IA-16') }
+  async reloadSummary(_caseId: string): Promise<Json> { return this.red('IA-17') }
+
+  async uploadRole(documentId: string, descriptor: { role: EvidenceRole; path: string; sha256: string; metadata: Json }): Promise<EvidenceBinding> {
+    const binding = await uploadAndReviewEvidenceViaVisibleUi(this.operatorPage, this.reviewerPage, documentId, descriptor)
+    this.evidenceRoleMap.set(descriptor.role, binding)
+    return binding
+  }
 }
 
 test('Integrated Scheme A executes prior lifecycle and new finance on one case', async ({ browser, page }) => {
   test.setTimeout(240_000)
-  expect(adminUsername && adminPassword && reviewerUsername && reviewerPassword && evidenceDir && bundlePath).toBeTruthy()
+  for (const required of [adminUsername, adminPassword, reviewerUsername, reviewerPassword, evidenceDir, bundlePath]) expect(typeof required).toBe('string')
 
   await login(page, adminUsername!, adminPassword!)
   const reviewerContext: BrowserContext = await browser.newContext()
   const reviewerPage = await reviewerContext.newPage()
   await login(reviewerPage, reviewerUsername!, reviewerPassword!)
-
   const evidenceRoleMap = new Map<EvidenceRole, EvidenceBinding>()
+  const journey = new IntegratedJourneyDriver(page, reviewerPage, evidenceRoleMap)
   const suffix = `${Date.now()}`
   const clientCode = `IA-${suffix}`
   const caseNo = `IA-CASE-${suffix}`
-  let clientId = ''
-  let caseId = ''
-  let oa1SourceId = ''
-  let oa2SourceId = ''
-  let grantOriginalTaskId = ''
-  let grantReplacementTaskId = ''
+  let clientId = ''; let caseId = ''; let filingPackageId = ''; let oa1SourceId = ''; let oa1PackageId = ''; let oa1TaskId = ''; let grantOriginalTaskId = ''; let grantReplacementTaskId = ''; let draftId = ''; let billId = ''; let paymentLineId = ''
   const manifestSha256 = process.env.FPMS_DEMO_EXPECTED_MANIFEST_SHA256 || ''
 
   await test.step(checkpointContract[0], async () => {
@@ -161,38 +192,86 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     await expect(page.getByText('演示输入已校验')).toBeVisible()
     await expect(page.getByText(manifestSha256)).toBeVisible()
     await expect(page.getByText('SYNTHETIC_TEST_ONLY')).toBeVisible()
+    await expect(page.getByText(/模板代码/)).toBeVisible()
+    await expect(page.getByText(/模板文件 SHA-256/)).toBeVisible()
+    await expect(page.getByText(/费率来源/)).toBeVisible()
+    await expect(page.getByText(/费率来源 SHA-256/)).toBeVisible()
+    await expect(page.getByText('未配置')).toBeVisible()
   })
 
-  await test.step(checkpointContract[1], async () => { contractRed('IA-01') })
-  await test.step(checkpointContract[2], async () => { clientId = clientCode; caseId = caseNo; contractRed('IA-02') })
-  await test.step(checkpointContract[3], async () => { contractRed('IA-03') })
-  await test.step(checkpointContract[4], async () => { contractRed('IA-04') })
+  await test.step(checkpointContract[1], async () => {
+    const x = await journey.createClientAndContact(clientCode); clientId = x.client_id
+    expect(x.client_count).toBe(1); expect(x.contact_count).toBe(1); expect(x.primary_contact_client_id).toBe(clientId)
+  })
+  await test.step(checkpointContract[2], async () => {
+    const x = await journey.createCase(clientId, caseNo); caseId = x.case_id
+    expect(x.case_no).toBe(caseNo); expect(x.projection).toEqual(['NEW_CASE', 'NOT_SUBMITTED', 'NOT_ESTABLISHED', 'CONFIRMED']); expect(x.legacy_display).toBe('NOT_FILED')
+    expect(x.business_counts).toEqual({ package: 0, task: 0, draft: 0, bill: 0, payment: 0, offset: 0 })
+  })
+  await test.step(checkpointContract[3], async () => {
+    const x = await journey.inspectCatalog(caseId); expect(x.row_count).toBe(60); expect(x.executable_enabled).toBe(true); expect(x.reference_only_disabled).toBe(true); expect(x.request_status).not.toBe(422)
+  })
+  await test.step(checkpointContract[4], async () => {
+    const x = await journey.resolveFiling(caseId); filingPackageId = x.package_id
+    expect(x.replayed_package_id).toBe(filingPackageId); expect(x.package_kind).toBe('FILING_PREP'); expect(x.projection).toEqual(['FILING_PREPARATION', 'NOT_SUBMITTED', 'NOT_ESTABLISHED', 'CONFIRMED'])
+  })
   await test.step(checkpointContract[5], async () => {
-    const payload = { reviewed_evidence_version_id: '', expected_content_hash: '', official_due_date: '', official_due_date_source: '', official_due_date_status: 'CONFIRMED' }
-    oa1SourceId = bindConsumer({} as EvidenceBinding, 'filing external submission OA1', {}, payload).consumerResultId
+    const x = await journey.completeFilingAndOa1(caseId); oa1SourceId = x.source_id; oa1PackageId = x.package_id; oa1TaskId = x.task_id
+    expect(x.filing_package_id).toBe(filingPackageId); expect(x.role_map_count).toBe(8)
+    expect(bindFilingSubmission(x.filing_binding, x.filing_result).consumerResultId).toBe(x.filing_result.external_submission_activity_id)
+    expect(lifecycleEvidencePayload(x.oa1_binding)).toEqual({ evidence_version_id: x.oa1_binding.evidenceVersionId })
+    expect(x.deadline_surfaces).toEqual({ create: x.deadline, read: x.deadline, edit: x.deadline, impact_preview: x.deadline, wizard: x.deadline })
+    expect(typeof x.deadline.official_due_date).toBe('string'); expect(['MANUAL_OFFICIAL_NOTICE', 'IMPORTED_OFFICIAL_NOTICE']).toContain(x.deadline.official_due_date_source); expect(x.deadline.official_due_date_status).toBe('CONFIRMED'); expect(x.replayed_package_id).toBe(oa1PackageId); expect(x.replayed_task_id).toBe(oa1TaskId); expect(x.invalid_deadline_no_write).toBe(true)
   })
-  await test.step(checkpointContract[6], async () => { contractRed('IA-06') })
-  await test.step(checkpointContract[7], async () => { contractRed('IA-07') })
-  await test.step(checkpointContract[8], async () => { contractRed('IA-08') })
-  await test.step(checkpointContract[9], async () => { oa2SourceId = oa1SourceId; contractRed('IA-09') })
-  await test.step(checkpointContract[10], async () => { grantOriginalTaskId = 'dynamic'; contractRed('IA-10') })
-  await test.step(checkpointContract[11], async () => { grantReplacementTaskId = grantOriginalTaskId; contractRed('IA-11') })
+  await test.step(checkpointContract[6], async () => {
+    const x = await journey.createOaOut(oa1SourceId, oa1PackageId); expect(x.linked_source_id).toBe(oa1SourceId); expect(x.linked_package_id).toBe(oa1PackageId); expect(x.link_count).toBe(1); expect(x.task_status).toBe('OPEN'); expect(x.package_status).toBe('WAITING_RECEIPT')
+  })
+  await test.step(checkpointContract[7], async () => {
+    const x = await journey.rejectInvalidReceipts(caseId, oa1PackageId); expect(x.cross_case_status).toBeGreaterThanOrEqual(400); expect(x.same_case_wrong_source_status).toBeGreaterThanOrEqual(400); expect(x.before_snapshot).toEqual(x.after_snapshot)
+  })
+  await test.step(checkpointContract[8], async () => {
+    const x = await journey.archiveOa1(oa1PackageId); expect(x.package_status).toBe('ARCHIVED'); expect(x.closed_task_ids).toEqual([oa1TaskId]); expect(x.projection).toEqual(['PROSECUTION_MANAGEMENT', 'SUBSTANTIVE_EXAMINATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.legacy_display).toBe('SUB_EXAM')
+  })
+  await test.step(checkpointContract[9], async () => {
+    const x = await journey.completeOa2(caseId); expect(x.source_id).not.toBe(oa1SourceId); expect(x.package_id).not.toBe(oa1PackageId); expect(x.task_id).not.toBe(oa1TaskId); expect(x.oa_sequence).toBe(2); expect(x.notice_role).toBe('OA_NOTICE_2'); expect(x.receipt_role).toBe('OA_RECEIPT_2')
+    expect(x.deadline_surfaces).toEqual({ create: x.deadline, read: x.deadline, edit: x.deadline, impact_preview: x.deadline, wizard: x.deadline }); expect(typeof x.deadline.official_due_date).toBe('string'); expect(['MANUAL_OFFICIAL_NOTICE', 'IMPORTED_OFFICIAL_NOTICE']).toContain(x.deadline.official_due_date_source); expect(x.deadline.official_due_date_status).toBe('CONFIRMED'); expect(x.sequence1_reuse_no_write).toBe(true); expect(x.incomplete_deadline_no_write).toBe(true)
+  })
+  await test.step(checkpointContract[10], async () => {
+    const x = await journey.createGrantOriginal(caseId); grantOriginalTaskId = x.task_id
+    expect(grantEvidencePayload(x.binding)).toEqual({ reviewed_evidence_version_id: x.binding.evidenceVersionId, expected_content_hash: x.binding.contentHash }); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
+  })
+  await test.step(checkpointContract[11], async () => {
+    const x = await journey.replaceGrant(grantOriginalTaskId); grantReplacementTaskId = x.replacement_task_id
+    expect(grantReplacementTaskId).not.toBe(grantOriginalTaskId); expect(x.superseded_task_id).toBe(grantOriginalTaskId); expect(x.actionable_task_ids).toEqual([grantReplacementTaskId]); expect(x.original_hash).not.toBe(x.replacement_hash); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED'])
+  })
   await test.step(checkpointContract[12], async () => {
-    const mutationContracts = ['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client']
-    expect(mutationContracts).toHaveLength(4)
-    contractRed('IA-12')
+    const x = await journey.exerciseGrantGatesAndPay(grantOriginalTaskId, grantReplacementTaskId)
+    expect(x.blocked_mutations).toEqual(['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client']); expect(x.blocked_statuses).toEqual([409, 409, 409, 409]); expect(x.before_snapshot).toEqual(x.after_snapshot); expect(x.current_instruction).toBe('PAY'); expect(x.current_instruction_count).toBe(1); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
   })
-  await test.step(checkpointContract[13], async () => { contractRed('IA-13 LOCKED SERVICE') })
-  await test.step(checkpointContract[14], async () => { contractRed('IA-14 UNSETTLED') })
-  await test.step(checkpointContract[15], async () => { contractRed('IA-15 UNALLOCATED') })
-  await test.step(checkpointContract[16], async () => { contractRed('IA-16 SETTLED FULLY_ALLOCATED 0.00') })
-  await test.step(checkpointContract[17], async () => { contractRed('IA-17') })
+  await test.step(checkpointContract[13], async () => {
+    const x = await journey.createServiceDraft(caseId); draftId = x.draft_id
+    expect(x.case_id).toBe(caseId); expect(x.obligation_count).toBe(1); expect(x.draft_count).toBe(1); expect(x.draft_status).toBe('LOCKED'); expect(x.service_amount).toBe(x.bundle_amount); expect(x.official_fee_display).toBe('未配置'); expect(x.official_fee_in_total).toBe(false)
+  })
+  await test.step(checkpointContract[14], async () => {
+    const x = await journey.createBill(draftId); billId = x.bill_id
+    expect(x.replayed_bill_id).toBe(billId); expect(x.bill_count).toBe(1); expect(x.status).toBe('UNSETTLED'); expect(x.balance).toBe(x.bundle_amount); expect(x.currency).toBe('CNY')
+  })
+  await test.step(checkpointContract[15], async () => {
+    const x = await journey.createPayment(clientId, billId); paymentLineId = x.payment_line_id
+    expect(x.payment_count).toBe(1); expect(x.payment_line_count).toBe(1); expect(x.status).toBe('UNALLOCATED'); expect(x.applied_bill_ids).toEqual([]); expect(x.suggested_bill_id).toBe(billId)
+  })
+  await test.step(checkpointContract[16], async () => {
+    const x = await journey.createOffset(paymentLineId, billId); expect(x.active_offset_count).toBe(1); expect(x.bill_status).toBe('SETTLED'); expect(x.payment_status).toBe('FULLY_ALLOCATED'); expect(x.bill_balance).toBe('0.00'); expect(x.payment_unapplied).toBe('0.00'); expect(x.currency).toBe('CNY'); expect(x.case_receipt_received).toBe(x.bundle_amount)
+  })
+  await test.step(checkpointContract[17], async () => {
+    const x = await journey.reloadSummary(caseId); expect(x.case_id).toBe(caseId); expect(x.route_object_ids).toEqual(x.authoritative_object_ids); expect(x.bill_status).toBe('SETTLED'); expect(x.payment_status).toBe('FULLY_ALLOCATED'); expect(x.synthetic_zero_count).toBe(0)
+  })
   await test.step(checkpointContract[18], async () => {
-    expect({ lifecycle_status: 'GRANT_REGISTRATION_IN_PROGRESS', lifecycle_stage: 'GRANT_REGISTRATION', application_status: 'APPLICATION_PENDING', source_state: 'CONFIRMED', legacy_display: 'GRANT_PENDING' }).toBeTruthy()
+    const x = await journey.reloadSummary(caseId)
+    expect(x.lifecycle_status).toBe('GRANT_REGISTRATION_IN_PROGRESS'); expect(x.lifecycle_stage).toBe('GRANT_REGISTRATION'); expect(x.application_status).toBe('APPLICATION_PENDING'); expect(x.source_state).toBe('CONFIRMED'); expect(x.legacy_display).toBe('GRANT_PENDING'); expect(x.bill_status).toBe('SETTLED'); expect(x.payment_status).toBe('FULLY_ALLOCATED'); expect(x.bill_balance).toBe('0.00'); expect(x.payment_unapplied).toBe('0.00'); expect(x.currency).toBe('CNY'); expect(x.checkpoints_passed).toBe(19); expect(evidenceRoleMap.size).toBe(12)
   })
 
   await mkdir(evidenceDir!, { recursive: true })
   await writeFile(path.join(evidenceDir!, 'evidence-role-map.json'), JSON.stringify([...evidenceRoleMap.values()], null, 2))
   await reviewerContext.close()
-  expect({ clientId, caseId, oa1SourceId, oa2SourceId, grantOriginalTaskId, grantReplacementTaskId, apiBase }).toBeTruthy()
 })
