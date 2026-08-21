@@ -11,6 +11,12 @@ import pytest
 from app.core import demo_bundle
 from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.fees.models import FeeDraft, FeeItem, FeeObligation
+from app.modules.fees.obligation_contracts import (
+    FeeDomain,
+    FeeObligationDraftStatus,
+    FeeOfficialEvidenceStatus,
+    FeePayListStatus,
+)
 from app.modules.fees.obligation_service import get_fee_obligation
 from app.modules.masterdata.clients.models import Client
 
@@ -181,6 +187,10 @@ def test_runtime_service_item_to_pay_locked_draft(
     with session_factory() as db:
         detail = get_fee_obligation(obligation_id, db)
         assert detail.id == obligation_id
+        assert detail.fee_domain is FeeDomain.SERVICE
+        assert detail.statuses.draft_status is FeeObligationDraftStatus.CREATED
+        assert detail.statuses.official_evidence_status is FeeOfficialEvidenceStatus.NOT_APPLICABLE
+        assert detail.statuses.pay_list_status is FeePayListStatus.NOT_CREATED
         assert db.get(FeeDraft, draft_id).status == "LOCKED"
         items = db.query(FeeItem).filter(FeeItem.draft_id == draft_id).all()
         assert len(items) == 1

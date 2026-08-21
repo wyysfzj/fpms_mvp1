@@ -1722,8 +1722,7 @@ def _detail_pay_list_status(
 ) -> FeePayListStatus:
     if not rows:
         return FeePayListStatus.NOT_CREATED
-    if header["fee_domain"] != FeeDomain.GOV.value:
-        _stored_state_invalid()
+    fee_domain = _stored_enum(FeeDomain, cast(str, header["fee_domain"]))
     line_by_id = {line["id"]: line for line in lines}
     payment_states: set[bool] = set()
     for row in rows:
@@ -1736,7 +1735,7 @@ def _detail_pay_list_status(
             or row["draft_case_id"] != header["case_id"]
             or row["draft_currency"] != header["currency"]
             or row["item_case_id"] != header["case_id"]
-            or row["item_fee_type"] != FeeDomain.GOV.value
+            or row["item_fee_type"] != fee_domain.value
             or row["item_fee_code"] != line["fee_code"]
             or row["item_year_no"] != line["fee_year_key"]
         ):
@@ -1750,6 +1749,10 @@ def _detail_pay_list_status(
             row["payment_currency"],
             row["pay_list_currency"],
         )
+        if fee_domain is FeeDomain.SERVICE:
+            if any(value is not None for value in payment_values):
+                _stored_state_invalid()
+            continue
         if any(value is None for value in payment_values) and not all(
             value is None for value in payment_values
         ):
@@ -1764,6 +1767,16 @@ def _detail_pay_list_status(
             or row["pay_list_currency"] != header["currency"]
         ):
             _stored_state_invalid()
+    if fee_domain is FeeDomain.SERVICE:
+        if (
+            header["draft_status"] != FeeObligationDraftStatus.CREATED.value
+            or header["payment_status"] != FeePaymentStatus.UNPAID.value
+            or header["official_evidence_status"]
+            != FeeOfficialEvidenceStatus.NOT_APPLICABLE.value
+            or header["client_instruction_status"] != FeeClientInstructionStatus.PAY.value
+        ):
+            _stored_state_invalid()
+        return FeePayListStatus.NOT_CREATED
     if len(payment_states) != 1:
         _stored_state_invalid()
     if False in payment_states:
