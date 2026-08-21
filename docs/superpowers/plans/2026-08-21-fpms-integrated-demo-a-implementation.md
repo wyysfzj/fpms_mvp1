@@ -55,8 +55,10 @@ suffix task; it never widens the current allowlist.
 
 Every ordinal uses the exact task/evidence/commit contract below. Each evidence root must contain
 `task.json`, `summary.md`, `git/diff.patch`, `git/rev.txt`, `git/status.txt`, `commands.jsonl`,
-`review/HIGH_REVIEW.md` and `checksums.sha256`; the review binds the exact candidate commit/tree and
-returns `0/0/0` before the commit shown for that ordinal is accepted.
+`review/HIGH_REVIEW.md` and `checksums.sha256`. After RED/GREEN and focused scope checks, run the
+listed commit command to create the candidate. The independent review then binds that exact
+candidate commit/tree. Only a `0/0/0` review plus freshly regenerated and replayed checksums accepts
+the candidate. A remediation creates a new commit and repeats review; no uncommitted bytes qualify.
 
 | Ordinal | Exact task path | Exact evidence root | Literal commit command |
 | --- | --- | --- | --- |
@@ -94,7 +96,8 @@ node FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-sta
 python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task01 --runs 1 --headless
 ```
 
-- [ ] Review/evidence, remove only that temp root, then commit:
+- [ ] Remove only that temp root, create the candidate commit, then obtain exact-commit High review
+  and finalize/replay evidence:
 
 ```bash
 git add FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a.live-backend.spec.ts FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs scripts/run_demo_integrated_a_rehearsal.py backend/tests/test_demo_integrated_a_runner.py tasks/postdemo/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01.md
@@ -125,8 +128,8 @@ business writes. GREEN and advance real RED beyond IA-00:
 python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task02 --runs 1 --headless
 ```
 
-- [ ] Review/evidence/cleanup; commit `feat(demo): add integrated input bundle contract` with only
-the four source/test files and exact task card.
+- [ ] Cleanup, commit `feat(demo): add integrated input bundle contract` with only the four
+source/test files and exact task card, then exact-commit review/evidence acceptance.
 
 ## Task 3 — Visible provenance
 
@@ -146,7 +149,8 @@ cd frontend && npm run typecheck
 cd frontend && npx eslint src/modules/demo/pages/DemoAbc.vue src/modules/demo/demo.api.ts
 ```
 
-- [ ] Review/evidence; commit `feat(demo): show integrated input provenance` with exact files.
+- [ ] Commit `feat(demo): show integrated input provenance` with exact files, then exact-commit
+review/evidence acceptance.
 
 ## Task 4 — Evidence command reconciliation
 
@@ -167,7 +171,8 @@ cd frontend && npx eslint src/api/documents.ts src/modules/documents/components/
 ```
 
 - [ ] If already green, record zero-product-diff; otherwise reconcile only unknown transport.
-Review/evidence; commit `fix(documents): reconcile evidence review commands` with exact files.
+Commit `fix(documents): reconcile evidence review commands` with exact files, then exact-commit
+review/evidence acceptance.
 
 ## Task 5 — Filing and first OA
 
@@ -189,8 +194,9 @@ node FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-sta
 python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task05 --runs 1 --headless
 ```
 
-- [ ] Edit only an exact failing owner or record zero-product-diff; review/evidence/cleanup; commit
-`test(demo): close integrated filing and first OA` with the listed files.
+- [ ] Edit only an exact failing owner or record zero-product-diff; cleanup; commit
+`test(demo): close integrated filing and first OA` with the listed files; then exact-commit
+review/evidence acceptance.
 
 ## Task 6 — Receipt gates and OA2
 
@@ -212,8 +218,9 @@ node FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-sta
 python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task06 --runs 1 --headless
 ```
 
-- [ ] Exact owner or zero-product-diff; review/evidence/cleanup; commit
-`test(demo): close receipt gates and second OA` with listed files.
+- [ ] Exact owner or zero-product-diff; cleanup; commit
+`test(demo): close receipt gates and second OA` with listed files; then exact-commit review/evidence
+acceptance.
 
 ## Task 7 — Grant replacement boundary
 
@@ -235,7 +242,8 @@ python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrat
 ```
 
 - [ ] Missing official-fee authority stays CONFIG_REQUIRED/no-write. Exact owner or zero-product-
-diff; review/evidence/cleanup; commit `fix(demo): preserve grant authority boundary`.
+diff; cleanup; commit `fix(demo): preserve grant authority boundary`; then exact-commit
+review/evidence acceptance.
 
 ## Task 8 — Same-case finance
 
@@ -259,8 +267,8 @@ cd frontend && npx eslint src/modules/demo/pages/DemoAbc.vue src/modules/demo/de
 python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task08 --runs 1 --headless
 ```
 
-- [ ] Exact owner or zero-product-diff; review/evidence/cleanup; commit
-`test(demo): connect finance to integrated case`.
+- [ ] Exact owner or zero-product-diff; cleanup; commit
+`test(demo): connect finance to integrated case`; then exact-commit review/evidence acceptance.
 
 ## Task 9 — Two-run controller
 
@@ -269,8 +277,9 @@ python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrat
 **Files:** controller, `backend/tests/test_demo_integrated_a_runner.py`, exact task card; evidence
 `artifacts/FPMS-DEMO-INTEGRATED-A-RUNNER-20260821-09/**`.
 
-- [ ] RED/GREEN: clean pin, two roots/business identity sets, headed mode, IA 19/19, maps, exact
-postconditions, redacted commands, screenshots, checksums, cleanup and no listeners.
+- [ ] RED/GREEN: clean pin, two headless diagnostic roots/business identity sets, IA 19/19, maps,
+exact postconditions, redacted commands, screenshots, checksums, cleanup and no listeners. Headed
+proof is owned only by Task 10.
 
 ```bash
 /tmp/fpms-demo-python-20260817/bin/python -m pytest -q backend/tests/test_demo_integrated_a_runner.py
@@ -278,7 +287,8 @@ postconditions, redacted commands, screenshots, checksums, cleanup and no listen
 python3 scripts/run_demo_integrated_a_rehearsal.py --artifact /tmp/fpms-integrated-a-task09 --runs 2 --headless
 ```
 
-- [ ] Review/evidence/cleanup; commit `test(demo): harden integrated rehearsal controller`.
+- [ ] Cleanup; commit `test(demo): harden integrated rehearsal controller`; then exact-commit
+review/evidence acceptance.
 
 ## Task 10 — Final acceptance
 
@@ -317,7 +327,8 @@ evidence and return APPROVED 0/0/0.
 ## Serial rule
 
 Order `1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10`. SQLite/shared files are serialized. Each:
-RED → minimum GREEN → focused verification → exact scope → independent High 0/0/0 → evidence →
-commit. Completed ordinals are not repeated. Transport ambiguity reconciles durable state. A new
+RED → minimum GREEN → focused verification → exact scope → candidate commit → independent High
+0/0/0 bound to that commit/tree → fresh checksum replay → evidence acceptance. Completed ordinals
+are not repeated. Transport ambiguity reconciles durable state. A new
 owner creates one exact suffix task, not redesign. Three failed reviews of the same contract stop
 for customer input.
