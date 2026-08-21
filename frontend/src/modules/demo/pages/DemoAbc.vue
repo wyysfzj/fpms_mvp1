@@ -6,8 +6,10 @@
         <h1>客户账单、回款与核销演示</h1>
         <p>所有金额与模板均来自当前只读 runtime bundle；本页不代表生产费率或正式模板。</p>
       </div>
-      <el-tag :type="bundle ? 'success' : 'warning'" size="large">
-        {{ bundle ? '演示输入已校验' : '等待演示输入' }}
+      <el-tag :type="demoReady ? 'success' : bundle ? 'info' : 'warning'" size="large">
+        {{ demoReady
+          ? `演示输入已校验 · ${preflight?.authority_classification}`
+          : bundle ? '演示输入已加载，尚未通过全新环境校验' : '等待演示输入' }}
       </el-tag>
     </header>
 
@@ -15,15 +17,23 @@
 
     <el-card class="step-card">
       <template #header><strong>1. Runtime bundle</strong></template>
-      <el-button :loading="loading === 'bundle'" type="primary" @click="loadBundle">校验并读取输入</el-button>
+      <div class="actions">
+        <el-button data-testid="demo-preflight" :loading="loading === 'preflight'" type="primary" @click="validatePreflight">校验全新演示环境</el-button>
+        <el-button :loading="loading === 'bundle'" @click="loadBundle">读取输入</el-button>
+      </div>
       <dl v-if="bundle" class="facts">
-        <div><dt>Bundle</dt><dd>{{ bundle.bundle_id }} / {{ bundle.bundle_version }}</dd></div>
-        <div><dt>Manifest SHA-256</dt><dd class="hash">{{ bundle.manifest_sha256 }}</dd></div>
-        <div><dt>模板</dt><dd>{{ bundle.template_code }}</dd></div>
-        <div><dt>Template SHA-256</dt><dd class="hash">{{ bundle.template_sha256 }}</dd></div>
-        <div><dt>服务费项目</dt><dd>{{ bundle.name_zh_cn }}（{{ money(bundle.amount) }} {{ bundle.currency }}）</dd></div>
-        <div><dt>来源</dt><dd>{{ bundle.source_ref }} / {{ bundle.source_version }}</dd></div>
+        <div><dt>Bundle ID / 版本</dt><dd><span data-testid="bundle-id">{{ bundle.bundle_id }}</span> / <span data-testid="bundle-version">{{ bundle.bundle_version }}</span></dd></div>
+        <div><dt>Manifest SHA-256</dt><dd data-testid="manifest-sha256" class="hash">{{ bundle.manifest_sha256 }}</dd></div>
+        <div><dt>模板代码</dt><dd data-testid="template-code">{{ bundle.template_code }}</dd></div>
+        <div><dt>模板文件 SHA-256</dt><dd data-testid="template-sha256" class="hash">{{ bundle.template_sha256 }}</dd></div>
+        <div><dt>费率项目代码</dt><dd><span data-testid="rate-item-code">{{ bundle.item_code }}</span> · {{ bundle.name_zh_cn }}</dd></div>
+        <div><dt>费率来源</dt><dd data-testid="rate-source-ref">{{ bundle.source_ref }}</dd></div>
+        <div><dt>费率来源版本</dt><dd data-testid="rate-source-version">{{ bundle.source_version }}</dd></div>
+        <div><dt>费率来源 SHA-256</dt><dd data-testid="rate-source-sha256" class="hash">{{ bundle.source_sha256 }}</dd></div>
+        <div><dt>服务费</dt><dd>{{ money(bundle.amount) }} {{ bundle.currency }}</dd></div>
+        <div><dt>官方费用</dt><dd>官方费用：未配置（不计入总额）</dd></div>
       </dl>
+      <el-alert v-if="bundle" data-testid="demo-disclaimer" :title="bundle.disclaimer_zh_cn" type="warning" :closable="false" class="disclaimer" />
     </el-card>
 
     <el-card class="step-card">
@@ -46,7 +56,7 @@
     <el-card class="step-card">
       <template #header><strong>3. 服务费义务 → PAY → 锁定草单</strong></template>
       <div class="actions">
-        <el-button data-testid="create-obligation" :disabled="!selectedCase || !bundle" :loading="loading === 'obligation'" @click="createObligation">生成服务费义务</el-button>
+        <el-button data-testid="create-obligation" :disabled="!selectedCase || !demoReady" :loading="loading === 'obligation'" @click="createObligation">生成服务费义务</el-button>
         <el-button data-testid="create-draft" :disabled="!obligation" :loading="loading === 'draft'" @click="confirmPayAndLock">确认 PAY 并锁定草单</el-button>
       </div>
       <p v-if="obligation" class="success-line">义务 {{ obligation.obligation.id }} · {{ money(obligation.amount) }} CNY</p>
@@ -86,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { getCaseByCaseNo } from '../../../api/cases'
 import type { Case } from '../../../api/cases.types'
 import {
@@ -97,6 +107,7 @@ import {
   createDemoServiceObligation,
   lockDemoDraft,
   readDemoServiceItem,
+  readDemoPreflight,
   recordDemoPayInstruction,
 } from '../demo.api'
 import type {
@@ -105,10 +116,13 @@ import type {
   DemoDraft,
   DemoFeeObligationResponse,
   DemoOffsetResponse,
+  DemoPreflight,
   DemoServiceItem,
 } from '../demo.api'
 
 const bundle = ref<DemoServiceItem>()
+const preflight = ref<DemoPreflight>()
+const demoReady = computed(() => preflight.value?.readiness === 'READY')
 const selectedCase = ref<Case>()
 const caseNoInput = ref('')
 const obligation = ref<DemoFeeObligationResponse>()
@@ -159,13 +173,22 @@ async function loadBundle() {
   await run('bundle', async () => { bundle.value = await readDemoServiceItem() })
 }
 
+async function validatePreflight() {
+  preflight.value = undefined
+  await run('preflight', async () => {
+    const result = await readDemoPreflight()
+    preflight.value = result
+    bundle.value = result
+  })
+}
+
 async function loadCase() {
   if (!caseNoInput.value) return
   await run('case', async () => { selectedCase.value = await getCaseByCaseNo(caseNoInput.value) })
 }
 
 async function createObligation() {
-  if (!selectedCase.value || !bundle.value) return
+  if (!selectedCase.value || !bundle.value || !demoReady.value) return
   await run('obligation', async () => {
     obligation.value = await createDemoServiceObligation(
       selectedCase.value!.id,
@@ -247,4 +270,5 @@ onMounted(loadBundle)
 .facts dd { margin: 4px 0 0; font-weight: 600; }
 .hash { overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: 12px; }
 .final-state { border-left: 4px solid #16a34a; padding-left: 16px; }
+.disclaimer { margin-top: 16px; }
 </style>

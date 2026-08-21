@@ -12,9 +12,10 @@ from app.modules.fees.models import FeeDraft, FeeItem, FeeObligation
 from app.modules.masterdata.clients.models import Client
 
 
-def _bundle(tmp_path: Path):
+def _bundle(tmp_path: Path, *, integrated: bool = False):
     helpers = runpy.run_path(str(Path(__file__).with_name("test_demo_abc_runtime_bundle.py")))
-    return helpers["_valid_bundle"](tmp_path)
+    builder = "_valid_integrated_bundle" if integrated else "_valid_bundle"
+    return helpers[builder](tmp_path)
 
 
 def _seed_case(session_factory) -> tuple[str, str]:
@@ -53,8 +54,13 @@ def _seed_case(session_factory) -> tuple[str, str]:
     return client_id, case_id
 
 
-def _configure_bundle(tmp_path: Path, monkeypatch) -> tuple[Path, str]:
-    root, _manifest, digest = _bundle(tmp_path)
+def _configure_bundle(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    integrated: bool = False,
+) -> tuple[Path, str]:
+    root, _manifest, digest = _bundle(tmp_path, integrated=integrated)
     monkeypatch.setenv("FPMS_ENV", "demo")
     monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
     monkeypatch.setenv("FPMS_DEMO_RUN_PROFILE", "TECHNICAL_REHEARSAL")
@@ -67,7 +73,8 @@ def _configure_bundle(tmp_path: Path, monkeypatch) -> tuple[Path, str]:
     monkeypatch.setenv(
         "FPMS_DEMO_EXPECTED_AUTHORITY_CLASSIFICATION", "SYNTHETIC_TEST_ONLY"
     )
-    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: date(2026, 8, 16))
+    current_date = date(2026, 8, 21) if integrated else date(2026, 8, 16)
+    monkeypatch.setattr(demo_bundle, "_current_demo_date", lambda: current_date)
     return root, digest
 
 
@@ -151,6 +158,64 @@ def test_runtime_service_item_to_pay_locked_draft(
             .all()
         )
         assert len(source_rows) == 1
+
+
+def test_demo_preflight_requires_validated_input_and_zero_business_counts(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    _configure_bundle(tmp_path, monkeypatch, integrated=True)
+
+    response = client.get("/api/v1/fees/demo-preflight", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["readiness"] == "READY"
+    assert payload["authority_classification"] == "SYNTHETIC_TEST_ONLY"
+    assert payload["customer_activation_eligible"] is False
+    assert payload["business_counts"] == {
+        "client": 0,
+        "contact": 0,
+        "case": 0,
+        "package": 0,
+        "task": 0,
+        "obligation": 0,
+        "draft": 0,
+        "bill": 0,
+        "payment": 0,
+        "offset": 0,
+    }
+    assert payload["template_code"] == "DEMO_INTEGRATED_LETTER_1"
+    assert len(payload["template_sha256"]) == 64
+    assert payload["item_code"] == "DEMO_INTEGRATED_SERVICE_1"
+    assert len(payload["source_sha256"]) == 64
+
+    _seed_case(session_factory)
+    not_fresh = client.get("/api/v1/fees/demo-preflight", headers=auth_headers)
+    assert not_fresh.status_code == 409
+    assert not_fresh.json()["error"]["code"] == "DEMO_RUN_NOT_FRESH"
+
+
+def test_demo_preflight_rejects_legacy_bundle_without_business_writes(
+    client,
+    auth_headers,
+    session_factory,
+    tmp_path,
+    monkeypatch,
+):
+    _configure_bundle(tmp_path, monkeypatch)
+
+    response = client.get("/api/v1/fees/demo-preflight", headers=auth_headers)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "DEMO_INPUT_CONFIG_REQUIRED"
+    with session_factory() as db:
+        assert db.query(Client).count() == 0
+        assert db.query(Case).count() == 0
+        assert db.query(FeeObligation).count() == 0
+        assert db.query(FeeDraft).count() == 0
 
 
 def test_invalid_item_creates_no_fee_facts_and_cached_bundle_ignores_external_drift(

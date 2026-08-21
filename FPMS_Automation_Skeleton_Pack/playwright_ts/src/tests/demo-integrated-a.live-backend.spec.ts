@@ -61,6 +61,7 @@ const adminUsername = process.env.FPMS_ADMIN_USERNAME
 const adminPassword = process.env.FPMS_ADMIN_PASSWORD
 const reviewerUsername = process.env.FPMS_REVIEWER_USERNAME
 const reviewerPassword = process.env.FPMS_REVIEWER_PASSWORD
+const expectedDisclaimer = process.env.FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN
 const expectedProvenance = {
   bundle_id: process.env.FPMS_DEMO_EXPECTED_BUNDLE_ID,
   bundle_version: process.env.FPMS_DEMO_EXPECTED_BUNDLE_VERSION,
@@ -363,7 +364,29 @@ class IntegratedJourneyDriver {
   async createPayment(_clientId: string, _billId: string): Promise<Json> { return this.red('IA-15') }
   async createOffset(_lineId: string, _billId: string): Promise<Json> { return this.red('IA-16') }
   async reloadSummary(_caseId: string): Promise<Json> { return this.red('IA-17') }
-  async preflight(): Promise<Json> { return this.red('IA-00') }
+  async preflight(): Promise<Json> {
+    await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
+    const responsePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/fees/demo-preflight'))
+    await this.operatorPage.getByTestId('demo-preflight').click()
+    const item = await (await responsePromise).json() as Json
+    return {
+      provenance: {
+        bundle_id: item.bundle_id,
+        bundle_version: item.bundle_version,
+        manifest_sha256: item.manifest_sha256,
+        template_code: item.template_code,
+        template_sha256: item.template_sha256,
+        rate_item_code: item.item_code,
+        rate_source_ref: item.source_ref,
+        rate_source_version: item.source_version,
+        rate_source_sha256: item.source_sha256,
+      },
+      business_counts: item.business_counts,
+      readiness: item.readiness,
+      classification: item.authority_classification,
+      customer_activation_eligible: item.customer_activation_eligible,
+    }
+  }
 
   async publicLifecycleApi(
     operation: PublicLifecycleOperation,
@@ -382,7 +405,7 @@ class IntegratedJourneyDriver {
 
 test('Integrated Scheme A executes prior lifecycle and new finance on one case', async ({ browser, page, request }) => {
   test.setTimeout(240_000)
-  for (const required of [adminUsername, adminPassword, reviewerUsername, reviewerPassword, evidenceDir, bundlePath]) expect(typeof required).toBe('string')
+  for (const required of [adminUsername, adminPassword, reviewerUsername, reviewerPassword, evidenceDir, bundlePath, expectedDisclaimer]) expect(typeof required).toBe('string')
 
   const operatorToken = await login(page, adminUsername!, adminPassword!)
   const reviewerContext: BrowserContext = await browser.newContext()
@@ -406,17 +429,24 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     expect(snapshot.readiness).toBe('READY')
     expect(snapshot.classification).toBe('SYNTHETIC_TEST_ONLY')
     expect(snapshot.customer_activation_eligible).toBe(false)
-    await page.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('演示输入已校验')).toBeVisible()
     await expect(page.getByText(manifestSha256)).toBeVisible()
     await expect(page.getByText('SYNTHETIC_TEST_ONLY')).toBeVisible()
-    await expect(page.getByText(/模板代码/)).toBeVisible()
-    await expect(page.getByText(/模板文件 SHA-256/)).toBeVisible()
-    await expect(page.getByText(/费率来源/)).toBeVisible()
-    await expect(page.getByText(/费率来源 SHA-256/)).toBeVisible()
-    await expect(page.getByText('未配置')).toBeVisible()
-    for (const value of Object.values(expectedProvenance)) await expect(page.getByText(value!, { exact: false })).toBeVisible()
-    await expect(page.getByText(/虚构演示输入.*不是客户授权费率.*不是官方费用/)).toBeVisible()
+    await expect(page.getByText('模板代码', { exact: true })).toBeVisible()
+    await expect(page.getByText('模板文件 SHA-256', { exact: true })).toBeVisible()
+    await expect(page.getByText('费率来源', { exact: true })).toBeVisible()
+    await expect(page.getByText('费率来源 SHA-256', { exact: true })).toBeVisible()
+    await expect(page.getByText('官方费用：未配置（不计入总额）', { exact: true })).toBeVisible()
+    await expect(page.getByTestId('bundle-id')).toHaveText(expectedProvenance.bundle_id!)
+    await expect(page.getByTestId('bundle-version')).toHaveText(expectedProvenance.bundle_version!)
+    await expect(page.getByTestId('manifest-sha256')).toHaveText(expectedProvenance.manifest_sha256!)
+    await expect(page.getByTestId('template-code')).toHaveText(expectedProvenance.template_code!)
+    await expect(page.getByTestId('template-sha256')).toHaveText(expectedProvenance.template_sha256!)
+    await expect(page.getByTestId('rate-item-code')).toHaveText(expectedProvenance.rate_item_code!)
+    await expect(page.getByTestId('rate-source-ref')).toHaveText(expectedProvenance.rate_source_ref!)
+    await expect(page.getByTestId('rate-source-version')).toHaveText(expectedProvenance.rate_source_version!)
+    await expect(page.getByTestId('rate-source-sha256')).toHaveText(expectedProvenance.rate_source_sha256!)
+    await expect(page.getByTestId('demo-disclaimer')).toHaveText(expectedDisclaimer!)
   })
 
   await test.step(checkpointContract[1], async () => {

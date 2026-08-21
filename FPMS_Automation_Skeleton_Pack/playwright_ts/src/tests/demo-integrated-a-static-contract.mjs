@@ -206,7 +206,7 @@ const allowedMemberCalls = new Set([
   'replaceGrant', 'resolveFiling', 'publicLifecycleApi', 'set', 'setInputFiles', 'setTimeout', 'status',
   'step', 'stringify', 'toBe', 'toBeDefined', 'toBeGreaterThan',
   'toBeGreaterThanOrEqual', 'toBeVisible', 'toContain', 'toContainEqual', 'toEqual',
-  'toHaveLength', 'toHaveURL', 'toMatch', 'uploadRole', 'url', 'values',
+  'toHaveLength', 'toHaveText', 'toHaveURL', 'toMatch', 'uploadRole', 'url', 'values',
   'waitForResponse',
 ])
 const allowedIdentifierCalls = new Set([
@@ -222,7 +222,9 @@ const expectedSensitiveCallCounts = new Map([
   ["operatorPage.waitForResponse((response) => response.status() === 201 && response.url().includes('/attachments'))", 1],
   ["reviewerPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })", 1],
   ["reviewerPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/review'))", 1],
-  ["page.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })", 2],
+  ["this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/fees/demo-preflight'))", 1],
+  ["page.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })", 1],
   ["writeFile(path.join(evidenceDir!, 'evidence-role-map.json'), JSON.stringify(orderedEvidenceLedger, null, 2))", 1],
 ])
 const observedSensitiveCallCounts = new Map()

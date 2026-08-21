@@ -28,6 +28,28 @@ class DemoServiceItemOut(BaseModel):
     disclaimer_zh_cn: str
 
 
+class DemoBusinessCountsOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    client: int
+    contact: int
+    case: int
+    package: int
+    task: int
+    obligation: int
+    draft: int
+    bill: int
+    payment: int
+    offset: int
+
+
+class DemoPreflightOut(DemoServiceItemOut):
+    authority_classification: str
+    customer_activation_eligible: bool
+    readiness: str
+    business_counts: DemoBusinessCountsOut
+
+
 class DemoServiceObligationIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

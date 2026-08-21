@@ -74,6 +74,11 @@ function boolean(value: unknown, path: string): boolean {
   return value
 }
 
+function count(value: unknown, path: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) invalid(path)
+  return value
+}
+
 function stringArray(value: unknown, path: string, item: (value: unknown, path: string) => string): string[] {
   if (!Array.isArray(value)) invalid(path)
   return value.map((entry, index) => item(entry, `${path}[${index}]`))
@@ -102,6 +107,24 @@ export interface DemoFeeObligationResponse extends DemoServiceItem {
   source_activity_id: string
   idempotency_key: string
   reused: boolean
+}
+
+export interface DemoPreflight extends DemoServiceItem {
+  authority_classification: 'SYNTHETIC_TEST_ONLY' | 'CUSTOMER_AUTHORIZED'
+  customer_activation_eligible: boolean
+  readiness: 'READY'
+  business_counts: {
+    client: number
+    contact: number
+    case: number
+    package: number
+    task: number
+    obligation: number
+    draft: number
+    bill: number
+    payment: number
+    offset: number
+  }
 }
 
 export interface DemoDraft {
@@ -212,6 +235,40 @@ export function parseDemoServiceItem(value: unknown): DemoServiceItem {
   digest(row.source_sha256, 'service_item.source_sha256')
   string(row.disclaimer_zh_cn, 'service_item.disclaimer_zh_cn')
   return value as DemoServiceItem
+}
+
+export function parseDemoPreflight(value: unknown): DemoPreflight {
+  parseDemoServiceItem(value)
+  const row = record(value, 'demo_preflight')
+  literal(
+    row.authority_classification,
+    ['SYNTHETIC_TEST_ONLY', 'CUSTOMER_AUTHORIZED'],
+    'demo_preflight.authority_classification',
+  )
+  const customerEligible = boolean(
+    row.customer_activation_eligible,
+    'demo_preflight.customer_activation_eligible',
+  )
+  literal(row.readiness, ['READY'], 'demo_preflight.readiness')
+  const counts = record(row.business_counts, 'demo_preflight.business_counts')
+  const expectedCountKeys = [
+    'bill', 'case', 'client', 'contact', 'draft', 'obligation', 'offset', 'package', 'payment', 'task',
+  ]
+  if (Object.keys(counts).sort().join('|') !== expectedCountKeys.join('|')) {
+    invalid('demo_preflight.business_counts')
+  }
+  for (const key of expectedCountKeys) {
+    if (count(counts[key], `demo_preflight.business_counts.${key}`) !== 0) {
+      invalid(`demo_preflight.business_counts.${key}`)
+    }
+  }
+  if (
+    (row.authority_classification === 'SYNTHETIC_TEST_ONLY' && customerEligible) ||
+    (row.authority_classification === 'CUSTOMER_AUTHORIZED' && !customerEligible)
+  ) {
+    invalid('demo_preflight.customer_activation_eligible')
+  }
+  return value as DemoPreflight
 }
 
 export function parseDemoFeeObligationResponse(value: unknown): DemoFeeObligationResponse {

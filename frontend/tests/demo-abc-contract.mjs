@@ -10,6 +10,7 @@ const router = readFileSync(join(root, 'src/router/index.ts'), 'utf8')
 const menu = readFileSync(join(root, 'src/constants/menu.ts'), 'utf8')
 
 for (const endpoint of [
+  '/fees/demo-preflight',
   '/fees/demo-service-item',
   '/fees/demo-service-obligations',
   '/bills/demo-from-draft',
@@ -34,6 +35,30 @@ assert.ok(menu.includes("route: '/demo/abc'"))
 assert.ok(page.includes('DEMO_ONLY'))
 assert.ok(page.includes('template_sha256'))
 assert.ok(page.includes('manifest_sha256'))
+for (const visibleLabel of [
+  'Bundle ID / 版本',
+  'Manifest SHA-256',
+  '模板代码',
+  '模板文件 SHA-256',
+  '费率项目代码',
+  '费率来源',
+  '费率来源版本',
+  '费率来源 SHA-256',
+  '官方费用：未配置（不计入总额）',
+]) assert.ok(page.includes(visibleLabel), `missing visible IA-00 label ${visibleLabel}`)
+assert.ok(page.includes('data-testid="demo-preflight"'))
+assert.ok(page.includes('data-testid="demo-disclaimer"'))
+assert.ok(page.includes("const demoReady = computed(() => preflight.value?.readiness === 'READY')"))
+assert.ok(page.includes("preflight.value = undefined"))
+assert.ok(page.includes(':disabled="!selectedCase || !demoReady"'))
+assert.ok(page.includes('if (!selectedCase.value || !bundle.value || !demoReady.value) return'))
+assert.ok(page.includes('演示输入已加载，尚未通过全新环境校验'))
+for (const testId of [
+  'bundle-id', 'bundle-version', 'manifest-sha256', 'template-code', 'template-sha256',
+  'rate-item-code', 'rate-source-ref', 'rate-source-version', 'rate-source-sha256',
+]) assert.ok(page.includes(`data-testid="${testId}"`), `missing IA-00 provenance test id ${testId}`)
+assert.ok(api.includes('readDemoPreflight'))
+assert.ok(api.includes('parseDemoPreflight'))
 assert.ok(page.includes('idempotencyKeys'))
 assert.ok(!page.includes('amount || 0'))
 assert.ok(!page.includes('Number('))

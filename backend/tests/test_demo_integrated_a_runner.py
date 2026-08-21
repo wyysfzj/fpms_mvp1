@@ -64,6 +64,24 @@ def test_integrated_spec_login_uses_current_visible_form_labels():
     assert "page.getByRole('button', { name: '登 录' }).click()" in source
 
 
+def test_runner_binds_ia00_expectations_to_the_integrated_manifest():
+    source = RUNNER.read_text(encoding="utf-8")
+
+    for key in (
+        "FPMS_DEMO_EXPECTED_BUNDLE_ID",
+        "FPMS_DEMO_EXPECTED_BUNDLE_VERSION",
+        "FPMS_DEMO_EXPECTED_TEMPLATE_CODE",
+        "FPMS_DEMO_EXPECTED_TEMPLATE_SHA256",
+        "FPMS_DEMO_EXPECTED_RATE_ITEM_CODE",
+        "FPMS_DEMO_EXPECTED_RATE_SOURCE_REF",
+        "FPMS_DEMO_EXPECTED_RATE_SOURCE_VERSION",
+        "FPMS_DEMO_EXPECTED_RATE_SOURCE_SHA256",
+        "FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN",
+    ):
+        assert key in source
+    assert '(bundle / "manifest.json").read_text' in source
+
+
 def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
     module = _module()
     source = SPEC.read_text(encoding="utf-8")

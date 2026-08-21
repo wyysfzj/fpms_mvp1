@@ -212,6 +212,9 @@ def _run_one(
     run_root = (Path(tempfile.gettempdir()) / f"fpms-demo-abc-{run_id}").resolve()
     run_artifact = artifact / f"run{ordinal}"
     run_artifact.mkdir()
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    template = manifest["templates"][0]
+    rate = manifest["rates"][0]
     admin_password = secrets.token_urlsafe(24)
     reviewer_password = secrets.token_urlsafe(24)
     env = os.environ.copy()
@@ -253,6 +256,15 @@ def _run_one(
             FPMS_REVIEWER_USERNAME="demo_evidence_reviewer",
             FPMS_REVIEWER_PASSWORD=reviewer_password,
             FPMS_DEMO_EVIDENCE_DIR=str(run_artifact),
+            FPMS_DEMO_EXPECTED_BUNDLE_ID=manifest["bundle_id"],
+            FPMS_DEMO_EXPECTED_BUNDLE_VERSION=manifest["bundle_version"],
+            FPMS_DEMO_EXPECTED_TEMPLATE_CODE=template["template_code"],
+            FPMS_DEMO_EXPECTED_TEMPLATE_SHA256=template["sha256"],
+            FPMS_DEMO_EXPECTED_RATE_ITEM_CODE=rate["item_code"],
+            FPMS_DEMO_EXPECTED_RATE_SOURCE_REF=rate["source_ref"],
+            FPMS_DEMO_EXPECTED_RATE_SOURCE_VERSION=rate["source_version"],
+            FPMS_DEMO_EXPECTED_RATE_SOURCE_SHA256=rate["source_sha256"],
+            FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN=rate["disclaimer_zh_cn"],
         )
         command = [
             "node",

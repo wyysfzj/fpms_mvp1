@@ -17,8 +17,13 @@ from app.db.session import get_db
 from app.modules.auth.models import T_User
 from app.modules.cases.models import Case
 from app.modules.documents.models import DocumentEvidenceVersion
-from app.modules.fees.demo_service import create_demo_service_obligation, get_demo_service_item
+from app.modules.fees.demo_service import (
+    create_demo_service_obligation,
+    get_demo_preflight,
+    get_demo_service_item,
+)
 from app.modules.fees.demo_service_schemas import (
+    DemoPreflightOut,
     DemoServiceItemOut,
     DemoServiceObligationIn,
     DemoServiceObligationOut,
@@ -106,6 +111,18 @@ def _service_price_book_runtime_profile() -> str:
 
 def _service_price_book_utcnow() -> datetime:
     return datetime.utcnow()
+
+
+@router.get(
+    "/fees/demo-preflight",
+    response_model=DemoPreflightOut,
+    summary="Validate a fresh local integrated-demo run",
+)
+def get_local_demo_preflight(
+    _perm: None = Depends(require_perm("Fee.Read")),
+    db: Session = Depends(get_db),
+) -> DemoPreflightOut:
+    return DemoPreflightOut.model_validate(get_demo_preflight(db))
 
 
 @router.get(

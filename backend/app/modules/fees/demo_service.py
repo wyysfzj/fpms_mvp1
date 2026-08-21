@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.demo_bundle import DemoBundleError, DemoBundleSnapshot, load_demo_bundle
 from app.core.errors import BusinessError
+from app.modules.billing.models import Bill, Offset, Payment
 from app.modules.cases.lifecycle_activity_service import append_case_activity
 from app.modules.cases.lifecycle_contracts import (
     ActivityLane,
@@ -25,6 +26,7 @@ from app.modules.cases.lifecycle_contracts import (
     OfficialProcedureStage,
 )
 from app.modules.cases.models import Case, CaseActivityEvent
+from app.modules.fees.models import FeeDraft, FeeObligation
 from app.modules.fees.obligation_contracts import (
     FeeDifferenceReviewState,
     FeeDomain,
@@ -34,9 +36,13 @@ from app.modules.fees.obligation_contracts import (
     RecognizeFeeObligationResult,
 )
 from app.modules.fees.obligation_service import recognize_obligation
+from app.modules.masterdata.clients.models import Client, ClientContact
+from app.modules.official_workflows.models import OfficialWorkPackage
+from app.modules.tasks.models import Task
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _SOURCE_SCHEMA = "FPMS_DEMO_SERVICE_PRICE_ITEM_SELECTED_V1"
+_INTEGRATED_SCHEMA = "fpms.demo-input-bundle/integrated-a-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +62,14 @@ class DemoServiceItem:
     source_version: str
     source_sha256: str
     disclaimer_zh_cn: str
+
+
+@dataclass(frozen=True, slots=True)
+class DemoPreflightResult(DemoServiceItem):
+    authority_classification: str
+    customer_activation_eligible: bool
+    readiness: str
+    business_counts: dict[str, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,8 +143,7 @@ def _bundle() -> DemoBundleSnapshot:
     return _load_bundle_snapshot(root, digest, authority_digest, authority_classification)
 
 
-def get_demo_service_item() -> DemoServiceItem:
-    snapshot = _bundle()
+def _demo_service_item(snapshot: DemoBundleSnapshot) -> DemoServiceItem:
     rate = snapshot.service_rate
     try:
         amount = Decimal(rate.amount)
@@ -152,6 +165,47 @@ def get_demo_service_item() -> DemoServiceItem:
         source_version=rate.source_version,
         source_sha256=rate.source_sha256,
         disclaimer_zh_cn=rate.disclaimer_zh_cn,
+    )
+
+
+def get_demo_service_item() -> DemoServiceItem:
+    return _demo_service_item(_bundle())
+
+
+def get_demo_preflight(transaction: Session) -> DemoPreflightResult:
+    snapshot = _bundle()
+    if snapshot.schema_version != _INTEGRATED_SCHEMA:
+        raise _config_required("当前输入不是集成演示方案 A 的运行包")
+    item = _demo_service_item(snapshot)
+    models = (
+        ("client", Client),
+        ("contact", ClientContact),
+        ("case", Case),
+        ("package", OfficialWorkPackage),
+        ("task", Task),
+        ("obligation", FeeObligation),
+        ("draft", FeeDraft),
+        ("bill", Bill),
+        ("payment", Payment),
+        ("offset", Offset),
+    )
+    counts = {
+        name: int(transaction.scalar(select(func.count()).select_from(model)) or 0)
+        for name, model in models
+    }
+    if any(counts.values()):
+        raise BusinessError(
+            code="DEMO_RUN_NOT_FRESH",
+            message="本地集成演示必须从全新业务数据库开始",
+            status_code=409,
+        )
+    values = {field.name: getattr(item, field.name) for field in fields(DemoServiceItem)}
+    return DemoPreflightResult(
+        **values,
+        authority_classification=snapshot.authority_classification,
+        customer_activation_eligible=snapshot.customer_activation_eligible,
+        readiness="READY",
+        business_counts=counts,
     )
 
 

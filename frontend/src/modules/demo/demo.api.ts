@@ -5,6 +5,7 @@ import {
   parseDemoDraft,
   parseDemoFeeObligationResponse,
   parseDemoOffsetResponse,
+  parseDemoPreflight,
   parseDemoServiceItem,
 } from './demo.contract'
 import {
@@ -37,6 +38,16 @@ export interface DemoFeeObligationResponse extends DemoServiceItem {
   source_activity_id: string
   idempotency_key: string
   reused: boolean
+}
+
+export interface DemoPreflight extends DemoServiceItem {
+  authority_classification: 'SYNTHETIC_TEST_ONLY' | 'CUSTOMER_AUTHORIZED'
+  customer_activation_eligible: boolean
+  readiness: 'READY'
+  business_counts: Record<
+    'client' | 'contact' | 'case' | 'package' | 'task' | 'obligation' | 'draft' | 'bill' | 'payment' | 'offset',
+    number
+  >
 }
 
 export interface DemoDraft {
@@ -125,6 +136,10 @@ export interface DemoOffsetResponse {
 
 export async function readDemoServiceItem(): Promise<DemoServiceItem> {
   return parseDemoServiceItem((await http.get('/fees/demo-service-item')).data)
+}
+
+export async function readDemoPreflight(): Promise<DemoPreflight> {
+  return parseDemoPreflight((await http.get('/fees/demo-preflight')).data)
 }
 
 export async function createDemoServiceObligation(
