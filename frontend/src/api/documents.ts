@@ -86,6 +86,24 @@ interface BackendDocument {
     official_due_date_status?: 'CONFIRMED' | 'NEEDS_CONFIRMATION' | 'LEGACY_UNVERIFIED' | null
 }
 
+interface BackendEvidenceReviewResult {
+    case_id: string
+    evidence_version_id: string
+    creator_id: string
+    reviewer_id: string
+    decision: 'APPROVE' | 'REJECT'
+    review_state: 'APPROVED' | 'REJECTED'
+    reviewed_at: string
+    idempotency_key: string
+}
+
+export interface EvidenceReviewExpectation {
+    expectedReviewerId: string
+    role: string
+    isCurrent: boolean
+    isFinal: boolean
+}
+
 function mapAttachment(input: BackendAttachment): Attachment {
     return {
         id: input.id,
@@ -424,32 +442,110 @@ export async function getDocument(id: string | number): Promise<Document> {
 export async function reviewDocumentEvidence(
     documentId: string,
     evidenceVersionId: string,
-    payload: DocumentEvidenceReviewPayload
+    payload: DocumentEvidenceReviewPayload,
+    expectation: EvidenceReviewExpectation,
 ): Promise<AttachmentEvidenceProjection> {
-    await http.post(`/documents/evidence-versions/${evidenceVersionId}/review`, payload)
-    const document = await getDocument(documentId)
-    const attachment = document.attachments?.find(
-        (item) => item.evidence_version_id === evidenceVersionId
+    const expectedReviewState = payload.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'
+    return executeEvidenceReviewCommand(
+        async () => {
+            const response = await http.post<BackendEvidenceReviewResult>(
+                `/documents/evidence-versions/${evidenceVersionId}/review`,
+                payload,
+            )
+            return mapEvidenceReviewResult(
+                response.data,
+                evidenceVersionId,
+                payload,
+                expectation,
+            )
+        },
+        async () => {
+            const document = await getDocument(documentId)
+            const attachment = document.attachments?.find(
+                (item) => item.evidence_version_id === evidenceVersionId
+            )
+            if (
+                attachment?.evidence_version_id === evidenceVersionId &&
+                attachment.role === expectation.role &&
+                attachment.creator_id &&
+                attachment.reviewer_id === expectation.expectedReviewerId &&
+                attachment.review_state === expectedReviewState &&
+                typeof attachment.is_current === 'boolean' &&
+                typeof attachment.is_final === 'boolean'
+            ) {
+                return {
+                    evidence_version_id: attachment.evidence_version_id,
+                    role: attachment.role,
+                    creator_id: attachment.creator_id,
+                    reviewer_id: attachment.reviewer_id,
+                    review_state: attachment.review_state,
+                    is_current: attachment.is_current,
+                    is_final: attachment.is_final,
+                }
+            }
+            throw new Error('未找到与复核命令完全一致的持久状态')
+        },
     )
-    if (
-        !attachment?.evidence_version_id ||
-        !attachment.role ||
-        !attachment.creator_id ||
-        !attachment.review_state ||
-        typeof attachment.is_current !== 'boolean' ||
-        typeof attachment.is_final !== 'boolean'
-    ) {
-        throw new Error('未找到已复核的证据版本')
+}
+
+export function shouldReconcileEvidenceReview(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false
+    const candidate = error as { status?: unknown; code?: unknown }
+    return candidate.status === 0 && candidate.code === 'UNKNOWN_ERROR'
+}
+
+export async function executeEvidenceReviewCommand<T>(
+    postReview: () => Promise<T>,
+    reconcileDocument: () => Promise<T>,
+): Promise<T> {
+    try {
+        return await postReview()
+    } catch (error) {
+        if (!shouldReconcileEvidenceReview(error)) throw error
+        try {
+            return await reconcileDocument()
+        } catch {
+            // Preserve the original unknown mutation outcome when reconciliation cannot prove it.
+            throw error
+        }
     }
+}
+
+function mapEvidenceReviewResult(
+    result: BackendEvidenceReviewResult,
+    evidenceVersionId: string,
+    payload: DocumentEvidenceReviewPayload,
+    expectation: EvidenceReviewExpectation,
+): AttachmentEvidenceProjection {
+    const expectedReviewState = payload.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'
+    requireEqual(result.case_id, payload.case_id)
+    requireEqual(result.decision, payload.decision)
+    requireEqual(result.reviewed_at, payload.reviewed_at)
+    requireEqual(result.idempotency_key, payload.idempotency_key)
     return {
-        evidence_version_id: attachment.evidence_version_id,
-        role: attachment.role,
-        creator_id: attachment.creator_id,
-        reviewer_id: attachment.reviewer_id ?? null,
-        review_state: attachment.review_state,
-        is_current: attachment.is_current,
-        is_final: attachment.is_final,
+        evidence_version_id: requireEqual(result.evidence_version_id, evidenceVersionId),
+        role: requireText(expectation.role),
+        creator_id: requireText(result.creator_id),
+        reviewer_id: requireEqual(result.reviewer_id, expectation.expectedReviewerId),
+        review_state: requireEqual(result.review_state, expectedReviewState),
+        is_current: requireBoolean(expectation.isCurrent),
+        is_final: requireBoolean(expectation.isFinal),
     }
+}
+
+function requireText(value: unknown): string {
+    if (typeof value !== 'string' || !value.trim()) throw new Error('证据复核响应不一致')
+    return value
+}
+
+function requireEqual<T extends string>(value: unknown, expected: T | undefined): T {
+    if (expected === undefined || value !== expected) throw new Error('证据复核响应不一致')
+    return expected
+}
+
+function requireBoolean(value: unknown): boolean {
+    if (typeof value !== 'boolean') throw new Error('证据复核响应不一致')
+    return value
 }
 
 export async function listGrantEvidenceCandidates(

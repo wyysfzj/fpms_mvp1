@@ -186,7 +186,7 @@ import {
   uploadAttachment,
 } from '../../../api/documents'
 import { http } from '../../../api/http'
-import type { Attachment } from '../../../api/documents.types'
+import type { Attachment, DocumentEvidenceReviewPayload } from '../../../api/documents.types'
 import type { ApiError } from '../../../api/types'
 import ApiErrorBanner from '../../../components/errors/ApiErrorBanner.vue'
 import { useAuthStore } from '../../../stores/auth'
@@ -208,6 +208,7 @@ const downloadingId = ref<string | null>(null)
 const reviewingKey = ref<string | null>(null)
 const caseId = ref<string | null>(null)
 const currentUserId = ref<string | null>(null)
+const reviewIntents = new Map<string, DocumentEvidenceReviewPayload>()
 const uploadDialogVisible = ref(false)
 const selectedUploadFile = ref<File | null>(null)
 const selectedUploadFileName = ref('')
@@ -366,8 +367,25 @@ function reviewActionDisabled(att: Attachment): boolean {
   )
 }
 
+function getReviewIntent(
+  evidenceVersionId: string,
+  decision: 'APPROVE' | 'REJECT',
+): DocumentEvidenceReviewPayload {
+  const intentKey = `${evidenceVersionId}:${decision}`
+  const existing = reviewIntents.get(intentKey)
+  if (existing) return existing
+  const payload: DocumentEvidenceReviewPayload = {
+    case_id: caseId.value!,
+    decision,
+    reviewed_at: new Date().toISOString().slice(0, 19),
+    idempotency_key: `review-ui:${evidenceVersionId}:${decision}`,
+  }
+  reviewIntents.set(intentKey, payload)
+  return payload
+}
+
 async function handleReview(att: Attachment, decision: 'APPROVE' | 'REJECT') {
-  if (!att.evidence_version_id || !caseId.value || !currentUserId.value) {
+  if (!att.evidence_version_id || !att.role || !caseId.value || !currentUserId.value) {
     ElMessage.error('暂时无法确认复核所需信息，请刷新后重试。')
     return
   }
@@ -380,15 +398,17 @@ async function handleReview(att: Attachment, decision: 'APPROVE' | 'REJECT') {
   error.value = null
 
   try {
+    const payload = getReviewIntent(att.evidence_version_id, decision)
     const projection = await reviewDocumentEvidence(
       String(props.documentId),
       att.evidence_version_id,
+      payload,
       {
-        case_id: caseId.value,
-        decision,
-        reviewed_at: new Date().toISOString().slice(0, 19),
-        idempotency_key: `review-ui:${att.evidence_version_id}:${decision}`,
-      }
+        expectedReviewerId: currentUserId.value,
+        role: att.role,
+        isCurrent: att.is_current === true,
+        isFinal: att.is_final === true,
+      },
     )
     att.creator_id = projection.creator_id
     att.reviewer_id = projection.reviewer_id

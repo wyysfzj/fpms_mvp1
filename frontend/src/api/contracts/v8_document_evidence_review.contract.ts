@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { reviewDocumentEvidence } from '../documents'
+import type { EvidenceReviewExpectation } from '../documents'
 import type {
     AttachmentEvidenceProjection,
     DocumentEvidenceReviewPayload,
@@ -18,10 +19,17 @@ const payload: DocumentEvidenceReviewPayload = {
     reviewed_at: '2026-07-20T10:00:00',
     idempotency_key: 'review-1',
 }
+const expectation: EvidenceReviewExpectation = {
+    expectedReviewerId: 'reviewer-1',
+    role: 'OA_NOTICE',
+    isCurrent: true,
+    isFinal: false,
+}
 const projectionPromise: Promise<AttachmentEvidenceProjection> = reviewDocumentEvidence(
     'document-1',
     'evidence-version-1',
-    payload
+    payload,
+    expectation,
 )
 
 declare const projection: AttachmentEvidenceProjection
@@ -44,7 +52,8 @@ const reviewSignature: Exact<
     (
         documentId: string,
         evidenceVersionId: string,
-        payload: DocumentEvidenceReviewPayload
+        payload: DocumentEvidenceReviewPayload,
+        expectation: EvidenceReviewExpectation
     ) => Promise<AttachmentEvidenceProjection>
 > = true
 
