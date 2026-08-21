@@ -185,7 +185,14 @@ const forbiddenNetworkMembers = new Set([
   'evaluate',
   'route',
   'fulfill',
+  'bind',
+  'call',
+  'apply',
 ])
+
+assert.equal((source.match(/\bAPIRequestContext\b/g) || []).length, 3, 'evidence writes must use visible UI; APIRequestContext is confined to the audited helper and driver transport')
+assert.equal((source.match(/\bapiRequest\b/g) || []).length, 4, 'evidence writes must use visible UI; apiRequest references must match the exact audited data flow')
+assert.equal((source.match(/\brequest\b/g) || []).length, 2, 'evidence writes must use visible UI; Playwright request fixture references must match the exact audited data flow')
 
 function constantString(node) {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text
@@ -218,6 +225,28 @@ function visit(node) {
   const inAuditedHelper = node.getStart(syntax) > helperBodyStart && node.getEnd() < helperBodyEnd
   if (ts.isIdentifier(node) && forbiddenRuntimeIdentifiers.has(node.text)) {
     assert.fail(`evidence writes must use visible UI; reflective network primitive ${node.text} is forbidden`)
+  }
+  if (ts.isIdentifier(node) && node.text === 'Object') {
+    const member = node.parent
+    const name = ts.isPropertyAccessExpression(member) || ts.isElementAccessExpression(member)
+      ? memberName(member)
+      : undefined
+    const isAllowedObjectCall = name !== undefined
+      && ['entries', 'keys', 'values'].includes(name)
+      && ts.isCallExpression(member.parent)
+      && member.parent.expression === member
+    if (!isAllowedObjectCall) {
+      assert.fail('evidence writes must use visible UI; Object reflection and aliasing are forbidden')
+    }
+  }
+  if (ts.isObjectBindingPattern(node)) {
+    const names = node.elements.map((element) => memberName(element.name)).sort()
+    const isExactFixture = ts.isParameter(node.parent)
+      && names.length === 3
+      && names.join(',') === 'browser,page,request'
+    if (!isExactFixture) {
+      assert.fail('evidence writes must use visible UI; object destructuring is forbidden outside the exact Playwright fixture')
+    }
   }
   if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
     const name = memberName(node)
