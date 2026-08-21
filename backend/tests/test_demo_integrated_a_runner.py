@@ -140,6 +140,8 @@ def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
         'await page.setContent("<script>void globalThis[\'fe\' + \'tch\'](\'/api/v1/documents/fake/attachments\',{method:\'POST\'})</script>")',
         "await page.goto('javascript:void globalThis.fetch(\'/api/v1/documents/fake/attachments\')')",
         "await page.goto('data:text/html,<script>fetch(\'/api/v1/documents/fake/attachments\')</script>')",
+        "await writeFile('../../frontend/direct-api.html', `<script>void globalThis['fe' + 'tch']('${apiBase}/documents/fake/attachments',{method:'POST',headers:{Authorization:'Bearer ${operatorToken}'}})</script>`); await page.goto(`${baseUrl}/direct-api.html`)",
+        "await page.waitForResponse(async (response) => { await writeFile('../../frontend/direct-api.html', '<script>malicious()</script>'); return response.status() === 200 })",
     ],
 )
 def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):

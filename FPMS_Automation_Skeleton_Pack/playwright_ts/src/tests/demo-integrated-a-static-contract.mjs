@@ -215,6 +215,17 @@ const allowedIdentifierCalls = new Set([
   'recordFilingSubmission', 'recordGrantConsumer', 'recordReceiptConsumer', 'test',
   'uploadAndReviewEvidenceViaVisibleUi', 'writeFile',
 ])
+const expectedSensitiveCallCounts = new Map([
+  ["page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' })", 1],
+  ["page.waitForResponse((response) => response.status() === 200 && response.url().includes('/auth/login'))", 1],
+  ["operatorPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })", 1],
+  ["operatorPage.waitForResponse((response) => response.status() === 201 && response.url().includes('/attachments'))", 1],
+  ["reviewerPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })", 1],
+  ["reviewerPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/review'))", 1],
+  ["page.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })", 2],
+  ["writeFile(path.join(evidenceDir!, 'evidence-role-map.json'), JSON.stringify(orderedEvidenceLedger, null, 2))", 1],
+])
+const observedSensitiveCallCounts = new Map()
 
 assert.equal((source.match(/\bAPIRequestContext\b/g) || []).length, 3, 'evidence writes must use visible UI; APIRequestContext is confined to the audited helper and driver transport')
 assert.equal((source.match(/\bapiRequest\b/g) || []).length, 4, 'evidence writes must use visible UI; apiRequest references must match the exact audited data flow')
@@ -304,6 +315,10 @@ function visit(node) {
       assert.fail('evidence writes must use visible UI; dynamic computed calls are forbidden outside the audited helper')
     }
     const name = memberName(node.expression)
+    if (['goto', 'waitForResponse', 'writeFile'].includes(name)) {
+      const callText = node.getText(syntax)
+      observedSensitiveCallCounts.set(callText, (observedSensitiveCallCounts.get(callText) ?? 0) + 1)
+    }
     const receiver = ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression)
       ? node.expression.expression.text
       : undefined
@@ -328,6 +343,11 @@ function visit(node) {
 
 visit(syntax)
 assert.equal(auditedFetchCount, 1, 'audited helper must contain exactly one apiRequest.fetch call')
+assert.deepEqual(
+  [...observedSensitiveCallCounts.entries()].sort(),
+  [...expectedSensitiveCallCounts.entries()].sort(),
+  'evidence writes must use visible UI; sensitive calls must match the exact receiver, argument and count contract',
+)
 
 assert.ok(!/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i.test(source), 'fixed UUID forbidden')
 console.log('demo_integrated_a_static_contract=PASS')
