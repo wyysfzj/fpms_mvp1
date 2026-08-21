@@ -134,6 +134,8 @@ def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
         "const transportAlias = request; const { fetch: hiddenSend } = transportAlias; await hiddenSend('/documents/fake/attachments', { method: 'POST' })",
         "const leak = ({ fetch: hiddenSend }: APIRequestContext) => hiddenSend('/documents/fake/attachments', { method: 'POST' }); await leak(request)",
         "const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(request), 'fetch')!; const hiddenSend = descriptor.value.bind(request); await hiddenSend('/documents/fake/attachments', { method: 'POST' })",
+        "const uiAlias = page as any; const hiddenTransport = uiAlias[['req', 'uest'].join('')]; const hiddenSend = hiddenTransport[['po', 'st'].join('')]; await hiddenSend('/documents/fake/attachments', {})",
+        "const hiddenTransport = (journey as any)[['api', 'Request'].join('')]; const hiddenSend = hiddenTransport[['fe', 'tch'].join('')]; await hiddenSend('/documents/fake/attachments', { method: 'POST' })",
     ],
 )
 def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):

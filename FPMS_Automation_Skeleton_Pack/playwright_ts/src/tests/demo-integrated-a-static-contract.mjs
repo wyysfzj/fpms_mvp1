@@ -189,6 +189,10 @@ const forbiddenNetworkMembers = new Set([
   'call',
   'apply',
 ])
+const allowedDynamicElementAccess = new Set([
+  'publicLifecycleApiAllowlist[operation]',
+  'expectedConsumerByRole[role]',
+])
 
 assert.equal((source.match(/\bAPIRequestContext\b/g) || []).length, 3, 'evidence writes must use visible UI; APIRequestContext is confined to the audited helper and driver transport')
 assert.equal((source.match(/\bapiRequest\b/g) || []).length, 4, 'evidence writes must use visible UI; apiRequest references must match the exact audited data flow')
@@ -196,6 +200,7 @@ assert.equal((source.match(/\brequest\b/g) || []).length, 2, 'evidence writes mu
 
 function constantString(node) {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text
+  if (ts.isNumericLiteral(node)) return node.text
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
     const left = constantString(node.left)
     const right = constantString(node.right)
@@ -260,8 +265,8 @@ function visit(node) {
     if (name && forbiddenNetworkMembers.has(name) && !isExactAuditedFetch) {
       assert.fail(`evidence writes must use visible UI; network member ${name} is outside the audited helper`)
     }
-    if (ts.isElementAccessExpression(node) && name === undefined && containsTransportReference(node.expression)) {
-      assert.fail('evidence writes must use visible UI; dynamic transport member access is forbidden')
+    if (ts.isElementAccessExpression(node) && name === undefined && !allowedDynamicElementAccess.has(node.getText(syntax))) {
+      assert.fail('evidence writes must use visible UI; dynamic element access is outside the exact safe allowlist')
     }
   }
   if (ts.isBindingElement(node)) {
