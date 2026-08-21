@@ -338,8 +338,8 @@ dispatch lane.
 
 ### `DEC-INTEGRATED-DEMO-A-20260821`
 
-- Status: `APPROVED_DESIGN_SCOPE_PENDING_INDEPENDENT_REVIEW`; implementation and customer-input
-  activation remain blocked until their own exact acceptance gates.
+- Status: `APPROVED_DESIGN_SCOPE`; implementation-plan review and customer-input activation remain
+  subject to their own exact acceptance gates.
 - Exact source/version: the customer requirement, the complete Scheme A proposal it references,
   and the customer's exact approval in Codex task
   `019ffc07-14a5-7dc2-9536-f2047327e14a`, preserved as a labelled UTF-8/LF transcript with one
@@ -352,6 +352,13 @@ dispatch lane.
   `f0fa544eb6291382d8ab8cc4c630a3747e04afe7d3b0a8d25a066275bed9d438`.
 - Actor and acceptance authority: the repository customer/user requires the upcoming demo to
   retain the prior demo and show the new changes, then explicitly confirmed Scheme A.
+- Written-spec acceptance: after independent High review `APPROVED`, `P0/P1/P2 = 0/0/0` of exact
+  design candidate `d3d6cd4817284663edda257f7d606c82f994f1e4`, the same customer explicitly sent
+  `批准书面规格并继续实施`. The exact UTF-8/LF bytes are preserved at
+  `docs/product/v8/customer-decisions/2026-08-21-integrated-demo-a-written-spec-acceptance.txt`,
+  size `34` bytes, SHA-256
+  `731566d51b56eed1c6b9bf2c1b1b32505f14e64347dca500dd851d66dddbe3d5`, in Codex task
+  `019ffc07-14a5-7dc2-9536-f2047327e14a` on `2026-08-21` Asia/Shanghai.
 - Approved exact decision: use one fictional client and one fictional case for one continuous
   presentation. Preserve the V7 client/contact, case, wizard/catalog, filing, two-OA/receipt,
   grant-source replacement and superseded-task safety story, then continue on the same case into
@@ -366,11 +373,11 @@ dispatch lane.
   local runs and receive independent High `P0/P1/P2 = 0/0/0`. This decision does not approve
   production, release, security, PostgreSQL, remote hosting, official submission/payment or a real
   customer runtime bundle.
-- Effective scope/time: active only as authority to review the exact successor design. Atomic
-  implementation planning and implementation remain blocked until that design has an independent
-  zero-finding review and written customer acceptance. Customer-facing activation of actual
-  templates/prices starts only after a separate exact bundle authority record and digest
-  validation.
+- Effective scope/time: active as authority to create and independently review the exact atomic
+  implementation plan. Product implementation begins only after that plan's independent
+  zero-finding review; each implementation task retains its own RED/GREEN/review gate.
+  Customer-facing activation of actual templates/prices starts only after a separate exact bundle
+  authority record and digest validation.
 - Rollback impact: reverting the successor design or implementation returns the accepted demo to
   the prior local ABC technical boundary. It must not delete or rewrite any historical evidence,
   lifecycle, obligation, draft, bill, payment or offset fact.
