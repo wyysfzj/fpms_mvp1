@@ -5,10 +5,12 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
+from app.core.errors import BusinessError
 from app.modules.documents.models import Document
 from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
 from app.modules.grant_fees import service as grant_fee_service
@@ -231,3 +233,52 @@ def test_demo_does_not_downgrade_present_but_invalid_fee_lines(monkeypatch) -> N
         reviewed_evidence_version_id=str(uuid4()),
         expected_evidence_content_hash=f"sha256:{'b' * 64}",
     ) is None
+
+
+def _unconfigured_stored_snapshot_payload() -> dict[str, object]:
+    document = Document(
+        id=str(uuid4()),
+        case_id=str(uuid4()),
+        direction="IN",
+        doc_date=date(2026, 8, 11),
+        title="虚构授权通知谱系",
+        extra_data='{"official_due_date":"2026-11-23"}',
+    )
+    evidence_id = str(uuid4())
+    content_hash = f"sha256:{'c' * 64}"
+    snapshot = grant_fee_service._demo_unconfigured_grant_fee_snapshot(
+        document=document,
+        reviewed_evidence_version_id=evidence_id,
+        expected_evidence_content_hash=content_hash,
+    )
+    assert snapshot is not None
+    return {
+        "grant_fee_lines_snapshot": snapshot.canonical_json,
+        "grant_fee_lines_snapshot_hash": snapshot.snapshot_hash,
+        "grant_fee_lines_schema": snapshot.schema,
+        "source_document_id": document.id,
+        "reviewed_evidence_version_id": evidence_id,
+        "reviewed_evidence_content_hash": content_hash,
+    }
+
+
+def test_demo_replacement_can_revalidate_predecessor_unconfigured_snapshot(monkeypatch) -> None:
+    monkeypatch.setenv("FPMS_ENV", "demo")
+    monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
+
+    grant_fee_service._validate_grant_notice_stored_snapshot(
+        _unconfigured_stored_snapshot_payload()
+    )
+
+
+def test_non_demo_replacement_rejects_predecessor_unconfigured_snapshot(monkeypatch) -> None:
+    monkeypatch.setenv("FPMS_ENV", "demo")
+    monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
+    payload = _unconfigured_stored_snapshot_payload()
+    monkeypatch.setenv("FPMS_ENV", "dev")
+    monkeypatch.delenv("FPMS_DEMO_SCOPE", raising=False)
+
+    with pytest.raises(BusinessError) as caught:
+        grant_fee_service._validate_grant_notice_stored_snapshot(payload)
+
+    assert caught.value.code == "LIFECYCLE_IDEMPOTENCY_CONFLICT"

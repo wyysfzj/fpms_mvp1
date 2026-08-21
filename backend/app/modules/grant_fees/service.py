@@ -2654,7 +2654,7 @@ def _validate_grant_notice_stored_snapshot(payload: dict[str, object]) -> None:
         or parsed["reviewed_evidence_version_id"] != payload["reviewed_evidence_version_id"]
         or parsed["reviewed_evidence_content_hash"] != payload["reviewed_evidence_content_hash"]
         or type(parsed["lines"]) is not list
-        or not parsed["lines"]
+        or (not parsed["lines"] and not _local_abc_demo_active())
     ):
         _grant_notice_idempotency_conflict()
 
