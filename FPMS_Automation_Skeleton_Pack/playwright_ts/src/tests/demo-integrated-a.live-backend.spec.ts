@@ -1228,7 +1228,7 @@ class IntegratedJourneyDriver {
       idempotency_key: `integrated-grant-original-${taskId.slice(0, 8)}`,
     }
     const dispatched = await this.publicLifecycleApi('GRANT_NOTICE', { grant_fee_task_id: taskId }, payload)
-    expect(dispatched.status).toBe(200)
+    expect(dispatched.status, JSON.stringify(dispatched.body)).toBe(200)
     recordGrantConsumer(this.evidenceRoleMap, binding, 'grant-original-dispatch', payload, dispatched.body)
     const overlay = await this.loadLifecycleOverlay(caseId)
     const center = overlay.center_snapshot
@@ -1283,7 +1283,7 @@ class IntegratedJourneyDriver {
       idempotency_key: `integrated-grant-replacement-${replacementTaskId.slice(0, 8)}`,
     }
     const dispatched = await this.publicLifecycleApi('GRANT_NOTICE', { grant_fee_task_id: replacementTaskId }, lifecyclePayload)
-    expect(dispatched.status).toBe(200)
+    expect(dispatched.status, JSON.stringify(dispatched.body)).toBe(200)
     recordGrantConsumer(this.evidenceRoleMap, binding, 'grant-replacement-dispatch', lifecyclePayload, dispatched.body)
     const originalState = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: taskId })
     const replacementState = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: replacementTaskId })
