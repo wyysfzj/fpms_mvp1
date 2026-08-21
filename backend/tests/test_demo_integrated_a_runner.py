@@ -58,7 +58,7 @@ def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
         "GRANT_GENERATE_NOTICES": ("POST", "/grant-fee-tasks/generate-notices"),
         "GRANT_NOTICE": (
             "POST",
-            "/grant-fee-tasks/{task_id}/lifecycle/grant-notice",
+            "/grant-fee-tasks/{grant_fee_task_id}/lifecycle/grant-notice",
         ),
         "GRANT_REPLACEMENT": (
             "POST",
@@ -127,6 +127,10 @@ def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
         "apiRequest['fet'+'ch']('/documents/x/attachments')",
         "Reflect.get(page, 'req'+'uest')['post']('/documents/x/attachments')",
         "globalThis.fetch('/documents/x/attachments')",
+        "const hiddenFetch = apiRequest['fe' + 'tch'].bind(apiRequest); hiddenFetch('/documents/x/attachments', { method: 'POST' })",
+        "const hiddenRequest = Reflect.get(page, ['req', 'uest'].join('')); const hiddenPost = Reflect.get(hiddenRequest, 'post'); Reflect.apply(hiddenPost, hiddenRequest, ['/documents/x/attachments'])",
+        "const { fetch: hiddenFetch } = apiRequest; hiddenFetch('/documents/x/attachments', { method: 'POST' })",
+        "const transport = apiRequest; const method = ['fe', 'tch'].join(''); transport[method]('/documents/x/attachments', { method: 'POST' })",
     ],
 )
 def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):

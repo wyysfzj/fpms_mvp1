@@ -117,7 +117,7 @@ const expectedPublicLifecycleApi = {
   GRANT_BATCH_INSTRUCTION: ['POST', '/grant-fee-tasks/batch-instruction'],
   GRANT_GENERATE_DRAFT: ['POST', '/grant-fee-tasks/{task_id}/generate-draft'],
   GRANT_GENERATE_NOTICES: ['POST', '/grant-fee-tasks/generate-notices'],
-  GRANT_NOTICE: ['POST', '/grant-fee-tasks/{task_id}/lifecycle/grant-notice'],
+  GRANT_NOTICE: ['POST', '/grant-fee-tasks/{grant_fee_task_id}/lifecycle/grant-notice'],
   GRANT_REPLACEMENT: ['POST', '/grant-fee-tasks/{task_id}/replacement-notice'],
   GRANT_TASK_STATE: ['PUT', '/grant-fee-tasks/{task_id}/state'],
   LINK_OA_REPLY: ['POST', '/official-work-packages/{package_id}/oa-reply/reply-document'],
@@ -165,6 +165,27 @@ const syntax = ts.createSourceFile('demo-integrated-a.live-backend.spec.ts', sou
 const helperBodyStart = source.indexOf(helperStart)
 const helperBodyEnd = source.indexOf(helperEnd)
 let auditedFetchCount = 0
+const forbiddenRuntimeIdentifiers = new Set([
+  'Reflect',
+  'globalThis',
+  'window',
+  'XMLHttpRequest',
+  'WebSocket',
+  'axios',
+  'Proxy',
+])
+const forbiddenNetworkMembers = new Set([
+  'request',
+  'fetch',
+  'post',
+  'put',
+  'patch',
+  'delete',
+  'addInitScript',
+  'evaluate',
+  'route',
+  'fulfill',
+])
 
 function constantString(node) {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text
@@ -184,13 +205,48 @@ function memberName(node) {
   return undefined
 }
 
+function containsTransportReference(node) {
+  if (ts.isIdentifier(node) && ['apiRequest', 'request', 'page', 'context'].includes(node.text)) return true
+  let found = false
+  ts.forEachChild(node, (child) => {
+    if (!found && containsTransportReference(child)) found = true
+  })
+  return found
+}
+
 function visit(node) {
   const inAuditedHelper = node.getStart(syntax) > helperBodyStart && node.getEnd() < helperBodyEnd
+  if (ts.isIdentifier(node) && forbiddenRuntimeIdentifiers.has(node.text)) {
+    assert.fail(`evidence writes must use visible UI; reflective network primitive ${node.text} is forbidden`)
+  }
   if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
     const name = memberName(node)
-    if (name === 'request') assert.fail('evidence writes must use visible UI; page/context request shortcuts are forbidden')
+    const isExactAuditedFetch = name === 'fetch'
+      && ts.isPropertyAccessExpression(node)
+      && ts.isIdentifier(node.expression)
+      && node.expression.text === 'apiRequest'
+      && ts.isCallExpression(node.parent)
+      && node.parent.expression === node
+      && inAuditedHelper
+    if (name && forbiddenNetworkMembers.has(name) && !isExactAuditedFetch) {
+      assert.fail(`evidence writes must use visible UI; network member ${name} is outside the audited helper`)
+    }
+    if (ts.isElementAccessExpression(node) && name === undefined && containsTransportReference(node.expression)) {
+      assert.fail('evidence writes must use visible UI; dynamic transport member access is forbidden')
+    }
+  }
+  if (ts.isBindingElement(node)) {
+    const boundProperty = node.propertyName ? memberName(node.propertyName) : memberName(node.name)
+    const declaration = node.parent.parent
+    const initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer : undefined
+    if (boundProperty && forbiddenNetworkMembers.has(boundProperty) && initializer && containsTransportReference(initializer)) {
+      assert.fail(`evidence writes must use visible UI; network member ${boundProperty} cannot be aliased`)
+    }
   }
   if (ts.isCallExpression(node)) {
+    if (ts.isElementAccessExpression(node.expression) && memberName(node.expression) === undefined && !inAuditedHelper) {
+      assert.fail('evidence writes must use visible UI; dynamic computed calls are forbidden outside the audited helper')
+    }
     const name = memberName(node.expression)
     const receiver = ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression)
       ? node.expression.expression.text

@@ -50,7 +50,10 @@ PUBLIC_LIFECYCLE_API_ALLOWLIST = {
     "GRANT_BATCH_INSTRUCTION": ("POST", "/grant-fee-tasks/batch-instruction"),
     "GRANT_GENERATE_DRAFT": ("POST", "/grant-fee-tasks/{task_id}/generate-draft"),
     "GRANT_GENERATE_NOTICES": ("POST", "/grant-fee-tasks/generate-notices"),
-    "GRANT_NOTICE": ("POST", "/grant-fee-tasks/{task_id}/lifecycle/grant-notice"),
+    "GRANT_NOTICE": (
+        "POST",
+        "/grant-fee-tasks/{grant_fee_task_id}/lifecycle/grant-notice",
+    ),
     "GRANT_REPLACEMENT": ("POST", "/grant-fee-tasks/{task_id}/replacement-notice"),
     "GRANT_TASK_STATE": ("PUT", "/grant-fee-tasks/{task_id}/state"),
     "LINK_OA_REPLY": (

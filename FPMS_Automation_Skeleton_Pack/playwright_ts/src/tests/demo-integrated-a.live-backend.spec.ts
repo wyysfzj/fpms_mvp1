@@ -82,7 +82,7 @@ const publicLifecycleApiAllowlist = {
   GRANT_BATCH_INSTRUCTION: { method: 'POST', path: '/grant-fee-tasks/batch-instruction' },
   GRANT_GENERATE_DRAFT: { method: 'POST', path: '/grant-fee-tasks/{task_id}/generate-draft' },
   GRANT_GENERATE_NOTICES: { method: 'POST', path: '/grant-fee-tasks/generate-notices' },
-  GRANT_NOTICE: { method: 'POST', path: '/grant-fee-tasks/{task_id}/lifecycle/grant-notice' },
+  GRANT_NOTICE: { method: 'POST', path: '/grant-fee-tasks/{grant_fee_task_id}/lifecycle/grant-notice' },
   GRANT_REPLACEMENT: { method: 'POST', path: '/grant-fee-tasks/{task_id}/replacement-notice' },
   GRANT_TASK_STATE: { method: 'PUT', path: '/grant-fee-tasks/{task_id}/state' },
   LINK_OA_REPLY: { method: 'POST', path: '/official-work-packages/{package_id}/oa-reply/reply-document' },
