@@ -80,7 +80,7 @@ checkpoints below in order.
 
 | ID | Prior/new mapping | Visible action | Required observable result |
 | --- | --- | --- | --- |
-| `IA-00` | preflight | Start a fresh local run with the exact bundle digest and candidate identity. | Bundle classification, version, hash and disclaimer are visible; database/business counts start at zero; readiness opens only after validation. |
+| `IA-00` | preflight | Start a fresh local run with the exact integrated-bundle digest and candidate identity. | Bundle classification/ID/version/manifest hash, template code/file hash, and rate item code/source ref/source version/source SHA-256 are visible with the disclaimer; database/business counts start at zero; readiness opens only after validation. |
 | `IA-01` | `V7-01` | Create the fictional client and primary contact. | Exactly one dynamic client/contact identity and correct ownership. |
 | `IA-02` | `V7-02` | Create one domestic invention case for that client. | Case is reloadable and initially `NOT_FILED`; package, task, draft, bill, payment and offset counts are zero. |
 | `IA-03` | `V7-03` | Open the document wizard and official-document catalog. | Template request succeeds without 422; all 60 catalog rows are visible; one executable example can be located and one reference-only example is visibly disabled. |
@@ -89,11 +89,11 @@ checkpoints below in order.
 | `IA-06` | `V7-06` | Create OA_OUT linked to the first OA source/package. | OA_OUT linkage is unique; the OA task remains `OPEN`; package awaits receipt. |
 | `IA-07` | `V7-07` | Exercise cross-case and same-case-wrong-source receipt attempts in the automated gate; optionally show one concise Chinese rejection live. | Both attempts are rejected and source/package/task/case/receipt counts are byte-for-byte unchanged. |
 | `IA-08` | `V7-08` | Upload the correct receipt, refresh/check the OA package and archive it. | Package is `ARCHIVED`; exactly the first OA task becomes `DONE`; no other task closes; case returns exactly to `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` (legacy `SUB_EXAM`). |
-| `IA-09` | `V7-09` | Create and complete a second OA using new source/package/task/OA_OUT/receipt identities. | Every second-OA identity differs from the first; its own task alone closes; first-OA history remains immutable; case again returns exactly to `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` (legacy `SUB_EXAM`). |
+| `IA-09` | `V7-09` | Create and complete a second OA using the bundle's distinct sequence-2 notice/receipt and new source/package/task/OA_OUT identities. | Its own complete due-date date/source/`CONFIRMED` triple round-trips through create/read/edit/impact-preview/wizard; missing, changed or sequence-1 reuse rejects with no write. Every second-OA identity differs from the first; its own task alone closes; first-OA history remains immutable; case again returns exactly to `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` (legacy `SUB_EXAM`). |
 | `IA-10` | `V7-10` | Record a reviewed fictional grant-registration notice with exact confirmed source/date. | One source-linked grant task is created; projection is exactly `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED`; no fee draft appears automatically and no patent-in-force conclusion is claimed. |
 | `IA-11` | `V7-11` | Replace the grant source/task through the public replacement action. | Old source/task is visibly superseded; exactly one current task remains actionable; lineage shows old and new identities; the exact grant-registration projection remains unchanged. |
 | `IA-12` | `V7-12` | Against the superseded task attempt direct draft preparation, batch customer instruction, notice generation and status mutation; then record the customer's `PAY` instruction on the current task. | Each of the four old-task mutation classes is disabled or returns 409/no-write with unchanged counts/state; the current instruction persists once. Missing official-fee authority creates no official fee item, obligation, draft or amount. |
-| `IA-13` | `V7-13` successor + ABC runtime input | Select the exact runtime service-price item for the same case, create/reuse its obligation, record `PAY`, prepare and lock the service draft. | Bundle/version/hash/item/disclaimer are visible; exactly one SERVICE obligation and one linked `LOCKED` draft exist; service amount equals the bundle. No official fee item, obligation, draft or amount exists; the UI shows `未配置` and excludes official fees from every total. |
+| `IA-13` | `V7-13` successor + ABC runtime input | Select the exact runtime service-price item for the same case, create/reuse its obligation, record `PAY`, prepare and lock the service draft. | Bundle ID/version/manifest hash, template code/file hash, rate item code/source ref/source version/source SHA-256 and disclaimer are visible and equal the startup snapshot; exactly one SERVICE obligation and one linked `LOCKED` draft exist; service amount equals the bundle. No activated official-fee item, obligation, draft or payable amount exists; the UI shows `未配置` and excludes official fees from every total. |
 | `IA-14` | ABC bill | Create the AR bill and repeat the same intent. | Exactly one AR bill consumes the locked service draft/item; replay returns the same bill; it starts `UNSETTLED` with the exact CNY balance. |
 | `IA-15` | ABC payment | Record one equal CNY bank receipt and repeat the same intent. | Exactly one payment and one payment line exist; before offset it is `UNALLOCATED`; target bill is a suggestion, not a false applied link. |
 | `IA-16` | ABC offset | Offset the payment line to the AR bill. | Exactly one active offset; bill becomes `SETTLED/0.00`; payment becomes `FULLY_ALLOCATED/0.00`; canonical case receipt equals the service amount. |
@@ -171,6 +171,70 @@ replaces that gap with a visible runtime boundary:
 - the runtime bundle supplies one separately labelled SERVICE price on the same case;
 - that service obligation and locked draft are the only source consumed by the AR bill;
 - the presentation states explicitly that a service receivable is not an official government fee.
+
+### 5.5 Integrated runtime bundle successor
+
+The accepted ABC v1 parser contains only one `OA_NOTICE`/`OA_RECEIPT` pair and cannot supply the
+second OA or grant replacement chapter. The implementation must therefore introduce one explicit
+`fpms.demo-input-bundle/integrated-a-v1` successor. It is an additive, exact demo-profile contract;
+the old ABC v1 remains readable for its accepted narrow rehearsal and cannot be silently
+reinterpreted as the integrated bundle.
+
+The integrated manifest contains exactly one internal preview template, one SERVICE rate and these
+ordered fictional-evidence roles:
+
+1. `FILING_FINAL_SUBMISSION`;
+2. `FILING_RECEIPT`;
+3. `ACCEPTANCE_NOTICE`;
+4. `PRELIMINARY_EXAMINATION_SOURCE`;
+5. `PUBLICATION_NOTICE`;
+6. `SUBSTANTIVE_EXAMINATION_SOURCE`;
+7. `OA_NOTICE_1`;
+8. `OA_RECEIPT_1`;
+9. `OA_NOTICE_2`;
+10. `OA_RECEIPT_2`;
+11. `GRANT_NOTICE_ORIGINAL`;
+12. `GRANT_NOTICE_REPLACEMENT`.
+
+Every row has a unique role, path, Simplified-Chinese title and SHA-256. The two OA notice hashes,
+two receipt hashes and two grant-notice hashes must be pairwise distinct. The authority file binds
+all 13 file digests (template plus 12 evidence files), manifest digest and the rate source digest.
+No extra or missing role/file is accepted.
+
+Exact semantic metadata is frozen as follows:
+
+- `OA_NOTICE_1`: `oa_sequence=1`, canonical `official_due_date`, source exactly
+  `MANUAL_OFFICIAL_NOTICE|IMPORTED_OFFICIAL_NOTICE`, status `CONFIRMED`, effective time and
+  `source_template_code=DEMO_OA_NOTICE_1`.
+- `OA_RECEIPT_1`: canonical received time and one exact accepted receipt kind; its manifest role
+  binds it only to `OA_NOTICE_1`.
+- `OA_NOTICE_2`: `oa_sequence=2`, its own canonical due date, source, `CONFIRMED` status, effective
+  time and `source_template_code=DEMO_OA_NOTICE_2`; none of its identity/hash/semantic fields may
+  fall back to the sequence-1 row.
+- `OA_RECEIPT_2`: its own canonical received time and accepted receipt kind; its manifest role
+  binds it only to `OA_NOTICE_2`.
+- `GRANT_NOTICE_ORIGINAL`: canonical effective time, due date, due-date source/status and
+  `source_template_code=DEMO_GRANT_NOTICE_1`; replacement linkage is null.
+- `GRANT_NOTICE_REPLACEMENT`: its own distinct hash/effective time/due-date triple,
+  `source_template_code=DEMO_GRANT_NOTICE_2`, and exact `supersedes_role=GRANT_NOTICE_ORIGINAL`.
+
+All 12 evidence files remain visibly marked fictional PDF inputs. In each fresh run they are
+uploaded through the public UI, obtain new attachment/evidence-version identities and pass the
+existing distinct-reviewer gate. The run ledger records the immutable mapping
+`bundle role -> path/hash/metadata -> attachment ID -> reviewed evidence-version ID`. Lifecycle
+commands can consume only that mapping; a seed, in-repository fixture, historical V6/V7 object or
+unbound uploaded file is not an alternative source.
+
+The preview and SERVICE rate provenance shown in `IA-00` and `IA-13` is exact, not a friendly
+summary:
+
+- template `template_code` and file `sha256`;
+- rate `item_code`, `source_ref`, `source_version` and `source_sha256`;
+- bundle `bundle_id`, `bundle_version`, `manifest_sha256` and authority classification.
+
+Both fresh headed runs assert every value against the immutable startup snapshot and capture the
+visible result. A mismatch, omitted display value or bundle byte change stops the run before any
+later lifecycle/finance write.
 
 ## 6. Error handling and recovery
 
