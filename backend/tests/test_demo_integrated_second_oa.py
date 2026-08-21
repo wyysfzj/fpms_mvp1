@@ -52,3 +52,13 @@ def test_second_oa_contract_keeps_exact_identity_and_projection_assertions() -> 
         "expect(evidenceRoleMap.size).toBe(10)",
     ):
         assert token in source
+
+
+def test_cross_case_negative_fixture_does_not_reuse_full_case_initialization() -> None:
+    source = _source()
+    method = source.split("async rejectInvalidReceipts", 1)[1].split(
+        "async archiveOa1", 1
+    )[0]
+    assert "this.createCase(" not in method
+    assert "const auxiliaryResponse = this.operatorPage.waitForResponse" in method
+    assert "const auxiliary = await (await auxiliaryResponse).json()" in method

@@ -905,8 +905,32 @@ class IntegratedJourneyDriver {
     const mainCaseId = this.caseId
     const mainCaseNo = this.caseNo
 
-    const auxiliary = await this.createCase(this.clientId, `${mainCaseNo}-X`)
-    const crossDocument = await this.createDocumentViaVisibleUi(auxiliary.case_id, `虚构跨案错误回执-${mainCaseNo}`, '2026-08-10')
+    this.caseId = ''
+    this.caseNo = `${mainCaseNo}-X`
+    await this.operatorPage.goto(`${baseUrl}/cases/new`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByRole('heading', { name: '新建案件' })).toBeVisible()
+    await this.operatorPage.getByPlaceholder('请输入案号（例如：P2024-001）').fill(this.caseNo)
+    await this.operatorPage.getByPlaceholder('请输入案件标题').fill('虚构跨案回执辅助案件')
+    const clientField = this.operatorPage.locator('.el-form-item').filter({ hasText: '客户' }).first()
+    await clientField.getByRole('combobox').click()
+    await this.operatorPage.getByRole('option', { name: this.clientName }).click()
+    await this.operatorPage.locator('.el-collapse-item__header').filter({ hasText: '申请人信息' }).click()
+    await this.operatorPage.getByRole('button', { name: '新增申请人', exact: true }).click()
+    const applicantField = this.operatorPage.locator('.el-form-item').filter({ hasText: '从客户主数据回填' }).first()
+    await applicantField.getByRole('combobox').click()
+    await this.operatorPage.getByRole('option', { name: this.clientName }).last().click()
+    await expect(this.operatorPage.getByPlaceholder('申请人中文名称')).toHaveValue(this.clientName)
+    await this.operatorPage.getByText('控制标记', { exact: true }).click()
+    const reductionField = this.operatorPage.locator('.el-form-item').filter({ hasText: '费用减缓比例' }).first()
+    await reductionField.locator('.el-select__wrapper').click()
+    await this.operatorPage.getByRole('option', { name: '不减免（0）' }).click()
+    const auxiliaryResponse = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/cases'))
+    await this.operatorPage.getByRole('button', { name: '创建案件' }).click()
+    const auxiliary = await (await auxiliaryResponse).json() as Json
+    expect(auxiliary.client_id).toBe(this.clientId)
+    expect(auxiliary.status).toBe('NOT_FILED')
+    this.caseId = auxiliary.id
+    const crossDocument = await this.createDocumentViaVisibleUi(auxiliary.id, `虚构跨案错误回执-${mainCaseNo}`, '2026-08-10')
     const crossAttachment = await this.uploadRole(crossDocument.document.id, invalidReceipt)
     this.caseId = mainCaseId
     this.caseNo = mainCaseNo
