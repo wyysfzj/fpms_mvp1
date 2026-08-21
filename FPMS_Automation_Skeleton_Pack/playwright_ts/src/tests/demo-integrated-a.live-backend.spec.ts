@@ -495,15 +495,21 @@ class IntegratedJourneyDriver {
     const center = overlay.center_snapshot
     const packages = observedOverlayPackages(overlay)
 
-    const billPagePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/bills')).then((response) => response.json() as Promise<Json>)
+    const billResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/bills'))
     await this.operatorPage.goto(`${baseUrl}/billing/bills`, { waitUntil: 'domcontentloaded' })
-    const billPage = await billPagePromise
-    const paymentPagePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/payments')).then((response) => response.json() as Promise<Json>)
+    expect((await billResponse).status()).toBe(200)
+    await expect(this.operatorPage.getByText('暂无账单', { exact: true })).toBeVisible()
+    const billCount = await this.operatorPage.locator('.el-table__row').count()
+    const paymentResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/payments'))
     await this.operatorPage.goto(`${baseUrl}/billing/payments`, { waitUntil: 'domcontentloaded' })
-    const paymentPage = await paymentPagePromise
-    const offsetPagePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/offsets')).then((response) => response.json() as Promise<Json>)
+    expect((await paymentResponse).status()).toBe(200)
+    await expect(this.operatorPage.getByText('暂无预收款记录', { exact: true })).toBeVisible()
+    const paymentCount = await this.operatorPage.locator('.el-table__row').count()
+    const offsetResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/offsets'))
     await this.operatorPage.goto(`${baseUrl}/billing/offsets`, { waitUntil: 'domcontentloaded' })
-    const offsetPage = await offsetPagePromise
+    expect((await offsetResponse).status()).toBe(200)
+    await expect(this.operatorPage.getByText('暂无数据', { exact: true })).toBeVisible()
+    const offsetCount = await this.operatorPage.locator('.el-table__row').count()
     return {
       case_id: created.id,
       case_no: created.case_no,
@@ -513,9 +519,9 @@ class IntegratedJourneyDriver {
         package: packages.length,
         task: (taskPage.items as Json[]).length,
         draft: (draftPage.items as Json[]).length,
-        bill: (billPage.items as Json[]).length,
-        payment: (paymentPage.items as Json[]).length,
-        offset: (offsetPage.items as Json[]).length,
+        bill: billCount,
+        payment: paymentCount,
+        offset: offsetCount,
       },
     }
   }

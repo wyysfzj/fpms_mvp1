@@ -62,3 +62,18 @@ def test_cross_case_negative_fixture_does_not_reuse_full_case_initialization() -
     assert "this.createCase(" not in method
     assert "const auxiliaryResponse = this.operatorPage.waitForResponse" in method
     assert "const auxiliary = await (await auxiliaryResponse).json()" in method
+
+
+def test_initial_finance_counts_use_visible_empty_lists_not_response_bodies() -> None:
+    source = _source()
+    method = source.split("async createCase", 1)[1].split("async inspectCatalog", 1)[0]
+    assert "billPagePromise" not in method
+    assert "paymentPagePromise" not in method
+    assert "offsetPagePromise" not in method
+    for token in (
+        "getByText('暂无账单'",
+        "getByText('暂无预收款记录'",
+        "getByText('暂无数据'",
+        "locator('.el-table__row').count()",
+    ):
+        assert token in method
