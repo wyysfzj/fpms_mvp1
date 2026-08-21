@@ -3,12 +3,15 @@ from __future__ import annotations
 import hashlib
 import runpy
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
 from app.core import demo_bundle
+from app.core.errors import BusinessError
+from app.modules.annuity.models import GovPayment, PayList
 from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.fees.models import FeeDraft, FeeItem, FeeObligation
 from app.modules.fees.obligation_contracts import (
@@ -209,6 +212,77 @@ def test_runtime_service_item_to_pay_locked_draft(
         headers=auth_headers,
     )
     assert overlay.status_code == 200, overlay.text
+    draft_milestones = [
+        milestone
+        for milestone in overlay.json()["milestones"]
+        if milestone["activity_type"] == "FEE_DRAFT_CREATED"
+    ]
+    assert len(draft_milestones) == 1
+    overlay_obligations = draft_milestones[0]["fee_obligations"]
+    assert len(overlay_obligations) == 1
+    overlay_obligation = overlay_obligations[0]
+    assert overlay_obligation["obligation_id"] == obligation_id
+    assert overlay_obligation["fee_domain"] == "SERVICE"
+    assert overlay_obligation["statuses"]["draft_status"] == "CREATED"
+    assert overlay_obligation["statuses"]["official_evidence_status"] == "NOT_APPLICABLE"
+    assert overlay_obligation["statuses"]["pay_list_status"] == "NOT_CREATED"
+    assert [
+        (line["fee_code"], line["payable_amount"])
+        for line in overlay_obligation["lines"]
+    ] == [(expected_item, "1200.00")]
+    assert overlay_obligation["related_facts"] == [
+        {"kind": "DRAFT", "object_id": draft_id, "status": "LOCKED"}
+    ]
+
+    _, other_case_id = _seed_case(session_factory)
+    with session_factory() as db:
+        item = db.query(FeeItem).filter(FeeItem.draft_id == draft_id).one()
+        draft = db.get(FeeDraft, draft_id)
+        assert draft is not None
+
+        item.fee_type = "GOV"
+        db.commit()
+        with pytest.raises(BusinessError, match="FEE_OBLIGATION_STORED_STATE_INVALID"):
+            get_fee_obligation(obligation_id, db)
+        item.fee_type = "SERVICE"
+        db.commit()
+
+        draft.currency = "USD"
+        db.commit()
+        with pytest.raises(BusinessError, match="FEE_OBLIGATION_STORED_STATE_INVALID"):
+            get_fee_obligation(obligation_id, db)
+        draft.currency = "CNY"
+        db.commit()
+
+        item.case_id = other_case_id
+        db.commit()
+        with pytest.raises(BusinessError, match="FEE_OBLIGATION_STORED_STATE_INVALID"):
+            get_fee_obligation(obligation_id, db)
+        item.case_id = case_id
+        db.commit()
+
+        pay_list = PayList(
+            client_id=client_id,
+            pay_list_no=f"SERVICE-INVALID-{uuid4().hex[:8]}",
+            status="DRAFT",
+            currency="CNY",
+            total_amount=Decimal("1200.00"),
+        )
+        db.add(pay_list)
+        db.flush()
+        db.add(
+            GovPayment(
+                pay_list_id=pay_list.id,
+                case_id=case_id,
+                fee_item_id=item.id,
+                status="RECORDED",
+                currency="CNY",
+                paid_amount=Decimal("1200.00"),
+            )
+        )
+        db.commit()
+        with pytest.raises(BusinessError, match="FEE_OBLIGATION_STORED_STATE_INVALID"):
+            get_fee_obligation(obligation_id, db)
 
 
 def test_demo_preflight_requires_validated_input_and_zero_business_counts(
