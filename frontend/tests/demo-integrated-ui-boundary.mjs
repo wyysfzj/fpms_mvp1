@@ -23,4 +23,18 @@ assert.notEqual(arbitraryWrite.status, 0, 'arbitrary write paths must fail close
 const directNetwork = validate(`${source}\nasync function forbidden(page: Page) { await page.request.post('/api/v1/documents/fake/attachments') }\n`)
 assert.notEqual(directNetwork.status, 0, 'direct network calls must fail closed')
 
+for (const apiPath of [
+  '/api/v1/documents/fake/attachments',
+  '/api/v1/documents/fake/evidence-versions/fake/review',
+]) {
+  const apiNavigation = validate(`${source}\nasync function forbidden(page: Page) { await page.goto(\`${'${baseUrl}'}${apiPath}\`) }\n`)
+  assert.notEqual(apiNavigation.status, 0, `API navigation must fail closed: ${apiPath}`)
+}
+
+const pathMutation = validate(`${plannedUi}\npath.join = () => '/tmp/escape.json'\n`)
+assert.notEqual(pathMutation.status, 0, 'path namespace mutation must fail closed')
+
+const callbackEval = validate(`${source}\n;['void 0'].map(eval)\n`)
+assert.notEqual(callbackEval.status, 0, 'code-evaluation references must fail closed')
+
 console.log('demo_integrated_ui_boundary=PASS')

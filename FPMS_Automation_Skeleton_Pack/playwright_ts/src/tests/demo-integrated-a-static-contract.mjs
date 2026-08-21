@@ -193,6 +193,8 @@ const helperBodyStart = source.indexOf(helperStart)
 const helperBodyEnd = source.indexOf(helperEnd)
 let auditedFetchCount = 0
 const forbiddenRuntimeIdentifiers = new Set([
+  'eval',
+  'Function',
   'Reflect',
   'globalThis',
   'window',
@@ -351,6 +353,31 @@ function visit(node) {
   if (ts.isIdentifier(node) && forbiddenRuntimeIdentifiers.has(node.text)) {
     assert.fail(`evidence writes must use visible UI; reflective network primitive ${node.text} is forbidden`)
   }
+  if (ts.isIdentifier(node) && node.text === 'path') {
+    const member = node.parent
+    const call = ts.isPropertyAccessExpression(member)
+      && member.expression === node
+      && member.name.text === 'join'
+      && ts.isCallExpression(member.parent)
+      && member.parent.expression === member
+      ? member.parent
+      : undefined
+    const write = call?.parent
+    const isImport = ts.isImportClause(node.parent)
+    const isPropertyName = (
+      (ts.isPropertyAccessExpression(member) && member.name === node)
+      || (ts.isPropertyAssignment(member) && member.name === node)
+      || (ts.isPropertySignature(member) && member.name === node)
+    )
+    const isExactWriteTarget = write
+      && ts.isCallExpression(write)
+      && ts.isIdentifier(write.expression)
+      && write.expression.text === 'writeFile'
+      && write.arguments[0] === call
+    if (!isImport && !isPropertyName && !isExactWriteTarget) {
+      assert.fail('evidence writes must not alias or mutate the path namespace')
+    }
+  }
   if (ts.isIdentifier(node) && node.text === 'Object') {
     const member = node.parent
     const name = ts.isPropertyAccessExpression(member) || ts.isElementAccessExpression(member)
@@ -469,7 +496,12 @@ function visit(node) {
       }
       if (name === 'goto') {
         const target = node.arguments[0]?.getText(syntax) ?? ''
-        assert.ok(target.startsWith('`${baseUrl}/'), 'evidence writes must use visible UI; navigation must stay under the configured base URL')
+        assert.ok(
+          target.startsWith('`${baseUrl}/')
+            && !target.startsWith('`${baseUrl}/api/')
+            && !/attachments|evidence-versions|\/review/.test(target),
+          'evidence writes must use visible UI; navigation must stay on a non-API configured-base page',
+        )
       }
     } else {
       assert.fail('evidence writes must use visible UI; indirect call is outside the exact call allowlist')
