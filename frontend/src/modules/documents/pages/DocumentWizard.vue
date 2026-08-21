@@ -62,6 +62,7 @@
                   :key="template.id"
                   :label="formatTemplateLabel(template)"
                   :value="template.id"
+                  :disabled="isReferenceOnlyTemplate(template)"
                 />
               </el-select>
               <div v-if="templatesError" class="defaults-error">{{ templatesError }}</div>
@@ -1012,7 +1013,28 @@ function handleReturn() {
 }
 
 function formatTemplateLabel(template: DocTemplate): string {
-  return `${template.code} - ${template.name}`
+  const status = getOfficialNoticeCatalogStatus(template)
+  const statusLabel = status === 'EXECUTABLE' ? '可执行' : status === 'REFERENCE_ONLY' ? '仅供参考' : ''
+  return `${template.code} - ${template.name}${statusLabel ? `（${statusLabel}）` : ''}`
+}
+
+function getOfficialNoticeCatalogStatus(template: DocTemplate): 'EXECUTABLE' | 'REFERENCE_ONLY' | null {
+  try {
+    const metadata: unknown = JSON.parse(template.input_fields || 'null')
+    if (typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata)) {
+      const fields = metadata as Record<string, unknown>
+      if (fields.catalog_kind === 'OFFICIAL_NOTICE') {
+        return fields.catalog_status === 'EXECUTABLE' ? 'EXECUTABLE' : 'REFERENCE_ONLY'
+      }
+    }
+  } catch {
+    // Official-notice metadata fails closed below.
+  }
+  return template.code.startsWith('OFFICIAL_NOTICE_') ? 'REFERENCE_ONLY' : null
+}
+
+function isReferenceOnlyTemplate(template: DocTemplate): boolean {
+  return getOfficialNoticeCatalogStatus(template) === 'REFERENCE_ONLY'
 }
 
 function createRow(input: string): DocumentWizardCaseRow {

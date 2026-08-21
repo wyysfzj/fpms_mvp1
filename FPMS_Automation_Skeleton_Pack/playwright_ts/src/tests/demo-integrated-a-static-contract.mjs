@@ -89,7 +89,7 @@ for (const token of [
   'x.surfaces',
   "expect(evidenceRoleMap.size).toBe(12)",
   "expect(x.checkpoints_passed).toBe(19)",
-  "expect(evidenceRoleMap.size).toBe(8)",
+  "expect(evidenceRoleMap.size).toBe(7)",
   "expect(x.blocked_statuses).toEqual([409, 409, 409, 409])",
   "expect(x.provenance).toEqual(expectedProvenance)",
   "expect(x.source_draft_ids).toEqual([draftId])",
@@ -101,6 +101,33 @@ for (const token of [
 for (const forbidden of ['page.route(', 'route.fulfill(', 'SessionLocal', 'sqlite3', 'pdP1LiveSeed', 'v6-enrich', 'test.skip', 'markSkeleton', 'contractRed', '.toBeTruthy()', 'expect({', 'addInitScript', '.evaluate(', 'import(']) {
   assert.ok(!source.includes(forbidden), `forbidden construct ${forbidden}`)
 }
+for (const falseGreen of [
+  'client_count: 1',
+  'business_counts: { package: 0',
+  'return deadline',
+  'replayed_task_id: targetTask.task_id',
+  'link_count: linked.body.reply_document.id ===',
+]) assert.ok(!source.includes(falseGreen), `Task5 false-green construct ${falseGreen}`)
+for (const task5Evidence of [
+  'visibleCaseSnapshot(',
+  'visibleOaTasks(',
+  'task5-checkpoints.json',
+  'task_identity_snapshots',
+  'missing_deadline_no_write',
+  'changed_deadline_no_write',
+  'linked_reply_ids',
+  'tasks.map((item) => item.id)',
+  'matches.map((item) => item.id)',
+  'observedOverlayPackages(',
+  'item.package_kind, item.status',
+  "typeof x.task_id).toBe('string')",
+  'item.client_code === code && item.name_cn === this.clientName',
+  "item.contact_name === '虚构主联系人'",
+]) assert.ok(source.includes(task5Evidence), `missing Task5 observed contract ${task5Evidence}`)
+for (const wrongShape of [
+  'tasks.map((item) => item.task_id)',
+  '.map((item) => item.package_id).filter',
+]) assert.ok(!source.includes(wrongShape), `Task5 wrong response shape ${wrongShape}`)
 
 const importLines = source.split('\n').filter((line) => /^import\s/.test(line.trimStart())).map((line) => line.trim())
 assert.deepEqual(importLines, [
@@ -197,21 +224,22 @@ const allowedDynamicElementAccess = new Set([
 ])
 const allowedMemberCalls = new Set([
   'archiveOa1', 'click', 'close', 'completeFilingAndOa1', 'completeOa2',
+  'count',
   'createBill', 'createCase', 'createClientAndContact', 'createGrantOriginal',
-  'createOaOut', 'createOffset', 'createPayment', 'createServiceDraft', 'entries',
-  'exerciseGrantGatesAndPay', 'fill', 'find', 'get', 'getByPlaceholder', 'getByRole',
-  'getByTestId', 'getByText', 'goto', 'includes', 'inspectCatalog', 'join', 'json',
-  'keys', 'locator', 'map', 'newContext', 'newPage', 'now', 'objectContaining',
-  'preflight', 'red', 'rejectInvalidReceipts', 'reloadSummary', 'replace',
-  'replaceGrant', 'resolveFiling', 'publicLifecycleApi', 'set', 'setInputFiles', 'setTimeout', 'status',
-  'step', 'stringify', 'toBe', 'toBeDefined', 'toBeGreaterThan',
-  'toBeGreaterThanOrEqual', 'toBeVisible', 'toContain', 'toContainEqual', 'toEqual',
-  'toHaveLength', 'toHaveText', 'toHaveURL', 'toMatch', 'uploadRole', 'url', 'values',
-  'waitForResponse',
+  'createDocumentViaVisibleUi', 'createOaOut', 'createOffset', 'createPayment', 'createServiceDraft', 'endsWith', 'entries',
+  'exerciseGrantGatesAndPay', 'fill', 'filter', 'find', 'first', 'flatMap', 'get', 'getByPlaceholder', 'getByRole',
+  'getAttribute', 'getByTestId', 'getByText', 'goto', 'includes', 'inspectCatalog', 'join', 'json',
+  'inputValue', 'isDisabled', 'isEnabled', 'keys', 'last', 'loadLifecycleOverlay', 'locator', 'map', 'newContext', 'newPage', 'now', 'objectContaining', 'parse', 'press',
+  'preflight', 'push', 'red', 'rejectInvalidReceipts', 'reloadSummary', 'replace',
+  'replaceGrant', 'resolveFiling', 'publicLifecycleApi', 'set', 'setDefaultTimeout', 'setInputFiles', 'setTimeout', 'slice', 'sort', 'status', 'then',
+  'step', 'stringify', 'textContent', 'toBe', 'toBeDefined', 'toBeGreaterThan',
+  'toBeDisabled', 'toBeEnabled', 'toBeGreaterThanOrEqual', 'toBeVisible', 'toContain', 'toContainEqual', 'toContainText', 'toEqual', 'toLowerCase',
+  'toHaveCount', 'toHaveLength', 'toHaveText', 'toHaveURL', 'toHaveValue', 'toMatch', 'trim', 'uploadRole', 'url', 'values',
+  'verifyContentEdit', 'verifyMissingDeadlineNoWrite', 'verifyWizardDeadline', 'visibleCaseSnapshot', 'visibleOaTasks', 'waitForResponse', 'waitForTimeout',
 ])
 const allowedIdentifierCalls = new Set([
-  'assertCompleteEvidenceLedger', 'callPublicLifecycleApi', 'encodeURIComponent',
-  'expect', 'login', 'mkdir', 'recordDocumentLifecycleConsumer',
+  'assertCompleteEvidenceLedger', 'callPublicLifecycleApi', 'encodeURIComponent', 'evidenceDescriptors',
+  'expect', 'login', 'mkdir', 'observedOverlayPackages', 'recordDocumentLifecycleConsumer',
   'recordFilingSubmission', 'recordGrantConsumer', 'recordReceiptConsumer', 'test',
   'uploadAndReviewEvidenceViaVisibleUi', 'writeFile',
 ])
@@ -222,10 +250,69 @@ const expectedSensitiveCallCounts = new Map([
   ["operatorPage.waitForResponse((response) => response.status() === 201 && response.url().includes('/attachments'))", 1],
   ["reviewerPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })", 1],
   ["reviewerPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/review'))", 1],
+  ["this.operatorPage.goto(`${baseUrl}/clients/new`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 201 && new URL(response.url()).pathname.endsWith('/api/v1/clients'))", 1],
+  ["this.operatorPage.goto(`${baseUrl}/clients/${client.id}`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 201 && new URL(response.url()).pathname.endsWith(`/api/v1/clients/${client.id}/contacts`))", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/clients/${client.id}/contacts`))", 1],
+  [`this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/clients') && url.searchParams.get('page_size') === '20'
+    })`, 1],
+  ["this.operatorPage.goto(`${baseUrl}/clients`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.goto(`${baseUrl}/cases/new`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/v1/cases'))", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/cases/${created.id}/lifecycle-overlay`))", 1],
+  [`this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/tasks') && url.searchParams.get('case_id') === created.id
+    })`, 1],
+  [`this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/fees/drafts') && url.searchParams.get('case_id') === created.id
+    })`, 1],
+  ["this.operatorPage.goto(`${baseUrl}/cases/${created.id}`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/bills'))", 1],
+  ["this.operatorPage.goto(`${baseUrl}/billing/bills`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/payments'))", 1],
+  ["this.operatorPage.goto(`${baseUrl}/billing/payments`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/offsets'))", 1],
+  ["this.operatorPage.goto(`${baseUrl}/billing/offsets`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/doc-templates'))", 1],
+  ["this.operatorPage.goto(`${baseUrl}/documents/new?case_id=${caseId}`, { waitUntil: 'domcontentloaded' })", 2],
+  [`this.operatorPage.waitForResponse(
+      (response) => response.status() >= 400 && new URL(response.url()).pathname.endsWith('/api/v1/documents'),
+    )`, 1],
+  ["this.operatorPage.goto(`${baseUrl}/documents`, { waitUntil: 'domcontentloaded' })", 2],
+  [`this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/documents') && url.searchParams.get('page_size') === '20'
+    })`, 2],
+  [`this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/tasks') && url.searchParams.get('page_size') === '20' && url.searchParams.get('status') === null
+    })`, 2],
+  ["this.operatorPage.goto(`${baseUrl}/tasks`, { waitUntil: 'domcontentloaded' })", 2],
+  ["this.operatorPage.goto(`${baseUrl}/official-workflows/filing-preparation?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/cases/${caseId}/lifecycle-overlay`))", 1],
+  ["this.operatorPage.goto(`${baseUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded' })", 2],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/documents/impact-preview'))", 1],
+  [`this.operatorPage.waitForResponse(
+      (response) => new URL(response.url()).pathname.endsWith('/api/v1/documents'),
+      { timeout: 5_000 },
+    )`, 1],
+  ["this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${caseId}/lifecycle-overlay`))", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/documents/${documentId}`))", 3],
+  ["this.operatorPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })", 2],
+  ["this.operatorPage.goto(`${baseUrl}/documents/wizard`, { waitUntil: 'domcontentloaded' })", 2],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/documents/wizard/task-preview'))", 1],
+  ["this.operatorPage.goto(`${baseUrl}/official-workflows/filing-preparation?package_id=${this.filingPackageId}`, { waitUntil: 'domcontentloaded' })", 1],
+  ["this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/official-work-packages/${this.filingPackageId}/filing-preparation/refresh`))", 1],
   ["this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })", 1],
   ["this.operatorPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/fees/demo-preflight'))", 1],
   ["page.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })", 1],
   ["writeFile(path.join(evidenceDir!, 'evidence-role-map.json'), JSON.stringify(orderedEvidenceLedger, null, 2))", 1],
+  ["writeFile(path.join(evidenceDir!, 'task5-checkpoints.json'), JSON.stringify({ checkpoints: task5Checkpoints, evidence_bindings: [...evidenceRoleMap.values()] }, null, 2))", 1],
 ])
 const observedSensitiveCallCounts = new Map()
 

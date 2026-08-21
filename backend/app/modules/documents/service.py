@@ -176,6 +176,12 @@ _ATTACHMENT_ROLE_DEFINITIONS: dict[str, dict[str, object]] = {
         "package_usage_hint": "FILING_ARCHIVE",
         "is_archive_evidence": True,
     },
+    "OFFICIAL_NOTICE_PDF": {
+        "category": ATTACHMENT_ROLE_CATEGORY_ARCHIVE,
+        "external_upload_position": "OFFICIAL_NOTICE_EVIDENCE",
+        "package_usage_hint": "OFFICIAL_NOTICE_EVIDENCE",
+        "is_archive_evidence": True,
+    },
     "ELECTRONIC_RECEIPT": {
         "category": ATTACHMENT_ROLE_CATEGORY_ARCHIVE,
         "external_upload_position": "RECEIPT_ARCHIVE",
@@ -219,6 +225,10 @@ _ATTACHMENT_ROLE_FILE_RULES: dict[str, dict[str, set[str]]] = {
         "mimes": _ZIP_MIME_TYPES,
     },
     "FILING_MERGED_PDF": {
+        "exts": {".pdf"},
+        "mimes": _PDF_MIME_TYPES,
+    },
+    "OFFICIAL_NOTICE_PDF": {
         "exts": {".pdf"},
         "mimes": _PDF_MIME_TYPES,
     },
@@ -344,6 +354,35 @@ def _validate_document_template_execution_gate(template: DocTemplate) -> None:
             "template_code": template.code,
             "catalog_status": semantics.catalog_status,
         },
+        status_code=409,
+    )
+
+
+def _validate_document_create_deadline(template: DocTemplate | None, extra_data: str | None) -> None:
+    if template is None:
+        return
+    semantics = resolve_document_semantics(template)
+    if semantics.deadline_source_policy != "EXPLICIT_OFFICIAL_DUE_REQUIRED":
+        return
+    deadline = parse_document_extra_data(extra_data)
+    if (
+        deadline.official_due_date is not None
+        and deadline.official_due_date_source
+        in {"MANUAL_OFFICIAL_NOTICE", "IMPORTED_OFFICIAL_NOTICE"}
+        and deadline.official_due_date_status == "CONFIRMED"
+    ):
+        return
+    error_code = {
+        "OA_REPLY": "OA_OFFICIAL_DUE_DATE_REQUIRED",
+        "GRANT_NOTICE": "GRANT_OFFICIAL_DUE_DATE_REQUIRED",
+    }.get(
+        semantics.execution_behavior,
+        "DOCUMENT_OFFICIAL_DUE_DATE_REQUIRED",
+    )
+    raise_business_error(
+        error_code,
+        "Executable notice creation requires a confirmed explicit official due date",
+        details={"status": deadline.official_due_date_status},
         status_code=409,
     )
 
@@ -938,6 +977,7 @@ def _create_document_record(
     )
 
     extra_data = _merge_document_create_extra_data(data)
+    _validate_document_create_deadline(template, extra_data)
     document = Document(
         id=str(uuid4()),
         case_id=data.case_id,
@@ -2753,10 +2793,21 @@ def add_attachment(
         )
         db.add(attachment)
         db.flush()
+        final_official_roles = {
+            "FILING_MERGED_PDF",
+            "OFFICIAL_NOTICE_PDF",
+        }
         evidence_role = (
-            EvidenceRole.FILING_FULL_WORD
+            EvidenceRole.OFFICIAL_FINAL_PDF
+            if official_file_role in final_official_roles
+            else EvidenceRole.FILING_FULL_WORD
             if official_file_role == EvidenceRole.FILING_FULL_WORD.value
             else EvidenceRole.RAW_ATTACHMENT
+        )
+        evidence_state = (
+            EvidenceVersionState.FINAL
+            if evidence_role is EvidenceRole.OFFICIAL_FINAL_PDF
+            else EvidenceVersionState.DRAFT
         )
         evidence_version = register_evidence_version(
             RegisterEvidenceVersionCommand(
@@ -2765,7 +2816,7 @@ def add_attachment(
                 attachment_id=attachment.id,
                 lineage_key=f"attachment:{attachment.id}",
                 role=evidence_role,
-                state=EvidenceVersionState.DRAFT,
+                state=evidence_state,
                 creator_id=creator_id,
                 content_hash=attachment.content_hash,
             ),

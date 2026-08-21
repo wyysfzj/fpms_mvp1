@@ -183,7 +183,7 @@ function toUpdatePayload(data: DocumentUpdatePayload): Record<string, unknown> {
     if (data.direction !== undefined) payload.direction = data.direction
     if (data.doc_date !== undefined) payload.doc_date = data.doc_date || null
     if (data.title !== undefined) payload.title = data.title || null
-    if (data.description !== undefined) payload.extra_data = data.description || null
+    if (data.description !== undefined) payload.description = data.description || null
     if (data.reply_to_id !== undefined) payload.reply_to_id = data.reply_to_id || null
     if (data.need_reply !== undefined) payload.need_reply = data.need_reply
     if (data.reply_date !== undefined) payload.reply_date = data.reply_date || null

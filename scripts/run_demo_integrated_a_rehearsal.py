@@ -126,6 +126,38 @@ def build_integrated_bundle(parent: Path) -> tuple[Path, str, str]:
     return bundle, manifest_sha, authority_sha
 
 
+def integrated_evidence_descriptors(bundle: Path) -> list[dict[str, Any]]:
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    rows = manifest.get("evidence")
+    if not isinstance(rows, list) or len(rows) != 12:
+        raise RuntimeError("integrated evidence manifest must contain exactly twelve rows")
+    descriptors: list[dict[str, Any]] = []
+    bundle_root = bundle.resolve()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise RuntimeError("integrated evidence row is invalid")
+        source_path = (bundle_root / str(row.get("path", ""))).resolve()
+        if bundle_root not in source_path.parents or not source_path.is_file():
+            raise RuntimeError("integrated evidence path escapes or is unavailable")
+        descriptors.append(
+            {
+                "role": row.get("role"),
+                "path": str(source_path),
+                "sha256": row.get("sha256"),
+                "metadata": row.get("metadata"),
+            }
+        )
+    return descriptors
+
+
+def integrated_evidence_json(bundle: Path) -> str:
+    return json.dumps(
+        integrated_evidence_descriptors(bundle),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
 def validate_spec_source(source: str) -> None:
     forbidden = [token for token in FORBIDDEN_SPEC_TOKENS if token in source]
     if forbidden:
@@ -265,6 +297,7 @@ def _run_one(
             FPMS_DEMO_EXPECTED_RATE_SOURCE_VERSION=rate["source_version"],
             FPMS_DEMO_EXPECTED_RATE_SOURCE_SHA256=rate["source_sha256"],
             FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN=rate["disclaimer_zh_cn"],
+            FPMS_DEMO_INTEGRATED_EVIDENCE_JSON=integrated_evidence_json(bundle),
         )
         command = [
             "node",

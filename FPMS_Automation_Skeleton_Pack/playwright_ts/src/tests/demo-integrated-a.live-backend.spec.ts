@@ -3,6 +3,17 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 type Json = Record<string, any>
+
+function observedOverlayPackages(overlay: Json): Json[] {
+  const byId = new Map<string, Json>()
+  for (const milestone of overlay.milestones as Json[]) {
+    for (const item of (milestone.work_packages || []) as Json[]) {
+      if (typeof item.package_id === 'string' && item.package_id.length > 0) byId.set(item.package_id, item)
+    }
+  }
+  return [...byId.values()]
+}
+
 type EvidenceRole =
   | 'FILING_FINAL_SUBMISSION'
   | 'FILING_RECEIPT'
@@ -62,6 +73,7 @@ const adminPassword = process.env.FPMS_ADMIN_PASSWORD
 const reviewerUsername = process.env.FPMS_REVIEWER_USERNAME
 const reviewerPassword = process.env.FPMS_REVIEWER_PASSWORD
 const expectedDisclaimer = process.env.FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN
+const integratedEvidenceJson = process.env.FPMS_DEMO_INTEGRATED_EVIDENCE_JSON
 const expectedProvenance = {
   bundle_id: process.env.FPMS_DEMO_EXPECTED_BUNDLE_ID,
   bundle_version: process.env.FPMS_DEMO_EXPECTED_BUNDLE_VERSION,
@@ -114,6 +126,20 @@ const orderedRoles: EvidenceRole[] = [
   'GRANT_NOTICE_ORIGINAL',
   'GRANT_NOTICE_REPLACEMENT',
 ]
+
+function evidenceDescriptors(): Map<EvidenceRole, { role: EvidenceRole; path: string; sha256: string; metadata: Json }> {
+  expect(typeof integratedEvidenceJson).toBe('string')
+  const rows = JSON.parse(integratedEvidenceJson!) as Array<{ role: EvidenceRole; path: string; sha256: string; metadata: Json }>
+  expect(rows.map((row) => row.role)).toEqual(orderedRoles)
+  expect(new Set(rows.map((row) => row.path)).size).toBe(12)
+  expect(new Set(rows.map((row) => row.sha256)).size).toBe(12)
+  for (const row of rows) {
+    expect(row.path).toMatch(/^\//)
+    expect(row.sha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(row.metadata.role ?? row.role).toBe(row.role)
+  }
+  return new Map(rows.map((row) => [row.role, row]))
+}
 
 const checkpointContract = [
   'IA-00 preflight and provenance',
@@ -182,28 +208,42 @@ async function uploadAndReviewEvidenceViaVisibleUi(
   documentId: string,
   descriptor: { role: EvidenceRole; path: string; sha256: string; metadata: Json },
 ): Promise<EvidenceBinding> {
+  const officialRole = descriptor.role === 'FILING_FINAL_SUBMISSION'
+    ? '合并PDF'
+    : descriptor.role.includes('RECEIPT')
+      ? '电子申请回执'
+      : '官方通知书PDF'
   await operatorPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })
   await operatorPage.getByTestId('attachment-open-upload').click()
   await operatorPage.getByTestId('attachment-file-picker').locator('input[type=file]').setInputFiles(descriptor.path)
+  const uploadDialog = operatorPage.getByRole('dialog', { name: '上传附件' })
+  await uploadDialog.locator('.el-form-item').filter({ hasText: '附件角色' }).locator('.el-select__wrapper').click()
+  await operatorPage.getByRole('option', { name: officialRole, exact: true }).click()
   const uploadResponse = operatorPage.waitForResponse((response) => response.status() === 201 && response.url().includes('/attachments'))
   await operatorPage.getByRole('button', { name: '确认上传' }).click()
   const uploaded = await (await uploadResponse).json() as Json
-  expect(uploaded.content_hash).toBe(descriptor.sha256)
+  expect(uploaded.content_hash).toBe(`sha256:${descriptor.sha256}`)
+  const uploadedFileName = descriptor.path.replace(/^.*\//, '')
+  const uploadedItem = operatorPage.locator('.attachment-item').filter({ hasText: uploadedFileName }).first()
+  await expect(uploadedItem).toBeVisible()
+  const uploadedTestId = await uploadedItem.getAttribute('data-testid')
+  expect(uploadedTestId).toMatch(/^attachment-\S+$/)
+  const evidenceVersionId = uploadedTestId!.replace('attachment-', '')
 
   await reviewerPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })
   const reviewResponse = reviewerPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/review'))
-  await reviewerPage.getByTestId(`attachment-${uploaded.evidence_version_id}`).getByRole('button', { name: '通过' }).click()
+  await reviewerPage.getByTestId(`attachment-${evidenceVersionId}`).getByRole('button', { name: '通过' }).click()
   const reviewed = await (await reviewResponse).json() as Json
   expect(reviewed.review_state).toBe('APPROVED')
-  expect(reviewed.content_hash).toBe(descriptor.sha256)
+  expect(reviewed.evidence_version_id).toBe(evidenceVersionId)
   return {
     role: descriptor.role,
     manifestPath: descriptor.path,
     manifestSha256: descriptor.sha256,
     metadata: descriptor.metadata,
     attachmentId: uploaded.id,
-    evidenceVersionId: reviewed.evidence_version_id,
-    contentHash: reviewed.content_hash,
+    evidenceVersionId,
+    contentHash: uploaded.content_hash,
     reviewState: 'APPROVED',
     consumer: '',
     consumerResultId: '',
@@ -217,7 +257,7 @@ function recordDocumentLifecycleConsumer(
   payload: Json,
   result: Json,
 ): EvidenceBinding {
-  expect(binding.contentHash).toBe(binding.manifestSha256)
+  expect(binding.contentHash).toBe(`sha256:${binding.manifestSha256}`)
   expect(payload.evidence_version_id).toBe(binding.evidenceVersionId)
   expect(result.evidence_version_id).toBe(binding.evidenceVersionId)
   expect(typeof result.activity_id).toBe('string')
@@ -234,7 +274,7 @@ function recordReceiptConsumer(
   payload: Json,
   result: Json,
 ): EvidenceBinding {
-  expect(binding.contentHash).toBe(binding.manifestSha256)
+  expect(binding.contentHash).toBe(`sha256:${binding.manifestSha256}`)
   expect(payload.receipt_attachment_id).toBe(binding.attachmentId)
   expect(result.receipt_attachment_id).toBe(binding.attachmentId)
   expect(typeof result.id).toBe('string')
@@ -251,7 +291,7 @@ function recordGrantConsumer(
   payload: Json,
   result: Json,
 ): EvidenceBinding {
-  expect(binding.contentHash).toBe(binding.manifestSha256)
+  expect(binding.contentHash).toBe(`sha256:${binding.manifestSha256}`)
   expect(payload.reviewed_evidence_version_id).toBe(binding.evidenceVersionId)
   expect(payload.expected_content_hash).toBe(binding.contentHash)
   expect(typeof result.activity_id).toBe('string')
@@ -269,7 +309,7 @@ function recordFilingSubmission(
   packageResult: Json,
   activityResult: Json,
 ): EvidenceBinding {
-  expect(binding.contentHash).toBe(binding.manifestSha256)
+  expect(binding.contentHash).toBe(`sha256:${binding.manifestSha256}`)
   expect(commandResult.package_id).toBe(packageResult.package.id)
   expect(commandResult.checklist_item.item_code).toBe('EXTERNAL_SUBMISSION_RECORDED')
   expect(commandResult.checklist_item.status).toBe('DONE')
@@ -278,16 +318,16 @@ function recordFilingSubmission(
   )
   expect(manifest).toBeDefined()
   expect(manifest!.content_hash).toBe(binding.contentHash)
-  expect(activityResult.event_type).toBe('FILING_EXTERNAL_SUBMISSION_RECORDED')
+  expect(activityResult.activity_type).toBe('FILING_EXTERNAL_SUBMISSION_RECORDED')
   expect(activityResult.confirmation_status).toBe('CONFIRMED')
-  expect(activityResult.evidence_refs).toContainEqual(expect.objectContaining({
+  expect(activityResult.evidence_summary).toContainEqual(expect.objectContaining({
     evidence_kind: 'FINAL_SUBMISSION_VERSION',
     object_id: binding.evidenceVersionId,
     content_hash: binding.contentHash,
   }))
-  expect(typeof activityResult.id).toBe('string')
-  expect(activityResult.id.length).toBeGreaterThan(0)
-  const updated = { ...binding, consumer: 'filing-external-submission', consumerResultId: activityResult.id }
+  expect(typeof activityResult.activity_id).toBe('string')
+  expect(activityResult.activity_id.length).toBeGreaterThan(0)
+  const updated = { ...binding, consumer: 'filing-external-submission', consumerResultId: activityResult.activity_id }
   evidenceRoleMap.set(binding.role, updated)
   return updated
 }
@@ -316,8 +356,8 @@ function assertCompleteEvidenceLedger(
     expect(binding).toBeDefined()
     expect(binding!.role).toBe(role)
     expect(binding!.manifestPath.length).toBeGreaterThan(0)
-    expect(binding!.manifestSha256).toBe(binding!.contentHash)
-    expect(binding!.metadata.role).toBe(role)
+    expect(binding!.contentHash).toBe(`sha256:${binding!.manifestSha256}`)
+    expect(binding!.metadata.role ?? binding!.role).toBe(role)
     expect(Object.keys(binding!.metadata).length).toBeGreaterThan(1)
     expect(binding!.attachmentId.length).toBeGreaterThan(0)
     expect(binding!.evidenceVersionId.length).toBeGreaterThan(0)
@@ -335,24 +375,507 @@ function assertCompleteEvidenceLedger(
 }
 
 class IntegratedJourneyDriver {
+  private clientName = ''
+  private caseId = ''
+  private caseNo = ''
+  private filingPackageId = ''
+  private oa1SourceTitle = ''
+
   constructor(
     readonly operatorPage: Page,
     readonly reviewerPage: Page,
     readonly evidenceRoleMap: Map<EvidenceRole, EvidenceBinding>,
     readonly apiRequest: APIRequestContext,
     readonly accessToken: string,
+    readonly evidenceDescriptorsByRole: Map<EvidenceRole, { role: EvidenceRole; path: string; sha256: string; metadata: Json }>,
   ) {}
 
   private red(checkpoint: string): never {
     throw new Error(`${checkpoint} action RED: implement through its public UI/API owner`)
   }
 
-  async createClientAndContact(_code: string): Promise<Json> { return this.red('IA-01') }
-  async createCase(_clientId: string, _caseNo: string): Promise<Json> { return this.red('IA-02') }
-  async inspectCatalog(_caseId: string): Promise<Json> { return this.red('IA-03') }
-  async resolveFiling(_caseId: string): Promise<Json> { return this.red('IA-04') }
-  async completeFilingAndOa1(_caseId: string): Promise<Json> { return this.red('IA-05') }
-  async createOaOut(_sourceId: string, _packageId: string): Promise<Json> { return this.red('IA-06') }
+  async createClientAndContact(code: string): Promise<Json> {
+    this.clientName = `虚构集成演示客户-${code}`
+    await this.operatorPage.goto(`${baseUrl}/clients/new`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByRole('heading', { name: '新建客户' })).toBeVisible()
+    await this.operatorPage.getByPlaceholder('请输入客户名称').fill(this.clientName)
+    await this.operatorPage.getByPlaceholder('请输入客户代码（可选）').fill(code)
+    await this.operatorPage.getByPlaceholder('请输入邮箱地址').fill(`${code.toLowerCase()}@example.test`)
+    const clientResponse = this.operatorPage.waitForResponse((response) => response.status() === 201 && new URL(response.url()).pathname.endsWith('/api/v1/clients'))
+    await this.operatorPage.getByRole('button', { name: '创建客户' }).click()
+    const client = await (await clientResponse).json() as Json
+    expect(client.client_code).toBe(code)
+
+    await this.operatorPage.goto(`${baseUrl}/clients/${client.id}`, { waitUntil: 'domcontentloaded' })
+    await this.operatorPage.getByRole('tab', { name: '联系人' }).click()
+    await this.operatorPage.getByRole('button', { name: '新增联系人' }).click()
+    const dialog = this.operatorPage.getByRole('dialog', { name: '新增联系人' })
+    await dialog.locator('.el-form-item').filter({ hasText: '姓名' }).getByRole('textbox').fill('虚构主联系人')
+    await dialog.locator('.el-form-item').filter({ hasText: '职务' }).getByRole('textbox').fill('知识产权负责人')
+    await dialog.locator('.el-form-item').filter({ hasText: '邮箱' }).getByRole('textbox').fill(`${code.toLowerCase()}-contact@example.test`)
+    await dialog.locator('.el-form-item').filter({ hasText: '主联系人' }).locator('.el-switch').click()
+    const contactResponse = this.operatorPage.waitForResponse((response) => response.status() === 201 && new URL(response.url()).pathname.endsWith(`/api/v1/clients/${client.id}/contacts`))
+    const contactListResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/clients/${client.id}/contacts`))
+    await dialog.getByRole('button', { name: '确定' }).click()
+    const contact = await (await contactResponse).json() as Json
+    const contactList = await (await contactListResponse).json() as Json[]
+    expect(contact.client_id).toBe(client.id)
+    expect(contact.is_primary).toBe(true)
+    await expect(this.operatorPage.getByText('虚构主联系人', { exact: true })).toBeVisible()
+    const clientListResponse = this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/clients') && url.searchParams.get('page_size') === '20'
+    })
+    await this.operatorPage.goto(`${baseUrl}/clients`, { waitUntil: 'domcontentloaded' })
+    const clientList = await (await clientListResponse).json() as Json
+    const clientMatches = (clientList.items as Json[]).filter((item) => item.client_code === code && item.name_cn === this.clientName)
+    const contactMatches = contactList.filter((item) => item.client_id === client.id && item.contact_name === '虚构主联系人' && item.is_primary === true)
+    return { client_id: client.id, contact_id: contact.id, client_count: clientMatches.length, contact_count: contactMatches.length, primary_contact_client_id: contact.client_id }
+  }
+
+  async createCase(clientId: string, caseNo: string): Promise<Json> {
+    this.caseId = ''
+    this.caseNo = caseNo
+    await this.operatorPage.goto(`${baseUrl}/cases/new`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByRole('heading', { name: '新建案件' })).toBeVisible()
+    await this.operatorPage.getByPlaceholder('请输入案号（例如：P2024-001）').fill(caseNo)
+    await this.operatorPage.getByPlaceholder('请输入案件标题').fill('虚构集成演示发明案件')
+    const clientField = this.operatorPage.locator('.el-form-item').filter({ hasText: '客户' }).first()
+    await clientField.getByRole('combobox').click()
+    await this.operatorPage.getByRole('option', { name: this.clientName }).click()
+    await this.operatorPage.locator('.el-collapse-item__header').filter({ hasText: '申请人信息' }).click()
+    await this.operatorPage.getByRole('button', { name: '新增申请人', exact: true }).click()
+    const applicantField = this.operatorPage.locator('.el-form-item').filter({ hasText: '从客户主数据回填' }).first()
+    await applicantField.getByRole('combobox').click()
+    await this.operatorPage.getByRole('option', { name: this.clientName }).last().click()
+    await expect(this.operatorPage.getByPlaceholder('申请人中文名称')).toHaveValue(this.clientName)
+    await this.operatorPage.getByText('控制标记', { exact: true }).click()
+    const reductionField = this.operatorPage.locator('.el-form-item').filter({ hasText: '费用减缓比例' }).first()
+    await reductionField.locator('.el-select__wrapper').click()
+    await this.operatorPage.getByRole('option', { name: '不减免（0）' }).click()
+    const caseResponse = this.operatorPage.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/v1/cases'))
+    await this.operatorPage.getByRole('button', { name: '创建案件' }).click()
+    const created = await (await caseResponse).json() as Json
+    expect((await caseResponse).status(), JSON.stringify(created)).toBe(201)
+    this.caseId = created.id
+    expect(created.client_id).toBe(clientId)
+    expect(created.status).toBe('NOT_FILED')
+
+    const overlayResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/cases/${created.id}/lifecycle-overlay`))
+    const taskResponse = this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/tasks') && url.searchParams.get('case_id') === created.id
+    })
+    const draftResponse = this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/fees/drafts') && url.searchParams.get('case_id') === created.id
+    })
+    await this.operatorPage.goto(`${baseUrl}/cases/${created.id}`, { waitUntil: 'domcontentloaded' })
+    const overlay = await (await overlayResponse).json() as Json
+    const taskPage = await (await taskResponse).json() as Json
+    const draftPage = await (await draftResponse).json() as Json
+    const center = overlay.center_snapshot
+    const packages = observedOverlayPackages(overlay)
+
+    const billPagePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/bills')).then((response) => response.json() as Promise<Json>)
+    await this.operatorPage.goto(`${baseUrl}/billing/bills`, { waitUntil: 'domcontentloaded' })
+    const billPage = await billPagePromise
+    const paymentPagePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/payments')).then((response) => response.json() as Promise<Json>)
+    await this.operatorPage.goto(`${baseUrl}/billing/payments`, { waitUntil: 'domcontentloaded' })
+    const paymentPage = await paymentPagePromise
+    const offsetPagePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/offsets')).then((response) => response.json() as Promise<Json>)
+    await this.operatorPage.goto(`${baseUrl}/billing/offsets`, { waitUntil: 'domcontentloaded' })
+    const offsetPage = await offsetPagePromise
+    return {
+      case_id: created.id,
+      case_no: created.case_no,
+      projection: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status],
+      legacy_display: created.status,
+      business_counts: {
+        package: packages.length,
+        task: (taskPage.items as Json[]).length,
+        draft: (draftPage.items as Json[]).length,
+        bill: (billPage.items as Json[]).length,
+        payment: (paymentPage.items as Json[]).length,
+        offset: (offsetPage.items as Json[]).length,
+      },
+    }
+  }
+
+  async inspectCatalog(caseId: string): Promise<Json> {
+    const templateResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/doc-templates'))
+    await this.operatorPage.goto(`${baseUrl}/documents/wizard`, { waitUntil: 'domcontentloaded' })
+    const requestStatus = (await templateResponse).status()
+    await expect(this.operatorPage.getByRole('heading', { name: '中间文件向导' })).toBeVisible()
+    await this.operatorPage.getByText('收文', { exact: true }).first().click()
+    const templateField = this.operatorPage.locator('.defaults-field').filter({ hasText: '文书模板' }).first()
+    await templateField.locator('.el-select__wrapper').click()
+    const rows = this.operatorPage.getByRole('option').filter({ hasText: 'OFFICIAL_NOTICE_' })
+    await expect(rows).toHaveCount(60)
+    const executable = this.operatorPage.getByRole('option', { name: /OFFICIAL_NOTICE_001.*可执行/ })
+    const reference = this.operatorPage.getByRole('option', { name: /OFFICIAL_NOTICE_010.*仅供参考/ })
+    await expect(executable).toBeEnabled()
+    await expect(reference).toBeDisabled()
+    await this.operatorPage.keyboard.press('Escape')
+    return { row_count: await rows.count(), executable_enabled: await executable.isEnabled(), reference_only_disabled: await reference.isDisabled(), request_status: requestStatus }
+  }
+
+  async resolveFiling(caseId: string): Promise<Json> {
+    const created = await this.publicLifecycleApi('RESOLVE_FILING', { case_id: caseId })
+    expect(created.status).toBe(200)
+    const replayed = await this.publicLifecycleApi('RESOLVE_FILING', { case_id: caseId })
+    expect(replayed.status).toBe(200)
+    const packageId = created.body.package.id as string
+    this.filingPackageId = packageId
+    expect(replayed.body.package.id).toBe(packageId)
+    await this.operatorPage.goto(`${baseUrl}/official-workflows/filing-preparation?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByRole('heading', { name: '新申请递交准备' })).toBeVisible()
+    const overlayResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/cases/${caseId}/lifecycle-overlay`))
+    await this.operatorPage.goto(`${baseUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
+    const overlay = await (await overlayResponse).json() as Json
+    const center = overlay.center_snapshot
+    return { package_id: packageId, replayed_package_id: replayed.body.package.id, package_kind: created.body.package.package_kind, projection: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status] }
+  }
+
+  private async createDocumentViaVisibleUi(
+    caseId: string,
+    title: string,
+    documentDate: string,
+    templateCode?: string,
+    deadline?: { official_due_date: string; official_due_date_source: string; official_due_date_status: string },
+    replyToTitle?: string,
+    direction: 'IN' | 'OUT' = 'IN',
+  ): Promise<{ document: Json; impact: Json | null }> {
+    await this.operatorPage.goto(`${baseUrl}/documents/new?case_id=${caseId}`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByRole('heading', { name: '登记往来文件' })).toBeVisible()
+    await this.operatorPage.getByPlaceholder('请输入文件标题').fill(title)
+    await this.operatorPage.getByText(direction === 'IN' ? '收文' : '发文', { exact: true }).click()
+    await this.operatorPage.getByPlaceholder('请选择日期').fill(documentDate)
+    const typeField = this.operatorPage.locator('.el-form-item').filter({ hasText: '文件类型' }).first()
+    await typeField.locator('.el-select__wrapper').click()
+    await this.operatorPage.getByRole('option', { name: direction === 'IN' ? '官方来文' : '官方去文', exact: true }).click()
+    if (templateCode) {
+      const templateField = this.operatorPage.locator('.el-form-item').filter({ hasText: '文件模板' }).first()
+      await templateField.locator('.el-select__wrapper').click()
+      await this.operatorPage.getByRole('option').filter({ hasText: templateCode }).first().click()
+    }
+    if (replyToTitle) {
+      const replyField = this.operatorPage.locator('.el-form-item').filter({ hasText: '回复来源文件' }).first()
+      await replyField.locator('.el-select__wrapper').click()
+      await this.operatorPage.getByRole('option').filter({ hasText: replyToTitle }).first().click()
+    }
+    let impact: Json | null = null
+    if (deadline) {
+      await this.operatorPage.getByPlaceholder('请选择官方截止日').fill(deadline.official_due_date)
+      const sourceField = this.operatorPage.locator('.el-form-item').filter({ hasText: '截止日来源' }).first()
+      await sourceField.locator('.el-select__wrapper').click()
+      await this.operatorPage.getByRole('option', { name: '人工核对官方通知', exact: true }).click()
+      const impactResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/documents/impact-preview'))
+      const statusField = this.operatorPage.locator('.el-form-item').filter({ hasText: '确认状态' }).first()
+      await statusField.locator('.el-select__wrapper').click()
+      await this.operatorPage.getByRole('option', { name: '已确认', exact: true }).click()
+      impact = await (await impactResponse).json() as Json
+    }
+    await expect(this.operatorPage.getByPlaceholder('请输入文件标题')).toHaveValue(title)
+    await expect(this.operatorPage.getByPlaceholder('请选择日期')).toHaveValue(documentDate)
+    await expect(typeField).toContainText(direction === 'IN' ? '官方来文' : '官方去文')
+    await expect(this.operatorPage.getByPlaceholder('案件编号已自动带入')).toHaveValue(this.caseNo)
+    const submitButton = this.operatorPage.getByRole('button', { name: '登记往来文件', exact: true })
+    await expect(submitButton).toBeEnabled()
+    const createResponse = this.operatorPage.waitForResponse(
+      (response) => new URL(response.url()).pathname.endsWith('/api/v1/documents'),
+      { timeout: 5_000 },
+    )
+    await submitButton.click({ force: true })
+    await this.operatorPage.waitForTimeout(250)
+    expect(await this.operatorPage.locator('.el-form-item__error').count()).toBe(0)
+    const document = await (await createResponse).json() as Json
+    expect((await createResponse).status(), JSON.stringify(document)).toBe(201)
+    return { document, impact }
+  }
+
+  private async loadLifecycleOverlay(caseId: string): Promise<Json> {
+    const response = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${caseId}/lifecycle-overlay`))
+    await this.operatorPage.goto(`${baseUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
+    return await (await response).json() as Json
+  }
+
+  private async visibleCaseSnapshot(caseId: string): Promise<Json> {
+    const documentsResponse = this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/documents') && url.searchParams.get('page_size') === '20'
+    })
+    await this.operatorPage.goto(`${baseUrl}/documents`, { waitUntil: 'domcontentloaded' })
+    const documentPage = await (await documentsResponse).json() as Json
+    const documents = (documentPage.items as Json[]).filter((item) => item.case_id === caseId)
+
+    const tasksResponse = this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/tasks') && url.searchParams.get('page_size') === '20' && url.searchParams.get('status') === null
+    })
+    await this.operatorPage.goto(`${baseUrl}/tasks`, { waitUntil: 'domcontentloaded' })
+    const taskPage = await (await tasksResponse).json() as Json
+    const tasks = (taskPage.items as Json[]).filter((item) => item.case_id === caseId)
+    const overlay = await this.loadLifecycleOverlay(caseId)
+    return {
+      document_ids: documents.map((item) => item.id).sort(),
+      document_titles: documents.map((item) => item.title).sort(),
+      document_deadlines: documents.map((item) => [item.id, item.official_due_date, item.official_due_date_source, item.official_due_date_status]).sort(),
+      task_ids: tasks.map((item) => item.id).sort(),
+      task_states: tasks.map((item) => [item.id, item.status]).sort(),
+      package_ids: observedOverlayPackages(overlay).map((item) => item.package_id),
+      package_states: observedOverlayPackages(overlay).map((item) => [item.package_id, item.package_kind, item.status, item.source_document_id, item.reply_document_id]),
+      center_snapshot: overlay.center_snapshot,
+    }
+  }
+
+  private async visibleOaTasks(caseId: string, documentId: string): Promise<Json> {
+    const tasksResponse = this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/tasks') && url.searchParams.get('page_size') === '20' && url.searchParams.get('status') === null
+    })
+    await this.operatorPage.goto(`${baseUrl}/tasks`, { waitUntil: 'domcontentloaded' })
+    const taskPage = await (await tasksResponse).json() as Json
+    const matches = (taskPage.items as Json[]).filter((item) => item.case_id === caseId && item.document_id === documentId)
+    return { count: matches.length, ids: matches.map((item) => item.id).sort(), states: matches.map((item) => item.status).sort() }
+  }
+
+  private async verifyMissingDeadlineNoWrite(caseId: string): Promise<Json> {
+    const title = `虚构缺失期限审查意见-${this.caseNo}`
+    const before = await this.visibleCaseSnapshot(caseId)
+    await this.operatorPage.goto(`${baseUrl}/documents/new?case_id=${caseId}`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByRole('heading', { name: '登记往来文件' })).toBeVisible()
+    await this.operatorPage.getByPlaceholder('请输入文件标题').fill(title)
+    await this.operatorPage.getByText('收文', { exact: true }).first().click()
+    await this.operatorPage.getByPlaceholder('请选择日期').fill('2026-08-08')
+    const typeField = this.operatorPage.locator('.el-form-item').filter({ hasText: '文件类型' }).first()
+    await typeField.locator('.el-select__wrapper').click()
+    await this.operatorPage.getByRole('option', { name: '官方来文', exact: true }).click()
+    const templateField = this.operatorPage.locator('.el-form-item').filter({ hasText: '文件模板' }).first()
+    await templateField.locator('.el-select__wrapper').click()
+    await this.operatorPage.getByRole('option').filter({ hasText: 'OFFICIAL_NOTICE_003' }).first().click()
+    const rejectedResponse = this.operatorPage.waitForResponse(
+      (response) => response.status() >= 400 && new URL(response.url()).pathname.endsWith('/api/v1/documents'),
+    )
+    await this.operatorPage.getByRole('button', { name: '登记往来文件', exact: true }).click({ force: true })
+    const rejected = await rejectedResponse
+    const after = await this.visibleCaseSnapshot(caseId)
+    expect(after).toEqual(before)
+    return { status: rejected.status(), title_absent: !(after.document_titles as string[]).includes(title), before, after }
+  }
+
+  private async verifyContentEdit(documentId: string, deadline: Json): Promise<Json> {
+    const lockedBefore = await this.visibleCaseSnapshot(this.caseId)
+    const readResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/documents/${documentId}`))
+    await this.operatorPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })
+    const read = await (await readResponse).json() as Json
+    await this.operatorPage.getByRole('button', { name: '编辑往来文件' }).first().click()
+    await expect(this.operatorPage.getByRole('heading', { name: '编辑文档' })).toBeVisible()
+    await expect(this.operatorPage.getByPlaceholder('请选择官方截止日')).toBeDisabled()
+    const sourceField = this.operatorPage.locator('.el-form-item').filter({ hasText: '截止日来源' }).first()
+    await expect(sourceField.getByRole('combobox')).toBeDisabled()
+    await expect(this.operatorPage.locator('.deadline-lineage-card').getByText('已确认', { exact: true })).toBeVisible()
+    const lockedAfter = await this.visibleCaseSnapshot(this.caseId)
+    expect(lockedAfter).toEqual(lockedBefore)
+    const rereadResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/documents/${documentId}`))
+    await this.operatorPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })
+    await rereadResponse
+    await this.operatorPage.getByRole('button', { name: '编辑往来文件' }).first().click()
+    await expect(this.operatorPage.getByRole('heading', { name: '编辑文档' })).toBeVisible()
+    await this.operatorPage.getByPlaceholder('请输入文档内容或说明').fill('Integrated A 现场已复核')
+    const updateResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/documents/${documentId}`))
+    await this.operatorPage.getByRole('button', { name: '保存修改' }).click()
+    const edited = await (await updateResponse).json() as Json
+    for (const current of [read, edited]) {
+      const currentDeadline = {
+        official_due_date: current.official_due_date,
+        official_due_date_source: current.official_due_date_source,
+        official_due_date_status: current.official_due_date_status,
+      }
+      expect(currentDeadline).toEqual(deadline)
+    }
+    return {
+      read_deadline: { official_due_date: read.official_due_date, official_due_date_source: read.official_due_date_source, official_due_date_status: read.official_due_date_status },
+      edit_deadline: { official_due_date: edited.official_due_date, official_due_date_source: edited.official_due_date_source, official_due_date_status: edited.official_due_date_status },
+      changed_deadline_gate: { date_disabled: true, source_disabled: true, status_visible: true, before: lockedBefore, after: lockedAfter },
+    }
+  }
+
+  private async verifyWizardDeadline(caseNo: string, templateCode: string, deadline: Json): Promise<Json> {
+    await this.operatorPage.goto(`${baseUrl}/documents/wizard`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByRole('heading', { name: '中间文件向导' })).toBeVisible()
+    await this.operatorPage.getByText('收文', { exact: true }).first().click()
+    const templateField = this.operatorPage.locator('.defaults-field').filter({ hasText: '文书模板' }).first()
+    await templateField.locator('.el-select__wrapper').click()
+    await this.operatorPage.getByRole('option').filter({ hasText: templateCode }).first().click()
+    await this.operatorPage.getByPlaceholder('请选择发文日期').fill('2026-08-08')
+    await this.operatorPage.getByPlaceholder(/请输入案卷号或申请号，每行一条/).fill(caseNo)
+    await this.operatorPage.getByRole('button', { name: '拆分为逐行列表' }).click()
+    await this.operatorPage.getByRole('button', { name: '解析全部' }).click()
+    await expect(this.operatorPage.getByText('已解析', { exact: true })).toBeVisible()
+    await this.operatorPage.getByRole('button', { name: '下一步' }).click()
+    await this.operatorPage.getByPlaceholder('请选择官方截止日').fill(deadline.official_due_date)
+    const deadlineSourceField = this.operatorPage.locator('.step2-field').filter({ hasText: '截止日来源' }).first()
+    await deadlineSourceField.locator('.el-select__wrapper').click()
+    await this.operatorPage.getByRole('option', { name: '人工核对官方通知', exact: true }).click()
+    const deadlineStatusField = this.operatorPage.locator('.step2-field').filter({ hasText: '确认状态' }).first()
+    await deadlineStatusField.locator('.el-select__wrapper').click()
+    await this.operatorPage.getByRole('option', { name: '已确认', exact: true }).click()
+    const retainedDate = await this.operatorPage.getByPlaceholder('请选择官方截止日').inputValue()
+    const retainedSource = (await deadlineSourceField.locator('.el-select__placeholder').textContent())?.trim()
+    const retainedStatus = (await deadlineStatusField.locator('.el-select__placeholder').textContent())?.trim()
+    const previewResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/documents/wizard/task-preview'))
+    await this.operatorPage.getByRole('button', { name: '继续预览联动内容' }).click()
+    const preview = await (await previewResponse).json() as Json
+    const candidate = (preview.items as Json[])[0]
+    await expect(this.operatorPage.getByText(candidate.due_date, { exact: true })).toBeVisible()
+    await this.operatorPage.getByRole('button', { name: '上一步' }).click()
+    await expect(this.operatorPage.getByPlaceholder('请选择官方截止日')).toHaveValue(retainedDate)
+    return {
+      official_due_date: retainedDate,
+      official_due_date_source: retainedSource === '人工核对官方通知' ? 'MANUAL_OFFICIAL_NOTICE' : retainedSource,
+      official_due_date_status: retainedStatus === '已确认' ? 'CONFIRMED' : retainedStatus,
+      preview_due_date: candidate.due_date,
+    }
+  }
+
+  async completeFilingAndOa1(caseId: string): Promise<Json> {
+    const filingDescriptor = this.evidenceDescriptorsByRole.get('FILING_FINAL_SUBMISSION')!
+    const filingCreated = await this.createDocumentViaVisibleUi(caseId, '虚构最终递交文件', '2026-08-02')
+    const filingBinding = await this.uploadRole(filingCreated.document.id, filingDescriptor)
+    await this.operatorPage.goto(`${baseUrl}/official-workflows/filing-preparation?package_id=${this.filingPackageId}`, { waitUntil: 'domcontentloaded' })
+    const refreshResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith(`/api/v1/official-work-packages/${this.filingPackageId}/filing-preparation/refresh`))
+    await this.operatorPage.getByRole('button', { name: '刷新工作包' }).click()
+    await refreshResponse
+    const externalPayload = { operation_code: 'EXTERNAL_SUBMISSION_RECORDED', occurred_at: filingDescriptor.metadata.effective_at, note: '本地虚构演示人工递交记录' }
+    const filingCommand = await this.publicLifecycleApi('RECORD_FILING_EXTERNAL', { package_id: this.filingPackageId }, externalPayload)
+    expect(filingCommand.status).toBe(200)
+    const filingPackage = await this.publicLifecycleApi('GET_FILING_PACKAGE', { package_id: this.filingPackageId })
+    expect(filingPackage.status).toBe(200)
+    const filingOverlay = await this.loadLifecycleOverlay(caseId)
+    const filingActivity = (filingOverlay.milestones as Json[]).find((item) => item.activity_type === 'FILING_EXTERNAL_SUBMISSION_RECORDED')!
+    recordFilingSubmission(this.evidenceRoleMap, filingBinding, filingCommand.body, filingPackage.body, filingActivity)
+
+    const filingReceiptDescriptor = this.evidenceDescriptorsByRole.get('FILING_RECEIPT')!
+    const filingReceiptBinding = await this.uploadRole(filingCreated.document.id, filingReceiptDescriptor)
+    const filingReceiptPayload = {
+      receipt_kind: filingReceiptDescriptor.metadata.receipt_kind,
+      receipt_attachment_id: filingReceiptBinding.attachmentId,
+      receiving_case_no: `FILING-${this.caseNo}`,
+      submitter: '虚构演示操作员',
+      received_at: filingReceiptDescriptor.metadata.received_at,
+      received_file_list: '虚构最终递交文件',
+      archive_status: 'ARCHIVED',
+      note: '本地虚构演示递交回执',
+    }
+    const filingReceipt = await this.publicLifecycleApi('RECORD_PACKAGE_RECEIPT', { package_id: this.filingPackageId }, filingReceiptPayload)
+    expect(filingReceipt.status, JSON.stringify(filingReceipt.body)).toBe(201)
+    recordReceiptConsumer(this.evidenceRoleMap, filingReceiptBinding, 'filing-receipt', filingReceiptPayload, filingReceipt.body)
+    const filingReceiptOverlay = await this.loadLifecycleOverlay(caseId)
+    const filingReceiptCenter = filingReceiptOverlay.center_snapshot
+    const filingReceiptProjection = [
+      filingReceiptCenter.business_stage,
+      filingReceiptCenter.official_procedure_stage,
+      filingReceiptCenter.legal_status,
+      filingReceiptCenter.verification_status,
+    ]
+
+    const lifecycleConsumptions: Array<{ kind: 'document-lifecycle'; role: EvidenceRole; consumer: string; payload: Json; result: Json }> = []
+    const lifecycleSteps: Array<{ role: EvidenceRole; title: string; template?: string; consumer: string }> = [
+      { role: 'ACCEPTANCE_NOTICE', title: '虚构受理通知书', template: 'OFFICIAL_NOTICE_001', consumer: 'acceptance-notice' },
+      { role: 'PRELIMINARY_EXAMINATION_SOURCE', title: '虚构初步审查来源', consumer: 'preliminary-examination' },
+      { role: 'PUBLICATION_NOTICE', title: '虚构公布通知书', consumer: 'publication-notice' },
+      { role: 'SUBSTANTIVE_EXAMINATION_SOURCE', title: '虚构进入实审通知', consumer: 'substantive-examination' },
+    ]
+    for (const step of lifecycleSteps) {
+      const descriptor = this.evidenceDescriptorsByRole.get(step.role)!
+      const created = await this.createDocumentViaVisibleUi(caseId, step.title, descriptor.metadata.effective_at.slice(0, 10), step.template)
+      const binding = await this.uploadRole(created.document.id, descriptor)
+      const payload = { evidence_version_id: binding.evidenceVersionId, effective_at: descriptor.metadata.effective_at, idempotency_key: `${step.role.toLowerCase()}-${caseId}` }
+      const result = step.role === 'ACCEPTANCE_NOTICE'
+        ? await this.publicLifecycleApi('RECORD_ACCEPTANCE', { document_id: created.document.id }, payload)
+        : step.role === 'PRELIMINARY_EXAMINATION_SOURCE'
+          ? await this.publicLifecycleApi('RECORD_PRELIMINARY_START', { document_id: created.document.id }, payload)
+          : step.role === 'PUBLICATION_NOTICE'
+            ? await this.publicLifecycleApi('RECORD_PUBLICATION', { document_id: created.document.id }, payload)
+            : await this.publicLifecycleApi('RECORD_SUBSTANTIVE_START', { document_id: created.document.id }, payload)
+      expect(result.status).toBe(200)
+      recordDocumentLifecycleConsumer(this.evidenceRoleMap, binding, step.consumer, payload, result.body)
+      lifecycleConsumptions.push({ kind: 'document-lifecycle', role: step.role, consumer: step.consumer, payload, result: result.body })
+      if (step.role === 'PRELIMINARY_EXAMINATION_SOURCE') {
+        const passed = await this.publicLifecycleApi('RECORD_PRELIMINARY_PASS', { document_id: created.document.id }, { ...payload, idempotency_key: `preliminary-pass-${caseId}` })
+        expect(passed.status).toBe(200)
+        recordDocumentLifecycleConsumer(this.evidenceRoleMap, binding, step.consumer, { ...payload, idempotency_key: `preliminary-pass-${caseId}` }, passed.body)
+      }
+    }
+
+    const oaDescriptor = this.evidenceDescriptorsByRole.get('OA_NOTICE_1')!
+    const deadline = {
+      official_due_date: oaDescriptor.metadata.official_due_date,
+      official_due_date_source: oaDescriptor.metadata.official_due_date_source,
+      official_due_date_status: oaDescriptor.metadata.official_due_date_status,
+    }
+    this.oa1SourceTitle = `虚构第一次审查意见通知书-${this.caseNo}`
+    const oaCreated = await this.createDocumentViaVisibleUi(caseId, this.oa1SourceTitle, oaDescriptor.metadata.effective_at.slice(0, 10), 'OFFICIAL_NOTICE_003', deadline)
+    const createDeadline = { official_due_date: oaCreated.document.official_due_date, official_due_date_source: oaCreated.document.official_due_date_source, official_due_date_status: oaCreated.document.official_due_date_status }
+    const impactDeadline = { official_due_date: oaCreated.impact!.official_due_date, official_due_date_source: oaCreated.impact!.official_due_date_source, official_due_date_status: oaCreated.impact!.official_due_date_status }
+    expect(createDeadline).toEqual(deadline)
+    expect(impactDeadline).toEqual(deadline)
+    const oaBinding = await this.uploadRole(oaCreated.document.id, oaDescriptor)
+    const oaPayload = { evidence_version_id: oaBinding.evidenceVersionId, effective_at: oaDescriptor.metadata.effective_at, idempotency_key: `oa1-notice-${caseId}` }
+    const oaRecorded = await this.publicLifecycleApi('RECORD_OA_NOTICE', { document_id: oaCreated.document.id }, oaPayload)
+    expect(oaRecorded.status).toBe(200)
+    recordDocumentLifecycleConsumer(this.evidenceRoleMap, oaBinding, 'oa1-notice', oaPayload, oaRecorded.body)
+    const edited = await this.verifyContentEdit(oaCreated.document.id, deadline)
+    const wizard = await this.verifyWizardDeadline(this.caseNo, 'OFFICIAL_NOTICE_003', deadline)
+    const invalidDeadline = await this.verifyMissingDeadlineNoWrite(caseId)
+    const resolved = await this.publicLifecycleApi('RESOLVE_OA', { document_id: oaCreated.document.id })
+    expect(resolved.status).toBe(200)
+    const firstTaskSnapshot = await this.visibleOaTasks(caseId, oaCreated.document.id)
+    expect(firstTaskSnapshot.count).toBe(1)
+    const replayed = await this.publicLifecycleApi('RESOLVE_OA', { document_id: oaCreated.document.id })
+    expect(replayed.status).toBe(200)
+    const replayTaskSnapshot = await this.visibleOaTasks(caseId, oaCreated.document.id)
+    expect(replayTaskSnapshot).toEqual(firstTaskSnapshot)
+    return {
+      filing_package_id: this.filingPackageId,
+      filing_command_result: filingCommand.body,
+      filing_package_result: filingPackage.body,
+      filing_activity_result: filingActivity,
+      filing_receipt_projection: filingReceiptProjection,
+      lifecycle_consumptions: lifecycleConsumptions,
+      source_id: oaCreated.document.id,
+      package_id: resolved.body.package.id,
+      task_id: (firstTaskSnapshot.ids as string[])[0],
+      replayed_package_id: replayed.body.package.id,
+      replayed_task_id: (replayTaskSnapshot.ids as string[])[0],
+      task_identity_snapshots: { first: firstTaskSnapshot, replay: replayTaskSnapshot },
+      deadline,
+      deadline_surfaces: { create: createDeadline, read: edited.read_deadline, edit: edited.edit_deadline, impact_preview: impactDeadline, wizard: { official_due_date: wizard.official_due_date, official_due_date_source: wizard.official_due_date_source, official_due_date_status: wizard.official_due_date_status } },
+      wizard_preview_due_date: wizard.preview_due_date,
+      missing_deadline_no_write: invalidDeadline,
+      changed_deadline_no_write: edited.changed_deadline_gate,
+    }
+  }
+
+  async createOaOut(sourceId: string, packageId: string): Promise<Json> {
+    const created = await this.createDocumentViaVisibleUi(this.caseId, `虚构第一次审查意见答复-${this.caseNo}`, '2026-08-09', 'OA_OUT', undefined, this.oa1SourceTitle, 'OUT')
+    const linked = await this.publicLifecycleApi('LINK_OA_REPLY', { package_id: packageId }, { reply_document_id: created.document.id })
+    expect(linked.status).toBe(200)
+    const replayed = await this.publicLifecycleApi('LINK_OA_REPLY', { package_id: packageId }, { reply_document_id: created.document.id })
+    expect(replayed.status).toBe(200)
+    const packageResult = await this.publicLifecycleApi('GET_OA_PACKAGE', { package_id: packageId })
+    expect(packageResult.status).toBe(200)
+    const taskSnapshot = await this.visibleOaTasks(created.document.case_id, sourceId)
+    const documentsResponse = this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/documents') && url.searchParams.get('page_size') === '20'
+    })
+    await this.operatorPage.goto(`${baseUrl}/documents`, { waitUntil: 'domcontentloaded' })
+    const documentPage = await (await documentsResponse).json() as Json
+    const links = (documentPage.items as Json[]).filter((item) => item.case_id === created.document.case_id && item.reply_to_id === sourceId)
+    return { linked_source_id: linked.body.package.source_document_id, linked_package_id: linked.body.package.id, link_count: links.length, linked_reply_ids: links.map((item) => item.id).sort(), replayed_reply_id: replayed.body.reply_document.id, task_status: (taskSnapshot.states as string[])[0], task_count: taskSnapshot.count, package_status: packageResult.body.package.status, oa_out_id: created.document.id }
+  }
   async rejectInvalidReceipts(_caseId: string, _packageId: string): Promise<Json> { return this.red('IA-07') }
   async archiveOa1(_packageId: string): Promise<Json> { return this.red('IA-08') }
   async completeOa2(_caseId: string): Promise<Json> { return this.red('IA-09') }
@@ -405,14 +928,17 @@ class IntegratedJourneyDriver {
 
 test('Integrated Scheme A executes prior lifecycle and new finance on one case', async ({ browser, page, request }) => {
   test.setTimeout(240_000)
-  for (const required of [adminUsername, adminPassword, reviewerUsername, reviewerPassword, evidenceDir, bundlePath, expectedDisclaimer]) expect(typeof required).toBe('string')
+  for (const required of [adminUsername, adminPassword, reviewerUsername, reviewerPassword, evidenceDir, bundlePath, expectedDisclaimer, integratedEvidenceJson]) expect(typeof required).toBe('string')
 
   const operatorToken = await login(page, adminUsername!, adminPassword!)
   const reviewerContext: BrowserContext = await browser.newContext()
   const reviewerPage = await reviewerContext.newPage()
+  page.setDefaultTimeout(10_000)
+  reviewerPage.setDefaultTimeout(10_000)
   await login(reviewerPage, reviewerUsername!, reviewerPassword!)
   const evidenceRoleMap = new Map<EvidenceRole, EvidenceBinding>()
-  const journey = new IntegratedJourneyDriver(page, reviewerPage, evidenceRoleMap, request, operatorToken)
+  const journey = new IntegratedJourneyDriver(page, reviewerPage, evidenceRoleMap, request, operatorToken, evidenceDescriptors())
+  const task5Checkpoints: Json[] = []
   const suffix = `${Date.now()}`
   const clientCode = `IA-${suffix}`
   const caseNo = `IA-CASE-${suffix}`
@@ -452,23 +978,26 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   await test.step(checkpointContract[1], async () => {
     const x = await journey.createClientAndContact(clientCode); clientId = x.client_id
     expect(x.client_count).toBe(1); expect(x.contact_count).toBe(1); expect(x.primary_contact_client_id).toBe(clientId)
+    task5Checkpoints.push({ checkpoint: 'IA-01', result: x })
   })
   await test.step(checkpointContract[2], async () => {
     const x = await journey.createCase(clientId, caseNo); caseId = x.case_id
     expect(x.case_no).toBe(caseNo); expect(x.projection).toEqual(['NEW_CASE', 'NOT_SUBMITTED', 'NOT_ESTABLISHED', 'CONFIRMED']); expect(x.legacy_display).toBe('NOT_FILED')
     expect(x.business_counts).toEqual({ package: 0, task: 0, draft: 0, bill: 0, payment: 0, offset: 0 })
+    task5Checkpoints.push({ checkpoint: 'IA-02', result: x })
   })
   await test.step(checkpointContract[3], async () => {
     const x = await journey.inspectCatalog(caseId); expect(x.row_count).toBe(60); expect(x.executable_enabled).toBe(true); expect(x.reference_only_disabled).toBe(true); expect(x.request_status).not.toBe(422)
+    task5Checkpoints.push({ checkpoint: 'IA-03', result: x })
   })
   await test.step(checkpointContract[4], async () => {
     const x = await journey.resolveFiling(caseId); filingPackageId = x.package_id
     expect(x.replayed_package_id).toBe(filingPackageId); expect(x.package_kind).toBe('FILING_PREP'); expect(x.projection).toEqual(['FILING_PREPARATION', 'NOT_SUBMITTED', 'NOT_ESTABLISHED', 'CONFIRMED'])
+    task5Checkpoints.push({ checkpoint: 'IA-04', result: x })
   })
   await test.step(checkpointContract[5], async () => {
     const x = await journey.completeFilingAndOa1(caseId); oa1SourceId = x.source_id; oa1PackageId = x.package_id; oa1TaskId = x.task_id
-    for (const target of x.upload_targets as Array<{ document_id: string; descriptor: { role: EvidenceRole; path: string; sha256: string; metadata: Json } }>) await journey.uploadRole(target.document_id, target.descriptor)
-    expect(x.filing_package_id).toBe(filingPackageId); expect(evidenceRoleMap.size).toBe(8)
+    expect(x.filing_package_id).toBe(filingPackageId); expect(evidenceRoleMap.size).toBe(7)
     const filingBinding = evidenceRoleMap.get('FILING_FINAL_SUBMISSION')!
     const filingRecord = recordFilingSubmission(
       evidenceRoleMap,
@@ -477,20 +1006,21 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
       x.filing_package_result,
       x.filing_activity_result,
     )
-    expect(filingRecord.consumerResultId).toBe(x.filing_activity_result.id)
-    for (const consumption of x.lifecycle_consumptions as Array<{ kind: 'document-lifecycle' | 'receipt'; role: EvidenceRole; consumer: string; payload: Json; result: Json }>) {
-      if (consumption.kind === 'receipt') {
-        recordReceiptConsumer(evidenceRoleMap, evidenceRoleMap.get(consumption.role)!, consumption.consumer, consumption.payload, consumption.result)
-      } else {
-        recordDocumentLifecycleConsumer(evidenceRoleMap, evidenceRoleMap.get(consumption.role)!, consumption.consumer, consumption.payload, consumption.result)
-      }
-    }
+    expect(filingRecord.consumerResultId).toBe(x.filing_activity_result.activity_id)
+    expect(x.filing_receipt_projection).toEqual(['PROSECUTION_MANAGEMENT', 'SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE', 'APPLICATION_PENDING', 'CONFIRMED'])
     expect(evidenceRoleMap.get('OA_NOTICE_1')!.consumer).toBe('oa1-notice')
     expect(x.deadline_surfaces).toEqual({ create: x.deadline, read: x.deadline, edit: x.deadline, impact_preview: x.deadline, wizard: x.deadline })
-    expect(typeof x.deadline.official_due_date).toBe('string'); expect(['MANUAL_OFFICIAL_NOTICE', 'IMPORTED_OFFICIAL_NOTICE']).toContain(x.deadline.official_due_date_source); expect(x.deadline.official_due_date_status).toBe('CONFIRMED'); expect(x.replayed_package_id).toBe(oa1PackageId); expect(x.replayed_task_id).toBe(oa1TaskId); expect(x.invalid_deadline_no_write).toBe(true)
+    expect(typeof x.deadline.official_due_date).toBe('string'); expect(['MANUAL_OFFICIAL_NOTICE', 'IMPORTED_OFFICIAL_NOTICE']).toContain(x.deadline.official_due_date_source); expect(x.deadline.official_due_date_status).toBe('CONFIRMED'); expect(x.wizard_preview_due_date).toBe(x.deadline.official_due_date); expect(x.replayed_package_id).toBe(oa1PackageId); expect(typeof x.task_id).toBe('string'); expect(x.task_id.length).toBeGreaterThan(0); expect(x.replayed_task_id).toBe(oa1TaskId)
+    expect(x.task_identity_snapshots.first).toEqual(x.task_identity_snapshots.replay); expect(x.task_identity_snapshots.first.count).toBe(1)
+    expect(x.missing_deadline_no_write.status).toBeGreaterThanOrEqual(400); expect(x.missing_deadline_no_write.title_absent).toBe(true); expect(x.missing_deadline_no_write.before.package_states.length).toBeGreaterThan(0); expect(x.missing_deadline_no_write.before).toEqual(x.missing_deadline_no_write.after)
+    expect(x.changed_deadline_no_write.date_disabled).toBe(true); expect(x.changed_deadline_no_write.source_disabled).toBe(true); expect(x.changed_deadline_no_write.status_visible).toBe(true); expect(x.changed_deadline_no_write.before.package_states.length).toBeGreaterThan(0); expect(x.changed_deadline_no_write.before).toEqual(x.changed_deadline_no_write.after)
+    task5Checkpoints.push({ checkpoint: 'IA-05', result: x })
   })
   await test.step(checkpointContract[6], async () => {
-    const x = await journey.createOaOut(oa1SourceId, oa1PackageId); expect(x.linked_source_id).toBe(oa1SourceId); expect(x.linked_package_id).toBe(oa1PackageId); expect(x.link_count).toBe(1); expect(x.task_status).toBe('OPEN'); expect(x.package_status).toBe('WAITING_RECEIPT')
+    const x = await journey.createOaOut(oa1SourceId, oa1PackageId); expect(x.linked_source_id).toBe(oa1SourceId); expect(x.linked_package_id).toBe(oa1PackageId); expect(x.link_count).toBe(1); expect(x.linked_reply_ids).toEqual([x.oa_out_id]); expect(x.replayed_reply_id).toBe(x.oa_out_id); expect(x.task_count).toBe(1); expect(x.task_status).toBe('OPEN'); expect(x.package_status).toBe('WAITING_RECEIPT')
+    task5Checkpoints.push({ checkpoint: 'IA-06', result: x })
+    await mkdir(evidenceDir!, { recursive: true })
+    await writeFile(path.join(evidenceDir!, 'task5-checkpoints.json'), JSON.stringify({ checkpoints: task5Checkpoints, evidence_bindings: [...evidenceRoleMap.values()] }, null, 2))
   })
   await test.step(checkpointContract[7], async () => {
     const x = await journey.rejectInvalidReceipts(caseId, oa1PackageId); expect(x.cross_case_status).toBeGreaterThanOrEqual(400); expect(x.same_case_wrong_source_status).toBeGreaterThanOrEqual(400); expect(x.before_snapshot).toEqual(x.after_snapshot)

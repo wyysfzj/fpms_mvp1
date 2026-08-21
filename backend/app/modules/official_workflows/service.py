@@ -17,6 +17,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.errors import BusinessError, raise_business_error
 from app.modules.annuity.models import GovPayment, PayList
 from app.modules.cases.enums import CaseStatus
@@ -2670,11 +2671,32 @@ def link_oa_reply_document(
             "Reply document does not belong to the package case",
             status_code=400,
         )
+    _bind_oa_reply_identity(package, reply)
+    _mark_linked_oa_reply_waiting_receipt(package)
+    db.commit()
+    return get_oa_reply_package(db, package_id=package_id)
+
+
+def _mark_linked_oa_reply_waiting_receipt(package: OfficialWorkPackage) -> None:
+    package.status = "WAITING_RECEIPT"
+
+
+def _bind_oa_reply_identity(package: OfficialWorkPackage, reply: Document) -> None:
+    if package.reply_document_id and package.reply_document_id != reply.id:
+        raise_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            "OA reply package is already linked to a different reply document",
+            status_code=409,
+        )
+    if reply.reply_to_id and reply.reply_to_id != package.source_document_id:
+        raise_business_error(
+            "OA_REPLY_IDENTITY_CONFLICT",
+            "OA reply document is already linked to a different source document",
+            status_code=409,
+        )
     package.reply_document_id = reply.id
     if package.source_document_id:
         reply.reply_to_id = package.source_document_id
-    db.commit()
-    return get_oa_reply_package(db, package_id=package_id)
 
 
 def _find_letter_mapping(
@@ -3950,7 +3972,12 @@ def _filing_receipt_attachment_hash(attachment: DocAttachment) -> str:
         _filing_receipt_conflict("Receipt attachment path is missing")
     candidate = Path(file_path)
     backend_root = Path(__file__).resolve().parents[3]
-    storage_root = (backend_root / "storage").resolve()
+    configured_storage = Path(get_settings().storage_dir)
+    storage_root = (
+        configured_storage.resolve()
+        if configured_storage.is_absolute()
+        else (backend_root / configured_storage).resolve()
+    )
     if candidate.is_absolute():
         resolved = candidate
     elif file_path.startswith("storage/"):
@@ -4062,6 +4089,35 @@ def _require_filing_submission_lifecycle_link(
     if not exact_activity or not exact_links:
         _filing_receipt_conflict("Final filing submission lifecycle link is inconsistent")
     return lifecycle_activity
+
+
+def _filing_receipt_projection_matches(
+    case: Case,
+    *,
+    receipt_replay: bool,
+    latest_lifecycle_key: str | None,
+    submission_lifecycle_key: str,
+    replay_receipt_lifecycle_key: str | None,
+) -> bool:
+    if receipt_replay:
+        return (
+            case.status == CaseStatus.WAITING_RECEIPT.value
+            and case.business_stage == BusinessStage.PROSECUTION_MANAGEMENT.value
+            and case.official_procedure_stage
+            == OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE.value
+            and case.legal_status == LegalStatus.APPLICATION_PENDING.value
+            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+            and replay_receipt_lifecycle_key is not None
+            and latest_lifecycle_key == replay_receipt_lifecycle_key
+        )
+    return (
+        case.status == CaseStatus.WAITING_RECEIPT.value
+        and case.business_stage == BusinessStage.WAITING_EXTERNAL_RECEIPT.value
+        and case.official_procedure_stage == OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT.value
+        and case.legal_status == LegalStatus.NOT_ESTABLISHED.value
+        and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
+        and latest_lifecycle_key == submission_lifecycle_key
+    )
 
 
 def record_official_work_package_receipt(
@@ -4202,27 +4258,26 @@ def record_official_work_package_receipt(
             submission_activity_id=resolution.submission_activity_id,
             submission_activity_hash=resolution.submission_activity_hash,
         )
-        fresh_projection_matches = (
-            case.status == CaseStatus.WAITING_RECEIPT.value
-            and case.business_stage == BusinessStage.WAITING_EXTERNAL_RECEIPT.value
-            and case.official_procedure_stage
-            == OfficialProcedureStage.SUBMITTED_WAITING_RECEIPT.value
-            and case.legal_status == LegalStatus.NOT_ESTABLISHED.value
-            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
-            and prior_revision == submission_lifecycle.sequence
+        latest_lifecycle_key = db.execute(
+            select(CaseActivityEvent.idempotency_key)
+            .where(
+                CaseActivityEvent.case_id == package.case_id,
+                CaseActivityEvent.lane == ActivityLane.LIFECYCLE.value,
+            )
+            .order_by(CaseActivityEvent.sequence.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        replay_receipt_lifecycle_key = (
+            f"filing-receipt-archived:{receipt_candidates[0].id}"
+            if receipt_replay
+            else None
         )
-        replay_projection_matches = (
-            case.status == CaseStatus.WAITING_RECEIPT.value
-            and case.business_stage == BusinessStage.PROSECUTION_MANAGEMENT.value
-            and case.official_procedure_stage
-            == OfficialProcedureStage.SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE.value
-            and case.legal_status == LegalStatus.APPLICATION_PENDING.value
-            and case.lifecycle_verification_status == ConfirmationStatus.CONFIRMED.value
-            and prior_revision == submission_lifecycle.sequence + 1
-        )
-        if not (
-            (not receipt_replay and fresh_projection_matches)
-            or (receipt_replay and replay_projection_matches)
+        if not _filing_receipt_projection_matches(
+            case,
+            receipt_replay=receipt_replay,
+            latest_lifecycle_key=latest_lifecycle_key,
+            submission_lifecycle_key=submission_lifecycle.idempotency_key,
+            replay_receipt_lifecycle_key=replay_receipt_lifecycle_key,
         ):
             _filing_receipt_conflict("Case projection conflicts with the archived filing receipt")
 

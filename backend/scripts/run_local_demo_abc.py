@@ -12,11 +12,12 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.core.demo_bundle import (
@@ -24,6 +25,12 @@ from app.core.demo_bundle import (
     demo_bundle_forbidden_roots,
     load_demo_bundle,
 )
+from app.models import *  # noqa: F401, F403 - register the complete ORM graph before seeding
+from app.modules.documents.models import DocTemplate
+from app.modules.documents.official_notice_catalog import (
+    seed_fee_reduction_approval_official_notice_catalog,
+)
+from app.modules.tasks.models import TaskTemplate
 from scripts.seed_demo_abc import DemoIdentity, seed_demo_identities
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -160,6 +167,64 @@ def _candidate_identity() -> tuple[str, str]:
     return commit, tree
 
 
+def seed_demo_task_templates(db: Session) -> None:
+    rows = (
+        {
+            "code": "OA_REPLY",
+            "name": "OA答复期限",
+            "add_days": 120,
+            "inner_offset_days": 14,
+            "description": "审查意见通知书答复期限自动任务",
+        },
+        {
+            "code": "OA_REPLY_SUBSEQUENT",
+            "name": "后续审查意见答复期限",
+            "add_days": None,
+            "inner_offset_days": None,
+            "description": "第二次及以后审查意见答复任务；截止日必须使用官文载明的明确期限",
+        },
+    )
+    for row in rows:
+        existing = db.query(TaskTemplate).filter(TaskTemplate.code == row["code"]).one_or_none()
+        if existing is not None:
+            actual = {
+                "code": existing.code,
+                "name": existing.name,
+                "add_days": existing.add_days,
+                "inner_offset_days": existing.inner_offset_days,
+                "description": existing.description,
+            }
+            if actual != row:
+                raise RuntimeError(f"demo task-template configuration conflicts: {row['code']}")
+            continue
+        db.add(TaskTemplate(id=str(uuid4()), enabled=True, **row))
+    db.flush()
+
+
+def seed_demo_oa_out_template(db: Session) -> None:
+    expected = {
+        "code": "OA_OUT",
+        "name": "审查意见答复书（发文）",
+        "direction": "OUT",
+        "need_reply": False,
+        "deadline_template_code": None,
+        "status_effect": None,
+        "status_restore": None,
+        "fee_draft_type": None,
+        "fee_item_list": None,
+        "reply_to_template_code": "OA_IN",
+        "input_fields": None,
+    }
+    existing = db.query(DocTemplate).filter(DocTemplate.code == expected["code"]).one_or_none()
+    if existing is not None:
+        actual = {field: getattr(existing, field) for field in expected}
+        if actual != expected:
+            raise RuntimeError("demo document-template configuration conflicts: OA_OUT")
+        return
+    db.add(DocTemplate(id=str(uuid4()), enabled=True, **expected))
+    db.flush()
+
+
 def bootstrap_demo_run() -> DemoRun:
     run_id, bundle, operator, reviewer, jwt_secret = _preflight()
     run_root = Path(tempfile.gettempdir()) / f"fpms-demo-abc-{run_id}"
@@ -194,6 +259,13 @@ def bootstrap_demo_run() -> DemoRun:
     try:
         factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         with factory() as db:
+            catalog_count = seed_fee_reduction_approval_official_notice_catalog(db)
+            if catalog_count != 60:
+                raise RuntimeError(
+                    f"fresh demo official-notice catalog must contain 60 rows; changed={catalog_count}"
+                )
+            seed_demo_task_templates(db)
+            seed_demo_oa_out_template(db)
             seed_demo_identities(db, operator=operator, reviewer=reviewer)
     finally:
         engine.dispose()
