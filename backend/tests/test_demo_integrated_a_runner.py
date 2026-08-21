@@ -61,6 +61,7 @@ def test_integrated_spec_login_uses_current_visible_form_labels():
     assert "getByPlaceholder('密码')" not in source
     assert 'page.locator(\'.el-form-item:has-text("用户名") input\').fill(username)' in source
     assert 'page.locator(\'.el-form-item:has-text("密码") input\').fill(password)' in source
+    assert "page.getByRole('button', { name: '登 录' }).click()" in source
 
 
 def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():

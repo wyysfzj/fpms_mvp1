@@ -141,7 +141,7 @@ async function login(page: Page, username: string, password: string): Promise<st
   await page.locator('.el-form-item:has-text("用户名") input').fill(username)
   await page.locator('.el-form-item:has-text("密码") input').fill(password)
   const loginResponse = page.waitForResponse((response) => response.status() === 200 && response.url().includes('/auth/login'))
-  await page.getByRole('button', { name: '登录' }).click()
+  await page.getByRole('button', { name: '登 录' }).click()
   const loginResult = await (await loginResponse).json() as Json
   expect(typeof loginResult.access_token).toBe('string')
   expect(loginResult.access_token.length).toBeGreaterThan(0)
