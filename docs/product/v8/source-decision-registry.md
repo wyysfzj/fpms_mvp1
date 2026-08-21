@@ -336,6 +336,41 @@ dispatch lane.
 
 ## Registry update rule
 
+### `DEC-INTEGRATED-DEMO-A-20260821`
+
+- Status: `APPROVED_DEMO_SCOPE`; implementation and customer-input activation remain subject to
+  their own exact acceptance gates.
+- Exact source/version: two customer messages in the current Codex task, preserved in order with
+  one LF separator and one terminal LF at
+  `docs/product/v8/customer-decisions/2026-08-21-integrated-demo-a.txt`, decision version
+  `customer-decision:2026-08-21:integrated-demo-a:v1`, received on `2026-08-21` in timezone
+  `Asia/Shanghai`.
+- Exact source size: `150` bytes.
+- Source SHA-256:
+  `2832585c3038e6f9034eef6b6a1539386c34944a87c6f5e1565fda6691e84fde`.
+- Actor and acceptance authority: the repository customer/user requires the upcoming demo to
+  retain the prior demo and show the new changes, then explicitly confirmed Scheme A.
+- Approved exact decision: use one fictional client and one fictional case for one continuous
+  presentation. Preserve the V7 client/contact, case, wizard/catalog, filing, two-OA/receipt,
+  grant-source replacement and superseded-task safety story, then continue on the same case into
+  the accepted runtime service-price, locked draft, unique AR bill, customer bank receipt and full
+  offset story. Do not replace the prior story with the finance slice or split the two chapters
+  across unrelated cases.
+- Safety boundary: historical hard-coded amounts, seeds, lifecycle enrichment and fixtures do not
+  become authority. Missing official-fee or customer service-price authority remains fail-closed.
+  A visibly labelled `SYNTHETIC_TEST_ONLY` bundle may support a fictional local technical
+  rehearsal but cannot become customer pricing, legal or production truth.
+- Acceptance boundary: the integrated current-candidate journey must pass twice on distinct fresh
+  local runs and receive independent High `P0/P1/P2 = 0/0/0`. This decision does not approve
+  production, release, security, PostgreSQL, remote hosting, official submission/payment or a real
+  customer runtime bundle.
+- Effective scope/time: active immediately for the exact successor design and its later atomic
+  implementation tasks. Customer-facing activation of actual templates/prices starts only after a
+  separate exact bundle authority record and digest validation.
+- Rollback impact: reverting the successor design or implementation returns the accepted demo to
+  the prior local ABC technical boundary. It must not delete or rewrite any historical evidence,
+  lifecycle, obligation, draft, bill, payment or offset fact.
+
 The first story that relies on a new or changed source/decision must update this registry
 with source/version/hash, decision value, actor, effective scope/time and rollback impact.
 Official/legal/fee/customer truth remains `PROTECTED` and requires independent review.
