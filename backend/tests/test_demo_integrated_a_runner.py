@@ -54,6 +54,15 @@ def test_runner_uses_permission_safe_run_root_cleanup():
     assert "shutil.rmtree(run_root)" not in source
 
 
+def test_integrated_spec_login_uses_current_visible_form_labels():
+    source = SPEC.read_text(encoding="utf-8")
+
+    assert "getByPlaceholder('用户名')" not in source
+    assert "getByPlaceholder('密码')" not in source
+    assert 'page.locator(\'.el-form-item:has-text("用户名") input\').fill(username)' in source
+    assert 'page.locator(\'.el-form-item:has-text("密码") input\').fill(password)' in source
+
+
 def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
     module = _module()
     source = SPEC.read_text(encoding="utf-8")
