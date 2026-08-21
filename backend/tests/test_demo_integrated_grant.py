@@ -51,6 +51,8 @@ def test_original_grant_binds_visible_review_to_public_lifecycle() -> None:
         "reviewed_evidence_version_id: binding.evidenceVersionId",
         "expected_content_hash: binding.contentHash",
         "recordGrantConsumer",
+        "expected_deadline",
+        "original_activity_id",
     ):
         assert token in method
     assert (
@@ -74,6 +76,8 @@ def test_replacement_grant_has_distinct_evidence_and_exact_lineage() -> None:
         "recordGrantConsumer",
         "superseded_task_id",
         "replacement_predecessor_task_id",
+        "replacement_activity_id",
+        "original_activity_id",
     ):
         assert token in method
 

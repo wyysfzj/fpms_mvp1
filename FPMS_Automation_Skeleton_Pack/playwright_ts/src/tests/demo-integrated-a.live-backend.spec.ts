@@ -1241,8 +1241,15 @@ class IntegratedJourneyDriver {
       source_document_id: sourceTasks[0].source_document_id,
       source_document_date: created.document.doc_date,
       expected_source_document_date: sourceDocumentDate,
+      source_deadline: {
+        official_due_date: created.document.official_due_date,
+        official_due_date_source: created.document.official_due_date_source,
+        official_due_date_status: created.document.official_due_date_status,
+      },
+      expected_deadline: deadline,
       source_evidence_version_id: binding.evidenceVersionId,
       source_content_hash: binding.contentHash,
+      original_activity_id: dispatched.body.activity_id,
       actionable_task_ids: actionable.map((item) => item.task_id),
       projection: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status],
       official_fee_carriers: afterSnapshot.official_fee_carriers,
@@ -1307,6 +1314,8 @@ class IntegratedJourneyDriver {
       replacement_source_evidence_version_id: binding.evidenceVersionId,
       replacement_source_content_hash: binding.contentHash,
       replacement_metadata: binding.metadata,
+      original_activity_id: this.evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.consumerResultId,
+      replacement_activity_id: dispatched.body.activity_id,
       actionable_task_ids: actionable.map((item) => item.task_id),
       original_hash: this.evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.contentHash,
       replacement_hash: binding.contentHash,
@@ -1573,14 +1582,14 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   await test.step(checkpointContract[10], async () => {
     const x = await journey.createGrantOriginal(caseId)
     const binding = evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!; grantOriginalTaskId = x.task_id
-    expect(evidenceRoleMap.size).toBe(11); expect(x.source_document_id).toBe(x.document_id); expect(x.source_document_date).toBe(x.expected_source_document_date); expect(x.source_evidence_version_id).toBe(binding.evidenceVersionId); expect(x.source_content_hash).toBe(binding.contentHash); expect(x.actionable_task_ids).toEqual([grantOriginalTaskId]); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
+    expect(evidenceRoleMap.size).toBe(11); expect(x.source_document_id).toBe(x.document_id); expect(x.source_document_date).toBe(x.expected_source_document_date); expect(x.source_deadline).toEqual(x.expected_deadline); expect(x.source_evidence_version_id).toBe(binding.evidenceVersionId); expect(x.source_content_hash).toBe(binding.contentHash); expect(x.original_activity_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.consumerResultId); expect(x.actionable_task_ids).toEqual([grantOriginalTaskId]); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
     task7Checkpoints.push({ checkpoint: 'IA-10', result: x })
   })
   await test.step(checkpointContract[11], async () => {
     const x = await journey.replaceGrant(grantOriginalTaskId)
     const binding = evidenceRoleMap.get('GRANT_NOTICE_REPLACEMENT')!; grantReplacementTaskId = x.replacement_task_id
     expect(evidenceRoleMap.size).toBe(12)
-    expect(grantReplacementTaskId).not.toBe(grantOriginalTaskId); expect(x.original_document_id).not.toBe(x.replacement_document_id); expect(x.replacement_document_id).toBe(x.document_id); expect(x.superseded_task_id).toBe(grantOriginalTaskId); expect(x.replacement_predecessor_task_id).toBe(grantOriginalTaskId); expect(x.original_source_evidence_version_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.evidenceVersionId); expect(x.replacement_source_evidence_version_id).toBe(binding.evidenceVersionId); expect(x.replacement_source_content_hash).toBe(binding.contentHash); expect(x.replacement_metadata).toEqual(binding.metadata); expect(x.actionable_task_ids).toEqual([grantReplacementTaskId]); expect(x.original_hash).not.toBe(x.replacement_hash); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED'])
+    expect(grantReplacementTaskId).not.toBe(grantOriginalTaskId); expect(x.original_document_id).not.toBe(x.replacement_document_id); expect(x.replacement_document_id).toBe(x.document_id); expect(x.superseded_task_id).toBe(grantOriginalTaskId); expect(x.replacement_predecessor_task_id).toBe(grantOriginalTaskId); expect(x.original_activity_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.consumerResultId); expect(x.replacement_activity_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_REPLACEMENT')!.consumerResultId); expect(x.replacement_activity_id).not.toBe(x.original_activity_id); expect(x.original_source_evidence_version_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.evidenceVersionId); expect(x.replacement_source_evidence_version_id).toBe(binding.evidenceVersionId); expect(x.replacement_source_content_hash).toBe(binding.contentHash); expect(x.replacement_metadata).toEqual(binding.metadata); expect(x.actionable_task_ids).toEqual([grantReplacementTaskId]); expect(x.original_hash).not.toBe(x.replacement_hash); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED'])
     task7Checkpoints.push({ checkpoint: 'IA-11', result: x })
   })
   await test.step(checkpointContract[12], async () => {
