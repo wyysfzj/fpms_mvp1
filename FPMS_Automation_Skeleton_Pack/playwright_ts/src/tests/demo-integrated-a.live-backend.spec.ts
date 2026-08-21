@@ -38,6 +38,17 @@ const adminUsername = process.env.FPMS_ADMIN_USERNAME
 const adminPassword = process.env.FPMS_ADMIN_PASSWORD
 const reviewerUsername = process.env.FPMS_REVIEWER_USERNAME
 const reviewerPassword = process.env.FPMS_REVIEWER_PASSWORD
+const expectedProvenance = {
+  bundle_id: process.env.FPMS_DEMO_EXPECTED_BUNDLE_ID,
+  bundle_version: process.env.FPMS_DEMO_EXPECTED_BUNDLE_VERSION,
+  manifest_sha256: process.env.FPMS_DEMO_EXPECTED_MANIFEST_SHA256,
+  template_code: process.env.FPMS_DEMO_EXPECTED_TEMPLATE_CODE,
+  template_sha256: process.env.FPMS_DEMO_EXPECTED_TEMPLATE_SHA256,
+  rate_item_code: process.env.FPMS_DEMO_EXPECTED_RATE_ITEM_CODE,
+  rate_source_ref: process.env.FPMS_DEMO_EXPECTED_RATE_SOURCE_REF,
+  rate_source_version: process.env.FPMS_DEMO_EXPECTED_RATE_SOURCE_VERSION,
+  rate_source_sha256: process.env.FPMS_DEMO_EXPECTED_RATE_SOURCE_SHA256,
+}
 
 const orderedRoles: EvidenceRole[] = [
   'FILING_FINAL_SUBMISSION',
@@ -93,13 +104,13 @@ async function uploadAndReviewEvidenceViaVisibleUi(
   await operatorPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })
   await operatorPage.getByTestId('attachment-open-upload').click()
   await operatorPage.getByTestId('attachment-file-picker').locator('input[type=file]').setInputFiles(descriptor.path)
-  const uploadResponse = operatorPage.waitForResponse((response) => response.request().method() === 'POST' && response.status() === 201)
+  const uploadResponse = operatorPage.waitForResponse((response) => response.status() === 201 && response.url().includes('/attachments'))
   await operatorPage.getByRole('button', { name: '确认上传' }).click()
   const uploaded = await (await uploadResponse).json() as Json
   expect(uploaded.content_hash).toBe(descriptor.sha256)
 
   await reviewerPage.goto(`${baseUrl}/documents/${documentId}`, { waitUntil: 'domcontentloaded' })
-  const reviewResponse = reviewerPage.waitForResponse((response) => response.request().method() === 'POST' && response.status() === 200)
+  const reviewResponse = reviewerPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/review'))
   await reviewerPage.getByTestId(`attachment-${uploaded.evidence_version_id}`).getByRole('button', { name: '通过' }).click()
   const reviewed = await (await reviewResponse).json() as Json
   expect(reviewed.review_state).toBe('APPROVED')
@@ -118,19 +129,48 @@ async function uploadAndReviewEvidenceViaVisibleUi(
   }
 }
 
-function lifecycleEvidencePayload(binding: EvidenceBinding): Json {
-  return { evidence_version_id: binding.evidenceVersionId }
+function recordLifecycleConsumer(
+  evidenceRoleMap: Map<EvidenceRole, EvidenceBinding>,
+  binding: EvidenceBinding,
+  consumer: string,
+  payload: Json,
+  result: Json,
+): EvidenceBinding {
+  expect(payload.evidence_version_id).toBe(binding.evidenceVersionId)
+  expect(result.consumed_evidence_version_id).toBe(binding.evidenceVersionId)
+  expect(result.consumed_content_hash).toBe(binding.contentHash)
+  const updated = { ...binding, consumer, consumerResultId: String(result.id || result.activity_id || result.task_id) }
+  evidenceRoleMap.set(binding.role, updated)
+  return updated
 }
 
-function grantEvidencePayload(binding: EvidenceBinding): Json {
-  return { reviewed_evidence_version_id: binding.evidenceVersionId, expected_content_hash: binding.contentHash }
+function recordGrantConsumer(
+  evidenceRoleMap: Map<EvidenceRole, EvidenceBinding>,
+  binding: EvidenceBinding,
+  consumer: string,
+  payload: Json,
+  result: Json,
+): EvidenceBinding {
+  expect(payload.reviewed_evidence_version_id).toBe(binding.evidenceVersionId)
+  expect(payload.expected_content_hash).toBe(binding.contentHash)
+  expect(result.consumed_evidence_version_id).toBe(binding.evidenceVersionId)
+  expect(result.consumed_content_hash).toBe(binding.contentHash)
+  const updated = { ...binding, consumer, consumerResultId: String(result.id || result.task_id) }
+  evidenceRoleMap.set(binding.role, updated)
+  return updated
 }
 
-function bindFilingSubmission(binding: EvidenceBinding, result: Json): EvidenceBinding {
+function recordFilingSubmission(
+  evidenceRoleMap: Map<EvidenceRole, EvidenceBinding>,
+  binding: EvidenceBinding,
+  result: Json,
+): EvidenceBinding {
   expect(result.reviewed_final_submission_version_id).toBe(binding.evidenceVersionId)
   expect(result.reviewed_final_submission_content_hash).toBe(binding.contentHash)
   expect(typeof result.external_submission_activity_id).toBe('string')
-  return { ...binding, consumer: 'filing-external-submission', consumerResultId: result.external_submission_activity_id }
+  const updated = { ...binding, consumer: 'filing-external-submission', consumerResultId: result.external_submission_activity_id }
+  evidenceRoleMap.set(binding.role, updated)
+  return updated
 }
 
 class IntegratedJourneyDriver {
@@ -161,6 +201,7 @@ class IntegratedJourneyDriver {
   async createPayment(_clientId: string, _billId: string): Promise<Json> { return this.red('IA-15') }
   async createOffset(_lineId: string, _billId: string): Promise<Json> { return this.red('IA-16') }
   async reloadSummary(_caseId: string): Promise<Json> { return this.red('IA-17') }
+  async preflight(): Promise<Json> { return this.red('IA-00') }
 
   async uploadRole(documentId: string, descriptor: { role: EvidenceRole; path: string; sha256: string; metadata: Json }): Promise<EvidenceBinding> {
     const binding = await uploadAndReviewEvidenceViaVisibleUi(this.operatorPage, this.reviewerPage, documentId, descriptor)
@@ -188,6 +229,13 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   await test.step(checkpointContract[0], async () => {
     expect(orderedRoles).toHaveLength(12)
     expect(manifestSha256).toMatch(/^[0-9a-f]{64}$/)
+    for (const value of Object.values(expectedProvenance)) expect(typeof value).toBe('string')
+    const snapshot = await journey.preflight()
+    expect(snapshot.provenance).toEqual(expectedProvenance)
+    expect(snapshot.business_counts).toEqual({ client: 0, contact: 0, case: 0, package: 0, task: 0, obligation: 0, draft: 0, bill: 0, payment: 0, offset: 0 })
+    expect(snapshot.readiness).toBe('READY')
+    expect(snapshot.classification).toBe('SYNTHETIC_TEST_ONLY')
+    expect(snapshot.customer_activation_eligible).toBe(false)
     await page.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByText('演示输入已校验')).toBeVisible()
     await expect(page.getByText(manifestSha256)).toBeVisible()
@@ -197,6 +245,8 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     await expect(page.getByText(/费率来源/)).toBeVisible()
     await expect(page.getByText(/费率来源 SHA-256/)).toBeVisible()
     await expect(page.getByText('未配置')).toBeVisible()
+    for (const value of Object.values(expectedProvenance)) await expect(page.getByText(value!, { exact: false })).toBeVisible()
+    await expect(page.getByText(/虚构演示输入.*不是客户授权费率.*不是官方费用/)).toBeVisible()
   })
 
   await test.step(checkpointContract[1], async () => {
@@ -217,9 +267,14 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   })
   await test.step(checkpointContract[5], async () => {
     const x = await journey.completeFilingAndOa1(caseId); oa1SourceId = x.source_id; oa1PackageId = x.package_id; oa1TaskId = x.task_id
-    expect(x.filing_package_id).toBe(filingPackageId); expect(x.role_map_count).toBe(8)
-    expect(bindFilingSubmission(x.filing_binding, x.filing_result).consumerResultId).toBe(x.filing_result.external_submission_activity_id)
-    expect(lifecycleEvidencePayload(x.oa1_binding)).toEqual({ evidence_version_id: x.oa1_binding.evidenceVersionId })
+    for (const target of x.upload_targets as Array<{ document_id: string; descriptor: { role: EvidenceRole; path: string; sha256: string; metadata: Json } }>) await journey.uploadRole(target.document_id, target.descriptor)
+    expect(x.filing_package_id).toBe(filingPackageId); expect(evidenceRoleMap.size).toBe(8)
+    const filingBinding = evidenceRoleMap.get('FILING_FINAL_SUBMISSION')!
+    expect(recordFilingSubmission(evidenceRoleMap, filingBinding, x.filing_result).consumerResultId).toBe(x.filing_result.external_submission_activity_id)
+    for (const consumption of x.lifecycle_consumptions as Array<{ role: EvidenceRole; consumer: string; payload: Json; result: Json }>) {
+      recordLifecycleConsumer(evidenceRoleMap, evidenceRoleMap.get(consumption.role)!, consumption.consumer, consumption.payload, consumption.result)
+    }
+    expect(evidenceRoleMap.get('OA_NOTICE_1')!.consumer).toBe('oa1-notice')
     expect(x.deadline_surfaces).toEqual({ create: x.deadline, read: x.deadline, edit: x.deadline, impact_preview: x.deadline, wizard: x.deadline })
     expect(typeof x.deadline.official_due_date).toBe('string'); expect(['MANUAL_OFFICIAL_NOTICE', 'IMPORTED_OFFICIAL_NOTICE']).toContain(x.deadline.official_due_date_source); expect(x.deadline.official_due_date_status).toBe('CONFIRMED'); expect(x.replayed_package_id).toBe(oa1PackageId); expect(x.replayed_task_id).toBe(oa1TaskId); expect(x.invalid_deadline_no_write).toBe(true)
   })
@@ -233,15 +288,24 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     const x = await journey.archiveOa1(oa1PackageId); expect(x.package_status).toBe('ARCHIVED'); expect(x.closed_task_ids).toEqual([oa1TaskId]); expect(x.projection).toEqual(['PROSECUTION_MANAGEMENT', 'SUBSTANTIVE_EXAMINATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.legacy_display).toBe('SUB_EXAM')
   })
   await test.step(checkpointContract[9], async () => {
-    const x = await journey.completeOa2(caseId); expect(x.source_id).not.toBe(oa1SourceId); expect(x.package_id).not.toBe(oa1PackageId); expect(x.task_id).not.toBe(oa1TaskId); expect(x.oa_sequence).toBe(2); expect(x.notice_role).toBe('OA_NOTICE_2'); expect(x.receipt_role).toBe('OA_RECEIPT_2')
+    const x = await journey.completeOa2(caseId)
+    for (const target of x.upload_targets as Array<{ document_id: string; descriptor: { role: EvidenceRole; path: string; sha256: string; metadata: Json } }>) await journey.uploadRole(target.document_id, target.descriptor)
+    for (const consumption of x.lifecycle_consumptions as Array<{ role: EvidenceRole; consumer: string; payload: Json; result: Json }>) recordLifecycleConsumer(evidenceRoleMap, evidenceRoleMap.get(consumption.role)!, consumption.consumer, consumption.payload, consumption.result)
+    expect(evidenceRoleMap.size).toBe(10); expect(x.source_id).not.toBe(oa1SourceId); expect(x.package_id).not.toBe(oa1PackageId); expect(x.task_id).not.toBe(oa1TaskId); expect(x.oa_out_id).not.toBe(x.oa1_oa_out_id); expect(x.receipt_id).not.toBe(x.oa1_receipt_id); expect(x.oa_sequence).toBe(2); expect(x.notice_role).toBe('OA_NOTICE_2'); expect(x.receipt_role).toBe('OA_RECEIPT_2')
     expect(x.deadline_surfaces).toEqual({ create: x.deadline, read: x.deadline, edit: x.deadline, impact_preview: x.deadline, wizard: x.deadline }); expect(typeof x.deadline.official_due_date).toBe('string'); expect(['MANUAL_OFFICIAL_NOTICE', 'IMPORTED_OFFICIAL_NOTICE']).toContain(x.deadline.official_due_date_source); expect(x.deadline.official_due_date_status).toBe('CONFIRMED'); expect(x.sequence1_reuse_no_write).toBe(true); expect(x.incomplete_deadline_no_write).toBe(true)
+    expect(x.closed_task_ids).toEqual([x.task_id]); expect(x.oa1_history_after).toEqual(x.oa1_history_before); expect(x.projection).toEqual(['PROSECUTION_MANAGEMENT', 'SUBSTANTIVE_EXAMINATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.legacy_display).toBe('SUB_EXAM')
   })
   await test.step(checkpointContract[10], async () => {
-    const x = await journey.createGrantOriginal(caseId); grantOriginalTaskId = x.task_id
-    expect(grantEvidencePayload(x.binding)).toEqual({ reviewed_evidence_version_id: x.binding.evidenceVersionId, expected_content_hash: x.binding.contentHash }); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
+    const x = await journey.createGrantOriginal(caseId)
+    const binding = await journey.uploadRole(x.document_id, x.descriptor); grantOriginalTaskId = x.task_id
+    recordGrantConsumer(evidenceRoleMap, binding, 'grant-original-dispatch', x.payload, x.result)
+    expect(evidenceRoleMap.size).toBe(11); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
   })
   await test.step(checkpointContract[11], async () => {
-    const x = await journey.replaceGrant(grantOriginalTaskId); grantReplacementTaskId = x.replacement_task_id
+    const x = await journey.replaceGrant(grantOriginalTaskId)
+    const binding = await journey.uploadRole(x.document_id, x.descriptor); grantReplacementTaskId = x.replacement_task_id
+    recordGrantConsumer(evidenceRoleMap, binding, 'grant-replacement-dispatch', x.payload, x.result)
+    expect(evidenceRoleMap.size).toBe(12)
     expect(grantReplacementTaskId).not.toBe(grantOriginalTaskId); expect(x.superseded_task_id).toBe(grantOriginalTaskId); expect(x.actionable_task_ids).toEqual([grantReplacementTaskId]); expect(x.original_hash).not.toBe(x.replacement_hash); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED'])
   })
   await test.step(checkpointContract[12], async () => {
@@ -250,15 +314,15 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   })
   await test.step(checkpointContract[13], async () => {
     const x = await journey.createServiceDraft(caseId); draftId = x.draft_id
-    expect(x.case_id).toBe(caseId); expect(x.obligation_count).toBe(1); expect(x.draft_count).toBe(1); expect(x.draft_status).toBe('LOCKED'); expect(x.service_amount).toBe(x.bundle_amount); expect(x.official_fee_display).toBe('未配置'); expect(x.official_fee_in_total).toBe(false)
+    expect(x.case_id).toBe(caseId); expect(x.provenance).toEqual(expectedProvenance); expect(x.disclaimer).toMatch(/虚构演示输入.*不是客户授权费率.*不是官方费用/); expect(x.obligation_count).toBe(1); expect(x.draft_count).toBe(1); expect(x.draft_status).toBe('LOCKED'); expect(x.service_amount).toBe(x.bundle_amount); expect(x.official_fee_display).toBe('未配置'); expect(x.official_fee_in_total).toBe(false)
   })
   await test.step(checkpointContract[14], async () => {
     const x = await journey.createBill(draftId); billId = x.bill_id
-    expect(x.replayed_bill_id).toBe(billId); expect(x.bill_count).toBe(1); expect(x.status).toBe('UNSETTLED'); expect(x.balance).toBe(x.bundle_amount); expect(x.currency).toBe('CNY')
+    expect(x.replayed_bill_id).toBe(billId); expect(x.bill_count).toBe(1); expect(x.source_draft_ids).toEqual([draftId]); expect(x.consumed_draft_ids).toEqual([draftId]); expect(x.source_item_ids).toEqual(x.bill_item_source_ids); expect(x.source_item_ids).toHaveLength(1); expect(x.status).toBe('UNSETTLED'); expect(x.balance).toBe(x.bundle_amount); expect(x.currency).toBe('CNY')
   })
   await test.step(checkpointContract[15], async () => {
     const x = await journey.createPayment(clientId, billId); paymentLineId = x.payment_line_id
-    expect(x.payment_count).toBe(1); expect(x.payment_line_count).toBe(1); expect(x.status).toBe('UNALLOCATED'); expect(x.applied_bill_ids).toEqual([]); expect(x.suggested_bill_id).toBe(billId)
+    expect(x.replayed_payment_id).toBe(x.payment_id); expect(x.payment_count).toBe(1); expect(x.payment_line_count).toBe(1); expect(x.amount).toBe(x.bundle_amount); expect(x.currency).toBe('CNY'); expect(x.status).toBe('UNALLOCATED'); expect(x.applied_bill_ids).toEqual([]); expect(x.suggested_bill_id).toBe(billId)
   })
   await test.step(checkpointContract[16], async () => {
     const x = await journey.createOffset(paymentLineId, billId); expect(x.active_offset_count).toBe(1); expect(x.bill_status).toBe('SETTLED'); expect(x.payment_status).toBe('FULLY_ALLOCATED'); expect(x.bill_balance).toBe('0.00'); expect(x.payment_unapplied).toBe('0.00'); expect(x.currency).toBe('CNY'); expect(x.case_receipt_received).toBe(x.bundle_amount)

@@ -42,6 +42,16 @@ for (const token of [
   'reviewerContext',
   'evidenceRoleMap',
   'manifestSha256',
+  'bundle_id',
+  'bundle_version',
+  'template_code',
+  'template_sha256',
+  'rate_item_code',
+  'rate_source_ref',
+  'rate_source_version',
+  'rate_source_sha256',
+  "expect(snapshot.business_counts).toEqual({ client: 0",
+  "expect(snapshot.readiness).toBe('READY')",
   'attachmentId',
   'evidenceVersionId',
   'contentHash',
@@ -62,27 +72,34 @@ for (const token of [
   'SETTLED',
   'FULLY_ALLOCATED',
   '0.00',
-  'bindFilingSubmission',
-  'lifecycleEvidencePayload',
-  'grantEvidencePayload',
+  'recordFilingSubmission',
+  'recordLifecycleConsumer',
+  'recordGrantConsumer',
   "expect(evidenceRoleMap.size).toBe(12)",
   "expect(x.checkpoints_passed).toBe(19)",
-  "expect(x.role_map_count).toBe(8)",
+  "expect(evidenceRoleMap.size).toBe(8)",
   "expect(x.blocked_statuses).toEqual([409, 409, 409, 409])",
+  "expect(x.provenance).toEqual(expectedProvenance)",
+  "expect(x.source_draft_ids).toEqual([draftId])",
+  "expect(x.replayed_payment_id).toBe(x.payment_id)",
+  "expect(x.closed_task_ids).toEqual([x.task_id])",
+  "expect(x.oa1_history_after).toEqual(x.oa1_history_before)",
 ]) assert.ok(source.includes(token), `missing integrated contract token ${token}`)
 
 for (const forbidden of ['page.route(', 'route.fulfill(', 'SessionLocal', 'sqlite3', 'pdP1LiveSeed', 'v6-enrich', 'test.skip', 'markSkeleton', 'contractRed', '.toBeTruthy()', 'expect({']) {
   assert.ok(!source.includes(forbidden), `forbidden construct ${forbidden}`)
 }
 
-const imports = [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((match) => match[1])
-assert.deepEqual(imports.sort(), ['@playwright/test', 'node:fs/promises', 'node:path'].sort(), 'only audited imports are permitted')
+const importLines = source.split('\n').filter((line) => /^import\s/.test(line))
+assert.deepEqual(importLines, [
+  "import { test, expect, type BrowserContext, type Page } from '@playwright/test'",
+  "import { mkdir, writeFile } from 'node:fs/promises'",
+  "import path from 'node:path'",
+], 'only three exact audited imports are permitted')
 
-for (const pattern of [
-  /(?:page\.)?request\s*\.\s*(?:post|put|patch|fetch)\s*\([^)]*(?:attachments|evidence-versions|\/review)/s,
-  /\bfetch\s*\([^)]*(?:attachments|evidence-versions|\/review)/s,
-  /\baxios\s*\.\s*(?:post|put|patch)\s*\([^)]*(?:attachments|evidence-versions|\/review)/s,
-]) assert.ok(!pattern.test(source), `direct evidence shortcut matched ${pattern}`)
+for (const pattern of [/\brequest\b/, /\bfetch\b/, /\baxios\b/, /\bXMLHttpRequest\b/, /\bWebSocket\b/, /\beval\s*\(/, /\bFunction\s*\(/, /\bimport\s*\(/, /\.evaluate\s*\(/, /\[['"]request['"]\]/]) {
+  assert.ok(!pattern.test(source), `canonical spec business writes must use visible UI; matched ${pattern}`)
+}
 
 assert.ok(!/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i.test(source), 'fixed UUID forbidden')
 console.log('demo_integrated_a_static_contract=PASS')

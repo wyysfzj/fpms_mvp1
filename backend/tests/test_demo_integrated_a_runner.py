@@ -54,12 +54,15 @@ def test_runner_forbids_mock_db_enrichment_and_direct_evidence_shortcuts():
         "request.fetch('/documents/x/attachments', { method: 'POST' })",
         'fetch("/documents/evidence-versions/x/review", { method: "POST" })',
         'axios.post("/documents/evidence-versions/x/review", payload)',
+        "const transport = page.request; transport.post(endpoint, payload)",
+        "const endpoint = '/attach' + 'ments'; fetch(endpoint, payload)",
+        "const transport = page['request']; transport.post(endpoint, payload)",
     ],
 )
 def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):
     module = _module()
     source = SPEC.read_text(encoding="utf-8") + "\n" + shortcut
-    with pytest.raises(RuntimeError, match="direct evidence write shortcut"):
+    with pytest.raises(RuntimeError, match="visible UI"):
         module.validate_spec_source(source)
 
 
@@ -67,4 +70,18 @@ def test_runner_rejects_imported_local_helper_evasion():
     module = _module()
     source = SPEC.read_text(encoding="utf-8") + '\nimport { uploadAttachment } from "./helper"'
     with pytest.raises(RuntimeError, match="imports are not allowlisted"):
+        module.validate_spec_source(source)
+
+
+@pytest.mark.parametrize(
+    "shortcut",
+    [
+        'import("./helper").then((m) => m.uploadAttachment())',
+        'import "./side-effect-helper"',
+    ],
+)
+def test_runner_rejects_dynamic_or_side_effect_import(shortcut: str):
+    module = _module()
+    source = SPEC.read_text(encoding="utf-8") + "\n" + shortcut
+    with pytest.raises(RuntimeError):
         module.validate_spec_source(source)

@@ -39,6 +39,10 @@ official-fee truth, production, PostgreSQL, security, broad/product/release gate
 
 - `artifacts/FPMS-DEMO-INTEGRATED-A-BROWSER-CONTRACT-20260821-01/**`
 
+## Remaining Follow-Up Task IDs
+
+- None within this atomic closure. Approved plan ordinals 02–10 remain separately owned.
+
 ## Done Definition
 
 The static contract proves the forbidden constructs and required IA/role/lineage tokens; the runner

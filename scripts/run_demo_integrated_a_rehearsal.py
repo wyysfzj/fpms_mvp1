@@ -39,12 +39,23 @@ FORBIDDEN_SPEC_TOKENS = (
     ".toBeTruthy()",
     "expect({",
 )
-FORBIDDEN_EVIDENCE_PATTERNS = (
-    re.compile(r"(?:page\.)?request\s*\.\s*(?:post|put|patch|fetch)\s*\([^)]*(?:attachments|evidence-versions|/review)", re.S),
-    re.compile(r"\bfetch\s*\([^)]*(?:attachments|evidence-versions|/review)", re.S),
-    re.compile(r"\baxios\s*\.\s*(?:post|put|patch)\s*\([^)]*(?:attachments|evidence-versions|/review)", re.S),
+FORBIDDEN_NETWORK_PATTERNS = (
+    re.compile(r"\brequest\b"),
+    re.compile(r"\bfetch\b"),
+    re.compile(r"\baxios\b"),
+    re.compile(r"\bXMLHttpRequest\b"),
+    re.compile(r"\bWebSocket\b"),
+    re.compile(r"\beval\s*\("),
+    re.compile(r"\bFunction\s*\("),
+    re.compile(r"\bimport\s*\("),
+    re.compile(r"\.evaluate\s*\("),
+    re.compile(r"\[['\"]request['\"]\]"),
 )
-ALLOWED_SPEC_IMPORTS = {"@playwright/test", "node:fs/promises", "node:path"}
+ALLOWED_SPEC_IMPORT_LINES = [
+    "import { test, expect, type BrowserContext, type Page } from '@playwright/test'",
+    "import { mkdir, writeFile } from 'node:fs/promises'",
+    "import path from 'node:path'",
+]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -69,11 +80,11 @@ def validate_spec_source(source: str) -> None:
     forbidden = [token for token in FORBIDDEN_SPEC_TOKENS if token in source]
     if forbidden:
         raise RuntimeError(f"focused spec contains forbidden constructs: {forbidden}")
-    if any(pattern.search(source) for pattern in FORBIDDEN_EVIDENCE_PATTERNS):
-        raise RuntimeError("focused spec contains a direct evidence write shortcut")
-    imports = set(re.findall(r"from\s+['\"]([^'\"]+)['\"]", source))
-    if imports != ALLOWED_SPEC_IMPORTS:
-        raise RuntimeError(f"focused spec imports are not allowlisted: {sorted(imports)}")
+    if any(pattern.search(source) for pattern in FORBIDDEN_NETWORK_PATTERNS):
+        raise RuntimeError("canonical spec business writes must use visible UI")
+    imports = [line for line in source.splitlines() if line.startswith("import ")]
+    if imports != ALLOWED_SPEC_IMPORT_LINES:
+        raise RuntimeError(f"focused spec imports are not allowlisted: {imports}")
 
 
 def _write_json(path: Path, value: Any) -> None:
