@@ -37,4 +37,10 @@ assert.notEqual(pathMutation.status, 0, 'path namespace mutation must fail close
 const callbackEval = validate(`${source}\n;['void 0'].map(eval)\n`)
 assert.notEqual(callbackEval.status, 0, 'code-evaluation references must fail closed')
 
+const encodedApiNavigation = validate(`${source}\nasync function forbidden(page: Page) { await page.goto(\`${'${baseUrl}'}/%61pi/v1/documents/fake/%61ttachments\`) }\n`)
+assert.notEqual(encodedApiNavigation.status, 0, 'encoded API navigation must fail closed')
+
+const constructorCode = validate(`${source}\nfunction harmlessSeed() {}; [0].map(new harmlessSeed.constructor('return 0'))\n`)
+assert.notEqual(constructorCode.status, 0, 'constructor-based code generation must fail closed')
+
 console.log('demo_integrated_ui_boundary=PASS')

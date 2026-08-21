@@ -499,6 +499,7 @@ function visit(node) {
         assert.ok(
           target.startsWith('`${baseUrl}/')
             && !target.startsWith('`${baseUrl}/api/')
+            && !target.includes('%')
             && !/attachments|evidence-versions|\/review/.test(target),
           'evidence writes must use visible UI; navigation must stay on a non-API configured-base page',
         )
@@ -506,6 +507,13 @@ function visit(node) {
     } else {
       assert.fail('evidence writes must use visible UI; indirect call is outside the exact call allowlist')
     }
+  }
+  if (ts.isNewExpression(node)) {
+    assert.ok(
+      ts.isIdentifier(node.expression)
+        && ['Error', 'IntegratedJourneyDriver', 'Map', 'Set', 'URL'].includes(node.expression.text),
+      'evidence writes must use only the exact constructor allowlist',
+    )
   }
   ts.forEachChild(node, visit)
 }
