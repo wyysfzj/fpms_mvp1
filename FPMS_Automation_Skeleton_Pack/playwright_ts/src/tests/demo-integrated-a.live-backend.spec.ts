@@ -977,8 +977,11 @@ class IntegratedJourneyDriver {
       case_snapshot: await this.visibleCaseSnapshot(caseId),
       target_package: wrongSourcePackageBefore.body,
     }
+    await this.operatorPage.goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(wrongSourceAttachment.id)
     await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(`WRONG-${mainCaseNo}`)
+    await this.operatorPage.getByPlaceholder('请输入提交人').fill('虚构演示操作员')
+    await this.operatorPage.getByPlaceholder('请选择接收时间').fill('2026-08-10T10:00:00')
     await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('虚构同案错误来源回执')
     const wrongSourceResponse = this.operatorPage.waitForResponse((item) => item.status() >= 400 && item.url().includes(`/official-work-packages/${packageId}/receipts`))
     await this.operatorPage.getByRole('button', { name: '记录回执元数据' }).click()

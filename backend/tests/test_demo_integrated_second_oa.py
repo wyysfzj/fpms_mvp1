@@ -104,3 +104,14 @@ def test_each_invalid_receipt_snapshots_the_exact_target_oa_package() -> None:
         "expect(wrongSourceAfter).toEqual(wrongSourceBefore)",
     ):
         assert token in method
+
+
+def test_each_invalid_receipt_reopens_and_refills_the_visible_form() -> None:
+    source = _source()
+    method = source.split("async rejectInvalidReceipts", 1)[1].split(
+        "async archiveOa1", 1
+    )[0]
+    route = "goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`"
+    assert method.count(route) == 2
+    assert method.count("fill('虚构演示操作员')") == 2
+    assert method.count("fill('2026-08-10T10:00:00')") == 2
