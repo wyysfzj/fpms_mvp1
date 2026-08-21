@@ -83,17 +83,17 @@ checkpoints below in order.
 | `IA-00` | preflight | Start a fresh local run with the exact bundle digest and candidate identity. | Bundle classification, version, hash and disclaimer are visible; database/business counts start at zero; readiness opens only after validation. |
 | `IA-01` | `V7-01` | Create the fictional client and primary contact. | Exactly one dynamic client/contact identity and correct ownership. |
 | `IA-02` | `V7-02` | Create one domestic invention case for that client. | Case is reloadable and initially `NOT_FILED`; package, task, draft, bill, payment and offset counts are zero. |
-| `IA-03` | `V7-03` | Open the document wizard and official-document catalog. | Template request succeeds; the complete expected catalog is visible; reference-only entries cannot execute. |
+| `IA-03` | `V7-03` | Open the document wizard and official-document catalog. | Template request succeeds without 422; all 60 catalog rows are visible; one executable example can be located and one reference-only example is visibly disabled. |
 | `IA-04` | `V7-04` | Resolve filing preparation twice. | Both actions return the same filing package; preparation does not claim official filing or advance legal status. |
-| `IA-05` | `V7-05` | Complete the reviewed fictional filing-evidence ladder, then record first OA with exact confirmed deadline and resolve it twice. | Ordered evidence identities are visible; one OA source/package/task exists; deadline date/source/status round-trip exactly; repeated resolve reuses the same package/task. |
+| `IA-05` | `V7-05` | Complete the reviewed fictional filing-evidence ladder, then record first OA with exact confirmed deadline and resolve it twice. | Ordered evidence identities are visible; one OA source/package/task exists; the same complete due-date date/source/status triple appears on create response, read, content-only edit, impact preview and wizard recall; repeated resolve reuses the same package/task. Missing or changed deadline truth rejects with no write. |
 | `IA-06` | `V7-06` | Create OA_OUT linked to the first OA source/package. | OA_OUT linkage is unique; the OA task remains `OPEN`; package awaits receipt. |
 | `IA-07` | `V7-07` | Exercise cross-case and same-case-wrong-source receipt attempts in the automated gate; optionally show one concise Chinese rejection live. | Both attempts are rejected and source/package/task/case/receipt counts are byte-for-byte unchanged. |
-| `IA-08` | `V7-08` | Upload the correct receipt, refresh/check the OA package and archive it. | Package is `ARCHIVED`; exactly the first OA task becomes `DONE`; no other task closes; case returns to its observed stable prosecution state. |
-| `IA-09` | `V7-09` | Create and complete a second OA using new source/package/task/OA_OUT/receipt identities. | Every second-OA identity differs from the first; its own task alone closes; first-OA history remains immutable. |
-| `IA-10` | `V7-10` | Record a reviewed fictional grant notice with exact confirmed source/date. | One source-linked grant task is created; no fee draft appears automatically; no unsupported legal conclusion is claimed. |
-| `IA-11` | `V7-11` | Replace the grant source/task through the public replacement action. | Old source/task is visibly superseded; exactly one current task remains actionable; lineage shows old and new identities. |
-| `IA-12` | `V7-12` | Attempt mutations against the superseded task, then record the customer's `PAY` instruction on the current task. | Every old-task mutation is disabled or returns 409/no-write; the current instruction persists once. Missing official-fee authority creates no guessed official-fee draft. |
-| `IA-13` | `V7-13` successor + ABC runtime input | Select the exact runtime service-price item for the same case, create/reuse its obligation, record `PAY`, prepare and lock the service draft. | Bundle/version/hash/item/disclaimer are visible; exactly one SERVICE obligation and one linked `LOCKED` draft exist; amount equals the bundle; official amount remains zero/unconfigured. |
+| `IA-08` | `V7-08` | Upload the correct receipt, refresh/check the OA package and archive it. | Package is `ARCHIVED`; exactly the first OA task becomes `DONE`; no other task closes; case returns exactly to `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` (legacy `SUB_EXAM`). |
+| `IA-09` | `V7-09` | Create and complete a second OA using new source/package/task/OA_OUT/receipt identities. | Every second-OA identity differs from the first; its own task alone closes; first-OA history remains immutable; case again returns exactly to `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` (legacy `SUB_EXAM`). |
+| `IA-10` | `V7-10` | Record a reviewed fictional grant-registration notice with exact confirmed source/date. | One source-linked grant task is created; projection is exactly `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED`; no fee draft appears automatically and no patent-in-force conclusion is claimed. |
+| `IA-11` | `V7-11` | Replace the grant source/task through the public replacement action. | Old source/task is visibly superseded; exactly one current task remains actionable; lineage shows old and new identities; the exact grant-registration projection remains unchanged. |
+| `IA-12` | `V7-12` | Against the superseded task attempt direct draft preparation, batch customer instruction, notice generation and status mutation; then record the customer's `PAY` instruction on the current task. | Each of the four old-task mutation classes is disabled or returns 409/no-write with unchanged counts/state; the current instruction persists once. Missing official-fee authority creates no official fee item, obligation, draft or amount. |
+| `IA-13` | `V7-13` successor + ABC runtime input | Select the exact runtime service-price item for the same case, create/reuse its obligation, record `PAY`, prepare and lock the service draft. | Bundle/version/hash/item/disclaimer are visible; exactly one SERVICE obligation and one linked `LOCKED` draft exist; service amount equals the bundle. No official fee item, obligation, draft or amount exists; the UI shows `未配置` and excludes official fees from every total. |
 | `IA-14` | ABC bill | Create the AR bill and repeat the same intent. | Exactly one AR bill consumes the locked service draft/item; replay returns the same bill; it starts `UNSETTLED` with the exact CNY balance. |
 | `IA-15` | ABC payment | Record one equal CNY bank receipt and repeat the same intent. | Exactly one payment and one payment line exist; before offset it is `UNALLOCATED`; target bill is a suggestion, not a false applied link. |
 | `IA-16` | ABC offset | Offset the payment line to the AR bill. | Exactly one active offset; bill becomes `SETTLED/0.00`; payment becomes `FULLY_ALLOCATED/0.00`; canonical case receipt equals the service amount. |
@@ -118,7 +118,50 @@ Every step must read back the same case/evidence identity before the next write.
 only product behavior for a fictional case; they are not claims of a real filing or real legal
 status.
 
-### 5.2 Fee and runtime-input correction to the prior demo
+### 5.2 Exact lifecycle projections
+
+The checkpoint ledger records all four values after every lifecycle event. `CONFIRMED` below is the
+lifecycle verification state, not authority for any fee or external legal fact.
+
+| Event/checkpoint | Exact projection after success | Legacy display |
+| --- | --- | --- |
+| case opened / `IA-02` | `NEW_CASE / NOT_SUBMITTED / NOT_ESTABLISHED / CONFIRMED` | `NOT_FILED` |
+| filing preparation / `IA-04` | `FILING_PREPARATION / NOT_SUBMITTED / NOT_ESTABLISHED / CONFIRMED` | `NOT_FILED` |
+| fictional external submission | `WAITING_EXTERNAL_RECEIPT / SUBMITTED_WAITING_RECEIPT / NOT_ESTABLISHED / CONFIRMED` | `WAITING_RECEIPT` |
+| filing receipt archived | `PROSECUTION_MANAGEMENT / SUBMISSION_CONFIRMED_WAITING_ACCEPTANCE / APPLICATION_PENDING / CONFIRMED` | `WAITING_RECEIPT` |
+| acceptance notice recorded | `PROSECUTION_MANAGEMENT / ACCEPTED / APPLICATION_PENDING / CONFIRMED` | `ACCEPTED` |
+| preliminary examination started | `PROSECUTION_MANAGEMENT / PRELIMINARY_EXAMINATION / APPLICATION_PENDING / CONFIRMED` | `PRELIM_EXAM` |
+| publication recorded | `PROSECUTION_MANAGEMENT / PUBLISHED / APPLICATION_PENDING / CONFIRMED` | `PUBLISHED` |
+| substantive examination started | `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` | `SUB_EXAM` |
+| first OA notice recorded (`oa_sequence=1`) | `OA_REPLY_IN_PROGRESS / OFFICE_ACTION_RESPONSE / APPLICATION_PENDING / CONFIRMED` | `OA1` |
+| second OA notice recorded (`oa_sequence=2`) | `OA_REPLY_IN_PROGRESS / OFFICE_ACTION_RESPONSE / APPLICATION_PENDING / CONFIRMED` | `OA2` |
+| either OA receipt archived | `PROSECUTION_MANAGEMENT / SUBSTANTIVE_EXAMINATION / APPLICATION_PENDING / CONFIRMED` | `SUB_EXAM` |
+| grant-registration notice recorded or exact source replacement | `GRANT_REGISTRATION_IN_PROGRESS / GRANT_REGISTRATION / APPLICATION_PENDING / CONFIRMED` | `GRANT_PENDING` |
+
+`IA-12` through `IA-17` do not change this lifecycle projection. A grant announcement or patent
+register confirmation is not part of Scheme A and cannot be narrated from the grant-registration
+notice.
+
+### 5.3 V7 successor coverage ledger
+
+| Prior checkpoint | Successor checkpoint | Preserved contract |
+| --- | --- | --- |
+| `V7-01` | `IA-01` | UI-created client and primary contact |
+| `V7-02` | `IA-02` | UI-created case and exact initial four-state tuple |
+| `V7-03` | `IA-03` | wizard request, 60-row catalog, executable/reference gate |
+| `V7-04` | `IA-04` | filing-package existing-first resolve |
+| `V7-05` | `IA-05` | confirmed deadline across create/read/edit/impact-preview/wizard surfaces |
+| `V7-06` | `IA-06` | OA_OUT linkage while task stays open |
+| `V7-07` | `IA-07` | cross-case and wrong-source receipt no-write gates |
+| `V7-08` | `IA-08` | valid receipt archives one package and closes one task |
+| `V7-09` | `IA-09` | independent later OA lineage and closure |
+| `V7-10` | `IA-10` | grant-registration notice, exact projection, no automatic draft |
+| `V7-11` | `IA-11` | source/task replacement and single actionable successor |
+| `V7-12` | `IA-12` | four superseded-task mutation gates and current customer instruction |
+| `V7-13` | `IA-13` | blocked enrichment replaced by validated runtime SERVICE input; no official-fee inference |
+| `V7-14` | `IA-18` | evidence summary, exact non-goals and cleanup |
+
+### 5.4 Fee and runtime-input correction to the prior demo
 
 The old V7 flow expected a later fee draft but its blocked enrichment had no safe source. Scheme A
 replaces that gap with a visible runtime boundary:

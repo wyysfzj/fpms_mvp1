@@ -18,7 +18,7 @@ demo journey with the accepted local ABC runtime-input and customer-finance jour
 - Customer confirmation in the current Codex task: the upcoming demo must cover both the prior
   demo and the new changes, followed by exact confirmation `确认方案A`.
 
-## Exact closure
+## Exact Closure Slice
 
 Create one successor design that freezes:
 
@@ -33,13 +33,13 @@ Create one successor design that freezes:
 5. the explicit correction that no missing official-fee authority, hard-coded historical amount,
    seed, enrichment or fixture may be used to make the combined journey appear complete.
 
-## Explicit non-closure
+## Explicit Non-Closure
 
 No backend, frontend, test, schema, migration, seed or runner implementation. No actual runtime
 bundle contents or customer/source activation. No official fee/payment truth, production,
 PostgreSQL, remote deployment, security remediation, broad/product/release gate or release claim.
 
-## Allowed files
+## Allowed Files
 
 - `tasks/postdemo/FPMS-DEMO-INTEGRATED-A-DESIGN-FREEZE-20260821-01.md`
 - `docs/product/v8/customer-decisions/2026-08-21-integrated-demo-a.txt`
@@ -47,22 +47,30 @@ PostgreSQL, remote deployment, security remediation, broad/product/release gate 
 - `docs/superpowers/specs/2026-08-21-fpms-integrated-demo-a-design.md`
 - `artifacts/FPMS-DEMO-INTEGRATED-A-DESIGN-FREEZE-20260821-01/**`
 
-## Verification
+## Verification Commands
 
 - Preserve the exact two customer messages, byte size and SHA-256 in the decision registry.
 - Assert that the design maps `V7-01` through `V7-14` into the successor and contains the ABC
   runtime bundle, service draft, unique bill, bank receipt, offset, two fresh headed runs,
   independent High review, rollback and non-closure boundary.
-- `git diff --check` over the exact allowlist.
-- Confirm no changed path falls outside the allowlist.
+- `git diff --check 1bb329bf5fb2dfdae3c5771ea7f04a83f632bb20 HEAD --` over the exact
+  design baseline-to-candidate range.
+- Compare `git diff --name-only 1bb329bf5fb2dfdae3c5771ea7f04a83f632bb20 HEAD --` to the four exact
+  non-artifact allowlisted files; a clean-tree `git diff` is not scope evidence.
 - Obtain one independent specification review with P0/P1/P2 = 0/0/0 before implementation
   planning.
+- Rebuild the final evidence with `task.json`, latest canonical `results.jsonl`, `summary.md`,
+  baseline-to-candidate `git/diff.patch`, independent review and `checksums.sha256`, then validate
+  every checksum.
 
-## Follow-up
+## Remaining Follow-Up Task IDs
 
-- Materialize an ordered implementation plan only after this written design is accepted.
-- Split every discovered implementation defect into one exact atomic task; do not absorb it into
-  the design task.
+- None. An ordered implementation plan will materialize new exact task IDs only after this written
+  design is independently reviewed and accepted; those later tasks are not part of this closure.
+
+## Evidence Path
+
+- `artifacts/FPMS-DEMO-INTEGRATED-A-DESIGN-FREEZE-20260821-01/**`
 
 ## Rollback
 
