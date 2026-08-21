@@ -943,7 +943,13 @@ class IntegratedJourneyDriver {
 
     const wrongSourceDocument = await this.createDocumentViaVisibleUi(caseId, `虚构同案错误来源回执-${mainCaseNo}`, '2026-08-10')
     const wrongSourceAttachment = await this.uploadRole(wrongSourceDocument.document.id, invalidReceipt)
-    const before = await this.visibleCaseSnapshot(caseId)
+    const crossPackageBefore = await this.publicLifecycleApi('GET_OA_PACKAGE', { package_id: packageId })
+    expect(crossPackageBefore.status).toBe(200)
+    expect(crossPackageBefore.body.package.id).toBe(packageId)
+    const crossCaseBefore = {
+      case_snapshot: await this.visibleCaseSnapshot(caseId),
+      target_package: crossPackageBefore.body,
+    }
 
     await this.operatorPage.goto(`${baseUrl}/official-workflows/oa-reply?package_id=${packageId}`, { waitUntil: 'domcontentloaded' })
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(crossAttachment.id)
@@ -956,7 +962,21 @@ class IntegratedJourneyDriver {
     const crossRejected = await crossResponse
     const crossError = await crossRejected.json() as Json
     expect(crossError.error.code).toBe('OFFICIAL_WORK_PACKAGE_RECEIPT_CASE_MISMATCH')
+    const crossPackageAfter = await this.publicLifecycleApi('GET_OA_PACKAGE', { package_id: packageId })
+    expect(crossPackageAfter.status).toBe(200)
+    const crossCaseAfter = {
+      case_snapshot: await this.visibleCaseSnapshot(caseId),
+      target_package: crossPackageAfter.body,
+    }
+    expect(crossCaseAfter).toEqual(crossCaseBefore)
 
+    const wrongSourcePackageBefore = await this.publicLifecycleApi('GET_OA_PACKAGE', { package_id: packageId })
+    expect(wrongSourcePackageBefore.status).toBe(200)
+    expect(wrongSourcePackageBefore.body.package.id).toBe(packageId)
+    const wrongSourceBefore = {
+      case_snapshot: await this.visibleCaseSnapshot(caseId),
+      target_package: wrongSourcePackageBefore.body,
+    }
     await this.operatorPage.getByPlaceholder('引用已上传附件ID').fill(wrongSourceAttachment.id)
     await this.operatorPage.getByPlaceholder('请输入官方接收案件编号').fill(`WRONG-${mainCaseNo}`)
     await this.operatorPage.getByPlaceholder('逐行记录官方回执中的收到文件清单').fill('虚构同案错误来源回执')
@@ -965,10 +985,21 @@ class IntegratedJourneyDriver {
     const wrongSourceRejected = await wrongSourceResponse
     const wrongSourceError = await wrongSourceRejected.json() as Json
     expect(wrongSourceError.error.code).toBe('OA_RECEIPT_ATTACHMENT_SOURCE_INVALID')
-
-    const after = await this.visibleCaseSnapshot(caseId)
-    expect(after).toEqual(before)
-    return { cross_case_status: crossRejected.status(), same_case_wrong_source_status: wrongSourceRejected.status(), before_snapshot: before, after_snapshot: after }
+    const wrongSourcePackageAfter = await this.publicLifecycleApi('GET_OA_PACKAGE', { package_id: packageId })
+    expect(wrongSourcePackageAfter.status).toBe(200)
+    const wrongSourceAfter = {
+      case_snapshot: await this.visibleCaseSnapshot(caseId),
+      target_package: wrongSourcePackageAfter.body,
+    }
+    expect(wrongSourceAfter).toEqual(wrongSourceBefore)
+    return {
+      cross_case_status: crossRejected.status(),
+      same_case_wrong_source_status: wrongSourceRejected.status(),
+      cross_case_before_snapshot: crossCaseBefore,
+      cross_case_after_snapshot: crossCaseAfter,
+      wrong_source_before_snapshot: wrongSourceBefore,
+      wrong_source_after_snapshot: wrongSourceAfter,
+    }
   }
 
   async archiveOa1(
@@ -1312,7 +1343,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     await writeFile(path.join(evidenceDir!, 'task5-checkpoints.json'), JSON.stringify({ checkpoints: task5Checkpoints, evidence_bindings: [...evidenceRoleMap.values()] }, null, 2))
   })
   await test.step(checkpointContract[7], async () => {
-    const x = await journey.rejectInvalidReceipts(caseId, oa1PackageId); expect(x.cross_case_status).toBeGreaterThanOrEqual(400); expect(x.same_case_wrong_source_status).toBeGreaterThanOrEqual(400); expect(x.before_snapshot).toEqual(x.after_snapshot)
+    const x = await journey.rejectInvalidReceipts(caseId, oa1PackageId); expect(x.cross_case_status).toBeGreaterThanOrEqual(400); expect(x.same_case_wrong_source_status).toBeGreaterThanOrEqual(400); expect(x.cross_case_before_snapshot).toEqual(x.cross_case_after_snapshot); expect(x.wrong_source_before_snapshot).toEqual(x.wrong_source_after_snapshot); expect(x.cross_case_before_snapshot.target_package.package.id).toBe(oa1PackageId); expect(x.wrong_source_before_snapshot.target_package.package.id).toBe(oa1PackageId)
     task6Checkpoints.push({ checkpoint: 'IA-07', result: x })
   })
   await test.step(checkpointContract[8], async () => {

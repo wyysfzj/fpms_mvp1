@@ -85,3 +85,22 @@ def test_archive_reads_legacy_case_status_from_case_detail_not_overlay_center() 
     assert "center.legacy_case_status" not in method
     assert "caseDetail.status" in method
     assert "endsWith(`/api/v1/cases/${this.caseId}`)" in method
+
+
+def test_each_invalid_receipt_snapshots_the_exact_target_oa_package() -> None:
+    source = _source()
+    method = source.split("async rejectInvalidReceipts", 1)[1].split(
+        "async archiveOa1", 1
+    )[0]
+    assert method.count("this.publicLifecycleApi('GET_OA_PACKAGE'") == 4
+    for token in (
+        "crossCaseBefore",
+        "crossCaseAfter",
+        "wrongSourceBefore",
+        "wrongSourceAfter",
+        "target_package: crossPackageBefore.body",
+        "target_package: wrongSourcePackageBefore.body",
+        "expect(crossCaseAfter).toEqual(crossCaseBefore)",
+        "expect(wrongSourceAfter).toEqual(wrongSourceBefore)",
+    ):
+        assert token in method
