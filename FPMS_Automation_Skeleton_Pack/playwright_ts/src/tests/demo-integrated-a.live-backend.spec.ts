@@ -396,6 +396,8 @@ class IntegratedJourneyDriver {
   private oa1ReplyId = ''
   private oa1ReceiptId = ''
   private oa1History: Json = {}
+  private grantTemplateId = ''
+  private grantOriginalDocumentId = ''
 
   constructor(
     readonly operatorPage: Page,
@@ -593,7 +595,10 @@ class IntegratedJourneyDriver {
       await this.operatorPage.getByPlaceholder('请选择官方截止日').fill(deadline.official_due_date)
       const sourceField = this.operatorPage.locator('.el-form-item').filter({ hasText: '截止日来源' }).first()
       await sourceField.locator('.el-select__wrapper').click()
-      await this.operatorPage.getByRole('option', { name: '人工核对官方通知', exact: true }).click()
+      const sourceLabel = deadline.official_due_date_source === 'IMPORTED_OFFICIAL_NOTICE'
+        ? '导入官方通知'
+        : '人工核对官方通知'
+      await this.operatorPage.getByRole('option', { name: sourceLabel, exact: true }).click()
       const impactResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/documents/impact-preview'))
       const statusField = this.operatorPage.locator('.el-form-item').filter({ hasText: '确认状态' }).first()
       await statusField.locator('.el-select__wrapper').click()
@@ -640,7 +645,28 @@ class IntegratedJourneyDriver {
     await this.operatorPage.goto(`${baseUrl}/tasks`, { waitUntil: 'domcontentloaded' })
     const taskPage = await (await tasksResponse).json() as Json
     const tasks = (taskPage.items as Json[]).filter((item) => item.case_id === caseId)
+    const draftResponse = this.operatorPage.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return response.status() === 200 && url.pathname.endsWith('/api/v1/fees/drafts') && url.searchParams.get('case_id') === caseId
+    })
     const overlay = await this.loadLifecycleOverlay(caseId)
+    const draftPage = await (await draftResponse).json() as Json
+    const grantResponse = this.operatorPage.waitForResponse((response) => response.status() === 200 && new URL(response.url()).pathname.endsWith('/api/v1/grant-fee-tasks/list'))
+    await this.operatorPage.goto(`${baseUrl}/grant-fee/tasks`, { waitUntil: 'domcontentloaded' })
+    const grantPage = await (await grantResponse).json() as Json
+    const grantTasks = (grantPage.items as Json[]).filter((item) => item.case_id === caseId)
+    const byObligation = new Map<string, Json>()
+    for (const milestone of overlay.milestones as Json[]) {
+      for (const obligation of (milestone.fee_obligations || []) as Json[]) {
+        if (obligation.fee_domain === 'GOV' && typeof obligation.obligation_id === 'string') byObligation.set(obligation.obligation_id, obligation)
+      }
+    }
+    const obligations = [...byObligation.values()]
+    const lineIds = new Set(obligations.flatMap((item) => (item.lines as Json[]).map((line) => line.line_id as string)))
+    const payableIds = new Set(obligations.flatMap((item) => (item.lines as Json[])
+      .filter((line) => typeof line.payable_amount === 'string' && line.payable_amount !== '0.00')
+      .map((line) => line.line_id as string)))
+    const grantDrafts = (draftPage.items as Json[]).filter((item) => item.draft_type === 'GRANT_FEE')
     return {
       document_ids: documents.map((item) => item.id).sort(),
       document_titles: documents.map((item) => item.title).sort(),
@@ -649,6 +675,8 @@ class IntegratedJourneyDriver {
       task_states: tasks.map((item) => [item.id, item.status]).sort(),
       package_ids: observedOverlayPackages(overlay).map((item) => item.package_id),
       package_states: observedOverlayPackages(overlay).map((item) => [item.package_id, item.package_kind, item.status, item.source_document_id, item.reply_document_id]),
+      grant_tasks: grantTasks,
+      official_fee_carriers: { item: lineIds.size, obligation: obligations.length, draft: grantDrafts.length, payable: payableIds.size },
       center_snapshot: overlay.center_snapshot,
     }
   }
@@ -1166,9 +1194,188 @@ class IntegratedJourneyDriver {
       legacy_display: archived.legacy_display,
     }
   }
-  async createGrantOriginal(_caseId: string): Promise<Json> { return this.red('IA-10') }
-  async replaceGrant(_taskId: string): Promise<Json> { return this.red('IA-11') }
-  async exerciseGrantGatesAndPay(_oldId: string, _newId: string): Promise<Json> { return this.red('IA-12') }
+  async createGrantOriginal(caseId: string): Promise<Json> {
+    const descriptor = this.evidenceDescriptorsByRole.get('GRANT_NOTICE_ORIGINAL')!
+    expect(descriptor.metadata.source_template_code).toBe('DEMO_GRANT_NOTICE_1')
+    expect(descriptor.metadata.supersedes_role).toBe(null)
+    const sourceDocumentDate = (descriptor.metadata.effective_at as string).slice(0, 10)
+    const deadline = {
+      official_due_date: descriptor.metadata.official_due_date as string,
+      official_due_date_source: descriptor.metadata.official_due_date_source as string,
+      official_due_date_status: descriptor.metadata.official_due_date_status as string,
+    }
+    expect(deadline.official_due_date_source).toBe('IMPORTED_OFFICIAL_NOTICE')
+    expect(deadline.official_due_date_status).toBe('CONFIRMED')
+    const created = await this.createDocumentViaVisibleUi(
+      caseId,
+      `虚构原始办理登记手续通知书-${this.caseNo}`,
+      sourceDocumentDate,
+      'OFFICIAL_NOTICE_009',
+      deadline,
+    )
+    this.grantOriginalDocumentId = created.document.id
+    this.grantTemplateId = created.document.doc_template_id
+    const createdSnapshot = await this.visibleCaseSnapshot(caseId)
+    const tasks = createdSnapshot.grant_tasks as Json[]
+    const sourceTasks = tasks.filter((item) => item.source_document_id === created.document.id)
+    expect(sourceTasks).toHaveLength(1)
+    const taskId = sourceTasks[0].task_id as string
+    const binding = await this.uploadRole(created.document.id, descriptor) as EvidenceBinding
+    const payload = {
+      reviewed_evidence_version_id: binding.evidenceVersionId,
+      expected_content_hash: binding.contentHash,
+      recorded_at: descriptor.metadata.effective_at,
+      idempotency_key: `integrated-grant-original-${taskId.slice(0, 8)}`,
+    }
+    const dispatched = await this.publicLifecycleApi('GRANT_NOTICE', { grant_fee_task_id: taskId }, payload)
+    expect(dispatched.status).toBe(200)
+    recordGrantConsumer(this.evidenceRoleMap, binding, 'grant-original-dispatch', payload, dispatched.body)
+    const overlay = await this.loadLifecycleOverlay(caseId)
+    const center = overlay.center_snapshot
+    const afterSnapshot = await this.visibleCaseSnapshot(caseId)
+    const afterTasks = afterSnapshot.grant_tasks as Json[]
+    const actionable = afterTasks.filter((item) => item.lineage_status === 'CONFIRMED')
+    return {
+      document_id: created.document.id,
+      task_id: taskId,
+      source_document_id: sourceTasks[0].source_document_id,
+      source_document_date: created.document.doc_date,
+      expected_source_document_date: sourceDocumentDate,
+      source_evidence_version_id: binding.evidenceVersionId,
+      source_content_hash: binding.contentHash,
+      actionable_task_ids: actionable.map((item) => item.task_id),
+      projection: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status],
+      official_fee_carriers: afterSnapshot.official_fee_carriers,
+      payload,
+      result: dispatched.body,
+    }
+  }
+
+  async replaceGrant(taskId: string): Promise<Json> {
+    const descriptor = this.evidenceDescriptorsByRole.get('GRANT_NOTICE_REPLACEMENT')!
+    expect(descriptor.metadata.source_template_code).toBe('DEMO_GRANT_NOTICE_2')
+    expect(descriptor.metadata.supersedes_role).toBe('GRANT_NOTICE_ORIGINAL')
+    const sourceDocumentDate = (descriptor.metadata.effective_at as string).slice(0, 10)
+    const replacementPayload = {
+      idempotency_key: `integrated-grant-replace-${taskId.slice(0, 8)}`,
+      reason: '虚构官方更正文书替换原授权通知',
+      document: {
+        doc_template_id: this.grantTemplateId,
+        doc_date: sourceDocumentDate,
+        title: `虚构更正办理登记手续通知书-${this.caseNo}`,
+        ref_no: `IA-GRANT-REPLACE-${taskId.slice(0, 8)}`,
+        official_due_date: descriptor.metadata.official_due_date,
+        official_due_date_source: descriptor.metadata.official_due_date_source,
+        official_due_date_status: descriptor.metadata.official_due_date_status,
+        description: '仅用于本地虚构集成演示的更正通知',
+      },
+    }
+    const replaced = await this.publicLifecycleApi('GRANT_REPLACEMENT', { task_id: taskId }, replacementPayload)
+    expect(replaced.status).toBe(200)
+    expect(replaced.body.superseded_task_id).toBe(taskId)
+    const replacementTaskId = replaced.body.replacement_task.task_id as string
+    const replacementDocumentId = replaced.body.document.id as string
+    const binding = await this.uploadRole(replacementDocumentId, descriptor) as EvidenceBinding
+    const lifecyclePayload = {
+      reviewed_evidence_version_id: binding.evidenceVersionId,
+      expected_content_hash: binding.contentHash,
+      recorded_at: descriptor.metadata.effective_at,
+      idempotency_key: `integrated-grant-replacement-${replacementTaskId.slice(0, 8)}`,
+    }
+    const dispatched = await this.publicLifecycleApi('GRANT_NOTICE', { grant_fee_task_id: replacementTaskId }, lifecyclePayload)
+    expect(dispatched.status).toBe(200)
+    recordGrantConsumer(this.evidenceRoleMap, binding, 'grant-replacement-dispatch', lifecyclePayload, dispatched.body)
+    const originalState = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: taskId })
+    const replacementState = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: replacementTaskId })
+    expect(originalState.status).toBe(200)
+    expect(replacementState.status).toBe(200)
+    expect(originalState.body.lineage_status).toBe('SUPERSEDED')
+    expect(replacementState.body.lineage_status).toBe('CONFIRMED')
+    const replacementSnapshot = await this.visibleCaseSnapshot(this.caseId)
+    const tasks = replacementSnapshot.grant_tasks as Json[]
+    const actionable = tasks.filter((item) => item.lineage_status === 'CONFIRMED')
+    const overlay = await this.loadLifecycleOverlay(this.caseId)
+    const center = overlay.center_snapshot
+    return {
+      document_id: replacementDocumentId,
+      replacement_document_id: replacementDocumentId,
+      original_document_id: this.grantOriginalDocumentId,
+      replacement_task_id: replacementTaskId,
+      superseded_task_id: replaced.body.superseded_task_id,
+      replacement_predecessor_task_id: replaced.body.superseded_task_id,
+      original_source_evidence_version_id: this.evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.evidenceVersionId,
+      replacement_source_evidence_version_id: binding.evidenceVersionId,
+      replacement_source_content_hash: binding.contentHash,
+      replacement_metadata: binding.metadata,
+      actionable_task_ids: actionable.map((item) => item.task_id),
+      original_hash: this.evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.contentHash,
+      replacement_hash: binding.contentHash,
+      projection: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status],
+      payload: lifecyclePayload,
+      result: dispatched.body,
+    }
+  }
+
+  async exerciseGrantGatesAndPay(oldTaskId: string, newTaskId: string): Promise<Json> {
+    const beforeOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+    const beforeCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+    expect(beforeOld.status).toBe(200)
+    expect(beforeCurrent.status).toBe(200)
+    const beforeVisible = await this.visibleCaseSnapshot(this.caseId)
+    const before = { old_task: beforeOld.body, current_task: beforeCurrent.body, official_fee_carriers: beforeVisible.official_fee_carriers }
+    const blocked = [
+      await this.publicLifecycleApi('GRANT_GENERATE_DRAFT', { task_id: oldTaskId }),
+      await this.publicLifecycleApi('GRANT_BATCH_INSTRUCTION', {}, { task_ids: [oldTaskId], action: 'record_pay_instruction' }),
+      await this.publicLifecycleApi('GRANT_GENERATE_NOTICES', {}, { task_ids: [oldTaskId] }),
+      await this.publicLifecycleApi('GRANT_TASK_STATE', { task_id: oldTaskId }, { action: 'mark_waiting_client' }),
+    ]
+    expect(blocked.map((item) => item.status)).toEqual([409, 409, 409, 409])
+    const afterOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+    const afterCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+    expect(afterOld.status).toBe(200)
+    expect(afterCurrent.status).toBe(200)
+    const afterVisible = await this.visibleCaseSnapshot(this.caseId)
+    const after = { old_task: afterOld.body, current_task: afterCurrent.body, official_fee_carriers: afterVisible.official_fee_carriers }
+    expect(after).toEqual(before)
+
+    const waiting = await this.publicLifecycleApi('GRANT_TASK_STATE', { task_id: newTaskId }, { action: 'mark_waiting_client' })
+    expect(waiting.status).toBe(200)
+    expect(waiting.body.state).toBe('WAITING_CLIENT')
+    const paid = await this.publicLifecycleApi('GRANT_BATCH_INSTRUCTION', {}, { task_ids: [newTaskId], action: 'record_pay_instruction' })
+    expect(paid.status).toBe(200)
+    expect(paid.body.updated_task_ids).toEqual([newTaskId])
+    const paidState = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+    expect(paidState.status).toBe(200)
+    expect(paidState.body.client_instruction).toBe('PAY')
+
+    const missingBeforeOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+    const missingBeforeCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+    const missingBeforeVisible = await this.visibleCaseSnapshot(this.caseId)
+    const missingAuthorityBefore = { old_task: missingBeforeOld.body, current_task: missingBeforeCurrent.body, official_fee_carriers: missingBeforeVisible.official_fee_carriers }
+    const missingAuthority = await this.publicLifecycleApi('GRANT_GENERATE_DRAFT', { task_id: newTaskId })
+    expect(missingAuthority.status).toBe(409)
+    expect(missingAuthority.body.error.code).toBe('DEMO_OFFICIAL_FEE_CONFIG_REQUIRED')
+    const missingAfterOld = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: oldTaskId })
+    const missingAfterCurrent = await this.publicLifecycleApi('GET_GRANT_TASK', { task_id: newTaskId })
+    const missingAfterVisible = await this.visibleCaseSnapshot(this.caseId)
+    const missingAuthorityAfter = { old_task: missingAfterOld.body, current_task: missingAfterCurrent.body, official_fee_carriers: missingAfterVisible.official_fee_carriers }
+    expect(missingAuthorityAfter).toEqual(missingAuthorityBefore)
+    const tasks = missingAfterVisible.grant_tasks as Json[]
+    const currentPayRows = tasks.filter((item) => item.task_id === newTaskId && item.client_instruction === 'PAY')
+    return {
+      blocked_mutations: ['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client'],
+      blocked_statuses: blocked.map((item) => item.status),
+      before_snapshot: before,
+      after_snapshot: after,
+      current_instruction: paidState.body.client_instruction,
+      current_instruction_count: currentPayRows.length,
+      missing_authority_status: missingAuthority.status,
+      missing_authority_code: missingAuthority.body.error.code,
+      missing_authority_before: missingAuthorityBefore,
+      missing_authority_after: missingAuthorityAfter,
+      official_fee_carriers: missingAuthorityAfter.official_fee_carriers,
+    }
+  }
   async createServiceDraft(_caseId: string): Promise<Json> { return this.red('IA-13') }
   async createBill(_draftId: string): Promise<Json> { return this.red('IA-14') }
   async createPayment(_clientId: string, _billId: string): Promise<Json> { return this.red('IA-15') }
@@ -1262,6 +1469,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   const journey = new IntegratedJourneyDriver(page, reviewerPage, evidenceRoleMap, request, operatorToken, evidenceDescriptors(), outputMap)
   const task5Checkpoints: Json[] = []
   const task6Checkpoints: Json[] = []
+  const task7Checkpoints: Json[] = []
   const suffix = `${Date.now()}`
   const clientCode = `IA-${suffix}`
   const caseNo = `IA-CASE-${suffix}`
@@ -1364,20 +1572,23 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   })
   await test.step(checkpointContract[10], async () => {
     const x = await journey.createGrantOriginal(caseId)
-    const binding = await journey.uploadRole(x.document_id, x.descriptor); grantOriginalTaskId = x.task_id
-    recordGrantConsumer(evidenceRoleMap, binding, 'grant-original-dispatch', x.payload, x.result)
+    const binding = evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!; grantOriginalTaskId = x.task_id
     expect(evidenceRoleMap.size).toBe(11); expect(x.source_document_id).toBe(x.document_id); expect(x.source_document_date).toBe(x.expected_source_document_date); expect(x.source_evidence_version_id).toBe(binding.evidenceVersionId); expect(x.source_content_hash).toBe(binding.contentHash); expect(x.actionable_task_ids).toEqual([grantOriginalTaskId]); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED']); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
+    task7Checkpoints.push({ checkpoint: 'IA-10', result: x })
   })
   await test.step(checkpointContract[11], async () => {
     const x = await journey.replaceGrant(grantOriginalTaskId)
-    const binding = await journey.uploadRole(x.document_id, x.descriptor); grantReplacementTaskId = x.replacement_task_id
-    recordGrantConsumer(evidenceRoleMap, binding, 'grant-replacement-dispatch', x.payload, x.result)
+    const binding = evidenceRoleMap.get('GRANT_NOTICE_REPLACEMENT')!; grantReplacementTaskId = x.replacement_task_id
     expect(evidenceRoleMap.size).toBe(12)
     expect(grantReplacementTaskId).not.toBe(grantOriginalTaskId); expect(x.original_document_id).not.toBe(x.replacement_document_id); expect(x.replacement_document_id).toBe(x.document_id); expect(x.superseded_task_id).toBe(grantOriginalTaskId); expect(x.replacement_predecessor_task_id).toBe(grantOriginalTaskId); expect(x.original_source_evidence_version_id).toBe(evidenceRoleMap.get('GRANT_NOTICE_ORIGINAL')!.evidenceVersionId); expect(x.replacement_source_evidence_version_id).toBe(binding.evidenceVersionId); expect(x.replacement_source_content_hash).toBe(binding.contentHash); expect(x.replacement_metadata).toEqual(binding.metadata); expect(x.actionable_task_ids).toEqual([grantReplacementTaskId]); expect(x.original_hash).not.toBe(x.replacement_hash); expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', 'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED'])
+    task7Checkpoints.push({ checkpoint: 'IA-11', result: x })
   })
   await test.step(checkpointContract[12], async () => {
     const x = await journey.exerciseGrantGatesAndPay(grantOriginalTaskId, grantReplacementTaskId)
-    expect(x.blocked_mutations).toEqual(['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client']); expect(x.blocked_statuses).toEqual([409, 409, 409, 409]); expect(x.before_snapshot).toEqual(x.after_snapshot); expect(x.current_instruction).toBe('PAY'); expect(x.current_instruction_count).toBe(1); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
+    expect(x.blocked_mutations).toEqual(['generate-draft', 'batch-instruction', 'generate-notices', 'mark_waiting_client']); expect(x.blocked_statuses).toEqual([409, 409, 409, 409]); expect(x.before_snapshot).toEqual(x.after_snapshot); expect(x.current_instruction).toBe('PAY'); expect(x.current_instruction_count).toBe(1); expect(x.missing_authority_status).toBe(409); expect(x.missing_authority_code).toBe('DEMO_OFFICIAL_FEE_CONFIG_REQUIRED'); expect(x.missing_authority_before).toEqual(x.missing_authority_after); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
+    task7Checkpoints.push({ checkpoint: 'IA-12', result: x })
+    await mkdir(evidenceDir!, { recursive: true })
+    await writeFile(path.join(evidenceDir!, 'task7-checkpoints.json'), JSON.stringify({ checkpoints: [...task5Checkpoints, ...task6Checkpoints, ...task7Checkpoints], evidence_bindings: [...evidenceRoleMap.values()] }, null, 2))
   })
   await test.step(checkpointContract[13], async () => {
     const x = await journey.createServiceDraft(caseId); draftId = x.draft_id

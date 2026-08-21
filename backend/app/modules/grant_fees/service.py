@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -4146,6 +4147,18 @@ def generate_grant_fee_draft(
     gov_amount = _money_amount(task.gov_fee_amt)
     service_amount = _ZERO
     total_amount = gov_amount + service_amount
+
+    if (
+        os.environ.get("FPMS_ENV") == "demo"
+        and os.environ.get("FPMS_DEMO_SCOPE") == "LOCAL_ABC_E2E"
+        and gov_amount <= _ZERO
+    ):
+        raise_business_error(
+            "DEMO_OFFICIAL_FEE_CONFIG_REQUIRED",
+            "本地演示未配置经确认的官方费用，不能生成授权费草单",
+            details={"task_id": task_id, "currency": normalized_currency},
+            status_code=409,
+        )
 
     draft = FeeDraft(
         id=str(uuid4()),

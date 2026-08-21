@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+from decimal import Decimal
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+from sqlalchemy.orm import sessionmaker
+
+from app.modules.documents.models import Document
+from app.modules.fees.models import FeeDraft, FeeItem, T_GrantFeeTask
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = (
+    ROOT
+    / "FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests"
+    / "demo-integrated-a.live-backend.spec.ts"
+)
+
+
+def _source() -> str:
+    return SPEC.read_text(encoding="utf-8")
+
+
+def _method(source: str, start: str, end: str) -> str:
+    return source.split(start, 1)[1].split(end, 1)[0]
+
+
+def test_ia10_to_ia12_are_real_and_next_red_is_ia13() -> None:
+    source = _source()
+    for checkpoint in ("IA-10", "IA-11", "IA-12"):
+        assert f"return this.red('{checkpoint}')" not in source
+    assert "return this.red('IA-13')" in source
+    assert "task7-checkpoints.json" in source
+
+
+def test_original_grant_binds_visible_review_to_public_lifecycle() -> None:
+    source = _source()
+    method = _method(source, "async createGrantOriginal", "async replaceGrant")
+    for token in (
+        "GRANT_NOTICE_ORIGINAL",
+        "OFFICIAL_NOTICE_009",
+        "this.createDocumentViaVisibleUi",
+        "await this.uploadRole",
+        "this.publicLifecycleApi('GRANT_NOTICE'",
+        "reviewed_evidence_version_id: binding.evidenceVersionId",
+        "expected_content_hash: binding.contentHash",
+        "recordGrantConsumer",
+    ):
+        assert token in method
+    assert (
+        "expect(x.projection).toEqual(['GRANT_REGISTRATION_IN_PROGRESS', "
+        "'GRANT_REGISTRATION', 'APPLICATION_PENDING', 'CONFIRMED'])"
+    ) in source
+
+
+def test_replacement_grant_has_distinct_evidence_and_exact_lineage() -> None:
+    source = _source()
+    method = _method(source, "async replaceGrant", "async exerciseGrantGatesAndPay")
+    for token in (
+        "GRANT_NOTICE_REPLACEMENT",
+        "supersedes_role",
+        "GRANT_NOTICE_ORIGINAL",
+        "this.publicLifecycleApi('GRANT_REPLACEMENT'",
+        "await this.uploadRole",
+        "this.publicLifecycleApi('GRANT_NOTICE'",
+        "reviewed_evidence_version_id: binding.evidenceVersionId",
+        "expected_content_hash: binding.contentHash",
+        "recordGrantConsumer",
+        "superseded_task_id",
+        "replacement_predecessor_task_id",
+    ):
+        assert token in method
+
+
+def test_superseded_mutations_and_missing_fee_authority_are_observable_no_write() -> None:
+    source = _source()
+    method = _method(source, "async exerciseGrantGatesAndPay", "async createServiceDraft")
+    for operation in (
+        "GRANT_GENERATE_DRAFT",
+        "GRANT_BATCH_INSTRUCTION",
+        "GRANT_GENERATE_NOTICES",
+        "GRANT_TASK_STATE",
+    ):
+        assert f"this.publicLifecycleApi('{operation}'" in method
+    for token in (
+        "before_snapshot",
+        "after_snapshot",
+        "expect(after).toEqual(before)",
+        "record_pay_instruction",
+        "DEMO_OFFICIAL_FEE_CONFIG_REQUIRED",
+        "missing_authority_status",
+        "missing_authority_before",
+        "missing_authority_after",
+        "official_fee_carriers",
+    ):
+        assert token in method
+
+
+def _create_ready_zero_grant_task(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+) -> tuple[str, str]:
+    client_response = client.post(
+        "/api/v1/clients",
+        headers=auth_headers,
+        json={
+            "client_code": f"IA-GRANT-{uuid4().hex[:8]}",
+            "name_cn": "虚构集成授权边界客户",
+            "default_currency": "CNY",
+        },
+    )
+    assert client_response.status_code == 201, client_response.text
+    case_response = client.post(
+        "/api/v1/cases",
+        headers=auth_headers,
+        json={
+            "case_no": f"IA-GRANT-{uuid4().hex[:8]}",
+            "case_type": "NORMAL",
+            "patent_category": "INV",
+            "flow_dir": "CN_DOMESTIC",
+            "fee_reduction": "0",
+            "title_cn": "虚构集成授权边界案件",
+            "client_id": client_response.json()["id"],
+        },
+    )
+    assert case_response.status_code == 201, case_response.text
+    case_id = case_response.json()["id"]
+    with session_factory() as db:
+        source = Document(
+            case_id=case_id,
+            doc_type="OFFICIAL",
+            direction="IN",
+            doc_date=date(2026, 8, 11),
+            title="虚构授权通知来源",
+        )
+        db.add(source)
+        db.flush()
+        task = T_GrantFeeTask(
+            case_id=case_id,
+            source_document_id=source.id,
+            due_date=date(2026, 11, 23),
+            deadline_source="IMPORTED_OFFICIAL_NOTICE",
+            deadline_confirmed_at=datetime(2026, 8, 11, 9, 0),
+            gov_fee_amt=Decimal("0.00"),
+            service_fee_amt=Decimal("0.00"),
+            currency="CNY",
+            client_instruction="PAY",
+            notify_count=2,
+            draft_generated=False,
+            notice_sent=True,
+            is_overdue=False,
+        )
+        db.add(task)
+        db.commit()
+        return case_id, task.id
+
+
+def test_demo_missing_official_fee_authority_is_409_and_zero_write(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    session_factory: sessionmaker,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("FPMS_ENV", "demo")
+    monkeypatch.setenv("FPMS_DEMO_SCOPE", "LOCAL_ABC_E2E")
+    case_id, task_id = _create_ready_zero_grant_task(client, auth_headers, session_factory)
+
+    response = client.post(
+        f"/api/v1/grant-fee-tasks/{task_id}/generate-draft",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "DEMO_OFFICIAL_FEE_CONFIG_REQUIRED"
+    with session_factory() as db:
+        assert db.scalar(
+            select(func.count()).select_from(FeeDraft).where(FeeDraft.case_id == case_id)
+        ) == 0
+        assert db.scalar(select(func.count()).select_from(FeeItem)) == 0
+        task = db.get(T_GrantFeeTask, task_id)
+        assert task is not None
+        assert task.client_instruction == "PAY"
+        assert task.draft_generated is False
