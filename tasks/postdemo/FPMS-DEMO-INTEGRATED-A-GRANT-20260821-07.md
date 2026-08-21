@@ -6,7 +6,7 @@ Risk-Tier: HIGH
 Closure-Tags: ["demo", "grant", "lifecycle", "lineage", "evidence", "fee"]
 Task-Path: tasks/postdemo/FPMS-DEMO-INTEGRATED-A-GRANT-20260821-07.md
 Role: Implementer
-Dependencies: ["FPMS-DEMO-INTEGRATED-A-SECOND-OA-20260821-06 APPROVED 0/0/0"]
+Dependencies: ["FPMS-DEMO-INTEGRATED-A-SECOND-OA-20260821-06 APPROVED 0/0/0", "FPMS-DEMO-INTEGRATED-A-GRANT-NO-FEE-20260822-07A APPROVED 0/0/0"]
 
 ## Exact Closure Slice
 
