@@ -287,7 +287,7 @@ def _run_one(
         if run_root.exists():
             if run_root.parent != Path(tempfile.gettempdir()).resolve() or not run_root.name.startswith("fpms-demo-abc-integrated-r"):
                 raise RuntimeError(f"refusing unexpected cleanup root: {run_root}")
-            shutil.rmtree(run_root)
+            abc.remove_run_root(run_root, run_id)
         _write_json(run_artifact / "cleanup.json", {"run_id": run_id, "run_root_removed": not run_root.exists()})
 
 

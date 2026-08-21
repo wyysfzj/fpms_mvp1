@@ -47,6 +47,13 @@ def test_runner_builds_the_integrated_bundle_successor(tmp_path: Path):
     assert manifest.count('"classification":"FICTIONAL_DEMO_EVIDENCE"') == 12
 
 
+def test_runner_uses_permission_safe_run_root_cleanup():
+    source = RUNNER.read_text(encoding="utf-8")
+
+    assert "abc.remove_run_root(run_root, run_id)" in source
+    assert "shutil.rmtree(run_root)" not in source
+
+
 def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
     module = _module()
     source = SPEC.read_text(encoding="utf-8")
