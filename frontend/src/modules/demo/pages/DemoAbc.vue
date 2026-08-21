@@ -106,6 +106,10 @@ import {
   createDemoFullOffset,
   createDemoServiceObligation,
   lockDemoDraft,
+  readDemoBillCommand,
+  readDemoDraft,
+  readDemoOffsetCommand,
+  readDemoPaymentCommand,
   readDemoServiceItem,
   readDemoPreflight,
   recordDemoPayInstruction,
@@ -119,6 +123,7 @@ import type {
   DemoPreflight,
   DemoServiceItem,
 } from '../demo.api'
+import { parseDemoFeeObligationResponse, parseDemoPreflight } from '../demo.contract'
 
 const bundle = ref<DemoServiceItem>()
 const preflight = ref<DemoPreflight>()
@@ -144,6 +149,64 @@ const idempotencyKeys = reactive({
 const today = new Date().toISOString().slice(0, 10)
 const due = new Date(Date.now() + 15 * 86_400_000).toISOString().slice(0, 10)
 const suffix = crypto.randomUUID().slice(0, 8).toUpperCase()
+const DEMO_SESSION_KEY = 'fpms_demo_abc_session_v1'
+
+interface StoredDemoSession {
+  preflight: DemoPreflight
+  case_no?: string
+  obligation?: DemoFeeObligationResponse
+  draft_id?: string
+  idempotency_keys: typeof idempotencyKeys
+}
+
+function sameProvenance(saved: DemoPreflight, currentBundle: DemoServiceItem): boolean {
+  return saved.bundle_id === currentBundle.bundle_id
+    && saved.bundle_version === currentBundle.bundle_version
+    && saved.manifest_sha256 === currentBundle.manifest_sha256
+    && saved.template_code === currentBundle.template_code
+    && saved.template_sha256 === currentBundle.template_sha256
+    && saved.item_code === currentBundle.item_code
+    && saved.source_ref === currentBundle.source_ref
+    && saved.source_version === currentBundle.source_version
+    && saved.source_sha256 === currentBundle.source_sha256
+}
+
+function persistSession() {
+  if (!preflight.value) return
+  const state: StoredDemoSession = {
+    preflight: preflight.value,
+    case_no: selectedCase.value?.case_no,
+    obligation: obligation.value,
+    draft_id: draft.value?.id,
+    idempotency_keys: { ...idempotencyKeys },
+  }
+  sessionStorage.setItem(DEMO_SESSION_KEY, JSON.stringify(state))
+}
+
+function readStoredSession(currentBundle: DemoServiceItem): StoredDemoSession | undefined {
+  const raw = sessionStorage.getItem(DEMO_SESSION_KEY)
+  if (!raw) return undefined
+  try {
+    const value = JSON.parse(raw) as Partial<StoredDemoSession>
+    const saved = {
+      ...value,
+      preflight: parseDemoPreflight(value.preflight),
+      obligation: value.obligation
+        ? parseDemoFeeObligationResponse(value.obligation)
+        : undefined,
+    }
+    if (saved.preflight.manifest_sha256 !== currentBundle.manifest_sha256
+      || !sameProvenance(saved.preflight, currentBundle)
+      || !saved.idempotency_keys) {
+      sessionStorage.removeItem(DEMO_SESSION_KEY)
+      return undefined
+    }
+    return saved as StoredDemoSession
+  } catch {
+    sessionStorage.removeItem(DEMO_SESSION_KEY)
+    return undefined
+  }
+}
 
 function money(value: string): string {
   if (!/^(?:0|[1-9]\d*)\.\d{2}$/.test(value)) return '数据异常'
@@ -169,22 +232,22 @@ async function run(step: string, action: () => Promise<void>) {
   }
 }
 
-async function loadBundle() {
-  await run('bundle', async () => { bundle.value = await readDemoServiceItem() })
-}
-
 async function validatePreflight() {
   preflight.value = undefined
   await run('preflight', async () => {
     const result = await readDemoPreflight()
     preflight.value = result
     bundle.value = result
+    persistSession()
   })
 }
 
 async function loadCase() {
   if (!caseNoInput.value) return
-  await run('case', async () => { selectedCase.value = await getCaseByCaseNo(caseNoInput.value) })
+  await run('case', async () => {
+    selectedCase.value = await getCaseByCaseNo(caseNoInput.value)
+    persistSession()
+  })
 }
 
 async function createObligation() {
@@ -195,6 +258,7 @@ async function createObligation() {
       bundle.value!.item_code,
       idempotencyKeys.obligation,
     )
+    persistSession()
   })
 }
 
@@ -208,6 +272,7 @@ async function confirmPayAndLock() {
       obligation.value!.obligation.id,
     )
     draft.value = await lockDemoDraft(created.id)
+    persistSession()
   })
 }
 
@@ -222,6 +287,7 @@ async function createBill() {
       idempotencyKeys.bill,
     )
     bill.value = result.bill
+    persistSession()
   })
 }
 
@@ -235,6 +301,7 @@ async function createPayment() {
       today,
       idempotencyKeys.payment,
     )
+    persistSession()
   })
 }
 
@@ -249,10 +316,46 @@ async function createOffset() {
     )
     bill.value = offset.value.bill
     payment.value = { ...payment.value!, line: offset.value.line, bill: offset.value.bill }
+    persistSession()
   })
 }
 
-onMounted(loadBundle)
+async function restoreSession() {
+  await run('bundle', async () => {
+    const currentBundle = await readDemoServiceItem()
+    bundle.value = currentBundle
+    const saved = readStoredSession(currentBundle)
+    if (!saved) return
+
+    preflight.value = saved.preflight
+    Object.assign(idempotencyKeys, saved.idempotency_keys)
+    obligation.value = saved.obligation
+    if (saved.case_no) {
+      selectedCase.value = await getCaseByCaseNo(saved.case_no)
+      caseNoInput.value = saved.case_no
+    }
+    if (saved.draft_id) {
+      const restoredDraft = await readDemoDraft(saved.draft_id)
+      if (restoredDraft.case_id !== selectedCase.value?.id) throw new Error('演示草单与当前案件不一致')
+      draft.value = restoredDraft
+    }
+    const billResult = await readDemoBillCommand(idempotencyKeys.bill)
+    if (billResult) bill.value = billResult.bill
+    const paymentResult = await readDemoPaymentCommand(idempotencyKeys.payment)
+    if (paymentResult) payment.value = paymentResult
+    const offsetResult = await readDemoOffsetCommand(idempotencyKeys.offset)
+    if (offsetResult) {
+      if (offsetResult.bill.case_id !== selectedCase.value?.id) throw new Error('演示核销与当前案件不一致')
+      offset.value = offsetResult
+      bill.value = offsetResult.bill
+      if (payment.value) {
+        payment.value = { ...payment.value, line: offsetResult.line, bill: offsetResult.bill }
+      }
+    }
+  })
+}
+
+onMounted(restoreSession)
 </script>
 
 <style scoped>

@@ -398,6 +398,13 @@ class IntegratedJourneyDriver {
   private oa1History: Json = {}
   private grantTemplateId = ''
   private grantOriginalDocumentId = ''
+  private draftId = ''
+  private billId = ''
+  private paymentId = ''
+  private paymentLineId = ''
+  private offsetId = ''
+  private bundleAmount = ''
+  private summaryReads = 0
 
   constructor(
     readonly operatorPage: Page,
@@ -1422,11 +1429,237 @@ class IntegratedJourneyDriver {
       official_fee_carriers: missingAuthorityAfter.official_fee_carriers,
     }
   }
-  async createServiceDraft(_caseId: string): Promise<Json> { return this.red('IA-13') }
-  async createBill(_draftId: string): Promise<Json> { return this.red('IA-14') }
-  async createPayment(_clientId: string, _billId: string): Promise<Json> { return this.red('IA-15') }
-  async createOffset(_lineId: string, _billId: string): Promise<Json> { return this.red('IA-16') }
-  async reloadSummary(_caseId: string): Promise<Json> { return this.red('IA-17') }
+  async createServiceDraft(caseId: string): Promise<Json> {
+    expect(caseId).toBe(this.caseId)
+    await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByText('演示输入已校验', { exact: false })).toBeVisible()
+    await this.operatorPage.getByTestId('demo-case-no').fill(this.caseNo)
+    await this.operatorPage.getByRole('button', { name: '加载案件' }).click()
+    await expect(this.operatorPage.getByText(`已选择 ${this.caseNo}`, { exact: false })).toBeVisible()
+
+    const obligationCreated = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/fees/demo-service-obligations'))
+    await this.operatorPage.getByTestId('create-obligation').click()
+    const created = await (await obligationCreated).json() as Json
+    const obligationReplayed = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/fees/demo-service-obligations'))
+    await this.operatorPage.getByTestId('create-obligation').click()
+    const replayed = await (await obligationReplayed).json() as Json
+    expect(replayed.obligation.id).toBe(created.obligation.id)
+    expect(replayed.reused).toBe(true)
+
+    const draftCreated = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/fees/drafts'))
+    const draftRead = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.includes('/api/v1/fees/drafts/'))
+    await this.operatorPage.getByTestId('create-draft').click()
+    const openDraft = await (await draftCreated).json() as Json
+    const lockedDraft = await (await draftRead).json() as Json
+    expect(lockedDraft.id).toBe(openDraft.id)
+    expect(lockedDraft.status).toBe('LOCKED')
+    this.draftId = lockedDraft.id
+    this.bundleAmount = created.amount
+
+    const overlayResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${caseId}/lifecycle-overlay`))
+    const draftListResponse = this.operatorPage.waitForResponse((item) => {
+      const url = new URL(item.url())
+      return item.status() === 200 && url.pathname.endsWith('/api/v1/fees/drafts') && url.searchParams.get('case_id') === caseId
+    })
+    await this.operatorPage.goto(`${baseUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
+    const overlay = await (await overlayResponse).json() as Json
+    const draftPage = await (await draftListResponse).json() as Json
+    const serviceObligations = (overlay.milestones as Json[]).flatMap((milestone) => (milestone.fee_obligations || []) as Json[])
+      .filter((item) => item.fee_domain === 'SERVICE' && item.obligation_id === created.obligation.id)
+    const serviceDrafts = (draftPage.items as Json[]).filter((item) => item.id === lockedDraft.id && item.status === 'LOCKED')
+    const visible = await this.visibleCaseSnapshot(caseId)
+    return {
+      case_id: caseId,
+      draft_id: lockedDraft.id,
+      provenance: {
+        bundle_id: created.bundle_id,
+        bundle_version: created.bundle_version,
+        manifest_sha256: created.manifest_sha256,
+        template_code: created.template_code,
+        template_sha256: created.template_sha256,
+        rate_item_code: created.item_code,
+        rate_source_ref: created.source_ref,
+        rate_source_version: created.source_version,
+        rate_source_sha256: created.source_sha256,
+      },
+      disclaimer: created.disclaimer_zh_cn,
+      obligation_count: serviceObligations.length,
+      draft_count: serviceDrafts.length,
+      draft_status: lockedDraft.status,
+      service_amount: lockedDraft.total_service,
+      bundle_amount: created.amount,
+      official_fee_display: '未配置',
+      official_fee_in_total: lockedDraft.total_gov !== '0.00',
+      official_fee_carriers: visible.official_fee_carriers,
+    }
+  }
+
+  async createBill(draftId: string): Promise<Json> {
+    expect(draftId).toBe(this.draftId)
+    await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByText(draftId, { exact: false })).toBeVisible()
+    const createdResponse = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/bills/demo-from-draft'))
+    await this.operatorPage.getByTestId('create-bill').click()
+    const created = await (await createdResponse).json() as Json
+    const replayedResponse = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/bills/demo-from-draft'))
+    await this.operatorPage.getByTestId('create-bill').click()
+    const replayed = await (await replayedResponse).json() as Json
+    expect(replayed.reused).toBe(true)
+    expect(replayed.bill.id).toBe(created.bill.id)
+    this.billId = created.bill.id
+
+    const listResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/bills'))
+    await this.operatorPage.goto(`${baseUrl}/billing/bills`, { waitUntil: 'domcontentloaded' })
+    const billPage = await (await listResponse).json() as Json
+    const billMatches = (billPage.items as Json[]).filter((item) => item.id === created.bill.id)
+    const detailResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/bills/${created.bill.id}`))
+    await this.operatorPage.goto(`${baseUrl}/billing/bills/${created.bill.id}`, { waitUntil: 'domcontentloaded' })
+    const detail = await (await detailResponse).json() as Json
+    await expect(this.operatorPage.getByText(detail.bill_no, { exact: false })).toBeVisible()
+    return {
+      bill_id: detail.id,
+      replayed_bill_id: replayed.bill.id,
+      bill_count: billMatches.length,
+      source_draft_ids: detail.source_draft_ids,
+      consumed_draft_ids: detail.source_draft_ids,
+      bill_item_ids: (detail.items as Json[]).map((item) => item.id),
+      bill_item_draft_ids: (detail.items as Json[]).map((item) => item.draft_id),
+      status: detail.status,
+      balance: detail.balance,
+      bundle_amount: this.bundleAmount,
+      currency: detail.currency,
+    }
+  }
+
+  async createPayment(clientId: string, billId: string): Promise<Json> {
+    expect(clientId).toBe(this.clientId)
+    expect(billId).toBe(this.billId)
+    await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
+    await expect(this.operatorPage.getByText(this.bundleAmount, { exact: false }).first()).toBeVisible()
+    const createdResponse = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/payments/demo-bank-receipts'))
+    await this.operatorPage.getByTestId('create-payment').click()
+    const created = await (await createdResponse).json() as Json
+    const replayedResponse = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/payments/demo-bank-receipts'))
+    await this.operatorPage.getByTestId('create-payment').click()
+    const replayed = await (await replayedResponse).json() as Json
+    expect(replayed.reused).toBe(true)
+    expect(replayed.payment.id).toBe(created.payment.id)
+    expect(replayed.line.id).toBe(created.line.id)
+    this.paymentId = created.payment.id
+    this.paymentLineId = created.line.id
+
+    const paymentListResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/payments'))
+    await this.operatorPage.goto(`${baseUrl}/billing/payments`, { waitUntil: 'domcontentloaded' })
+    const paymentPage = await (await paymentListResponse).json() as Json
+    const paymentMatches = (paymentPage.items as Json[]).filter((item) => item.id === created.payment.id)
+    const offsetListResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/offsets'))
+    await this.operatorPage.goto(`${baseUrl}/billing/offsets`, { waitUntil: 'domcontentloaded' })
+    const offsetPage = await (await offsetListResponse).json() as Json
+    const applied = (offsetPage.items as Json[]).filter((item) => item.bill_id === billId && item.is_reversed === false)
+    return {
+      payment_id: created.payment.id,
+      replayed_payment_id: replayed.payment.id,
+      payment_line_id: created.line.id,
+      payment_count: paymentMatches.length,
+      payment_line_count: paymentMatches[0].line_count,
+      amount: created.payment.amount,
+      bundle_amount: this.bundleAmount,
+      currency: created.payment.currency,
+      status: created.line.status,
+      applied_bill_ids: applied.map((item) => item.bill_id),
+      suggested_bill_id: created.target_bill_id,
+    }
+  }
+
+  async createOffset(lineId: string, billId: string): Promise<Json> {
+    expect(lineId).toBe(this.paymentLineId)
+    expect(billId).toBe(this.billId)
+    await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
+    const createdResponse = this.operatorPage.waitForResponse((item) => item.status() === 201 && new URL(item.url()).pathname.endsWith('/api/v1/offsets/demo-full'))
+    await this.operatorPage.getByTestId('create-offset').click()
+    const created = await (await createdResponse).json() as Json
+    this.offsetId = created.offset.id
+    const offsetListResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/offsets'))
+    await this.operatorPage.goto(`${baseUrl}/billing/offsets`, { waitUntil: 'domcontentloaded' })
+    const offsetPage = await (await offsetListResponse).json() as Json
+    const active = (offsetPage.items as Json[]).filter((item) => item.id === created.offset.id && item.bill_id === billId && item.is_reversed === false)
+    return {
+      offset_id: created.offset.id,
+      active_offset_count: active.length,
+      bill_status: created.bill.status,
+      payment_status: created.line.status,
+      bill_balance: created.bill.balance,
+      payment_unapplied: created.line.balance_amt,
+      bundle_amount: this.bundleAmount,
+      currency: created.bill.currency,
+      case_receipt_received: created.case_receipt.received_amt,
+    }
+  }
+
+  async reloadSummary(caseId: string): Promise<Json> {
+    this.summaryReads += 1
+    if (this.summaryReads > 1) return this.red('IA-18')
+    expect(caseId).toBe(this.caseId)
+    const caseResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${caseId}`))
+    const overlayResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/cases/${caseId}/lifecycle-overlay`))
+    await this.operatorPage.goto(`${baseUrl}/cases/${caseId}`, { waitUntil: 'domcontentloaded' })
+    const caseDetail = await (await caseResponse).json() as Json
+    const overlay = await (await overlayResponse).json() as Json
+
+    const draftResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/fees/drafts/${this.draftId}`))
+    await this.operatorPage.goto(`${baseUrl}/fees/drafts/${this.draftId}`, { waitUntil: 'domcontentloaded' })
+    const draft = await (await draftResponse).json() as Json
+    await expect(this.operatorPage).toHaveURL(`${baseUrl}/fees/drafts/${this.draftId}`)
+
+    const billResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith(`/api/v1/bills/${this.billId}`))
+    await this.operatorPage.goto(`${baseUrl}/billing/bills/${this.billId}`, { waitUntil: 'domcontentloaded' })
+    const bill = await (await billResponse).json() as Json
+    await expect(this.operatorPage).toHaveURL(`${baseUrl}/billing/bills/${this.billId}`)
+
+    const paymentResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/payments'))
+    await this.operatorPage.goto(`${baseUrl}/billing/payments`, { waitUntil: 'domcontentloaded' })
+    const paymentPage = await (await paymentResponse).json() as Json
+    const payment = (paymentPage.items as Json[]).find((item) => item.id === this.paymentId)
+    expect(payment).toBeDefined()
+
+    const offsetResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/offsets'))
+    await this.operatorPage.goto(`${baseUrl}/billing/offsets`, { waitUntil: 'domcontentloaded' })
+    const offsetPage = await (await offsetResponse).json() as Json
+    const offset = (offsetPage.items as Json[]).find((item) => item.id === this.offsetId)
+    expect(offset).toBeDefined()
+
+    const receiptResponse = this.operatorPage.waitForResponse((item) => item.status() === 200 && new URL(item.url()).pathname.endsWith('/api/v1/fee-overview/case-receipts'))
+    await this.operatorPage.goto(`${baseUrl}/billing/case-receipts`, { waitUntil: 'domcontentloaded' })
+    const receiptPage = await (await receiptResponse).json() as Json
+    const receipt = (receiptPage.items as Json[]).find((item) => item.case_id === caseId && item.fee_type === 'SERVICE')
+    expect(receipt).toBeDefined()
+
+    const center = overlay.center_snapshot
+    return {
+      case_id: caseId,
+      route_object_ids: { case: caseId, draft: this.draftId, bill: this.billId },
+      authoritative_object_ids: { case: caseDetail.id, draft: draft.id, bill: bill.id },
+      surfaces: {
+        case: { id: caseDetail.id, business_stage: center.business_stage, official_procedure_stage: center.official_procedure_stage, legal_status: center.legal_status, confirmation_status: center.verification_status },
+        draft: { id: draft.id, status: draft.status, amount: draft.amount, currency: draft.currency },
+        bill: { id: bill.id, status: bill.status, balance: bill.balance, currency: bill.currency },
+        payment: { id: payment.id, status: payment.prepayment_status, unapplied: payment.unapplied_amt, currency: payment.currency },
+        offset: { id: offset.id, active: offset.is_reversed === false, amount: offset.offset_amt, currency: bill.currency },
+      },
+      lifecycle_status: center.business_stage,
+      lifecycle_stage: center.official_procedure_stage,
+      application_status: center.legal_status,
+      source_state: center.verification_status,
+      legacy_display: caseDetail.status,
+      bill_status: bill.status,
+      payment_status: payment.prepayment_status,
+      bill_balance: bill.balance,
+      payment_unapplied: payment.unapplied_amt,
+      bundle_amount: this.bundleAmount,
+      currency: bill.currency,
+      synthetic_zero_count: [draft.total_service, bill.amount, receipt.receivable_amt, receipt.received_amt].filter((value) => value === '0.00').length,
+    }
+  }
   async preflight(): Promise<Json> {
     await this.operatorPage.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
     const responsePromise = this.operatorPage.waitForResponse((response) => response.status() === 200 && response.url().includes('/fees/demo-preflight'))
@@ -1516,6 +1749,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   const task5Checkpoints: Json[] = []
   const task6Checkpoints: Json[] = []
   const task7Checkpoints: Json[] = []
+  const task8Checkpoints: Json[] = []
   const suffix = `${Date.now()}`
   const clientCode = `IA-${suffix}`
   const caseNo = `IA-CASE-${suffix}`
@@ -1638,26 +1872,33 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
   })
   await test.step(checkpointContract[13], async () => {
     const x = await journey.createServiceDraft(caseId); draftId = x.draft_id
-    expect(x.case_id).toBe(caseId); expect(x.provenance).toEqual(expectedProvenance); expect(x.disclaimer).toMatch(/虚构演示输入.*不是客户授权费率.*不是官方费用/); expect(x.obligation_count).toBe(1); expect(x.draft_count).toBe(1); expect(x.draft_status).toBe('LOCKED'); expect(x.service_amount).toBe(x.bundle_amount); expect(x.official_fee_display).toBe('未配置'); expect(x.official_fee_in_total).toBe(false)
+    expect(x.case_id).toBe(caseId); expect(x.provenance).toEqual(expectedProvenance); expect(x.disclaimer).toMatch(/虚构演示输入.*不是客户授权费率.*不是官方费用/); expect(x.obligation_count).toBe(1); expect(x.draft_count).toBe(1); expect(x.draft_status).toBe('LOCKED'); expect(x.service_amount).toBe(x.bundle_amount); expect(x.official_fee_display).toBe('未配置'); expect(x.official_fee_in_total).toBe(false); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
     await page.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByText(draftId, { exact: false })).toBeVisible()
     await expect(page.getByText(x.bundle_amount, { exact: false })).toBeVisible()
     await expect(page.getByText(x.disclaimer, { exact: false })).toBeVisible()
     for (const value of Object.values(expectedProvenance)) await expect(page.getByText(value!, { exact: false })).toBeVisible()
+    task8Checkpoints.push({ checkpoint: 'IA-13', result: x })
   })
   await test.step(checkpointContract[14], async () => {
     const x = await journey.createBill(draftId); billId = x.bill_id
-    expect(x.replayed_bill_id).toBe(billId); expect(x.bill_count).toBe(1); expect(x.source_draft_ids).toEqual([draftId]); expect(x.consumed_draft_ids).toEqual([draftId]); expect(x.source_item_ids).toEqual(x.bill_item_source_ids); expect(x.source_item_ids).toHaveLength(1); expect(x.status).toBe('UNSETTLED'); expect(x.balance).toBe(x.bundle_amount); expect(x.currency).toBe('CNY')
+    expect(x.replayed_bill_id).toBe(billId); expect(x.bill_count).toBe(1); expect(x.source_draft_ids).toEqual([draftId]); expect(x.consumed_draft_ids).toEqual([draftId]); expect(x.bill_item_ids).toHaveLength(1); expect(x.bill_item_draft_ids).toEqual([draftId]); expect(x.status).toBe('UNSETTLED'); expect(x.balance).toBe(x.bundle_amount); expect(x.currency).toBe('CNY')
+    task8Checkpoints.push({ checkpoint: 'IA-14', result: x })
   })
   await test.step(checkpointContract[15], async () => {
     const x = await journey.createPayment(clientId, billId); paymentId = x.payment_id; paymentLineId = x.payment_line_id
     expect(x.replayed_payment_id).toBe(x.payment_id); expect(x.payment_count).toBe(1); expect(x.payment_line_count).toBe(1); expect(x.amount).toBe(x.bundle_amount); expect(x.currency).toBe('CNY'); expect(x.status).toBe('UNALLOCATED'); expect(x.applied_bill_ids).toEqual([]); expect(x.suggested_bill_id).toBe(billId)
+    task8Checkpoints.push({ checkpoint: 'IA-15', result: x })
   })
   await test.step(checkpointContract[16], async () => {
     const x = await journey.createOffset(paymentLineId, billId); offsetId = x.offset_id; expect(x.active_offset_count).toBe(1); expect(x.bill_status).toBe('SETTLED'); expect(x.payment_status).toBe('FULLY_ALLOCATED'); expect(x.bill_balance).toBe('0.00'); expect(x.payment_unapplied).toBe('0.00'); expect(x.currency).toBe('CNY'); expect(x.case_receipt_received).toBe(x.bundle_amount)
+    task8Checkpoints.push({ checkpoint: 'IA-16', result: x })
   })
   await test.step(checkpointContract[17], async () => {
     const x = await journey.reloadSummary(caseId); expect(x.case_id).toBe(caseId); expect(x.route_object_ids).toEqual(x.authoritative_object_ids); expect(x.surfaces).toEqual({ case: { id: caseId, business_stage: 'GRANT_REGISTRATION_IN_PROGRESS', official_procedure_stage: 'GRANT_REGISTRATION', legal_status: 'APPLICATION_PENDING', confirmation_status: 'CONFIRMED' }, draft: { id: draftId, status: 'LOCKED', amount: x.bundle_amount, currency: 'CNY' }, bill: { id: billId, status: 'SETTLED', balance: '0.00', currency: 'CNY' }, payment: { id: paymentId, status: 'FULLY_ALLOCATED', unapplied: '0.00', currency: 'CNY' }, offset: { id: offsetId, active: true, amount: x.bundle_amount, currency: 'CNY' } }); expect(x.bill_status).toBe('SETTLED'); expect(x.payment_status).toBe('FULLY_ALLOCATED'); expect(x.synthetic_zero_count).toBe(0)
+    task8Checkpoints.push({ checkpoint: 'IA-17', result: x })
+    await mkdir(evidenceDir!, { recursive: true })
+    await writeFile(path.join(evidenceDir!, 'task8-checkpoints.json'), JSON.stringify({ checkpoints: [...task5Checkpoints, ...task6Checkpoints, ...task7Checkpoints, ...task8Checkpoints], evidence_bindings: [...evidenceRoleMap.values()] }, null, 2))
   })
   await test.step(checkpointContract[18], async () => {
     const x = await journey.reloadSummary(caseId)

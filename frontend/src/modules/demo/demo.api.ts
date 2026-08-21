@@ -200,6 +200,10 @@ export async function lockDemoDraft(draftId: string): Promise<DemoDraft> {
   return parseDemoDraft((await http.get<DemoDraft>(`/fees/drafts/${draftId}`)).data)
 }
 
+export async function readDemoDraft(draftId: string): Promise<DemoDraft> {
+  return parseDemoDraft((await http.get(`/fees/drafts/${draftId}`)).data)
+}
+
 async function readCommand(endpoint: string) {
   return http.get(endpoint, {
     validateStatus: (status) => status === 200 || status === 202 || status === 404,
@@ -220,6 +224,41 @@ async function reconcileUnknownCommand<T>(
   } catch {
     throw error
   }
+}
+
+async function readCompletedCommand<T>(
+  endpoint: string,
+  parse: (value: unknown) => T,
+): Promise<T | undefined> {
+  const response = await readCommand(endpoint)
+  return response.status === 200 ? parse(response.data) : undefined
+}
+
+export async function readDemoBillCommand(
+  idempotencyKey: string,
+): Promise<{ bill: DemoBillDetail; idempotency_key: string; reused: boolean } | undefined> {
+  return readCompletedCommand(
+    `/bills/from-drafts/idempotency/${encodeURIComponent(idempotencyKey)}`,
+    parseDemoBillCommandResponse,
+  )
+}
+
+export async function readDemoPaymentCommand(
+  idempotencyKey: string,
+): Promise<DemoBankReceiptResponse | undefined> {
+  return readCompletedCommand(
+    `/payments/idempotency/${encodeURIComponent(idempotencyKey)}`,
+    parseDemoBankReceiptResponse,
+  )
+}
+
+export async function readDemoOffsetCommand(
+  idempotencyKey: string,
+): Promise<DemoOffsetResponse | undefined> {
+  return readCompletedCommand(
+    `/offsets/idempotency/${encodeURIComponent(idempotencyKey)}`,
+    parseDemoOffsetResponse,
+  )
 }
 
 export async function createDemoBill(

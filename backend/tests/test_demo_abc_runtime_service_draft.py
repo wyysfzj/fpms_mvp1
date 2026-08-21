@@ -6,6 +6,8 @@ from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 from app.core import demo_bundle
 from app.modules.cases.models import Case, CaseActivityEvent
 from app.modules.fees.models import FeeDraft, FeeItem, FeeObligation
@@ -78,27 +80,33 @@ def _configure_bundle(
     return root, digest
 
 
+@pytest.mark.parametrize("integrated", [False, True])
 def test_runtime_service_item_to_pay_locked_draft(
     client,
     auth_headers,
     session_factory,
     tmp_path,
     monkeypatch,
+    integrated,
 ):
-    _configure_bundle(tmp_path, monkeypatch)
+    _configure_bundle(tmp_path, monkeypatch, integrated=integrated)
     client_id, case_id = _seed_case(session_factory)
+    expected_item = "DEMO_INTEGRATED_SERVICE_1" if integrated else "DEMO_SERVICE_1"
+    expected_template = (
+        "DEMO_INTEGRATED_LETTER_1" if integrated else "DEMO_INTERNAL_LETTER_1"
+    )
 
     item_response = client.get("/api/v1/fees/demo-service-item", headers=auth_headers)
     assert item_response.status_code == 200, item_response.text
     assert item_response.json()["amount"] == "1200.00"
     assert item_response.json()["classification"] == "DEMO_ONLY"
-    assert item_response.json()["template_code"] == "DEMO_INTERNAL_LETTER_1"
+    assert item_response.json()["template_code"] == expected_template
     assert len(item_response.json()["template_sha256"]) == 64
     assert item_response.json()["template_required_variables"] == ["case_no", "client_name"]
 
     command = {
         "case_id": case_id,
-        "item_code": "DEMO_SERVICE_1",
+        "item_code": expected_item,
         "idempotency_key": "demo-service-intent-1",
     }
     create_response = client.post(

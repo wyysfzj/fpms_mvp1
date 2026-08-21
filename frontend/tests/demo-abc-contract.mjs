@@ -60,6 +60,22 @@ for (const testId of [
 assert.ok(api.includes('readDemoPreflight'))
 assert.ok(api.includes('parseDemoPreflight'))
 assert.ok(page.includes('idempotencyKeys'))
+assert.ok(page.includes("const DEMO_SESSION_KEY = 'fpms_demo_abc_session_v1'"))
+assert.ok(page.includes('sessionStorage.setItem(DEMO_SESSION_KEY'))
+assert.ok(page.includes('sessionStorage.getItem(DEMO_SESSION_KEY)'))
+assert.ok(page.includes('saved.preflight.manifest_sha256 !== currentBundle.manifest_sha256'))
+for (const authoritativeRead of [
+  '`/fees/drafts/${draftId}`',
+  '`/bills/from-drafts/idempotency/${encodeURIComponent(idempotencyKey)}`',
+  '`/payments/idempotency/${encodeURIComponent(idempotencyKey)}`',
+  '`/offsets/idempotency/${encodeURIComponent(idempotencyKey)}`',
+]) assert.ok(api.includes(authoritativeRead), `missing authoritative reload ${authoritativeRead}`)
+assert.equal(
+  (api.match(/idempotency_key: idempotencyKey/g) || []).length,
+  5,
+  'obligation, instruction, bill, payment and offset each send one idempotency key',
+)
+assert.ok(!/idempotency_key: idempotencyKey,\s*idempotency_key: idempotencyKey/.test(api))
 assert.ok(!page.includes('amount || 0'))
 assert.ok(!page.includes('Number('))
 assert.ok(page.includes("import { getCaseByCaseNo } from '../../../api/cases'"))
