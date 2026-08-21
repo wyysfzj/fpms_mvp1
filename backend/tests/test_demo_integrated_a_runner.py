@@ -41,10 +41,75 @@ def test_runner_fails_at_the_missing_integrated_bundle_builder(tmp_path: Path):
         module.build_integrated_bundle(tmp_path)
 
 
-def test_runner_forbids_mock_db_enrichment_and_direct_evidence_shortcuts():
+def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
     module = _module()
     source = SPEC.read_text(encoding="utf-8")
     module.validate_spec_source(source)
+    assert module.PUBLIC_LIFECYCLE_API_ALLOWLIST == {
+        "ARCHIVE_PACKAGE": ("POST", "/official-work-packages/{package_id}/archive"),
+        "GET_FILING_PACKAGE": (
+            "GET",
+            "/official-work-packages/{package_id}/filing-preparation",
+        ),
+        "GET_GRANT_TASK": ("GET", "/grant-fee-tasks/{task_id}/state"),
+        "GET_OA_PACKAGE": ("GET", "/official-work-packages/{package_id}/oa-reply"),
+        "GRANT_BATCH_INSTRUCTION": ("POST", "/grant-fee-tasks/batch-instruction"),
+        "GRANT_GENERATE_DRAFT": ("POST", "/grant-fee-tasks/{task_id}/generate-draft"),
+        "GRANT_GENERATE_NOTICES": ("POST", "/grant-fee-tasks/generate-notices"),
+        "GRANT_NOTICE": (
+            "POST",
+            "/grant-fee-tasks/{task_id}/lifecycle/grant-notice",
+        ),
+        "GRANT_REPLACEMENT": (
+            "POST",
+            "/grant-fee-tasks/{task_id}/replacement-notice",
+        ),
+        "GRANT_TASK_STATE": ("PUT", "/grant-fee-tasks/{task_id}/state"),
+        "LINK_OA_REPLY": (
+            "POST",
+            "/official-work-packages/{package_id}/oa-reply/reply-document",
+        ),
+        "RECORD_ACCEPTANCE": (
+            "POST",
+            "/documents/{document_id}/lifecycle/acceptance-notice",
+        ),
+        "RECORD_FILING_EXTERNAL": (
+            "POST",
+            "/official-work-packages/{package_id}/filing-preparation/external-operations",
+        ),
+        "RECORD_OA_NOTICE": (
+            "POST",
+            "/documents/{document_id}/lifecycle/oa-notice",
+        ),
+        "RECORD_PACKAGE_RECEIPT": (
+            "POST",
+            "/official-work-packages/{package_id}/receipts",
+        ),
+        "RECORD_PRELIMINARY_PASS": (
+            "POST",
+            "/documents/{document_id}/lifecycle/preliminary-pass",
+        ),
+        "RECORD_PRELIMINARY_START": (
+            "POST",
+            "/documents/{document_id}/lifecycle/preliminary-start",
+        ),
+        "RECORD_PUBLICATION": (
+            "POST",
+            "/documents/{document_id}/lifecycle/publication-notice",
+        ),
+        "RECORD_SUBSTANTIVE_START": (
+            "POST",
+            "/documents/{document_id}/lifecycle/substantive-start",
+        ),
+        "RESOLVE_FILING": (
+            "POST",
+            "/cases/{case_id}/official-work-packages/filing-preparation/resolve",
+        ),
+        "RESOLVE_OA": (
+            "POST",
+            "/official-documents/{document_id}/official-work-packages/oa-reply/resolve",
+        ),
+    }
 
 
 @pytest.mark.parametrize(
@@ -57,6 +122,11 @@ def test_runner_forbids_mock_db_enrichment_and_direct_evidence_shortcuts():
         "const transport = page.request; transport.post(endpoint, payload)",
         "const endpoint = '/attach' + 'ments'; fetch(endpoint, payload)",
         "const transport = page['request']; transport.post(endpoint, payload)",
+        "const transport = page['req'+'uest']; const endpoint = '/attach'+'ments'; transport['po'+'st'](endpoint, payload)",
+        "page.addInitScript(() => globalThis['fet'+'ch']('/documents/x/attachments'))",
+        "apiRequest['fet'+'ch']('/documents/x/attachments')",
+        "Reflect.get(page, 'req'+'uest')['post']('/documents/x/attachments')",
+        "globalThis.fetch('/documents/x/attachments')",
     ],
 )
 def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):
@@ -68,7 +138,7 @@ def test_runner_rejects_direct_evidence_shortcut_spellings(shortcut: str):
 
 def test_runner_rejects_imported_local_helper_evasion():
     module = _module()
-    source = SPEC.read_text(encoding="utf-8") + '\nimport { uploadAttachment } from "./helper"'
+    source = SPEC.read_text(encoding="utf-8") + '\n  import { uploadAttachment } from "./helper"'
     with pytest.raises(RuntimeError, match="imports are not allowlisted"):
         module.validate_spec_source(source)
 
@@ -84,4 +154,15 @@ def test_runner_rejects_dynamic_or_side_effect_import(shortcut: str):
     module = _module()
     source = SPEC.read_text(encoding="utf-8") + "\n" + shortcut
     with pytest.raises(RuntimeError):
+        module.validate_spec_source(source)
+
+
+def test_runner_rejects_public_api_allowlist_drift_to_evidence_write():
+    module = _module()
+    source = SPEC.read_text(encoding="utf-8").replace(
+        "/documents/{document_id}/lifecycle/acceptance-notice",
+        "/documents/{document_id}/attachments",
+        1,
+    )
+    with pytest.raises(RuntimeError, match="public lifecycle API allowlist"):
         module.validate_spec_source(source)

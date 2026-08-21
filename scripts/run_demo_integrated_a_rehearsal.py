@@ -11,7 +11,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import re
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +24,7 @@ from scripts import run_demo_abc_rehearsal as abc  # noqa: E402
 BACKEND = ROOT / "backend"
 PLAYWRIGHT = ROOT / "FPMS_Automation_Skeleton_Pack" / "playwright_ts"
 SPEC = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a.live-backend.spec.ts"
+STATIC_CONTRACT = PLAYWRIGHT / "src" / "tests" / "demo-integrated-a-static-contract.mjs"
 DEFAULT_ARTIFACT = ROOT / "artifacts" / "FPMS-DEMO-INTEGRATED-A-DIAGNOSTIC"
 FORBIDDEN_SPEC_TOKENS = (
     "page.route(",
@@ -39,20 +39,68 @@ FORBIDDEN_SPEC_TOKENS = (
     ".toBeTruthy()",
     "expect({",
 )
-FORBIDDEN_NETWORK_PATTERNS = (
-    re.compile(r"\brequest\b"),
-    re.compile(r"\bfetch\b"),
-    re.compile(r"\baxios\b"),
-    re.compile(r"\bXMLHttpRequest\b"),
-    re.compile(r"\bWebSocket\b"),
-    re.compile(r"\beval\s*\("),
-    re.compile(r"\bFunction\s*\("),
-    re.compile(r"\bimport\s*\("),
-    re.compile(r"\.evaluate\s*\("),
-    re.compile(r"\[['\"]request['\"]\]"),
-)
+PUBLIC_LIFECYCLE_API_ALLOWLIST = {
+    "ARCHIVE_PACKAGE": ("POST", "/official-work-packages/{package_id}/archive"),
+    "GET_FILING_PACKAGE": (
+        "GET",
+        "/official-work-packages/{package_id}/filing-preparation",
+    ),
+    "GET_GRANT_TASK": ("GET", "/grant-fee-tasks/{task_id}/state"),
+    "GET_OA_PACKAGE": ("GET", "/official-work-packages/{package_id}/oa-reply"),
+    "GRANT_BATCH_INSTRUCTION": ("POST", "/grant-fee-tasks/batch-instruction"),
+    "GRANT_GENERATE_DRAFT": ("POST", "/grant-fee-tasks/{task_id}/generate-draft"),
+    "GRANT_GENERATE_NOTICES": ("POST", "/grant-fee-tasks/generate-notices"),
+    "GRANT_NOTICE": ("POST", "/grant-fee-tasks/{task_id}/lifecycle/grant-notice"),
+    "GRANT_REPLACEMENT": ("POST", "/grant-fee-tasks/{task_id}/replacement-notice"),
+    "GRANT_TASK_STATE": ("PUT", "/grant-fee-tasks/{task_id}/state"),
+    "LINK_OA_REPLY": (
+        "POST",
+        "/official-work-packages/{package_id}/oa-reply/reply-document",
+    ),
+    "RECORD_ACCEPTANCE": (
+        "POST",
+        "/documents/{document_id}/lifecycle/acceptance-notice",
+    ),
+    "RECORD_FILING_EXTERNAL": (
+        "POST",
+        "/official-work-packages/{package_id}/filing-preparation/external-operations",
+    ),
+    "RECORD_OA_NOTICE": ("POST", "/documents/{document_id}/lifecycle/oa-notice"),
+    "RECORD_PACKAGE_RECEIPT": (
+        "POST",
+        "/official-work-packages/{package_id}/receipts",
+    ),
+    "RECORD_PRELIMINARY_PASS": (
+        "POST",
+        "/documents/{document_id}/lifecycle/preliminary-pass",
+    ),
+    "RECORD_PRELIMINARY_START": (
+        "POST",
+        "/documents/{document_id}/lifecycle/preliminary-start",
+    ),
+    "RECORD_PUBLICATION": (
+        "POST",
+        "/documents/{document_id}/lifecycle/publication-notice",
+    ),
+    "RECORD_SUBSTANTIVE_START": (
+        "POST",
+        "/documents/{document_id}/lifecycle/substantive-start",
+    ),
+    "RESOLVE_FILING": (
+        "POST",
+        "/cases/{case_id}/official-work-packages/filing-preparation/resolve",
+    ),
+    "RESOLVE_OA": (
+        "POST",
+        "/official-documents/{document_id}/official-work-packages/oa-reply/resolve",
+    ),
+}
+PUBLIC_API_START = "// BEGIN EXACT PUBLIC LIFECYCLE API ALLOWLIST"
+PUBLIC_API_END = "// END EXACT PUBLIC LIFECYCLE API ALLOWLIST"
+PUBLIC_HELPER_START = "// BEGIN AUDITED PUBLIC API HELPER"
+PUBLIC_HELPER_END = "// END AUDITED PUBLIC API HELPER"
 ALLOWED_SPEC_IMPORT_LINES = [
-    "import { test, expect, type BrowserContext, type Page } from '@playwright/test'",
+    "import { test, expect, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test'",
     "import { mkdir, writeFile } from 'node:fs/promises'",
     "import path from 'node:path'",
 ]
@@ -80,11 +128,68 @@ def validate_spec_source(source: str) -> None:
     forbidden = [token for token in FORBIDDEN_SPEC_TOKENS if token in source]
     if forbidden:
         raise RuntimeError(f"focused spec contains forbidden constructs: {forbidden}")
-    if any(pattern.search(source) for pattern in FORBIDDEN_NETWORK_PATTERNS):
-        raise RuntimeError("canonical spec business writes must use visible UI")
-    imports = [line for line in source.splitlines() if line.startswith("import ")]
+    imports = [line.strip() for line in source.splitlines() if line.lstrip().startswith("import ")]
     if imports != ALLOWED_SPEC_IMPORT_LINES:
         raise RuntimeError(f"focused spec imports are not allowlisted: {imports}")
+
+    if source.count(PUBLIC_API_START) != 1 or source.count(PUBLIC_API_END) != 1:
+        raise RuntimeError("public lifecycle API allowlist markers are invalid")
+    allowlist_block = source.split(PUBLIC_API_START, 1)[1].split(PUBLIC_API_END, 1)[0]
+    for operation, (method, path) in PUBLIC_LIFECYCLE_API_ALLOWLIST.items():
+        exact = f"  {operation}: {{ method: '{method}', path: '{path}' }},"
+        if allowlist_block.count(exact) != 1:
+            raise RuntimeError("public lifecycle API allowlist does not match the approved boundary")
+    operation_lines = [
+        line
+        for line in allowlist_block.splitlines()
+        if line.startswith("  ") and ": { method:" in line
+    ]
+    if len(operation_lines) != len(PUBLIC_LIFECYCLE_API_ALLOWLIST):
+        raise RuntimeError("public lifecycle API allowlist contains an extra operation")
+    if any(token in allowlist_block for token in ("attachments", "evidence-versions", "/review")):
+        raise RuntimeError("public lifecycle API allowlist includes a visible-UI-only evidence write")
+
+    if source.count(PUBLIC_HELPER_START) != 1 or source.count(PUBLIC_HELPER_END) != 1:
+        raise RuntimeError("audited public API helper markers are invalid")
+    prefix, helper_and_suffix = source.split(PUBLIC_HELPER_START, 1)
+    helper, suffix = helper_and_suffix.split(PUBLIC_HELPER_END, 1)
+    if helper.count("apiRequest.fetch(") != 1:
+        raise RuntimeError("audited public API helper must own the only request fetch")
+    outside_helper = prefix + suffix
+    direct_network_tokens = (
+        "page.request",
+        "page['request']",
+        'page["request"]',
+        "['req'+'uest']",
+        '["req"+"uest"]',
+        ".fetch(",
+        "fetch(",
+        "axios",
+        "XMLHttpRequest",
+        "WebSocket",
+        "addInitScript",
+        ".evaluate(",
+        "eval(",
+        "Function(",
+        "import(",
+        "['fet'+'ch']",
+        '["fet"+"ch"]',
+        "['po'+'st']",
+        '["po"+"st"]',
+    )
+    if any(token in outside_helper for token in direct_network_tokens):
+        raise RuntimeError("evidence writes must use visible UI; public calls must use the audited helper")
+    ast_check = subprocess.run(
+        ["node", str(STATIC_CONTRACT), "--stdin"],
+        cwd=PLAYWRIGHT,
+        input=source,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if ast_check.returncode != 0:
+        raise RuntimeError(ast_check.stdout.strip())
 
 
 def _write_json(path: Path, value: Any) -> None:
