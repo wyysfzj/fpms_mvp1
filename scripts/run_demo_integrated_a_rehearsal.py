@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -158,6 +159,59 @@ def integrated_evidence_json(bundle: Path) -> str:
     )
 
 
+def materialize_oa_reply_outputs(output_root: Path) -> list[dict[str, Any]]:
+    if output_root.exists() or output_root.is_symlink():
+        raise RuntimeError(f"OA reply output root already exists: {output_root}")
+    output_root.mkdir(parents=True)
+    helpers = runpy.run_path(str(BACKEND / "tests" / "test_demo_abc_runtime_bundle.py"))
+    write_docx = helpers.get("_write_docx")
+    write_pdf = helpers.get("_write_pdf")
+    if write_docx is None or write_pdf is None:
+        raise RuntimeError("synthetic output writers are unavailable")
+
+    definitions = (
+        ("OA_STATEMENT_WORD", "意见陈述 Word", ".docx"),
+        ("OA_STATEMENT_PDF", "意见陈述 PDF 保真附件", ".pdf"),
+        ("OA_MODIFIED_CLAIMS", "修改后的权利要求书", ".docx"),
+    )
+    descriptors: list[dict[str, Any]] = []
+    for oa_sequence in (1, 2):
+        for role, label, suffix in definitions:
+            title = f"虚构第{oa_sequence}次OA答复-{label}"
+            output_path = output_root / f"oa{oa_sequence}-{role.lower()}{suffix}"
+            if suffix == ".docx":
+                write_docx(output_path)
+                with zipfile.ZipFile(output_path, "a", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("customXml/fpms-demo-output-label.txt", title)
+                media_type = (
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+            else:
+                write_pdf(output_path, unique_text=title)
+                media_type = "application/pdf"
+            descriptors.append(
+                {
+                    "oa_sequence": oa_sequence,
+                    "official_file_role": role,
+                    "title_zh_cn": title,
+                    "classification": "SYNTHETIC_TEST_OUTPUT",
+                    "path": str(output_path.resolve()),
+                    "media_type": media_type,
+                    "sha256": hashlib.sha256(output_path.read_bytes()).hexdigest(),
+                }
+            )
+    if len({row["path"] for row in descriptors}) != 6 or len(
+        {row["sha256"] for row in descriptors}
+    ) != 6:
+        raise RuntimeError("OA reply output identities must be unique")
+    _write_json(output_root / "descriptors.json", descriptors)
+    return descriptors
+
+
+def oa_reply_outputs_json(descriptors: list[dict[str, Any]]) -> str:
+    return json.dumps(descriptors, ensure_ascii=False, separators=(",", ":"))
+
+
 def validate_spec_source(source: str) -> None:
     forbidden = [token for token in FORBIDDEN_SPEC_TOKENS if token in source]
     if forbidden:
@@ -249,6 +303,7 @@ def _run_one(
     rate = manifest["rates"][0]
     admin_password = secrets.token_urlsafe(24)
     reviewer_password = secrets.token_urlsafe(24)
+    oa_reply_outputs = materialize_oa_reply_outputs(run_artifact / "oa-reply-outputs")
     env = os.environ.copy()
     env.update(
         FPMS_ENV="demo",
@@ -298,6 +353,7 @@ def _run_one(
             FPMS_DEMO_EXPECTED_RATE_SOURCE_SHA256=rate["source_sha256"],
             FPMS_DEMO_EXPECTED_DISCLAIMER_ZH_CN=rate["disclaimer_zh_cn"],
             FPMS_DEMO_INTEGRATED_EVIDENCE_JSON=integrated_evidence_json(bundle),
+            FPMS_DEMO_INTEGRATED_OA_REPLY_OUTPUT_JSON=oa_reply_outputs_json(oa_reply_outputs),
         )
         command = [
             "node",
