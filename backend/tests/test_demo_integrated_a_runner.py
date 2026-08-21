@@ -181,3 +181,26 @@ def test_runner_rejects_public_api_allowlist_drift_to_evidence_write():
     )
     with pytest.raises(RuntimeError, match="public lifecycle API allowlist"):
         module.validate_spec_source(source)
+
+
+def test_runner_accepts_the_frozen_driver_lifecycle_wrapper_shape():
+    module = _module()
+    source = SPEC.read_text(encoding="utf-8").replace(
+        "  async preflight(): Promise<Json>",
+        "  async expectedWrapper(): Promise<Json> { return this.publicLifecycleApi('RESOLVE_FILING', { case_id: 'dynamic' }) }\n"
+        "  async preflight(): Promise<Json>",
+        1,
+    )
+    module.validate_spec_source(source)
+
+
+def test_runner_rejects_lifecycle_wrapper_calls_on_an_alternate_receiver():
+    module = _module()
+    source = SPEC.read_text(encoding="utf-8").replace(
+        "  async preflight(): Promise<Json>",
+        "  async invalidWrapper(): Promise<Json> { return journey.publicLifecycleApi('RESOLVE_FILING', { case_id: 'dynamic' }) }\n"
+        "  async preflight(): Promise<Json>",
+        1,
+    )
+    with pytest.raises(RuntimeError, match="visible UI"):
+        module.validate_spec_source(source)

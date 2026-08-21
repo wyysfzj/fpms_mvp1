@@ -203,7 +203,7 @@ const allowedMemberCalls = new Set([
   'getByTestId', 'getByText', 'goto', 'includes', 'inspectCatalog', 'join', 'json',
   'keys', 'locator', 'map', 'newContext', 'newPage', 'now', 'objectContaining',
   'preflight', 'red', 'rejectInvalidReceipts', 'reloadSummary', 'replace',
-  'replaceGrant', 'resolveFiling', 'set', 'setInputFiles', 'setTimeout', 'status',
+  'replaceGrant', 'resolveFiling', 'publicLifecycleApi', 'set', 'setInputFiles', 'setTimeout', 'status',
   'step', 'stringify', 'toBe', 'toBeDefined', 'toBeGreaterThan',
   'toBeGreaterThanOrEqual', 'toBeVisible', 'toContain', 'toContainEqual', 'toEqual',
   'toHaveLength', 'toHaveURL', 'toMatch', 'uploadRole', 'url', 'values',
@@ -330,6 +330,27 @@ function visit(node) {
       assert.ok(allowedIdentifierCalls.has(node.expression.text), `evidence writes must use visible UI; identifier call ${node.expression.text} is outside the exact call allowlist`)
     } else if (name !== undefined) {
       assert.ok(allowedMemberCalls.has(name), `evidence writes must use visible UI; member call ${name} is outside the exact call allowlist`)
+      if (name === 'publicLifecycleApi') {
+        const receiverIsThis = ts.isPropertyAccessExpression(node.expression)
+          && node.expression.expression.kind === ts.SyntaxKind.ThisKeyword
+        let owner = node.parent
+        while (owner && !ts.isMethodDeclaration(owner)) owner = owner.parent
+        const classOwner = owner?.parent
+        const operation = node.arguments[0]
+        assert.ok(
+          receiverIsThis
+            && owner
+            && ts.isClassDeclaration(classOwner)
+            && classOwner.name?.text === 'IntegratedJourneyDriver'
+            && operation
+            && ts.isStringLiteral(operation)
+            && Object.hasOwn(expectedPublicLifecycleApi, operation.text)
+            && node.arguments.length >= 2
+            && node.arguments.length <= 3
+            && ts.isObjectLiteralExpression(node.arguments[1]),
+          'evidence writes must use visible UI; lifecycle wrapper calls must use this, a frozen operation and literal path parameters inside IntegratedJourneyDriver',
+        )
+      }
       if (name === 'goto') {
         const target = node.arguments[0]?.getText(syntax) ?? ''
         assert.ok(target.startsWith('`${baseUrl}/'), 'evidence writes must use visible UI; navigation must stay under the configured base URL')
