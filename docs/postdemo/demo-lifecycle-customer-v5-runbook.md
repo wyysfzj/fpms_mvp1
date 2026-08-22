@@ -609,6 +609,7 @@ PYTHONPATH="$INTEGRATED_DEPS:backend" python3 \
 **输入**
 
 - 服务项目：授权登记阶段代理服务费；
+- 业务费项代码：`SVC_GRANT_REGISTRATION_CN`；
 - 金额：`1,200.00 CNY`，保持 active synthetic bundle 的精确值；
 - rate item code、source ref、source version、source SHA-256。
 

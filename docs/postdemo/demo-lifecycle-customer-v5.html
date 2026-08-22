@@ -650,7 +650,7 @@
           <div class="stage-body">
             <div class="stage-field"><span class="field-label">主持人话术</span><p>授权任务 PAY 与服务费义务分开；本阶段只使用有来源的 SERVICE 项目。</p></div>
             <div class="stage-field stage-action"><span class="field-label">界面/动作</span><p>主持人不共享控制页：仅创建唯一 SERVICE obligation；客户共享费用页与草单页：记录 PAY、创建并锁定草单。</p></div>
-            <div class="stage-field"><span class="field-label">输入</span><p>授权登记阶段代理服务费；1,200.00 CNY；rate item code、source ref、source version、source SHA-256。</p></div>
+            <div class="stage-field"><span class="field-label">输入</span><p>授权登记阶段代理服务费；业务费项代码 SVC_GRANT_REGISTRATION_CN；1,200.00 CNY；source ref、source version、source SHA-256。</p></div>
             <div class="stage-field stage-result"><span class="field-label">屏幕输出</span><p>客户共享费用页与草单页显示唯一义务、LOCKED 草单、服务费来源与“官方费用：未配置”。</p></div>
             <div class="stage-field"><span class="field-label">预期结果</span><p>草单金额严格等于 bundle amount，只含 SERVICE line，重试不增加第二条义务或草单。</p></div>
             <div class="stage-field"><span class="field-label">验证</span><p>Canonical IA-13 通过控制命令创建后，切到正常费用/草单读页核对权威状态和 provenance。</p></div>

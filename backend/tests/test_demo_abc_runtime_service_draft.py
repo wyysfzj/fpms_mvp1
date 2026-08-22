@@ -125,7 +125,7 @@ def test_runtime_service_item_to_pay_locked_draft(
 ):
     _configure_bundle(tmp_path, monkeypatch, integrated=integrated)
     client_id, case_id = _seed_case(session_factory)
-    expected_item = "DEMO_INTEGRATED_SERVICE_1" if integrated else "DEMO_SERVICE_1"
+    expected_item = "SVC_GRANT_REGISTRATION_CN" if integrated else "DEMO_SERVICE_1"
     expected_template = (
         "DEMO_INTEGRATED_LETTER_1" if integrated else "DEMO_INTERNAL_LETTER_1"
     )
@@ -133,6 +133,9 @@ def test_runtime_service_item_to_pay_locked_draft(
     item_response = client.get("/api/v1/fees/demo-service-item", headers=auth_headers)
     assert item_response.status_code == 200, item_response.text
     assert item_response.json()["amount"] == "1200.00"
+    assert item_response.json()["item_code"] == expected_item
+    if integrated:
+        assert not item_response.json()["item_code"].startswith(("DEMO_", "IA-"))
     assert item_response.json()["classification"] == "DEMO_ONLY"
     assert item_response.json()["template_code"] == expected_template
     assert len(item_response.json()["template_sha256"]) == 64
@@ -314,7 +317,8 @@ def test_demo_preflight_requires_validated_input_and_zero_business_counts(
     }
     assert payload["template_code"] == "DEMO_INTEGRATED_LETTER_1"
     assert len(payload["template_sha256"]) == 64
-    assert payload["item_code"] == "DEMO_INTEGRATED_SERVICE_1"
+    assert payload["item_code"] == "SVC_GRANT_REGISTRATION_CN"
+    assert not payload["item_code"].startswith(("DEMO_", "IA-"))
     assert len(payload["source_sha256"]) == 64
 
     _seed_case(session_factory)

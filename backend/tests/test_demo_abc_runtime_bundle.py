@@ -510,7 +510,7 @@ def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], s
         "rates": [
             {
                 "domain": "SERVICE_DEMO_PRICE",
-                "item_code": "DEMO_INTEGRATED_SERVICE_1",
+                "item_code": "SVC_GRANT_REGISTRATION_CN",
                 "name_zh_cn": "授权登记阶段代理服务费",
                 "currency": "CNY",
                 "calc_mode": "FIXED",
@@ -881,6 +881,8 @@ def test_integrated_bundle_returns_exact_immutable_descriptors(
         "办理登记手续通知书（更新版本）",
     ]
     assert manifest["rates"][0]["name_zh_cn"] == "授权登记阶段代理服务费"
+    assert snapshot.service_rate.item_code == "SVC_GRANT_REGISTRATION_CN"
+    assert not snapshot.service_rate.item_code.startswith(("DEMO_", "IA-"))
     assert "虚构" not in manifest["provenance"]["label_zh_cn"]
     assert "虚构" not in manifest["rates"][0]["disclaimer_zh_cn"]
     assert snapshot.evidence[8].metadata.oa_sequence == 2

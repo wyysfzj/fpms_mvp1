@@ -58,6 +58,8 @@ const customerScenarioValues = [
 ]
 for (const target of [normalizedHtml, runbook]) {
   for (const value of customerScenarioValues) assert.ok(target.includes(value), `customer scenario missing ${value}`)
+  assert.ok(target.includes('SVC_GRANT_REGISTRATION_CN'), 'customer material must show the realistic-shaped service item code')
+  assert.ok(!target.includes('DEMO_INTEGRATED_SERVICE_1'), 'customer material must not show the technical integrated service item code')
   for (const rejected of ['IA-CASE', 'DEMO-AR', 'DEMO-PAY', 'DEMO-BANK', '虚构集成演示客户', '虚构主联系人', '集成演示服务费']) {
     assert.ok(!target.includes(rejected), `customer material contains rejected value ${rejected}`)
   }

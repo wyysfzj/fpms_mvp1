@@ -47,6 +47,7 @@ UUIDs, and idempotency keys. No broad, product, release, deploy, or production g
 - `FPMS_Automation_Skeleton_Pack/playwright_ts/src/tests/demo-integrated-a-static-contract.mjs`
 - `scripts/run_demo_integrated_a_rehearsal.py`
 - `backend/tests/test_demo_abc_runtime_bundle.py`
+- `backend/tests/test_demo_abc_runtime_service_draft.py`
 - `backend/tests/test_demo_integrated_a_runner.py`
 - `backend/tests/test_demo_integrated_first_oa.py`
 - `frontend/src/modules/demo/pages/DemoAbc.vue`
@@ -64,6 +65,13 @@ acknowledgement as `FeeDraftDetail`, corrupting the page projection after a succ
 minimum amendment makes that existing adapter read the authoritative draft through the existing GET
 after the successful POST. It does not change this task's closure, non-closure, endpoint, route,
 schema, permission, transaction, or domain semantics, and it does not absorb the unlock adapter.
+
+The task owner later approved only `backend/tests/test_demo_abc_runtime_service_draft.py` as an
+additional focused contract after provisional High review found the Integrated A customer screenshot
+still exposed the technical-looking fee code `DEMO_INTEGRATED_SERVICE_1`. The narrow remediation
+changes only that integrated synthetic fixture identity and its expected assertions to the
+realistic-shaped business code `SVC_GRANT_REGISTRATION_CN`. It preserves `DEMO_ONLY`,
+`SERVICE_DEMO_PRICE`, all synthetic authority boundaries, and legacy ABC v1 `DEMO_SERVICE_1`.
 
 ## Required Scenario
 
