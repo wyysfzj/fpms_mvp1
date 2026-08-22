@@ -447,7 +447,7 @@ def _valid_integrated_bundle(tmp_path: Path) -> tuple[Path, dict[str, object], s
     for ordinal, (role, title) in enumerate(
         zip(INTEGRATED_EVIDENCE_ROLES, INTEGRATED_EVIDENCE_TITLES, strict=True)
     ):
-        evidence_path = evidence / f"{ordinal + 1:02d}-{role.lower()}.pdf"
+        evidence_path = evidence / f"{title}.pdf"
         _write_pdf(evidence_path, unique_text=f"integrated-a-{ordinal + 1:02d}-{role}")
         evidence_rows.append(
             {
@@ -880,6 +880,15 @@ def test_integrated_bundle_returns_exact_immutable_descriptors(
         "办理登记手续通知书（原始版本）",
         "办理登记手续通知书（更新版本）",
     ]
+    evidence_basenames = [Path(row["path"]).name for row in manifest["evidence"]]
+    assert evidence_basenames == [
+        f"{title}.pdf" for title in INTEGRATED_EVIDENCE_TITLES
+    ]
+    assert all(not name[0].isdigit() for name in evidence_basenames)
+    assert all(
+        role.lower() not in name.lower()
+        for role, name in zip(INTEGRATED_EVIDENCE_ROLES, evidence_basenames, strict=True)
+    )
     assert manifest["rates"][0]["name_zh_cn"] == "授权登记阶段代理服务费"
     assert snapshot.service_rate.item_code == "SVC_GRANT_REGISTRATION_CN"
     assert not snapshot.service_rate.item_code.startswith(("DEMO_", "IA-"))

@@ -184,16 +184,18 @@ def materialize_oa_reply_outputs(output_root: Path) -> list[dict[str, Any]]:
         raise RuntimeError("synthetic output writers are unavailable")
 
     definitions = (
-        ("OA_STATEMENT_WORD", "审查意见答复意见陈述书（Word）", ".docx"),
-        ("OA_STATEMENT_PDF", "审查意见答复意见陈述书（PDF）", ".pdf"),
-        ("OA_MODIFIED_CLAIMS", "审查意见答复修改后权利要求书", ".docx"),
+        ("OA_STATEMENT_WORD", "审查意见答复意见陈述书（Word）", "意见陈述书", ".docx"),
+        ("OA_STATEMENT_PDF", "审查意见答复意见陈述书（PDF）", "意见陈述书", ".pdf"),
+        ("OA_MODIFIED_CLAIMS", "审查意见答复修改后权利要求书", "修改后权利要求书", ".docx"),
     )
     descriptors: list[dict[str, Any]] = []
     for oa_sequence in (1, 2):
-        for role, label, suffix in definitions:
+        for role, label, file_label, suffix in definitions:
             sequence_label = "第一" if oa_sequence == 1 else "第二"
             title = f"{sequence_label}次{label}"
-            output_path = output_root / f"oa{oa_sequence}-{role.lower()}{suffix}"
+            output_path = output_root / (
+                f"{sequence_label}次审查意见答复_{file_label}{suffix}"
+            )
             if suffix == ".docx":
                 write_docx(output_path)
                 with zipfile.ZipFile(output_path, "a", compression=zipfile.ZIP_DEFLATED) as archive:

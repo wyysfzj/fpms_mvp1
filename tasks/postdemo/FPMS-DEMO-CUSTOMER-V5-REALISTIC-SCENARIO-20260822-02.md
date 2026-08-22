@@ -73,6 +73,13 @@ changes only that integrated synthetic fixture identity and its expected asserti
 realistic-shaped business code `SVC_GRANT_REGISTRATION_CN`. It preserves `DEMO_ONLY`,
 `SERVICE_DEMO_PRICE`, all synthetic authority boundaries, and legacy ABC v1 `DEMO_SERVICE_1`.
 
+The same provisional High review found customer attachment surfaces still exposed ordinal/role
+slugs and OA reply artifacts still exposed `oa1-*`/`oa2-*` basenames. The approved remediation only
+renames the twelve Integrated A synthetic evidence files and six generated OA reply files to their
+natural Chinese business titles; roles, classifications, metadata, content hashes, endpoints, and
+domain behavior remain unchanged. Runbook section 10 is explicitly relabeled as a historical
+baseline record rather than evidence for this candidate.
+
 ## Required Scenario
 
 - Customer: `澄岳智造技术（苏州）有限公司`

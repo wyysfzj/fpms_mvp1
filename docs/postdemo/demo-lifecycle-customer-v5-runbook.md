@@ -942,12 +942,13 @@ lsof -nP -iTCP:5173 -sTCP:LISTEN
 
 ---
 
-## 10. 本 Runbook 的验证记录
+## 10. 本 Runbook 的历史基线验证记录
 
-本节在 runbook 生成后使用同一现有 runner 做一次 fresh headed rehearsal，并记录实际结果。
-验证只覆盖本文档描述的本地 synthetic demo，不扩展到产品、生产或发布。
+本节仅保留 runbook 生成时使用同一现有 runner 完成的历史基线 headed rehearsal。它不是
+当前任务或当前 candidate 的自证；当前候选必须由 task-local evidence 和独立 High review 另行
+绑定。该历史记录只覆盖本文档描述的本地 synthetic demo，不扩展到产品、生产或发布。
 
-| 字段 | 本轮结果 |
+| 字段 | 历史基线结果 |
 | --- | --- |
 | 验证日期 | 2026-08-22（Asia/Shanghai） |
 | Candidate commit/tree | `06b5813dab1d4a027ec989b5f3c1edff2c997998` / `bd257fca30ec2eab0595040b62f205be37d83305` |
@@ -962,7 +963,7 @@ lsof -nP -iTCP:5173 -sTCP:LISTEN
 | Checksums | 20/20 `OK` |
 | Verdict | `LOCAL SYNTHETIC INTEGRATED TECHNICAL DEMO PASS` |
 
-验证前的命令灵敏度检查曾用 `backend/.venv/bin/python` 启动 runner，并在 bundle 构建前因
+历史基线验证前的命令灵敏度检查曾用 `backend/.venv/bin/python` 启动 runner，并在 bundle 构建前因
 缺少 test-only `pytest` 明确失败；当时没有启动服务或写入业务数据。Runbook 已将入口修正为
 既有 `INTEGRATED_DEPS`，随后使用全新 artifact/RUN_ID 完成上述 PASS。该失败证明依赖预检能够
 阻止“环境不完整但继续演示”的假成功。

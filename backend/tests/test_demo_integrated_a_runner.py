@@ -139,6 +139,14 @@ def test_runner_materializes_natural_oa_reply_output_titles(tmp_path: Path):
         "第二次审查意见答复意见陈述书（PDF）",
         "第二次审查意见答复修改后权利要求书",
     ]
+    assert [Path(row["path"]).name for row in rows] == [
+        "第一次审查意见答复_意见陈述书.docx",
+        "第一次审查意见答复_意见陈述书.pdf",
+        "第一次审查意见答复_修改后权利要求书.docx",
+        "第二次审查意见答复_意见陈述书.docx",
+        "第二次审查意见答复_意见陈述书.pdf",
+        "第二次审查意见答复_修改后权利要求书.docx",
+    ]
 
 
 def test_runner_accepts_only_the_frozen_public_lifecycle_api_allowlist():
