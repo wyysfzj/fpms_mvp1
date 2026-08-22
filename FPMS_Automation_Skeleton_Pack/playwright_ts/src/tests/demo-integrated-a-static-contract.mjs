@@ -81,6 +81,8 @@ for (const stage7VisibleAction of [
   "getByRole('button', { name: '锁定', exact: true }).click()",
 ]) assert.ok(source.includes(stage7VisibleAction), `missing truthful stage 07 action ${stage7VisibleAction}`)
 assert.ok(!source.includes("getByTestId('create-draft').click()"), 'stage 07 must not create or lock the draft on the hidden control page')
+assert.ok(source.includes('case_title: created.title_cn'), 'case checkpoint must read the raw create-case title_cn field')
+assert.ok(!source.includes('case_title: created.title,'), 'case checkpoint must not read the frontend-adapted title field from a raw API response')
 
 for (let ordinal = 0; ordinal <= 18; ordinal += 1) {
   assert.ok(source.includes(`IA-${String(ordinal).padStart(2, '0')}`), `missing IA-${ordinal}`)

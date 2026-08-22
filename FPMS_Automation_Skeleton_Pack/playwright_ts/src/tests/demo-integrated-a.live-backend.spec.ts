@@ -535,7 +535,7 @@ class IntegratedJourneyDriver {
     return {
       case_id: created.id,
       case_no: created.case_no,
-      case_title: created.title,
+      case_title: created.title_cn,
       projection: [center.business_stage, center.official_procedure_stage, center.legal_status, center.verification_status],
       legacy_display: created.status,
       business_counts: {
