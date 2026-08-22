@@ -1481,6 +1481,9 @@ class IntegratedJourneyDriver {
     const draftPage = await (await draftListResponse).json() as Json
     const serviceObligations = (overlay.milestones as Json[]).flatMap((milestone) => (milestone.fee_obligations || []) as Json[])
       .filter((item) => item.fee_domain === 'SERVICE' && item.obligation_id === created.obligation.id)
+    const serviceObligationIds = new Set(serviceObligations.map((item) => item.obligation_id))
+    expect(serviceObligations.length).toBeGreaterThan(0)
+    expect([...serviceObligationIds]).toEqual([created.obligation.id])
     const serviceDrafts = (draftPage.items as Json[]).filter((item) => item.id === lockedDraft.id && item.status === 'LOCKED')
     const visible = await this.visibleCaseSnapshot(caseId)
     return {
@@ -1498,7 +1501,7 @@ class IntegratedJourneyDriver {
         rate_source_sha256: created.source_sha256,
       },
       disclaimer: created.disclaimer_zh_cn,
-      obligation_count: serviceObligations.length,
+      obligation_count: serviceObligationIds.size,
       draft_count: serviceDrafts.length,
       draft_status: lockedDraft.status,
       service_amount: lockedDraft.total_service,
