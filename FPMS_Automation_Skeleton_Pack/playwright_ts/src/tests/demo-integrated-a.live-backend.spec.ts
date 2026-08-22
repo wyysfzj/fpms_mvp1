@@ -1895,7 +1895,20 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     await expect(page.getByText(draftId, { exact: false })).toBeVisible()
     await expect(page.getByText(`${x.bundle_amount} CNY`, { exact: true })).toBeVisible()
     await expect(page.getByText(x.disclaimer, { exact: false })).toBeVisible()
-    for (const value of Object.values(expectedProvenance)) await expect(page.getByText(value!, { exact: false })).toBeVisible()
+    const visibleProvenance = {
+      'bundle-id': expectedProvenance.bundle_id,
+      'bundle-version': expectedProvenance.bundle_version,
+      'manifest-sha256': expectedProvenance.manifest_sha256,
+      'template-code': expectedProvenance.template_code,
+      'template-sha256': expectedProvenance.template_sha256,
+      'rate-item-code': expectedProvenance.rate_item_code,
+      'rate-source-ref': expectedProvenance.rate_source_ref,
+      'rate-source-version': expectedProvenance.rate_source_version,
+      'rate-source-sha256': expectedProvenance.rate_source_sha256,
+    }
+    for (const [testId, value] of Object.entries(visibleProvenance)) {
+      await expect(page.getByTestId(testId)).toHaveText(value!)
+    }
     task8Checkpoints.push({ checkpoint: 'IA-13', result: x })
   })
   await test.step(checkpointContract[14], async () => {
