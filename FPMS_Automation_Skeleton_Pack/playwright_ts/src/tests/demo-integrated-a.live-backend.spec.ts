@@ -1893,7 +1893,7 @@ test('Integrated Scheme A executes prior lifecycle and new finance on one case',
     expect(x.case_id).toBe(caseId); expect(x.provenance).toEqual(expectedProvenance); expect(x.disclaimer).toBe(expectedDisclaimer); expect(x.obligation_count).toBe(1); expect(x.draft_count).toBe(1); expect(x.draft_status).toBe('LOCKED'); expect(x.service_amount).toBe(x.bundle_amount); expect(x.official_fee_display).toBe('未配置'); expect(x.official_fee_in_total).toBe(false); expect(x.official_fee_carriers).toEqual({ item: 0, obligation: 0, draft: 0, payable: 0 })
     await page.goto(`${baseUrl}/demo/abc`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByText(draftId, { exact: false })).toBeVisible()
-    await expect(page.getByText(x.bundle_amount, { exact: false })).toBeVisible()
+    await expect(page.getByText(`${x.bundle_amount} CNY`, { exact: true })).toBeVisible()
     await expect(page.getByText(x.disclaimer, { exact: false })).toBeVisible()
     for (const value of Object.values(expectedProvenance)) await expect(page.getByText(value!, { exact: false })).toBeVisible()
     task8Checkpoints.push({ checkpoint: 'IA-13', result: x })
