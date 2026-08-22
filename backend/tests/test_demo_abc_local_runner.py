@@ -224,3 +224,144 @@ def test_port_probe_preserves_active_listener_failure(monkeypatch):
 
     with pytest.raises(RuntimeError, match="local demo port is already in use: 5173"):
         run_local_demo_abc._assert_port_available(5173)
+
+
+def test_local_runner_serves_browser_api_through_frontend_origin(monkeypatch):
+    assert run_local_demo_abc is not None, "local runner is not implemented"
+    launches: list[tuple[list[str], dict]] = []
+
+    class ExitedProcess:
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+        def terminate(self):
+            raise AssertionError("an exited process must not be terminated")
+
+        def wait(self, timeout=None):
+            return 0
+
+    def fake_popen(command, **kwargs):
+        launches.append((command, kwargs))
+        return ExitedProcess()
+
+    monkeypatch.setattr(run_local_demo_abc.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        run_local_demo_abc,
+        "_wait_for_backend_ready",
+        lambda _process: None,
+        raising=False,
+    )
+
+    result = run_local_demo_abc._serve(type("Run", (), {"run_id": "same-origin"})())
+
+    assert result == 0
+    frontend_launch = next(item for item in launches if item[0][0] == "npm")
+    assert frontend_launch[1]["env"]["VITE_API_BASE_URL"] == "/api/v1"
+
+
+def test_local_runner_starts_frontend_only_after_backend_health(monkeypatch):
+    events: list[str] = []
+
+    class ExitedProcess:
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+        def terminate(self):
+            raise AssertionError("an exited process must not be terminated")
+
+        def wait(self, timeout=None):
+            return 0
+
+    def fake_popen(command, **kwargs):
+        events.append("frontend-launch" if command[0] == "npm" else "backend-launch")
+        return ExitedProcess()
+
+    monkeypatch.setattr(run_local_demo_abc.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        run_local_demo_abc,
+        "_wait_for_backend_ready",
+        lambda _process: events.append("backend-ready"),
+        raising=False,
+    )
+
+    assert run_local_demo_abc._serve(type("Run", (), {"run_id": "startup-order"})()) == 0
+    assert events[:3] == ["backend-launch", "backend-ready", "frontend-launch"]
+
+
+def test_backend_readiness_waits_for_healthz_200(monkeypatch):
+    statuses = iter([503, 200])
+    requests: list[tuple[str, str]] = []
+    closed: list[int] = []
+
+    class RunningBackend:
+        def poll(self):
+            return None
+
+    class FakeResponse:
+        def __init__(self, status):
+            self.status = status
+
+    class FakeConnection:
+        def __init__(self, status):
+            self.status = status
+
+        def request(self, method, target):
+            requests.append((method, target))
+
+        def getresponse(self):
+            return FakeResponse(self.status)
+
+        def close(self):
+            closed.append(self.status)
+
+    monkeypatch.setattr(
+        run_local_demo_abc.http.client,
+        "HTTPConnection",
+        lambda *_args, **_kwargs: FakeConnection(next(statuses)),
+    )
+    monkeypatch.setattr(run_local_demo_abc.time, "sleep", lambda _seconds: None)
+
+    run_local_demo_abc._wait_for_backend_ready(RunningBackend())
+
+    assert requests == [("GET", "/healthz"), ("GET", "/healthz")]
+    assert closed == [503, 200]
+
+
+def test_backend_readiness_failure_never_starts_frontend_and_cleans_backend(monkeypatch):
+    launches: list[list[str]] = []
+
+    class ExitedBackend:
+        returncode = 17
+
+        def __init__(self):
+            self.waited = False
+
+        def poll(self):
+            return 17
+
+        def terminate(self):
+            raise AssertionError("an exited backend must not be terminated")
+
+        def wait(self, timeout=None):
+            self.waited = True
+            return 17
+
+    backend = ExitedBackend()
+
+    def fake_popen(command, **_kwargs):
+        launches.append(command)
+        if command[0] == "npm":
+            raise AssertionError("frontend must not start before backend health")
+        return backend
+
+    monkeypatch.setattr(run_local_demo_abc.subprocess, "Popen", fake_popen)
+
+    with pytest.raises(RuntimeError, match="backend exited before health check"):
+        run_local_demo_abc._serve(type("Run", (), {"run_id": "backend-exited"})())
+
+    assert len(launches) == 1
+    assert backend.waited is True

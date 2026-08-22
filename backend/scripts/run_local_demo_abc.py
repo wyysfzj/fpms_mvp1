@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
@@ -321,24 +322,44 @@ def _assert_launch_dependencies() -> None:
     _assert_port_available(5173)
 
 
+def _wait_for_backend_ready(process: subprocess.Popen, timeout_seconds: float = 30.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        returncode = process.poll()
+        if returncode is not None:
+            raise RuntimeError(f"backend exited before health check: {returncode}")
+        connection = http.client.HTTPConnection("127.0.0.1", 8000, timeout=1.0)
+        try:
+            connection.request("GET", "/healthz")
+            if connection.getresponse().status == 200:
+                return
+        except OSError:
+            pass
+        finally:
+            connection.close()
+        time.sleep(0.1)
+    raise RuntimeError("backend did not become healthy within 30 seconds")
+
+
 def _serve(run: DemoRun) -> int:
     backend_env = os.environ.copy()
     frontend_env = os.environ.copy()
-    frontend_env["VITE_API_BASE_URL"] = "http://127.0.0.1:8000/api/v1"
-    processes = [
-        subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
-            cwd=_BACKEND_ROOT,
-            env=backend_env,
-        ),
-        subprocess.Popen(
+    frontend_env["VITE_API_BASE_URL"] = "/api/v1"
+    backend_process = subprocess.Popen(
+        [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+        cwd=_BACKEND_ROOT,
+        env=backend_env,
+    )
+    processes = [backend_process]
+    try:
+        _wait_for_backend_ready(backend_process)
+        frontend_process = subprocess.Popen(
             ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
             cwd=_FRONTEND_ROOT,
             env=frontend_env,
-        ),
-    ]
-    print(f"FPMS local ABC demo: http://127.0.0.1:5173 (run_id={run.run_id})")
-    try:
+        )
+        processes.append(frontend_process)
+        print(f"FPMS local ABC demo: http://127.0.0.1:5173 (run_id={run.run_id})")
         while all(process.poll() is None for process in processes):
             time.sleep(0.25)
         return next((process.returncode for process in processes if process.returncode), 0)
